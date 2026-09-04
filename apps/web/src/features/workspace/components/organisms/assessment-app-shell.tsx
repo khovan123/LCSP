@@ -45,6 +45,7 @@ import {
   CenterContentSlot,
   LeftSidebarSlot,
 } from "./assessment-shell-slots";
+import { SidebarHeaderControls } from "../molecules/sidebar-header-controls";
 import { useWorkspaceRuntime } from "./workspace-runtime-provider";
 
 type AssessmentAppShellProps = {
@@ -156,7 +157,6 @@ export function AssessmentAppShell({
   const navigation = (
     <AppSidebar
       assessments={assessments}
-      collapsed={false}
       onBack={() => router.back()}
       onForward={() => router.forward()}
       onNavigate={() => setMobileNavigationOpen(false)}
@@ -180,7 +180,6 @@ export function AssessmentAppShell({
       <LeftSidebarSlot collapsed={leftCollapsed}>
         <AppSidebar
           assessments={assessments}
-          collapsed={leftCollapsed}
           onBack={() => router.back()}
           onForward={() => router.forward()}
           onSearch={openAssessmentSearch}
@@ -206,19 +205,23 @@ export function AssessmentAppShell({
             <PanelLeftIcon />
           </Button>
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={toggleLeftSidebar}
-            aria-label={t("pages.appShell.sidebarToggle")}
-            aria-pressed={!leftCollapsed}
-            className="hidden lg:inline-flex"
-          >
-            <PanelLeftIcon />
-          </Button>
+          {leftCollapsed ? (
+            <SidebarHeaderControls
+              className="hidden px-0 lg:-ml-2 lg:flex"
+              onBack={() => router.back()}
+              onForward={() => router.forward()}
+              onSearch={openAssessmentSearch}
+              onToggleCollapse={toggleLeftSidebar}
+              showDivider={false}
+            />
+          ) : null}
 
-          <div className="ml-2 min-w-0 flex-1 border-l border-border/70 pl-3 lg:ml-3 lg:pl-4">
+          <div
+            className={cn(
+              "min-w-0 flex-1",
+              leftCollapsed ? "ml-8" : "ml-2",
+            )}
+          >
             <p className="truncate text-[0.6875rem] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
               {headerEyebrow}
             </p>

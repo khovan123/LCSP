@@ -27,7 +27,6 @@ export { SIDEBAR_RECENT_LOAD_STATES } from "../../types/recent-filter.types";
 
 type AppSidebarProps = {
   assessments: AssessmentSummary[];
-  collapsed: boolean;
   onNavigate?: () => void;
   onBack: () => void;
   onForward: () => void;
@@ -44,7 +43,6 @@ type AppSidebarProps = {
 export function AppSidebar({
   accountControl,
   assessments,
-  collapsed,
   onBack,
   onForward,
   onNavigate,
@@ -67,8 +65,6 @@ export function AppSidebar({
   );
   const newActive = pathname === "/assessments/new";
 
-  if (collapsed) return null;
-
   function updateFilter<Value extends string>(
     key: RecentFilterKey,
     value: Value,
@@ -87,7 +83,7 @@ export function AppSidebar({
   return (
     <nav
       aria-label={resolveAppMessage("pages.appShell.workspaceNavigation")}
-      className="flex min-h-0 w-full flex-col bg-[#111111] text-[#dbd9d1]"
+      className="flex min-h-0 w-full flex-col bg-sidebar text-sidebar-foreground"
       data-component="AppSidebar"
     >
       <SidebarHeaderControls
@@ -102,7 +98,7 @@ export function AppSidebar({
           active={newActive}
           href="/assessments/new"
           icon={
-            <span className="flex size-4.5 items-center justify-center rounded-[10px] border border-[#292929]">
+            <span className="flex size-4.5 items-center justify-center rounded-[10px] border border-sidebar-border">
               <PlusIcon className="size-3" />
             </span>
           }
@@ -123,7 +119,7 @@ export function AppSidebar({
 
       <section className="mt-3.5 min-h-0 flex-1 overflow-y-auto px-2.5 pb-12">
         <div className="flex h-7 items-center">
-          <h2 className="ml-2 flex-1 text-[13px] leading-none font-medium text-[#8f8c85]">
+          <h2 className="ml-2 flex-1 text-[13px] leading-none font-medium text-sidebar-foreground/60">
             {resolveAppMessage("pages.appShell.recents")}
           </h2>
           <RecentFilterPopover

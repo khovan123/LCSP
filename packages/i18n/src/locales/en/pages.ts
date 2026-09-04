@@ -819,9 +819,20 @@ export const enPages = {
         title: "Appearance",
         description:
           "Keep the GitHub-style structure while staying inside the existing LCSP visual system.",
-        shellTitle: "Current shell",
+        shellTitle: "Theme",
         shellDescription:
-          "Appearance follows the active LCSP workspace shell. Account-level theme preferences are not persisted yet.",
+          "Choose Light, Dark, or System. System follows the operating-system preference without changing the saved preference.",
+        themeControlLabel: "Theme preference",
+        themeOptions: {
+          light: "Light",
+          dark: "Dark",
+          system: "System",
+        },
+        resolvedThemeLabel: "Resolved theme",
+        resolvedThemeOptions: {
+          light: "Light",
+          dark: "Dark",
+        },
       },
       notifications: {
         title: "Notifications",

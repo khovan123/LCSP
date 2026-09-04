@@ -816,9 +816,20 @@ export const viPages = {
         title: "Giao diện",
         description:
           "Giữ bố cục kiểu GitHub nhưng vẫn dùng hệ giao diện hiện tại của LCSP.",
-        shellTitle: "Shell hiện tại",
+        shellTitle: "Theme",
         shellDescription:
-          "Giao diện đang bám theo shell workspace hiện tại của LCSP. Tùy chọn theme theo tài khoản chưa được lưu riêng.",
+          "Chọn Sáng, Tối hoặc Hệ thống. Hệ thống bám theo tùy chọn hệ điều hành mà không đổi lựa chọn đã lưu.",
+        themeControlLabel: "Tùy chọn theme",
+        themeOptions: {
+          light: "Sáng",
+          dark: "Tối",
+          system: "Hệ thống",
+        },
+        resolvedThemeLabel: "Theme đang hiển thị",
+        resolvedThemeOptions: {
+          light: "Sáng",
+          dark: "Tối",
+        },
       },
       notifications: {
         title: "Thông báo",

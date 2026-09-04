@@ -761,6 +761,17 @@ export type PagesMessages = {
         description: string;
         shellTitle: string;
         shellDescription: string;
+        themeControlLabel: string;
+        themeOptions: {
+          light: string;
+          dark: string;
+          system: string;
+        };
+        resolvedThemeLabel: string;
+        resolvedThemeOptions: {
+          light: string;
+          dark: string;
+        };
       };
       notifications: {
         title: string;

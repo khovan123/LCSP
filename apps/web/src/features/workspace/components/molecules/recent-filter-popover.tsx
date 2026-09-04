@@ -45,7 +45,7 @@ export function RecentFilterPopover({
       <DropdownMenuTrigger render={<RecentFilterTrigger open={open} />} />
       <DropdownMenuContent
         align="end"
-        className="h-41.5 w-44 min-w-44 overflow-visible rounded-xl border border-[#404040] bg-[#1f1f1f] p-0.75 text-[#d6d4cc] shadow-[0_8px_9px_rgba(0,0,0,0.35)] ring-0"
+        className="h-41.5 w-44 min-w-44 overflow-visible rounded-xl border border-border bg-popover p-0.75 text-popover-foreground shadow-[0_8px_9px_rgba(0,0,0,0.18)] ring-0 dark:shadow-[0_8px_9px_rgba(0,0,0,0.35)]"
         side="bottom"
         sideOffset={4}
       >
@@ -84,7 +84,7 @@ export function RecentFilterPopover({
             filters.lastActivity,
           )}
         />
-        <DropdownMenuSeparator className="mx-1.5 my-1.5 bg-[#292929]" />
+        <DropdownMenuSeparator className="mx-1.5 my-1.5 bg-border" />
         <RecentFilterSubmenu
           label={resolveAppMessage(
             "pages.appShell.recentFilter.labels.groupBy",

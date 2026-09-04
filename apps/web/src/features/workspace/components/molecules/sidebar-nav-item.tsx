@@ -47,8 +47,8 @@ export function SidebarNavItem({
         className={cn(
           "min-w-0 truncate text-left",
           variant === SIDEBAR_NAV_ITEM_VARIANTS.new
-            ? "text-sm font-medium text-[#d6d4cc]"
-            : "text-sm font-normal text-[#dbd9d1]",
+            ? "text-sm font-medium text-sidebar-foreground"
+            : "text-sm font-normal text-sidebar-foreground",
         )}
       >
         {label}
@@ -56,8 +56,10 @@ export function SidebarNavItem({
     </>
   );
   const itemClassName = cn(
-    "flex h-8 w-full items-center gap-2 rounded-[7px] px-2.5 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#8f8c85]",
-    active ? "bg-[#1f1f1f] hover:bg-[#242424]" : "hover:bg-[#1b1b1b]",
+    "flex h-8 w-full items-center gap-2 rounded-[7px] px-2.5 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+    active
+      ? "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent"
+      : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
     disabled ? "cursor-default" : "cursor-pointer",
     className,
   );

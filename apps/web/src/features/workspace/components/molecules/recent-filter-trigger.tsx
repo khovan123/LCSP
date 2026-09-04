@@ -23,7 +23,7 @@ export const RecentFilterTrigger = forwardRef<
       aria-label={resolveAppMessage("pages.appShell.recentFilter.trigger")}
       aria-pressed={open}
       className={cn(
-        "relative flex size-7 items-center justify-center rounded-md outline-none transition-colors hover:bg-[#1b1b1b] focus-visible:ring-2 focus-visible:ring-[#8f8c85]",
+        "relative flex size-7 items-center justify-center rounded-md text-sidebar-foreground outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
         className,
       )}
       data-recent-filter-trigger="true"
@@ -32,7 +32,7 @@ export const RecentFilterTrigger = forwardRef<
     >
       <SlidersHorizontalIcon
         aria-hidden="true"
-        className="pointer-events-none size-4 text-[#dbd9d1]"
+        className="pointer-events-none size-4"
       />
     </button>
   );

@@ -38,18 +38,18 @@ export function SidebarAccountMount({
         render={
           <button
             aria-label={resolveAppMessage("pages.appShell.accountMenu")}
-            className="flex h-9 w-full items-center rounded-[7px] px-2.5 text-left outline-none transition-colors hover:bg-[#1b1b1b] focus-visible:ring-2 focus-visible:ring-[#8f8c85]"
+            className="flex h-9 w-full items-center rounded-[7px] px-2.5 text-left outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
             type="button"
           />
         }
       >
-        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#2b2b2b] text-xs font-medium text-[#dbd9d1]">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-medium text-sidebar-accent-foreground">
           {userInitial}
         </span>
-        <span className="ml-2.5 min-w-0 flex-1 truncate text-[13.5px] font-normal text-[#d1cfc7]">
+        <span className="ml-2.5 min-w-0 flex-1 truncate text-[13.5px] font-normal text-sidebar-foreground/90">
           {userName}
         </span>
-        <ChevronsUpDownIcon className="size-3.5 shrink-0 text-[#8f8c85]" />
+        <ChevronsUpDownIcon className="size-3.5 shrink-0 text-sidebar-foreground/60" />
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"

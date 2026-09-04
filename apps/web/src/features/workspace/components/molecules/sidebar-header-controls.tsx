@@ -15,22 +15,33 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { resolveAppMessage } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 type SidebarHeaderControlsProps = {
+  className?: string;
   onBack: () => void;
   onForward: () => void;
   onSearch: () => void;
   onToggleCollapse: () => void;
+  showDivider?: boolean;
 };
 
 export function SidebarHeaderControls({
+  className,
   onBack,
   onForward,
   onSearch,
   onToggleCollapse,
+  showDivider = true,
 }: SidebarHeaderControlsProps) {
   return (
-    <div className="flex h-13 shrink-0 items-center gap-2 border-b border-[#292929] px-3">
+    <div
+      className={cn(
+        "flex h-13 shrink-0 items-center gap-2 px-3",
+        showDivider ? "border-b border-sidebar-border" : null,
+        className,
+      )}
+    >
       <SidebarHeaderButton
         Icon={PanelLeftIcon}
         label={resolveAppMessage("pages.appShell.sidebarToggle")}
@@ -70,7 +81,7 @@ function SidebarHeaderButton({
         render={
           <Button
             aria-label={label}
-            className="size-8 rounded-lg text-[#dbd9d1] hover:bg-[#1b1b1b] hover:text-[#dbd9d1] focus-visible:ring-2 focus-visible:ring-[#8f8c85]"
+            className="size-8 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
             onClick={onClick}
             size="icon"
             type="button"

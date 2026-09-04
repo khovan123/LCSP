@@ -136,12 +136,13 @@ test("workspace route uses the redesigned app shell instead of the legacy sideba
   assert.doesNotMatch(appShellSource, /SidebarProvider|AppSidebar|AppHeader/);
 });
 
-test("assessment app shell keeps fixed desktop sidebar geometry without overlap", async () => {
+test("assessment app shell releases the left sidebar space completely when collapsed", async () => {
   const slotSource = await readFile(slotPath, "utf8");
 
   assert.match(slotSource, /w-55/);
   assert.match(slotSource, /if \(collapsed\) return null/);
   assert.doesNotMatch(slotSource, /w-14/);
+  assert.doesNotMatch(slotSource, /icon|rail|collapsed.*w-/i);
   assert.match(slotSource, /w-105/);
   assert.match(slotSource, /min-w-0 flex-1/);
   assert.match(slotSource, /hidden .*lg:flex/);
@@ -157,6 +158,16 @@ test("assessment app shell mounts the single shared LCSP-268 AppSidebar through 
   assert.match(shellSource, /import \{ AppSidebar/);
   assert.match(shellSource, /<LeftSidebarSlot collapsed=\{leftCollapsed\}>/);
   assert.match(shellSource, /<AppSidebar/);
+  const appSidebarInstances = shellSource
+    .split("<AppSidebar")
+    .slice(1)
+    .map((source) => source.slice(0, source.indexOf("/>")));
+  assert.ok(appSidebarInstances.length >= 2);
+  for (const instance of appSidebarInstances) {
+    assert.doesNotMatch(instance, /collapsed=/);
+  }
+  assert.doesNotMatch(sidebarSource, /collapsed: boolean/);
+  assert.doesNotMatch(sidebarSource, /if \(collapsed\) return null/);
   assert.doesNotMatch(shellSource, /function AssessmentShellNavigation/);
   assert.doesNotMatch(shellSource, /<AssessmentShellNavigation/);
   assert.match(sidebarSource, /export function AppSidebar/);
@@ -193,7 +204,7 @@ test("app sidebar keeps LCSP-268 navigation contracts without legacy assessment 
   );
 });
 
-test("app sidebar renders the Figma left header controls through shell-owned state", async () => {
+test("app shell renders top controls through shell-owned sidebar state", async () => {
   const [shellSource, sidebarSource, headerControlsSource] = await Promise.all([
     readFile(shellPath, "utf8"),
     readFile(appSidebarPath, "utf8"),
@@ -201,12 +212,18 @@ test("app sidebar renders the Figma left header controls through shell-owned sta
   ]);
 
   assert.match(sidebarSource, /<SidebarHeaderControls/);
+  assert.match(shellSource, /import \{ SidebarHeaderControls/);
+  assert.match(shellSource, /leftCollapsed \? \(/);
+  assert.match(shellSource, /showDivider=\{false\}/);
+  assert.match(shellSource, /className="hidden px-0 lg:-ml-2 lg:flex"/);
+  assert.match(shellSource, /leftCollapsed \? "ml-8" : "ml-2"/);
+  assert.doesNotMatch(shellSource, /aria-pressed=\{!leftCollapsed\}/);
   assert.match(headerControlsSource, /export function SidebarHeaderControls/);
   assert.match(headerControlsSource, /PanelLeftIcon/);
   assert.match(headerControlsSource, /SearchIcon/);
   assert.match(headerControlsSource, /ArrowLeftIcon/);
   assert.match(headerControlsSource, /ArrowRightIcon/);
-  assert.match(headerControlsSource, /className="flex h-13/);
+  assert.match(headerControlsSource, /flex h-13/);
   assert.match(headerControlsSource, /size="icon"/);
   assert.match(headerControlsSource, /data-icon="inline-start"/);
   assert.match(shellSource, /onToggleCollapse=\{toggleLeftSidebar\}/);
@@ -225,12 +242,13 @@ test("app sidebar exposes the Figma sidebar item state contracts", async () => {
   assert.match(sidebarSource, /SIDEBAR_NAV_ITEM_VARIANTS\.new/);
   assert.match(navItemSource, /export function SidebarNavItem/);
   assert.match(recentItemSource, /export function RecentAssessmentItem/);
-  assert.match(navItemSource, /hover:bg-\[#1b1b1b\]/);
-  assert.match(navItemSource, /bg-\[#1f1f1f\] hover:bg-\[#242424\]/);
-  assert.match(recentItemSource, /bg-\[#252525\]/);
+  assert.match(navItemSource, /hover:bg-sidebar-accent/);
+  assert.match(navItemSource, /bg-sidebar-accent/);
+  assert.match(navItemSource, /text-sidebar-accent-foreground/);
+  assert.match(recentItemSource, /bg-sidebar-accent/);
   assert.match(
     recentItemSource,
-    /hover:border-\[#5c5c5c\] hover:bg-\[#292929\]/,
+    /hover:border-sidebar-border hover:bg-sidebar-accent/,
   );
   assert.match(recentItemSource, /h-8\.5/);
 });
