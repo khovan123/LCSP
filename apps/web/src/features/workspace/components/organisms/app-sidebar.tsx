@@ -20,6 +20,7 @@ import { RecentAssessmentItem } from "../molecules/recent-assessment-item";
 import { RecentEmptyMessage } from "../molecules/recent-empty-message";
 import { RecentFilterPopover } from "../molecules/recent-filter-popover";
 import { SidebarAccountMount } from "../molecules/sidebar-account-mount";
+import { SidebarHeaderControls } from "../molecules/sidebar-header-controls";
 import { SidebarNavItem } from "../molecules/sidebar-nav-item";
 
 export { SIDEBAR_RECENT_LOAD_STATES } from "../../types/recent-filter.types";
@@ -28,7 +29,11 @@ type AppSidebarProps = {
   assessments: AssessmentSummary[];
   collapsed: boolean;
   onNavigate?: () => void;
+  onBack: () => void;
+  onForward: () => void;
   onSignOut: () => void;
+  onSearch: () => void;
+  onToggleCollapse: () => void;
   pathname: string;
   recentLoadState?: SidebarRecentLoadState;
   signOutPending: boolean;
@@ -40,8 +45,12 @@ export function AppSidebar({
   accountControl,
   assessments,
   collapsed,
+  onBack,
+  onForward,
   onNavigate,
   onSignOut,
+  onSearch,
+  onToggleCollapse,
   pathname,
   recentLoadState = SIDEBAR_RECENT_LOAD_STATES.idle,
   signOutPending,
@@ -81,7 +90,14 @@ export function AppSidebar({
       className="flex min-h-0 w-full flex-col bg-[#111111] text-[#dbd9d1]"
       data-component="AppSidebar"
     >
-      <div className="shrink-0 px-2.5 pt-15">
+      <SidebarHeaderControls
+        onBack={onBack}
+        onForward={onForward}
+        onSearch={onSearch}
+        onToggleCollapse={onToggleCollapse}
+      />
+
+      <div className="shrink-0 px-2.5 pt-2">
         <SidebarNavItem
           active={newActive}
           href="/assessments/new"
@@ -100,7 +116,7 @@ export function AppSidebar({
           disabled
           icon={<BoxesIcon className="size-4" />}
           label={resolveAppMessage("pages.appShell.artifacts")}
-          title={resolveAppMessage("pages.appShell.artifactsUnavailable")}
+          tooltip={resolveAppMessage("pages.appShell.artifactsUnavailable")}
           variant={SIDEBAR_NAV_ITEM_VARIANTS.nav}
         />
       </div>

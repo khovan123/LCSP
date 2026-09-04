@@ -3,7 +3,7 @@
 import { ASSESSMENT_RUNTIME_RUN_STATUSES } from "@lcsp/contracts/evidence";
 import { resolveMessage } from "@lcsp/i18n";
 import { PanelLeftIcon, PanelRightIcon } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +59,7 @@ export function AssessmentAppShell({
   sections,
 }: AssessmentAppShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const routeScreen = getRouteScreen(pathname, assessmentId);
   const [shellState, setShellState] = useState<AssessmentShellState>(() => ({
     screen: routeScreen,
@@ -148,12 +149,20 @@ export function AssessmentAppShell({
     }));
   }
 
+  function openAssessmentSearch() {
+    window.dispatchEvent(new Event("lcsp:search-assessments"));
+  }
+
   const navigation = (
     <AppSidebar
       assessments={assessments}
       collapsed={false}
+      onBack={() => router.back()}
+      onForward={() => router.forward()}
       onNavigate={() => setMobileNavigationOpen(false)}
+      onSearch={openAssessmentSearch}
       onSignOut={() => void handleSignOut()}
+      onToggleCollapse={() => setMobileNavigationOpen(false)}
       pathname={pathname}
       recentLoadState={recentLoadState}
       signOutPending={signOutMutation.isPending}
@@ -172,7 +181,11 @@ export function AssessmentAppShell({
         <AppSidebar
           assessments={assessments}
           collapsed={leftCollapsed}
+          onBack={() => router.back()}
+          onForward={() => router.forward()}
+          onSearch={openAssessmentSearch}
           onSignOut={() => void handleSignOut()}
+          onToggleCollapse={toggleLeftSidebar}
           pathname={pathname}
           recentLoadState={recentLoadState}
           signOutPending={signOutMutation.isPending}

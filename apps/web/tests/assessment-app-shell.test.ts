@@ -38,6 +38,19 @@ const sidebarAccountMountPath = new URL(
   "../src/features/workspace/components/molecules/sidebar-account-mount.tsx",
   import.meta.url,
 );
+const sidebarHeaderControlsPath = new URL(
+  "../src/features/workspace/components/molecules/sidebar-header-controls.tsx",
+  import.meta.url,
+);
+const workspaceSwitcherPath = new URL(
+  "../src/features/workspace/components/molecules/workspace-switcher.tsx",
+  import.meta.url,
+);
+const uiSidebarPath = new URL(
+  "../src/components/ui/sidebar.tsx",
+  import.meta.url,
+);
+const agentsPath = new URL("../../../AGENTS.md", import.meta.url);
 const recentFilterTypesPath = new URL(
   "../src/features/workspace/types/recent-filter.types.ts",
   import.meta.url,
@@ -154,6 +167,7 @@ test("assessment app shell mounts the single shared LCSP-268 AppSidebar through 
   assert.match(sidebarSource, /RecentAssessmentItem/);
   assert.match(sidebarSource, /RecentFilterPopover/);
   assert.match(sidebarSource, /SidebarAccountMount/);
+  assert.match(sidebarSource, /SidebarHeaderControls/);
   assert.match(sidebarSource, /SidebarNavItem/);
   await assert.rejects(readFile(legacySidebarAssessmentListPath, "utf8"), {
     code: "ENOENT",
@@ -179,6 +193,28 @@ test("app sidebar keeps LCSP-268 navigation contracts without legacy assessment 
   );
 });
 
+test("app sidebar renders the Figma left header controls through shell-owned state", async () => {
+  const [shellSource, sidebarSource, headerControlsSource] = await Promise.all([
+    readFile(shellPath, "utf8"),
+    readFile(appSidebarPath, "utf8"),
+    readFile(sidebarHeaderControlsPath, "utf8"),
+  ]);
+
+  assert.match(sidebarSource, /<SidebarHeaderControls/);
+  assert.match(headerControlsSource, /export function SidebarHeaderControls/);
+  assert.match(headerControlsSource, /PanelLeftIcon/);
+  assert.match(headerControlsSource, /SearchIcon/);
+  assert.match(headerControlsSource, /ArrowLeftIcon/);
+  assert.match(headerControlsSource, /ArrowRightIcon/);
+  assert.match(headerControlsSource, /className="flex h-13/);
+  assert.match(headerControlsSource, /size="icon"/);
+  assert.match(headerControlsSource, /data-icon="inline-start"/);
+  assert.match(shellSource, /onToggleCollapse=\{toggleLeftSidebar\}/);
+  assert.match(shellSource, /onBack=\{\(\) => router\.back\(\)\}/);
+  assert.match(shellSource, /onForward=\{\(\) => router\.forward\(\)\}/);
+  assert.match(shellSource, /lcsp:search-assessments/);
+});
+
 test("app sidebar exposes the Figma sidebar item state contracts", async () => {
   const [sidebarSource, navItemSource, recentItemSource] = await Promise.all([
     readFile(appSidebarPath, "utf8"),
@@ -196,7 +232,7 @@ test("app sidebar exposes the Figma sidebar item state contracts", async () => {
     recentItemSource,
     /hover:border-\[#5c5c5c\] hover:bg-\[#292929\]/,
   );
-  assert.match(recentItemSource, /h-\[34px\]/);
+  assert.match(recentItemSource, /h-8\.5/);
 });
 
 test("recent filter popover renders main rows, submenus, and preserved selection state", async () => {
@@ -251,7 +287,7 @@ test("recent filter empty and hover-through states are explicitly handled", asyn
   assert.match(sidebarSource, /recentFilter\.error/);
   assert.match(recentItemSource, /data-hover-suppressed/);
   assert.match(sidebarSource, /suppressHover=\{filterOpen\}/);
-  assert.match(combined, /open \? "mt-\[188px\]" : "mt-7"/);
+  assert.match(combined, /open \? "mt-47" : "mt-7"/);
 });
 
 test("account mount remains available for the LCSP-269 account controls", async () => {
@@ -275,6 +311,7 @@ test("LCSP-268 sidebar is split into feature atomic files", async () => {
     filterTriggerSource,
     filterPopoverSource,
     filterSubmenuSource,
+    headerControlsSource,
     typesSource,
     optionsSource,
     utilsSource,
@@ -285,6 +322,7 @@ test("LCSP-268 sidebar is split into feature atomic files", async () => {
     readFile(recentFilterTriggerPath, "utf8"),
     readFile(recentFilterPopoverPath, "utf8"),
     readFile(recentFilterSubmenuPath, "utf8"),
+    readFile(sidebarHeaderControlsPath, "utf8"),
     readFile(recentFilterTypesPath, "utf8"),
     readFile(recentFilterOptionsPath, "utf8"),
     readFile(recentFilterUtilsPath, "utf8"),
@@ -302,6 +340,7 @@ test("LCSP-268 sidebar is split into feature atomic files", async () => {
   assert.match(filterTriggerSource, /export const RecentFilterTrigger/);
   assert.match(filterPopoverSource, /export function RecentFilterPopover/);
   assert.match(filterSubmenuSource, /export function RecentFilterSubmenu/);
+  assert.match(headerControlsSource, /export function SidebarHeaderControls/);
   assert.match(typesSource, /export const DEFAULT_RECENT_FILTERS/);
   assert.match(optionsSource, /satisfies RecentFilterOption/);
   assert.match(utilsSource, /export function getVisibleRecentAssessments/);
@@ -313,6 +352,7 @@ test("LCSP-268 sidebar copy resolves through the shared app i18n helper", async 
     filterTriggerSource,
     filterPopoverSource,
     filterSubmenuSource,
+    headerControlsSource,
     accountMountSource,
     appI18nSource,
   ] = await Promise.all([
@@ -320,6 +360,7 @@ test("LCSP-268 sidebar copy resolves through the shared app i18n helper", async 
     readFile(recentFilterTriggerPath, "utf8"),
     readFile(recentFilterPopoverPath, "utf8"),
     readFile(recentFilterSubmenuPath, "utf8"),
+    readFile(sidebarHeaderControlsPath, "utf8"),
     readFile(sidebarAccountMountPath, "utf8"),
     readFile(appI18nPath, "utf8"),
   ]);
@@ -328,6 +369,7 @@ test("LCSP-268 sidebar copy resolves through the shared app i18n helper", async 
     filterTriggerSource,
     filterPopoverSource,
     filterSubmenuSource,
+    headerControlsSource,
     accountMountSource,
   ].join("\n");
 
@@ -335,6 +377,41 @@ test("LCSP-268 sidebar copy resolves through the shared app i18n helper", async 
   assert.match(sidebarCopySources, /resolveAppMessage/);
   assert.doesNotMatch(sidebarCopySources, /function t\(/);
   assert.doesNotMatch(sidebarCopySources, /resolveMessage\(appLocale/);
+});
+
+test("sidebar hover hints use shadcn tooltip primitives instead of native title attributes", async () => {
+  const [
+    agentsSource,
+    sidebarSource,
+    navItemSource,
+    recentItemSource,
+    headerControlsSource,
+    workspaceSwitcherSource,
+    uiSidebarSource,
+  ] = await Promise.all([
+    readFile(agentsPath, "utf8"),
+    readFile(appSidebarPath, "utf8"),
+    readFile(sidebarNavItemPath, "utf8"),
+    readFile(recentAssessmentItemPath, "utf8"),
+    readFile(sidebarHeaderControlsPath, "utf8"),
+    readFile(workspaceSwitcherPath, "utf8"),
+    readFile(uiSidebarPath, "utf8"),
+  ]);
+  const tooltipSources = [
+    navItemSource,
+    recentItemSource,
+    headerControlsSource,
+    workspaceSwitcherSource,
+    uiSidebarSource,
+  ].join("\n");
+
+  assert.match(agentsSource, /Do not add HTML `title` attributes/);
+  assert.match(sidebarSource, /tooltip=\{resolveAppMessage/);
+  assert.doesNotMatch(sidebarSource, /title=\{/);
+  assert.match(tooltipSources, /Tooltip/);
+  assert.match(tooltipSources, /TooltipTrigger/);
+  assert.match(tooltipSources, /TooltipContent/);
+  assert.doesNotMatch(tooltipSources, /\btitle=/);
 });
 
 test("assessment entry points no longer route progression through legacy step pages", async () => {

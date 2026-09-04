@@ -36,6 +36,8 @@ export const enPages = {
     moreAssessments: "More assessments",
     allAssessments: "All assessments",
     searchAssessments: "Search assessments",
+    back: "Back",
+    forward: "Forward",
     noAssessmentMatches: "No matching assessments found.",
     recentFilter: {
       trigger: "Filter recent assessments",

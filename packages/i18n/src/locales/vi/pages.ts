@@ -36,6 +36,8 @@ export const viPages = {
     moreAssessments: "Thêm assessment",
     allAssessments: "Tất cả assessment",
     searchAssessments: "Tìm assessment",
+    back: "Quay lại",
+    forward: "Tiến tới",
     noAssessmentMatches: "Không tìm thấy assessment phù hợp.",
     recentFilter: {
       trigger: "Lọc assessment gần đây",

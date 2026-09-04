@@ -74,6 +74,8 @@ export type PagesMessages = {
     moreAssessments: string;
     allAssessments: string;
     searchAssessments: string;
+    back: string;
+    forward: string;
     noAssessmentMatches: string;
     recentFilter: {
       trigger: string;

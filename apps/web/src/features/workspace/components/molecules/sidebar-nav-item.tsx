@@ -1,8 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import {
@@ -19,7 +24,7 @@ type SidebarNavItemProps = {
   icon: ReactNode;
   label: string;
   onNavigate?: () => void;
-  title?: string;
+  tooltip?: string;
   variant: SidebarNavItemVariant;
 };
 
@@ -32,7 +37,7 @@ export function SidebarNavItem({
   icon,
   label,
   onNavigate,
-  title,
+  tooltip,
   variant,
 }: SidebarNavItemProps) {
   const content = (
@@ -58,28 +63,39 @@ export function SidebarNavItem({
   );
 
   if (href && !disabled) {
-    return (
+    return withOptionalTooltip(
       <Link
         aria-current={active ? "page" : undefined}
         className={itemClassName}
         href={href}
         onClick={onNavigate}
-        title={title}
       >
         {content}
-      </Link>
+      </Link>,
+      tooltip,
     );
   }
 
-  return (
+  return withOptionalTooltip(
     <button
       aria-disabled={disabled || undefined}
       aria-label={ariaLabel}
       className={itemClassName}
-      title={title}
       type="button"
     >
       {content}
-    </button>
+    </button>,
+    tooltip,
+  );
+}
+
+function withOptionalTooltip(trigger: ReactElement, tooltip?: string) {
+  if (!tooltip) return trigger;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={trigger} />
+      <TooltipContent side="right">{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
