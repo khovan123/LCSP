@@ -8,6 +8,10 @@ from typing import Any
 from orchestration.dispatcher import RootSubagentDispatcher
 
 from .engineering_assessment_boundary import EngineeringAssessmentBoundary
+from .managed_targeted_investigator import (
+    ManagedTargetedInvestigatorPipeline,
+    TargetedInterviewPending,
+)
 
 
 _TERMINAL_WAITING_OUTCOMES = {
@@ -42,9 +46,16 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
         recovery_root: Any | None = None,
         **kwargs: Any,
     ) -> None:
+        injected_pipeline = kwargs.get("investigation_pipeline")
         super().__init__(*args, **kwargs)
         self._interview_dispatcher = interview_dispatcher
         self._recovery_root = recovery_root
+        if injected_pipeline is None:
+            self._pipeline = ManagedTargetedInvestigatorPipeline(
+                delegate=self._pipeline,
+                config=self._config,
+                api_client=self._api_client,
+            )
 
     def handle(self, message: dict[str, Any], correlationId: str) -> None:
         evidence_report_id = self._evidence_report_id(message)
@@ -73,7 +84,14 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
         original_pipeline = self._pipeline
         self._pipeline = _ConfirmedContextPipeline(original_pipeline, confirmed_context)
         try:
-            super().handle(message, correlationId)
+            try:
+                super().handle(message, correlationId)
+            except TargetedInterviewPending:
+                # The managed Investigator already persisted the exact child
+                # execution/checkpoint and queued Targeted Interview. Do not emit a
+                # classification callback or continue deterministic evaluation until
+                # that exact execution is resumed with guarded Customer context.
+                return
         finally:
             self._pipeline = original_pipeline
 
@@ -105,17 +123,16 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
             return dict(confirmed) if isinstance(confirmed, dict) else {}
 
         if outcome in _TERMINAL_WAITING_OUTCOMES and (
-            active_question is not None or context_revision > 0 or outcome != "WAITING_FOR_CUSTOMER"
+            active_question is not None
+            or context_revision > 0
+            or outcome != "WAITING_FOR_CUSTOMER"
         ):
             return None
 
         if outcome != "WAITING_FOR_CUSTOMER" or context_revision != 0:
             return None
 
-        dispatcher = self._interview_dispatcher or RootSubagentDispatcher(
-            self._config,
-            api_client=self._api_client,
-        )
+        dispatcher = self._interview_dispatcher or RootSubagentDispatcher()
         result = dispatcher.dispatch(
             subagent_type="interview",
             instruction=_initial_interview_instruction(
@@ -145,7 +162,6 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
         handoff["expectedContextRevision"] = 0
         self._api_client.post_interview_initial_question(assessment_id, handoff)
         return None
-
 
     def _route_unavailable_coverage_to_recovery(
         self,
@@ -178,7 +194,9 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
                 ]
             },
             config={
-                "configurable": {"thread_id": f"assessment:{assessment_id}:coverage-recovery"},
+                "configurable": {
+                    "thread_id": f"assessment:{assessment_id}:coverage-recovery"
+                },
                 "metadata": {
                     "assessment_id": assessment_id,
                     "technical_evidence_report_id": evidence_report_id,
@@ -190,12 +208,16 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
 
 
 def _technical_coverage(evidence_report: dict[str, Any]) -> tuple[str, list[str]]:
-    payload = evidence_report.get("evidence_payload") or evidence_report.get("evidencePayload")
+    payload = evidence_report.get("evidence_payload") or evidence_report.get(
+        "evidencePayload"
+    )
     graph = payload.get("evidence_graph") if isinstance(payload, dict) else None
     coverage_state = "UNKNOWN"
     coverage_notes: list[str] = []
     if isinstance(graph, dict):
-        coverage_state = str(graph.get("coverage_state") or graph.get("coverageState") or "UNKNOWN").upper()
+        coverage_state = str(
+            graph.get("coverage_state") or graph.get("coverageState") or "UNKNOWN"
+        ).upper()
         raw_notes = graph.get("coverage_notes") or graph.get("coverageNotes") or []
         if isinstance(raw_notes, list):
             coverage_notes = [str(item)[:240] for item in raw_notes[:8]]
@@ -214,8 +236,10 @@ def _initial_interview_instruction(
         "technicalEvidenceReportId": evidence_report_id,
         "coverageState": coverage_state,
         "coverageNotes": coverage_notes,
-        "snapshotId": evidence_report.get("snapshot_id") or evidence_report.get("snapshotId"),
-        "schemaVersion": evidence_report.get("schema_version") or evidence_report.get("schemaVersion"),
+        "snapshotId": evidence_report.get("snapshot_id")
+        or evidence_report.get("snapshotId"),
+        "schemaVersion": evidence_report.get("schema_version")
+        or evidence_report.get("schemaVersion"),
     }
     return (
         "Run INITIAL_INTERVIEW before any EngineeringRule, Planner or Investigator work. "
