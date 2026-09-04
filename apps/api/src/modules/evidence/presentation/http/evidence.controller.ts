@@ -106,7 +106,9 @@ export class InternalEvidenceController {
       select: { ownerId: true },
     });
     if (!assessment) {
-      throw new NotFoundException("Assessment not found for TechnicalEvidenceReport");
+      throw new NotFoundException(
+        "Assessment not found for TechnicalEvidenceReport",
+      );
     }
 
     return {
