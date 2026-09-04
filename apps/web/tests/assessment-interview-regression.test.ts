@@ -185,6 +185,15 @@ test("workflow run renders dynamic interview controls through shared workspace c
   assert.match(questionSource, /requiresFreeText/);
   assert.match(questionSource, /whyEvidenceRefs/);
   assert.match(questionSource, /blocked-or-unresolved-actions/);
+  assert.match(questionSource, /usesSingleValue/);
+  assert.match(
+    questionSource,
+    /ASSESSMENT_INTERVIEW_CONTROLS\.singleSelect\s*\|\|\s*\n\s*question\.control === ASSESSMENT_INTERVIEW_CONTROLS\.boolean/,
+  );
+  assert.match(
+    questionSource,
+    /usesSingleValue && singleValue \? \[singleValue\] : selectedChoiceIds/,
+  );
   assert.doesNotMatch(questionSource, /Support/);
 
   const contractSource = await readFile(contractsPath, "utf8");
@@ -196,9 +205,7 @@ test("workflow run renders dynamic interview controls through shared workspace c
 test("web production cutover has no active wizard customer-context consumers", async () => {
   const assessmentQueries = await readFile(assessmentQueriesPath, "utf8");
   const files = await collectFiles(new URL(".", workspaceRoot).pathname);
-  const activeFiles = files.filter(
-    (file) => !file.includes("/features/wizard/"),
-  );
+  const activeFiles = files.filter((file) => !file.includes("/features/wizard/"));
   const wizardRouteFiles = activeFiles.filter((file) =>
     /\/app\/api\/assessments\/\[id\]\/wizard\//.test(file),
   );
