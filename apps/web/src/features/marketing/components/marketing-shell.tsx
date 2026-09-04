@@ -1,10 +1,13 @@
+"use client";
+
 import { resolveMessage } from "@lcsp/i18n";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { LCSPLogo } from "@/components/atoms/lcsp-logo";
-import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
+import { useMarketingLocale } from "./marketing-locale";
+import { LanguageSwitcher } from "./language-switcher";
 
 const navigation = [
   {
@@ -32,12 +35,17 @@ type MarketingShellProps = {
 };
 
 export function MarketingShell({ active, children }: MarketingShellProps) {
+  const locale = useMarketingLocale();
+  const prefix = `/${locale}`;
+  const localizedHref = (href: string) =>
+    href === "/" ? prefix : `${prefix}${href}`;
+
   return (
     <main className="min-h-dvh bg-background text-foreground">
       <header className="sticky top-0 z-50 h-18 border-b border-border bg-background">
         <div className="relative mx-auto h-18 w-full max-w-[1440px]">
           <Link
-            href="/"
+            href={prefix}
             aria-label={t("pages.marketing.brandHomeLabel")}
             className="absolute left-8 top-5 inline-flex h-8 items-center"
           >
@@ -51,7 +59,7 @@ export function MarketingShell({ active, children }: MarketingShellProps) {
             {navigation.map((item) => (
               <Link
                 key={item.key}
-                href={item.href}
+                href={localizedHref(item.href)}
                 aria-current={active === item.key ? "page" : undefined}
                 className={cn(
                   "flex h-10 items-center px-4 text-xs font-medium text-foreground transition-colors hover:text-brand",
@@ -64,15 +72,16 @@ export function MarketingShell({ active, children }: MarketingShellProps) {
           </nav>
 
           <div className="absolute right-8 top-[18px] flex h-9 items-center gap-2.5">
+            <LanguageSwitcher />
             <Link
               href="/sign-in"
-              className="inline-flex h-9 w-24 items-center justify-center rounded-lg border border-border bg-secondary text-[13px] font-medium text-foreground transition-colors hover:bg-muted"
+              className="inline-flex h-9 w-24 items-center justify-center rounded-lg border border-border bg-muted text-[13px] font-medium text-foreground transition-colors hover:bg-accent"
             >
               {t("pages.marketing.nav.signIn")}
             </Link>
             <Link
               href="/sign-up"
-              className="inline-flex h-9 w-[122px] items-center justify-center rounded-lg border border-primary bg-primary text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-85"
+              className="inline-flex h-9 w-[122px] items-center justify-center rounded-lg border border-foreground bg-foreground text-[13px] font-medium text-background transition-opacity hover:opacity-85"
             >
               {t("pages.marketing.nav.createAccount")}
             </Link>
@@ -86,11 +95,11 @@ export function MarketingShell({ active, children }: MarketingShellProps) {
           {navigation.map((item) => (
             <Link
               key={item.key}
-              href={item.href}
+              href={localizedHref(item.href)}
               aria-current={active === item.key ? "page" : undefined}
               className={cn(
                 "shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground",
-                active === item.key && "bg-secondary text-foreground",
+                active === item.key && "bg-muted text-foreground",
               )}
             >
               {t(item.labelKey)}
@@ -101,20 +110,28 @@ export function MarketingShell({ active, children }: MarketingShellProps) {
 
       {children}
 
-      <MarketingFooter active={active} />
+      <MarketingFooter active={active} locale={locale} />
     </main>
   );
 }
 
-function MarketingFooter({ active }: { active: MarketingPageKey }) {
+function MarketingFooter({
+  active,
+  locale,
+}: {
+  active: MarketingPageKey;
+  locale: import("@lcsp/contracts/shared/locale").Locale;
+}) {
   const footer = t("pages.marketing.footer");
+  const localizedHref = (href: string) =>
+    href === "/" ? `/${locale}` : `/${locale}${href}`;
 
   return (
     <footer className="bg-background">
       <div className="relative mx-auto h-[220px] w-full max-w-[1440px] border-t border-border px-8 md:px-[120px]">
         <div className="pt-12">
           <Link
-            href="/"
+            href={`/${locale}`}
             aria-label={t("pages.marketing.brandHomeLabel")}
             className="inline-flex h-6 items-center"
           >
@@ -136,7 +153,7 @@ function MarketingFooter({ active }: { active: MarketingPageKey }) {
           {navigation.map((item) => (
             <Link
               key={item.key}
-              href={item.href}
+              href={localizedHref(item.href)}
               aria-current={active === item.key ? "page" : undefined}
               className={cn(
                 "px-3 py-3 text-xs font-medium text-foreground transition-colors hover:text-brand",
@@ -152,6 +169,11 @@ function MarketingFooter({ active }: { active: MarketingPageKey }) {
   );
 }
 
-function t(key: string) {
-  return resolveMessage(appLocale, key as Parameters<typeof resolveMessage>[1]);
+function useMarketingText(key: string) {
+  return resolveMessage(
+    useMarketingLocale(),
+    key as Parameters<typeof resolveMessage>[1],
+  );
 }
+
+const t = useMarketingText;

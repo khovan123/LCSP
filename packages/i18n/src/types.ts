@@ -170,6 +170,14 @@ export type PagesMessages = {
     };
   };
   marketing: {
+    metadata: {
+      productTitle: string;
+      productDescription: string;
+      featuresTitle: string;
+      featuresDescription: string;
+      pricingTitle: string;
+      pricingDescription: string;
+    };
     brandHomeLabel: string;
     footerTagline: string;
     footer: string;
