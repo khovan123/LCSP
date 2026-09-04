@@ -128,7 +128,8 @@ def test_interview_resume_boundary_passes_private_context_only_to_interview_and_
     assert len(dispatcher.calls) == 1
     instruction = dispatcher.calls[0]["instruction"]
     assert '"freeText": "raw"' in instruction
-    assert "Do not expose private raw Customer content to Root" in instruction
+    assert "private worker-only input" in instruction
+    assert "must not be copied into Customer-safe evidence or downstream prompts" in instruction
     assert root.calls == []
     assert len(api.decision_posts) == 1
     assessment_id, decision = api.decision_posts[0]
