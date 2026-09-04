@@ -244,6 +244,112 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         mockTx,
       );
     });
+
+    it("preserves BOOLEAN question control as responseMode for boolean answers", async () => {
+      const activeState: AssessmentInterviewRuntimeState = {
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        contextRevision: 1,
+        activeQuestion: {
+          id: "q-bool",
+          intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+          prompt: "Is encryption enabled?",
+          control: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+          choices: [
+            { id: "yes", label: "Yes" },
+            { id: "no", label: "No" },
+          ],
+        },
+      };
+
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
+        assessmentId: "assessment-1",
+        contextRevision: 1,
+        processedRevision: 0,
+        activeQuestionId: "q-bool",
+        stateJson: activeState,
+        privateContextJson: { revisions: [] },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+      });
+
+      const result = await service.submitAnswer({
+        assessmentId: "assessment-1",
+        actor: {
+          userId: "user-1",
+          sessionId: "session-1",
+          role: AUTH_USER_ROLES.customer,
+          scope: "assessment:assessment-1",
+        },
+        correlationId: "corr-submit-bool",
+        answer: {
+          questionId: "q-bool",
+          selectedChoiceIds: ["yes"],
+        },
+      });
+
+      expect(result.contextRevision).toBe(2);
+      expect(mockInterviewAudit.recordCustomerAnswer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          questionId: "q-bool",
+          responseMode: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+          answerValue: ["yes"],
+        }),
+        mockTx,
+      );
+    });
+
+    it("preserves MULTI_SELECT question control as responseMode for multi-select answers", async () => {
+      const activeState: AssessmentInterviewRuntimeState = {
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        contextRevision: 1,
+        activeQuestion: {
+          id: "q-multi",
+          intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+          prompt: "Select compliance frameworks",
+          control: ASSESSMENT_INTERVIEW_CONTROLS.multiSelect,
+          choices: [
+            { id: "soc2", label: "SOC 2" },
+            { id: "iso27001", label: "ISO 27001" },
+          ],
+        },
+      };
+
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
+        assessmentId: "assessment-1",
+        contextRevision: 1,
+        processedRevision: 0,
+        activeQuestionId: "q-multi",
+        stateJson: activeState,
+        privateContextJson: { revisions: [] },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+      });
+
+      const result = await service.submitAnswer({
+        assessmentId: "assessment-1",
+        actor: {
+          userId: "user-1",
+          sessionId: "session-1",
+          role: AUTH_USER_ROLES.customer,
+          scope: "assessment:assessment-1",
+        },
+        correlationId: "corr-submit-multi",
+        answer: {
+          questionId: "q-multi",
+          selectedChoiceIds: ["soc2", "iso27001"],
+        },
+      });
+
+      expect(result.contextRevision).toBe(2);
+      expect(mockInterviewAudit.recordCustomerAnswer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          questionId: "q-multi",
+          responseMode: ASSESSMENT_INTERVIEW_CONTROLS.multiSelect,
+          answerValue: ["soc2", "iso27001"],
+        }),
+        mockTx,
+      );
+    });
   });
 
   describe("recordBlockedAction", () => {

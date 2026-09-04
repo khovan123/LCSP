@@ -278,12 +278,7 @@ export class AssessmentInterviewRuntimeService {
         technicalCoverageState: provenance.technicalCoverageState,
         coverageLimitations: provenance.coverageLimitations,
       };
-      const responseMode =
-        answer.confirmed || answer.adjusted
-          ? ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust
-          : answer.selectedChoiceIds && answer.selectedChoiceIds.length > 0
-            ? ASSESSMENT_INTERVIEW_CONTROLS.singleSelect
-            : ASSESSMENT_INTERVIEW_CONTROLS.freeText;
+      const responseMode = thread.state.activeQuestion.control;
       const responseAction = answer.confirmed
         ? ASSESSMENT_INTERVIEW_ANSWER_ACTIONS.confirm
         : answer.adjusted
