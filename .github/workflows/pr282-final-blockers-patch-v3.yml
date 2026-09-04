@@ -1,0 +1,116 @@
+name: PR282 final blockers patch v3
+
+on:
+  push:
+    branches:
+      - feat/LCSP-278-add-responsive-interaction-regression-coverage
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lcsp_worker_test
+        ports:
+          - 55436:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d lcsp_worker_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      LCSP_TEST_CHECKPOINT_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55436/lcsp_worker_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/LCSP-278-add-responsive-interaction-regression-coverage
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Materialize guarded production patch from validated v2 recipe
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          production = Path('deepagents/tools/common/capabilities/assessment/investigation/engineering_rule/managed_targeted_investigator.py')
+          text = production.read_text(encoding='utf-8')
+          start = text.index('def resume_managed_investigator(')
+          end = text.index('\n\ndef complete_resumed_investigation(', start)
+          chunk = text[start:end]
+          needle = '        artifact_versions=artifact_versions,\n    )\n\n    report_id = str(artifact_versions.get("technicalEvidenceReportId") or "").strip()'
+          replacement = (
+              '        artifact_versions=artifact_versions,\n'
+              '        # A broker retry can carry the original guarded checkpoint after this exact\n'
+              '        # execution already advanced to READY. Preserve every identity/artifact pin,\n'
+              '        # but allow the invocation layer to recover the durable READY child state.\n'
+              '        allow_ready_advanced=True,\n'
+              '    )\n\n'
+              '    report_id = str(artifact_versions.get("technicalEvidenceReportId") or "").strip()'
+          )
+          if chunk.count(needle) != 1:
+              raise SystemExit(f'expected one scoped strict resume precheck, found {chunk.count(needle)}')
+          production.write_text(
+              text[:start] + chunk.replace(needle, replacement, 1) + text[end:],
+              encoding='utf-8',
+          )
+
+          recipe = Path('.github/workflows/pr282-final-blockers-patch-v2.yml').read_text(encoding='utf-8')
+          begin = "          cat > deepagents/tests/test_assessment_interview_release_vertical.py <<'PYTEST'\n"
+          start = recipe.index(begin) + len(begin)
+          end = recipe.index('\n          PYTEST\n', start)
+          test_body = recipe[start:end]
+          test_body = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in test_body.splitlines()
+          ) + '\n'
+          old_hint = '# Architecture\\n\\nThe AI recommendation crosses a governed human approval step.'
+          new_hint = '# Runtime Architecture\\n\\nThe AI model invocation feeds a human review workflow before approval.'
+          if test_body.count(old_hint) != 1:
+              raise SystemExit(f'expected one OpenWiki hint fixture, found {test_body.count(old_hint)}')
+          test_body = test_body.replace(old_hint, new_hint, 1)
+          Path('deepagents/tests/test_assessment_interview_release_vertical.py').write_text(
+              test_body,
+              encoding='utf-8',
+          )
+          PY
+
+      - name: Validate replay and full production-boundary vertical on Postgres
+        shell: bash
+        run: |
+          python -m py_compile \
+            deepagents/tools/common/capabilities/assessment/investigation/engineering_rule/managed_targeted_investigator.py \
+            deepagents/tests/test_assessment_interview_release_vertical.py
+          cd deepagents
+          python -m pip install -e '.[dev]'
+          pytest \
+            tests/test_assessment_interview_postgres_vertical.py \
+            tests/test_assessment_interview_release_vertical.py -q
+          cd ..
+          git diff --check
+
+      - name: Commit production patch and remove temporary patch infrastructure
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm \
+            .github/workflows/pr282-final-blockers-patch.yml \
+            .github/workflows/pr282-final-blockers-patch-v2.yml \
+            .github/workflows/pr282-final-blockers-patch-v3.yml
+          git add \
+            deepagents/tools/common/capabilities/assessment/investigation/engineering_rule/managed_targeted_investigator.py \
+            deepagents/tests/test_assessment_interview_release_vertical.py
+          git commit -m 'fix(LCSP-278): close investigator replay release blockers'
+          git push origin HEAD:feat/LCSP-278-add-responsive-interaction-regression-coverage
