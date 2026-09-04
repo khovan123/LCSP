@@ -344,6 +344,7 @@ def test_context_resolved_resumes_exact_managed_investigator_without_root() -> N
     api = TargetedApi()
     root = RecordingRoot()
     resume_calls = []
+    completion_calls = []
 
     def exact_resumer(**kwargs):
         resume_calls.append(kwargs)
@@ -370,12 +371,16 @@ def test_context_resolved_resumes_exact_managed_investigator_without_root() -> N
             },
         }
 
+    def exact_completer(**kwargs):
+        completion_calls.append(kwargs)
+
     boundary = AssessmentInterviewResumeBoundary(
         SimpleNamespace(),
         root_agent=root,
         api_client=api,
         dispatcher=RecordingDispatcher(targeted_handoff),
         investigator_resumer=exact_resumer,
+        investigation_completer=exact_completer,
     )
 
     boundary.handle(_message(reason="TARGETED_INTERVIEW_REQUIRED"), "corr-1")
@@ -387,6 +392,12 @@ def test_context_resolved_resumes_exact_managed_investigator_without_root() -> N
     assert call["confirmed_context"] == {"decision_authority": "human"}
     assert call["assessment_id"] == "assessment-1"
     assert call["context_revision"] == 2
+    assert len(completion_calls) == 1
+    assert completion_calls[0]["resumed_handoff"]["status"] == "READY"
+    assert completion_calls[0]["continuation"] is continuation
+    assert completion_calls[0]["confirmed_context"] == {
+        "decision_authority": "human"
+    }
 
 
 def test_exact_resume_rejects_wrong_investigator_execution() -> None:
