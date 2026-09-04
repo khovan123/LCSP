@@ -455,6 +455,10 @@ def resume_managed_investigator(
         checkpoint_id=checkpoint_id,
         affected_rule_ids=affected_rule_ids,
         artifact_versions=artifact_versions,
+        # A broker retry can carry the original guarded checkpoint after this exact
+        # execution already advanced to READY. Preserve every identity/artifact pin,
+        # but allow the invocation layer to recover the durable READY child state.
+        allow_ready_advanced=True,
     )
 
     report_id = str(artifact_versions.get("technicalEvidenceReportId") or "").strip()
