@@ -276,7 +276,7 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       });
     assert.equal(falseReady.status, 409, JSON.stringify(falseReady.body));
 
-    const ready = await httpRequest(app)
+    const forgedCustomerConfirmation = await httpRequest(app)
       .post("/internal/assessment-interviews/assessment-1/agent-decisions")
       .set("x-worker-api-key", WORKER_KEY)
       .send({
@@ -284,6 +284,21 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
         contextAuthority:
           ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+        confirmedContext: { decision_authority: "human approval required" },
+      });
+    assert.equal(
+      forgedCustomerConfirmation.status,
+      409,
+      JSON.stringify(forgedCustomerConfirmation.body),
+    );
+
+    const ready = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/agent-decisions")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        expectedContextRevision: 1,
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+        contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
         confirmedContext: { decision_authority: "human approval required" },
       });
     assert.equal(ready.status, 201, JSON.stringify(ready.body));
@@ -298,8 +313,7 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       .send({
         expectedContextRevision: 1,
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
-        contextAuthority:
-          ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+        contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
       });
     assert.equal(duplicate.status, 409, JSON.stringify(duplicate.body));
   });
@@ -373,8 +387,7 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       .send({
         expectedContextRevision: 1,
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
-        contextAuthority:
-          ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+        contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
         confirmedContext: { baseline: "confirmed" },
       });
     assert.equal(ready.status, 201, JSON.stringify(ready.body));
@@ -466,11 +479,59 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       });
     assert.equal(forged.status, 409, JSON.stringify(forged.body));
 
-    const resolved = await httpRequest(app)
+    const forgedSystemConfirmation = await httpRequest(app)
       .post("/internal/assessment-interviews/assessment-1/agent-decisions")
       .set("x-worker-api-key", WORKER_KEY)
       .send({
         expectedContextRevision: 2,
+        mode: "TARGETED_INTERVIEW",
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
+        contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+        confirmedContext: { decision_authority: "human operations lead" },
+      });
+    assert.equal(
+      forgedSystemConfirmation.status,
+      409,
+      JSON.stringify(forgedSystemConfirmation.body),
+    );
+
+    const confirmQuestion = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/agent-decisions")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        expectedContextRevision: 2,
+        mode: "TARGETED_INTERVIEW",
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
+        activeQuestion: {
+          id: "target-confirm-1",
+          needId: "need-decision-authority",
+          intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
+          control: ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust,
+          prompt: "Please confirm this interpretation before it becomes authoritative.",
+          priorAnswerSummary: "The human operations lead has final approval.",
+        },
+      });
+    assert.equal(
+      confirmQuestion.status,
+      201,
+      JSON.stringify(confirmQuestion.body),
+    );
+
+    const confirmation = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        questionId: "target-confirm-1",
+        confirmed: true,
+      });
+    assert.equal(confirmation.status, 201, JSON.stringify(confirmation.body));
+
+    const resolved = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/agent-decisions")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        expectedContextRevision: 3,
         mode: "TARGETED_INTERVIEW",
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
         contextAuthority:

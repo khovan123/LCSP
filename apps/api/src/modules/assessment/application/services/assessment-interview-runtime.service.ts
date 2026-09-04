@@ -10,7 +10,9 @@ import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   ASSESSMENT_CONTEXT_AUTHORITY_STATUSES,
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
+  ASSESSMENT_INTERVIEW_CONTROLS,
   ASSESSMENT_INTERVIEW_OUTCOMES,
+  ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
   ASSESSMENT_RUNTIME_STAGE_CODES,
   type AssessmentContextAuthorityStatus,
   type AssessmentInterviewAnswerHistoryItem,
@@ -54,6 +56,12 @@ export type PrivateInterviewAnswerRevision = {
   contextRevision: number;
   priorRevision: number;
   authority: AssessmentContextAuthorityStatus;
+  questionIntent?: NonNullable<
+    AssessmentInterviewRuntimeState["activeQuestion"]
+  >["intent"];
+  questionControl?: NonNullable<
+    AssessmentInterviewRuntimeState["activeQuestion"]
+  >["control"];
   sourceVersion: string;
   pgeVersion: string;
   governedEvidenceRefs: string[];
@@ -179,6 +187,8 @@ export class AssessmentInterviewRuntimeService {
         contextRevision: nextRevision,
         priorRevision,
         authority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
+        questionIntent: thread.state.activeQuestion.intent,
+        questionControl: thread.state.activeQuestion.control,
         sourceVersion: provenance.sourceVersion,
         pgeVersion: provenance.pgeVersion,
         governedEvidenceRefs: provenance.governedEvidenceRefs,
@@ -516,7 +526,11 @@ export class AssessmentInterviewRuntimeService {
       const state = decisionState(thread.state, decision);
       const revisions = thread.privateRevisions.map((revision) =>
         revision.contextRevision === decision.expectedContextRevision
-          ? { ...revision, processedAt: new Date().toISOString() }
+          ? {
+              ...revision,
+              authority: decision.contextAuthority ?? revision.authority,
+              processedAt: new Date().toISOString(),
+            }
           : revision,
       );
       const updated = await tx.assessmentInterviewThread.updateMany({
@@ -1099,6 +1113,11 @@ function assertGuardedDecision(
       { status: HttpStatus.CONFLICT },
     );
   }
+  assertAuthorityProvenance(
+    decision.contextAuthority,
+    privateRevision,
+    correlationId,
+  );
   if (
     decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextReady &&
     !isAuthoritative(decision.contextAuthority)
@@ -1174,6 +1193,55 @@ function assertGuardedDecision(
         status: HttpStatus.CONFLICT,
         meta: { missing: missing.join(",") },
       },
+    );
+  }
+}
+
+function assertAuthorityProvenance(
+  authority: AssessmentContextAuthorityStatus | undefined,
+  privateRevision: PrivateInterviewAnswerRevision | undefined,
+  correlationId: string,
+): void {
+  if (!isAuthoritative(authority)) {
+    return;
+  }
+  if (!privateRevision) {
+    throw problemException(
+      "INTERVIEW_AUTHORITATIVE_CONTEXT_REQUIRES_CUSTOMER_REVISION",
+      correlationId,
+      { status: HttpStatus.CONFLICT },
+    );
+  }
+
+  const explicitlyConfirmed =
+    privateRevision.questionControl ===
+      ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust &&
+    privateRevision.answer.confirmed === true &&
+    privateRevision.answer.adjusted !== true;
+
+  if (
+    authority === ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed
+  ) {
+    if (!explicitlyConfirmed) {
+      throw problemException(
+        "INTERVIEW_CUSTOMER_CONFIRMED_REQUIRES_EXPLICIT_CONFIRMATION",
+        correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
+    }
+    return;
+  }
+
+  if (
+    privateRevision.questionIntent !== ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask ||
+    privateRevision.questionControl ===
+      ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust ||
+    privateRevision.answer.adjusted === true
+  ) {
+    throw problemException(
+      "INTERVIEW_CONFIRMED_REQUIRES_DIRECT_ASK",
+      correlationId,
+      { status: HttpStatus.CONFLICT },
     );
   }
 }

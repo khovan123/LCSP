@@ -158,8 +158,7 @@ def _initial_interview_instruction(
         "Use only this bounded technical coverage/provenance summary to decide the first Customer question. "
         "Missing technical evidence is not proof that a business behavior does not exist. "
         "Do not infer Customer confirmation from PGE/documentary evidence. "
-        "Return WAITING_FOR_CUSTOMER with exactly one bounded activeQuestion.
-"
+        "Return WAITING_FOR_CUSTOMER with exactly one bounded activeQuestion.\n"
         f"Bounded initial context: {json.dumps(safe_context, ensure_ascii=False, sort_keys=True)}"
     )
 
