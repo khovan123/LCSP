@@ -409,7 +409,10 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       })
       .set("x-worker-api-key", WORKER_KEY);
     assert.equal(stale.status, 200, JSON.stringify(stale.body));
-    assert.equal(successBody<{ status: string }>(stale).status, "STALE_PROVENANCE");
+    assert.equal(
+      successBody<{ status: string }>(stale).status,
+      "STALE_PROVENANCE",
+    );
   });
 
   it("rejects answers that do not match the active runtime control", async () => {
@@ -665,7 +668,9 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
     const more = await httpRequest(app)
       .post("/assessments/assessment-1/interview/blocked-actions")
       .set("Authorization", `Bearer ${token}`)
-      .send({ action: ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext });
+      .send({
+        action: ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
+      });
     assert.equal(more.status, 201, JSON.stringify(more.body));
 
     const decision = await httpRequest(app)
@@ -690,7 +695,10 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       },
       orderBy: { sequence: "desc" },
     });
-    assert.doesNotMatch(JSON.stringify(runtimeEvent.outputSummaryJson), /Need internal legal owner/u);
+    assert.doesNotMatch(
+      JSON.stringify(runtimeEvent.outputSummaryJson),
+      /Need internal legal owner/u,
+    );
   });
 
   it("re-enters Interview when Customer chooses Provide More Context", async () => {

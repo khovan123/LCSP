@@ -390,7 +390,8 @@ export class AssessmentInterviewRuntimeService {
     );
     const target = thread.privateStore.targetedNeed;
     const provenanceChanged =
-      (input.sourceVersion && input.sourceVersion !== authoritative.sourceVersion) ||
+      (input.sourceVersion &&
+        input.sourceVersion !== authoritative.sourceVersion) ||
       (input.pgeVersion && input.pgeVersion !== authoritative.pgeVersion) ||
       thread.sourceVersion !== authoritative.sourceVersion ||
       thread.pgeVersion !== authoritative.pgeVersion ||
@@ -1105,7 +1106,9 @@ function parseStoredTargetedContinuation(
     !Array.isArray(record.affectedRuleIds) ||
     !artifactVersions ||
     Object.keys(artifactVersions).length === 0 ||
-    Object.values(artifactVersions).some((value) => typeof value !== "string") ||
+    Object.values(artifactVersions).some(
+      (value) => typeof value !== "string",
+    ) ||
     typeof record.sourceVersion !== "string" ||
     typeof record.pgeVersion !== "string"
   ) {
@@ -1321,7 +1324,9 @@ function assertAnswerMatchesQuestion(
   if (new Set(selected).size !== selected.length) {
     invalid();
   }
-  const choiceById = new Map((question.choices ?? []).map((choice) => [choice.id, choice]));
+  const choiceById = new Map(
+    (question.choices ?? []).map((choice) => [choice.id, choice]),
+  );
   const unknownChoice = selected.some((choiceId) => !choiceById.has(choiceId));
   const requiresOtherText = selected.some(
     (choiceId) => choiceById.get(choiceId)?.requiresFreeText === true,
@@ -1330,25 +1335,52 @@ function assertAnswerMatchesQuestion(
   const hasFreeText = Boolean(answer.freeText?.trim());
 
   if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
-    if (!hasFreeText || selected.length || answer.confirmed || answer.adjusted || hasOtherText) invalid();
+    if (
+      !hasFreeText ||
+      selected.length ||
+      answer.confirmed ||
+      answer.adjusted ||
+      hasOtherText
+    )
+      invalid();
     return;
   }
   if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.boolean) {
-    if (selected.length !== 1 || !["yes", "no"].includes(selected[0] ?? "") || answer.confirmed || answer.adjusted || hasOtherText) invalid();
+    if (
+      selected.length !== 1 ||
+      !["yes", "no"].includes(selected[0] ?? "") ||
+      answer.confirmed ||
+      answer.adjusted ||
+      hasOtherText
+    )
+      invalid();
     return;
   }
   if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect) {
-    if (selected.length !== 1 || unknownChoice || answer.confirmed || answer.adjusted) invalid();
+    if (
+      selected.length !== 1 ||
+      unknownChoice ||
+      answer.confirmed ||
+      answer.adjusted
+    )
+      invalid();
     if (requiresOtherText !== hasOtherText) invalid();
     return;
   }
   if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.multiSelect) {
-    if (!selected.length || unknownChoice || answer.confirmed || answer.adjusted) invalid();
+    if (
+      !selected.length ||
+      unknownChoice ||
+      answer.confirmed ||
+      answer.adjusted
+    )
+      invalid();
     if (requiresOtherText !== hasOtherText) invalid();
     return;
   }
   if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust) {
-    if (answer.confirmed === answer.adjusted || selected.length || hasOtherText) invalid();
+    if (answer.confirmed === answer.adjusted || selected.length || hasOtherText)
+      invalid();
     return;
   }
   invalid();
