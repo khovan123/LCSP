@@ -1,3 +1,7 @@
+import type {
+  AssessmentInterviewOutcome,
+  AssessmentInterviewQuestionIntent,
+} from "../evidence/assessment-interview.ts";
 import type { AuditActorType } from "./audit-event.types.ts";
 
 /**
@@ -5,6 +9,10 @@ import type { AuditActorType } from "./audit-event.types.ts";
  *
  * Sourced strictly from @lcsp/contracts in SCREAMING_SNAKE_CASE format.
  *
+ * - INTERVIEW_QUESTION_PERSISTED: A dynamic or seeded interview question was persisted.
+ * - INTERVIEW_CUSTOMER_ANSWER_RECORDED: A customer submitted an answer to an active interview question.
+ * - INTERVIEW_CONTEXT_REVISION_CREATED: A new interview context revision was created or updated.
+ * - INTERVIEW_OUTCOME_RECORDED: An interview lifecycle outcome (e.g. WAITING_FOR_CUSTOMER, CONTEXT_READY, BLOCKED_OR_UNRESOLVED) was recorded.
  * - INTERVIEW_STATEMENT_RECORDED: A new material context statement has been recorded.
  * - INTERVIEW_STATEMENT_CONFIRMED: A material statement has been explicitly confirmed by an authenticated respondent.
  * - INTERVIEW_CONTEXT_SUPERSEDED: An existing context value has been updated/corrected with supersession history.
@@ -14,6 +22,10 @@ import type { AuditActorType } from "./audit-event.types.ts";
  * - INTERVIEW_ORCHESTRATION_RERUN_TRIGGERED: Assessment Orchestration executed a selective rerun based on downstream impact.
  */
 export const INTERVIEW_AUDIT_EVENT_TYPES = {
+  questionPersisted: "INTERVIEW_QUESTION_PERSISTED",
+  customerAnswerRecorded: "INTERVIEW_CUSTOMER_ANSWER_RECORDED",
+  contextRevisionCreated: "INTERVIEW_CONTEXT_REVISION_CREATED",
+  interviewOutcomeRecorded: "INTERVIEW_OUTCOME_RECORDED",
   statementRecorded: "INTERVIEW_STATEMENT_RECORDED",
   statementConfirmed: "INTERVIEW_STATEMENT_CONFIRMED",
   contextSuperseded: "INTERVIEW_CONTEXT_SUPERSEDED",
@@ -98,14 +110,14 @@ export type MaterialCustomerContextProvenance = {
   priorRevision?: string;
   /** Active dynamic question ID if this statement answered a question. */
   questionId?: string;
-  /** Dynamic question intent (e.g., "ASK", "CLARIFY"). */
-  questionIntent?: string;
+  /** Dynamic question intent (ASK | CLARIFY). */
+  questionIntent?: AssessmentInterviewQuestionIntent;
   /** Agent interpretation summary confirmed by customer. */
   interpretation?: string;
   /** List of governed evidence IDs supporting or cited in this context item. */
   evidenceRefs?: string[];
-  /** Technical source/PGE snapshot metadata. */
-  sourceSnapshot?: InterviewSourceSnapshotRef;
+  /** Technical source/PGE snapshot metadata (mandatory for material customer context). */
+  sourceSnapshot: InterviewSourceSnapshotRef;
   /** ISO timestamp when the event occurred. */
   timestamp: string;
 };
@@ -170,7 +182,8 @@ export type InterviewAuditTrailItem = {
   isConflict: boolean;
   conflict?: InterviewAuditConflictDetail;
   questionId?: string;
-  questionIntent?: string;
+  questionIntent?: AssessmentInterviewQuestionIntent;
+  outcome?: AssessmentInterviewOutcome;
   interpretation?: string;
   evidenceRefs: string[];
   originatingInvestigationReference?: string | null;
@@ -187,4 +200,6 @@ export type InterviewAuditTrailResponse = {
   assessmentId: string;
   events: InterviewAuditTrailItem[];
   total: number;
+  limit?: number;
+  offset?: number;
 };

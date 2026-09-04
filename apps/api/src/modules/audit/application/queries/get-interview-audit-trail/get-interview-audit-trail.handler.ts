@@ -13,6 +13,12 @@ import {
   type InterviewSourceSnapshotRef,
   type InterviewTechnicalCoverageState,
 } from "@lcsp/contracts/audit";
+import {
+  ASSESSMENT_INTERVIEW_OUTCOMES,
+  ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
+  type AssessmentInterviewOutcome,
+  type AssessmentInterviewQuestionIntent,
+} from "@lcsp/contracts/evidence";
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 
@@ -70,6 +76,28 @@ function readSourceSnapshot(
   };
 }
 
+function readQuestionIntent(
+  value: unknown,
+): AssessmentInterviewQuestionIntent | undefined {
+  const cleaned = cleanString(value);
+  if (!cleaned) return undefined;
+  return Object.values(ASSESSMENT_INTERVIEW_QUESTION_INTENTS).includes(
+    cleaned as AssessmentInterviewQuestionIntent,
+  )
+    ? (cleaned as AssessmentInterviewQuestionIntent)
+    : undefined;
+}
+
+function readOutcome(value: unknown): AssessmentInterviewOutcome | undefined {
+  const cleaned = cleanString(value);
+  if (!cleaned) return undefined;
+  return Object.values(ASSESSMENT_INTERVIEW_OUTCOMES).includes(
+    cleaned as AssessmentInterviewOutcome,
+  )
+    ? (cleaned as AssessmentInterviewOutcome)
+    : undefined;
+}
+
 function readActorRef(value: unknown) {
   if (!isRecord(value)) return null;
   const id = cleanString(value.id);
@@ -122,23 +150,11 @@ export class GetInterviewAuditTrailHandler implements IQueryHandler<
   GetInterviewAuditTrailQuery,
   InterviewAuditTrailResponse
 > {
-  /**
-   * Creates the query handler with Prisma and redactor dependencies.
-   *
-   * @param prisma Database service for querying assessments and audit records.
-   * @param redactor Service applying secret redaction rules to audit payloads.
-   */
   constructor(
     private readonly prisma: PrismaService,
     private readonly redactor: AuditRedactorService,
   ) {}
 
-  /**
-   * Executes the query to fetch, filter, and normalize the interview audit trail.
-   *
-   * @param query Query containing assessment ID and caller security context.
-   * @returns Chronological list of interview audit events.
-   */
   async execute(
     query: GetInterviewAuditTrailQuery,
   ): Promise<InterviewAuditTrailResponse> {
@@ -166,23 +182,35 @@ export class GetInterviewAuditTrailHandler implements IQueryHandler<
     }
 
     const eventTypes = Object.values(INTERVIEW_AUDIT_EVENT_TYPES);
+    const limit = Math.min(Math.max(query.limit ?? 50, 1), 100);
+    const offset = Math.max(query.offset ?? 0, 0);
 
-    const auditRows = await this.prisma.auditEvent.findMany({
-      where: {
-        resourceId: query.assessmentId,
-        eventType: { in: eventTypes },
-      },
-      orderBy: { createdAt: "asc" },
-      select: {
-        id: true,
-        eventType: true,
-        actorId: true,
-        correlationId: true,
-        sessionId: true,
-        payload: true,
-        createdAt: true,
-      },
-    });
+    const [total, auditRows] = await Promise.all([
+      this.prisma.auditEvent.count({
+        where: {
+          resourceId: query.assessmentId,
+          eventType: { in: eventTypes },
+        },
+      }),
+      this.prisma.auditEvent.findMany({
+        where: {
+          resourceId: query.assessmentId,
+          eventType: { in: eventTypes },
+        },
+        orderBy: { createdAt: "asc" },
+        skip: offset,
+        take: limit,
+        select: {
+          id: true,
+          eventType: true,
+          actorId: true,
+          correlationId: true,
+          sessionId: true,
+          payload: true,
+          createdAt: true,
+        },
+      }),
+    ]);
 
     const events: InterviewAuditTrailItem[] = auditRows.map((row) => {
       const redactedPayload = this.redactor.redact(row.payload) ?? {};
@@ -197,6 +225,7 @@ export class GetInterviewAuditTrailHandler implements IQueryHandler<
 
       const revision =
         cleanString(payloadRecord.interviewContextRevision) ??
+        cleanString(payloadRecord.contextRevision) ??
         cleanString(payloadRecord.newRevision);
 
       const evidenceRefs = Array.isArray(payloadRecord.evidenceRefs)
@@ -235,18 +264,22 @@ export class GetInterviewAuditTrailHandler implements IQueryHandler<
         currentStage: cleanString(payloadRecord.stage) ?? undefined,
         sourceSnapshot,
         statementKey: cleanString(payloadRecord.statementKey) ?? undefined,
-        statementValue: payloadRecord.statementValue ?? payloadRecord.newValue,
+        statementValue:
+          payloadRecord.statementValue ??
+          payloadRecord.newValue ??
+          payloadRecord.answerValue,
         priorValue: payloadRecord.priorValue,
         priorRevision: cleanString(payloadRecord.priorRevision) ?? undefined,
         isConflict,
         conflict,
         questionId: cleanString(payloadRecord.questionId) ?? undefined,
-        questionIntent: cleanString(payloadRecord.questionIntent) ?? undefined,
+        questionIntent: readQuestionIntent(payloadRecord.questionIntent),
+        outcome: readOutcome(payloadRecord.outcome),
         interpretation: cleanString(payloadRecord.interpretation) ?? undefined,
         evidenceRefs,
-        originatingInvestigationReference: cleanString(
-          payloadRecord.originatingInvestigationReference,
-        ),
+        originatingInvestigationReference:
+          cleanString(payloadRecord.originatingInvestigationReference) ??
+          undefined,
         downstreamImpact:
           row.eventType ===
             INTERVIEW_AUDIT_EVENT_TYPES.downstreamImpactEmitted ||
@@ -260,13 +293,12 @@ export class GetInterviewAuditTrailHandler implements IQueryHandler<
     return {
       assessmentId: query.assessmentId,
       events,
-      total: events.length,
+      total,
+      limit,
+      offset,
     };
   }
 
-  /**
-   * Throws a standardized 404 NOT_FOUND problem for isolation failures.
-   */
   private throwNotFound(correlationId: string): never {
     throw problemException(ASSESSMENT_ERROR_CODES.notFound, correlationId, {
       status: HttpStatus.NOT_FOUND,

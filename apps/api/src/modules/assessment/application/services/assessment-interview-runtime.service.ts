@@ -37,6 +37,7 @@ import { OutboxRepository } from "../../../../platform/outbox/outbox.repository.
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
+import { InterviewAuditService } from "../../../audit/application/services/interview-audit.service.js";
 
 const INTERVIEW_TOOL_NAME = "assessment_interview";
 const INTERVIEW_SOURCE_VERSION = "assessment-interview-runtime-v1";
@@ -138,6 +139,7 @@ export class AssessmentInterviewRuntimeService {
     private readonly prisma: PrismaService,
     private readonly runtimeEvents: AssessmentRuntimeEventService,
     private readonly outboxRepository: OutboxRepository,
+    private readonly interviewAudit: InterviewAuditService,
   ) {}
 
   async getState(
@@ -266,6 +268,7 @@ export class AssessmentInterviewRuntimeService {
         state: nextState,
         revision: nextRevision,
         questionId: answer.questionId,
+        questionIntent: thread.state.activeQuestion.intent,
       };
     });
 
@@ -285,6 +288,65 @@ export class AssessmentInterviewRuntimeService {
       waitingReason: INTERVIEW_AGENT_DECISION_REQUIRED,
       startedAt: new Date(),
     });
+
+    const respondentRef = {
+      id: input.actor.userId,
+      role: input.actor.role,
+      authenticated: true as const,
+    };
+    const prov = await this.assessmentProvenance(input.assessmentId);
+    const sourceSnapshot = {
+      sourceVersion: prov.sourceVersion,
+      pgeVersion: prov.pgeVersion,
+    };
+    const responseMode = answer.confirmed
+      ? "CONFIRMED"
+      : answer.adjusted
+        ? "ADJUSTED"
+        : answer.selectedChoiceIds && answer.selectedChoiceIds.length > 0
+          ? "CHOICE"
+          : "FREE_TEXT";
+    const answerValue =
+      answer.freeText ??
+      answer.otherText ??
+      answer.selectedChoiceIds ??
+      (answer.confirmed ? true : answer.adjusted ? false : null);
+
+    await this.interviewAudit.recordCustomerAnswer({
+      assessmentId: input.assessmentId,
+      respondentRef,
+      questionId: answer.questionId,
+      questionIntent: next.questionIntent,
+      responseMode,
+      responseAction: answer.confirmed
+        ? "CONFIRMED"
+        : answer.adjusted
+          ? "ADJUSTED"
+          : undefined,
+      answerValue,
+      interviewContextRevision: String(next.revision),
+      threadId: this.threadId(input.assessmentId),
+      turnId: next.revision,
+      sourceSnapshot,
+      evidenceRefs: prov.governedEvidenceRefs,
+      correlationId: input.correlationId,
+    });
+
+    await this.interviewAudit.recordContextRevisionCreated({
+      assessmentId: input.assessmentId,
+      respondentRef,
+      contextRevision: next.revision,
+      priorRevision: next.revision - 1,
+      authority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
+      statementKey: answer.questionId,
+      statementValue: answerValue,
+      threadId: this.threadId(input.assessmentId),
+      turnId: next.revision,
+      sourceSnapshot,
+      governedEvidenceRefs: prov.governedEvidenceRefs,
+      correlationId: input.correlationId,
+    });
+
     return next.state;
   }
 
@@ -374,6 +436,22 @@ export class AssessmentInterviewRuntimeService {
       waitingReason: blocked.action,
       startedAt: now,
     });
+
+    const respondentRef = {
+      id: input.actor.userId,
+      role: input.actor.role,
+      authenticated: true as const,
+    };
+    await this.interviewAudit.recordInterviewOutcome({
+      assessmentId: input.assessmentId,
+      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved,
+      respondentRef,
+      summary: `Customer chose blocked action: ${blocked.action}`,
+      contextRevision: result.contextRevision,
+      threadId: this.threadId(input.assessmentId),
+      correlationId: input.correlationId,
+    });
+
     return result;
   }
 
@@ -429,7 +507,7 @@ export class AssessmentInterviewRuntimeService {
     target: TargetedNeedRegistrationInput;
   }): Promise<AssessmentInterviewRuntimeState> {
     const target = parseTargetedNeedRegistration(input.target);
-    return this.prisma.$transaction(async (tx) => {
+    const targetResult = await this.prisma.$transaction(async (tx) => {
       const thread = await this.readThread(input.assessmentId, tx);
       if (thread.state.outcome !== ASSESSMENT_INTERVIEW_OUTCOMES.contextReady) {
         throw problemException(
@@ -506,8 +584,30 @@ export class AssessmentInterviewRuntimeService {
         }),
         tx,
       );
-      return nextState;
+      return {
+        state: nextState,
+        sourceVersion: thread.sourceVersion,
+        pgeVersion: thread.pgeVersion,
+      };
     });
+
+    await this.interviewAudit.recordTargetedClarification({
+      assessmentId: input.assessmentId,
+      originatingInvestigationReference:
+        target.originatingInvestigationReference,
+      interviewContextRevision: String(targetResult.state.contextRevision ?? 0),
+      sessionId: this.threadId(input.assessmentId),
+      threadId: this.threadId(input.assessmentId),
+      runId: target.workflowRunId,
+      stage: "TARGETED_INTERVIEW",
+      sourceSnapshot: {
+        sourceVersion: targetResult.sourceVersion ?? undefined,
+        pgeVersion: targetResult.pgeVersion ?? undefined,
+      },
+      correlationId: input.correlationId,
+    });
+
+    return targetResult.state;
   }
 
   async getWorkerStateForWorker(
@@ -638,6 +738,54 @@ export class AssessmentInterviewRuntimeService {
           : null,
       startedAt: new Date(),
     });
+
+    await this.interviewAudit.recordInterviewOutcome({
+      assessmentId: input.assessmentId,
+      outcome: result.state.outcome,
+      activeQuestionId: result.state.activeQuestion?.id,
+      contextRevision: decision.expectedContextRevision,
+      threadId: this.threadId(input.assessmentId),
+      correlationId: input.correlationId,
+    });
+
+    if (result.state.activeQuestion) {
+      const auth = await this.assessmentProvenance(input.assessmentId);
+      await this.interviewAudit.recordQuestionPersisted({
+        assessmentId: input.assessmentId,
+        questionId: result.state.activeQuestion.id,
+        questionIntent: result.state.activeQuestion.intent,
+        prompt: result.state.activeQuestion.prompt,
+        control: result.state.activeQuestion.control,
+        choices: result.state.activeQuestion.choices,
+        whyEvidenceRefs: result.state.activeQuestion.whyEvidenceRefs,
+        threadId: this.threadId(input.assessmentId),
+        turnId: decision.expectedContextRevision,
+        sourceSnapshot: {
+          sourceVersion: auth.sourceVersion,
+          pgeVersion: auth.pgeVersion,
+        },
+        correlationId: input.correlationId,
+      });
+    }
+
+    if (decision.flags?.includes("DOWNSTREAM_IMPACT")) {
+      const auth = await this.assessmentProvenance(input.assessmentId);
+      await this.interviewAudit.recordDownstreamImpact({
+        assessmentId: input.assessmentId,
+        interviewContextRevision: String(decision.expectedContextRevision),
+        affectedActivities: ["reconciliation", "classification_review"],
+        summary: "Context changes impact downstream evaluation.",
+        sessionId: this.threadId(input.assessmentId),
+        threadId: this.threadId(input.assessmentId),
+        runId: `run:${input.assessmentId}:${decision.expectedContextRevision}`,
+        sourceSnapshot: {
+          sourceVersion: auth.sourceVersion,
+          pgeVersion: auth.pgeVersion,
+        },
+        correlationId: input.correlationId,
+      });
+    }
+
     return result.continuation
       ? { ...result.state, continuation: result.continuation }
       : result.state;
@@ -689,6 +837,26 @@ export class AssessmentInterviewRuntimeService {
       waitingReason: "WAITING_FOR_CUSTOMER",
       startedAt: new Date(),
     });
+
+    if (state.activeQuestion) {
+      await this.interviewAudit.recordQuestionPersisted({
+        assessmentId: input.assessmentId,
+        questionId: activeQuestionId,
+        questionIntent: state.activeQuestion.intent,
+        prompt: state.activeQuestion.prompt,
+        control: state.activeQuestion.control,
+        choices: state.activeQuestion.choices,
+        whyEvidenceRefs: state.activeQuestion.whyEvidenceRefs,
+        threadId: this.threadId(input.assessmentId),
+        turnId: 0,
+        sourceSnapshot: {
+          sourceVersion: provenance.sourceVersion,
+          pgeVersion: provenance.pgeVersion,
+        },
+        correlationId: input.correlationId,
+      });
+    }
+
     return nextState;
   }
 

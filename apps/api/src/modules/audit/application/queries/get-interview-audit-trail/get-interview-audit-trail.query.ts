@@ -10,6 +10,8 @@ export class GetInterviewAuditTrailQuery {
    * @param subjectRole - Authenticated user's RBAC role.
    * @param subjectScope - Optional RBAC tenant/organization scope.
    * @param correlationId - Request correlation identifier.
+   * @param limit - Optional page size (default 50, max 100).
+   * @param offset - Optional pagination offset (default 0).
    */
   constructor(
     public readonly assessmentId: string,
@@ -17,5 +19,7 @@ export class GetInterviewAuditTrailQuery {
     public readonly subjectRole: string,
     public readonly subjectScope: string | null | undefined,
     public readonly correlationId: string,
+    public readonly limit?: number,
+    public readonly offset?: number,
   ) {}
 }

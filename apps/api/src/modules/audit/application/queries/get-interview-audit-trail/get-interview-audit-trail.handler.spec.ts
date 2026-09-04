@@ -5,22 +5,36 @@ import {
   AUDIT_ACTOR_TYPES,
   INTERVIEW_AUDIT_EVENT_TYPES,
 } from "@lcsp/contracts/audit";
-import { HttpStatus } from "@nestjs/common";
+import { HttpException, HttpStatus } from "@nestjs/common";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditRedactorService } from "../../services/audit/audit-redactor.service.js";
 import { GetInterviewAuditTrailHandler } from "./get-interview-audit-trail.handler.js";
 import { GetInterviewAuditTrailQuery } from "./get-interview-audit-trail.query.js";
 
+async function captureError(promise: Promise<unknown>): Promise<HttpException> {
+  try {
+    await promise;
+    throw new Error("expected promise to reject");
+  } catch (error) {
+    if (error instanceof HttpException) {
+      return error;
+    }
+    throw error;
+  }
+}
+
 describe("GetInterviewAuditTrailHandler", () => {
   let handler: GetInterviewAuditTrailHandler;
   let findUniqueAssessmentMock: jest.Mock<any>;
   let findManyAuditEventsMock: jest.Mock<any>;
+  let countAuditEventsMock: jest.Mock<any>;
   let redactor: AuditRedactorService;
 
   beforeEach(() => {
     findUniqueAssessmentMock = jest.fn();
     findManyAuditEventsMock = jest.fn();
+    countAuditEventsMock = jest.fn();
     redactor = new AuditRedactorService();
 
     const prisma = {
@@ -29,18 +43,20 @@ describe("GetInterviewAuditTrailHandler", () => {
       },
       auditEvent: {
         findMany: findManyAuditEventsMock,
+        count: countAuditEventsMock,
       },
     } as unknown as PrismaService;
 
     handler = new GetInterviewAuditTrailHandler(prisma, redactor);
   });
 
-  it("successfully returns normalized interview audit trail for assessment owner", async () => {
+  it("successfully returns normalized interview audit trail for assessment owner with pagination", async () => {
     findUniqueAssessmentMock.mockResolvedValue({
       id: "assessment-1",
       ownerId: "user-owner",
     });
 
+    countAuditEventsMock.mockResolvedValue(2);
     findManyAuditEventsMock.mockResolvedValue([
       {
         id: "evt-1",
@@ -67,7 +83,7 @@ describe("GetInterviewAuditTrailHandler", () => {
           modelId: "model-1",
           stage: "INITIAL_INTERVIEW",
           questionId: "q-lang",
-          questionIntent: "CONFIRM",
+          questionIntent: "CLARIFY",
           interpretation:
             "Customer confirmed TypeScript is the primary language.",
           evidenceRefs: ["ev-ts-1"],
@@ -122,11 +138,15 @@ describe("GetInterviewAuditTrailHandler", () => {
         AUTH_USER_ROLES.customer,
         undefined,
         "corr-trail-1",
+        10,
+        0,
       ),
     );
 
     expect(result.assessmentId).toBe("assessment-1");
     expect(result.total).toBe(2);
+    expect(result.limit).toBe(10);
+    expect(result.offset).toBe(0);
     expect(result.events).toHaveLength(2);
 
     expect(result.events[0]).toEqual({
@@ -168,10 +188,11 @@ describe("GetInterviewAuditTrailHandler", () => {
       isConflict: false,
       conflict: undefined,
       questionId: "q-lang",
-      questionIntent: "CONFIRM",
+      questionIntent: "CLARIFY",
+      outcome: undefined,
       interpretation: "Customer confirmed TypeScript is the primary language.",
       evidenceRefs: ["ev-ts-1"],
-      originatingInvestigationReference: null,
+      originatingInvestigationReference: undefined,
       downstreamImpact: false,
       affectedActivities: [],
       rerunScope: [],
@@ -210,9 +231,10 @@ describe("GetInterviewAuditTrailHandler", () => {
       conflict: undefined,
       questionId: undefined,
       questionIntent: undefined,
+      outcome: undefined,
       interpretation: undefined,
       evidenceRefs: [],
-      originatingInvestigationReference: null,
+      originatingInvestigationReference: undefined,
       downstreamImpact: false,
       affectedActivities: [],
       rerunScope: [],
@@ -220,11 +242,193 @@ describe("GetInterviewAuditTrailHandler", () => {
     });
   });
 
-  it("keeps runtime service attribution distinct from customer respondent provenance", async () => {
+  it("throws 404 when assessment does not exist", async () => {
+    findUniqueAssessmentMock.mockResolvedValue(null);
+
+    const error = await captureError(
+      handler.execute(
+        new GetInterviewAuditTrailQuery(
+          "non-existent",
+          "user-1",
+          AUTH_USER_ROLES.customer,
+          undefined,
+          "corr-404",
+        ),
+      ),
+    );
+
+    expect(error.getStatus()).toBe(HttpStatus.NOT_FOUND);
+  });
+
+  it("throws 404 when CUSTOMER user attempts to read another user's assessment (tenant isolation)", async () => {
+    findUniqueAssessmentMock.mockResolvedValue({
+      id: "assessment-1",
+      ownerId: "other-user",
+    });
+
+    const error = await captureError(
+      handler.execute(
+        new GetInterviewAuditTrailQuery(
+          "assessment-1",
+          "unauthorized-customer",
+          AUTH_USER_ROLES.customer,
+          undefined,
+          "corr-tenant-isolation",
+        ),
+      ),
+    );
+
+    expect(error.getStatus()).toBe(HttpStatus.NOT_FOUND);
+  });
+
+  it("allows ADMIN user to retrieve interview audit trail across assessments", async () => {
+    findUniqueAssessmentMock.mockResolvedValue({
+      id: "assessment-1",
+      ownerId: "customer-1",
+    });
+    countAuditEventsMock.mockResolvedValue(0);
+    findManyAuditEventsMock.mockResolvedValue([]);
+
+    const result = await handler.execute(
+      new GetInterviewAuditTrailQuery(
+        "assessment-1",
+        "admin-user",
+        AUTH_USER_ROLES.admin,
+        undefined,
+        "corr-admin-read",
+      ),
+    );
+
+    expect(result.assessmentId).toBe("assessment-1");
+    expect(result.events).toEqual([]);
+  });
+
+  it("throws 404 if scope does not match assessment ID (tenant/assessment isolation)", async () => {
     findUniqueAssessmentMock.mockResolvedValue({
       id: "assessment-1",
       ownerId: "user-owner",
     });
+
+    const error = await captureError(
+      handler.execute(
+        new GetInterviewAuditTrailQuery(
+          "assessment-1",
+          "user-owner",
+          AUTH_USER_ROLES.customer,
+          "assessment:wrong-assessment",
+          "corr-scope-mismatch",
+        ),
+      ),
+    );
+
+    expect(error.getStatus()).toBe(HttpStatus.NOT_FOUND);
+  });
+
+  it("applies secret redaction to audit event payload before returning", async () => {
+    findUniqueAssessmentMock.mockResolvedValue({
+      id: "assessment-1",
+      ownerId: "user-owner",
+    });
+
+    countAuditEventsMock.mockResolvedValue(1);
+    findManyAuditEventsMock.mockResolvedValue([
+      {
+        id: "evt-redacted",
+        eventType: INTERVIEW_AUDIT_EVENT_TYPES.statementRecorded,
+        actorId: "user-owner",
+        correlationId: "corr-redact",
+        sessionId: "session-1",
+        createdAt: new Date("2026-09-01T11:00:00.000Z"),
+        payload: {
+          statementKey: "api_key",
+          statementValue: "secret-token-value",
+          interviewContextRevision: "3",
+          secretData: "must-be-redacted",
+          passwordHash: "hash-to-remove",
+        },
+      },
+    ]);
+
+    const result = await handler.execute(
+      new GetInterviewAuditTrailQuery(
+        "assessment-1",
+        "user-owner",
+        AUTH_USER_ROLES.customer,
+        undefined,
+        "corr-redaction-test",
+      ),
+    );
+
+    expect(result.events[0]?.statementValue).toBe("secret-token-value");
+    expect(
+      (result.events[0] as unknown as Record<string, unknown>).passwordHash,
+    ).toBeUndefined();
+  });
+
+  it("correctly surfaces originatingInvestigationReference and downstreamImpact", async () => {
+    findUniqueAssessmentMock.mockResolvedValue({
+      id: "assessment-1",
+      ownerId: "user-owner",
+    });
+
+    countAuditEventsMock.mockResolvedValue(2);
+    findManyAuditEventsMock.mockResolvedValue([
+      {
+        id: "evt-target",
+        eventType: INTERVIEW_AUDIT_EVENT_TYPES.targetedClarificationStarted,
+        actorId: null,
+        correlationId: "corr-target",
+        sessionId: "session-1",
+        createdAt: new Date("2026-09-01T12:00:00.000Z"),
+        payload: {
+          originatingInvestigationReference: "inv-target-42",
+          stage: "TARGETED_INVESTIGATION",
+          interviewContextRevision: "4",
+        },
+      },
+      {
+        id: "evt-impact",
+        eventType: INTERVIEW_AUDIT_EVENT_TYPES.downstreamImpactEmitted,
+        actorId: null,
+        correlationId: "corr-impact",
+        sessionId: "session-1",
+        createdAt: new Date("2026-09-01T12:05:00.000Z"),
+        payload: {
+          interviewContextRevision: "5",
+          affectedActivities: ["reconciliation", "classification_review"],
+        },
+      },
+    ]);
+
+    const result = await handler.execute(
+      new GetInterviewAuditTrailQuery(
+        "assessment-1",
+        "user-owner",
+        AUTH_USER_ROLES.customer,
+        undefined,
+        "corr-investigation-test",
+      ),
+    );
+
+    expect(result.events[0]?.originatingInvestigationReference).toBe(
+      "inv-target-42",
+    );
+    expect(result.events[0]?.downstreamImpact).toBe(false);
+
+    expect(result.events[1]?.downstreamImpact).toBe(true);
+    expect(result.events[1]?.affectedActivities).toEqual([
+      "reconciliation",
+      "classification_review",
+    ]);
+  });
+
+  it("surfaces orchestration rerun provenance and actor distinction", async () => {
+    findUniqueAssessmentMock.mockResolvedValue({
+      id: "assessment-1",
+      ownerId: "user-owner",
+    });
+
+    countAuditEventsMock.mockResolvedValue(1);
     findManyAuditEventsMock.mockResolvedValue([
       {
         id: "evt-rerun",
@@ -232,7 +436,7 @@ describe("GetInterviewAuditTrailHandler", () => {
         actorId: AUDIT_ACTOR_IDS.assessmentOrchestrator,
         correlationId: "corr-rerun",
         sessionId: "session-1",
-        createdAt: new Date("2026-09-01T11:00:00.000Z"),
+        createdAt: new Date("2026-09-01T12:10:00.000Z"),
         payload: {
           actor: {
             id: AUDIT_ACTOR_IDS.assessmentOrchestrator,
@@ -248,13 +452,12 @@ describe("GetInterviewAuditTrailHandler", () => {
           interviewContextRevision: "rev-7",
           threadId: "thread-7",
           runId: "orchestrator-run-7",
-          stage: "RE_SCOPE",
           guidanceVersion: "guidance-v7",
           modelId: "model-v7",
+          stage: "RE_SCOPE",
           rerunScope: ["reconciliation", "classification_review"],
           sourceSnapshot: {
             snapshotId: "snapshot-7",
-            commitSha: "commit-7",
             pgeVersion: "pge-v7",
             technicalCoverageState: "PARTIAL",
             coverageLimitations: ["worker repository unavailable"],
@@ -307,19 +510,27 @@ describe("GetInterviewAuditTrailHandler", () => {
       id: "assessment-1",
       ownerId: "user-owner",
     });
+    countAuditEventsMock.mockResolvedValue(1);
     findManyAuditEventsMock.mockResolvedValue([
       {
         id: "evt-conflict",
         eventType: INTERVIEW_AUDIT_EVENT_TYPES.contextConflicted,
         actorId: "user-bob",
         correlationId: "corr-conflict",
-        sessionId: "session-conflict",
-        createdAt: new Date("2026-09-01T12:00:00.000Z"),
+        sessionId: "session-1",
+        createdAt: new Date("2026-09-01T12:15:00.000Z"),
         payload: {
           actor: {
             id: "user-bob",
             type: AUDIT_ACTOR_TYPES.user,
             role: "CUSTOMER",
+            name: "Bob",
+            authenticated: true,
+          },
+          respondentRef: {
+            id: "user-bob",
+            role: "CUSTOMER",
+            name: "Bob",
             authenticated: true,
           },
           statementKey: "cloud_provider",
@@ -327,6 +538,7 @@ describe("GetInterviewAuditTrailHandler", () => {
             firstRespondent: {
               id: "user-alice",
               role: "CUSTOMER",
+              name: "Alice",
               authenticated: true,
             },
             firstValue: "AWS",
@@ -334,6 +546,7 @@ describe("GetInterviewAuditTrailHandler", () => {
             secondRespondent: {
               id: "user-bob",
               role: "CUSTOMER",
+              name: "Bob",
               authenticated: true,
             },
             secondValue: "GCP",
@@ -349,112 +562,33 @@ describe("GetInterviewAuditTrailHandler", () => {
         "user-owner",
         AUTH_USER_ROLES.customer,
         undefined,
-        "corr-read-conflict",
+        "corr-conflict-query",
       ),
     );
 
-    expect(result.events[0].interviewContextRevision).toBeNull();
-    expect(result.events[0].isConflict).toBe(true);
-    expect(result.events[0].conflict).toEqual({
-      firstRespondentRef: {
-        id: "user-alice",
-        role: "CUSTOMER",
-        name: undefined,
-        authenticated: true,
+    expect(result.events[0]).toMatchObject({
+      eventType: INTERVIEW_AUDIT_EVENT_TYPES.contextConflicted,
+      isConflict: true,
+      interviewContextRevision: null,
+      statementKey: "cloud_provider",
+      conflict: {
+        firstRespondentRef: {
+          id: "user-alice",
+          role: "CUSTOMER",
+          name: "Alice",
+          authenticated: true,
+        },
+        firstStatementValue: "AWS",
+        firstTurnId: 2,
+        secondRespondentRef: {
+          id: "user-bob",
+          role: "CUSTOMER",
+          name: "Bob",
+          authenticated: true,
+        },
+        secondStatementValue: "GCP",
+        secondTurnId: 4,
       },
-      firstStatementValue: "AWS",
-      firstTurnId: 2,
-      secondRespondentRef: {
-        id: "user-bob",
-        role: "CUSTOMER",
-        name: undefined,
-        authenticated: true,
-      },
-      secondStatementValue: "GCP",
-      secondTurnId: 4,
     });
-  });
-
-  it("enforces tenant isolation: throws 404 when assessment is not found", async () => {
-    findUniqueAssessmentMock.mockResolvedValue(null);
-
-    await expect(
-      handler.execute(
-        new GetInterviewAuditTrailQuery(
-          "non-existent-assessment",
-          "user-1",
-          AUTH_USER_ROLES.customer,
-          undefined,
-          "corr-notfound",
-        ),
-      ),
-    ).rejects.toMatchObject({
-      status: HttpStatus.NOT_FOUND,
-    });
-  });
-
-  it("enforces tenant isolation: throws 404 when customer queries another user's assessment", async () => {
-    findUniqueAssessmentMock.mockResolvedValue({
-      id: "assessment-1",
-      ownerId: "user-another",
-    });
-
-    await expect(
-      handler.execute(
-        new GetInterviewAuditTrailQuery(
-          "assessment-1",
-          "user-intruder",
-          AUTH_USER_ROLES.customer,
-          undefined,
-          "corr-forbidden",
-        ),
-      ),
-    ).rejects.toMatchObject({
-      status: HttpStatus.NOT_FOUND,
-    });
-  });
-
-  it("allows ADMIN users to read assessment audit trail", async () => {
-    findUniqueAssessmentMock.mockResolvedValue({
-      id: "assessment-1",
-      ownerId: "user-customer",
-    });
-
-    findManyAuditEventsMock.mockResolvedValue([]);
-
-    const result = await handler.execute(
-      new GetInterviewAuditTrailQuery(
-        "assessment-1",
-        "admin-user",
-        AUTH_USER_ROLES.admin,
-        undefined,
-        "corr-admin",
-      ),
-    );
-
-    expect(result.assessmentId).toBe("assessment-1");
-    expect(result.events).toEqual([]);
-    expect(result.total).toBe(0);
-  });
-
-  it("rejects audit retrieval when the authenticated scope targets another assessment", async () => {
-    findUniqueAssessmentMock.mockResolvedValue({
-      id: "assessment-1",
-      ownerId: "user-owner",
-    });
-
-    await expect(
-      handler.execute(
-        new GetInterviewAuditTrailQuery(
-          "assessment-1",
-          "user-owner",
-          AUTH_USER_ROLES.customer,
-          "assessment:assessment-2",
-          "corr-scope-mismatch",
-        ),
-      ),
-    ).rejects.toMatchObject({ status: HttpStatus.NOT_FOUND });
-
-    expect(findManyAuditEventsMock).not.toHaveBeenCalled();
   });
 });

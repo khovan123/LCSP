@@ -12,6 +12,10 @@ import {
   type InterviewAuditEventType,
   type InterviewSourceSnapshotRef,
 } from "@lcsp/contracts/audit";
+import type {
+  AssessmentInterviewOutcome,
+  AssessmentInterviewQuestionIntent,
+} from "@lcsp/contracts/evidence";
 
 import { AuditWriterService } from "../../../../platform/audit/audit-writer.service.js";
 
@@ -28,10 +32,10 @@ export type RecordStatementAuditInput = {
   statementKey: string;
   statementValue: unknown;
   questionId?: string;
-  questionIntent?: string;
+  questionIntent?: AssessmentInterviewQuestionIntent;
   interpretation?: string;
   evidenceRefs?: string[];
-  sourceSnapshot?: InterviewSourceSnapshotRef;
+  sourceSnapshot: InterviewSourceSnapshotRef;
   runId?: string;
   stage?: string;
   guidanceVersion?: string;
@@ -45,6 +49,86 @@ export type RecordStatementAuditInput = {
  * Input structure for recording explicit statement confirmation by an authenticated actor.
  */
 export type RecordConfirmationAuditInput = RecordStatementAuditInput;
+
+/**
+ * Input structure for recording a dynamic or seeded question persistence.
+ */
+export type RecordQuestionPersistedAuditInput = {
+  assessmentId: string;
+  questionId: string;
+  questionIntent: AssessmentInterviewQuestionIntent;
+  prompt: string;
+  control?: string;
+  choices?: unknown[];
+  whyEvidenceRefs?: string[];
+  sessionId?: string;
+  threadId?: string;
+  turnId?: string | number;
+  sourceSnapshot?: InterviewSourceSnapshotRef;
+  runId?: string;
+  stage?: string;
+  guidanceVersion?: string;
+  modelId?: string;
+  correlationId: string;
+  causationId?: string | null;
+};
+
+/**
+ * Input structure for recording an authenticated customer's raw or structured answer.
+ */
+export type RecordCustomerAnswerAuditInput = {
+  assessmentId: string;
+  respondentRef: InterviewAuditActorRef;
+  questionId: string;
+  questionIntent?: AssessmentInterviewQuestionIntent;
+  responseMode?: string;
+  responseAction?: string;
+  answerValue: unknown;
+  interviewContextRevision: string;
+  sessionId?: string;
+  threadId?: string;
+  turnId?: string | number;
+  sourceSnapshot: InterviewSourceSnapshotRef;
+  evidenceRefs?: string[];
+  correlationId: string;
+  causationId?: string | null;
+};
+
+/**
+ * Input structure for recording a newly committed context revision in the interview state.
+ */
+export type RecordContextRevisionCreatedAuditInput = {
+  assessmentId: string;
+  respondentRef?: InterviewAuditActorRef | null;
+  contextRevision: string | number;
+  priorRevision?: string | number;
+  authority?: string;
+  statementKey?: string;
+  statementValue?: unknown;
+  sessionId?: string;
+  threadId?: string;
+  turnId?: string | number;
+  sourceSnapshot: InterviewSourceSnapshotRef;
+  governedEvidenceRefs?: string[];
+  correlationId: string;
+  causationId?: string | null;
+};
+
+/**
+ * Input structure for recording an interview lifecycle outcome.
+ */
+export type RecordInterviewOutcomeAuditInput = {
+  assessmentId: string;
+  outcome: AssessmentInterviewOutcome;
+  respondentRef?: InterviewAuditActorRef | null;
+  summary?: string;
+  activeQuestionId?: string;
+  contextRevision?: string | number;
+  sessionId?: string;
+  threadId?: string;
+  correlationId: string;
+  causationId?: string | null;
+};
 
 /**
  * Input structure for recording a context supersession (correction / revision update).
@@ -61,10 +145,10 @@ export type RecordSupersessionAuditInput = {
   threadId: string;
   turnId: string | number;
   questionId?: string;
-  questionIntent?: string;
+  questionIntent?: AssessmentInterviewQuestionIntent;
   interpretation?: string;
   evidenceRefs?: string[];
-  sourceSnapshot?: InterviewSourceSnapshotRef;
+  sourceSnapshot: InterviewSourceSnapshotRef;
   runId?: string;
   stage?: string;
   guidanceVersion?: string;
@@ -160,31 +244,144 @@ export type RecordOrchestrationRerunAuditInput = {
 
 /**
  * High-level domain audit service for Interview Agent operations.
- *
- * Enforces production audit rules:
- * 1. Actor Identity Authority: Authenticated actor references are sourced exclusively from
- *    trusted application security contexts, never from chat message text.
- * 2. Material Provenance: Every statement/confirmation captures timestamp, assessmentId,
- *    source/PGE snapshot, session/thread/turn, revision, question ID, and evidence refs.
- * 3. Supersession & History: Corrections preserve prior/new values and revisions.
- * 4. Contradictions: Cross-respondent conflicts are preserved as conflict records (no last-answer-wins).
- * 5. Orchestration Attribution: DOWNSTREAM_IMPACT is distinguished from selective rerun execution.
  */
 @Injectable()
 export class InterviewAuditService {
   private readonly logger = new Logger(InterviewAuditService.name);
 
-  /**
-   * Creates the Interview audit service backed by AuditWriterService.
-   *
-   * @param auditWriter Platform audit writer persisting normalized AuditEvent records.
-   */
   constructor(private readonly auditWriter: AuditWriterService) {}
 
   /**
+   * Records a dynamic or seeded question persistence in the interview audit trail.
+   */
+  async recordQuestionPersisted(
+    input: RecordQuestionPersistedAuditInput,
+  ): Promise<void> {
+    await this.writeInterviewEvent({
+      eventType: INTERVIEW_AUDIT_EVENT_TYPES.questionPersisted,
+      assessmentId: input.assessmentId,
+      actor: this.serviceActor(AUDIT_ACTOR_IDS.interviewAgent),
+      correlationId: input.correlationId,
+      causationId: input.causationId,
+      sessionId: input.sessionId,
+      payload: {
+        questionId: input.questionId,
+        questionIntent: input.questionIntent,
+        prompt: input.prompt,
+        control: input.control,
+        choices: input.choices,
+        whyEvidenceRefs: input.whyEvidenceRefs ?? [],
+        threadId: input.threadId,
+        turnId: input.turnId,
+        sourceSnapshot: input.sourceSnapshot,
+        runId: input.runId,
+        stage: input.stage,
+        guidanceVersion: input.guidanceVersion,
+        modelId: input.modelId,
+      },
+    });
+  }
+
+  /**
+   * Records an authenticated customer's submitted answer in the interview audit trail.
+   */
+  async recordCustomerAnswer(
+    input: RecordCustomerAnswerAuditInput,
+  ): Promise<void> {
+    const actor = this.authenticatedRespondent(input.respondentRef);
+    await this.writeInterviewEvent({
+      eventType: INTERVIEW_AUDIT_EVENT_TYPES.customerAnswerRecorded,
+      assessmentId: input.assessmentId,
+      actor,
+      respondentRef: input.respondentRef,
+      correlationId: input.correlationId,
+      causationId: input.causationId,
+      sessionId: input.sessionId,
+      payload: {
+        questionId: input.questionId,
+        questionIntent: input.questionIntent,
+        responseMode: input.responseMode,
+        responseAction: input.responseAction,
+        answerValue: input.answerValue,
+        interviewContextRevision: input.interviewContextRevision,
+        threadId: input.threadId,
+        turnId: input.turnId,
+        sourceSnapshot: input.sourceSnapshot,
+        evidenceRefs: input.evidenceRefs ?? [],
+      },
+    });
+  }
+
+  /**
+   * Records the creation/mutation of an interview context revision.
+   */
+  async recordContextRevisionCreated(
+    input: RecordContextRevisionCreatedAuditInput,
+  ): Promise<void> {
+    const respondentRef = this.optionalAuthenticatedRespondent(
+      input.respondentRef,
+    );
+    const actor = respondentRef
+      ? this.authenticatedRespondent(respondentRef)
+      : this.serviceActor(AUDIT_ACTOR_IDS.interviewAgent);
+
+    await this.writeInterviewEvent({
+      eventType: INTERVIEW_AUDIT_EVENT_TYPES.contextRevisionCreated,
+      assessmentId: input.assessmentId,
+      actor,
+      respondentRef,
+      correlationId: input.correlationId,
+      causationId: input.causationId,
+      sessionId: input.sessionId,
+      payload: {
+        contextRevision: String(input.contextRevision),
+        priorRevision:
+          input.priorRevision !== undefined
+            ? String(input.priorRevision)
+            : undefined,
+        authority: input.authority,
+        statementKey: input.statementKey,
+        statementValue: input.statementValue,
+        threadId: input.threadId,
+        turnId: input.turnId,
+        sourceSnapshot: input.sourceSnapshot,
+        evidenceRefs: input.governedEvidenceRefs ?? [],
+      },
+    });
+  }
+
+  /**
+   * Records an interview outcome transition (e.g. WAITING_FOR_CUSTOMER, CONTEXT_READY, BLOCKED_OR_UNRESOLVED).
+   */
+  async recordInterviewOutcome(
+    input: RecordInterviewOutcomeAuditInput,
+  ): Promise<void> {
+    const respondentRef = this.optionalAuthenticatedRespondent(
+      input.respondentRef,
+    );
+    await this.writeInterviewEvent({
+      eventType: INTERVIEW_AUDIT_EVENT_TYPES.interviewOutcomeRecorded,
+      assessmentId: input.assessmentId,
+      actor: this.serviceActor(AUDIT_ACTOR_IDS.interviewAgent),
+      respondentRef,
+      correlationId: input.correlationId,
+      causationId: input.causationId,
+      sessionId: input.sessionId,
+      payload: {
+        outcome: input.outcome,
+        summary: input.summary,
+        activeQuestionId: input.activeQuestionId,
+        contextRevision:
+          input.contextRevision !== undefined
+            ? String(input.contextRevision)
+            : undefined,
+        threadId: input.threadId,
+      },
+    });
+  }
+
+  /**
    * Records a material Customer context statement in the canonical audit log.
-   *
-   * @param input Material statement audit input parameters.
    */
   async recordStatement(input: RecordStatementAuditInput): Promise<void> {
     const actor = this.authenticatedRespondent(input.respondentRef);
@@ -218,8 +415,6 @@ export class InterviewAuditService {
 
   /**
    * Records an explicit confirmation of a material statement by an authenticated respondent.
-   *
-   * @param input Statement confirmation audit input parameters.
    */
   async recordConfirmation(input: RecordConfirmationAuditInput): Promise<void> {
     const actor = this.authenticatedRespondent(input.respondentRef);
@@ -253,8 +448,6 @@ export class InterviewAuditService {
 
   /**
    * Records a context supersession where an existing context value is corrected or updated.
-   *
-   * @param input Supersession audit input parameters.
    */
   async recordSupersession(input: RecordSupersessionAuditInput): Promise<void> {
     const actor = this.authenticatedRespondent(input.respondentRef);
@@ -289,9 +482,6 @@ export class InterviewAuditService {
 
   /**
    * Records a cross-respondent conflict when two different authenticated users provide conflicting statements.
-   * Preserves both statements rather than executing a naive last-answer-wins replacement.
-   *
-   * @param input Conflict audit input parameters.
    */
   async recordCrossRespondentConflict(
     input: RecordCrossRespondentConflictAuditInput,
@@ -331,9 +521,6 @@ export class InterviewAuditService {
 
   /**
    * Records the initiation of a targeted clarification loop triggered by the Investigator.
-   * Preserves originatingInvestigationReference while keeping opaque runtime continuation details out of the interview context.
-   *
-   * @param input Targeted clarification audit parameters.
    */
   async recordTargetedClarification(
     input: RecordTargetedClarificationAuditInput,
@@ -365,8 +552,6 @@ export class InterviewAuditService {
 
   /**
    * Records DOWNSTREAM_IMPACT emission from the Interview Agent.
-   *
-   * @param input Downstream impact audit input parameters.
    */
   async recordDownstreamImpact(
     input: RecordDownstreamImpactAuditInput,
@@ -398,8 +583,6 @@ export class InterviewAuditService {
 
   /**
    * Records an Orchestration-owned selective rerun execution.
-   *
-   * @param input Orchestration rerun audit input parameters.
    */
   async recordOrchestrationRerun(
     input: RecordOrchestrationRerunAuditInput,

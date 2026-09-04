@@ -104,8 +104,18 @@ export class AuditController {
   async getAssessmentInterviewAudit(
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,
+    @Query("limit") limitRaw?: string,
+    @Query("offset") offsetRaw?: string,
   ) {
     const rbacContext = request.rbacContext;
+    const limit =
+      limitRaw !== undefined && Number.isFinite(Number(limitRaw))
+        ? Number(limitRaw)
+        : undefined;
+    const offset =
+      offsetRaw !== undefined && Number.isFinite(Number(offsetRaw))
+        ? Number(offsetRaw)
+        : undefined;
 
     return resultEnvelope(
       await this.queryBus.execute(
@@ -115,6 +125,8 @@ export class AuditController {
           rbacContext.role,
           rbacContext.scope,
           request.correlationId as string,
+          limit,
+          offset,
         ),
       ),
     );

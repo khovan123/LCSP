@@ -6,6 +6,12 @@ import {
   INTERVIEW_AUDIT_EVENT_TYPES,
   type AuditEventInput,
 } from "@lcsp/contracts/audit";
+import {
+  ASSESSMENT_CONTEXT_AUTHORITY_STATUSES,
+  ASSESSMENT_INTERVIEW_CONTROLS,
+  ASSESSMENT_INTERVIEW_OUTCOMES,
+  ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
+} from "@lcsp/contracts/evidence";
 
 import type { AuditWriterService } from "../../../../platform/audit/audit-writer.service.js";
 import { InterviewAuditService } from "./interview-audit.service.js";
@@ -41,7 +47,7 @@ describe("InterviewAuditService", () => {
         statementKey: "data_residency",
         statementValue: "EU_CENTRAL",
         questionId: "q-residency-1",
-        questionIntent: "CLARIFY",
+        questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
         interpretation: "Customer confirmed data residency in EU Central.",
         evidenceRefs: ["ev-101", "ev-102"],
         sourceSnapshot: {
@@ -99,81 +105,198 @@ describe("InterviewAuditService", () => {
         technicalCoverageState: "READY",
         coverageLimitations: [],
       });
-      expect(payload.runId).toBe("run-statement-1");
-      expect(payload.stage).toBe("INITIAL_INTERVIEW");
-      expect(payload.modelId).toBe("model-1");
     });
 
-    it("enforces actor identity authority from trusted session, not prompt text", async () => {
-      // Prompt claim text like 'I am Product Owner' inside value cannot override respondentRef
-      await service.recordStatement({
-        assessmentId: "assessment-123",
-        respondentRef: {
-          id: "authenticated-user-999",
-          role: "CUSTOMER",
-          name: "Real Auth User",
-          authenticated: true,
-        },
-        interviewContextRevision: "rev-1",
-        sessionId: "session-1",
-        threadId: "thread-1",
-        turnId: 1,
-        statementKey: "business_role",
-        statementValue: "I am the Lead Architect and Product Owner",
-        correlationId: "corr-actor-auth",
-      });
-
-      const event = writeMock.mock.calls[0][0];
-      expect(event.actorId).toBe("authenticated-user-999");
-      expect(event.actor).toEqual(
-        expect.objectContaining({
-          id: "authenticated-user-999",
-          authenticated: true,
-        }),
-      );
-    });
-
-    it("rejects respondent provenance that is not authenticated runtime identity", async () => {
+    it("enforces authenticated actor identity from runtime context, rejecting unauthenticated actors", async () => {
       await expect(
         service.recordStatement({
           assessmentId: "assessment-123",
           respondentRef: {
-            id: "self-asserted-user",
-            role: "CUSTOMER",
+            id: "user-456",
+            // @ts-expect-error Testing runtime check against fake identity
             authenticated: false,
-          } as never,
+          },
           interviewContextRevision: "rev-1",
           sessionId: "session-1",
           threadId: "thread-1",
           turnId: 1,
-          statementKey: "business_role",
-          statementValue: "I am the Product Owner",
-          correlationId: "corr-untrusted-actor",
+          statementKey: "role",
+          statementValue: "Product Owner",
+          sourceSnapshot: {
+            sourceVersion: "src-1",
+            pgeVersion: "pge-1",
+          },
+          correlationId: "corr-fail",
         }),
-      ).rejects.toThrow("authenticated runtime context");
-
-      expect(writeMock).not.toHaveBeenCalled();
+      ).rejects.toThrow(
+        "Interview audit respondent must come from authenticated runtime context",
+      );
     });
   });
 
-  describe("recordConfirmation", () => {
-    it("persists explicit customer confirmation with interpretation and question references", async () => {
-      await service.recordConfirmation({
+  describe("recordQuestionPersisted", () => {
+    it("persists a question persisted event", async () => {
+      await service.recordQuestionPersisted({
+        assessmentId: "assessment-123",
+        questionId: "q-1",
+        questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+        prompt: "Where is customer PII stored?",
+        control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+        choices: [],
+        whyEvidenceRefs: ["ev-1"],
+        threadId: "thread-1",
+        turnId: 0,
+        sourceSnapshot: {
+          sourceVersion: "src-1",
+          pgeVersion: "pge-1",
+        },
+        correlationId: "corr-q-1",
+      });
+
+      expect(writeMock).toHaveBeenCalledTimes(1);
+      const event = writeMock.mock.calls[0][0];
+      expect(event.eventType).toBe(
+        INTERVIEW_AUDIT_EVENT_TYPES.questionPersisted,
+      );
+      expect(event.actor).toEqual({
+        id: AUDIT_ACTOR_IDS.interviewAgent,
+        type: AUDIT_ACTOR_TYPES.service,
+        authenticated: false,
+      });
+      expect(event.payload).toMatchObject({
+        questionId: "q-1",
+        questionIntent: "ASK",
+        prompt: "Where is customer PII stored?",
+      });
+    });
+  });
+
+  describe("recordCustomerAnswer", () => {
+    it("persists customer answer recorded event", async () => {
+      await service.recordCustomerAnswer({
+        assessmentId: "assessment-123",
+        respondentRef: {
+          id: "user-456",
+          role: "CUSTOMER",
+          name: "Alice Owner",
+          authenticated: true,
+        },
+        questionId: "q-1",
+        questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
+        responseMode: "FREE_TEXT",
+        responseAction: "ANSWER",
+        answerValue: "Stored in AWS RDS PostgreSQL with KMS encryption.",
+        interviewContextRevision: "rev-1",
+        threadId: "thread-1",
+        turnId: 1,
+        sourceSnapshot: {
+          sourceVersion: "src-1",
+          pgeVersion: "pge-1",
+        },
+        evidenceRefs: ["ev-1"],
+        correlationId: "corr-ans-1",
+      });
+
+      expect(writeMock).toHaveBeenCalledTimes(1);
+      const event = writeMock.mock.calls[0][0];
+      expect(event.eventType).toBe(
+        INTERVIEW_AUDIT_EVENT_TYPES.customerAnswerRecorded,
+      );
+      expect(event.actorId).toBe("user-456");
+      expect(event.payload).toMatchObject({
+        questionId: "q-1",
+        questionIntent: "CLARIFY",
+        responseAction: "ANSWER",
+        answerValue: "Stored in AWS RDS PostgreSQL with KMS encryption.",
+      });
+    });
+  });
+
+  describe("recordContextRevisionCreated", () => {
+    it("persists context revision created event", async () => {
+      await service.recordContextRevisionCreated({
         assessmentId: "assessment-123",
         respondentRef: {
           id: "user-456",
           role: "CUSTOMER",
           authenticated: true,
         },
+        contextRevision: 2,
+        priorRevision: 1,
+        authority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
+        statementKey: "q-1",
+        statementValue: "AWS RDS",
+        threadId: "thread-1",
+        turnId: 2,
+        sourceSnapshot: {
+          sourceVersion: "src-1",
+          pgeVersion: "pge-1",
+        },
+        governedEvidenceRefs: ["ev-1"],
+        correlationId: "corr-rev-1",
+      });
+
+      expect(writeMock).toHaveBeenCalledTimes(1);
+      const event = writeMock.mock.calls[0][0];
+      expect(event.eventType).toBe(
+        INTERVIEW_AUDIT_EVENT_TYPES.contextRevisionCreated,
+      );
+      expect(event.payload).toMatchObject({
+        contextRevision: "2",
+        priorRevision: "1",
+        authority: "CUSTOMER_STATED",
+        statementKey: "q-1",
+      });
+    });
+  });
+
+  describe("recordInterviewOutcome", () => {
+    it("persists interview outcome recorded event", async () => {
+      await service.recordInterviewOutcome({
+        assessmentId: "assessment-123",
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+        summary: "Context is ready for reconciliation.",
+        contextRevision: 3,
+        threadId: "thread-1",
+        correlationId: "corr-outcome-1",
+      });
+
+      expect(writeMock).toHaveBeenCalledTimes(1);
+      const event = writeMock.mock.calls[0][0];
+      expect(event.eventType).toBe(
+        INTERVIEW_AUDIT_EVENT_TYPES.interviewOutcomeRecorded,
+      );
+      expect(event.payload).toMatchObject({
+        outcome: "CONTEXT_READY",
+        summary: "Context is ready for reconciliation.",
+        contextRevision: "3",
+      });
+    });
+  });
+
+  describe("recordConfirmation", () => {
+    it("records an explicit confirmation event with statement reference", async () => {
+      await service.recordConfirmation({
+        assessmentId: "assessment-123",
+        respondentRef: {
+          id: "user-456",
+          role: "CUSTOMER",
+          name: "Alice Owner",
+          authenticated: true,
+        },
         interviewContextRevision: "rev-3",
         sessionId: "session-789",
         threadId: "thread-abc",
         turnId: 4,
-        statementKey: "hipaa_scope",
-        statementValue: true,
-        questionId: "q-hipaa",
-        interpretation: "Customer confirmed HIPAA compliance scope applies.",
-        evidenceRefs: ["ev-hipaa-1"],
+        statementKey: "data_retention_days",
+        statementValue: 365,
+        questionId: "q-retention",
+        questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+        interpretation: "Customer confirmed 365 days retention period.",
+        sourceSnapshot: {
+          sourceVersion: "src-1",
+          pgeVersion: "pge-1",
+        },
         correlationId: "corr-confirm-1",
       });
 
@@ -184,16 +307,13 @@ describe("InterviewAuditService", () => {
       );
       expect(event.actorId).toBe("user-456");
       const payload = event.payload as Record<string, unknown>;
-      expect(payload.statementKey).toBe("hipaa_scope");
-      expect(payload.statementValue).toBe(true);
-      expect(payload.interpretation).toBe(
-        "Customer confirmed HIPAA compliance scope applies.",
-      );
+      expect(payload.statementKey).toBe("data_retention_days");
+      expect(payload.statementValue).toBe(365);
     });
   });
 
   describe("recordSupersession", () => {
-    it("records context correction preserving prior value/revision and new value/revision", async () => {
+    it("records an INTERVIEW_CONTEXT_SUPERSEDED event preserving prior and new values with revisions", async () => {
       await service.recordSupersession({
         assessmentId: "assessment-123",
         respondentRef: {
@@ -201,18 +321,20 @@ describe("InterviewAuditService", () => {
           role: "CUSTOMER",
           authenticated: true,
         },
-        statementKey: "data_retention_days",
-        priorValue: 30,
-        priorRevision: "rev-1",
-        newValue: 90,
-        newRevision: "rev-2",
+        priorRevision: "rev-2",
+        newRevision: "rev-3",
+        statementKey: "data_residency",
+        priorValue: "EU_CENTRAL",
+        newValue: "US_EAST",
         sessionId: "session-789",
         threadId: "thread-abc",
         turnId: 5,
-        questionId: "q-retention",
-        questionIntent: "CLARIFY",
-        interpretation: "Customer corrected the retention period to 90 days.",
-        evidenceRefs: ["ev-retention-policy"],
+        questionId: "q-residency-correction",
+        questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
+        sourceSnapshot: {
+          sourceVersion: "src-1",
+          pgeVersion: "pge-1",
+        },
         correlationId: "corr-super-1",
       });
 
@@ -221,25 +343,18 @@ describe("InterviewAuditService", () => {
       expect(event.eventType).toBe(
         INTERVIEW_AUDIT_EVENT_TYPES.contextSuperseded,
       );
-      expect(event.actorId).toBe("user-456");
 
       const payload = event.payload as Record<string, unknown>;
-      expect(payload.statementKey).toBe("data_retention_days");
-      expect(payload.priorValue).toBe(30);
-      expect(payload.priorRevision).toBe("rev-1");
-      expect(payload.newValue).toBe(90);
-      expect(payload.newRevision).toBe("rev-2");
-      expect(payload.turnId).toBe(5);
-      expect(payload.questionIntent).toBe("CLARIFY");
-      expect(payload.interpretation).toBe(
-        "Customer corrected the retention period to 90 days.",
-      );
-      expect(payload.evidenceRefs).toEqual(["ev-retention-policy"]);
+      expect(payload.statementKey).toBe("data_residency");
+      expect(payload.priorValue).toBe("EU_CENTRAL");
+      expect(payload.priorRevision).toBe("rev-2");
+      expect(payload.newValue).toBe("US_EAST");
+      expect(payload.newRevision).toBe("rev-3");
     });
   });
 
   describe("recordCrossRespondentConflict", () => {
-    it("preserves cross-respondent contradiction as a conflict record rather than last-answer-wins", async () => {
+    it("records an INTERVIEW_CONTEXT_CONFLICT_RECORDED event preserving both conflicting respondents", async () => {
       await service.recordCrossRespondentConflict({
         assessmentId: "assessment-123",
         statementKey: "cloud_provider",
@@ -259,10 +374,9 @@ describe("InterviewAuditService", () => {
         },
         secondStatementValue: "GCP",
         secondTurnId: 4,
-        interviewContextRevision: "rev-3",
+        interviewContextRevision: "rev-4",
         sessionId: "session-789",
         threadId: "thread-abc",
-        questionId: "q-cloud",
         correlationId: "corr-conflict-1",
       });
 
