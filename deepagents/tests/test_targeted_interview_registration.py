@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from orchestration.context import LCSPRunContext
 from middleware.specialist_handoff_validation import _persist_targeted_interview_need
+from orchestration.context import LCSPRunContext
 
 
 class RecordingApi:
@@ -21,7 +21,10 @@ def test_investigator_needs_input_persists_trusted_target_before_root() -> None:
         workflow_run_id="workflow-1",
         checkpoint_id="checkpoint-7",
         engineering_rule_ids=("ENG-1", "ENG-2"),
-        artifact_versions={"technicalEvidenceReportId": "ter-1", "repositorySnapshotId": "snapshot-1"},
+        artifact_versions={
+            "technicalEvidenceReportId": "ter-1",
+            "repositorySnapshotId": "snapshot-1",
+        },
     )
     _persist_targeted_interview_need(
         subagent_type="investigator",
@@ -32,6 +35,7 @@ def test_investigator_needs_input_persists_trusted_target_before_root() -> None:
                 "business_context_need": "Who approves this action?",
                 "resolution_criteria": ["decision_authority"],
             },
+            "artifact_versions": dict(context.artifact_versions),
         },
         context=context,
         metadata={"api_client": api},
@@ -46,7 +50,10 @@ def test_investigator_needs_input_persists_trusted_target_before_root() -> None:
     assert payload["workflowRunId"] == "workflow-1"
     assert payload["checkpointId"] == "checkpoint-7"
     assert payload["affectedRuleIds"] == ["ENG-1", "ENG-2"]
-    assert payload["originatingInvestigationReference"] == "investigator:task-call-investigator-17:need-1"
+    assert (
+        payload["originatingInvestigationReference"]
+        == "investigator:task-call-investigator-17:need-1"
+    )
     assert payload["artifactVersions"] == context.artifact_versions
 
 
