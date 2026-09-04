@@ -293,12 +293,12 @@ describe("GetInterviewAuditTrailHandler", () => {
       modelId: "model-v7",
       currentStage: "RE_SCOPE",
       rerunScope: ["reconciliation", "classification_review"],
-      sourceSnapshot: expect.objectContaining({
+      sourceSnapshot: {
         snapshotId: "snapshot-7",
         pgeVersion: "pge-v7",
         technicalCoverageState: "PARTIAL",
         coverageLimitations: ["worker repository unavailable"],
-      }),
+      },
     });
   });
 

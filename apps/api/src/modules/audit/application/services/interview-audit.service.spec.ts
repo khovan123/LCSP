@@ -275,17 +275,17 @@ describe("InterviewAuditService", () => {
 
       const payload = event.payload as Record<string, unknown>;
       expect(payload.statementKey).toBe("cloud_provider");
-      expect(payload.conflict).toEqual({
-        firstRespondent: expect.objectContaining({
+      expect(payload.conflict).toMatchObject({
+        firstRespondent: {
           id: "user-alice",
           name: "Alice",
-        }),
+        },
         firstValue: "AWS",
         firstTurnId: 2,
-        secondRespondent: expect.objectContaining({
+        secondRespondent: {
           id: "user-bob",
           name: "Bob",
-        }),
+        },
         secondValue: "GCP",
         secondTurnId: 4,
       });
@@ -354,10 +354,9 @@ describe("InterviewAuditService", () => {
           authenticated: false,
         }),
       );
-      expect((impactEvent.payload as any).affectedActivities).toEqual([
-        "reconciliation",
-        "classification_review",
-      ]);
+      expect(impactEvent.payload).toMatchObject({
+        affectedActivities: ["reconciliation", "classification_review"],
+      });
 
       // 2. Assessment Orchestration executes selective rerun
       await service.recordOrchestrationRerun({
@@ -383,9 +382,9 @@ describe("InterviewAuditService", () => {
           authenticated: false,
         }),
       );
-      expect((rerunEvent.payload as any).rerunScope).toEqual([
-        "reconciliation",
-      ]);
+      expect(rerunEvent.payload).toMatchObject({
+        rerunScope: ["reconciliation"],
+      });
     });
   });
 });
