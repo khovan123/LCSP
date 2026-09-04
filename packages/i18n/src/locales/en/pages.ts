@@ -37,6 +37,38 @@ export const enPages = {
     allAssessments: "All assessments",
     searchAssessments: "Search assessments",
     noAssessmentMatches: "No matching assessments found.",
+    recentFilter: {
+      trigger: "Filter recent assessments",
+      empty: "No assessments match the current filters",
+      loading: "Loading recent assessments",
+      error: "Unable to load recent assessments",
+      labels: {
+        type: "Type",
+        status: "Status",
+        lastActivity: "Last activity",
+        groupBy: "Group by",
+        sortBy: "Sort by",
+      },
+      options: {
+        all: "All",
+        active: "Active",
+        archived: "Archived",
+        chat: "Chat",
+        task: "Task",
+        oneDay: "1d",
+        threeDays: "3d",
+        sevenDays: "7d",
+        thirtyDays: "30d",
+        date: "Date",
+        unread: "Unread",
+        state: "State",
+        customGroups: "Custom groups",
+        none: "None",
+        name: "Name",
+        dateCreated: "Date created",
+        lastActivity: "Last activity",
+      },
+    },
     settings: "Settings",
     readiness: "Readiness",
     technicalEvidence: "Technical evidence",
@@ -676,7 +708,8 @@ export const enPages = {
       READY_FOR_REVIEW: "Ready for Review",
     },
     nextActions: {
-      workflowRun: "Open the Workflow Run to continue the current assessment activity.",
+      workflowRun:
+        "Open the Workflow Run to continue the current assessment activity.",
     },
     security: {
       title: "Account protection",
@@ -985,14 +1018,18 @@ export const enPages = {
     blockedCheckInternally: "I need to check internally",
     blockedSaveExit: "Save & Exit",
     whyAsking: "Why are we asking?",
-    whyAskingDetail: "The Interview Agent linked this question to evidence refs:",
+    whyAskingDetail:
+      "The Interview Agent linked this question to evidence refs:",
     submitAnswer: "Send answer",
     answerSavedForRuntime:
       "Answer captured for the runtime thread. The Interview Agent will evaluate sufficiency before downstream resume.",
-    draftSavedForResume: "Draft saved. Return to this assessment to resume the same interview thread.",
-    blockedActionRecorded: "Choice recorded for the unresolved interview thread.",
+    draftSavedForResume:
+      "Draft saved. Return to this assessment to resume the same interview thread.",
+    blockedActionRecorded:
+      "Choice recorded for the unresolved interview thread.",
     runtimeWaitingForAgent: "Waiting for runtime activity for this assessment.",
-    noActiveInterviewQuestion: "No active Interview Agent question is waiting right now.",
+    noActiveInterviewQuestion:
+      "No active Interview Agent question is waiting right now.",
     loadingInterviewState: "Loading Interview Agent state.",
     answerHistoryPrefix: "Prior answer:",
     modules: {
@@ -1005,7 +1042,8 @@ export const enPages = {
   },
   assessmentForm: {
     pageTitle: "Create assessment",
-    pageDescription: "Enter the basics before starting the assessment workflow.",
+    pageDescription:
+      "Enter the basics before starting the assessment workflow.",
     formTitle: "Assessment details",
     formDescription: "You can add more detail in the next workflow steps.",
     nameLabel: "Assessment name",

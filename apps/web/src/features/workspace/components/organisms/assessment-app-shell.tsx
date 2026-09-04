@@ -2,32 +2,12 @@
 
 import { ASSESSMENT_RUNTIME_RUN_STATUSES } from "@lcsp/contracts/evidence";
 import { resolveMessage } from "@lcsp/i18n";
-import {
-  BoxesIcon,
-  ChevronRightIcon,
-  ChevronsUpDownIcon,
-  FileCheck2Icon,
-  LogOutIcon,
-  PanelLeftIcon,
-  PanelRightIcon,
-  PlugIcon,
-  PlusIcon,
-  SettingsIcon,
-  ShieldCheckIcon,
-} from "lucide-react";
-import Link from "next/link";
+import { PanelLeftIcon, PanelRightIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Sheet,
   SheetContent,
@@ -36,7 +16,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useSignOutMutation } from "@/lib/api/auth-queries";
-import { getAssessmentActiveHref } from "@/lib/api/workspace-client";
 import {
   useAssessmentsQuery,
   useWorkspaceQuery,
@@ -44,23 +23,23 @@ import {
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
+import type {
+  AppShellNavigationItem,
+  AppShellNavigationSection,
+} from "../../types/app-shell.types";
 import {
   ASSESSMENT_LEFT_SIDEBAR_STATES,
   ASSESSMENT_RIGHT_PANEL_STATES,
   ASSESSMENT_SHELL_SCREENS,
   type AssessmentShellState,
 } from "../../types/assessment-shell-state.types";
-import type {
-  AppShellNavigationItem,
-  AppShellNavigationSection,
-} from "../../types/app-shell.types";
 import { WORKSPACE_RUNTIME_CONNECTION_STATES } from "../../types/workspace-runtime.types";
-import type { AssessmentSummary } from "../../types/workspace.types";
 import {
   connectionLabel,
   runStatusLabel,
   stageLabel,
 } from "../../utils/assessment-runtime-formatter";
+import { AppSidebar, SIDEBAR_RECENT_LOAD_STATES } from "./app-sidebar";
 import {
   AssessmentRightPanelSlot,
   CenterContentSlot,
@@ -102,6 +81,11 @@ export function AssessmentAppShell({
     workspaceQuery.data?.kind === "loaded"
       ? workspaceQuery.data.workspace
       : undefined;
+  const recentLoadState = assessmentsQuery.isLoading
+    ? SIDEBAR_RECENT_LOAD_STATES.loading
+    : assessmentsQuery.data?.kind === "error"
+      ? SIDEBAR_RECENT_LOAD_STATES.error
+      : SIDEBAR_RECENT_LOAD_STATES.idle;
   const assessmentSection = sections.find(
     (section) => section.kind === "assessment",
   );
@@ -165,12 +149,13 @@ export function AssessmentAppShell({
   }
 
   const navigation = (
-    <AssessmentShellNavigation
+    <AppSidebar
       assessments={assessments}
       collapsed={false}
       onNavigate={() => setMobileNavigationOpen(false)}
       onSignOut={() => void handleSignOut()}
       pathname={pathname}
+      recentLoadState={recentLoadState}
       signOutPending={signOutMutation.isPending}
       userName={workspace?.user.display_name}
     />
@@ -184,11 +169,12 @@ export function AssessmentAppShell({
       data-right-panel={effectiveShellState.rightPanel}
     >
       <LeftSidebarSlot collapsed={leftCollapsed}>
-        <AssessmentShellNavigation
+        <AppSidebar
           assessments={assessments}
           collapsed={leftCollapsed}
           onSignOut={() => void handleSignOut()}
           pathname={pathname}
+          recentLoadState={recentLoadState}
           signOutPending={signOutMutation.isPending}
           userName={workspace?.user.display_name}
         />
@@ -276,7 +262,7 @@ export function AssessmentAppShell({
       </div>
 
       <Sheet open={mobileNavigationOpen} onOpenChange={setMobileNavigationOpen}>
-        <SheetContent side="left" className="w-[min(88vw,320px)] p-0">
+        <SheetContent side="left" className="w-[min(88vw,320px)] p-0 lg:hidden">
           <SheetHeader className="sr-only">
             <SheetTitle>{t("pages.appShell.mobileTitle")}</SheetTitle>
             <SheetDescription>
@@ -306,233 +292,6 @@ export function AssessmentAppShell({
         </Sheet>
       ) : null}
     </div>
-  );
-}
-
-function AssessmentShellNavigation({
-  assessments,
-  collapsed,
-  onNavigate,
-  onSignOut,
-  pathname,
-  signOutPending,
-  userName,
-}: {
-  assessments: AssessmentSummary[];
-  collapsed: boolean;
-  onNavigate?: () => void;
-  onSignOut: () => void;
-  pathname: string;
-  signOutPending: boolean;
-  userName?: string;
-}) {
-  const recentAssessmentItems: AppShellNavigationItem[] = assessments
-    .slice(0, 3)
-    .map((assessment) => ({
-      href: getAssessmentActiveHref(assessment),
-      label: assessment.name,
-      icon: FileCheck2Icon,
-    }));
-  const resolvedUserName = userName?.trim() || t("pages.appShell.productName");
-  const userInitial = resolvedUserName.slice(0, 1).toUpperCase();
-
-  function navigateTo(href: string) {
-    onNavigate?.();
-    window.location.assign(href);
-  }
-
-  return (
-    <div className="flex min-h-0 w-full flex-col">
-      <div className="shrink-0 p-2.5">
-        <Link
-          href="/workspace"
-          onClick={onNavigate}
-          className={cn(
-            "flex min-w-0 items-center rounded-lg px-1.5 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-            collapsed ? "justify-center" : "gap-2.5",
-          )}
-          title={t("pages.appShell.productName")}
-        >
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
-            <ShieldCheckIcon className="size-4" />
-          </span>
-          {collapsed ? null : (
-            <span className="truncate text-sm font-semibold">
-              {t("pages.appShell.productName")}
-            </span>
-          )}
-        </Link>
-
-        <Link
-          href="/assessments/new"
-          onClick={onNavigate}
-          className={cn(
-            "mt-4 flex h-9 items-center rounded-lg px-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-            collapsed ? "justify-center" : "gap-2",
-          )}
-          title={collapsed ? t("pages.appShell.new") : undefined}
-        >
-          <PlusIcon className="size-4 shrink-0" />
-          {collapsed ? null : <span>{t("pages.appShell.new")}</span>}
-        </Link>
-
-        <button
-          type="button"
-          aria-disabled="true"
-          title={t("pages.appShell.artifactsUnavailable")}
-          className={cn(
-            "mt-1 flex h-9 w-full cursor-default items-center rounded-lg px-2 text-sm font-medium text-sidebar-foreground/70",
-            collapsed ? "justify-center" : "gap-2",
-          )}
-        >
-          <BoxesIcon className="size-4 shrink-0" />
-          {collapsed ? null : <span>{t("pages.appShell.artifacts")}</span>}
-        </button>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-3">
-        {recentAssessmentItems.length > 0 ? (
-          <NavigationGroup
-            collapsed={collapsed}
-            label={t("pages.appShell.recents")}
-            items={recentAssessmentItems}
-            onNavigate={onNavigate}
-            pathname={pathname}
-          />
-        ) : null}
-      </div>
-
-      <div className="shrink-0 p-2.5">
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                className={cn(
-                  "flex w-full items-center rounded-lg px-1.5 py-1.5 text-left outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-                  collapsed ? "justify-center" : "gap-2",
-                )}
-                aria-label={t("pages.appShell.accountMenu")}
-              />
-            }
-          >
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-accent-foreground">
-              {userInitial}
-            </span>
-            {collapsed ? null : (
-              <>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                  {resolvedUserName}
-                </span>
-                <ChevronsUpDownIcon className="size-3.5 shrink-0 text-sidebar-foreground/55" />
-              </>
-            )}
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            side="top"
-            align="start"
-            sideOffset={6}
-            className="w-51"
-          >
-            <DropdownMenuItem onClick={() => navigateTo("/workspace/settings")}>
-              <SettingsIcon />
-              {t("pages.appShell.settings")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => navigateTo("/workspace/settings#repositories")}
-            >
-              <PlugIcon />
-              {t("pages.appShell.connectors")}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="destructive"
-              disabled={signOutPending}
-              onClick={onSignOut}
-            >
-              <LogOutIcon />
-              {t("pages.appShell.signOut")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
-  );
-}
-
-function NavigationGroup({
-  className,
-  collapsed,
-  items,
-  label,
-  onNavigate,
-  pathname,
-}: {
-  className?: string;
-  collapsed: boolean;
-  items: AppShellNavigationItem[];
-  label: string;
-  onNavigate?: () => void;
-  pathname: string;
-}) {
-  return (
-    <section className={className}>
-      {!collapsed ? (
-        <p className="mb-1.5 px-2 text-[0.6875rem] font-semibold tracking-[0.12em] text-sidebar-foreground/50 uppercase">
-          {label}
-        </p>
-      ) : null}
-      <nav className="space-y-1" aria-label={label}>
-        {items.map((item) => {
-          const Icon = item.icon;
-          const active = isNavigationItemActive(pathname, item);
-          const content = (
-            <>
-              <Icon className="size-4 shrink-0" />
-              {!collapsed ? (
-                <span className="truncate">{item.label}</span>
-              ) : null}
-              {!collapsed && active ? (
-                <ChevronRightIcon className="ml-auto size-3.5 shrink-0" />
-              ) : null}
-            </>
-          );
-          const className = cn(
-            "flex h-9 w-full items-center rounded-lg px-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-            collapsed ? "justify-center" : "gap-2.5",
-            active
-              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-              : "text-sidebar-foreground/75 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
-            item.disabled && "cursor-not-allowed opacity-45",
-          );
-
-          if (item.disabled) {
-            return (
-              <span
-                key={item.href}
-                className={className}
-                title={item.disabledReason ?? item.label}
-              >
-                {content}
-              </span>
-            );
-          }
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              className={className}
-              title={collapsed ? item.label : undefined}
-              aria-current={active ? "page" : undefined}
-            >
-              {content}
-            </Link>
-          );
-        })}
-      </nav>
-    </section>
   );
 }
 

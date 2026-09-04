@@ -37,6 +37,38 @@ export const viPages = {
     allAssessments: "Tất cả assessment",
     searchAssessments: "Tìm assessment",
     noAssessmentMatches: "Không tìm thấy assessment phù hợp.",
+    recentFilter: {
+      trigger: "Lọc assessment gần đây",
+      empty: "Không có assessment phù hợp với bộ lọc hiện tại",
+      loading: "Đang tải assessment gần đây",
+      error: "Không thể tải assessment gần đây",
+      labels: {
+        type: "Loại",
+        status: "Trạng thái",
+        lastActivity: "Hoạt động gần nhất",
+        groupBy: "Nhóm theo",
+        sortBy: "Sắp xếp theo",
+      },
+      options: {
+        all: "Tất cả",
+        active: "Đang hoạt động",
+        archived: "Đã lưu trữ",
+        chat: "Chat",
+        task: "Task",
+        oneDay: "1d",
+        threeDays: "3d",
+        sevenDays: "7d",
+        thirtyDays: "30d",
+        date: "Ngày",
+        unread: "Chưa đọc",
+        state: "State",
+        customGroups: "Nhóm tuỳ chỉnh",
+        none: "Không",
+        name: "Tên",
+        dateCreated: "Ngày tạo",
+        lastActivity: "Hoạt động gần nhất",
+      },
+    },
     settings: "Cài đặt",
     readiness: "Readiness",
     technicalEvidence: "Bằng chứng kỹ thuật",
@@ -674,8 +706,7 @@ export const viPages = {
       READY_FOR_REVIEW: "Sẵn sàng review",
     },
     nextActions: {
-      workflowRun:
-        "Mở Workflow Run để tiếp tục hoạt động assessment hiện tại.",
+      workflowRun: "Mở Workflow Run để tiếp tục hoạt động assessment hiện tại.",
     },
     security: {
       title: "Bảo vệ tài khoản",
@@ -986,10 +1017,13 @@ export const viPages = {
     submitAnswer: "Gửi câu trả lời",
     answerSavedForRuntime:
       "Câu trả lời đã được ghi cho thread runtime. Interview Agent sẽ đánh giá đủ bối cảnh trước khi resume downstream.",
-    draftSavedForResume: "Đã lưu draft. Quay lại assessment này để tiếp tục đúng interview thread.",
-    blockedActionRecorded: "Lựa chọn đã được ghi cho interview thread chưa resolve.",
+    draftSavedForResume:
+      "Đã lưu draft. Quay lại assessment này để tiếp tục đúng interview thread.",
+    blockedActionRecorded:
+      "Lựa chọn đã được ghi cho interview thread chưa resolve.",
     runtimeWaitingForAgent: "Đang chờ hoạt động runtime cho assessment này.",
-    noActiveInterviewQuestion: "Hiện chưa có câu hỏi Interview Agent nào đang chờ.",
+    noActiveInterviewQuestion:
+      "Hiện chưa có câu hỏi Interview Agent nào đang chờ.",
     loadingInterviewState: "Đang tải trạng thái Interview Agent.",
     answerHistoryPrefix: "Câu trả lời trước:",
     modules: {
