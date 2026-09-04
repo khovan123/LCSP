@@ -18,6 +18,7 @@ const WORKER_KEY = "test-only-worker-api-key-at-least-32-chars";
 type ReportRuntimeBody = {
   status: string;
   assessment_id: string;
+  user_id: string;
   evidence_payload: {
     technical_findings: Array<{ finding_type: string }>;
   };
@@ -123,6 +124,7 @@ describe("Worker runtime input endpoints (e2e) [LCSP-155]", () => {
     assert.equal(report.status, 200);
     assert.equal(reportBody.status, "accepted");
     assert.equal(reportBody.assessment_id, "assessment-runtime-1");
+    assert.equal(reportBody.user_id, "user-runtime-1");
     assert.equal(
       reportBody.evidence_payload.technical_findings[0]?.finding_type,
       "STATUS_UPDATE_SIGNAL",
