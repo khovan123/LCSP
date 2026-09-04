@@ -120,4 +120,3 @@ function collectNarrativeStrings(value: unknown, path = "$"): NarrativeValue[] {
     ([key, item]) => collectNarrativeStrings(item, `${path}.${key}`),
   );
 }
-

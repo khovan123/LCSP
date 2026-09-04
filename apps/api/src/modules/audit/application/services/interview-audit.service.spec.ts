@@ -15,7 +15,9 @@ describe("InterviewAuditService", () => {
   let writeMock: jest.Mock<(event: AuditEventInput) => Promise<void>>;
 
   beforeEach(() => {
-    writeMock = jest.fn<(event: AuditEventInput) => Promise<void>>().mockResolvedValue(undefined);
+    writeMock = jest
+      .fn<(event: AuditEventInput) => Promise<void>>()
+      .mockResolvedValue(undefined);
     const auditWriter = {
       write: writeMock,
     } as unknown as AuditWriterService;
@@ -60,7 +62,9 @@ describe("InterviewAuditService", () => {
       expect(writeMock).toHaveBeenCalledTimes(1);
       const event = writeMock.mock.calls[0][0];
 
-      expect(event.eventType).toBe(INTERVIEW_AUDIT_EVENT_TYPES.statementRecorded);
+      expect(event.eventType).toBe(
+        INTERVIEW_AUDIT_EVENT_TYPES.statementRecorded,
+      );
       expect(event.actorId).toBe("user-456");
       expect(event.actor).toEqual({
         id: "user-456",
@@ -82,7 +86,9 @@ describe("InterviewAuditService", () => {
       expect(payload.turnId).toBe(3);
       expect(payload.questionId).toBe("q-residency-1");
       expect(payload.questionIntent).toBe("CLARIFY");
-      expect(payload.interpretation).toBe("Customer confirmed data residency in EU Central.");
+      expect(payload.interpretation).toBe(
+        "Customer confirmed data residency in EU Central.",
+      );
       expect(payload.evidenceRefs).toEqual(["ev-101", "ev-102"]);
       expect(payload.sourceSnapshot).toEqual({
         snapshotId: "snap-001",
@@ -173,12 +179,16 @@ describe("InterviewAuditService", () => {
 
       expect(writeMock).toHaveBeenCalledTimes(1);
       const event = writeMock.mock.calls[0][0];
-      expect(event.eventType).toBe(INTERVIEW_AUDIT_EVENT_TYPES.statementConfirmed);
+      expect(event.eventType).toBe(
+        INTERVIEW_AUDIT_EVENT_TYPES.statementConfirmed,
+      );
       expect(event.actorId).toBe("user-456");
       const payload = event.payload as Record<string, unknown>;
       expect(payload.statementKey).toBe("hipaa_scope");
       expect(payload.statementValue).toBe(true);
-      expect(payload.interpretation).toBe("Customer confirmed HIPAA compliance scope applies.");
+      expect(payload.interpretation).toBe(
+        "Customer confirmed HIPAA compliance scope applies.",
+      );
     });
   });
 
@@ -208,7 +218,9 @@ describe("InterviewAuditService", () => {
 
       expect(writeMock).toHaveBeenCalledTimes(1);
       const event = writeMock.mock.calls[0][0];
-      expect(event.eventType).toBe(INTERVIEW_AUDIT_EVENT_TYPES.contextSuperseded);
+      expect(event.eventType).toBe(
+        INTERVIEW_AUDIT_EVENT_TYPES.contextSuperseded,
+      );
       expect(event.actorId).toBe("user-456");
 
       const payload = event.payload as Record<string, unknown>;
@@ -256,16 +268,24 @@ describe("InterviewAuditService", () => {
 
       expect(writeMock).toHaveBeenCalledTimes(1);
       const event = writeMock.mock.calls[0][0];
-      expect(event.eventType).toBe(INTERVIEW_AUDIT_EVENT_TYPES.contextConflicted);
+      expect(event.eventType).toBe(
+        INTERVIEW_AUDIT_EVENT_TYPES.contextConflicted,
+      );
       expect(event.actorId).toBe("user-bob");
 
       const payload = event.payload as Record<string, unknown>;
       expect(payload.statementKey).toBe("cloud_provider");
       expect(payload.conflict).toEqual({
-        firstRespondent: expect.objectContaining({ id: "user-alice", name: "Alice" }),
+        firstRespondent: expect.objectContaining({
+          id: "user-alice",
+          name: "Alice",
+        }),
         firstValue: "AWS",
         firstTurnId: 2,
-        secondRespondent: expect.objectContaining({ id: "user-bob", name: "Bob" }),
+        secondRespondent: expect.objectContaining({
+          id: "user-bob",
+          name: "Bob",
+        }),
         secondValue: "GCP",
         secondTurnId: 4,
       });
@@ -289,7 +309,9 @@ describe("InterviewAuditService", () => {
 
       expect(writeMock).toHaveBeenCalledTimes(1);
       const event = writeMock.mock.calls[0][0];
-      expect(event.eventType).toBe(INTERVIEW_AUDIT_EVENT_TYPES.targetedClarificationStarted);
+      expect(event.eventType).toBe(
+        INTERVIEW_AUDIT_EVENT_TYPES.targetedClarificationStarted,
+      );
       expect(event.actor).toEqual(
         expect.objectContaining({
           id: AUDIT_ACTOR_IDS.assessmentOrchestrator,
@@ -312,7 +334,8 @@ describe("InterviewAuditService", () => {
         assessmentId: "assessment-123",
         interviewContextRevision: "rev-5",
         affectedActivities: ["reconciliation", "classification_review"],
-        summary: "Context changed data residency from EU to US, requiring re-check.",
+        summary:
+          "Context changed data residency from EU to US, requiring re-check.",
         sessionId: "session-789",
         threadId: "thread-abc",
         runId: "interview-run-1",
@@ -321,7 +344,9 @@ describe("InterviewAuditService", () => {
 
       expect(writeMock).toHaveBeenCalledTimes(1);
       const impactEvent = writeMock.mock.calls[0][0];
-      expect(impactEvent.eventType).toBe(INTERVIEW_AUDIT_EVENT_TYPES.downstreamImpactEmitted);
+      expect(impactEvent.eventType).toBe(
+        INTERVIEW_AUDIT_EVENT_TYPES.downstreamImpactEmitted,
+      );
       expect(impactEvent.actor).toEqual(
         expect.objectContaining({
           id: AUDIT_ACTOR_IDS.interviewAgent,
@@ -347,7 +372,9 @@ describe("InterviewAuditService", () => {
 
       expect(writeMock).toHaveBeenCalledTimes(2);
       const rerunEvent = writeMock.mock.calls[1][0];
-      expect(rerunEvent.eventType).toBe(INTERVIEW_AUDIT_EVENT_TYPES.orchestrationRerunTriggered);
+      expect(rerunEvent.eventType).toBe(
+        INTERVIEW_AUDIT_EVENT_TYPES.orchestrationRerunTriggered,
+      );
       expect(rerunEvent.actorId).toBe("system-orchestrator");
       expect(rerunEvent.actor).toEqual(
         expect.objectContaining({
@@ -356,7 +383,9 @@ describe("InterviewAuditService", () => {
           authenticated: false,
         }),
       );
-      expect((rerunEvent.payload as any).rerunScope).toEqual(["reconciliation"]);
+      expect((rerunEvent.payload as any).rerunScope).toEqual([
+        "reconciliation",
+      ]);
     });
   });
 });

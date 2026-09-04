@@ -338,7 +338,9 @@ export class InterviewAuditService {
   async recordTargetedClarification(
     input: RecordTargetedClarificationAuditInput,
   ): Promise<void> {
-    const respondentRef = this.optionalAuthenticatedRespondent(input.respondentRef);
+    const respondentRef = this.optionalAuthenticatedRespondent(
+      input.respondentRef,
+    );
     await this.writeInterviewEvent({
       eventType: INTERVIEW_AUDIT_EVENT_TYPES.targetedClarificationStarted,
       assessmentId: input.assessmentId,
@@ -348,7 +350,8 @@ export class InterviewAuditService {
       causationId: input.causationId,
       sessionId: input.sessionId,
       payload: {
-        originatingInvestigationReference: input.originatingInvestigationReference,
+        originatingInvestigationReference:
+          input.originatingInvestigationReference,
         interviewContextRevision: input.interviewContextRevision,
         threadId: input.threadId,
         runId: input.runId,
@@ -368,7 +371,9 @@ export class InterviewAuditService {
   async recordDownstreamImpact(
     input: RecordDownstreamImpactAuditInput,
   ): Promise<void> {
-    const respondentRef = this.optionalAuthenticatedRespondent(input.respondentRef);
+    const respondentRef = this.optionalAuthenticatedRespondent(
+      input.respondentRef,
+    );
     await this.writeInterviewEvent({
       eventType: INTERVIEW_AUDIT_EVENT_TYPES.downstreamImpactEmitted,
       assessmentId: input.assessmentId,

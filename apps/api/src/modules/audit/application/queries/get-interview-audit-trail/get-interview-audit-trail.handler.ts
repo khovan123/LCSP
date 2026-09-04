@@ -16,13 +16,19 @@ import {
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 
-import { cleanString, isRecord } from "../../../../../common/utils/type-guards.js";
+import {
+  cleanString,
+  isRecord,
+} from "../../../../../common/utils/type-guards.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { AuditRedactorService } from "../../services/audit/audit-redactor.service.js";
 import { GetInterviewAuditTrailQuery } from "./get-interview-audit-trail.query.js";
 
-function auditActorType(value: unknown, actorId: string | null): AuditActorType {
+function auditActorType(
+  value: unknown,
+  actorId: string | null,
+): AuditActorType {
   if (Object.values(AUDIT_ACTOR_TYPES).includes(value as AuditActorType)) {
     return value as AuditActorType;
   }
@@ -112,9 +118,10 @@ function readConflictDetail(
  */
 @Injectable()
 @QueryHandler(GetInterviewAuditTrailQuery)
-export class GetInterviewAuditTrailHandler
-  implements IQueryHandler<GetInterviewAuditTrailQuery, InterviewAuditTrailResponse>
-{
+export class GetInterviewAuditTrailHandler implements IQueryHandler<
+  GetInterviewAuditTrailQuery,
+  InterviewAuditTrailResponse
+> {
   /**
    * Creates the query handler with Prisma and redactor dependencies.
    *
@@ -185,7 +192,8 @@ export class GetInterviewAuditTrailHandler
       const actorRole = cleanString(actor?.role);
       const actorName = cleanString(actor?.name);
       const actorType = auditActorType(actor?.type, row.actorId);
-      const respondentRef = readActorRef(payloadRecord.respondentRef) ?? undefined;
+      const respondentRef =
+        readActorRef(payloadRecord.respondentRef) ?? undefined;
 
       const revision =
         cleanString(payloadRecord.interviewContextRevision) ??
@@ -240,7 +248,8 @@ export class GetInterviewAuditTrailHandler
           payloadRecord.originatingInvestigationReference,
         ),
         downstreamImpact:
-          row.eventType === INTERVIEW_AUDIT_EVENT_TYPES.downstreamImpactEmitted ||
+          row.eventType ===
+            INTERVIEW_AUDIT_EVENT_TYPES.downstreamImpactEmitted ||
           Boolean(payloadRecord.downstreamImpact),
         affectedActivities: stringArray(payloadRecord.affectedActivities),
         rerunScope: stringArray(payloadRecord.rerunScope),
@@ -264,4 +273,3 @@ export class GetInterviewAuditTrailHandler
     });
   }
 }
-

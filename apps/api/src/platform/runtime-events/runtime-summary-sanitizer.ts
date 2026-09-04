@@ -144,4 +144,3 @@ function truncate(value: string, maxLength: number): string {
 }
 
 export { FALLBACK_SUMMARY };
-

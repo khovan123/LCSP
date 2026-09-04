@@ -225,4 +225,3 @@ function readStringRecord(value: unknown): Record<string, string> {
       .filter((entry): entry is readonly [string, string] => entry[1] !== null),
   );
 }
-

@@ -124,4 +124,3 @@ export class GetDocumentGenerationContextHandler implements IQueryHandler<GetDoc
     throw new NotFoundException(`${artifact} generation context not found`);
   }
 }
-

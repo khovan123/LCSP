@@ -68,7 +68,8 @@ describe("GetInterviewAuditTrailHandler", () => {
           stage: "INITIAL_INTERVIEW",
           questionId: "q-lang",
           questionIntent: "CONFIRM",
-          interpretation: "Customer confirmed TypeScript is the primary language.",
+          interpretation:
+            "Customer confirmed TypeScript is the primary language.",
           evidenceRefs: ["ev-ts-1"],
           sourceSnapshot: {
             snapshotId: "snapshot-1",

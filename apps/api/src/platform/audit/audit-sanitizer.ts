@@ -116,4 +116,3 @@ function sanitizeValue(
   }
   return isRecord(value) ? sanitizeRecord(value, path, removedKeys) : value;
 }
-

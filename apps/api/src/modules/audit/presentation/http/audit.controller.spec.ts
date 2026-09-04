@@ -184,7 +184,11 @@ describe("AuditController", () => {
 
   it("dispatches the interview audit trail query with rbac context", async () => {
     const execute = jest
-      .fn<(query: unknown) => Promise<{ assessmentId: string; events: unknown[]; total: number }>>()
+      .fn<
+        (
+          query: unknown,
+        ) => Promise<{ assessmentId: string; events: unknown[]; total: number }>
+      >()
       .mockResolvedValue({
         assessmentId: "assessment-42",
         events: [],
@@ -228,4 +232,3 @@ describe("AuditController", () => {
     });
   });
 });
-
