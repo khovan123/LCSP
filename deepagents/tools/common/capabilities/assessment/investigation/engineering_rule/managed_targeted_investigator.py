@@ -3,8 +3,8 @@
 The planned pipeline remains the deterministic EngineeringRule/evaluation shell, but
 production Investigator reasoning is executed through the same typed managed
 Investigator definition used by Root orchestration. A NEEDS_INPUT handoff is persisted
-with the exact durable child thread/checkpoint before deterministic evaluation or the
-outer assessment callback can continue.
+with the exact durable child thread/checkpoint and all legal/technical artifact pins
+before deterministic evaluation or the outer assessment callback can continue.
 """
 
 from __future__ import annotations
@@ -34,13 +34,7 @@ from tools.common.capabilities.platform.graph_runtime import checkpoint_database
 
 
 class TargetedInterviewPending(BaseException):
-    """Intentional stop after a targeted need is durably queued.
-
-    The direct planned pipeline catches ordinary ``Exception`` values and converts them
-    to degraded evidence. This sentinel deliberately sits outside that catch so a
-    Customer-context dependency stops before deterministic evaluation. The production
-    boundary catches it explicitly after restoring the temporary Investigator adapter.
-    """
+    """Intentional stop after a targeted need is durably queued."""
 
 
 class ManagedTargetedInvestigatorPipeline:
@@ -72,12 +66,49 @@ class ManagedTargetedInvestigatorPipeline:
                 user_id=user_id,
                 correlation_id=correlation_id,
             )
-            previous = getattr(self._delegate, "_investigator", None)
+            previous_investigator = getattr(self._delegate, "_investigator", None)
+            previous_api_client = getattr(self._delegate, "_api_client", None)
+            if previous_api_client is None:
+                raise RuntimeError("planned pipeline is missing its legal-rule API client")
             self._delegate._investigator = self._adapter
+            self._delegate._api_client = _LegalPinningApiProxy(
+                previous_api_client,
+                self._adapter,
+            )
             try:
                 return self._delegate.run(*args, **kwargs)
             finally:
-                self._delegate._investigator = previous
+                self._delegate._investigator = previous_investigator
+                self._delegate._api_client = previous_api_client
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._delegate, name)
+
+
+class _LegalPinningApiProxy:
+    """Capture the exact legal versions the planned pipeline itself consumes."""
+
+    def __init__(self, delegate: Any, adapter: "_ManagedInvestigatorAdapter") -> None:
+        self._delegate = delegate
+        self._adapter = adapter
+
+    def get_active_legal_rule_catalog(self) -> dict[str, Any]:
+        value = self._delegate.get_active_legal_rule_catalog()
+        if not isinstance(value, dict):
+            raise RuntimeError("active legal rule catalog response is invalid")
+        self._adapter.pin_legal_scope(
+            catalog_version_id=_active_version_id(value, "legal rule catalog")
+        )
+        return value
+
+    def get_active_legal_corpus(self) -> dict[str, Any]:
+        value = self._delegate.get_active_legal_corpus()
+        if not isinstance(value, dict):
+            raise RuntimeError("active legal corpus response is invalid")
+        self._adapter.pin_legal_scope(
+            corpus_version_id=_active_version_id(value, "legal corpus")
+        )
+        return value
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._delegate, name)
@@ -114,6 +145,26 @@ class _ManagedInvestigatorAdapter:
             "artifact_versions": _artifact_versions(evidence_report),
         }
 
+    def pin_legal_scope(
+        self,
+        *,
+        catalog_version_id: str | None = None,
+        corpus_version_id: str | None = None,
+    ) -> None:
+        if not self._run:
+            raise RuntimeError("managed Investigator legal pins require an active run")
+        versions = self._run["artifact_versions"]
+        if catalog_version_id:
+            existing = versions.get("legalRuleCatalogVersionId")
+            if existing and existing != catalog_version_id:
+                raise RuntimeError("legal rule catalog version drifted during planned run")
+            versions["legalRuleCatalogVersionId"] = catalog_version_id
+        if corpus_version_id:
+            existing = versions.get("legalCorpusVersionId")
+            if existing and existing != corpus_version_id:
+                raise RuntimeError("legal corpus version drifted during planned run")
+            versions["legalCorpusVersionId"] = corpus_version_id
+
     def investigate(
         self,
         *,
@@ -130,6 +181,7 @@ class _ManagedInvestigatorAdapter:
             raise RuntimeError("managed Investigator workflow pin drifted")
 
         artifact_versions = dict(self._run["artifact_versions"])
+        _require_complete_artifact_pins(artifact_versions)
         execution_id = _execution_id(
             assessment_id=self._run["assessment_id"],
             workflow_run_id=workflow_run_id,
@@ -307,6 +359,76 @@ class _ResumedHandoffInvestigator:
         return claims
 
 
+def assert_managed_investigator_artifact_pins(
+    api_client: Any,
+    continuation: dict[str, Any],
+) -> None:
+    """Fail closed if exact/rescope continuation would mix new legal artifacts."""
+    artifact_versions = _artifact_version_map(continuation)
+    _require_complete_artifact_pins(artifact_versions)
+    catalog = api_client.get_active_legal_rule_catalog()
+    corpus = api_client.get_active_legal_corpus()
+    if not isinstance(catalog, dict) or not isinstance(corpus, dict):
+        raise RuntimeError("active legal artifact responses are invalid")
+    active_catalog = _active_version_id(catalog, "legal rule catalog")
+    active_corpus = _active_version_id(corpus, "legal corpus")
+    if active_catalog != artifact_versions["legalRuleCatalogVersionId"]:
+        raise RuntimeError("exact continuation legal rule catalog pin is stale")
+    if active_corpus != artifact_versions["legalCorpusVersionId"]:
+        raise RuntimeError("exact continuation legal corpus pin is stale")
+
+
+def reconstruct_managed_investigator_continuation(
+    *,
+    config: Any,
+    assessment_id: str,
+    targeted_need: dict[str, Any],
+    source_version: str,
+    pge_version: str,
+) -> dict[str, Any]:
+    """Recover the server-registered continuation from its durable child checkpoint.
+
+    This is used only after the API guard already persisted but the worker crashed before
+    it could persist its post-guard PENDING marker. The originating reference contains the
+    exact execution id; opaque rule/artifact/checkpoint pins come from checkpoint metadata,
+    never from the Interview model.
+    """
+    checkpoint_url = checkpoint_database_url(
+        getattr(config, "langgraph_checkpoint_database_url", None)
+    )
+    if not checkpoint_url:
+        raise RuntimeError(
+            "continuation reconstruction requires LANGGRAPH_CHECKPOINT_DATABASE_URL"
+        )
+    origin = _required_text(targeted_need, "originatingInvestigationReference")
+    need_id = _required_text(targeted_need, "needId")
+    execution_id = _execution_id_from_origin(origin, need_id)
+    thread_id = f"investigator:{execution_id}"
+    snapshot = _load_investigator_snapshot(checkpoint_url, thread_id)
+    checkpoint_id = _snapshot_checkpoint_id(snapshot)
+    metadata = _snapshot_metadata(snapshot)
+    metadata_execution = str(metadata.get("investigator_execution_id") or "").strip()
+    if metadata_execution and metadata_execution != execution_id:
+        raise RuntimeError("durable Investigator checkpoint execution identity drifted")
+    artifact_versions = _string_map(metadata.get("artifact_versions"))
+    affected_rule_ids = _string_tuple(metadata.get("affected_rule_ids"))
+    _require_complete_artifact_pins(artifact_versions)
+    if not affected_rule_ids:
+        raise RuntimeError("durable Investigator checkpoint is missing affected rule pins")
+    if str(metadata.get("assessment_id") or assessment_id) != assessment_id:
+        raise RuntimeError("durable Investigator checkpoint assessment identity drifted")
+    return {
+        "originatingInvestigationReference": origin,
+        "investigatorExecutionId": execution_id,
+        "workflowRunId": thread_id,
+        "checkpointId": checkpoint_id,
+        "affectedRuleIds": list(affected_rule_ids),
+        "artifactVersions": dict(artifact_versions),
+        "sourceVersion": source_version,
+        "pgeVersion": pge_version,
+    }
+
+
 def resume_managed_investigator(
     *,
     config: Any,
@@ -325,6 +447,7 @@ def resume_managed_investigator(
         raise RuntimeError(
             "exact Investigator resume requires LANGGRAPH_CHECKPOINT_DATABASE_URL"
         )
+    assert_managed_investigator_artifact_pins(api_client, continuation)
     thread_id = _required_text(continuation, "workflowRunId")
     checkpoint_id = _required_text(continuation, "checkpointId")
     execution_id = _required_text(continuation, "investigatorExecutionId")
@@ -385,9 +508,10 @@ def complete_resumed_investigation(
     resumed_handoff: dict[str, Any],
     correlation_id: str,
 ) -> None:
-    """Run the deterministic evaluation/callback without another Planner/Investigator model."""
+    """Run deterministic evaluation/callback without another Planner/Investigator model."""
     from .engineering_assessment_boundary import EngineeringAssessmentBoundary
 
+    assert_managed_investigator_artifact_pins(api_client, continuation)
     artifact_versions = _artifact_version_map(continuation)
     affected_rule_ids = _affected_rule_ids(continuation)
     report_id = str(artifact_versions.get("technicalEvidenceReportId") or "").strip()
@@ -430,16 +554,36 @@ def _invoke_managed_investigator(
 
     with PostgresSaver.from_conn_string(checkpoint_url) as checkpointer:
         checkpointer.setup()
-        definition = INVESTIGATOR_SUBAGENT
-        agent = create_agent(
-            model=definition["model"],
-            tools=definition["tools"],
-            system_prompt=definition["system_prompt"],
-            middleware=definition["middleware"],
-            response_format=definition["response_format"],
-            name="lcsp-investigator-durable-execution",
-            checkpointer=checkpointer,
-        )
+        agent = _durable_investigator_agent(checkpointer)
+
+        # If a prior attempt already advanced this exact child checkpoint and persisted a
+        # READY structured response, reuse that durable result instead of invoking the
+        # model again. This closes the crash-after-resume/before-ACK duplicate window.
+        if checkpoint_id:
+            latest = agent.get_state({"configurable": {"thread_id": thread_id}})
+            latest_checkpoint = _snapshot_checkpoint_id(latest, required=False)
+            if latest_checkpoint and latest_checkpoint != checkpoint_id:
+                latest_metadata = _snapshot_metadata(latest)
+                latest_execution = str(
+                    latest_metadata.get("investigator_execution_id") or ""
+                ).strip()
+                if latest_execution and latest_execution != execution_id:
+                    raise RuntimeError(
+                        "advanced Investigator checkpoint belongs to a different execution"
+                    )
+                structured = _snapshot_structured_response(latest)
+                if structured is not None:
+                    validated = validate_specialist_handoff(
+                        "investigator",
+                        structured,
+                        graph=graph,
+                        pinned_rule_ids=context.engineering_rule_ids,
+                        pinned_versions=dict(context.artifact_versions),
+                    )
+                    recovered = InvestigatorResult.model_validate(validated)
+                    if recovered.status == "READY":
+                        return recovered.model_dump(mode="json"), latest_checkpoint
+
         configurable: dict[str, str] = {"thread_id": thread_id}
         if checkpoint_id:
             configurable["checkpoint_id"] = checkpoint_id
@@ -469,16 +613,30 @@ def _invoke_managed_investigator(
             pinned_versions=dict(context.artifact_versions),
         )
         snapshot = agent.get_state({"configurable": {"thread_id": thread_id}})
-        snapshot_config = getattr(snapshot, "config", None)
-        checkpoint = (
-            snapshot_config.get("configurable", {}).get("checkpoint_id")
-            if isinstance(snapshot_config, dict)
-            else None
-        )
-        checkpoint_text = str(checkpoint or "").strip()
-        if not checkpoint_text:
-            raise RuntimeError("managed Investigator did not persist a child checkpoint")
+        checkpoint_text = _snapshot_checkpoint_id(snapshot)
         return validated.model_dump(mode="json"), checkpoint_text
+
+
+def _durable_investigator_agent(checkpointer: Any):
+    definition = INVESTIGATOR_SUBAGENT
+    return create_agent(
+        model=definition["model"],
+        tools=definition["tools"],
+        system_prompt=definition["system_prompt"],
+        middleware=definition["middleware"],
+        response_format=definition["response_format"],
+        name="lcsp-investigator-durable-execution",
+        checkpointer=checkpointer,
+    )
+
+
+def _load_investigator_snapshot(checkpoint_url: str, thread_id: str):
+    from langgraph.checkpoint.postgres import PostgresSaver
+
+    with PostgresSaver.from_conn_string(checkpoint_url) as checkpointer:
+        checkpointer.setup()
+        agent = _durable_investigator_agent(checkpointer)
+        return agent.get_state({"configurable": {"thread_id": thread_id}})
 
 
 def _initial_instruction(
@@ -525,6 +683,20 @@ def _artifact_versions(evidence_report: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _require_complete_artifact_pins(artifact_versions: dict[str, str]) -> None:
+    required = (
+        "technicalEvidenceReportId",
+        "repositorySnapshotId",
+        "legalRuleCatalogVersionId",
+        "legalCorpusVersionId",
+    )
+    missing = [key for key in required if not str(artifact_versions.get(key) or "").strip()]
+    if missing:
+        raise RuntimeError(
+            f"managed Investigator immutable artifact pins are incomplete: {missing}"
+        )
+
+
 def _artifact_version_map(continuation: dict[str, Any]) -> dict[str, str]:
     value = continuation.get("artifactVersions")
     if (
@@ -548,6 +720,20 @@ def _affected_rule_ids(continuation: dict[str, Any]) -> tuple[str, ...]:
     ):
         raise ValueError("guarded continuation requires affectedRuleIds")
     return tuple(dict.fromkeys(value))
+
+
+def _active_version_id(value: dict[str, Any], label: str) -> str:
+    version = str(
+        value.get("versionId")
+        or value.get("version_id")
+        or value.get("corpusVersionId")
+        or value.get("corpus_version_id")
+        or value.get("id")
+        or ""
+    ).strip()
+    if not version:
+        raise RuntimeError(f"active {label} response is missing version id")
+    return version
 
 
 def _report_user_id(evidence_report: dict[str, Any]) -> str:
@@ -594,6 +780,60 @@ def _execution_id(
     return f"investigator-exec:{digest}"
 
 
+def _execution_id_from_origin(origin: str, need_id: str) -> str:
+    prefix = "investigator:"
+    suffix = f":{need_id}"
+    if not origin.startswith(prefix) or not origin.endswith(suffix):
+        raise RuntimeError("targeted continuation origin is not an Investigator execution")
+    execution_id = origin[len(prefix) : -len(suffix)].strip()
+    if not execution_id:
+        raise RuntimeError("targeted continuation origin is missing execution id")
+    return execution_id
+
+
+def _snapshot_checkpoint_id(snapshot: Any, *, required: bool = True) -> str:
+    snapshot_config = getattr(snapshot, "config", None)
+    checkpoint = (
+        snapshot_config.get("configurable", {}).get("checkpoint_id")
+        if isinstance(snapshot_config, dict)
+        else None
+    )
+    checkpoint_text = str(checkpoint or "").strip()
+    if required and not checkpoint_text:
+        raise RuntimeError("managed Investigator did not persist a child checkpoint")
+    return checkpoint_text
+
+
+def _snapshot_metadata(snapshot: Any) -> dict[str, Any]:
+    metadata = getattr(snapshot, "metadata", None)
+    return dict(metadata) if isinstance(metadata, dict) else {}
+
+
+def _snapshot_structured_response(snapshot: Any) -> Any | None:
+    values = getattr(snapshot, "values", None)
+    if not isinstance(values, dict):
+        return None
+    return values.get("structured_response")
+
+
+def _string_map(value: Any) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(key): str(item)
+        for key, item in value.items()
+        if isinstance(key, str) and isinstance(item, str) and item
+    }
+
+
+def _string_tuple(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(
+        dict.fromkeys(str(item) for item in value if isinstance(item, str) and item)
+    )
+
+
 def _required_text(value: dict[str, Any], field: str) -> str:
     text = str(value.get(field) or "").strip()
     if not text:
@@ -605,6 +845,8 @@ __all__ = [
     "ManagedTargetedInvestigatorPipeline",
     "ResumedManagedInvestigatorPipeline",
     "TargetedInterviewPending",
+    "assert_managed_investigator_artifact_pins",
     "complete_resumed_investigation",
+    "reconstruct_managed_investigator_continuation",
     "resume_managed_investigator",
 ]
