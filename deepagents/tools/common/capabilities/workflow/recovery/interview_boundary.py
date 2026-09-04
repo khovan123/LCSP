@@ -31,6 +31,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         dispatcher=None,
         downstream_handler=None,
         investigator_resumer: Callable[..., dict[str, Any]] | None = None,
+        investigation_completer: Callable[..., None] | None = None,
     ) -> None:
         super().__init__(config, rbac_client)
         self._root_agent = root_agent
@@ -38,6 +39,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         self._dispatcher = dispatcher
         self._downstream_handler = downstream_handler
         self._investigator_resumer = investigator_resumer
+        self._investigation_completer = investigation_completer
 
     def handle(self, message: dict[str, Any], correlationId: str) -> None:
         assessment_id = _required_text(message, "assessmentId")
@@ -252,9 +254,10 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
 
             resumer = resume_managed_investigator
 
+        api_client = self._api_client or self._load_api_client()
         result = resumer(
             config=self._config,
-            api_client=self._api_client or self._load_api_client(),
+            api_client=api_client,
             assessment_id=assessment_id,
             context_revision=context_revision,
             continuation=continuation,
@@ -276,6 +279,24 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             raise RuntimeError(
                 "exact Investigator resume must complete the original bounded investigation"
             )
+
+        completer = self._investigation_completer
+        if completer is None:
+            from tools.common.capabilities.assessment.investigation.engineering_rule.managed_targeted_investigator import (
+                complete_resumed_investigation,
+            )
+
+            completer = complete_resumed_investigation
+        completer(
+            config=self._config,
+            api_client=api_client,
+            assessment_id=assessment_id,
+            context_revision=context_revision,
+            continuation=continuation,
+            confirmed_context=confirmed_context,
+            resumed_handoff=handoff,
+            correlation_id=correlationId,
+        )
 
     def _reenter_root_for_revalidation(
         self,
