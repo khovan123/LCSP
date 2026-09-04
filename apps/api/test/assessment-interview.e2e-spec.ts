@@ -508,7 +508,8 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
           needId: "need-decision-authority",
           intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
           control: ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust,
-          prompt: "Please confirm this interpretation before it becomes authoritative.",
+          prompt:
+            "Please confirm this interpretation before it becomes authoritative.",
           priorAnswerSummary: "The human operations lead has final approval.",
         },
       });

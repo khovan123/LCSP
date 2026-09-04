@@ -1219,9 +1219,7 @@ function assertAuthorityProvenance(
     privateRevision.answer.confirmed === true &&
     privateRevision.answer.adjusted !== true;
 
-  if (
-    authority === ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed
-  ) {
+  if (authority === ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed) {
     if (!explicitlyConfirmed) {
       throw problemException(
         "INTERVIEW_CUSTOMER_CONFIRMED_REQUIRES_EXPLICIT_CONFIRMATION",
@@ -1233,7 +1231,8 @@ function assertAuthorityProvenance(
   }
 
   if (
-    privateRevision.questionIntent !== ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask ||
+    privateRevision.questionIntent !==
+      ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask ||
     privateRevision.questionControl ===
       ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust ||
     privateRevision.answer.adjusted === true
