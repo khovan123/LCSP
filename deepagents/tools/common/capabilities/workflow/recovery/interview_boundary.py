@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Callable
 
-from orchestration.context import LCSPRunContext
 from tools.common.capabilities.managed.boundary import AgentBoundaryBase
 
 INTERVIEW_RESUME_COMMAND = "command.assessment-interview.resume-agent.v1"
@@ -31,12 +30,14 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         api_client=None,
         dispatcher=None,
         downstream_handler=None,
+        investigator_resumer: Callable[..., dict[str, Any]] | None = None,
     ) -> None:
         super().__init__(config, rbac_client)
         self._root_agent = root_agent
         self._api_client = api_client
         self._dispatcher = dispatcher
         self._downstream_handler = downstream_handler
+        self._investigator_resumer = investigator_resumer
 
     def handle(self, message: dict[str, Any], correlationId: str) -> None:
         assessment_id = _required_text(message, "assessmentId")
@@ -65,18 +66,26 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 root=self._root_agent or self._load_root_agent(),
             )
             return
+
         targeted_need = context.get("targetedNeed")
         targeted_mode = isinstance(targeted_need, dict)
         same_revision_resume = resume_reason == "PROVIDE_MORE_CONTEXT" or targeted_mode
         if not same_revision_resume:
-            if status == DUPLICATE_CONTEXT or status == STALE_CONTEXT:
+            if status in {DUPLICATE_CONTEXT, STALE_CONTEXT}:
                 return
             if status != CURRENT_CONTEXT:
                 raise ValueError(f"unexpected Interview private context status: {status}")
-        elif status not in {CURRENT_CONTEXT, DUPLICATE_CONTEXT}:
+        else:
             if status == STALE_CONTEXT:
                 return
-            raise ValueError(f"unexpected Interview private context status: {status}")
+            if status not in {CURRENT_CONTEXT, DUPLICATE_CONTEXT}:
+                raise ValueError(f"unexpected Interview private context status: {status}")
+            if status == DUPLICATE_CONTEXT and _same_revision_resume_materialized(context):
+                # Targeted registration and PROVIDE_MORE_CONTEXT intentionally reuse the
+                # current context revision for their first worker command. Once the
+                # resulting question/terminal decision is materialized, broker redelivery
+                # must be a no-op before any Interview model invocation.
+                return
 
         decision = self._run_interview(
             assessment_id=assessment_id,
@@ -144,7 +153,9 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         targeted_need = context.get("targetedNeed")
         if isinstance(targeted_need, dict):
             if handoff.get("mode") != "TARGETED_INTERVIEW":
-                raise ValueError("Targeted Interview specialist must return TARGETED_INTERVIEW mode")
+                raise ValueError(
+                    "Targeted Interview specialist must return TARGETED_INTERVIEW mode"
+                )
             question = handoff.get("activeQuestion")
             if isinstance(question, dict) and question.get("needId") not in {
                 None,
@@ -185,7 +196,9 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         if outcome == "CONTEXT_READY":
             evidence_report_id = pge_version.split(":", 1)[0].strip()
             if not evidence_report_id:
-                raise ValueError("guarded CONTEXT_READY is missing technical evidence report provenance")
+                raise ValueError(
+                    "guarded CONTEXT_READY is missing technical evidence report provenance"
+                )
             from tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary import (
                 InterviewGatedEngineeringAssessmentBoundary,
             )
@@ -204,13 +217,21 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             return
 
         continuation = guarded_state.get("continuation")
-        if outcome == "CONTEXT_RESOLVED" and not isinstance(continuation, dict):
-            raise ValueError("guarded CONTEXT_RESOLVED is missing server-owned continuation")
+        if not isinstance(continuation, dict):
+            raise ValueError(
+                "guarded CONTEXT_RESOLVED is missing server-owned continuation"
+            )
+        confirmed_context = guarded_state.get("confirmedContext")
+        if not isinstance(confirmed_context, dict):
+            raise ValueError(
+                "guarded CONTEXT_RESOLVED is missing authoritative confirmedContext"
+            )
 
         self._resume_exact_investigator(
             assessment_id=assessment_id,
             context_revision=context_revision,
             continuation=continuation,
+            confirmed_context=confirmed_context,
             correlationId=correlationId,
         )
 
@@ -220,72 +241,41 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         assessment_id: str,
         context_revision: int,
         continuation: dict[str, Any],
+        confirmed_context: dict[str, Any],
         correlationId: str,
     ) -> None:
-        workflow_run_id = _required_text(continuation, "workflowRunId")
-        checkpoint_id = _required_text(continuation, "checkpointId")
-        execution_id = _required_text(continuation, "investigatorExecutionId")
-        originating_reference = _required_text(
-            continuation, "originatingInvestigationReference"
-        )
-        affected_rule_ids = continuation.get("affectedRuleIds")
-        artifact_versions = continuation.get("artifactVersions")
-        if (
-            not isinstance(affected_rule_ids, list)
-            or not affected_rule_ids
-            or any(not isinstance(item, str) or not item for item in affected_rule_ids)
-        ):
-            raise ValueError("guarded continuation requires affectedRuleIds")
-        if (
-            not isinstance(artifact_versions, dict)
-            or not artifact_versions
-            or any(not isinstance(key, str) or not isinstance(value, str) for key, value in artifact_versions.items())
-        ):
-            raise ValueError("guarded continuation requires immutable artifactVersions")
+        resumer = self._investigator_resumer
+        if resumer is None:
+            from tools.common.capabilities.assessment.investigation.engineering_rule.managed_targeted_investigator import (
+                resume_managed_investigator,
+            )
 
-        root = self._root_agent or self._load_root_agent()
-        root.invoke(
-            {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": (
-                            "Targeted Customer context has passed the protected Interview guard. "
-                            "Resume the already-checkpointed Investigator continuation only; do not "
-                            "start a new Initial Interview, Planner pass, or unrelated Investigator. "
-                            "The exact execution/checkpoint/scope/artifact pins are supplied as immutable "
-                            "runtime context and metadata, not as model-authored continuation data."
-                        ),
-                    }
-                ]
-            },
-            config={
-                "configurable": {
-                    "thread_id": workflow_run_id,
-                    "checkpoint_id": checkpoint_id,
-                },
-                "metadata": {
-                    "lcsp_thread_id": workflow_run_id,
-                    "assessment_id": assessment_id,
-                    "context_revision": context_revision,
-                    "correlationId": correlationId,
-                    "trigger": "TARGETED_INTERVIEW_EXACT_INVESTIGATOR_RESUME",
-                    "investigator_execution_id": execution_id,
-                    "originating_investigation_reference": originating_reference,
-                    "checkpoint_id": checkpoint_id,
-                    "affected_rule_ids": list(affected_rule_ids),
-                    "artifact_versions": dict(artifact_versions),
-                },
-            },
-            context=LCSPRunContext(
-                assessment_id=assessment_id,
-                workflow_run_id=workflow_run_id,
-                checkpoint_id=checkpoint_id,
-                artifact_versions=dict(artifact_versions),
-                engineering_rule_ids=tuple(affected_rule_ids),
-                idempotency_key=f"resume:{execution_id}:{context_revision}",
-            ),
+            resumer = resume_managed_investigator
+
+        result = resumer(
+            config=self._config,
+            api_client=self._api_client or self._load_api_client(),
+            assessment_id=assessment_id,
+            context_revision=context_revision,
+            continuation=continuation,
+            confirmed_context=confirmed_context,
+            correlation_id=correlationId,
         )
+        if not isinstance(result, dict):
+            raise RuntimeError("exact Investigator resume returned an invalid result")
+        if result.get("executionId") != continuation.get("investigatorExecutionId"):
+            raise RuntimeError("exact Investigator resume execution identity drifted")
+        if result.get("threadId") != continuation.get("workflowRunId"):
+            raise RuntimeError("exact Investigator resume thread identity drifted")
+        if result.get("fromCheckpointId") != continuation.get("checkpointId"):
+            raise RuntimeError("exact Investigator resume checkpoint identity drifted")
+        handoff = result.get("handoff")
+        if not isinstance(handoff, dict):
+            raise RuntimeError("exact Investigator resume did not return a typed handoff")
+        if handoff.get("status") != "READY":
+            raise RuntimeError(
+                "exact Investigator resume must complete the original bounded investigation"
+            )
 
     def _reenter_root_for_revalidation(
         self,
@@ -343,6 +333,18 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         from agent import agent
 
         return agent
+
+
+def _same_revision_resume_materialized(context: dict[str, Any]) -> bool:
+    state = context.get("publicState")
+    if not isinstance(state, dict):
+        return False
+    if isinstance(state.get("activeQuestion"), dict):
+        return True
+    outcome = str(state.get("outcome") or "")
+    if outcome in {"CONTEXT_READY", "CONTEXT_RESOLVED", "FAILED"}:
+        return True
+    return state.get("orchestrationRequested") is False
 
 
 def _interview_instruction(
