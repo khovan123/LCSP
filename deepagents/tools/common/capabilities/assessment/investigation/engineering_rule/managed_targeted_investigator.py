@@ -1,9 +1,10 @@
 """Managed Investigator bridge for production targeted Interview continuations.
 
-The legacy planned pipeline remains the deterministic EngineeringRule/evaluation shell,
-but production Investigator reasoning is executed through the same typed managed
+The planned pipeline remains the deterministic EngineeringRule/evaluation shell, but
+production Investigator reasoning is executed through the same typed managed
 Investigator definition used by Root orchestration. A NEEDS_INPUT handoff is persisted
-with the exact child thread/checkpoint before the outer assessment callback can run.
+with the exact durable child thread/checkpoint before the outer assessment callback can
+run.
 """
 
 from __future__ import annotations
@@ -103,7 +104,6 @@ class _ManagedInvestigatorAdapter:
                 "production managed Investigator requires LANGGRAPH_CHECKPOINT_DATABASE_URL"
             )
         self._run = {
-            "evidence_report": evidence_report,
             "workflow_run_id": workflow_run_id,
             "assessment_id": assessment_id,
             "user_id": user_id,
@@ -153,7 +153,6 @@ class _ManagedInvestigatorAdapter:
             context=context,
             instruction=_initial_instruction(packet, artifact_versions),
             graph=graph,
-            api_client=self._api_client,
             execution_id=execution_id,
             correlation_id=correlation_id or self._run["correlation_id"],
         )
@@ -174,7 +173,7 @@ class _ManagedInvestigatorAdapter:
             subagent_type="investigator",
             payload=handoff,
             context=registration_context,
-            metadata={"api_client": self._api_client, "program_graph": graph},
+            metadata={"api_client": self._api_client},
             execution_id=execution_id,
         )
         self.targeted_registered = True
@@ -220,6 +219,11 @@ def resume_managed_investigator(
     ):
         raise ValueError("guarded continuation requires immutable artifactVersions")
 
+    original_user_id = _checkpoint_user_id(
+        checkpoint_url=checkpoint_url,
+        thread_id=thread_id,
+        checkpoint_id=checkpoint_id,
+    )
     report_id = str(artifact_versions.get("technicalEvidenceReportId") or "").strip()
     if not report_id:
         raise ValueError("exact Investigator resume requires technicalEvidenceReportId pin")
@@ -227,6 +231,7 @@ def resume_managed_investigator(
     graph = _evidence_graph(evidence_report)
     context = LCSPRunContext(
         assessment_id=assessment_id,
+        user_id=original_user_id,
         workflow_run_id=thread_id,
         checkpoint_id=checkpoint_id,
         artifact_versions=dict(artifact_versions),
@@ -246,7 +251,6 @@ def resume_managed_investigator(
             + json.dumps(confirmed_context, ensure_ascii=False, sort_keys=True)
         ),
         graph=graph,
-        api_client=api_client,
         execution_id=execution_id,
         correlation_id=correlation_id,
     )
@@ -270,7 +274,6 @@ def _invoke_managed_investigator(
     context: LCSPRunContext,
     instruction: str,
     graph: Any,
-    api_client: Any,
     execution_id: str,
     correlation_id: str | None,
 ) -> tuple[dict[str, Any], str]:
@@ -298,12 +301,11 @@ def _invoke_managed_investigator(
                 "metadata": {
                     "lcsp_thread_id": thread_id,
                     "assessment_id": context.assessment_id,
+                    "user_id": context.user_id,
                     "investigator_execution_id": execution_id,
                     "artifact_versions": dict(context.artifact_versions),
                     "affected_rule_ids": list(context.engineering_rule_ids),
                     "correlationId": correlation_id,
-                    "api_client": api_client,
-                    "program_graph": graph,
                 },
             },
             context=context,
@@ -328,6 +330,33 @@ def _invoke_managed_investigator(
         if not checkpoint_text:
             raise RuntimeError("managed Investigator did not persist a child checkpoint")
         return validated.model_dump(mode="json"), checkpoint_text
+
+
+def _checkpoint_user_id(
+    *,
+    checkpoint_url: str,
+    thread_id: str,
+    checkpoint_id: str,
+) -> str:
+    from langgraph.checkpoint.postgres import PostgresSaver
+
+    with PostgresSaver.from_conn_string(checkpoint_url) as checkpointer:
+        checkpointer.setup()
+        item = checkpointer.get_tuple(
+            {
+                "configurable": {
+                    "thread_id": thread_id,
+                    "checkpoint_id": checkpoint_id,
+                }
+            }
+        )
+        metadata = getattr(item, "metadata", None) if item is not None else None
+        user_id = str(metadata.get("user_id") or "").strip() if isinstance(metadata, dict) else ""
+        if not user_id:
+            raise RuntimeError(
+                "exact Investigator checkpoint is missing its trusted original user identity"
+            )
+        return user_id
 
 
 def _initial_instruction(
@@ -375,7 +404,9 @@ def _artifact_versions(evidence_report: dict[str, Any]) -> dict[str, str]:
 
 
 def _evidence_graph(evidence_report: dict[str, Any]) -> Any:
-    payload = evidence_report.get("evidence_payload") or evidence_report.get("evidencePayload")
+    payload = evidence_report.get("evidence_payload") or evidence_report.get(
+        "evidencePayload"
+    )
     if not isinstance(payload, dict):
         raise ValueError("accepted technical evidence report is missing evidence payload")
     graph = payload.get("evidence_graph") or payload.get("evidenceGraph")
