@@ -7,6 +7,8 @@ const SAFE_CODE_KEYS = new Set([
   "statementKey",
   "claim_key",
   "claimKey",
+  "idempotency_key",
+  "idempotencyKey",
 ]);
 const SENSITIVE_KEY_PATTERN = /password|token|secret|key|nonce|code|hash/i;
 const MAX_AUDIT_STRING_LENGTH = 4096;
