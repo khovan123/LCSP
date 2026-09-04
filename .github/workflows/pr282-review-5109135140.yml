@@ -1,0 +1,51 @@
+name: PR282 review 5109135140 hardening
+
+on:
+  push:
+    branches:
+      - feat/LCSP-278-add-responsive-interaction-regression-coverage
+    paths:
+      - .github/workflows/pr282-review-5109135140.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: feat/LCSP-278-add-responsive-interaction-regression-coverage
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Apply guarded hardening patch
+        run: python .github/scripts/pr282_review_5109135140.py
+
+      - name: Validate Python syntax
+        run: |
+          python -m py_compile \
+            deepagents/middleware/specialist_handoff_validation.py \
+            deepagents/tools/common/capabilities/assessment/investigation/engineering_rule/interview_gated_boundary.py \
+            deepagents/tools/common/capabilities/workflow/recovery/interview_boundary.py \
+            deepagents/tests/investigation/test_interview_gated_engineering_assessment_boundary.py \
+            deepagents/tests/test_targeted_interview_registration.py \
+            deepagents/tests/test_assessment_interview_resume_boundary.py
+
+      - name: Validate patch whitespace
+        run: git diff --check
+
+      - name: Commit production patch and remove helpers
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(LCSP-278): harden interview recovery and exact resume'
+          git push origin HEAD:feat/LCSP-278-add-responsive-interaction-regression-coverage
