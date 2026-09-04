@@ -3,8 +3,8 @@
 The planned pipeline remains the deterministic EngineeringRule/evaluation shell, but
 production Investigator reasoning is executed through the same typed managed
 Investigator definition used by Root orchestration. A NEEDS_INPUT handoff is persisted
-with the exact durable child thread/checkpoint before the outer assessment callback can
-run.
+with the exact durable child thread/checkpoint before deterministic evaluation or the
+outer assessment callback can continue.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import hashlib
 import json
 from dataclasses import asdict
 from threading import Lock
-from typing import Any
+from typing import Any, Iterable
 
 from langchain.agents import create_agent
 
@@ -23,16 +23,24 @@ from orchestration.context import LCSPRunContext
 from orchestration.result_validation import validate_specialist_handoff
 from subagents.investigator.definition import SUBAGENT as INVESTIGATOR_SUBAGENT
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
-    ENGINEERING_EVIDENCE_CLAIM_TYPES,
-    ENGINEERING_LIMITATION_CODES,
     EvidenceClaim,
     InvestigationPacket,
+)
+from tools.common.capabilities.assessment.planning.engineering_rule.engineering_rule_planner import (
+    EngineeringRulePlan,
+    EngineeringRulePlanDecisionAudit,
 )
 from tools.common.capabilities.platform.graph_runtime import checkpoint_database_url
 
 
-class TargetedInterviewPending(RuntimeError):
-    """Intentional production stop after a targeted Interview need is durably queued."""
+class TargetedInterviewPending(BaseException):
+    """Intentional stop after a targeted need is durably queued.
+
+    The direct planned pipeline catches ordinary ``Exception`` values and converts them
+    to degraded evidence. This sentinel deliberately sits outside that catch so a
+    Customer-context dependency stops before deterministic evaluation. The production
+    boundary catches it explicitly after restoring the temporary Investigator adapter.
+    """
 
 
 class ManagedTargetedInvestigatorPipeline:
@@ -67,14 +75,9 @@ class ManagedTargetedInvestigatorPipeline:
             previous = getattr(self._delegate, "_investigator", None)
             self._delegate._investigator = self._adapter
             try:
-                result = self._delegate.run(*args, **kwargs)
+                return self._delegate.run(*args, **kwargs)
             finally:
                 self._delegate._investigator = previous
-            if self._adapter.targeted_registered:
-                raise TargetedInterviewPending(
-                    "managed Investigator registered a targeted Interview continuation"
-                )
-            return result
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._delegate, name)
@@ -85,7 +88,6 @@ class _ManagedInvestigatorAdapter:
         self._config = config
         self._api_client = api_client
         self._run: dict[str, Any] = {}
-        self.targeted_registered = False
 
     def begin_run(
         self,
@@ -111,7 +113,6 @@ class _ManagedInvestigatorAdapter:
             "checkpoint_url": checkpoint_url,
             "artifact_versions": _artifact_versions(evidence_report),
         }
-        self.targeted_registered = False
 
     def investigate(
         self,
@@ -127,8 +128,6 @@ class _ManagedInvestigatorAdapter:
             raise RuntimeError("managed Investigator adapter was not initialized for this run")
         if workflow_run_id != self._run["workflow_run_id"]:
             raise RuntimeError("managed Investigator workflow pin drifted")
-        if self.targeted_registered:
-            return [_pending_claim(packet)]
 
         artifact_versions = dict(self._run["artifact_versions"])
         execution_id = _execution_id(
@@ -176,8 +175,136 @@ class _ManagedInvestigatorAdapter:
             metadata={"api_client": self._api_client},
             execution_id=execution_id,
         )
-        self.targeted_registered = True
-        return [_pending_claim(packet)]
+        raise TargetedInterviewPending(
+            "managed Investigator registered a targeted Interview continuation"
+        )
+
+
+class ResumedManagedInvestigatorPipeline:
+    """Re-enter only the deterministic gate around an exact resumed Investigator output."""
+
+    def __init__(
+        self,
+        *,
+        api_client: Any,
+        affected_rule_ids: tuple[str, ...],
+        resumed_handoff: dict[str, Any],
+        confirmed_context: dict[str, Any],
+    ) -> None:
+        from .planned_pipeline import PlannedEngineeringInvestigationPipeline
+
+        self._confirmed_context = dict(confirmed_context)
+        self._delegate = PlannedEngineeringInvestigationPipeline(
+            api_client=api_client,
+            planner=_ExactResumePlanner(affected_rule_ids),
+            investigator=_ResumedHandoffInvestigator(
+                affected_rule_ids=affected_rule_ids,
+                handoff=resumed_handoff,
+            ),
+        )
+
+    def run(self, *args: Any, **kwargs: Any) -> Any:
+        kwargs["confirmed_customer_context"] = dict(self._confirmed_context)
+        return self._delegate.run(*args, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._delegate, name)
+
+
+class _ExactResumePlanner:
+    """Deterministically reconstruct the already-pinned targeted rule scope."""
+
+    def __init__(self, affected_rule_ids: tuple[str, ...]) -> None:
+        self._affected_rule_ids = affected_rule_ids
+
+    def plan(
+        self,
+        *,
+        candidates: Iterable[Any],
+        confirmed_customer_context: dict[str, Any] | None,
+        graph: Any,
+        workflow_run_id: str,
+        correlation_id: str | None = None,
+        openwiki_context: dict[str, Any] | None = None,
+    ) -> EngineeringRulePlan:
+        _ = (
+            confirmed_customer_context,
+            graph,
+            workflow_run_id,
+            correlation_id,
+            openwiki_context,
+        )
+        rows = tuple(candidates)
+        available = {str(item.engineering_rule_id) for item in rows}
+        missing = sorted(set(self._affected_rule_ids) - available)
+        if missing:
+            raise RuntimeError(
+                f"exact Investigator resume rule scope is no longer available: {missing}"
+            )
+        selected = tuple(
+            item.engineering_rule_id
+            for item in rows
+            if item.engineering_rule_id in self._affected_rule_ids
+        )
+        skipped = tuple(
+            item.engineering_rule_id
+            for item in rows
+            if item.engineering_rule_id not in self._affected_rule_ids
+        )
+        return EngineeringRulePlan(
+            selected_rule_ids=selected,
+            skipped_rule_ids=skipped,
+            fallback_used=False,
+            decision_audit=tuple(
+                EngineeringRulePlanDecisionAudit(
+                    engineering_rule_id=item.engineering_rule_id,
+                    requested_decision="EXACT_RESUME_PIN",
+                    final_decision=(
+                        "SELECT"
+                        if item.engineering_rule_id in self._affected_rule_ids
+                        else "SKIP"
+                    ),
+                    reason_code="TARGETED_EXACT_RESUME_PIN",
+                    basis=(),
+                )
+                for item in rows
+            ),
+        )
+
+
+class _ResumedHandoffInvestigator:
+    """Expose only the typed claims produced by the exact resumed child execution."""
+
+    def __init__(
+        self,
+        *,
+        affected_rule_ids: tuple[str, ...],
+        handoff: dict[str, Any],
+    ) -> None:
+        self._affected_rule_ids = set(affected_rule_ids)
+        self._result = InvestigatorResult.model_validate(handoff)
+        if self._result.status != "READY":
+            raise ValueError("resumed Investigator handoff must be READY before gate continuation")
+
+    def investigate(
+        self,
+        *,
+        packet: InvestigationPacket,
+        graph: Any,
+        workflow_run_id: str,
+        correlation_id: str | None = None,
+    ) -> list[EvidenceClaim]:
+        _ = (graph, workflow_run_id, correlation_id)
+        if packet.engineering_rule_id not in self._affected_rule_ids:
+            raise RuntimeError("deterministic exact-resume pipeline escaped affectedRuleIds")
+        claims = [
+            claim.to_evidence_claim()
+            for claim in self._result.claims
+            if claim.engineering_rule_id == packet.engineering_rule_id
+        ]
+        if not claims:
+            raise RuntimeError("exact resumed Investigator returned no claim for pinned rule")
+        return claims
 
 
 def resume_managed_investigator(
@@ -201,33 +328,14 @@ def resume_managed_investigator(
     thread_id = _required_text(continuation, "workflowRunId")
     checkpoint_id = _required_text(continuation, "checkpointId")
     execution_id = _required_text(continuation, "investigatorExecutionId")
-    affected_rule_ids = continuation.get("affectedRuleIds")
-    artifact_versions = continuation.get("artifactVersions")
-    if (
-        not isinstance(affected_rule_ids, list)
-        or not affected_rule_ids
-        or any(not isinstance(item, str) or not item for item in affected_rule_ids)
-    ):
-        raise ValueError("guarded continuation requires affectedRuleIds")
-    if (
-        not isinstance(artifact_versions, dict)
-        or not artifact_versions
-        or any(
-            not isinstance(key, str) or not isinstance(value, str)
-            for key, value in artifact_versions.items()
-        )
-    ):
-        raise ValueError("guarded continuation requires immutable artifactVersions")
+    affected_rule_ids = _affected_rule_ids(continuation)
+    artifact_versions = _artifact_version_map(continuation)
 
-    original_user_id = _checkpoint_user_id(
-        checkpoint_url=checkpoint_url,
-        thread_id=thread_id,
-        checkpoint_id=checkpoint_id,
-    )
     report_id = str(artifact_versions.get("technicalEvidenceReportId") or "").strip()
     if not report_id:
         raise ValueError("exact Investigator resume requires technicalEvidenceReportId pin")
     evidence_report = api_client.get_accepted_technical_evidence_report(report_id)
+    original_user_id = _report_user_id(evidence_report)
     graph = _evidence_graph(evidence_report)
     context = LCSPRunContext(
         assessment_id=assessment_id,
@@ -235,7 +343,7 @@ def resume_managed_investigator(
         workflow_run_id=thread_id,
         checkpoint_id=checkpoint_id,
         artifact_versions=dict(artifact_versions),
-        engineering_rule_ids=tuple(affected_rule_ids),
+        engineering_rule_ids=affected_rule_ids,
         idempotency_key=f"resume:{execution_id}:{context_revision}",
     )
     handoff, resumed_checkpoint_id = _invoke_managed_investigator(
@@ -264,6 +372,47 @@ def resume_managed_investigator(
         "checkpointId": resumed_checkpoint_id,
         "handoff": result.model_dump(mode="json"),
     }
+
+
+def complete_resumed_investigation(
+    *,
+    config: Any,
+    api_client: Any,
+    assessment_id: str,
+    context_revision: int,
+    continuation: dict[str, Any],
+    confirmed_context: dict[str, Any],
+    resumed_handoff: dict[str, Any],
+    correlation_id: str,
+) -> None:
+    """Run the deterministic evaluation/callback without another Planner/Investigator model."""
+    from .engineering_assessment_boundary import EngineeringAssessmentBoundary
+
+    artifact_versions = _artifact_version_map(continuation)
+    affected_rule_ids = _affected_rule_ids(continuation)
+    report_id = str(artifact_versions.get("technicalEvidenceReportId") or "").strip()
+    if not report_id:
+        raise ValueError("exact resume gate continuation requires technicalEvidenceReportId")
+    pipeline = ResumedManagedInvestigatorPipeline(
+        api_client=api_client,
+        affected_rule_ids=affected_rule_ids,
+        resumed_handoff=resumed_handoff,
+        confirmed_context=confirmed_context,
+    )
+    EngineeringAssessmentBoundary(
+        config,
+        api_client=api_client,
+        investigation_pipeline=pipeline,
+    ).handle(
+        {
+            "assessmentId": assessment_id,
+            "evidenceReportId": report_id,
+            "workflowRunId": (
+                f"{_required_text(continuation, 'workflowRunId')}:gate:{context_revision}"
+            ),
+        },
+        correlation_id,
+    )
 
 
 def _invoke_managed_investigator(
@@ -332,33 +481,6 @@ def _invoke_managed_investigator(
         return validated.model_dump(mode="json"), checkpoint_text
 
 
-def _checkpoint_user_id(
-    *,
-    checkpoint_url: str,
-    thread_id: str,
-    checkpoint_id: str,
-) -> str:
-    from langgraph.checkpoint.postgres import PostgresSaver
-
-    with PostgresSaver.from_conn_string(checkpoint_url) as checkpointer:
-        checkpointer.setup()
-        item = checkpointer.get_tuple(
-            {
-                "configurable": {
-                    "thread_id": thread_id,
-                    "checkpoint_id": checkpoint_id,
-                }
-            }
-        )
-        metadata = getattr(item, "metadata", None) if item is not None else None
-        user_id = str(metadata.get("user_id") or "").strip() if isinstance(metadata, dict) else ""
-        if not user_id:
-            raise RuntimeError(
-                "exact Investigator checkpoint is missing its trusted original user identity"
-            )
-        return user_id
-
-
 def _initial_instruction(
     packet: InvestigationPacket,
     artifact_versions: dict[str, str],
@@ -403,6 +525,42 @@ def _artifact_versions(evidence_report: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _artifact_version_map(continuation: dict[str, Any]) -> dict[str, str]:
+    value = continuation.get("artifactVersions")
+    if (
+        not isinstance(value, dict)
+        or not value
+        or any(
+            not isinstance(key, str) or not isinstance(item, str)
+            for key, item in value.items()
+        )
+    ):
+        raise ValueError("guarded continuation requires immutable artifactVersions")
+    return dict(value)
+
+
+def _affected_rule_ids(continuation: dict[str, Any]) -> tuple[str, ...]:
+    value = continuation.get("affectedRuleIds")
+    if (
+        not isinstance(value, list)
+        or not value
+        or any(not isinstance(item, str) or not item for item in value)
+    ):
+        raise ValueError("guarded continuation requires affectedRuleIds")
+    return tuple(dict.fromkeys(value))
+
+
+def _report_user_id(evidence_report: dict[str, Any]) -> str:
+    user_id = str(
+        evidence_report.get("user_id") or evidence_report.get("userId") or ""
+    ).strip()
+    if not user_id:
+        raise RuntimeError(
+            "pinned technical evidence report is missing original trusted user identity"
+        )
+    return user_id
+
+
 def _evidence_graph(evidence_report: dict[str, Any]) -> Any:
     payload = evidence_report.get("evidence_payload") or evidence_report.get(
         "evidencePayload"
@@ -436,20 +594,6 @@ def _execution_id(
     return f"investigator-exec:{digest}"
 
 
-def _pending_claim(packet: InvestigationPacket) -> EvidenceClaim:
-    return EvidenceClaim(
-        claim_id=f"claim:targeted-interview-pending:{packet.engineering_rule_id}",
-        engineering_rule_id=packet.engineering_rule_id,
-        claim_type=ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"],
-        value=None,
-        evidence_refs=tuple(packet.evidence_refs),
-        confidence=0.0,
-        limitations=(
-            ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"],
-        ),
-    )
-
-
 def _required_text(value: dict[str, Any], field: str) -> str:
     text = str(value.get(field) or "").strip()
     if not text:
@@ -459,6 +603,8 @@ def _required_text(value: dict[str, Any], field: str) -> str:
 
 __all__ = [
     "ManagedTargetedInvestigatorPipeline",
+    "ResumedManagedInvestigatorPipeline",
     "TargetedInterviewPending",
+    "complete_resumed_investigation",
     "resume_managed_investigator",
 ]
