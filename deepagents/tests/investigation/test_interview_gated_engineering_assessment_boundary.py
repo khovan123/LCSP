@@ -5,6 +5,9 @@ from types import SimpleNamespace
 from tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary import (
     InterviewGatedEngineeringAssessmentBoundary,
 )
+from tools.common.capabilities.assessment.investigation.engineering_rule.managed_targeted_investigator import (
+    ManagedTargetedInvestigatorPipeline,
+)
 
 
 class FakeApi:
@@ -93,6 +96,21 @@ def _report():
     }
 
 
+def test_default_production_pipeline_uses_managed_targeted_investigator_bridge() -> None:
+    boundary = InterviewGatedEngineeringAssessmentBoundary(
+        SimpleNamespace(
+            langgraph_checkpoint_database_url="postgresql://lcsp:lcsp@db/lcsp"
+        ),
+        api_client=FakeApi({"outcome": "CONTEXT_READY", "contextRevision": 1}),
+        snapshot_client=SimpleNamespace(),
+        code_workspace=NoopWorkspace(),
+        triage_trigger_publisher=lambda _payload: None,
+    )
+
+    assert isinstance(boundary._pipeline, ManagedTargetedInvestigatorPipeline)
+    assert boundary._pipeline._delegate.__class__.__name__ == "PlannedEngineeringInvestigationPipeline"
+
+
 def test_initial_pge_event_bootstraps_interview_and_stops_before_pipeline() -> None:
     api = FakeApi(
         {
@@ -140,7 +158,10 @@ def test_unavailable_coverage_routes_to_orchestration_before_interview() -> None
     assert dispatcher.calls == []
     assert api.seeded == []
     assert len(root.calls) == 1
-    assert root.calls[0][1]["metadata"]["trigger"] == "TECHNICAL_COVERAGE_UNAVAILABLE_RECOVERY"
+    assert (
+        root.calls[0][1]["metadata"]["trigger"]
+        == "TECHNICAL_COVERAGE_UNAVAILABLE_RECOVERY"
+    )
     assert "Do not enter Initial Interview" in root.calls[0][0]["messages"][0]["content"]
 
 
