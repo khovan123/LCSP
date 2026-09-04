@@ -374,6 +374,78 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
     );
   });
 
+  it("re-reads authoritative provenance instead of trusting stale thread pins", async () => {
+    await seedWaitingQuestion(prisma);
+    const answered = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ questionId: QUESTION_ID, freeText: RAW_ANSWER });
+    assert.equal(answered.status, 201, JSON.stringify(answered.body));
+
+    const thread = await prisma.assessmentInterviewThread.findUniqueOrThrow({
+      where: { assessmentId: "assessment-1" },
+    });
+    const store = jsonRecord(thread.privateContextJson);
+    const revisions = Array.isArray(store.revisions) ? store.revisions : [];
+    const staleRevisions = revisions.map((value) => ({
+      ...jsonRecord(value),
+      sourceVersion: "stale-source-pin",
+      pgeVersion: "stale-pge-pin",
+    }));
+    await prisma.assessmentInterviewThread.update({
+      where: { assessmentId: "assessment-1" },
+      data: {
+        sourceVersion: "stale-source-pin",
+        pgeVersion: "stale-pge-pin",
+        privateContextJson: { ...store, revisions: staleRevisions },
+      },
+    });
+
+    const stale = await httpRequest(app)
+      .get("/internal/assessment-interviews/assessment-1/private-context/1")
+      .query({
+        source_version: "stale-source-pin",
+        pge_version: "stale-pge-pin",
+      })
+      .set("x-worker-api-key", WORKER_KEY);
+    assert.equal(stale.status, 200, JSON.stringify(stale.body));
+    assert.equal(successBody<{ status: string }>(stale).status, "STALE_PROVENANCE");
+  });
+
+  it("rejects answers that do not match the active runtime control", async () => {
+    const seeded = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/initial-question")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        activeQuestion: {
+          id: QUESTION_ID,
+          intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+          control: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+          prompt: "Is human approval required?",
+        },
+      });
+    assert.equal(seeded.status, 201, JSON.stringify(seeded.body));
+
+    const empty = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ questionId: QUESTION_ID });
+    assert.equal(empty.status, 400, JSON.stringify(empty.body));
+
+    const invalidChoice = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ questionId: QUESTION_ID, selectedChoiceIds: ["maybe"] });
+    assert.equal(invalidChoice.status, 400, JSON.stringify(invalidChoice.body));
+
+    const valid = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ questionId: QUESTION_ID, selectedChoiceIds: ["yes"] });
+    assert.equal(valid.status, 201, JSON.stringify(valid.body));
+  });
+
   it("uses server-owned targeted criteria and continuation before exact resume", async () => {
     await seedWaitingQuestion(prisma);
     await httpRequest(app)
@@ -403,8 +475,10 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
         originatingInvestigationReference:
           "investigator:investigator-run-1:need-decision-authority",
         investigatorExecutionId: "investigator-run-1",
+        workflowRunId: "workflow-run-1",
         checkpointId: "checkpoint-1",
         affectedRuleIds: ["ENG-1"],
+        artifactVersions: { technicalEvidenceReportId: "ter-original" },
       });
     assert.equal(registered.status, 201, JSON.stringify(registered.body));
 
@@ -552,7 +626,9 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
         originatingInvestigationReference: string;
         investigatorExecutionId: string;
         checkpointId: string;
+        workflowRunId: string;
         affectedRuleIds: string[];
+        artifactVersions: Record<string, string>;
       };
     }>(resolved);
     assert.equal(
@@ -567,8 +643,54 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       resolvedState.continuation.investigatorExecutionId,
       "investigator-run-1",
     );
+    assert.equal(resolvedState.continuation.workflowRunId, "workflow-run-1");
     assert.equal(resolvedState.continuation.checkpointId, "checkpoint-1");
     assert.deepEqual(resolvedState.continuation.affectedRuleIds, ["ENG-1"]);
+    assert.deepEqual(resolvedState.continuation.artifactVersions, {
+      technicalEvidenceReportId: "ter-original",
+    });
+  });
+
+  it("keeps raw saved draft out of Agent-decision runtime events", async () => {
+    await seedWaitingQuestion(prisma);
+    const saved = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/blocked-actions")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        action: ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.saveAndExit,
+        draft: RAW_DRAFT,
+      });
+    assert.equal(saved.status, 201, JSON.stringify(saved.body));
+
+    const more = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/blocked-actions")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ action: ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext });
+    assert.equal(more.status, 201, JSON.stringify(more.body));
+
+    const decision = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/agent-decisions")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        expectedContextRevision: 0,
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        activeQuestion: {
+          id: "more-context-question",
+          intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+          control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+          prompt: "Please provide the additional context.",
+        },
+      });
+    assert.equal(decision.status, 201, JSON.stringify(decision.body));
+
+    const runtimeEvent = await prisma.assessmentRuntimeEvent.findFirstOrThrow({
+      where: {
+        assessmentId: "assessment-1",
+        summary: { contains: "guarded decision persisted" },
+      },
+      orderBy: { sequence: "desc" },
+    });
+    assert.doesNotMatch(JSON.stringify(runtimeEvent.outputSummaryJson), /Need internal legal owner/u);
   });
 
   it("re-enters Interview when Customer chooses Provide More Context", async () => {

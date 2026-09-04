@@ -33,10 +33,10 @@ class RecordingRoot:
         self._result = result or {"status": "ROOT_REENTERED"}
         self._order = order
 
-    def invoke(self, payload, config=None):
+    def invoke(self, payload, config=None, context=None):
         if self._order is not None:
             self._order.append("root")
-        self.calls.append((payload, config))
+        self.calls.append((payload, config, context))
         return self._result
 
 
@@ -227,6 +227,72 @@ def test_provide_more_context_persists_next_interview_question() -> None:
     assert len(api.decision_posts) == 1
     assert api.decision_posts[0][1]["outcome"] == "WAITING_FOR_CUSTOMER"
     assert root.calls == []
+
+
+def test_context_resolved_reenters_original_investigator_checkpoint() -> None:
+    continuation = {
+        "originatingInvestigationReference": "investigator:task-call-17:need-1",
+        "investigatorExecutionId": "task-call-17",
+        "workflowRunId": "workflow-original",
+        "checkpointId": "checkpoint-original",
+        "affectedRuleIds": ["ENG-1"],
+        "artifactVersions": {
+            "technicalEvidenceReportId": "ter-1",
+            "repositorySnapshotId": "snapshot-1",
+        },
+        "sourceVersion": "snapshot-1:abc",
+        "pgeVersion": "ter-1:v1",
+    }
+
+    class TargetedApi(RecordingApi):
+        def get_interview_private_context(self, *args, **kwargs):
+            result = super().get_interview_private_context(*args, **kwargs)
+            result["targetedNeed"] = {
+                "needId": "need-1",
+                "businessContextNeed": "Who approves?",
+                "resolutionCriteria": ["decision_authority"],
+                "originatingInvestigationReference": continuation["originatingInvestigationReference"],
+            }
+            return result
+
+        def post_interview_agent_decision(self, assessment_id, payload):
+            super().post_interview_agent_decision(assessment_id, payload)
+            return {"outcome": "CONTEXT_RESOLVED", "continuation": continuation}
+
+    targeted_handoff = {
+        "expectedContextRevision": 0,
+        "mode": "TARGETED_INTERVIEW",
+        "outcome": "CONTEXT_RESOLVED",
+        "contextAuthority": "CUSTOMER_CONFIRMED",
+        "confirmedContext": {"decision_authority": "human"},
+        "flags": [],
+        "blockedActions": [],
+        "targetedResolution": {},
+    }
+    api = TargetedApi()
+    root = RecordingRoot()
+    boundary = AssessmentInterviewResumeBoundary(
+        SimpleNamespace(),
+        root_agent=root,
+        api_client=api,
+        dispatcher=RecordingDispatcher(targeted_handoff),
+    )
+
+    boundary.handle(_message(reason="TARGETED_INTERVIEW_REQUIRED"), "corr-1")
+
+    assert len(root.calls) == 1
+    payload, config, context = root.calls[0]
+    assert config["configurable"] == {
+        "thread_id": "workflow-original",
+        "checkpoint_id": "checkpoint-original",
+    }
+    assert config["metadata"]["investigator_execution_id"] == "task-call-17"
+    assert config["metadata"]["artifact_versions"] == continuation["artifactVersions"]
+    assert context.workflow_run_id == "workflow-original"
+    assert context.checkpoint_id == "checkpoint-original"
+    assert context.engineering_rule_ids == ("ENG-1",)
+    assert "checkpoint-original" not in payload["messages"][0]["content"]
+    assert "task-call-17" not in payload["messages"][0]["content"]
 
 
 def test_interview_resume_boundary_rejects_missing_revision() -> None:

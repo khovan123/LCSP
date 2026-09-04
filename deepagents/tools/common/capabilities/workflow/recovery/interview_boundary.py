@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from orchestration.context import LCSPRunContext
 from tools.common.capabilities.managed.boundary import AgentBoundaryBase
 
 INTERVIEW_RESUME_COMMAND = "command.assessment-interview.resume-agent.v1"
@@ -206,34 +207,84 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         if outcome == "CONTEXT_RESOLVED" and not isinstance(continuation, dict):
             raise ValueError("guarded CONTEXT_RESOLVED is missing server-owned continuation")
 
+        self._resume_exact_investigator(
+            assessment_id=assessment_id,
+            context_revision=context_revision,
+            continuation=continuation,
+            correlationId=correlationId,
+        )
+
+    def _resume_exact_investigator(
+        self,
+        *,
+        assessment_id: str,
+        context_revision: int,
+        continuation: dict[str, Any],
+        correlationId: str,
+    ) -> None:
+        workflow_run_id = _required_text(continuation, "workflowRunId")
+        checkpoint_id = _required_text(continuation, "checkpointId")
+        execution_id = _required_text(continuation, "investigatorExecutionId")
+        originating_reference = _required_text(
+            continuation, "originatingInvestigationReference"
+        )
+        affected_rule_ids = continuation.get("affectedRuleIds")
+        artifact_versions = continuation.get("artifactVersions")
+        if (
+            not isinstance(affected_rule_ids, list)
+            or not affected_rule_ids
+            or any(not isinstance(item, str) or not item for item in affected_rule_ids)
+        ):
+            raise ValueError("guarded continuation requires affectedRuleIds")
+        if (
+            not isinstance(artifact_versions, dict)
+            or not artifact_versions
+            or any(not isinstance(key, str) or not isinstance(value, str) for key, value in artifact_versions.items())
+        ):
+            raise ValueError("guarded continuation requires immutable artifactVersions")
+
         root = self._root_agent or self._load_root_agent()
         root.invoke(
             {
                 "messages": [
                     {
                         "role": "user",
-                        "content": _guarded_downstream_prompt(
-                            assessment_id=assessment_id,
-                            thread_id=thread_id,
-                            context_revision=context_revision,
-                            pge_version=pge_version,
-                            outcome=outcome,
-                            continuation=continuation if isinstance(continuation, dict) else None,
+                        "content": (
+                            "Targeted Customer context has passed the protected Interview guard. "
+                            "Resume the already-checkpointed Investigator continuation only; do not "
+                            "start a new Initial Interview, Planner pass, or unrelated Investigator. "
+                            "The exact execution/checkpoint/scope/artifact pins are supplied as immutable "
+                            "runtime context and metadata, not as model-authored continuation data."
                         ),
                     }
                 ]
             },
             config={
-                "configurable": {"thread_id": thread_id},
+                "configurable": {
+                    "thread_id": workflow_run_id,
+                    "checkpoint_id": checkpoint_id,
+                },
                 "metadata": {
-                    "lcsp_thread_id": thread_id,
+                    "lcsp_thread_id": workflow_run_id,
                     "assessment_id": assessment_id,
                     "context_revision": context_revision,
                     "correlationId": correlationId,
-                    "trigger": "ASSESSMENT_INTERVIEW_GUARDED_CONTINUATION",
-                    "guarded_interview_outcome": outcome,
+                    "trigger": "TARGETED_INTERVIEW_EXACT_INVESTIGATOR_RESUME",
+                    "investigator_execution_id": execution_id,
+                    "originating_investigation_reference": originating_reference,
+                    "checkpoint_id": checkpoint_id,
+                    "affected_rule_ids": list(affected_rule_ids),
+                    "artifact_versions": dict(artifact_versions),
                 },
             },
+            context=LCSPRunContext(
+                assessment_id=assessment_id,
+                workflow_run_id=workflow_run_id,
+                checkpoint_id=checkpoint_id,
+                artifact_versions=dict(artifact_versions),
+                engineering_rule_ids=tuple(affected_rule_ids),
+                idempotency_key=f"resume:{execution_id}:{context_revision}",
+            ),
         )
 
     def _reenter_root_for_revalidation(
@@ -323,39 +374,6 @@ def _interview_instruction(
         "of sufficiency. PROVIDE_MORE_CONTEXT means author the next bounded question from "
         "the existing thread; do not restart a targeted Interview.\n\n"
         + json.dumps(bounded_payload, ensure_ascii=False, sort_keys=True)
-    )
-
-
-def _guarded_downstream_prompt(
-    *,
-    assessment_id: str,
-    thread_id: str,
-    context_revision: int,
-    pge_version: str,
-    outcome: str,
-    continuation: dict[str, Any] | None = None,
-) -> str:
-    if outcome == "CONTEXT_READY":
-        action = (
-            "Continue from the already-accepted guarded Initial Interview state into the "
-            "existing EngineeringRule readiness/Planner flow."
-        )
-    else:
-        action = (
-            "Continue only the persisted targeted clarification path and resume the exact "
-            "Investigator after validating its server-owned origin, scope and artifact pins."
-        )
-    continuation_clause = (
-        " Resume only the exact server-owned Investigator continuation: "
-        + json.dumps(continuation, ensure_ascii=False, sort_keys=True)
-        if continuation is not None
-        else ""
-    )
-    return (
-        f"{action} Do not re-evaluate Customer text in Root and do not bypass the persisted "
-        f"Interview guard. Assessment: {assessment_id}. Thread: {thread_id}. "
-        f"Context revision: {context_revision}. PGE version: {pge_version}."
-        + continuation_clause
     )
 
 

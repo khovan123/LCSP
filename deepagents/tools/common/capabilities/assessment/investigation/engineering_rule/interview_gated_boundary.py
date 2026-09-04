@@ -35,9 +35,16 @@ class _ConfirmedContextPipeline:
 class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary):
     """Production accepted-evidence boundary with decision-before-downstream Interview gating."""
 
-    def __init__(self, *args: Any, interview_dispatcher: Any | None = None, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        interview_dispatcher: Any | None = None,
+        recovery_root: Any | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(*args, **kwargs)
         self._interview_dispatcher = interview_dispatcher
+        self._recovery_root = recovery_root
 
     def handle(self, message: dict[str, Any], correlationId: str) -> None:
         evidence_report_id = self._evidence_report_id(message)
@@ -78,6 +85,16 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
         assessment_id: str,
         correlation_id: str,
     ) -> dict[str, Any] | None:
+        coverage_state, coverage_notes = _technical_coverage(evidence_report)
+        if coverage_state == "UNAVAILABLE":
+            self._route_unavailable_coverage_to_recovery(
+                assessment_id=assessment_id,
+                evidence_report_id=evidence_report_id,
+                coverage_notes=coverage_notes,
+                correlation_id=correlation_id,
+            )
+            return None
+
         state = self._api_client.get_interview_worker_state(assessment_id)
         outcome = str(state.get("outcome") or "")
         context_revision = int(state.get("contextRevision") or 0)
@@ -130,21 +147,68 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
         return None
 
 
+    def _route_unavailable_coverage_to_recovery(
+        self,
+        *,
+        assessment_id: str,
+        evidence_report_id: str,
+        coverage_notes: list[str],
+        correlation_id: str,
+    ) -> None:
+        root = self._recovery_root
+        if root is None:
+            from agent import agent
+
+            root = agent
+        root.invoke(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Technical evidence coverage is UNAVAILABLE. Do not enter Initial Interview, "
+                            "EngineeringRule, Planner, or Investigator. Run Root Orchestration recovery "
+                            "for the pinned technical evidence first (for example targeted re-analysis or "
+                            "a governed re-scan), then re-enter the assessment only from newly accepted "
+                            "technical evidence. "
+                            f"Assessment: {assessment_id}. Evidence report: {evidence_report_id}. "
+                            f"Bounded coverage notes: {json.dumps(coverage_notes, ensure_ascii=False)}"
+                        ),
+                    }
+                ]
+            },
+            config={
+                "configurable": {"thread_id": f"assessment:{assessment_id}:coverage-recovery"},
+                "metadata": {
+                    "assessment_id": assessment_id,
+                    "technical_evidence_report_id": evidence_report_id,
+                    "correlationId": correlation_id,
+                    "trigger": "TECHNICAL_COVERAGE_UNAVAILABLE_RECOVERY",
+                },
+            },
+        )
+
+
+def _technical_coverage(evidence_report: dict[str, Any]) -> tuple[str, list[str]]:
+    payload = evidence_report.get("evidence_payload") or evidence_report.get("evidencePayload")
+    graph = payload.get("evidence_graph") if isinstance(payload, dict) else None
+    coverage_state = "UNKNOWN"
+    coverage_notes: list[str] = []
+    if isinstance(graph, dict):
+        coverage_state = str(graph.get("coverage_state") or graph.get("coverageState") or "UNKNOWN").upper()
+        raw_notes = graph.get("coverage_notes") or graph.get("coverageNotes") or []
+        if isinstance(raw_notes, list):
+            coverage_notes = [str(item)[:240] for item in raw_notes[:8]]
+    return coverage_state, coverage_notes
+
+
 def _initial_interview_instruction(
     *,
     assessment_id: str,
     evidence_report_id: str,
     evidence_report: dict[str, Any],
 ) -> str:
-    payload = evidence_report.get("evidence_payload") or evidence_report.get("evidencePayload")
-    graph = payload.get("evidence_graph") if isinstance(payload, dict) else None
-    coverage_state = "UNKNOWN"
-    coverage_notes: list[str] = []
-    if isinstance(graph, dict):
-        coverage_state = str(graph.get("coverage_state") or graph.get("coverageState") or "UNKNOWN")
-        raw_notes = graph.get("coverage_notes") or graph.get("coverageNotes") or []
-        if isinstance(raw_notes, list):
-            coverage_notes = [str(item)[:240] for item in raw_notes[:8]]
+    coverage_state, coverage_notes = _technical_coverage(evidence_report)
     safe_context = {
         "assessmentId": assessment_id,
         "technicalEvidenceReportId": evidence_report_id,

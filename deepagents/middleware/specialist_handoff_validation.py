@@ -66,6 +66,7 @@ def _validate_lcsp_specialist_task_handoff(
         payload=payload,
         context=context,
         metadata=metadata,
+        execution_id=str(tool_call.get("id") or "").strip() or None,
     )
     return result
 
@@ -76,14 +77,16 @@ def _persist_targeted_interview_need(
     payload: dict[str, Any],
     context: LCSPRunContext | None,
     metadata: dict[str, Any],
+    execution_id: str | None = None,
 ) -> None:
     if subagent_type != "investigator" or payload.get("status") != "NEEDS_INPUT":
         return
     if context is None or not context.assessment_id or not context.user_id:
         raise RuntimeError("Targeted Interview registration requires trusted assessment/user context")
-    execution_id = context.checkpoint_id or context.workflow_run_id
     if not execution_id:
-        raise RuntimeError("Targeted Interview registration requires a trusted Investigator execution reference")
+        raise RuntimeError("Targeted Interview registration requires the original Investigator task execution id")
+    if not context.workflow_run_id or not context.checkpoint_id:
+        raise RuntimeError("Targeted Interview registration requires original workflow and checkpoint pins")
     affected_rule_ids = tuple(context.engineering_rule_ids)
     if not affected_rule_ids:
         raise RuntimeError("Targeted Interview registration requires pinned EngineeringRule scope")
@@ -101,6 +104,11 @@ def _persist_targeted_interview_need(
     register = getattr(api_client, "post_interview_targeted_need", None)
     if not callable(register):
         raise RuntimeError("WorkerApiClient cannot register Targeted Interview needs")
+    artifact_versions = payload.get("artifact_versions")
+    if not isinstance(artifact_versions, dict) or not artifact_versions:
+        raise RuntimeError("Targeted Interview registration requires validated Investigator artifact pins")
+    if dict(artifact_versions) != dict(context.artifact_versions):
+        raise RuntimeError("Investigator artifact pins drifted from immutable runtime context")
     originating_reference = f"investigator:{execution_id}:{need_id}"
     register(
         context.assessment_id,
@@ -111,8 +119,10 @@ def _persist_targeted_interview_need(
             "resolutionCriteria": [str(item) for item in criteria],
             "originatingInvestigationReference": originating_reference,
             "investigatorExecutionId": execution_id,
+            "workflowRunId": context.workflow_run_id,
             "checkpointId": context.checkpoint_id,
             "affectedRuleIds": list(affected_rule_ids),
+            "artifactVersions": dict(artifact_versions),
         },
     )
 

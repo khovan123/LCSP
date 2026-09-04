@@ -80,9 +80,12 @@ type TargetedInterviewNeed = {
 type TargetedInterviewContinuation = {
   originatingInvestigationReference: string;
   investigatorExecutionId: string;
-  checkpointId?: string;
+  workflowRunId: string;
+  checkpointId: string;
   affectedRuleIds: string[];
-  artifactVersions: { sourceVersion: string; pgeVersion: string };
+  artifactVersions: Record<string, string>;
+  sourceVersion: string;
+  pgeVersion: string;
 };
 
 type PrivateInterviewStore = {
@@ -98,8 +101,10 @@ type TargetedNeedRegistrationInput = {
   resolutionCriteria: string[];
   originatingInvestigationReference: string;
   investigatorExecutionId: string;
-  checkpointId?: string;
+  workflowRunId: string;
+  checkpointId: string;
   affectedRuleIds: string[];
+  artifactVersions: Record<string, string>;
 };
 
 type WorkerPrivateContext = {
@@ -167,6 +172,7 @@ export class AssessmentInterviewRuntimeService {
           },
         );
       }
+      assertAnswerMatchesQuestion(answer, thread.state.activeQuestion);
       const priorRevision = thread.contextRevision;
       const nextRevision = priorRevision + 1;
       const provenance = await this.assessmentProvenance(
@@ -378,12 +384,22 @@ export class AssessmentInterviewRuntimeService {
     pgeVersion?: string;
   }): Promise<WorkerPrivateContext> {
     const thread = await this.readThread(input.assessmentId);
+    const authoritative = await this.assessmentProvenance(input.assessmentId);
     const privateRevision = thread.privateRevisions.find(
       (revision) => revision.contextRevision === input.contextRevision,
     );
+    const target = thread.privateStore.targetedNeed;
     const provenanceChanged =
-      (input.sourceVersion && input.sourceVersion !== thread.sourceVersion) ||
-      (input.pgeVersion && input.pgeVersion !== thread.pgeVersion);
+      (input.sourceVersion && input.sourceVersion !== authoritative.sourceVersion) ||
+      (input.pgeVersion && input.pgeVersion !== authoritative.pgeVersion) ||
+      thread.sourceVersion !== authoritative.sourceVersion ||
+      thread.pgeVersion !== authoritative.pgeVersion ||
+      (!!privateRevision &&
+        (privateRevision.sourceVersion !== authoritative.sourceVersion ||
+          privateRevision.pgeVersion !== authoritative.pgeVersion)) ||
+      (!!target &&
+        (target.sourceVersion !== authoritative.sourceVersion ||
+          target.pgeVersion !== authoritative.pgeVersion));
     const status = provenanceChanged
       ? "STALE_PROVENANCE"
       : thread.processedRevision >= input.contextRevision
@@ -398,11 +414,11 @@ export class AssessmentInterviewRuntimeService {
       requestedRevision: input.contextRevision,
       currentRevision: thread.contextRevision,
       processedRevision: thread.processedRevision,
-      sourceVersion: thread.sourceVersion ?? MISSING_SOURCE_VERSION,
-      pgeVersion: thread.pgeVersion ?? MISSING_PGE_VERSION,
+      sourceVersion: authoritative.sourceVersion,
+      pgeVersion: authoritative.pgeVersion,
       publicState: thread.state,
       privateRevision,
-      targetedNeed: thread.privateStore.targetedNeed,
+      targetedNeed: target,
     };
   }
 
@@ -425,25 +441,37 @@ export class AssessmentInterviewRuntimeService {
         input.assessmentId,
         tx,
       );
+      if (
+        !thread.sourceVersion ||
+        !thread.pgeVersion ||
+        thread.sourceVersion !== provenance.sourceVersion ||
+        thread.pgeVersion !== provenance.pgeVersion
+      ) {
+        throw problemException(
+          "INTERVIEW_TARGETED_REGISTRATION_STALE_PROVENANCE",
+          input.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
+      }
       const targetedNeed: TargetedInterviewNeed = {
         needId: target.needId,
         businessContextNeed: target.businessContextNeed,
         resolutionCriteria: target.resolutionCriteria,
         originatingInvestigationReference:
           target.originatingInvestigationReference,
-        sourceVersion: provenance.sourceVersion,
-        pgeVersion: provenance.pgeVersion,
+        sourceVersion: thread.sourceVersion,
+        pgeVersion: thread.pgeVersion,
       };
       const targetedContinuation: TargetedInterviewContinuation = {
         originatingInvestigationReference:
           target.originatingInvestigationReference,
         investigatorExecutionId: target.investigatorExecutionId,
+        workflowRunId: target.workflowRunId,
         checkpointId: target.checkpointId,
         affectedRuleIds: target.affectedRuleIds,
-        artifactVersions: {
-          sourceVersion: provenance.sourceVersion,
-          pgeVersion: provenance.pgeVersion,
-        },
+        artifactVersions: target.artifactVersions,
+        sourceVersion: thread.sourceVersion,
+        pgeVersion: thread.pgeVersion,
       };
       const nextState: AssessmentInterviewRuntimeState = {
         ...thread.state,
@@ -461,8 +489,8 @@ export class AssessmentInterviewRuntimeService {
         activeQuestionId: null,
         processedRevision: thread.processedRevision,
         privateStore,
-        sourceVersion: provenance.sourceVersion,
-        pgeVersion: provenance.pgeVersion,
+        sourceVersion: thread.sourceVersion,
+        pgeVersion: thread.pgeVersion,
       });
       await this.outboxRepository.enqueue(
         this.interviewAgentResumeCommand({
@@ -471,8 +499,8 @@ export class AssessmentInterviewRuntimeService {
           correlationId: input.correlationId,
           contextRevision: thread.contextRevision,
           questionId: target.needId,
-          sourceVersion: provenance.sourceVersion,
-          pgeVersion: provenance.pgeVersion,
+          sourceVersion: thread.sourceVersion,
+          pgeVersion: thread.pgeVersion,
           resumeReason: "TARGETED_INTERVIEW_REQUIRED",
         }),
         tx,
@@ -510,6 +538,23 @@ export class AssessmentInterviewRuntimeService {
         (revision) =>
           revision.contextRevision === decision.expectedContextRevision,
       );
+      const authoritative = await this.assessmentProvenance(
+        input.assessmentId,
+        tx,
+      );
+      if (
+        thread.sourceVersion !== authoritative.sourceVersion ||
+        thread.pgeVersion !== authoritative.pgeVersion ||
+        (!!latestPrivate &&
+          (latestPrivate.sourceVersion !== authoritative.sourceVersion ||
+            latestPrivate.pgeVersion !== authoritative.pgeVersion))
+      ) {
+        throw problemException(
+          "INTERVIEW_DECISION_STALE_PROVENANCE",
+          input.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
+      }
       const isBlockedFollowup =
         thread.state.outcome ===
           ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved &&
@@ -584,7 +629,7 @@ export class AssessmentInterviewRuntimeService {
       summary:
         "Interview Agent guarded decision persisted for customer or orchestration continuation.",
       inputSummary: { decisionOutcome: result.state.outcome },
-      outputSummary: { assessmentInterview: publicState(result.state) },
+      outputSummary: { assessmentInterview: runtimeEventState(result.state) },
       waitingReason:
         result.state.outcome ===
         ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer
@@ -918,6 +963,13 @@ function parseTargetedNeedRegistration(
           typeof item === "string" && item.trim().length > 0,
       )
     : [];
+  const rawArtifactVersions = objectRecord(record?.artifactVersions);
+  const artifactVersions = Object.fromEntries(
+    Object.entries(rawArtifactVersions ?? {}).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[1] === "string" && entry[1].trim().length > 0,
+    ),
+  );
   if (
     !record ||
     typeof record.actorId !== "string" ||
@@ -926,7 +978,10 @@ function parseTargetedNeedRegistration(
     !criteria.length ||
     typeof record.originatingInvestigationReference !== "string" ||
     typeof record.investigatorExecutionId !== "string" ||
-    !affectedRuleIds.length
+    typeof record.workflowRunId !== "string" ||
+    typeof record.checkpointId !== "string" ||
+    !affectedRuleIds.length ||
+    !Object.keys(artifactVersions).length
   ) {
     throw new BadRequestException({ code: "INTERVIEW_TARGETED_NEED_INVALID" });
   }
@@ -937,9 +992,10 @@ function parseTargetedNeedRegistration(
     resolutionCriteria: criteria,
     originatingInvestigationReference: record.originatingInvestigationReference,
     investigatorExecutionId: record.investigatorExecutionId,
-    checkpointId:
-      typeof record.checkpointId === "string" ? record.checkpointId : undefined,
+    workflowRunId: record.workflowRunId,
+    checkpointId: record.checkpointId,
     affectedRuleIds,
+    artifactVersions,
   };
 }
 
@@ -1044,10 +1100,14 @@ function parseStoredTargetedContinuation(
     !record ||
     typeof record.originatingInvestigationReference !== "string" ||
     typeof record.investigatorExecutionId !== "string" ||
+    typeof record.workflowRunId !== "string" ||
+    typeof record.checkpointId !== "string" ||
     !Array.isArray(record.affectedRuleIds) ||
     !artifactVersions ||
-    typeof artifactVersions.sourceVersion !== "string" ||
-    typeof artifactVersions.pgeVersion !== "string"
+    Object.keys(artifactVersions).length === 0 ||
+    Object.values(artifactVersions).some((value) => typeof value !== "string") ||
+    typeof record.sourceVersion !== "string" ||
+    typeof record.pgeVersion !== "string"
   ) {
     return undefined;
   }
@@ -1172,8 +1232,8 @@ function assertGuardedDecision(
   if (
     target.sourceVersion !== thread.sourceVersion ||
     target.pgeVersion !== thread.pgeVersion ||
-    continuation.artifactVersions.sourceVersion !== thread.sourceVersion ||
-    continuation.artifactVersions.pgeVersion !== thread.pgeVersion
+    continuation.sourceVersion !== thread.sourceVersion ||
+    continuation.pgeVersion !== thread.pgeVersion
   ) {
     throw problemException("INTERVIEW_CONTINUATION_STALE", correlationId, {
       status: HttpStatus.CONFLICT,
@@ -1250,6 +1310,50 @@ function assertAuthorityProvenance(
   }
 }
 
+function assertAnswerMatchesQuestion(
+  answer: AssessmentInterviewAnswerInput,
+  question: NonNullable<AssessmentInterviewRuntimeState["activeQuestion"]>,
+): void {
+  const invalid = () => {
+    throw new BadRequestException({ code: "INTERVIEW_ANSWER_CONTROL_INVALID" });
+  };
+  const selected = answer.selectedChoiceIds ?? [];
+  if (new Set(selected).size !== selected.length) {
+    invalid();
+  }
+  const choiceById = new Map((question.choices ?? []).map((choice) => [choice.id, choice]));
+  const unknownChoice = selected.some((choiceId) => !choiceById.has(choiceId));
+  const requiresOtherText = selected.some(
+    (choiceId) => choiceById.get(choiceId)?.requiresFreeText === true,
+  );
+  const hasOtherText = Boolean(answer.otherText?.trim());
+  const hasFreeText = Boolean(answer.freeText?.trim());
+
+  if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
+    if (!hasFreeText || selected.length || answer.confirmed || answer.adjusted || hasOtherText) invalid();
+    return;
+  }
+  if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.boolean) {
+    if (selected.length !== 1 || !["yes", "no"].includes(selected[0] ?? "") || answer.confirmed || answer.adjusted || hasOtherText) invalid();
+    return;
+  }
+  if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect) {
+    if (selected.length !== 1 || unknownChoice || answer.confirmed || answer.adjusted) invalid();
+    if (requiresOtherText !== hasOtherText) invalid();
+    return;
+  }
+  if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.multiSelect) {
+    if (!selected.length || unknownChoice || answer.confirmed || answer.adjusted) invalid();
+    if (requiresOtherText !== hasOtherText) invalid();
+    return;
+  }
+  if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust) {
+    if (answer.confirmed === answer.adjusted || selected.length || hasOtherText) invalid();
+    return;
+  }
+  invalid();
+}
+
 function decisionState(
   current: AssessmentInterviewRuntimeState,
   decision: AgentDecisionInput,
@@ -1308,6 +1412,12 @@ function publicState(
       summary: item.summary,
     })),
   };
+}
+
+function runtimeEventState(
+  state: AssessmentInterviewRuntimeState,
+): AssessmentInterviewRuntimeState {
+  return { ...publicState(state), pendingDraft: undefined };
 }
 
 function objectRecord(value: unknown): Record<string, unknown> | null {

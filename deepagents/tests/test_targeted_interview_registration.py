@@ -21,7 +21,7 @@ def test_investigator_needs_input_persists_trusted_target_before_root() -> None:
         workflow_run_id="workflow-1",
         checkpoint_id="checkpoint-7",
         engineering_rule_ids=("ENG-1", "ENG-2"),
-        artifact_versions={"technicalEvidenceReportId": "ter-1"},
+        artifact_versions={"technicalEvidenceReportId": "ter-1", "repositorySnapshotId": "snapshot-1"},
     )
     _persist_targeted_interview_need(
         subagent_type="investigator",
@@ -35,17 +35,19 @@ def test_investigator_needs_input_persists_trusted_target_before_root() -> None:
         },
         context=context,
         metadata={"api_client": api},
+        execution_id="task-call-investigator-17",
     )
 
     assert len(api.calls) == 1
     assessment_id, payload = api.calls[0]
     assert assessment_id == "assessment-1"
     assert payload["actorId"] == "user-1"
-    assert payload["investigatorExecutionId"] == "checkpoint-7"
+    assert payload["investigatorExecutionId"] == "task-call-investigator-17"
+    assert payload["workflowRunId"] == "workflow-1"
     assert payload["checkpointId"] == "checkpoint-7"
     assert payload["affectedRuleIds"] == ["ENG-1", "ENG-2"]
-    assert payload["originatingInvestigationReference"] == "investigator:checkpoint-7:need-1"
-    assert "artifactVersions" not in payload
+    assert payload["originatingInvestigationReference"] == "investigator:task-call-investigator-17:need-1"
+    assert payload["artifactVersions"] == context.artifact_versions
 
 
 def test_non_investigator_or_ready_handoff_does_not_register_target() -> None:

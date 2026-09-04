@@ -47,6 +47,15 @@ class FakeDispatcher:
         }
 
 
+class RecordingRoot:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def invoke(self, payload, config=None):
+        self.calls.append((payload, config))
+        return {"status": "ROOT_REENTERED"}
+
+
 class NoopPipeline:
     def run(self, **kwargs):
         raise AssertionError("pipeline must not run during Initial Interview bootstrap")
@@ -57,11 +66,12 @@ class NoopWorkspace:
         return None
 
 
-def _boundary(api, dispatcher):
+def _boundary(api, dispatcher, recovery_root=None):
     return InterviewGatedEngineeringAssessmentBoundary(
         SimpleNamespace(),
         api_client=api,
         interview_dispatcher=dispatcher,
+        recovery_root=recovery_root,
         investigation_pipeline=NoopPipeline(),
         snapshot_client=SimpleNamespace(),
         code_workspace=NoopWorkspace(),
@@ -109,6 +119,29 @@ def test_initial_pge_event_bootstraps_interview_and_stops_before_pipeline() -> N
     assert "Missing technical evidence is not proof" in instruction
     assert api.seeded[0][0] == "assessment-1"
     assert api.seeded[0][1]["outcome"] == "WAITING_FOR_CUSTOMER"
+
+
+def test_unavailable_coverage_routes_to_orchestration_before_interview() -> None:
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    dispatcher = FakeDispatcher()
+    root = RecordingRoot()
+    boundary = _boundary(api, dispatcher, recovery_root=root)
+    report = _report()
+    report["evidence_payload"]["evidence_graph"]["coverage_state"] = "UNAVAILABLE"
+
+    result = boundary._prepare_interview(
+        evidence_report=report,
+        evidence_report_id="ter-1",
+        assessment_id="assessment-1",
+        correlation_id="corr-1",
+    )
+
+    assert result is None
+    assert dispatcher.calls == []
+    assert api.seeded == []
+    assert len(root.calls) == 1
+    assert root.calls[0][1]["metadata"]["trigger"] == "TECHNICAL_COVERAGE_UNAVAILABLE_RECOVERY"
+    assert "Do not enter Initial Interview" in root.calls[0][0]["messages"][0]["content"]
 
 
 def test_guarded_ready_state_is_the_only_initial_path_to_confirmed_context() -> None:
