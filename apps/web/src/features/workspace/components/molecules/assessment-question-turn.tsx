@@ -83,13 +83,14 @@ export function AssessmentQuestionTurn({
   }
 
   function submitAnswer(input: Partial<AssessmentQuestionAnswerInput> = {}) {
+    const usesSingleValue =
+      question.control === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect ||
+      question.control === ASSESSMENT_INTERVIEW_CONTROLS.boolean;
     onSubmitAnswer?.({
       questionId: question.id,
       freeText: freeText.trim() || undefined,
       selectedChoiceIds:
-        question.control === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect && singleValue
-          ? [singleValue]
-          : selectedChoiceIds,
+        usesSingleValue && singleValue ? [singleValue] : selectedChoiceIds,
       otherText: otherText.trim() || undefined,
       ...input,
     });
