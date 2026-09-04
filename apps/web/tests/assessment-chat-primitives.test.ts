@@ -104,7 +104,7 @@ test("assessment composer keeps the approved 720 by 76 single-send control", asy
   assert.match(source, /rounded-\[18px\]/);
   assert.equal(source.match(/<Textarea\b/g)?.length, 1);
   assert.equal(source.match(/<Button\b/g)?.length, 1);
-  assert.match(source, /ArrowUpIcon/);
+  assert.match(source, /CornerDownLeftIcon/);
   assert.doesNotMatch(source, /PlusIcon|<input\b|avatar|brand label/i);
   assert.doesNotMatch(source, /h-12 w-full max-w-\[760px\]/);
 });
