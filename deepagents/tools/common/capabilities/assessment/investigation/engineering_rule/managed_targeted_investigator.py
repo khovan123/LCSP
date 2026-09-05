@@ -457,6 +457,9 @@ def resume_managed_investigator(
             "exact Investigator resume requires LANGGRAPH_CHECKPOINT_DATABASE_URL"
         )
     assert_managed_investigator_artifact_pins(api_client, continuation)
+    typed_confirmed_context = coerce_confirmed_structured_business_context(
+        confirmed_context
+    )
     thread_id = _required_text(continuation, "workflowRunId")
     checkpoint_id = _required_text(continuation, "checkpointId")
     execution_id = _required_text(continuation, "investigatorExecutionId")
@@ -501,7 +504,11 @@ def resume_managed_investigator(
             "Continue this same Investigator execution from its stored checkpoint and fixed "
             "EngineeringRule/artifact scope. Do not restart Planner or Initial Interview. "
             "Use only the following Customer-confirmed business context as the new bounded input:\n"
-            + json.dumps(confirmed_context, ensure_ascii=False, sort_keys=True)
+            + json.dumps(
+                typed_confirmed_context.to_prompt_dict(),
+                ensure_ascii=False,
+                sort_keys=True,
+            )
         ),
         graph=graph,
         execution_id=execution_id,
@@ -526,7 +533,7 @@ def complete_resumed_investigation(
     assessment_id: str,
     context_revision: int,
     continuation: dict[str, Any],
-    confirmed_context: dict[str, Any],
+    confirmed_context: ConfirmedStructuredBusinessContext | dict[str, Any],
     resumed_handoff: dict[str, Any],
     correlation_id: str,
 ) -> None:
