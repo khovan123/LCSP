@@ -3,11 +3,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute } from "node:path";
 
-import { isRecord } from "../../../../common/utils/index.js";
 import {
   GITHUB_CREDENTIAL_ERROR_CODES,
   type GitHubCredentialErrorCode,
 } from "@lcsp/contracts/github-integration";
+import { isRecord } from "../../../../common/utils/index.js";
 
 import type {
   GitHubIdentity,
@@ -56,16 +56,123 @@ export class AzureDevOpsCliRepositoryProvider
   }
 
   async validateIdentity(credential: CredentialLease): Promise<GitHubIdentity> {
+    const rawSecret = credential.withSecret((value) => value);
+    const [possibleOrg, actualPat] = rawSecret.includes(":")
+      ? [
+          rawSecret.slice(0, rawSecret.indexOf(":")).trim(),
+          rawSecret.slice(rawSecret.indexOf(":") + 1).trim(),
+        ]
+      : ["", rawSecret.trim()];
+    const pat = actualPat || rawSecret;
+    const basicAuth = Buffer.from(`:${pat}`).toString("base64");
+
+    if (possibleOrg) {
+      try {
+        const res = await fetch(
+          `https://dev.azure.com/${encodeURIComponent(possibleOrg)}/_apis/connectionData`,
+          {
+            headers: {
+              Authorization: `Basic ${basicAuth}`,
+              Accept: "application/json",
+            },
+          },
+        );
+        if (res.ok) {
+          const data = (await res.json()) as Record<string, unknown>;
+          const user = (isRecord(data.authenticatedUser)
+            ? data.authenticatedUser
+            : {}) as Record<string, unknown>;
+          const props = (isRecord(user.properties)
+            ? user.properties
+            : {}) as Record<string, unknown>;
+          const accountProp = (isRecord(props.Account)
+            ? props.Account
+            : {}) as Record<string, unknown>;
+          const id =
+            typeof user.id === "string"
+              ? user.id
+              : typeof accountProp.$value === "string"
+                ? (accountProp.$value as string)
+                : undefined;
+          const login =
+            typeof accountProp.$value === "string"
+              ? (accountProp.$value as string)
+              : typeof user.providerDisplayName === "string"
+                ? (user.providerDisplayName as string)
+                : typeof user.customDisplayName === "string"
+                  ? (user.customDisplayName as string)
+                  : undefined;
+          if (id && login) {
+            return {
+              id,
+              login,
+              htmlUrl: `https://${this.host}/${possibleOrg}`,
+            };
+          }
+        }
+      } catch (error: unknown) {
+        if (error instanceof AzureDevOpsCliProviderError) throw error;
+      }
+    }
+
+    try {
+      const res = await fetch(
+        "https://app.vssps.visualstudio.com/_apis/profile/profiles/me?api-version=7.1-preview.1",
+        {
+          headers: {
+            Authorization: `Basic ${basicAuth}`,
+            Accept: "application/json",
+          },
+        },
+      );
+      if (res.ok) {
+        const body = (await res.json()) as Record<string, unknown>;
+        const id =
+          typeof body.id === "string"
+            ? body.id
+            : typeof body.emailAddress === "string"
+              ? body.emailAddress
+              : typeof body.publicAlias === "string"
+                ? body.publicAlias
+                : undefined;
+        const login =
+          typeof body.emailAddress === "string"
+            ? body.emailAddress
+            : typeof body.displayName === "string"
+              ? body.displayName
+              : typeof body.publicAlias === "string"
+                ? body.publicAlias
+                : undefined;
+        if (id && login) {
+          return {
+            id,
+            login,
+            htmlUrl: `https://${this.host}/${login}`,
+          };
+        }
+      }
+    } catch (error: unknown) {
+      if (error instanceof AzureDevOpsCliProviderError) throw error;
+    }
+
     const body = await this.runJson(credential, [
       "devops",
       "user",
       "show",
       "--output",
       "json",
-    ]);
+    ]).catch(async () =>
+      this.runJson(credential, [
+        "account",
+        "show",
+        "--output",
+        "json",
+      ]),
+    );
+
     if (!isRecord(body)) {
       throw new AzureDevOpsCliProviderError(
-        GITHUB_CREDENTIAL_ERROR_CODES.providerResponseInvalid,
+        GITHUB_CREDENTIAL_ERROR_CODES.credentialInvalid,
       );
     }
     const userObj = isRecord(body.user) ? body.user : body;
@@ -91,7 +198,7 @@ export class AzureDevOpsCliRepositoryProvider
               : undefined;
     if (!id || !login) {
       throw new AzureDevOpsCliProviderError(
-        GITHUB_CREDENTIAL_ERROR_CODES.providerResponseInvalid,
+        GITHUB_CREDENTIAL_ERROR_CODES.credentialInvalid,
       );
     }
     return {

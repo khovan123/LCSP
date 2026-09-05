@@ -1097,17 +1097,17 @@ export const viPages = {
         repositoryLabel: "Repository",
         discoverAction: "Xác thực và tìm repository",
         connectAction: "Kết nối repository",
-        requestFailedTitle: "Không thể kết nối GitHub",
+        requestFailedTitle: "Không thể kết nối provider",
         requestFailedDescription:
           "Hãy kiểm tra credential và quyền truy cập repository rồi thử lại.",
         credentialInvalidDescription:
-          "GitHub credential không hợp lệ hoặc đã hết hạn. Hãy nhập credential còn hiệu lực.",
+          "Credential của provider không hợp lệ hoặc đã hết hạn. Hãy nhập credential còn hiệu lực.",
         approvalRequiredDescription:
-          "Credential này cần được tổ chức GitHub hoặc SSO phê duyệt trước khi truy cập repository.",
+          "Credential này cần được tổ chức hoặc SSO phê duyệt trước khi truy cập repository.",
         repositoryDeniedDescription:
           "Credential không có quyền đọc repository đã chọn.",
         serviceUnavailableDescription:
-          "Dịch vụ truy cập GitHub tạm thời không khả dụng. Hãy thử lại sau.",
+          "Dịch vụ truy cập repository tạm thời không khả dụng. Hãy thử lại sau.",
         supportedProviderDescription:
           "Trạng thái credential được tải từ API provider credential hiện có.",
         unsupportedProviderDescription:

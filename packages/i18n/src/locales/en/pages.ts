@@ -1098,17 +1098,17 @@ export const enPages = {
         repositoryLabel: "Repository",
         discoverAction: "Validate and discover repositories",
         connectAction: "Connect repository",
-        requestFailedTitle: "Unable to connect GitHub",
+        requestFailedTitle: "Unable to connect provider",
         requestFailedDescription:
           "Check the credential and repository access, then try again.",
         credentialInvalidDescription:
-          "The GitHub credential is invalid or expired. Enter a current credential and try again.",
+          "The provider credential is invalid or expired. Enter a current credential and try again.",
         approvalRequiredDescription:
-          "This credential requires GitHub organization or SSO approval before it can access repositories.",
+          "This credential requires organization or SSO approval before it can access repositories.",
         repositoryDeniedDescription:
           "The credential cannot read the selected repository.",
         serviceUnavailableDescription:
-          "GitHub repository access is temporarily unavailable. Try again later.",
+          "Repository access is temporarily unavailable. Try again later.",
         supportedProviderDescription:
           "Credential status is loaded from the existing provider credential API.",
         unsupportedProviderDescription:
