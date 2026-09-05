@@ -1,16 +1,37 @@
 import Joi from "joi";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { NODE_ENVS, type AppConfig, type NodeEnv } from "./config.types.js";
 
-const CONFIG_WORKSPACE_ROOT = resolve(
+export const CONFIG_WORKSPACE_ROOT = findWorkspaceRoot(
   dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "..",
-  "..",
-  "..",
 );
+
+function findWorkspaceRoot(startDir: string): string {
+  let currentDir = resolve(startDir);
+
+  while (true) {
+    const packageJsonPath = resolve(currentDir, "package.json");
+    if (existsSync(packageJsonPath)) {
+      try {
+        const packageJson = JSON.parse(
+          readFileSync(packageJsonPath, "utf8"),
+        ) as {
+          name?: unknown;
+        };
+        if (packageJson.name === "lcsp") return currentDir;
+      } catch {
+        // Keep walking up; malformed intermediate package files are not roots.
+      }
+    }
+
+    const parentDir = resolve(currentDir, "..");
+    if (parentDir === currentDir) return startDir;
+    currentDir = parentDir;
+  }
+}
 
 const SMTP_MAILBOX_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 const SMTP_DISPLAY_NAME_PATTERN = /^([^<>]+)<\s*([^<>]+)\s*>$/;
@@ -229,25 +250,18 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
 export const configValidationSchema = createConfigValidationSchema();
 
 function cliExecutablePathSchema(variableName: string, workspaceRoot: string) {
+  void workspaceRoot;
   return Joi.string()
     .trim()
     .allow("")
     .default("")
-    .custom((value: string): string => {
-      if (!value || isAbsolute(value)) {
-        return value;
-      }
-      return resolve(workspaceRoot, value);
-    })
     .description(
       `${variableName} accepts an absolute path or a path relative to the LCSP workspace root`,
     );
 }
 
 function resolveCliExecutablePath(value: string | undefined): string {
-  const candidate = value?.trim() ?? "";
-  if (!candidate || isAbsolute(candidate)) return candidate;
-  return resolve(CONFIG_WORKSPACE_ROOT, candidate);
+  return value?.trim() ?? "";
 }
 
 function isValidKekKeyring(value: unknown, activeVersion: string): boolean {

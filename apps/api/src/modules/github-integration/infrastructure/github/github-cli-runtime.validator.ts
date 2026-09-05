@@ -43,11 +43,13 @@ export function resolveGitHubCliExecutablePath(
 }
 
 type GitHubCliRuntimeValidationDependencies = {
-  access: (path: string, mode: number) => void;
-  spawn: (
+  access?: (path: string, mode: number) => void;
+  cwd?: string;
+  spawn?: (
     executablePath: string,
     args: string[],
     options: {
+      cwd?: string;
       encoding: "utf8";
       shell: false;
       windowsHide: true;
@@ -64,16 +66,25 @@ export function assertGitHubCliRuntime(
     spawn: spawnSync,
   },
 ): void {
+  const cwd = dependencies.cwd ?? process.cwd();
+  const validationPath = isAbsolute(executablePath)
+    ? executablePath
+    : resolve(cwd, executablePath);
   try {
-    dependencies.access(executablePath, constants.X_OK);
-    const result = dependencies.spawn(executablePath, ["--version"], {
-      encoding: "utf8",
-      shell: false,
-      windowsHide: true,
-      timeout: 5_000,
-      env: minimalVersionEnvironment(),
-    });
-    const version = parseGitHubCliVersion(result.stdout);
+    (dependencies.access ?? accessSync)(validationPath, constants.X_OK);
+    const result = (dependencies.spawn ?? spawnSync)(
+      executablePath,
+      ["--version"],
+      {
+        cwd,
+        encoding: "utf8",
+        shell: false,
+        windowsHide: true,
+        timeout: 5_000,
+        env: minimalVersionEnvironment(),
+      },
+    );
+    const version = parseGitHubCliVersion(String(result.stdout ?? ""));
     if (
       result.status !== 0 ||
       !version ||

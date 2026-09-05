@@ -35,10 +35,12 @@ export function assertGitLabCliRuntime(
   executablePath: string,
   dependencies: {
     access?: (path: string, mode: number) => void;
+    cwd?: string;
     spawn?: (
       executablePath: string,
       args: string[],
       options: {
+        cwd?: string;
         encoding: "utf8";
         shell: false;
         stdio: ["ignore", "pipe", "ignore"];
@@ -46,15 +48,23 @@ export function assertGitLabCliRuntime(
     ) => { status: number | null; stdout: string | Buffer };
   } = {},
 ): void {
+  const cwd = dependencies.cwd ?? process.cwd();
+  const validationPath = isAbsolute(executablePath)
+    ? executablePath
+    : resolve(cwd, executablePath);
   let fileAvailable = false;
   try {
-    if (dependencies.access) dependencies.access(executablePath, 1);
-    fileAvailable =
-      existsSync(executablePath) && statSync(executablePath).isFile();
+    if (dependencies.access) {
+      dependencies.access(validationPath, 1);
+      fileAvailable = true;
+    } else {
+      fileAvailable =
+        existsSync(validationPath) && statSync(validationPath).isFile();
+    }
   } catch {
     fileAvailable = false;
   }
-  if (!isAbsolute(executablePath) || !fileAvailable) {
+  if (!fileAvailable) {
     throw new GitLabCliProviderError(
       GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable,
     );
@@ -63,6 +73,7 @@ export function assertGitLabCliRuntime(
     executablePath,
     ["--version"],
     {
+      cwd,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
       shell: false,
