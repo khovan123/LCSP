@@ -142,6 +142,7 @@ def _durable_create_agent_factory(
     *,
     snapshot_id: str = SNAPSHOT_ID,
     need_id: str = NEED_ID,
+    instructions: list[str] | None = None,
 ):
     def create_agent(**kwargs: Any):
         checkpointer = kwargs["checkpointer"]
@@ -149,6 +150,12 @@ def _durable_create_agent_factory(
 
         def investigator(state: _DurableState):
             run_counter.append(1)
+            if instructions is not None:
+                messages = state.get("messages") or []
+                if messages:
+                    content = getattr(messages[-1], "content", None)
+                    if isinstance(content, str):
+                        instructions.append(content)
             if len(state.get("messages") or []) <= 1:
                 structured = {
                     "status": "NEEDS_INPUT",
@@ -316,10 +323,14 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
     )
     dispatcher = RootSubagentDispatcher(agent_factory=interview_factory)
     run_counter: list[int] = []
+    investigator_instructions: list[str] = []
 
     def create_agent_with_report(**kwargs: Any):
         kwargs["_lcsp_report_id"] = report_id
-        return _durable_create_agent_factory(run_counter)(**kwargs)
+        return _durable_create_agent_factory(
+            run_counter,
+            instructions=investigator_instructions,
+        )(**kwargs)
 
     monkeypatch.setattr(managed, "create_agent", create_agent_with_report)
 
@@ -402,6 +413,18 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
     )
 
     assert run_counter == [1, 1]
+    assert len(investigator_instructions) == 2
+    resumed_instruction = investigator_instructions[-1]
+    assert "ConfirmedStructuredBusinessContext(" not in resumed_instruction
+    assert '"authority": "CUSTOMER_CONFIRMED_CONFIRMED_ONLY"' in resumed_instruction
+    assert '"contextRevision": 3' in resumed_instruction
+    assert '"topic": "decision_authority"' in resumed_instruction
+    assert '"source": "CUSTOMER_CONFIRMED"' in resumed_instruction
+    assert '"resolutionState": "CONFIRMED"' in resumed_instruction
+    assert "CUSTOMER_STATED" not in resumed_instruction
+    assert "UNCERTAIN" not in resumed_instruction
+    assert "CONFLICTED" not in resumed_instruction
+    assert "SUPERSEDED" not in resumed_instruction
     result = _classification_result()
     data = result["classificationData"]
     assert result["assessmentId"] == ASSESSMENT_ID
