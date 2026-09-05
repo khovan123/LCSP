@@ -13,7 +13,11 @@ import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
 import type { RepositoriesSettingsSectionProps } from "../../types/settings-page.types";
-import { ProviderCredentialDialog } from "../molecules/provider-credential-dialog";
+import {
+  PROVIDER_CREDENTIAL_DIALOG_MODES,
+  ProviderCredentialDialog,
+  type ProviderCredentialDialogMode,
+} from "../molecules/provider-credential-dialog";
 
 const PROVIDER_LOGOS = {
   github: "/assets/figma/settings/logo-github.svg",
@@ -60,9 +64,10 @@ export function RepositoriesSettingsSection({
   providerCredentialStatuses = [],
   onReauthenticate,
 }: RepositoriesSettingsSectionProps) {
-  const [dialogProvider, setDialogProvider] =
-    useState<CredentialProvider>(CREDENTIAL_PROVIDERS.github);
-  const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
+  const [credentialDialog, setCredentialDialog] = useState<{
+    mode: ProviderCredentialDialogMode;
+    provider: CredentialProvider;
+  } | null>(null);
   const statusByProvider = useMemo(
     () =>
       new Map(
@@ -73,9 +78,11 @@ export function RepositoriesSettingsSection({
   const githubStatus = statusByProvider.get(CREDENTIAL_PROVIDERS.github);
   const githubConfigured = githubStatus?.configured === true;
 
-  function openCredentialDialog(provider: SupportedCredentialProvider) {
-    setDialogProvider(provider);
-    setCredentialDialogOpen(true);
+  function openCredentialDialog(
+    provider: SupportedCredentialProvider,
+    mode: ProviderCredentialDialogMode,
+  ) {
+    setCredentialDialog({ provider, mode });
   }
 
   return (
@@ -107,6 +114,7 @@ export function RepositoriesSettingsSection({
           const actionLabel = configured
             ? "pages.workspace.settingsHub.repositories.managePat"
             : "pages.workspace.settingsHub.repositories.connect";
+          const credentialProvider = option.id as SupportedCredentialProvider;
           return (
             <div
               className="flex h-13 items-center rounded-[10px] border border-border bg-muted/40 px-3.5"
@@ -146,10 +154,15 @@ export function RepositoriesSettingsSection({
                 onClick={() => {
                   if (
                     SUPPORTED_CREDENTIAL_PROVIDERS.includes(
-                      option.id as SupportedCredentialProvider,
+                      credentialProvider,
                     )
                   ) {
-                    openCredentialDialog(option.id as SupportedCredentialProvider);
+                    openCredentialDialog(
+                      credentialProvider,
+                      configured
+                        ? PROVIDER_CREDENTIAL_DIALOG_MODES.manage
+                        : PROVIDER_CREDENTIAL_DIALOG_MODES.connect,
+                    );
                   }
                 }}
               >
@@ -180,19 +193,38 @@ export function RepositoriesSettingsSection({
         className="absolute top-134.5 left-191 h-9 w-27.5 text-sm"
         type="button"
         variant="outline"
-        onClick={() => openCredentialDialog(CREDENTIAL_PROVIDERS.github)}
+        disabled={!githubConfigured}
+        onClick={() =>
+          openCredentialDialog(
+            CREDENTIAL_PROVIDERS.github,
+            PROVIDER_CREDENTIAL_DIALOG_MODES.update,
+          )
+        }
       >
         {resolveMessage(
           appLocale,
-          "pages.workspace.settingsHub.actions.updatePat",
+          "pages.workspace.settingsHub.repositories.updatePat",
         )}
       </Button>
-      <ProviderCredentialDialog
-        open={credentialDialogOpen}
-        onOpenChange={setCredentialDialogOpen}
-        provider={dialogProvider}
-        onReauthenticate={onReauthenticate}
-      />
+      {credentialDialog ? (
+        <ProviderCredentialDialog
+          open={credentialDialog !== null}
+          mode={credentialDialog.mode}
+          onModeChange={(mode) =>
+            setCredentialDialog((current) =>
+              current ? { ...current, mode } : current,
+            )
+          }
+          onOpenChange={(open) => {
+            if (!open) {
+              setCredentialDialog(null);
+            }
+          }}
+          provider={credentialDialog.provider}
+          status={statusByProvider.get(credentialDialog.provider)}
+          onReauthenticate={onReauthenticate}
+        />
+      ) : null}
     </section>
   );
 }

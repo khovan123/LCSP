@@ -50,6 +50,8 @@ test("provider credential input is isolated in the credential dialog", async () 
   assert.match(dialog, /provider-credential/);
   assert.match(dialog, /type="password"/);
   assert.match(dialog, /autoComplete="new-password"/);
+  assert.match(dialog, /value={credential}/);
+  assert.doesNotMatch(dialog, /defaultValue=/);
 });
 
 test("initial configure and rotation refresh the shared provider credential status query", async () => {
@@ -75,7 +77,7 @@ test("initial configure and rotation refresh the shared provider credential stat
 
 test("successful credential submission clears the plaintext PAT without exposing it", async () => {
   const dialog = await readFile(credentialDialogPath, "utf8");
-  assert.match(dialog, /onSuccess:\s*\(\)\s*=>\s*{\s*setCredential\(""\)/);
+  assert.match(dialog, /function handleMutationSuccess\(\)\s*{\s*setCredential\(""\)/);
   assert.match(dialog, /type="password"/);
   assert.doesNotMatch(dialog, /setCredential\([^"e]/);
 });
@@ -85,6 +87,96 @@ test("reauthentication retries the pending credential update", async () => {
   assert.match(component, /onReauthenticate\?\.\(\(\)\s*=>\s*{/);
   assert.match(
     component,
-    /queueMicrotask\(\(\)\s*=>\s*{[\s\S]*?mutation\.mutate\(\{\s*provider,\s*credential:\s*submittedCredential\s*\}\)/,
+    /queueMicrotask\(\(\)\s*=>\s*{[\s\S]*?submitCredential\(submittedCredential\)/,
   );
+});
+
+test("provider credential dialog has explicit connect, manage, and update modes", async () => {
+  const dialog = await readFile(credentialDialogPath, "utf8");
+  const connectors = await source();
+
+  assert.match(dialog, /PROVIDER_CREDENTIAL_DIALOG_MODES\s*=\s*{/);
+  assert.match(dialog, /connect:\s*"connect"/);
+  assert.match(dialog, /manage:\s*"manage"/);
+  assert.match(dialog, /update:\s*"update"/);
+  assert.match(dialog, /data-mode={mode}/);
+  assert.match(connectors, /mode:\s*ProviderCredentialDialogMode/);
+  assert.match(connectors, /PROVIDER_CREDENTIAL_DIALOG_MODES\.connect/);
+  assert.match(connectors, /PROVIDER_CREDENTIAL_DIALOG_MODES\.manage/);
+  assert.match(connectors, /PROVIDER_CREDENTIAL_DIALOG_MODES\.update/);
+});
+
+test("provider rows select mode from configured status and disconnected GitHub has no active update action", async () => {
+  const connectors = await source();
+
+  assert.match(
+    connectors,
+    /configured[\s\S]*?\? PROVIDER_CREDENTIAL_DIALOG_MODES\.manage[\s\S]*?: PROVIDER_CREDENTIAL_DIALOG_MODES\.connect/,
+  );
+  assert.match(connectors, /disabled={!githubConfigured}/);
+  assert.match(
+    connectors,
+    /onClick=\{\(\) =>[\s\S]*?openCredentialDialog\(\s*CREDENTIAL_PROVIDERS\.github,\s*PROVIDER_CREDENTIAL_DIALOG_MODES\.update/,
+  );
+});
+
+test("provider credential dialog uses provider-specific Figma titles, not generic copy", async () => {
+  const [dialog, en, vi] = await Promise.all([
+    readFile(credentialDialogPath, "utf8"),
+    readFile(
+      new URL("../../../packages/i18n/src/locales/en/pages.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../../../packages/i18n/src/locales/vi/pages.ts", import.meta.url),
+      "utf8",
+    ),
+  ]);
+
+  assert.match(dialog, /connectGithubTitle/);
+  assert.match(dialog, /manageGithubPatTitle/);
+  assert.match(dialog, /updateGithubPatTitle/);
+  assert.match(dialog, /connectGitlabTitle/);
+  assert.match(dialog, /manageGitlabPatTitle/);
+  assert.match(dialog, /updateGitlabPatTitle/);
+  assert.doesNotMatch(dialog, /patDialogTitle|Provider credential/);
+  assert.doesNotMatch(en, /patDialogTitle:\s*"Provider credential"/);
+  assert.doesNotMatch(vi, /patDialogTitle:\s*"Provider credential"/);
+});
+
+test("manage and update modes do not fabricate PAT, username, or repository scopes", async () => {
+  const dialog = await readFile(credentialDialogPath, "utf8");
+
+  assert.match(dialog, /status\?\.account\?\.username/);
+  assert.match(dialog, /credentialStoredSecurely/);
+  assert.match(dialog, /repositoryAccessConfigured/);
+  assert.doesNotMatch(dialog, /connected-user|abcd|Read \+ Write/);
+});
+
+test("credential mutation submits only provider and credential", async () => {
+  const dialog = await readFile(credentialDialogPath, "utf8");
+
+  assert.match(dialog, /mutation\.mutate\(\s*\{\s*provider,\s*credential:\s*submittedCredential\s*\}/);
+  assert.doesNotMatch(dialog, /username:\s*/);
+});
+
+test("credential dialog uses Figma desktop shell and right-aligned footer buttons", async () => {
+  const dialog = await readFile(credentialDialogPath, "utf8");
+
+  assert.match(dialog, /h-\[430px\]/);
+  assert.match(dialog, /max-w-140/);
+  assert.match(dialog, /p-6/);
+  assert.match(dialog, /size-7/);
+  assert.match(dialog, /h-11/);
+  assert.match(dialog, /h-16\.5/);
+  assert.match(dialog, /flex-row justify-end gap-2\.5/);
+  assert.doesNotMatch(dialog, /max-w-md/);
+});
+
+test("unsupported providers stay disabled and cannot invoke credential mutation", async () => {
+  const connectors = await source();
+
+  assert.match(connectors, /bitbucketProvider[\s\S]*?supported:\s*false/);
+  assert.match(connectors, /azureDevOpsProvider[\s\S]*?supported:\s*false/);
+  assert.match(connectors, /disabled={!option\.supported}/);
 });

@@ -67,3 +67,19 @@ test("Connectors tab matches provider-list structure without inline repository f
   assert.doesNotMatch(connectors, /id="provider-credential"|type="password"/);
   assert.doesNotMatch(connectors, /unsupportedProviderDescription/);
 });
+
+test("Git credential dialog matches Figma mode shell instead of generic compact dialog", async () => {
+  const dialog = await read(
+    "../src/features/settings/components/molecules/provider-credential-dialog.tsx",
+  );
+
+  assert.match(dialog, /PROVIDER_CREDENTIAL_DIALOG_MODES/);
+  assert.match(dialog, /data-component="ProviderCredentialDialog"/);
+  assert.match(dialog, /data-mode={mode}/);
+  assert.match(dialog, /h-\[430px\]/);
+  assert.match(dialog, /max-w-140/);
+  assert.match(dialog, /rounded-2xl p-6/);
+  assert.match(dialog, /flex-row justify-end gap-2\.5/);
+  assert.doesNotMatch(dialog, /max-w-md/);
+  assert.doesNotMatch(dialog, /patDialogTitle|Provider credential/);
+});

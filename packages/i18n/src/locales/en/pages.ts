@@ -1109,19 +1109,44 @@ export const enPages = {
           "This provider is shown for the approved settings IA, but connection is not supported by the current backend contract.",
         codeRemediationWriteAccess: "Code remediation write access",
         codeRemediationWriteHelper: "Requires Contents + Pull requests write",
+        cancel: "Cancel",
         connect: "Connect",
+        connectGithubTitle: "Connect GitHub",
+        connectGitlabTitle: "Connect GitLab",
         connected: "Connected",
+        connectionStatus: "Connection status",
+        credentialStoredHelper:
+          "LCSP stores provider credentials securely and never displays the original token.",
+        credentialStoredSecurely: "Stored securely",
+        detectAccountFromCredential:
+          "Account will be detected from the credential.",
+        disconnect: "Disconnect",
+        disconnectUnavailable:
+          "Disconnect is not available from the current settings API.",
+        enterNewPat: "Enter a new PAT",
+        githubRepositoryCredentialSubtitle: "GitHub repository credential",
         gitProvidersTitle: "Git providers",
+        gitlabRepositoryAccessGuidance:
+          "Use a token with repository read access. Add repository write access only when code fixes are enabled.",
+        gitlabRepositoryCredentialSubtitle: "GitLab repository credential",
         githubPatAccessTitle: "GitHub PAT access",
+        manageGithubPatTitle: "Manage GitHub PAT",
+        manageGitlabPatTitle: "Manage GitLab PAT",
         managePat: "Manage PAT",
         manageProvidersDescription:
           "Manage repository providers and workspace integrations.",
         notConnected: "Not connected",
-        patDialogDescription:
-          "Update the provider access token through the existing secure credential flow.",
-        patDialogProvider: "Provider",
-        patDialogTitle: "Provider credential",
+        pastePersonalAccessToken: "Paste personal access token",
+        personalAccessToken: "Personal Access Token",
+        repositoryAccessConfigured: "Configured",
+        repositoryAccessGuidance:
+          "Repository read access is required. Repository write access is only needed for code fixes or pull requests.",
         repositoryReadAccess: "Repository read access",
+        save: "Save",
+        updateGithubPatTitle: "Update GitHub PAT",
+        updateGitlabPatTitle: "Update GitLab PAT",
+        updatePat: "Update PAT",
+        username: "Username",
       },
       errors: {
         profileLoadTitle: "Unable to load settings",

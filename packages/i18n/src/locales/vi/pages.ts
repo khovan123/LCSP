@@ -1108,19 +1108,44 @@ export const viPages = {
           "Provider này có trong IA settings đã duyệt, nhưng backend contract hiện chưa hỗ trợ kết nối.",
         codeRemediationWriteAccess: "Quyền ghi code remediation",
         codeRemediationWriteHelper: "Cần quyền ghi Contents + Pull requests",
+        cancel: "Hủy",
         connect: "Kết nối",
+        connectGithubTitle: "Kết nối GitHub",
+        connectGitlabTitle: "Kết nối GitLab",
         connected: "Đã kết nối",
+        connectionStatus: "Trạng thái kết nối",
+        credentialStoredHelper:
+          "LCSP lưu credential của provider an toàn và không hiển thị lại token gốc.",
+        credentialStoredSecurely: "Đã lưu an toàn",
+        detectAccountFromCredential:
+          "Tài khoản sẽ được nhận diện từ credential.",
+        disconnect: "Ngắt kết nối",
+        disconnectUnavailable:
+          "API cài đặt hiện chưa hỗ trợ ngắt kết nối provider.",
+        enterNewPat: "Nhập PAT mới",
+        githubRepositoryCredentialSubtitle: "Credential repository GitHub",
         gitProvidersTitle: "Git providers",
+        gitlabRepositoryAccessGuidance:
+          "Dùng token có quyền đọc repository. Chỉ thêm quyền ghi repository khi bật sửa code.",
+        gitlabRepositoryCredentialSubtitle: "Credential repository GitLab",
         githubPatAccessTitle: "Quyền GitHub PAT",
+        manageGithubPatTitle: "Quản lý GitHub PAT",
+        manageGitlabPatTitle: "Quản lý GitLab PAT",
         managePat: "Quản lý PAT",
         manageProvidersDescription:
           "Quản lý provider repository và tích hợp workspace.",
         notConnected: "Chưa kết nối",
-        patDialogDescription:
-          "Cập nhật access token của provider bằng flow credential bảo mật hiện có.",
-        patDialogProvider: "Provider",
-        patDialogTitle: "Provider credential",
+        pastePersonalAccessToken: "Dán personal access token",
+        personalAccessToken: "Personal Access Token",
+        repositoryAccessConfigured: "Đã cấu hình",
+        repositoryAccessGuidance:
+          "Cần quyền đọc repository. Quyền ghi repository chỉ cần cho sửa code hoặc pull request.",
         repositoryReadAccess: "Quyền đọc repository",
+        save: "Lưu",
+        updateGithubPatTitle: "Cập nhật GitHub PAT",
+        updateGitlabPatTitle: "Cập nhật GitLab PAT",
+        updatePat: "Cập nhật PAT",
+        username: "Username",
         listTitle: "Repository đã liên kết",
         listDescription:
           "Mỗi repository được hiển thị cạnh assessment đang sử dụng nó.",
