@@ -71,18 +71,26 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
     const providerKey = command.provider as CredentialProvider;
     const provider =
       this.registry.get(providerKey) ?? this.fallbackProvider;
-    const existing = await this.unitOfWork.execute((transaction) =>
-      transaction.providerCredentials.findActiveByOwnerProvider(
-        command.userId,
-        providerKey,
-      ),
+    const { existing, user } = await this.unitOfWork.execute(
+      async (transaction) => {
+        const existingCred =
+          await transaction.providerCredentials.findActiveByOwnerProvider(
+            command.userId,
+            providerKey,
+          );
+        const userRecord = await transaction.database.user.findUnique({
+          where: { id: command.userId },
+          select: { email: true },
+        });
+        return { existing: existingCred, user: userRecord };
+      },
     );
     const credentialId = existing?.id ?? crypto.randomUUID();
     const credentialVersion = existing ? existing.currentVersion + 1 : 1;
     const lease = new CredentialLease(command.credential, {
       internalCredentialId: credentialId,
       credentialVersion,
-      repositoryFullName: "provider-account",
+      repositoryFullName: user?.email ?? "provider-account",
       expiresAt: new Date(Date.now() + 2 * 60_000),
     });
     try {

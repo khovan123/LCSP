@@ -68,13 +68,19 @@ import {
   assertGitLabCliRuntime,
   resolveGitLabCliExecutablePath,
 } from "./infrastructure/gitlab/gitlab-cli-runtime.validator.js";
-import { BitbucketCliRepositoryProvider } from "./infrastructure/bitbucket/bitbucket-cli-repository.provider.js";
+import {
+  BitbucketCliProviderError,
+  BitbucketCliRepositoryProvider,
+} from "./infrastructure/bitbucket/bitbucket-cli-repository.provider.js";
 import { BitbucketSecureArchiveHttpTransport } from "./infrastructure/bitbucket/bitbucket-secure-archive-http.transport.js";
 import {
   assertBitbucketCliRuntime,
   resolveBitbucketCliExecutablePath,
 } from "./infrastructure/bitbucket/bitbucket-cli-runtime.validator.js";
-import { AzureDevOpsCliRepositoryProvider } from "./infrastructure/azure-devops/azure-devops-cli-repository.provider.js";
+import {
+  AzureDevOpsCliProviderError,
+  AzureDevOpsCliRepositoryProvider,
+} from "./infrastructure/azure-devops/azure-devops-cli-repository.provider.js";
 import { AzureDevOpsSecureArchiveHttpTransport } from "./infrastructure/azure-devops/azure-devops-secure-archive-http.transport.js";
 import {
   assertAzureDevOpsCliRuntime,
@@ -136,15 +142,35 @@ import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
         if (!bitbucket.enabled) {
           bitbucketProvider = {
             validateIdentity: () =>
-              Promise.reject(new Error("bitbucket_cli_unavailable")),
+              Promise.reject(
+                new BitbucketCliProviderError(
+                  GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable,
+                ),
+              ),
             listAccessibleRepositories: () =>
-              Promise.reject(new Error("bitbucket_cli_unavailable")),
+              Promise.reject(
+                new BitbucketCliProviderError(
+                  GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable,
+                ),
+              ),
             validateRepositoryAccess: () =>
-              Promise.reject(new Error("bitbucket_cli_unavailable")),
+              Promise.reject(
+                new BitbucketCliProviderError(
+                  GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable,
+                ),
+              ),
             resolveCommit: () =>
-              Promise.reject(new Error("bitbucket_cli_unavailable")),
+              Promise.reject(
+                new BitbucketCliProviderError(
+                  GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable,
+                ),
+              ),
             downloadArchive: () =>
-              Promise.reject(new Error("bitbucket_cli_unavailable")),
+              Promise.reject(
+                new BitbucketCliProviderError(
+                  GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable,
+                ),
+              ),
           };
         } else {
           const executablePath = resolveBitbucketCliExecutablePath(
@@ -162,15 +188,35 @@ import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
         if (!azureDevOps.enabled) {
           azureDevOpsProvider = {
             validateIdentity: () =>
-              Promise.reject(new Error("azure_devops_cli_unavailable")),
+              Promise.reject(
+                new AzureDevOpsCliProviderError(
+                  GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable,
+                ),
+              ),
             listAccessibleRepositories: () =>
-              Promise.reject(new Error("azure_devops_cli_unavailable")),
+              Promise.reject(
+                new AzureDevOpsCliProviderError(
+                  GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable,
+                ),
+              ),
             validateRepositoryAccess: () =>
-              Promise.reject(new Error("azure_devops_cli_unavailable")),
+              Promise.reject(
+                new AzureDevOpsCliProviderError(
+                  GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable,
+                ),
+              ),
             resolveCommit: () =>
-              Promise.reject(new Error("azure_devops_cli_unavailable")),
+              Promise.reject(
+                new AzureDevOpsCliProviderError(
+                  GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable,
+                ),
+              ),
             downloadArchive: () =>
-              Promise.reject(new Error("azure_devops_cli_unavailable")),
+              Promise.reject(
+                new AzureDevOpsCliProviderError(
+                  GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable,
+                ),
+              ),
           };
         } else {
           const executablePath = resolveAzureDevOpsCliExecutablePath(

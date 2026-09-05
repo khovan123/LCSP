@@ -66,10 +66,24 @@ export class AzureDevOpsCliRepositoryProvider
     const pat = actualPat || rawSecret;
     const basicAuth = Buffer.from(`:${pat}`).toString("base64");
 
-    if (possibleOrg) {
+    const candidateOrgs: string[] = [];
+    if (possibleOrg) candidateOrgs.push(possibleOrg);
+    if (
+      credential.repositoryFullName &&
+      credential.repositoryFullName !== "provider-account"
+    ) {
+      const emailPart = credential.repositoryFullName.includes("@")
+        ? credential.repositoryFullName.split("@")[0].trim()
+        : credential.repositoryFullName.split("/")[0].trim();
+      if (emailPart && !candidateOrgs.includes(emailPart)) {
+        candidateOrgs.push(emailPart);
+      }
+    }
+
+    for (const org of candidateOrgs) {
       try {
         const res = await fetch(
-          `https://dev.azure.com/${encodeURIComponent(possibleOrg)}/_apis/connectionData`,
+          `https://dev.azure.com/${encodeURIComponent(org)}/_apis/connectionData`,
           {
             headers: {
               Authorization: `Basic ${basicAuth}`,
@@ -106,7 +120,7 @@ export class AzureDevOpsCliRepositoryProvider
             return {
               id,
               login,
-              htmlUrl: `https://${this.host}/${possibleOrg}`,
+              htmlUrl: `https://${this.host}/${org}`,
             };
           }
         }

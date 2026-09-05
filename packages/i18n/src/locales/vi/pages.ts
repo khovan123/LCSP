@@ -1143,7 +1143,7 @@ export const viPages = {
         bitbucketRepositoryAccessGuidance:
           "Dùng app password có quyền đọc repository. Chỉ thêm quyền ghi repository khi bật sửa code.",
         azureDevOpsRepositoryAccessGuidance:
-          "Dùng personal access token có scope Code (Read). Chỉ thêm scope Code (Read & write) khi bật sửa code.",
+          "Dùng PAT với Organization 'All accessible organizations' (hoặc nhập 'tổ_chức:token') và scope Code (Read).",
         githubPatAccessTitle: "Quyền GitHub PAT",
         manageGithubPatTitle: "Quản lý GitHub PAT",
         manageGitlabPatTitle: "Quản lý GitLab PAT",
