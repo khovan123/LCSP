@@ -1,6 +1,7 @@
 import { constants, accessSync, existsSync, statSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
-import { isAbsolute, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, resolve } from "node:path";
 
 import { GITHUB_CREDENTIAL_ERROR_CODES } from "@lcsp/contracts/github-integration";
 
@@ -104,7 +105,11 @@ function isAtLeast(version: string, minimum: string): boolean {
 }
 
 function minimalVersionEnvironment(): NodeJS.ProcessEnv {
-  const environment: NodeJS.ProcessEnv = {};
+  const runtimeStateRoot = join(tmpdir(), "lcsp-gh-runtime-validation");
+  const environment: NodeJS.ProcessEnv = {
+    GH_CONFIG_DIR: join(runtimeStateRoot, "config"),
+    XDG_STATE_HOME: join(runtimeStateRoot, "state"),
+  };
   for (const name of ["SystemRoot", "WINDIR", "ComSpec"] as const) {
     const value = process.env[name];
     if (value) environment[name] = value;

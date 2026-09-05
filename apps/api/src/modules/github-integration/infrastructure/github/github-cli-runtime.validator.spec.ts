@@ -49,7 +49,13 @@ describe("GitHub CLI runtime validation", () => {
     expect((spawn.mock.calls as unknown[][])[0]).toEqual([
       "/usr/bin/gh",
       ["--version"],
-      expect.objectContaining({ shell: false }),
+      expect.objectContaining({
+        shell: false,
+        env: expect.objectContaining({
+          GH_CONFIG_DIR: expect.stringContaining("lcsp-gh-runtime-validation"),
+          XDG_STATE_HOME: expect.stringContaining("lcsp-gh-runtime-validation"),
+        }),
+      }),
     ]);
   });
 

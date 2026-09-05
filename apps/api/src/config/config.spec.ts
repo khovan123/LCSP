@@ -1,5 +1,10 @@
-import { config, configValidationSchema } from "./config.js";
+import { config, createConfigValidationSchema } from "./config.js";
 import { resolve } from "node:path";
+
+const VALIDATION_WORKSPACE_ROOT = resolve("test-workspace");
+const configValidationSchema = createConfigValidationSchema(
+  VALIDATION_WORKSPACE_ROOT,
+);
 
 const VALID_ENV = {
   NODE_ENV: "test",
@@ -97,13 +102,28 @@ describe("configValidationSchema", () => {
     expect(error?.message).toContain("AUTH_BCRYPT_COST");
   });
 
-  it("rejects a relative GitHub CLI executable path", () => {
+  it("resolves relative CLI executable paths from the workspace root", () => {
     const result = validate({
       ...VALID_ENV,
       GITHUB_CLI_EXECUTABLE_PATH: "tools/gh",
+      GITLAB_CLI_EXECUTABLE_PATH: ".cache/lcsp-cli/gitlab-cli/bin/glab",
+      BITBUCKET_CLI_EXECUTABLE_PATH: ".cache/lcsp-cli/bitbucket-cli/bin/bb",
     });
 
-    expect(result.error?.message).toContain("GITHUB_CLI_EXECUTABLE_PATH");
+    expect(result.error).toBeUndefined();
+    const validated = result.value as Record<string, unknown>;
+    expect(validated["GITHUB_CLI_EXECUTABLE_PATH"]).toBe(
+      resolve(VALIDATION_WORKSPACE_ROOT, "tools/gh"),
+    );
+    expect(validated["GITLAB_CLI_EXECUTABLE_PATH"]).toBe(
+      resolve(VALIDATION_WORKSPACE_ROOT, ".cache/lcsp-cli/gitlab-cli/bin/glab"),
+    );
+    expect(validated["BITBUCKET_CLI_EXECUTABLE_PATH"]).toBe(
+      resolve(
+        VALIDATION_WORKSPACE_ROOT,
+        ".cache/lcsp-cli/bitbucket-cli/bin/bb",
+      ),
+    );
   });
 
   it("allows App-only startup without credential KEK configuration", () => {
@@ -223,6 +243,28 @@ describe("config()", () => {
 
   afterEach(() => {
     process.env = originalEnv;
+  });
+
+  it("resolves relative CLI paths in the typed runtime config", () => {
+    process.env.GITHUB_CLI_EXECUTABLE_PATH =
+      ".cache/lcsp-cli/github-cli/2.98.0/bin/gh";
+    process.env.GITLAB_CLI_EXECUTABLE_PATH =
+      ".cache/lcsp-cli/gitlab-cli/1.113.0/bin/glab";
+    process.env.BITBUCKET_CLI_EXECUTABLE_PATH =
+      ".cache/lcsp-cli/bitbucket-cli/0.1.0/bin/bb";
+
+    const result = config();
+    const repoRoot = resolve(import.meta.dirname, "..", "..", "..", "..");
+
+    expect(result.githubCli.executablePath).toBe(
+      resolve(repoRoot, ".cache/lcsp-cli/github-cli/2.98.0/bin/gh"),
+    );
+    expect(result.gitlabCli.executablePath).toBe(
+      resolve(repoRoot, ".cache/lcsp-cli/gitlab-cli/1.113.0/bin/glab"),
+    );
+    expect(result.bitbucketCli.executablePath).toBe(
+      resolve(repoRoot, ".cache/lcsp-cli/bitbucket-cli/0.1.0/bin/bb"),
+    );
   });
 
   it("T06: parses OAUTH_ALLOWED_REDIRECT_URIS into a string array", () => {
