@@ -934,8 +934,8 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           checkpointId: "cp-1",
         }),
       });
-      const updateCalls = mockTx.assessmentInterviewThread.updateMany.mock
-        .calls as unknown[][];
+      const updateCalls =
+        mockTx.assessmentInterviewThread.updateMany.mock.calls;
       const updateInput = updateCalls[0]?.[0] as {
         data?: { stateJson?: unknown };
       };
