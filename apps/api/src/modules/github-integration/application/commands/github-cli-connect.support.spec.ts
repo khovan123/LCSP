@@ -102,12 +102,15 @@ describe("parseAzureDevOpsRepositoryUrl", () => {
       "org-name/project-name/repo-name",
       "https://dev.azure.com/org-name/project-name/_git/repo-name",
     ],
-  ])("normalizes Azure DevOps URL %s", (value, expectedFullName, expectedCanonical) => {
-    expect(parseAzureDevOpsRepositoryUrl(value)).toEqual({
-      repositoryFullName: expectedFullName,
-      canonicalUrl: expectedCanonical,
-    });
-  });
+  ])(
+    "normalizes Azure DevOps URL %s",
+    (value, expectedFullName, expectedCanonical) => {
+      expect(parseAzureDevOpsRepositoryUrl(value)).toEqual({
+        repositoryFullName: expectedFullName,
+        canonicalUrl: expectedCanonical,
+      });
+    },
+  );
 
   it.each([
     "http://dev.azure.com/org/proj/_git/repo",

@@ -73,11 +73,7 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
     assertCredential(command.credential, command.correlationId);
     const provider = (command.provider ??
       CREDENTIAL_PROVIDERS.github) as CredentialProvider;
-    if (
-      !Object.values(CREDENTIAL_PROVIDERS).includes(
-        provider as (typeof CREDENTIAL_PROVIDERS)[keyof typeof CREDENTIAL_PROVIDERS],
-      )
-    ) {
+    if (!Object.values(CREDENTIAL_PROVIDERS).includes(provider)) {
       this.invalid(command.correlationId);
     }
     const providerAdapter =
@@ -383,4 +379,3 @@ function toProviderAccountIdBigInt(id: string): bigint {
   const hash = createHash("sha256").update(id).digest();
   return hash.readBigUInt64BE(0) & 0x7fffffffffffffffn;
 }
-

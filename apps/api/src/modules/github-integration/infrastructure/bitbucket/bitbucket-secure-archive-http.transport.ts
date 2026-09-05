@@ -23,9 +23,7 @@ const ARCHIVE_CONTENT_TYPES = new Set([
   "application/x-tar",
 ]);
 
-export class BitbucketSecureArchiveHttpTransport
-  implements GitHubArchiveTransportPort
-{
+export class BitbucketSecureArchiveHttpTransport implements GitHubArchiveTransportPort {
   constructor(
     private readonly options: { timeoutMs: number; maxArchiveBytes: number },
     private readonly fetchImpl: typeof fetch = fetch,

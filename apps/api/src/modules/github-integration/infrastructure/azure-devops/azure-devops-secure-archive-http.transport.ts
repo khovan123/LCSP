@@ -22,9 +22,7 @@ const ARCHIVE_CONTENT_TYPES = new Set([
   "application/x-zip-compressed",
 ]);
 
-export class AzureDevOpsSecureArchiveHttpTransport
-  implements GitHubArchiveTransportPort
-{
+export class AzureDevOpsSecureArchiveHttpTransport implements GitHubArchiveTransportPort {
   constructor(
     private readonly options: { timeoutMs: number; maxArchiveBytes: number },
     private readonly fetchImpl: typeof fetch = fetch,

@@ -187,12 +187,7 @@ export class PrismaDatabaseCredentialStore implements CredentialStorePort {
       },
       select: { id: true },
     });
-    if (
-      !row ||
-      !Object.values(CREDENTIAL_PROVIDERS).includes(
-        context.provider as (typeof CREDENTIAL_PROVIDERS)[keyof typeof CREDENTIAL_PROVIDERS],
-      )
-    )
+    if (!row || !Object.values(CREDENTIAL_PROVIDERS).includes(context.provider))
       throw new CredentialStoreError();
   }
 }

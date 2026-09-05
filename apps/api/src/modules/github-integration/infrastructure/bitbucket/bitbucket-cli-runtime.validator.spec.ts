@@ -10,7 +10,9 @@ import {
 describe("Bitbucket CLI runtime validation", () => {
   it("resolves bb from PATH to an absolute executable path", () => {
     expect(
-      resolveBitbucketCliExecutablePath("", { discover: () => process.execPath }),
+      resolveBitbucketCliExecutablePath("", {
+        discover: () => process.execPath,
+      }),
     ).toBe(process.execPath);
   });
 

@@ -39,9 +39,7 @@ export class BitbucketCliProviderError extends Error {
 }
 
 /** Stateless bb adapter. The token is scoped to one child process only. */
-export class BitbucketCliRepositoryProvider
-  implements GitHubRepositoryProviderPort
-{
+export class BitbucketCliRepositoryProvider implements GitHubRepositoryProviderPort {
   private readonly host: string;
 
   constructor(private readonly options: BitbucketCliRepositoryProviderOptions) {
@@ -204,7 +202,12 @@ export class BitbucketCliRepositoryProvider
         ? value.is_private
         : value.visibility === "private";
 
-    if (!id || !name || !fullName || !REPOSITORY_FULL_NAME_PATTERN.test(fullName)) {
+    if (
+      !id ||
+      !name ||
+      !fullName ||
+      !REPOSITORY_FULL_NAME_PATTERN.test(fullName)
+    ) {
       throw this.invalid();
     }
     return {

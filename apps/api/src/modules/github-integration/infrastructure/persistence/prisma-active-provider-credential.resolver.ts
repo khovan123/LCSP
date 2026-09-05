@@ -116,4 +116,3 @@ function fromPrismaProvider(
       return CREDENTIAL_PROVIDERS.github;
   }
 }
-

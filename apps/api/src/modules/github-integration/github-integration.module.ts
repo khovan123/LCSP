@@ -183,7 +183,9 @@ import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
           });
         }
 
-        const azureDevOps = configService.get("azureDevOpsCli", { infer: true });
+        const azureDevOps = configService.get("azureDevOpsCli", {
+          infer: true,
+        });
         let azureDevOpsProvider: RepositoryProviderAdapter;
         if (!azureDevOps.enabled) {
           azureDevOpsProvider = {

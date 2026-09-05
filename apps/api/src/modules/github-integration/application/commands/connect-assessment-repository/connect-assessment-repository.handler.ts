@@ -204,4 +204,3 @@ function toAuthMode(
       return RepositoryAuthenticationMode.AZURE_DEVOPS_CLI_CREDENTIAL;
   }
 }
-

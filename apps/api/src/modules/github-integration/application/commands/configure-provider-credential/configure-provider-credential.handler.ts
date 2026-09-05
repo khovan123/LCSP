@@ -69,8 +69,7 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
       );
     }
     const providerKey = command.provider as CredentialProvider;
-    const provider =
-      this.registry.get(providerKey) ?? this.fallbackProvider;
+    const provider = this.registry.get(providerKey) ?? this.fallbackProvider;
     const { existing, user } = await this.unitOfWork.execute(
       async (transaction) => {
         const existingCred =
@@ -187,4 +186,3 @@ function toProviderAccountIdBigInt(id: string): bigint {
   const hash = createHash("sha256").update(id).digest();
   return hash.readBigUInt64BE(0) & 0x7fffffffffffffffn;
 }
-

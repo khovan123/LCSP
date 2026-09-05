@@ -89,4 +89,3 @@ function fromPrismaAuthMode(
       return REPOSITORY_AUTHENTICATION_MODES.githubCliCredential;
   }
 }
-

@@ -39,9 +39,7 @@ export class AzureDevOpsCliProviderError extends Error {
 }
 
 /** Stateless az CLI adapter. The token is scoped to one child process only. */
-export class AzureDevOpsCliRepositoryProvider
-  implements GitHubRepositoryProviderPort
-{
+export class AzureDevOpsCliRepositoryProvider implements GitHubRepositoryProviderPort {
   private readonly host: string;
 
   constructor(
@@ -142,28 +140,24 @@ export class AzureDevOpsCliRepositoryProvider
         );
         if (res.ok) {
           const data = (await res.json()) as Record<string, unknown>;
-          const user = (isRecord(data.authenticatedUser)
+          const user = isRecord(data.authenticatedUser)
             ? data.authenticatedUser
-            : {}) as Record<string, unknown>;
-          const props = (isRecord(user.properties)
-            ? user.properties
-            : {}) as Record<string, unknown>;
-          const accountProp = (isRecord(props.Account)
-            ? props.Account
-            : {}) as Record<string, unknown>;
+            : {};
+          const props = isRecord(user.properties) ? user.properties : {};
+          const accountProp = isRecord(props.Account) ? props.Account : {};
           const id =
             typeof user.id === "string"
               ? user.id
               : typeof accountProp.$value === "string"
-                ? (accountProp.$value as string)
+                ? accountProp.$value
                 : undefined;
           const login =
             typeof accountProp.$value === "string"
-              ? (accountProp.$value as string)
+              ? accountProp.$value
               : typeof user.providerDisplayName === "string"
-                ? (user.providerDisplayName as string)
+                ? user.providerDisplayName
                 : typeof user.customDisplayName === "string"
-                  ? (user.customDisplayName as string)
+                  ? user.customDisplayName
                   : undefined;
           if (id && login) {
             return {
@@ -227,12 +221,7 @@ export class AzureDevOpsCliRepositoryProvider
       "--output",
       "json",
     ]).catch(async () =>
-      this.runJson(credential, [
-        "account",
-        "show",
-        "--output",
-        "json",
-      ]),
+      this.runJson(credential, ["account", "show", "--output", "json"]),
     );
 
     if (!isRecord(body)) {
@@ -365,8 +354,7 @@ export class AzureDevOpsCliRepositoryProvider
           if (Array.isArray(data.value)) {
             for (const item of data.value) {
               if (isRecord(item)) {
-                const id =
-                  typeof item.id === "string" ? item.id : undefined;
+                const id = typeof item.id === "string" ? item.id : undefined;
                 const name =
                   typeof item.name === "string" ? item.name : undefined;
                 const project = isRecord(item.project)

@@ -80,7 +80,10 @@ describe("AzureDevOpsCliRepositoryProvider", () => {
       child.stderr.setEncoding = () => undefined;
       child.kill = () => undefined;
       queueMicrotask(() => {
-        child.stderr.emit("data", "TF401019: The Git repository with name or identifier does not exist");
+        child.stderr.emit(
+          "data",
+          "TF401019: The Git repository with name or identifier does not exist",
+        );
         child.emit("close", 1);
       });
       return child as never;
