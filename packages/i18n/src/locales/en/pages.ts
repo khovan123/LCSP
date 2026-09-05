@@ -1145,6 +1145,9 @@ export const enPages = {
           "Use an app password with repository read access. Add repository write access only when code fixes are enabled.",
         azureDevOpsRepositoryAccessGuidance:
           "Use a PAT with Organization 'All accessible organizations' (or enter as 'organization:token') and Code (Read) scope.",
+        azureDevOpsOrganizationLabel: "Organization (optional)",
+        azureDevOpsOrganizationPlaceholder:
+          "Auto-detected (or enter organization name)",
         githubPatAccessTitle: "GitHub PAT access",
         manageGithubPatTitle: "Manage GitHub PAT",
         manageGitlabPatTitle: "Manage GitLab PAT",

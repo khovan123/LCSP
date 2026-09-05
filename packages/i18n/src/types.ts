@@ -1020,6 +1020,8 @@ export type PagesMessages = {
         gitlabRepositoryAccessGuidance: string;
         bitbucketRepositoryAccessGuidance: string;
         azureDevOpsRepositoryAccessGuidance: string;
+        azureDevOpsOrganizationLabel: string;
+        azureDevOpsOrganizationPlaceholder: string;
         githubPatAccessTitle: string;
         manageGithubPatTitle: string;
         manageGitlabPatTitle: string;

@@ -1144,6 +1144,9 @@ export const viPages = {
           "Dùng app password có quyền đọc repository. Chỉ thêm quyền ghi repository khi bật sửa code.",
         azureDevOpsRepositoryAccessGuidance:
           "Dùng PAT với Organization 'All accessible organizations' (hoặc nhập 'tổ_chức:token') và scope Code (Read).",
+        azureDevOpsOrganizationLabel: "Tổ chức (không bắt buộc)",
+        azureDevOpsOrganizationPlaceholder:
+          "Tự động nhận diện (hoặc nhập tên tổ chức)",
         githubPatAccessTitle: "Quyền GitHub PAT",
         manageGithubPatTitle: "Quản lý GitHub PAT",
         manageGitlabPatTitle: "Quản lý GitLab PAT",

@@ -68,6 +68,54 @@ export class AzureDevOpsCliRepositoryProvider
 
     const candidateOrgs: string[] = [];
     if (possibleOrg) candidateOrgs.push(possibleOrg);
+
+    // 1. Try discovering accounts via global Microsoft API for "All accessible organizations" tokens
+    try {
+      const profileRes = await fetch(
+        "https://app.vssps.visualstudio.com/_apis/profile/profiles/me?api-version=7.1-preview.1",
+        {
+          headers: {
+            Authorization: `Basic ${basicAuth}`,
+            Accept: "application/json",
+          },
+        },
+      );
+      if (profileRes.ok) {
+        const profile = (await profileRes.json()) as Record<string, unknown>;
+        const memberId =
+          typeof profile.id === "string" ? profile.id : undefined;
+        if (memberId) {
+          const accountsRes = await fetch(
+            `https://app.vssps.visualstudio.com/_apis/accounts?memberId=${encodeURIComponent(memberId)}&api-version=7.1-preview.1`,
+            {
+              headers: {
+                Authorization: `Basic ${basicAuth}`,
+                Accept: "application/json",
+              },
+            },
+          );
+          if (accountsRes.ok) {
+            const accountsData = (await accountsRes.json()) as Record<
+              string,
+              unknown
+            >;
+            if (Array.isArray(accountsData.value)) {
+              for (const acc of accountsData.value) {
+                if (isRecord(acc) && typeof acc.accountName === "string") {
+                  if (!candidateOrgs.includes(acc.accountName)) {
+                    candidateOrgs.push(acc.accountName);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore global endpoint errors for org-scoped PATs
+    }
+
+    // 2. Add user email prefix as a candidate org if available
     if (
       credential.repositoryFullName &&
       credential.repositoryFullName !== "provider-account"
@@ -80,6 +128,7 @@ export class AzureDevOpsCliRepositoryProvider
       }
     }
 
+    // 3. Probe connectionData across all candidate orgs
     for (const org of candidateOrgs) {
       try {
         const res = await fetch(
@@ -129,6 +178,7 @@ export class AzureDevOpsCliRepositoryProvider
       }
     }
 
+    // 4. Try global profile endpoint as fallback identity
     try {
       const res = await fetch(
         "https://app.vssps.visualstudio.com/_apis/profile/profiles/me?api-version=7.1-preview.1",
@@ -169,6 +219,7 @@ export class AzureDevOpsCliRepositoryProvider
       if (error instanceof AzureDevOpsCliProviderError) throw error;
     }
 
+    // 5. Fallback to CLI
     const body = await this.runJson(credential, [
       "devops",
       "user",
@@ -226,12 +277,145 @@ export class AzureDevOpsCliRepositoryProvider
     credential: CredentialLease,
     pagePolicy: GitHubRepositoryPagePolicy,
   ): Promise<GitHubRepositorySummary[]> {
+    const rawSecret = credential.withSecret((value) => value);
+    const [possibleOrg, actualPat] = rawSecret.includes(":")
+      ? [
+          rawSecret.slice(0, rawSecret.indexOf(":")).trim(),
+          rawSecret.slice(rawSecret.indexOf(":") + 1).trim(),
+        ]
+      : ["", rawSecret.trim()];
+    const pat = actualPat || rawSecret;
+    const basicAuth = Buffer.from(`:${pat}`).toString("base64");
+
+    const candidateOrgs: string[] = [];
+    if (possibleOrg) candidateOrgs.push(possibleOrg);
+
+    // Try global accounts
+    try {
+      const profileRes = await fetch(
+        "https://app.vssps.visualstudio.com/_apis/profile/profiles/me?api-version=7.1-preview.1",
+        {
+          headers: {
+            Authorization: `Basic ${basicAuth}`,
+            Accept: "application/json",
+          },
+        },
+      );
+      if (profileRes.ok) {
+        const profile = (await profileRes.json()) as Record<string, unknown>;
+        const memberId =
+          typeof profile.id === "string" ? profile.id : undefined;
+        if (memberId) {
+          const accountsRes = await fetch(
+            `https://app.vssps.visualstudio.com/_apis/accounts?memberId=${encodeURIComponent(memberId)}&api-version=7.1-preview.1`,
+            {
+              headers: {
+                Authorization: `Basic ${basicAuth}`,
+                Accept: "application/json",
+              },
+            },
+          );
+          if (accountsRes.ok) {
+            const accountsData = (await accountsRes.json()) as Record<
+              string,
+              unknown
+            >;
+            if (Array.isArray(accountsData.value)) {
+              for (const acc of accountsData.value) {
+                if (isRecord(acc) && typeof acc.accountName === "string") {
+                  if (!candidateOrgs.includes(acc.accountName)) {
+                    candidateOrgs.push(acc.accountName);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore
+    }
+
+    if (
+      credential.repositoryFullName &&
+      credential.repositoryFullName !== "provider-account"
+    ) {
+      const emailPart = credential.repositoryFullName.includes("@")
+        ? credential.repositoryFullName.split("@")[0].trim()
+        : credential.repositoryFullName.split("/")[0].trim();
+      if (emailPart && !candidateOrgs.includes(emailPart)) {
+        candidateOrgs.push(emailPart);
+      }
+    }
+
+    const repos: GitHubRepositorySummary[] = [];
+    for (const org of candidateOrgs) {
+      try {
+        const res = await fetch(
+          `https://dev.azure.com/${encodeURIComponent(org)}/_apis/git/repositories?api-version=7.1-preview.1`,
+          {
+            headers: {
+              Authorization: `Basic ${basicAuth}`,
+              Accept: "application/json",
+            },
+          },
+        );
+        if (res.ok) {
+          const data = (await res.json()) as Record<string, unknown>;
+          if (Array.isArray(data.value)) {
+            for (const item of data.value) {
+              if (isRecord(item)) {
+                const id =
+                  typeof item.id === "string" ? item.id : undefined;
+                const name =
+                  typeof item.name === "string" ? item.name : undefined;
+                const project = isRecord(item.project)
+                  ? item.project
+                  : undefined;
+                const projectName =
+                  project && typeof project.name === "string"
+                    ? project.name
+                    : undefined;
+                if (id && name && projectName) {
+                  const defaultBranch =
+                    typeof item.defaultBranch === "string"
+                      ? item.defaultBranch.replace(/^refs\/heads\//u, "")
+                      : "main";
+                  const isPrivate =
+                    project && typeof project.visibility === "string"
+                      ? project.visibility.toLowerCase() === "private"
+                      : true;
+                  repos.push({
+                    id,
+                    name,
+                    fullName: `${projectName}/${name}`,
+                    defaultBranch,
+                    private: isPrivate,
+                  });
+                  if (repos.length >= pagePolicy.maxRepositories) {
+                    return repos;
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch {
+        // Ignore and continue
+      }
+    }
+
+    if (repos.length > 0) {
+      return repos;
+    }
+
+    // CLI fallback
     const body = await this.runJson(credential, [
       "repos",
       "list",
       "--output",
       "json",
-    ]);
+    ]).catch(() => []);
     if (!Array.isArray(body)) throw this.invalid();
     return body
       .slice(0, pagePolicy.maxRepositories)

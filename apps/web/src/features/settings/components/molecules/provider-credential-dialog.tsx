@@ -119,6 +119,7 @@ export function ProviderCredentialDialog({
   status,
 }: ProviderCredentialDialogProps) {
   const [credential, setCredential] = useState("");
+  const [organization, setOrganization] = useState("");
   const [reauthRequired, setReauthRequired] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const mutation = useConfigureProviderCredentialMutation();
@@ -127,6 +128,7 @@ export function ProviderCredentialDialog({
   function closeCredentialDialog(nextOpen: boolean) {
     if (!nextOpen) {
       setCredential("");
+      setOrganization("");
       setReauthRequired(false);
       setErrorMessage(null);
     }
@@ -135,6 +137,7 @@ export function ProviderCredentialDialog({
 
   function changeMode(nextMode: ProviderCredentialDialogMode) {
     setCredential("");
+    setOrganization("");
     setReauthRequired(false);
     setErrorMessage(null);
     onModeChange(nextMode);
@@ -142,6 +145,7 @@ export function ProviderCredentialDialog({
 
   function handleMutationSuccess() {
     setCredential("");
+    setOrganization("");
     setReauthRequired(false);
     setErrorMessage(null);
     toast.success(
@@ -193,13 +197,24 @@ export function ProviderCredentialDialog({
     event.preventDefault();
     const submittedCredential = credential.trim();
     if (!submittedCredential || mutation.isPending) return;
-    submitCredential(submittedCredential);
+    const finalCredential =
+      provider === CREDENTIAL_PROVIDERS.azureDevOps &&
+      organization.trim() &&
+      !submittedCredential.includes(":")
+        ? `${organization.trim()}:${submittedCredential}`
+        : submittedCredential;
+    submitCredential(finalCredential);
   }
 
   return (
     <Dialog open={open} onOpenChange={closeCredentialDialog}>
       <DialogContent
-        className="h-[430px] max-h-[calc(100svh-2rem)] max-w-140 gap-0 rounded-2xl p-6"
+        className={cn(
+          "max-h-[calc(100svh-2rem)] max-w-140 gap-0 rounded-2xl p-6",
+          provider === CREDENTIAL_PROVIDERS.azureDevOps
+            ? "min-h-[490px]"
+            : "h-[430px]",
+        )}
         closeLabel={resolveMessage(
           appLocale,
           "pages.workspace.settingsHub.repositories.dialogClose",
@@ -228,6 +243,8 @@ export function ProviderCredentialDialog({
               closeCredentialDialog(false);
             }}
             onCredentialChange={setCredential}
+            onOrganizationChange={setOrganization}
+            organization={organization}
             onSubmit={submit}
             provider={provider}
             reauthRequired={reauthRequired}
@@ -275,6 +292,8 @@ function CredentialForm({
   mode,
   onCancel,
   onCredentialChange,
+  onOrganizationChange,
+  organization,
   onSubmit,
   provider,
   reauthRequired,
@@ -286,6 +305,8 @@ function CredentialForm({
   mode: ProviderCredentialDialogMode;
   onCancel: () => void;
   onCredentialChange: (credential: string) => void;
+  onOrganizationChange: (organization: string) => void;
+  organization: string;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   provider: CredentialProvider;
   reauthRequired: boolean;
@@ -317,6 +338,30 @@ function CredentialForm({
               )}
         </div>
       </div>
+      {provider === CREDENTIAL_PROVIDERS.azureDevOps ? (
+        <div className="mt-4 flex h-18 flex-col gap-2">
+          <label
+            className="text-[13px] font-medium"
+            htmlFor="provider-organization"
+          >
+            {resolveMessage(
+              appLocale,
+              "pages.workspace.settingsHub.repositories.azureDevOpsOrganizationLabel",
+            )}
+          </label>
+          <Input
+            id="provider-organization"
+            className="h-11 text-[13px]"
+            type="text"
+            placeholder={resolveMessage(
+              appLocale,
+              "pages.workspace.settingsHub.repositories.azureDevOpsOrganizationPlaceholder",
+            )}
+            value={organization}
+            onChange={(event) => onOrganizationChange(event.target.value)}
+          />
+        </div>
+      ) : null}
       <div className="mt-4 flex h-18 flex-col gap-2">
         <label
           className="text-[13px] font-medium"
