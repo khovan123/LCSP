@@ -387,6 +387,7 @@ export class InterviewAuditService {
             ? String(input.contextRevision)
             : undefined,
         threadId: input.threadId,
+        guidanceVersion: input.guidanceVersion,
       },
       tx,
     });
