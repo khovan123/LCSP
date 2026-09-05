@@ -14,6 +14,10 @@ const overviewPath = new URL(
   "../src/features/workspace/components/organisms/assessment-overview.tsx",
   import.meta.url,
 );
+const shellSlotsPath = new URL(
+  "../src/features/workspace/components/organisms/assessment-shell-slots.tsx",
+  import.meta.url,
+);
 const agentTurnPath = new URL(
   "../src/features/workspace/components/molecules/agent-turn.tsx",
   import.meta.url,
@@ -61,7 +65,8 @@ test("assessment transcript is the shared scrollable 680px rail primitive", asyn
   assert.match(source, /data-slot="chat-rail"/);
   assert.match(source, /role="log"/);
   assert.match(source, /aria-live="polite"/);
-  assert.match(source, /overflow-x-hidden overflow-y-auto/);
+  assert.match(source, /no-scrollbar min-h-0 flex-1 overflow-x-hidden/);
+  assert.match(source, /overflow-y-auto/);
   assert.match(source, /max-w-170/);
   assert.doesNotMatch(source, /max-w-\[760px\]/);
 });
@@ -101,13 +106,30 @@ test("assessment overview gates Interview behind repository and scanner runtime"
 test("assessment composer keeps the approved 720 by 76 single-send control", async () => {
   const source = await readFile(composerPath, "utf8");
 
-  assert.match(source, /h-19 w-full max-w-180/);
+  assert.match(source, /mb-4 h-19 w-full max-w-180/);
+  assert.match(source, /shrink-0/);
   assert.match(source, /rounded-\[18px\]/);
   assert.equal(source.match(/<Textarea\b/g)?.length, 1);
   assert.equal(source.match(/<Button\b/g)?.length, 1);
   assert.match(source, /CornerDownLeftIcon/);
   assert.doesNotMatch(source, /PlusIcon|<input\b|avatar|brand label/i);
   assert.doesNotMatch(source, /h-12 w-full max-w-\[760px\]/);
+});
+
+test("assessment center keeps the transcript scrollable above a bottom composer", async () => {
+  const shellSlotsSource = await readFile(shellSlotsPath, "utf8");
+  const overviewSource = await readFile(overviewPath, "utf8");
+
+  assert.match(
+    shellSlotsSource,
+    /mx-auto flex h-full min-h-0 w-full max-w-180 flex-col/,
+  );
+  assert.match(shellSlotsSource, /min-h-0 flex-1 overflow-hidden/);
+  assert.match(overviewSource, /className="flex h-full min-h-0 flex-col"/);
+  assert.ok(
+    overviewSource.indexOf("<AssessmentTranscript") <
+      overviewSource.indexOf("<AssessmentComposer"),
+  );
 });
 
 test("assessment composer uses one submit path for Enter, Send, disabled, and IME behavior", async () => {
