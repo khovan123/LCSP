@@ -1296,20 +1296,33 @@ export const enPages = {
         scan: "Scanned source code",
         buildGraph: "Built program evidence graph",
         collectEvidence: "Collected evidence",
+        collectEvidenceRunning: "Collecting evidence...",
       },
     },
     graph: {
-      eyebrow: "Program Evidence Graph",
-      title: "Repository evidence snapshot",
-      description:
-        "The accepted evidence is pinned to this repository revision and ready for the interview.",
-      repository: "Repository",
-      commit: "Pinned commit",
+      title: "Program Evidence Graph",
+      subtitle: "Repository evidence snapshot · pinned commit",
+      ready: "Ready",
+      servicesScanned: "Services scanned",
+      servicesScannedDescription:
+        "Service/module boundaries included in the repository analysis.",
+      codeSymbolsIndexed: "Code symbols indexed",
+      codeSymbolsIndexedDescription:
+        "Functions, classes and handlers available for evidence tracing.",
+      aiProviderCallPaths: "AI/provider call paths",
+      aiProviderCallPathsDescription:
+        "Reachable execution paths crossing an AI/model/provider boundary.",
+      evidenceMappedScope: "Evidence-mapped scope",
+      evidenceMappedScopeDescription:
+        "In-scope graph nodes linked to at least one evidence claim.",
+      unavailableValue: "--",
+      viewEvidenceGraph: "View evidence graph",
+      artifactMetadata: "Artifact · repository evidence",
     },
     interview: {
       thought: "Thought for 2s",
-      description:
-        "Scanner is complete. I am ready to start the interview with the project context. Describe this project or system: what it does, who uses it, and where AI is involved.",
+      readyDescription:
+        "The scan is complete. I am ready to start the interview with the project context.",
       placeholder: "Describe the project or system...",
     },
     errors: {

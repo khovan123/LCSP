@@ -42,6 +42,14 @@ const resultContainerPath = new URL(
   "../src/features/workspace/components/molecules/chat-result-container.tsx",
   import.meta.url,
 );
+const scannerStepPath = new URL(
+  "../src/features/assessment-flow/components/organisms/scanner-step.tsx",
+  import.meta.url,
+);
+const programEvidenceSummaryPath = new URL(
+  "../src/features/assessment-flow/components/molecules/program-evidence-graph-summary.tsx",
+  import.meta.url,
+);
 const typesPath = new URL(
   "../src/features/workspace/types/assessment-chat.types.ts",
   import.meta.url,
@@ -246,6 +254,52 @@ test("chat result container is a neutral 680px rail-safe structured result wrapp
   assert.match(source, /children\?: ReactNode/);
   assert.match(source, /break-words/);
   assert.doesNotMatch(source, /Program Evidence|Findings|Investigation/);
+});
+
+test("scanner renders the dedicated Program Evidence Graph artifact only after evidence is ready", async () => {
+  const [scannerSource, artifactSource] = await Promise.all([
+    readFile(scannerStepPath, "utf8"),
+    readFile(programEvidenceSummaryPath, "utf8"),
+  ]);
+
+  assert.match(scannerSource, /ProgramEvidenceGraphSummary/);
+  assert.match(scannerSource, /evidenceReady \? \(/);
+  assert.doesNotMatch(scannerSource, /ChatResultContainer/);
+  assert.doesNotMatch(
+    scannerSource,
+    /pages\.assessmentFlow\.graph\.repository/,
+  );
+  assert.doesNotMatch(scannerSource, /pages\.assessmentFlow\.graph\.commit/);
+  assert.match(artifactSource, /data-slot="program-evidence-graph-summary"/);
+  assert.match(artifactSource, /pages\.assessmentFlow\.graph\.servicesScanned/);
+  assert.match(
+    artifactSource,
+    /pages\.assessmentFlow\.graph\.codeSymbolsIndexed/,
+  );
+  assert.match(
+    artifactSource,
+    /pages\.assessmentFlow\.graph\.aiProviderCallPaths/,
+  );
+  assert.match(
+    artifactSource,
+    /pages\.assessmentFlow\.graph\.evidenceMappedScope/,
+  );
+  assert.match(
+    artifactSource,
+    /pages\.assessmentFlow\.graph\.viewEvidenceGraph/,
+  );
+});
+
+test("assessment overview does not append raw runtime activity to the customer transcript", async () => {
+  const source = await readFile(overviewPath, "utf8");
+
+  assert.doesNotMatch(source, /workflowRunTitle/);
+  assert.doesNotMatch(source, /workflowRunDescription/);
+  assert.doesNotMatch(source, /workflow\.recentActivity\.slice/);
+  assert.doesNotMatch(source, /<ToolActivityList>/);
+  assert.doesNotMatch(source, /Repository scan run completed/);
+  assert.doesNotMatch(source, /Technical evidence callback submitted/);
+  assert.doesNotMatch(source, /Technical evidence callback was accepted/);
 });
 
 test("structured chat primitives stay presentational and do not introduce chat network calls", async () => {

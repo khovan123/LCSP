@@ -4,6 +4,7 @@ import {
   ToolActivityList,
   ToolActivityRow,
 } from "@/features/workspace/components/molecules/tool-activity-row";
+import { TOOL_ACTIVITY_STATUSES } from "@/features/workspace/types/assessment-chat.types";
 import { appLocale } from "@/lib/locale";
 
 import type { ScannerActivityItem } from "../../types/assessment-flow.types";
@@ -20,7 +21,11 @@ export function ScannerActivitySequence({
       {activities.map((activity) => (
         <ToolActivityRow
           key={activity.id}
-          label={t(activity.labelKey)}
+          label={t(
+            activity.status === TOOL_ACTIVITY_STATUSES.running
+              ? (activity.runningLabelKey ?? activity.labelKey)
+              : activity.labelKey,
+          )}
           status={activity.status}
         />
       ))}

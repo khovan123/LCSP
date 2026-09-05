@@ -1297,20 +1297,33 @@ export const viPages = {
         scan: "Đã quét source code",
         buildGraph: "Đã xây dựng Program Evidence Graph",
         collectEvidence: "Đã thu thập evidence",
+        collectEvidenceRunning: "Đang thu thập evidence...",
       },
     },
     graph: {
-      eyebrow: "Program Evidence Graph",
-      title: "Repository evidence snapshot",
-      description:
-        "Evidence đã được chấp nhận được pin theo revision của repository này và sẵn sàng cho Interview.",
-      repository: "Repository",
-      commit: "Commit đã pin",
+      title: "Program Evidence Graph",
+      subtitle: "Repository evidence snapshot · commit đã pin",
+      ready: "Sẵn sàng",
+      servicesScanned: "Services đã quét",
+      servicesScannedDescription:
+        "Ranh giới service/module được đưa vào phân tích repository.",
+      codeSymbolsIndexed: "Code symbols đã index",
+      codeSymbolsIndexedDescription:
+        "Functions, classes và handlers có thể dùng để trace evidence.",
+      aiProviderCallPaths: "AI/provider call paths",
+      aiProviderCallPathsDescription:
+        "Các execution path có thể chạm tới ranh giới AI/model/provider.",
+      evidenceMappedScope: "Phạm vi đã map evidence",
+      evidenceMappedScopeDescription:
+        "Graph nodes trong phạm vi được liên kết với ít nhất một evidence claim.",
+      unavailableValue: "--",
+      viewEvidenceGraph: "Xem evidence graph",
+      artifactMetadata: "Artifact · repository evidence",
     },
     interview: {
       thought: "Đã suy nghĩ trong 2 giây",
-      description:
-        "Scanner đã hoàn tất. Tôi sẵn sàng bắt đầu Interview bằng ngữ cảnh dự án. Hãy mô tả project hoặc system này: hệ thống làm gì, ai sử dụng và AI tham gia ở đâu.",
+      readyDescription:
+        "Scan hoàn tất. Tôi sẵn sàng bắt đầu Interview bằng ngữ cảnh dự án.",
       placeholder: "Mô tả project hoặc system...",
     },
     errors: {

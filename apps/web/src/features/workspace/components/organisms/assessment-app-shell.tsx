@@ -238,9 +238,11 @@ export function AssessmentAppShell({
             <p className="truncate text-[0.6875rem] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
               {headerEyebrow}
             </p>
-            <p className="truncate text-sm font-semibold text-foreground">
-              {headerTitle}
-            </p>
+            {!assessmentId ? (
+              <p className="truncate text-sm font-semibold text-foreground">
+                {headerTitle}
+              </p>
+            ) : null}
           </div>
 
           {assessmentId ? (
@@ -281,8 +283,6 @@ export function AssessmentAppShell({
                 assessmentId={assessmentId}
                 assessmentName={assessment?.name}
                 runtime={runtime}
-                pathname={pathname}
-                workflowItems={assessmentSection?.items ?? []}
                 workflowLabel={assessmentSection?.label}
               />
             </AssessmentRightPanelSlot>
@@ -313,8 +313,6 @@ export function AssessmentAppShell({
               assessmentId={assessmentId}
               assessmentName={assessment?.name}
               runtime={runtime}
-              pathname={pathname}
-              workflowItems={assessmentSection?.items ?? []}
               workflowLabel={assessmentSection?.label}
             />
           </SheetContent>
@@ -334,16 +332,12 @@ export function AssessmentAppShell({
 function AssessmentRuntimePanel({
   assessmentId,
   assessmentName,
-  pathname,
   runtime,
-  workflowItems,
   workflowLabel,
 }: {
   assessmentId: string;
   assessmentName?: string;
-  pathname: string;
   runtime: ReturnType<typeof useWorkspaceRuntime>;
-  workflowItems: AppShellNavigationItem[];
   workflowLabel?: string;
 }) {
   const timeline = runtime.getAssessmentRuntime(assessmentId);
@@ -376,19 +370,7 @@ function AssessmentRuntimePanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {workflowItems.length > 0 ? (
-          <AssessmentWorkflowTimeline
-            items={workflowItems}
-            pathname={pathname}
-            label={workflowLabel ?? t("pages.appShell.assessmentNavigation")}
-          />
-        ) : null}
-
-        <div
-          className={cn(
-            workflowItems.length > 0 && "mt-6 border-t border-border/60 pt-5",
-          )}
-        >
+        <div>
           <p className="mb-2 text-[0.6875rem] font-semibold tracking-widest text-muted-foreground uppercase">
             {t("pages.appShell.runtimePanelTitle")}
           </p>
@@ -458,68 +440,6 @@ function AssessmentRuntimePanel({
         </button>
       </div>
     </div>
-  );
-}
-
-function AssessmentWorkflowTimeline({
-  items,
-  label,
-  pathname,
-}: {
-  items: AppShellNavigationItem[];
-  label: string;
-  pathname: string;
-}) {
-  return (
-    <section aria-label={label}>
-      <p className="mb-3 text-[0.6875rem] font-semibold tracking-widest text-muted-foreground uppercase">
-        {label}
-      </p>
-      <ol className="space-y-0.5">
-        {items.map((item, index) => {
-          const Icon = item.icon;
-          const active = isNavigationItemActive(pathname, item);
-          const last = index === items.length - 1;
-
-          return (
-            <li key={item.href} className="relative flex min-h-10 gap-3">
-              {!last ? (
-                <span
-                  aria-hidden="true"
-                  className="absolute left-3.75 top-8 h-[calc(100%-20px)] w-px bg-border"
-                />
-              ) : null}
-              <span
-                className={cn(
-                  "relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full border bg-background",
-                  active
-                    ? "border-foreground/25 bg-foreground text-background"
-                    : "border-border text-muted-foreground",
-                )}
-              >
-                <Icon className="size-3.5" />
-              </span>
-              <button
-                type="button"
-                disabled={item.disabled}
-                aria-current={active ? "step" : undefined}
-                className={cn(
-                  "min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  active
-                    ? "font-semibold text-foreground"
-                    : "font-medium text-muted-foreground",
-                  item.disabled
-                    ? "cursor-not-allowed opacity-45"
-                    : "hover:bg-muted/70 hover:text-foreground",
-                )}
-              >
-                <span className="block truncate">{item.label}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-    </section>
   );
 }
 

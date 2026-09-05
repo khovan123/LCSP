@@ -4,6 +4,7 @@ import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 
 import { TOOL_ACTIVITY_STATUSES } from "@/features/workspace/types/assessment-chat.types";
 import type {
+  WorkspaceRuntimeActivityItem,
   WorkspaceRuntimeEvidenceReport,
   WorkspaceRuntimeRepositorySnapshot,
   WorkspaceRuntimeScanJob,
@@ -14,12 +15,14 @@ import {
   SCANNER_ACTIVITY_IDS,
 } from "../config/scanner-activities";
 import type { ScannerActivityItem } from "../types/assessment-flow.types";
+import { deriveProgramEvidenceSummary } from "./program-evidence-summary";
 
 export function deriveAssessmentFlowRuntime(input: {
   hasRepositoryConnection: boolean;
   snapshot: WorkspaceRuntimeRepositorySnapshot | null;
   scanJob: WorkspaceRuntimeScanJob | null;
   evidenceReport: WorkspaceRuntimeEvidenceReport | null;
+  recentActivity?: WorkspaceRuntimeActivityItem[];
 }) {
   const scanFailed =
     input.scanJob?.status === REPOSITORY_SCAN_JOB_STATUSES.failed ||
@@ -71,11 +74,9 @@ export function deriveAssessmentFlowRuntime(input: {
                     ? TOOL_ACTIVITY_STATUSES.running
                     : TOOL_ACTIVITY_STATUSES.pending
               : activity.id === SCANNER_ACTIVITY_IDS.buildGraph
-                ? evidenceAccepted || evidenceRejected
+                ? scanCompleted || evidenceAccepted || evidenceRejected
                   ? TOOL_ACTIVITY_STATUSES.completed
-                  : scanCompleted
-                    ? TOOL_ACTIVITY_STATUSES.running
-                    : TOOL_ACTIVITY_STATUSES.pending
+                  : TOOL_ACTIVITY_STATUSES.pending
                 : evidenceAccepted
                   ? TOOL_ACTIVITY_STATUSES.completed
                   : evidenceRejected
@@ -86,5 +87,13 @@ export function deriveAssessmentFlowRuntime(input: {
     }),
   );
 
-  return { stage, activities, scanFailed, evidenceAccepted };
+  return {
+    stage,
+    activities,
+    scanFailed,
+    evidenceAccepted,
+    programEvidenceSummary: deriveProgramEvidenceSummary({
+      recentActivity: input.recentActivity,
+    }),
+  };
 }

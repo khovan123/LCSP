@@ -1271,18 +1271,28 @@ export type PagesMessages = {
         scan: string;
         buildGraph: string;
         collectEvidence: string;
+        collectEvidenceRunning: string;
       };
     };
     graph: {
-      eyebrow: string;
       title: string;
-      description: string;
-      repository: string;
-      commit: string;
+      subtitle: string;
+      ready: string;
+      servicesScanned: string;
+      servicesScannedDescription: string;
+      codeSymbolsIndexed: string;
+      codeSymbolsIndexedDescription: string;
+      aiProviderCallPaths: string;
+      aiProviderCallPathsDescription: string;
+      evidenceMappedScope: string;
+      evidenceMappedScopeDescription: string;
+      unavailableValue: string;
+      viewEvidenceGraph: string;
+      artifactMetadata: string;
     };
     interview: {
       thought: string;
-      description: string;
+      readyDescription: string;
       placeholder: string;
     };
     errors: {

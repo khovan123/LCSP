@@ -5,13 +5,14 @@ import {
   AgentTurn,
   ThinkingLine,
 } from "@/features/workspace/components/molecules/agent-turn";
-import { ChatResultContainer } from "@/features/workspace/components/molecules/chat-result-container";
 import { appLocale } from "@/lib/locale";
 
 import type {
+  ProgramEvidenceSummary,
   RepositoryHistory,
   ScannerActivityItem,
 } from "../../types/assessment-flow.types";
+import { ProgramEvidenceGraphSummary } from "../molecules/program-evidence-graph-summary";
 import { RepositoryConnectionResult } from "../molecules/repository-connection-result";
 import { ScannerActivitySequence } from "../molecules/scanner-activity-sequence";
 
@@ -19,12 +20,14 @@ type ScannerStepProps = {
   repository: RepositoryHistory;
   activities: ScannerActivityItem[];
   evidenceReady: boolean;
+  programEvidenceSummary: ProgramEvidenceSummary;
 };
 
 export function ScannerStep({
   repository,
   activities,
   evidenceReady,
+  programEvidenceSummary,
 }: ScannerStepProps) {
   return (
     <>
@@ -50,35 +53,14 @@ export function ScannerStep({
         <div className="mt-3">
           <ScannerActivitySequence activities={activities} />
         </div>
+        {evidenceReady ? (
+          <ProgramEvidenceGraphSummary
+            className="mt-4"
+            commitSha={repository.commitSha}
+            summary={programEvidenceSummary}
+          />
+        ) : null}
       </AgentTurn>
-      {evidenceReady ? (
-        <AgentTurn>
-          <ChatResultContainer
-            eyebrow={t("pages.assessmentFlow.graph.eyebrow")}
-            title={t("pages.assessmentFlow.graph.title")}
-            description={t("pages.assessmentFlow.graph.description")}
-          >
-            <dl className="grid gap-2 text-xs sm:grid-cols-2">
-              <div>
-                <dt className="text-muted-foreground">
-                  {t("pages.assessmentFlow.graph.repository")}
-                </dt>
-                <dd className="truncate font-medium">
-                  {repository.repositoryFullName}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">
-                  {t("pages.assessmentFlow.graph.commit")}
-                </dt>
-                <dd className="font-mono font-medium">
-                  {repository.commitSha.slice(0, 12)}
-                </dd>
-              </div>
-            </dl>
-          </ChatResultContainer>
-        </AgentTurn>
-      ) : null}
     </>
   );
 }

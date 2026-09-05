@@ -6,7 +6,6 @@ import {
 } from "@lcsp/contracts/assessment";
 import {
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
-  ASSESSMENT_RUNTIME_RUN_STATUSES,
   type AssessmentInterviewBlockedAction,
 } from "@lcsp/contracts/evidence";
 import { REPOSITORY_CONNECTION_STATUSES } from "@lcsp/contracts/github-integration";
@@ -29,10 +28,7 @@ import { appLocale } from "@/lib/locale";
 
 import { useAssessmentRuntimeViewModel } from "../../hooks/use-assessment-runtime-view-model";
 import type { AssessmentOverviewProps } from "../../types/assessment-overview.types";
-import {
-  ASSESSMENT_CHAT_ROLES,
-  TOOL_ACTIVITY_STATUSES,
-} from "../../types/assessment-chat.types";
+import { ASSESSMENT_CHAT_ROLES } from "../../types/assessment-chat.types";
 import { ASSESSMENT_RUNTIME_AVAILABILITIES } from "../../types/assessment-runtime-adapter.types";
 import {
   selectComposerAvailability,
@@ -50,10 +46,6 @@ import {
   AssessmentQuestionTurn,
   type AssessmentQuestionAnswerInput,
 } from "../molecules/assessment-question-turn";
-import {
-  ToolActivityList,
-  ToolActivityRow,
-} from "../molecules/tool-activity-row";
 import { AssessmentComposer } from "./assessment-composer";
 import { AssessmentTranscript } from "./assessment-transcript";
 import { useWorkspaceRuntime } from "./workspace-runtime-provider";
@@ -79,6 +71,7 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
     workspaceRuntime.evidenceReports.find(
       (item) => item.assessmentId === assessmentId,
     ) ?? null;
+  const timeline = workspaceRuntime.getAssessmentRuntime(assessmentId);
   const flow = deriveAssessmentFlowRuntime({
     hasRepositoryConnection: readinessLoaded
       ? connection?.status === REPOSITORY_CONNECTION_STATUSES.active
@@ -86,6 +79,7 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
     snapshot,
     scanJob,
     evidenceReport,
+    recentActivity: timeline.recentActivity,
   });
 
   if (readinessQuery.isLoading && !snapshot) {
@@ -134,6 +128,7 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
           }}
           activities={flow.activities}
           evidenceReady={flow.evidenceAccepted}
+          programEvidenceSummary={flow.programEvidenceSummary}
         />
       }
       scanFailed={flow.scanFailed}
@@ -282,57 +277,6 @@ function AssessmentInterviewFlow({
 
         {interviewEnabled ? (
           <>
-            <AgentTurn>
-              <AgentMessage>
-                <ThoughtLine
-                  label={t("pages.assessmentFlow.interview.thought")}
-                />
-                <p className="mt-2">
-                  {t("pages.assessmentFlow.interview.description")}
-                </p>
-              </AgentMessage>
-            </AgentTurn>
-
-            <AgentTurn
-              content={
-                <AgentMessage>
-                  <p className="font-medium">
-                    {t("pages.assessment.workflowRunTitle")}
-                  </p>
-                  <p className="mt-1 text-muted-foreground">
-                    {t("pages.assessment.workflowRunDescription")}
-                  </p>
-                </AgentMessage>
-              }
-            />
-
-            <AgentTurn>
-              <ToolActivityList>
-                {workflow.activeTools.length ? (
-                  workflow.activeTools.map((tool) => (
-                    <ToolActivityRow
-                      key={`${tool.toolName}:${tool.startedAt ?? tool.attempt ?? "active"}`}
-                      label={tool.summary || tool.toolName}
-                      status={runtimeToolStatus(tool.status)}
-                    />
-                  ))
-                ) : (
-                  <ToolActivityRow
-                    label={t("pages.assessment.runtimeWaitingForAgent")}
-                    status={TOOL_ACTIVITY_STATUSES.pending}
-                  />
-                )}
-              </ToolActivityList>
-            </AgentTurn>
-
-            {workflow.recentActivity.slice(0, 4).map((event) => (
-              <AgentTurn key={event.eventId}>
-                <AgentMessage className="text-muted-foreground">
-                  {event.summary}
-                </AgentMessage>
-              </AgentTurn>
-            ))}
-
             {answerHistory.map((answer) => (
               <AgentTurn
                 key={`${answer.questionId}:${answer.answeredAt}`}
@@ -346,6 +290,16 @@ function AssessmentInterviewFlow({
 
             {interview.questionTurnProps ? (
               <AgentTurn
+                content={
+                  <AgentMessage>
+                    <ThoughtLine
+                      label={t("pages.assessmentFlow.interview.thought")}
+                    />
+                    <p className="mt-2">
+                      {t("pages.assessmentFlow.interview.readyDescription")}
+                    </p>
+                  </AgentMessage>
+                }
                 terminalAction={
                   <AssessmentQuestionTurn
                     question={interview.questionTurnProps.question}
@@ -362,6 +316,19 @@ function AssessmentInterviewFlow({
               customerActions.canSubmitBlockedAction &&
               customerActions.availableBlockedActions.length > 0 ? (
               <AgentTurn
+                content={
+                  <AgentMessage>
+                    <ThoughtLine
+                      label={t("pages.assessmentFlow.interview.thought")}
+                    />
+                    <p className="mt-2">
+                      {t("pages.assessmentFlow.interview.readyDescription")}
+                    </p>
+                    <p className="mt-2 text-muted-foreground">
+                      {t("pages.assessment.blockedActionRecorded")}
+                    </p>
+                  </AgentMessage>
+                }
                 terminalAction={
                   <div
                     data-slot="blocked-or-unresolved-actions"
@@ -391,20 +358,24 @@ function AssessmentInterviewFlow({
                     ))}
                   </div>
                 }
-              >
-                <AgentMessage className="text-muted-foreground">
-                  {t("pages.assessment.blockedActionRecorded")}
-                </AgentMessage>
-              </AgentTurn>
+              />
             ) : (
               <AgentTurn>
-                <AgentMessage className="text-muted-foreground">
-                  {normalized.availability ===
-                  ASSESSMENT_RUNTIME_AVAILABILITIES.loading
-                    ? t("pages.assessment.loadingInterviewState")
-                    : interview.orchestrationRequested
-                      ? t("pages.assessment.runtimeWaitingForAgent")
-                      : t("pages.assessment.noActiveInterviewQuestion")}
+                <AgentMessage>
+                  <ThoughtLine
+                    label={t("pages.assessmentFlow.interview.thought")}
+                  />
+                  <p className="mt-2">
+                    {t("pages.assessmentFlow.interview.readyDescription")}
+                  </p>
+                  <p className="mt-2 text-muted-foreground">
+                    {normalized.availability ===
+                    ASSESSMENT_RUNTIME_AVAILABILITIES.loading
+                      ? t("pages.assessment.loadingInterviewState")
+                      : interview.orchestrationRequested
+                        ? t("pages.assessment.runtimeWaitingForAgent")
+                        : t("pages.assessment.noActiveInterviewQuestion")}
+                  </p>
                 </AgentMessage>
               </AgentTurn>
             )}
@@ -430,7 +401,9 @@ function AssessmentInterviewFlow({
           scanFailed
             ? "pages.assessmentFlow.scanner.failedPlaceholder"
             : interviewEnabled
-              ? composerAvailability.placeholderKey
+              ? composerAvailability.isEnabled
+                ? "pages.assessmentFlow.interview.placeholder"
+                : composerAvailability.placeholderKey
               : "pages.assessmentFlow.scanner.runningPlaceholder",
         )}
         onValueChange={persistDraft}
@@ -438,19 +411,6 @@ function AssessmentInterviewFlow({
       />
     </main>
   );
-}
-
-function runtimeToolStatus(status: string) {
-  if (status === ASSESSMENT_RUNTIME_RUN_STATUSES.completed) {
-    return TOOL_ACTIVITY_STATUSES.completed;
-  }
-  if (status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed) {
-    return TOOL_ACTIVITY_STATUSES.failed;
-  }
-  if (status === ASSESSMENT_RUNTIME_RUN_STATUSES.running) {
-    return TOOL_ACTIVITY_STATUSES.running;
-  }
-  return TOOL_ACTIVITY_STATUSES.pending;
 }
 
 function blockedActionLabel(action: AssessmentInterviewBlockedAction) {

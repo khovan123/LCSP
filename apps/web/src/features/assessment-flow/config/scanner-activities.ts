@@ -26,5 +26,7 @@ export const SCANNER_ACTIVITY_CONFIG = [
   {
     id: SCANNER_ACTIVITY_IDS.collectEvidence,
     labelKey: "pages.assessmentFlow.scanner.activities.collectEvidence",
+    runningLabelKey:
+      "pages.assessmentFlow.scanner.activities.collectEvidenceRunning",
   },
 ] as const;
