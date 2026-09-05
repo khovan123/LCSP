@@ -150,6 +150,7 @@ export const viPages = {
     nav: {
       label: "Điều hướng trang giới thiệu",
       mobileLabel: "Các trang giới thiệu",
+      languageSwitcherLabel: "Ngôn ngữ",
       product: "Sản phẩm",
       features: "Tính năng",
       pricing: "Bảng giá",

@@ -3,6 +3,7 @@
 import { resolveMessage } from "@lcsp/i18n";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import type { Locale } from "@lcsp/contracts/shared/locale";
 
 import { LCSPLogo } from "@/components/atoms/lcsp-logo";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,7 @@ type MarketingShellProps = {
 
 export function MarketingShell({ active, children }: MarketingShellProps) {
   const locale = useMarketingLocale();
+  const t = (key: string) => resolveMarketingMessage(locale, key);
   const prefix = `/${locale}`;
   const localizedHref = (href: string) =>
     href === "/" ? prefix : `${prefix}${href}`;
@@ -75,13 +77,13 @@ export function MarketingShell({ active, children }: MarketingShellProps) {
             <LanguageSwitcher />
             <Link
               href="/sign-in"
-              className="inline-flex h-9 w-24 items-center justify-center rounded-lg border border-border bg-muted text-[13px] font-medium text-foreground transition-colors hover:bg-accent"
+              className="inline-flex h-9 w-24 items-center justify-center rounded-lg border border-border bg-secondary text-[13px] font-medium text-foreground transition-colors hover:bg-muted"
             >
               {t("pages.marketing.nav.signIn")}
             </Link>
             <Link
               href="/sign-up"
-              className="inline-flex h-9 w-[122px] items-center justify-center rounded-lg border border-foreground bg-foreground text-[13px] font-medium text-background transition-opacity hover:opacity-85"
+              className="inline-flex h-9 w-[122px] items-center justify-center rounded-lg border border-primary bg-primary text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-85"
             >
               {t("pages.marketing.nav.createAccount")}
             </Link>
@@ -99,7 +101,7 @@ export function MarketingShell({ active, children }: MarketingShellProps) {
               aria-current={active === item.key ? "page" : undefined}
               className={cn(
                 "shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground",
-                active === item.key && "bg-muted text-foreground",
+                active === item.key && "bg-secondary text-foreground",
               )}
             >
               {t(item.labelKey)}
@@ -120,8 +122,9 @@ function MarketingFooter({
   locale,
 }: {
   active: MarketingPageKey;
-  locale: import("@lcsp/contracts/shared/locale").Locale;
+  locale: Locale;
 }) {
+  const t = (key: string) => resolveMarketingMessage(locale, key);
   const footer = t("pages.marketing.footer");
   const localizedHref = (href: string) =>
     href === "/" ? `/${locale}` : `/${locale}${href}`;
@@ -169,11 +172,6 @@ function MarketingFooter({
   );
 }
 
-function useMarketingText(key: string) {
-  return resolveMessage(
-    useMarketingLocale(),
-    key as Parameters<typeof resolveMessage>[1],
-  );
+function resolveMarketingMessage(locale: Locale, key: string) {
+  return resolveMessage(locale, key as Parameters<typeof resolveMessage>[1]);
 }
-
-const t = useMarketingText;

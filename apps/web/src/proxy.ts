@@ -9,17 +9,23 @@ import { SESSION_COOKIE_NAME } from "./lib/session/session-store";
 import { upstreamRequest } from "./lib/server/upstream-request.ts";
 import { getProblemRequiredAction } from "./lib/api/problem-envelope.ts";
 import { getWorkspaceRouteRedirectPath } from "./workspace-route-middleware.ts";
+import {
+  getMarketingLocale,
+  localizedMarketingPath,
+  MARKETING_LOCALE_COOKIE,
+} from "./features/marketing/config/marketing-routing";
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const publicPath =
     pathname === "/" || pathname === "/features" || pathname === "/pricing";
   if (publicPath) {
-    const savedLocale = request.cookies.get("lcsp_locale")?.value;
-    const locale =
-      savedLocale === "en" || savedLocale === "vi" ? savedLocale : "vi";
-    const suffix = pathname === "/" ? "" : pathname;
-    return NextResponse.redirect(new URL(`/${locale}${suffix}`, request.url));
+    const locale = getMarketingLocale(
+      request.cookies.get(MARKETING_LOCALE_COOKIE)?.value,
+    );
+    return NextResponse.redirect(
+      new URL(localizedMarketingPath(locale, pathname), request.url),
+    );
   }
 
   const localeMatch = pathname.match(/^\/(en|vi)(?=\/|$)/);

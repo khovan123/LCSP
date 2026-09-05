@@ -184,6 +184,7 @@ export type PagesMessages = {
     nav: {
       label: string;
       mobileLabel: string;
+      languageSwitcherLabel: string;
       product: string;
       features: string;
       pricing: string;

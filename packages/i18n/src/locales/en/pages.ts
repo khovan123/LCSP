@@ -150,6 +150,7 @@ export const enPages = {
     nav: {
       label: "Marketing navigation",
       mobileLabel: "Marketing pages",
+      languageSwitcherLabel: "Language",
       product: "Product",
       features: "Features",
       pricing: "Pricing",
