@@ -145,6 +145,45 @@ export type PagesMessages = {
     authEyebrow: string;
     authTitle: string;
     authDescription: string;
+    assessmentSidebar: {
+      title: string;
+      repositoryContext: string;
+      repositoryUnavailable: string;
+      pinnedCommit: string;
+      workflowTitle: string;
+      artifactsAndEvidence: string;
+      artifactSummary: {
+        active: string;
+        readyWaiting: string;
+      };
+      workflow: {
+        scanner: string;
+        interview: string;
+        rules: string;
+        planner: string;
+        investigate: string;
+        gate: string;
+      };
+      statuses: {
+        running: string;
+        queued: string;
+        passed: string;
+        building: string;
+        ready: string;
+        waiting: string;
+        failed: string;
+      };
+      artifacts: {
+        programEvidenceGraph: string;
+        collectedEvidence: string;
+        projectContext: string;
+        programEvidenceGraphBuilding: string;
+        programEvidenceGraphServices: string;
+        programEvidenceGraphReady: string;
+        collectedEvidenceRunning: string;
+        projectContextWaiting: string;
+      };
+    };
     runtimePanelTitle: string;
     runtimePanelAwaiting: string;
     runtimePanelLastUpdated: string;

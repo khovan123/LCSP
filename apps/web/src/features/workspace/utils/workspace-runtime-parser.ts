@@ -178,6 +178,7 @@ function parseRepositorySnapshot(
       typeof item.repository_full_name === "string"
         ? item.repository_full_name
         : null,
+    branch: typeof item.branch === "string" ? item.branch : null,
     commitSha: item.commit_sha,
     createdAt: item.created_at,
   };

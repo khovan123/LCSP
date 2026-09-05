@@ -32,6 +32,7 @@ export type WorkspaceRuntimeRepositorySnapshot = {
   assessmentId: string;
   provider: string | null;
   repositoryFullName: string | null;
+  branch: string | null;
   commitSha: string;
   createdAt: string;
 };

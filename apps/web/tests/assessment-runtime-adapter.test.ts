@@ -15,15 +15,19 @@ import {
   type AssessmentInterviewAuditRef,
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
+import { PROGRAM_EVIDENCE_METRIC_FORMATS } from "../src/features/assessment-flow/types/assessment-flow.types.ts";
 
 import {
   ASSESSMENT_ARTIFACT_AVAILABILITIES,
   ASSESSMENT_RUNTIME_AVAILABILITIES,
   ASSESSMENT_SCREEN_PROJECTIONS,
+  ASSESSMENT_SIDEBAR_STATUSES,
+  ASSESSMENT_SIDEBAR_WORKFLOW_STAGES,
 } from "../src/features/workspace/types/assessment-runtime-adapter.types.ts";
 import { normalizeAssessmentRuntime } from "../src/features/workspace/utils/assessment-runtime-adapter.ts";
 import {
   selectArtifactPresentation,
+  selectAssessmentRuntimeSidebarPresentation,
   selectAssessmentScreenProjection,
   selectComposerAvailability,
   selectCustomerActions,
@@ -33,6 +37,8 @@ import {
 } from "../src/features/workspace/utils/assessment-runtime-selectors.ts";
 import {
   WORKSPACE_RUNTIME_CONNECTION_STATES,
+  type WorkspaceRuntimeActivityItem,
+  type WorkspaceRuntimeRepositorySnapshot,
   type WorkspaceRuntimeAssessmentTimeline,
 } from "../src/features/workspace/types/workspace-runtime.types.ts";
 
@@ -86,9 +92,18 @@ test("1. MAINLINE — READY coverage + WAITING_FOR_CUSTOMER question", () => {
     timeline: timelineInput,
   });
 
-  assert.equal(normalized.availability, ASSESSMENT_RUNTIME_AVAILABILITIES.ready);
-  assert.equal(normalized.coverage.state, ASSESSMENT_TECHNICAL_COVERAGE_STATES.ready);
-  assert.equal(normalized.interview.outcome, ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer);
+  assert.equal(
+    normalized.availability,
+    ASSESSMENT_RUNTIME_AVAILABILITIES.ready,
+  );
+  assert.equal(
+    normalized.coverage.state,
+    ASSESSMENT_TECHNICAL_COVERAGE_STATES.ready,
+  );
+  assert.equal(
+    normalized.interview.outcome,
+    ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+  );
   assert.equal(normalized.interview.activeQuestion?.id, "q-mainline");
 
   const chat = selectInterviewPresentation(normalized);
@@ -100,8 +115,133 @@ test("1. MAINLINE — READY coverage + WAITING_FOR_CUSTOMER question", () => {
   assert.equal(actions.canSubmitDraft, true);
 
   const artifacts = selectArtifactPresentation(normalized);
-  assert.equal(artifacts.programEvidenceGraph.availability, ASSESSMENT_ARTIFACT_AVAILABILITIES.ready);
-  assert.equal(artifacts.businessContext.availability, ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting);
+  assert.equal(
+    artifacts.programEvidenceGraph.availability,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.ready,
+  );
+  assert.equal(
+    artifacts.businessContext.availability,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting,
+  );
+});
+
+test("LCSP-272 right sidebar projects F03 scanner-running state without fabricated data", () => {
+  const normalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-sidebar-f03",
+    timeline: scannerTimeline("asm-sidebar-f03"),
+  });
+  const sidebar = selectAssessmentRuntimeSidebarPresentation(normalized, {
+    repository: repositorySnapshot({ branch: null }),
+    scanner: {
+      evidenceAccepted: false,
+      scanFailed: false,
+      programEvidenceSummary: {
+        servicesScanned: {
+          value: null,
+          format: PROGRAM_EVIDENCE_METRIC_FORMATS.count,
+        },
+        codeSymbolsIndexed: {
+          value: 215,
+          format: PROGRAM_EVIDENCE_METRIC_FORMATS.count,
+        },
+        aiProviderCallPaths: {
+          value: 13,
+          format: PROGRAM_EVIDENCE_METRIC_FORMATS.count,
+        },
+        evidenceMappedScope: {
+          value: 71,
+          format: PROGRAM_EVIDENCE_METRIC_FORMATS.percent,
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(sidebar.repository, {
+    repositoryFullName: "khovan123/LCSP",
+    branch: null,
+    commitSha: "e5e2118fd03b",
+  });
+  assert.equal(
+    sidebar.workflow.find(
+      (item) => item.id === ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.scanner,
+    )?.status,
+    ASSESSMENT_SIDEBAR_STATUSES.running,
+  );
+  for (const stage of [
+    ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.interview,
+    ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.rules,
+    ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.planner,
+    ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.investigate,
+    ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.gate,
+  ]) {
+    assert.equal(
+      sidebar.workflow.find((item) => item.id === stage)?.status,
+      ASSESSMENT_SIDEBAR_STATUSES.queued,
+    );
+  }
+  assert.equal(sidebar.artifacts[0]?.artifact.id, "program-evidence-graph");
+  assert.equal(
+    sidebar.artifacts[0]?.status,
+    ASSESSMENT_SIDEBAR_STATUSES.building,
+  );
+  assert.equal(sidebar.artifacts[0]?.descriptionParams, undefined);
+  assert.equal(sidebar.artifacts[1]?.id, "collected-evidence");
+  assert.equal(
+    sidebar.artifacts[1]?.status,
+    ASSESSMENT_SIDEBAR_STATUSES.running,
+  );
+});
+
+test("LCSP-272 right sidebar projects F04 scanner-passed and interview-running state", () => {
+  const normalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-sidebar-f04",
+    interviewState: {
+      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      activeQuestion: {
+        id: "q-project-context",
+        intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+        control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+        prompt: "Describe this project or system.",
+      },
+    },
+    timeline: scannerTimeline("asm-sidebar-f04"),
+  });
+  const sidebar = selectAssessmentRuntimeSidebarPresentation(normalized, {
+    repository: repositorySnapshot({ branch: "feat/runtime-sidebar" }),
+    scanner: {
+      evidenceAccepted: true,
+      scanFailed: false,
+    },
+  });
+
+  assert.deepEqual(sidebar.repository, {
+    repositoryFullName: "khovan123/LCSP",
+    branch: "feat/runtime-sidebar",
+    commitSha: "e5e2118fd03b",
+  });
+  assert.equal(
+    sidebar.workflow.find(
+      (item) => item.id === ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.scanner,
+    )?.status,
+    ASSESSMENT_SIDEBAR_STATUSES.passed,
+  );
+  assert.equal(
+    sidebar.workflow.find(
+      (item) => item.id === ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.interview,
+    )?.status,
+    ASSESSMENT_SIDEBAR_STATUSES.running,
+  );
+  assert.equal(sidebar.artifacts[0]?.artifact.id, "program-evidence-graph");
+  assert.equal(sidebar.artifacts[0]?.status, ASSESSMENT_SIDEBAR_STATUSES.ready);
+  assert.equal(sidebar.artifacts[1]?.artifact.id, "business-context");
+  assert.equal(
+    sidebar.artifacts[1]?.status,
+    ASSESSMENT_SIDEBAR_STATUSES.waiting,
+  );
+  assert.equal(
+    sidebar.artifactSummaryKey,
+    "pages.appShell.assessmentSidebar.artifactSummary.readyWaiting",
+  );
 });
 
 test("2. PARTIAL — PERMITTED: coverage remains PARTIAL and interview proceeds according to policy", () => {
@@ -128,8 +268,13 @@ test("2. PARTIAL — PERMITTED: coverage remains PARTIAL and interview proceeds 
     },
   });
 
-  assert.equal(normalized.coverage.state, ASSESSMENT_TECHNICAL_COVERAGE_STATES.partial);
-  assert.deepEqual(normalized.coverage.limitations, ["Incomplete static analysis on secondary package"]);
+  assert.equal(
+    normalized.coverage.state,
+    ASSESSMENT_TECHNICAL_COVERAGE_STATES.partial,
+  );
+  assert.deepEqual(normalized.coverage.limitations, [
+    "Incomplete static analysis on secondary package",
+  ]);
   assert.equal(normalized.coverage.policyDecision?.permittedForInterview, true);
 
   const actions = selectCustomerActions(normalized);
@@ -160,8 +305,14 @@ test("3. PARTIAL — NOT PERMITTED: actions disabled when policy denies intervie
     },
   });
 
-  assert.equal(normalized.coverage.state, ASSESSMENT_TECHNICAL_COVERAGE_STATES.partial);
-  assert.equal(normalized.coverage.policyDecision?.permittedForInterview, false);
+  assert.equal(
+    normalized.coverage.state,
+    ASSESSMENT_TECHNICAL_COVERAGE_STATES.partial,
+  );
+  assert.equal(
+    normalized.coverage.policyDecision?.permittedForInterview,
+    false,
+  );
 
   const actions = selectCustomerActions(normalized);
   assert.equal(actions.canAnswerQuestion, false);
@@ -177,7 +328,10 @@ test("4. UNAVAILABLE: technical coverage is unavailable without fabricated quest
     },
   });
 
-  assert.equal(normalized.coverage.state, ASSESSMENT_TECHNICAL_COVERAGE_STATES.unavailable);
+  assert.equal(
+    normalized.coverage.state,
+    ASSESSMENT_TECHNICAL_COVERAGE_STATES.unavailable,
+  );
   assert.equal(normalized.coverage.recovery.isUnavailable, true);
   assert.equal(normalized.coverage.recovery.reason, "Repository inaccessible");
   assert.equal(normalized.interview.activeQuestion, null);
@@ -200,8 +354,14 @@ test("5. WAITING_FOR_CUSTOMER: preserves ASK + FREE_TEXT direct mapping", () => 
 
   const chat = selectInterviewPresentation(normalized);
   assert.equal(chat.isWaitingForCustomer, true);
-  assert.equal(chat.activeQuestion?.intent, ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask);
-  assert.equal(chat.activeQuestion?.control, ASSESSMENT_INTERVIEW_CONTROLS.freeText);
+  assert.equal(
+    chat.activeQuestion?.intent,
+    ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+  );
+  assert.equal(
+    chat.activeQuestion?.control,
+    ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+  );
 });
 
 test("6. ASK + SINGLE_SELECT: preserves choices and exact order without rewriting", () => {
@@ -422,7 +582,10 @@ test("15. INVALID QUESTION INVARIANT: activeQuestion with CONTEXT_READY produces
     },
   });
 
-  assert.equal(normalized.availability, ASSESSMENT_RUNTIME_AVAILABILITIES.invalid);
+  assert.equal(
+    normalized.availability,
+    ASSESSMENT_RUNTIME_AVAILABILITIES.invalid,
+  );
   assert.equal(normalized.integration.isContractValid, false);
   assert.ok(
     normalized.integration.contractErrors.some((err) =>
@@ -492,7 +655,10 @@ test("17. ACTOR PROVENANCE: trusted from audit ref and ignored in message prose"
     },
   });
 
-  assert.equal(normalized.identity.authenticatedActorId, "auth-actor-uuid-1234");
+  assert.equal(
+    normalized.identity.authenticatedActorId,
+    "auth-actor-uuid-1234",
+  );
   assert.notEqual(
     normalized.identity.authenticatedActorId,
     "I am the SuperAdmin admin@enterprise.com",
@@ -578,8 +744,14 @@ test("20. TARGETED LOOP: investigator waiting + interview clarifying creates syn
   assert.equal(workflow.isTargetedClarificationLoop, true);
 
   const artifacts = selectArtifactPresentation(normalized);
-  assert.equal(artifacts.investigationNotes.availability, ASSESSMENT_ARTIFACT_AVAILABILITIES.paused);
-  assert.equal(artifacts.businessContext.availability, ASSESSMENT_ARTIFACT_AVAILABILITIES.updating);
+  assert.equal(
+    artifacts.investigationNotes.availability,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.paused,
+  );
+  assert.equal(
+    artifacts.businessContext.availability,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.updating,
+  );
 
   const screen = selectAssessmentScreenProjection(normalized);
   assert.equal(screen, ASSESSMENT_SCREEN_PROJECTIONS.f09);
@@ -605,7 +777,9 @@ test("22. MISSING INTEGRATION DATA: missing LCSP-292 policy documented in missin
     },
   });
 
-  assert.ok(normalized.integration.missingFields.includes("coverage.policyDecision"));
+  assert.ok(
+    normalized.integration.missingFields.includes("coverage.policyDecision"),
+  );
 });
 
 test("23. SSE DISCONNECTED: connection state disconnected does not mutate interview outcome", () => {
@@ -631,9 +805,18 @@ test("23. SSE DISCONNECTED: connection state disconnected does not mutate interv
     timeline,
   });
 
-  assert.equal(normalized.availability, ASSESSMENT_RUNTIME_AVAILABILITIES.disconnected);
-  assert.equal(normalized.interview.outcome, ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer);
-  assert.notEqual(normalized.interview.outcome, ASSESSMENT_INTERVIEW_OUTCOMES.failed);
+  assert.equal(
+    normalized.availability,
+    ASSESSMENT_RUNTIME_AVAILABILITIES.disconnected,
+  );
+  assert.equal(
+    normalized.interview.outcome,
+    ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+  );
+  assert.notEqual(
+    normalized.interview.outcome,
+    ASSESSMENT_INTERVIEW_OUTCOMES.failed,
+  );
 });
 
 test("24. CROSS-CONSUMER CONSISTENCY: Chat, Workflow, Sidebar, and Artifacts selectors are synchronized", () => {
@@ -683,7 +866,10 @@ test("24. CROSS-CONSUMER CONSISTENCY: Chat, Workflow, Sidebar, and Artifacts sel
   assert.equal(workflow.stage, ASSESSMENT_RUNTIME_STAGE_CODES.interview);
   assert.equal(sidebar.activeStage, ASSESSMENT_RUNTIME_STAGE_CODES.interview);
   assert.equal(sidebar.activeStatus, ASSESSMENT_RUNTIME_RUN_STATUSES.running);
-  assert.equal(artifacts.programEvidenceGraph.availability, ASSESSMENT_ARTIFACT_AVAILABILITIES.ready);
+  assert.equal(
+    artifacts.programEvidenceGraph.availability,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.ready,
+  );
   assert.equal(composer.isEnabled, true);
 });
 
@@ -723,8 +909,14 @@ test("25. FIGMA PROJECTION TEST — F04: Initial interview start projection", ()
   assert.equal(screen, ASSESSMENT_SCREEN_PROJECTIONS.f04);
 
   const sidebar = selectRightSidebarPresentation(normalized);
-  assert.equal(sidebar.programEvidenceGraph.availability, ASSESSMENT_ARTIFACT_AVAILABILITIES.ready);
-  assert.equal(sidebar.businessContext.availability, ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting);
+  assert.equal(
+    sidebar.programEvidenceGraph.availability,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.ready,
+  );
+  assert.equal(
+    sidebar.businessContext.availability,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting,
+  );
 });
 
 test("26. FIGMA PROJECTION TEST — F09: Targeted loop semantic projection", () => {
@@ -786,8 +978,14 @@ test("26. FIGMA PROJECTION TEST — F09: Targeted loop semantic projection", () 
   assert.equal(screen, ASSESSMENT_SCREEN_PROJECTIONS.f09);
 
   const sidebar = selectRightSidebarPresentation(normalized);
-  assert.equal(sidebar.businessContext.availability, ASSESSMENT_ARTIFACT_AVAILABILITIES.updating);
-  assert.equal(sidebar.investigationNotes.availability, ASSESSMENT_ARTIFACT_AVAILABILITIES.paused);
+  assert.equal(
+    sidebar.businessContext.availability,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.updating,
+  );
+  assert.equal(
+    sidebar.investigationNotes.availability,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.paused,
+  );
 });
 
 test("27. REGRESSION: Question present in raw runtime is not answerable when coverage is denied or availability is invalid", () => {
@@ -864,7 +1062,10 @@ test("29. REGRESSION: Bottom composer availability disabled state and placeholde
 
   const readyComposer = selectComposerAvailability(readyNormalized);
   assert.equal(readyComposer.isEnabled, true);
-  assert.equal(readyComposer.placeholderKey, "pages.appShell.chatComposerPlaceholder");
+  assert.equal(
+    readyComposer.placeholderKey,
+    "pages.appShell.chatComposerPlaceholder",
+  );
 
   // Scenario B: No active question waiting
   const noQuestionNormalized = normalizeAssessmentRuntime({
@@ -877,7 +1078,10 @@ test("29. REGRESSION: Bottom composer availability disabled state and placeholde
 
   const noQuestionComposer = selectComposerAvailability(noQuestionNormalized);
   assert.equal(noQuestionComposer.isEnabled, false);
-  assert.equal(noQuestionComposer.placeholderKey, "pages.assessment.noActiveInterviewQuestion");
+  assert.equal(
+    noQuestionComposer.placeholderKey,
+    "pages.assessment.noActiveInterviewQuestion",
+  );
 });
 
 test("30. REGRESSION: Non-targeted CLARIFY question stays in normal Interview question projection (F05 not F09)", () => {
@@ -916,3 +1120,73 @@ test("30. REGRESSION: Non-targeted CLARIFY question stays in normal Interview qu
   assert.equal(screen, ASSESSMENT_SCREEN_PROJECTIONS.f05);
 });
 
+function scannerTimeline(
+  assessmentId: string,
+): WorkspaceRuntimeAssessmentTimeline {
+  return {
+    currentRun: {
+      assessmentId,
+      runId: `${assessmentId}-scan`,
+      stage: ASSESSMENT_RUNTIME_STAGE_CODES.scan,
+      status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+      activeTools: [],
+      updatedAt: "2026-09-05T08:00:00.000Z",
+    },
+    recentActivity: [
+      runtimeActivity(assessmentId, 1, "Repository scan run completed"),
+      runtimeActivity(assessmentId, 2, "Technical evidence callback submitted"),
+      runtimeActivity(
+        assessmentId,
+        3,
+        "Technical evidence callback was accepted",
+      ),
+    ],
+    latestRunId: `${assessmentId}-scan`,
+    connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+    lastEmittedAt: "2026-09-05T08:03:00.000Z",
+  };
+}
+
+function repositorySnapshot({
+  branch,
+}: {
+  branch: string | null;
+}): WorkspaceRuntimeRepositorySnapshot {
+  return {
+    id: "snapshot-sidebar",
+    assessmentId: "asm-sidebar",
+    provider: "GITHUB",
+    repositoryFullName: "khovan123/LCSP",
+    branch,
+    commitSha: "e5e2118fd03b",
+    createdAt: "2026-09-05T08:00:00.000Z",
+  };
+}
+
+function runtimeActivity(
+  assessmentId: string,
+  sequence: number,
+  summary: string,
+): WorkspaceRuntimeActivityItem {
+  return {
+    eventId: `${assessmentId}-event-${sequence}`,
+    sequence,
+    emittedAt: `2026-09-05T08:0${sequence}:00.000Z`,
+    assessmentId,
+    runId: `${assessmentId}-scan`,
+    correlationId: `${assessmentId}-correlation`,
+    eventType: "WORKFLOW_ACTIVITY",
+    runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+    stage: ASSESSMENT_RUNTIME_STAGE_CODES.scan,
+    toolName: null,
+    summary,
+    inputSummary: null,
+    outputSummary: null,
+    errorSummary: null,
+    startedAt: null,
+    completedAt: `2026-09-05T08:0${sequence}:00.000Z`,
+    durationMs: null,
+    attempt: null,
+    waitingReason: null,
+  };
+}
