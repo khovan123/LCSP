@@ -1,5 +1,6 @@
 "use client";
 
+import { LOCALES, type Locale } from "@lcsp/contracts/shared";
 import type { ReactNode } from "react";
 import { useState, useSyncExternalStore } from "react";
 import { resolveMessage } from "@lcsp/i18n";
@@ -24,9 +25,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { appLocale } from "@/lib/locale";
+import {
+  appLocale,
+  getAppLocaleSnapshot,
+  setAppLocale,
+  subscribeToAppLocale,
+} from "@/lib/locale";
 import type {
   AuthSessionSummary,
   AuthSettingsProfile,
@@ -86,6 +99,11 @@ export function SettingsPage({
 }: SettingsPageProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const settingsLocale = useSyncExternalStore(
+    subscribeToAppLocale,
+    getAppLocaleSnapshot,
+    getAppLocaleSnapshot,
+  );
   const legacyHashSection = useSyncExternalStore(
     subscribeToHashChange,
     getCurrentHashSection,
@@ -275,6 +293,7 @@ export function SettingsPage({
       }
       data-component="SettingsPage"
       data-presentation={presentation}
+      data-locale={settingsLocale}
     >
       <div
         className={
@@ -511,14 +530,7 @@ function GeneralSettingsPanel({
             "pages.workspace.settingsHub.general.language",
           )}
         </label>
-        <ReadonlySelectValue
-          id="settings-language"
-          className="w-36"
-          value={resolveMessage(
-            appLocale,
-            "pages.workspace.settingsHub.general.languageEnglish",
-          )}
-        />
+        <LanguagePreferenceControl />
       </SettingsControlRow>
       <SettingsDivider className="top-86" />
       <SettingsControlRow className="top-88">
@@ -751,6 +763,47 @@ function ReadonlySelectValue({
       <span className="truncate">{value}</span>
       <ChevronDownIcon aria-hidden="true" className="size-3.5" />
     </button>
+  );
+}
+
+function LanguagePreferenceControl() {
+  const locale = useSyncExternalStore(
+    subscribeToAppLocale,
+    getAppLocaleSnapshot,
+    getAppLocaleSnapshot,
+  );
+
+  function handleLocaleChange(value: Locale | null) {
+    if (value === null) return;
+    if (!LOCALES.includes(value as Locale)) return;
+    setAppLocale(value);
+  }
+
+  const languageLabels: Record<Locale, Parameters<typeof resolveMessage>[1]> = {
+    en: "pages.workspace.settingsHub.general.languageEnglish",
+    vi: "pages.workspace.settingsHub.general.languageVietnamese",
+  };
+
+  return (
+    <Select value={locale} onValueChange={handleLocaleChange}>
+      <SelectTrigger
+        id="settings-language"
+        className="h-9 w-36 text-[13px]"
+        aria-label={resolveMessage(
+          appLocale,
+          "pages.workspace.settingsHub.general.language",
+        )}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent align="end">
+        {LOCALES.map((option) => (
+          <SelectItem key={option} value={option}>
+            {resolveMessage(appLocale, languageLabels[option])}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

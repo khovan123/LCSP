@@ -36,6 +36,25 @@ test("General settings panel uses compact Figma rows, not legacy cards", async (
   assert.doesNotMatch(settings, /<Card[\s\S]*GeneralSettingsPanel/);
 });
 
+test("General settings panel wires language to the shared EN VI locale preference", async () => {
+  const [settings, locale] = await Promise.all([
+    read("../src/features/settings/components/organisms/settings-page.tsx"),
+    read("../src/lib/locale.ts"),
+  ]);
+
+  assert.match(settings, /data-locale={settingsLocale}/);
+  assert.match(settings, /LanguagePreferenceControl/);
+  assert.match(settings, /Select value={locale}/);
+  assert.match(settings, /onValueChange={handleLocaleChange}/);
+  assert.match(settings, /LOCALES\.map/);
+  assert.match(settings, /languageEnglish/);
+  assert.match(settings, /languageVietnamese/);
+  assert.doesNotMatch(settings, /ReadonlySelectValue\s*[\r\n]+\s*id="settings-language"/);
+  assert.match(locale, /APP_LOCALE_COOKIE = "lcsp_locale"/);
+  assert.match(locale, /export let appLocale/);
+  assert.match(locale, /setAppLocale/);
+});
+
 test("Account tab hides legacy account presentation and renders compact sessions", async () => {
   const settings = await read(
     "../src/features/settings/components/organisms/settings-page.tsx",
