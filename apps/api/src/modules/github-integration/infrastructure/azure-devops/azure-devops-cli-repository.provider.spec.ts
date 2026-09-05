@@ -10,7 +10,7 @@ const executablePath =
 
 describe("AzureDevOpsCliRepositoryProvider", () => {
   it("validates identity correctly via devops user show", async () => {
-    const spawnImpl = ((_file: string, _args: string[]) => {
+    const spawnImpl = (() => {
       const child = new EventEmitter() as EventEmitter & {
         stdout: EventEmitter & { setEncoding(encoding: string): void };
         stderr: EventEmitter & { setEncoding(encoding: string): void };
@@ -64,7 +64,7 @@ describe("AzureDevOpsCliRepositoryProvider", () => {
   });
 
   it("handles repository not found errors gracefully", async () => {
-    const spawnImpl = ((_file: string, _args: string[]) => {
+    const spawnImpl = (() => {
       const child = new EventEmitter() as EventEmitter & {
         stdout: EventEmitter & { setEncoding(encoding: string): void };
         stderr: EventEmitter & { setEncoding(encoding: string): void };
