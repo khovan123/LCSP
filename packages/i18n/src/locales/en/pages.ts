@@ -74,6 +74,10 @@ export const enPages = {
       },
     },
     settings: "Settings",
+    language: "Language",
+    getHelp: "Get help",
+    documentation: "Documentation",
+    learnMore: "Learn more",
     readiness: "Readiness",
     technicalEvidence: "Technical evidence",
     classification: "Classification",
@@ -740,14 +744,18 @@ export const enPages = {
       description:
         "Manage account identity, MFA, recovery, sessions, and linked repositories with the current LCSP security flow.",
       sections: {
+        general: "General",
         account: "Account",
-        appearance: "Appearance",
-        notifications: "Notifications",
-        emails: "Emails",
-        passwordAndAuthentication: "Password and authentication",
-        sessions: "Sessions",
-        repositories: "Repositories",
+        privacy: "Privacy",
+        billing: "Billing",
+        usage: "Usage",
+        capabilities: "Capabilities",
+        connectors: "Connectors",
       },
+      closeLabel: "Close settings",
+      navigationLabel: "Settings navigation",
+      searchLabel: "Search settings",
+      searchPlaceholder: "Search",
       labels: {
         account: "Account",
         displayName: "Display name",
@@ -763,6 +771,10 @@ export const enPages = {
         defaultBranch: "Default branch",
         linkedAssessment: "Linked assessment",
         connectedAt: "Connected",
+        device: "Device",
+        location: "Location",
+        actions: "Actions",
+        trustedDevices: "Trusted devices",
       },
       badges: {
         verified: "Verified",
@@ -784,6 +796,8 @@ export const enPages = {
         noSessions: "No sessions found.",
         noRepositories: "No linked repositories found.",
         noAssessmentLinked: "No assessment linked",
+        loadingAccount: "Loading account",
+        notSupported: "Not supported yet",
       },
       actions: {
         edit: "Edit",
@@ -802,6 +816,8 @@ export const enPages = {
         linkGoogle: "Link Google",
         connectGitHubRepository: "Connect repository",
         manageGitHubRepositoryAccess: "Manage access",
+        logOutAllDevices: "Log out all devices",
+        updatePat: "Update PAT",
       },
       account: {
         title: "Account",
@@ -835,6 +851,87 @@ export const enPages = {
           light: "Light",
           dark: "Dark",
         },
+      },
+      general: {
+        profileTitle: "Profile",
+        fullName: "Full name",
+        assistantName: "What should the assistant call you?",
+        preferencesTitle: "Preferences",
+        appearance: "Appearance",
+        language: "Language",
+        languageEnglish: "English",
+        languageVietnamese: "Vietnamese",
+        chatFont: "Chat font",
+        chatFontInter: "Inter",
+        notificationsTitle: "Notifications",
+        assessmentCompletions: "Assessment completions",
+        assessmentCompletionsDescription:
+          "Notify when long-running assessments finish.",
+        remediationApprovals: "Remediation approvals",
+        remediationApprovalsDescription:
+          "Notify when code remediation needs approval.",
+      },
+      privacy: {
+        title: "Privacy",
+        description:
+          "Privacy controls are shown here only when backed by persisted product settings.",
+        repositoryMetadata: "Repository metadata",
+        improveModels: "Improve models with workspace data",
+        exportData: "Export assessment data",
+        sharedAssessments: "Shared assessments",
+        memoryPreferences: "Memory preferences",
+      },
+      billing: {
+        title: "Billing",
+        description:
+          "LCSP uses prepaid pay-as-you-go credits. No subscription plan controls are exposed without a billing contract.",
+        creditBalance: "Credit balance",
+        buyCredits: "Buy credits",
+        autoReload: "Auto-reload",
+        paymentMethod: "Payment method",
+        invoices: "Invoices and history",
+      },
+      usage: {
+        title: "Usage",
+        description:
+          "Usage will align to prepaid credits when workspace billing contracts are available.",
+        creditUsage: "Credit usage",
+        balance: "Current balance",
+        spendingLimit: "Spending limit",
+      },
+      capabilities: {
+        title: "Capabilities",
+        description:
+          "Capability controls stay read-only until the backend exposes persisted settings for this workspace.",
+        addDomain: "Add",
+        additionalAllowedDomains: "Additional allowed domains",
+        connectorSearch: "Connector search",
+        connectorSearchDescription:
+          "Surface relevant connectors while orchestration runs.",
+        domainAllowlistDescription:
+          "Choose which domains the execution sandbox can access.",
+        domainAllowlistNotice:
+          "Common package-manager domains are allowed. Add only the extra domains required by verification.",
+        domainInputPlaceholder: "example.com or *.example.com",
+        executionTitle: "Execution",
+        toolAccessMode: "Tool access mode",
+        toolAccessModeDescription:
+          "Controls how connector tools are loaded for new assessments.",
+        guidedMode: "Guided",
+        loadToolsWhenNeeded: "Load tools when needed",
+        artifacts: "Artifacts",
+        artifactsDescription:
+          "Artifact generation follows the current assessment workflow.",
+        cloudCodeExecution: "Cloud code execution",
+        cloudCodeExecutionDescription:
+          "Cloud execution is controlled by platform configuration.",
+        networkEgress: "Allow network egress",
+        networkEgressDescription:
+          "Network access is governed by runtime policy, not a local UI toggle.",
+        domainAllowlist: "Domain allowlist",
+        domainAllowlistUnsupported:
+          "Additional allowed domains are not configurable in the current settings contract.",
+        packageManagersOnly: "Package managers only",
       },
       notifications: {
         title: "Notifications",
@@ -933,8 +1030,17 @@ export const enPages = {
         activeTitle: "Web sessions",
         activeDescription:
           "Revoke sessions you no longer recognize without changing the current workspace layout.",
+        actionMenuLabel: "Open session actions",
+        logOutAllDevicesTitle: "Log out of all devices",
+        noTrustedDevices: "No trusted devices.",
         summary: "Active sessions",
         revokedTitle: "Session revoked",
+        trustedDevicesDescription:
+          "Devices authorized for repository remediation and secure actions.",
+        logoutAllUnsupported:
+          "Bulk device logout is not exposed by the current settings API.",
+        unknownLocation: "Location unavailable",
+        webSession: "Web session",
       },
       repositories: {
         title: "Repository credentials",
@@ -962,6 +1068,8 @@ export const enPages = {
         providerLabel: "Provider",
         githubProvider: "GitHub",
         gitlabProvider: "GitLab",
+        bitbucketProvider: "Bitbucket",
+        azureDevOpsProvider: "Azure DevOps",
         repositoryUrlLabel: "Repository URL",
         repositoryUrlPlaceholder: "https://github.com/owner/repository",
         gitlabRepositoryUrlPlaceholder: "https://gitlab.com/group/project",
@@ -983,6 +1091,25 @@ export const enPages = {
           "The credential cannot read the selected repository.",
         serviceUnavailableDescription:
           "GitHub repository access is temporarily unavailable. Try again later.",
+        supportedProviderDescription:
+          "Credential status is loaded from the existing provider credential API.",
+        unsupportedProviderDescription:
+          "This provider is shown for the approved settings IA, but connection is not supported by the current backend contract.",
+        codeRemediationWriteAccess: "Code remediation write access",
+        codeRemediationWriteHelper: "Requires Contents + Pull requests write",
+        connect: "Connect",
+        connected: "Connected",
+        gitProvidersTitle: "Git providers",
+        githubPatAccessTitle: "GitHub PAT access",
+        managePat: "Manage PAT",
+        manageProvidersDescription:
+          "Manage repository providers and workspace integrations.",
+        notConnected: "Not connected",
+        patDialogDescription:
+          "Update the provider access token through the existing secure credential flow.",
+        patDialogProvider: "Provider",
+        patDialogTitle: "Provider credential",
+        repositoryReadAccess: "Repository read access",
       },
       errors: {
         profileLoadTitle: "Unable to load settings",

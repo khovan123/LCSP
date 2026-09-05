@@ -6,6 +6,10 @@ const componentPath = new URL(
   "../src/features/settings/components/organisms/repositories-settings-section.tsx",
   import.meta.url,
 );
+const credentialDialogPath = new URL(
+  "../src/features/settings/components/molecules/provider-credential-dialog.tsx",
+  import.meta.url,
+);
 const queriesPath = new URL(
   "../src/lib/api/github-repository-queries.ts",
   import.meta.url,
@@ -18,21 +22,34 @@ async function source() {
 
 test("Settings repository section contains credential-only controls and safe status", async () => {
   const component = await source();
-  assert.match(component, /provider-credential/);
-  assert.match(component, /type="password"/);
-  assert.match(component, /account/);
+  assert.match(component, /data-component="ConnectorsSettingsPanel"/);
+  assert.match(component, /data-component="ConnectorProviderList"/);
+  assert.match(component, /githubPatAccessTitle/);
+  assert.match(component, /repositoryReadAccess/);
   assert.doesNotMatch(
     component,
-    /glpat-|ghp_|repositoryUrl|connectedRepositories|auth\/repositories/,
+    /id="provider-credential"|type="password"|glpat-|ghp_|repositoryUrl|connectedRepositories|auth\/repositories/,
   );
 });
 
-test("Settings repository section supports both providers and never renders a stored PAT", async () => {
+test("Settings repository section supports provider rows and never renders a stored PAT", async () => {
   const component = await source();
-  assert.match(component, /GitHub/);
-  assert.match(component, /GitLab/);
-  assert.match(component, /autoComplete="new-password"/);
+  assert.match(component, /githubProvider/);
+  assert.match(component, /gitlabProvider/);
+  assert.match(component, /bitbucketProvider/);
+  assert.match(component, /azureDevOpsProvider/);
+  assert.match(component, /logo-github\.svg/);
+  assert.match(component, /logo-gitlab\.svg/);
+  assert.match(component, /logo-bitbucket\.svg/);
+  assert.match(component, /logo-azure-devops\.svg/);
   assert.doesNotMatch(component, /Personal access token value/);
+});
+
+test("provider credential input is isolated in the credential dialog", async () => {
+  const dialog = await readFile(credentialDialogPath, "utf8");
+  assert.match(dialog, /provider-credential/);
+  assert.match(dialog, /type="password"/);
+  assert.match(dialog, /autoComplete="new-password"/);
 });
 
 test("initial configure and rotation refresh the shared provider credential status query", async () => {
@@ -57,17 +74,17 @@ test("initial configure and rotation refresh the shared provider credential stat
 });
 
 test("successful credential submission clears the plaintext PAT without exposing it", async () => {
-  const component = await source();
-  assert.match(component, /onSuccess:\s*\(\)\s*=>\s*{\s*setCredential\(""\)/);
-  assert.match(component, /type="password"/);
-  assert.doesNotMatch(component, /setCredential\([^"e]/);
+  const dialog = await readFile(credentialDialogPath, "utf8");
+  assert.match(dialog, /onSuccess:\s*\(\)\s*=>\s*{\s*setCredential\(""\)/);
+  assert.match(dialog, /type="password"/);
+  assert.doesNotMatch(dialog, /setCredential\([^"e]/);
 });
 
 test("reauthentication retries the pending credential update", async () => {
-  const component = await source();
+  const component = await readFile(credentialDialogPath, "utf8");
   assert.match(component, /onReauthenticate\?\.\(\(\)\s*=>\s*{/);
   assert.match(
     component,
-    /queueMicrotask\(\(\)\s*=>\s*{[\s\S]*?mutation\.mutate\(\{\s*provider,\s*credential\s*\}\)/,
+    /queueMicrotask\(\(\)\s*=>\s*{[\s\S]*?mutation\.mutate\(\{\s*provider,\s*credential:\s*submittedCredential\s*\}\)/,
   );
 });
