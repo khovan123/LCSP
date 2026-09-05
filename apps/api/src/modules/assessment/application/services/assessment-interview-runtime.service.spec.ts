@@ -1114,7 +1114,6 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       expect(
         mockTx.assessmentInterviewThread.updateMany,
       ).not.toHaveBeenCalled();
-
     });
 
     it("does not overwrite a pin won by a concurrent legacy-thread materialization", async () => {
@@ -1160,7 +1159,6 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         where: { assessmentId: "assessment-1", guidanceVersion: null },
         data: { guidanceVersion: "guidance-v4" },
       });
-
     });
   });
 });
