@@ -129,6 +129,7 @@ export type RecordInterviewOutcomeAuditInput = {
   contextRevision?: string | number;
   sessionId?: string;
   threadId?: string;
+  guidanceVersion?: string;
   correlationId: string;
   causationId?: string | null;
 };

@@ -116,9 +116,9 @@ type MockPrismaDelegates = {
     findUnique: jest.Mock<() => Promise<{ id: string; ownerId: string }>>;
   };
   assessmentInterviewThread: {
-    findUnique: jest.Mock<() => Promise<unknown>>;
-    updateMany: jest.Mock<() => Promise<{ count: number }>>;
-    upsert: jest.Mock<() => Promise<Record<string, unknown>>>;
+    findUnique: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
+    updateMany: jest.Mock<(...args: unknown[]) => Promise<{ count: number }>>;
+    upsert: jest.Mock<(...args: unknown[]) => Promise<Record<string, unknown>>>;
   };
   repositorySnapshot: {
     findFirst: jest.Mock<() => Promise<{ id: string; commitSha: string }>>;
@@ -169,12 +169,12 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           }),
       },
       assessmentInterviewThread: {
-        findUnique: jest.fn<() => Promise<unknown>>(),
+        findUnique: jest.fn<(...args: unknown[]) => Promise<unknown>>(),
         updateMany: jest
-          .fn<() => Promise<{ count: number }>>()
+          .fn<(...args: unknown[]) => Promise<{ count: number }>>()
           .mockResolvedValue({ count: 1 }),
         upsert: jest
-          .fn<() => Promise<Record<string, unknown>>>()
+          .fn<(...args: unknown[]) => Promise<Record<string, unknown>>>()
           .mockResolvedValue({}),
       },
       repositorySnapshot: {
@@ -315,6 +315,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             pgeVersion: "report-1:v1",
             technicalCoverageState: "READY",
             coverageLimitations: [],
+            guidanceVersion: "interview-context-test-v1",
           }),
         }),
         mockTx,
@@ -1003,6 +1004,18 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       expect(result.outcome).toBe(
         ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
       );
+      expect(mockTx.assessmentInterviewThread.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            guidanceVersion: "interview-context-test-v1",
+            privateContextJson: expect.objectContaining({
+              workingStrategy: expect.objectContaining({
+                terminologyMap: {},
+              }),
+            }),
+          }),
+        }),
+      );
       expect(mockInterviewAudit.recordQuestionPersisted).toHaveBeenCalledTimes(
         1,
       );
@@ -1020,6 +1033,119 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         }),
         mockTx,
       );
+    });
+  });
+
+  describe("legacy guidance pinning", () => {
+    it("pins a materialized legacy thread once and keeps the pin after active guidance changes", async () => {
+      const original = process.env.INTERVIEW_GUIDANCE_VERSION;
+      process.env.INTERVIEW_GUIDANCE_VERSION = "guidance-v3";
+      const legacyThread = {
+        assessmentId: "assessment-1",
+        contextRevision: 0,
+        processedRevision: 0,
+        activeQuestionId: "q-legacy",
+        stateJson: {
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+          activeQuestion: {
+            id: "q-legacy",
+            intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+            prompt: "What is the operating model?",
+            control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+          },
+        },
+        privateContextJson: { revisions: [] },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+        guidanceVersion: null,
+      };
+      mockTx.assessmentInterviewThread.findUnique
+        .mockResolvedValueOnce(legacyThread)
+        .mockResolvedValueOnce({
+          ...legacyThread,
+          guidanceVersion: "guidance-v3",
+        });
+
+      await service.seedInitialQuestionForWorker({
+        assessmentId: "assessment-1",
+        correlationId: "corr-legacy-pin",
+        state: legacyThread.stateJson,
+      });
+
+      expect(mockTx.assessmentInterviewThread.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({ guidanceVersion: "guidance-v3" }),
+        }),
+      );
+      expect(mockInterviewAudit.recordQuestionPersisted).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceSnapshot: expect.objectContaining({
+            guidanceVersion: "guidance-v3",
+          }),
+        }),
+        mockTx,
+      );
+
+      process.env.INTERVIEW_GUIDANCE_VERSION = "guidance-v4";
+      const workerContext = await service.getPrivateContextForWorker({
+        assessmentId: "assessment-1",
+        contextRevision: 0,
+      });
+
+      expect(workerContext.guidanceVersion).toBe("guidance-v3");
+      expect(
+        mockTx.assessmentInterviewThread.updateMany,
+      ).not.toHaveBeenCalled();
+
+      if (original === undefined) delete process.env.INTERVIEW_GUIDANCE_VERSION;
+      else process.env.INTERVIEW_GUIDANCE_VERSION = original;
+    });
+
+    it("does not overwrite a pin won by a concurrent legacy-thread materialization", async () => {
+      const original = process.env.INTERVIEW_GUIDANCE_VERSION;
+      process.env.INTERVIEW_GUIDANCE_VERSION = "guidance-v4";
+      const legacyThread = {
+        assessmentId: "assessment-1",
+        contextRevision: 1,
+        processedRevision: 0,
+        activeQuestionId: "q-legacy",
+        stateJson: {
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+          activeQuestion: {
+            id: "q-legacy",
+            intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+            prompt: "What is the operating model?",
+            control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+          },
+        },
+        privateContextJson: { revisions: [] },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+        guidanceVersion: null,
+      };
+      mockTx.assessmentInterviewThread.findUnique
+        .mockResolvedValueOnce(legacyThread)
+        .mockResolvedValueOnce({
+          ...legacyThread,
+          guidanceVersion: "guidance-v3",
+        });
+      mockTx.assessmentInterviewThread.updateMany.mockResolvedValueOnce({
+        count: 0,
+      });
+
+      const workerContext = await service.getPrivateContextForWorker({
+        assessmentId: "assessment-1",
+        contextRevision: 1,
+      });
+
+      expect(workerContext.guidanceVersion).toBe("guidance-v3");
+      expect(mockTx.assessmentInterviewThread.updateMany).toHaveBeenCalledWith({
+        where: { assessmentId: "assessment-1", guidanceVersion: null },
+        data: { guidanceVersion: "guidance-v4" },
+      });
+
+      if (original === undefined) delete process.env.INTERVIEW_GUIDANCE_VERSION;
+      else process.env.INTERVIEW_GUIDANCE_VERSION = original;
     });
   });
 });
