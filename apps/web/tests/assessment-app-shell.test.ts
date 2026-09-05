@@ -117,7 +117,7 @@ const workspaceClientPath = new URL(
 );
 const appI18nPath = new URL("../src/lib/i18n.ts", import.meta.url);
 const createAssessmentPath = new URL(
-  "../src/features/workspace/components/organisms/create-assessment-form.tsx",
+  "../src/features/assessment-flow/components/organisms/repository-setup-step.tsx",
   import.meta.url,
 );
 const summaryCardPath = new URL(
@@ -582,7 +582,7 @@ test("assessment entry points no longer route progression through legacy step pa
   assert.match(clientSource, /return `\/assessments\/\$\{encodedId\}`/);
   assert.match(
     createSource,
-    /router\.push\(`\/assessments\/\$\{outcome\.assessmentId\}`\)/,
+    /router\.replace\(`\/assessments\/\$\{assessmentId\}`\)/,
   );
 });
 

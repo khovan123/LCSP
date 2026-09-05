@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 import {
@@ -165,7 +166,7 @@ test("workflow run renders dynamic interview controls through shared workspace c
     readFile(questionTurnPath, "utf8"),
   ]);
 
-  assert.match(overviewSource, /data-surface="workflow-run"/);
+  assert.match(overviewSource, /data-flow-stage=/);
   assert.match(overviewSource, /AssessmentTranscript/);
   assert.match(overviewSource, /AssessmentComposer/);
   assert.match(overviewSource, /AssessmentQuestionTurn/);
@@ -204,8 +205,10 @@ test("workflow run renders dynamic interview controls through shared workspace c
 
 test("web production cutover has no active wizard customer-context consumers", async () => {
   const assessmentQueries = await readFile(assessmentQueriesPath, "utf8");
-  const files = await collectFiles(new URL(".", workspaceRoot).pathname);
-  const activeFiles = files.filter((file) => !file.includes("/features/wizard/"));
+  const files = await collectFiles(fileURLToPath(new URL(".", workspaceRoot)));
+  const activeFiles = files.filter(
+    (file) => !file.includes("/features/wizard/"),
+  );
   const wizardRouteFiles = activeFiles.filter((file) =>
     /\/app\/api\/assessments\/\[id\]\/wizard\//.test(file),
   );

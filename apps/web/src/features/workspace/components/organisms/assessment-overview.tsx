@@ -270,6 +270,7 @@ function AssessmentInterviewFlow({
     <main
       className="flex h-full min-h-0 flex-col"
       data-assessment-id={assessmentId}
+      data-surface="workflow-run"
       data-flow-stage={
         interviewEnabled
           ? ASSESSMENT_FLOW_STAGES.interview
