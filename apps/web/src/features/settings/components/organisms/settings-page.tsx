@@ -2,7 +2,7 @@
 
 import { LOCALES, type Locale } from "@lcsp/contracts/shared";
 import type { ReactNode } from "react";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { resolveMessage } from "@lcsp/i18n";
 import {
   ChevronDownIcon,
@@ -22,24 +22,21 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import {
   appLocale,
   getAppLocaleSnapshot,
+  hydrateAppLocaleFromCookie,
   setAppLocale,
   subscribeToAppLocale,
 } from "@/lib/locale";
+import { cn } from "@/lib/utils";
 import type {
   AuthSessionSummary,
   AuthSettingsProfile,
@@ -104,6 +101,10 @@ export function SettingsPage({
     getAppLocaleSnapshot,
     getAppLocaleSnapshot,
   );
+
+  useEffect(() => {
+    hydrateAppLocaleFromCookie();
+  }, []);
   const legacyHashSection = useSyncExternalStore(
     subscribeToHashChange,
     getCurrentHashSection,
@@ -530,7 +531,7 @@ function GeneralSettingsPanel({
             "pages.workspace.settingsHub.general.language",
           )}
         </label>
-        <LanguagePreferenceControl />
+        <SettingsLanguageSelect />
       </SettingsControlRow>
       <SettingsDivider className="top-86" />
       <SettingsControlRow className="top-88">
@@ -766,44 +767,73 @@ function ReadonlySelectValue({
   );
 }
 
-function LanguagePreferenceControl() {
+function SettingsLanguageSelect() {
   const locale = useSyncExternalStore(
     subscribeToAppLocale,
     getAppLocaleSnapshot,
     getAppLocaleSnapshot,
   );
 
-  function handleLocaleChange(value: Locale | null) {
-    if (value === null) return;
+  function handleLocaleChange(value: string) {
     if (!LOCALES.includes(value as Locale)) return;
-    setAppLocale(value);
+    setAppLocale(value as Locale);
   }
 
   const languageLabels: Record<Locale, Parameters<typeof resolveMessage>[1]> = {
     en: "pages.workspace.settingsHub.general.languageEnglish",
     vi: "pages.workspace.settingsHub.general.languageVietnamese",
   };
+  const selectedLanguageLabel = resolveMessage(locale, languageLabels[locale]);
 
   return (
-    <Select value={locale} onValueChange={handleLocaleChange}>
-      <SelectTrigger
-        id="settings-language"
-        className="h-9 w-36 text-[13px]"
-        aria-label={resolveMessage(
-          appLocale,
-          "pages.workspace.settingsHub.general.language",
-        )}
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            id="settings-language"
+            type="button"
+            aria-label={resolveMessage(
+              locale,
+              "pages.workspace.settingsHub.general.language",
+            )}
+            className="flex h-9 w-36 items-center justify-between rounded-lg border border-input bg-muted/35 px-3 text-left text-[13px] font-normal text-foreground outline-none transition-colors hover:bg-muted/45 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            data-component="SettingsLanguageSelectTrigger"
+          >
+            <span className="min-w-0 truncate">{selectedLanguageLabel}</span>
+            <ChevronDownIcon
+              aria-hidden="true"
+              className="size-3.5 shrink-0"
+            />
+          </button>
+        }
+      />
+      <DropdownMenuContent
+        align="end"
+        className="w-65 rounded-xl border-border bg-popover p-[7px] shadow-[0_8px_18px_rgba(0,0,0,0.35)]"
+        data-component="SettingsLanguageSelectContent"
       >
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent align="end">
-        {LOCALES.map((option) => (
-          <SelectItem key={option} value={option}>
-            {resolveMessage(appLocale, languageLabels[option])}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+        <DropdownMenuRadioGroup value={locale} onValueChange={handleLocaleChange}>
+          {LOCALES.map((option) => {
+            const selected = option === locale;
+            return (
+              <DropdownMenuRadioItem
+                key={option}
+                value={option}
+                className={cn(
+                  "h-9.5 w-61 rounded-lg px-3 pr-9 text-sm text-foreground focus:bg-accent focus:text-accent-foreground [&_[data-slot=dropdown-menu-radio-item-indicator]]:right-3 [&_[data-slot=dropdown-menu-radio-item-indicator]>svg]:size-4",
+                  selected && "bg-accent font-medium text-accent-foreground",
+                )}
+                data-component="SettingsLanguageSelectOption"
+                data-locale-option={option}
+                data-selected={selected ? "true" : undefined}
+              >
+                {resolveMessage(locale, languageLabels[option])}
+              </DropdownMenuRadioItem>
+            );
+          })}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

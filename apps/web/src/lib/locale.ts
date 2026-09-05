@@ -11,10 +11,9 @@ function readCookieLocale(): Locale | null {
   return LOCALES.includes(value as Locale) ? (value as Locale) : null;
 }
 
-export let appLocale: Locale = readCookieLocale() ?? "vi";
+export let appLocale: Locale = "vi";
 
 export function getAppLocaleSnapshot(): Locale {
-  appLocale = readCookieLocale() ?? appLocale;
   return appLocale;
 }
 
@@ -29,5 +28,12 @@ export function setAppLocale(locale: Locale) {
   if (typeof document !== "undefined") {
     document.cookie = `${APP_LOCALE_COOKIE}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
     window.dispatchEvent(new Event("lcsp:locale-change"));
+  }
+}
+
+export function hydrateAppLocaleFromCookie() {
+  const cookieLocale = readCookieLocale();
+  if (cookieLocale && cookieLocale !== appLocale) {
+    setAppLocale(cookieLocale);
   }
 }

@@ -48,7 +48,7 @@ export const SidebarAccountTrigger = forwardRef<
       </span>
       <ChevronIcon
         aria-hidden="true"
-        className="shrink-0 text-sidebar-foreground/60"
+        className="size-3.5 shrink-0 text-sidebar-foreground/60"
         data-icon="inline-end"
       />
     </button>

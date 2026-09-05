@@ -43,16 +43,55 @@ test("General settings panel wires language to the shared EN VI locale preferenc
   ]);
 
   assert.match(settings, /data-locale={settingsLocale}/);
-  assert.match(settings, /LanguagePreferenceControl/);
-  assert.match(settings, /Select value={locale}/);
+  assert.match(settings, /SettingsLanguageSelect/);
+  assert.match(settings, /DropdownMenuRadioGroup value={locale}/);
   assert.match(settings, /onValueChange={handleLocaleChange}/);
   assert.match(settings, /LOCALES\.map/);
   assert.match(settings, /languageEnglish/);
   assert.match(settings, /languageVietnamese/);
   assert.doesNotMatch(settings, /ReadonlySelectValue\s*[\r\n]+\s*id="settings-language"/);
+  assert.doesNotMatch(settings, /<Select value={locale}/);
+  assert.doesNotMatch(settings, /<SelectValue/);
+  assert.doesNotMatch(settings, />\{locale\}</);
   assert.match(locale, /APP_LOCALE_COOKIE = "lcsp_locale"/);
-  assert.match(locale, /export let appLocale/);
+  assert.match(locale, /export let appLocale: Locale = "vi"/);
+  assert.doesNotMatch(
+    locale,
+    /export let appLocale: Locale = readCookieLocale\(\) \?\? "vi"/,
+  );
+  assert.doesNotMatch(
+    locale,
+    /getAppLocaleSnapshot\(\): Locale \{[\s\S]*appLocale = readCookieLocale/,
+  );
+  assert.match(locale, /hydrateAppLocaleFromCookie/);
   assert.match(locale, /setAppLocale/);
+});
+
+test("Settings language select matches Figma trigger and option selected state", async () => {
+  const settings = await read(
+    "../src/features/settings/components/organisms/settings-page.tsx",
+  );
+
+  assert.match(settings, /data-component="SettingsLanguageSelectTrigger"/);
+  assert.match(settings, /selectedLanguageLabel/);
+  assert.match(settings, /h-9 w-36/);
+  assert.match(settings, /rounded-lg/);
+  assert.match(settings, /px-3/);
+  assert.match(settings, /text-\[13px\]/);
+  assert.match(settings, /size-3\.5/);
+  assert.match(settings, /data-component="SettingsLanguageSelectContent"/);
+  assert.match(settings, /w-65/);
+  assert.match(settings, /rounded-xl/);
+  assert.match(settings, /p-\[7px\]/);
+  assert.match(settings, /shadow-\[0_8px_18px_rgba\(0,0,0,0\.35\)\]/);
+  assert.match(settings, /data-component="SettingsLanguageSelectOption"/);
+  assert.match(settings, /h-9\.5 w-61/);
+  assert.match(settings, /data-selected={selected \? "true" : undefined}/);
+  assert.match(settings, /selected && "bg-accent font-medium text-accent-foreground"/);
+  assert.doesNotMatch(
+    settings,
+    /Japanese|Korean|Chinese \(Simplified\)|French|German/,
+  );
 });
 
 test("Account tab hides legacy account presentation and renders compact sessions", async () => {
