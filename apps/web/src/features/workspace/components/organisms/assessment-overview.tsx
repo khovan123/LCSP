@@ -6,6 +6,7 @@ import {
 } from "@lcsp/contracts/assessment";
 import {
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
+  ASSESSMENT_INTERVIEW_CONTROLS,
   type AssessmentInterviewBlockedAction,
 } from "@lcsp/contracts/evidence";
 import { REPOSITORY_CONNECTION_STATUSES } from "@lcsp/contracts/github-integration";
@@ -41,6 +42,7 @@ import {
   AgentTurn,
   ThinkingLine,
   ThoughtLine,
+  UserMessage,
 } from "../molecules/agent-turn";
 import {
   AssessmentQuestionTurn,
@@ -49,6 +51,13 @@ import {
 import { AssessmentComposer } from "./assessment-composer";
 import { AssessmentTranscript } from "./assessment-transcript";
 import { useWorkspaceRuntime } from "./workspace-runtime-provider";
+
+type InterviewAnswerDraft = {
+  questionId: string;
+  freeText: string;
+  selectedChoiceIds: string[];
+  otherText: string;
+};
 
 export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
   const workspaceRuntime = useWorkspaceRuntime();
@@ -173,10 +182,90 @@ function AssessmentInterviewFlow({
   const submitAnswer = useSubmitAssessmentInterviewAnswerMutation(assessmentId);
   const recordBlockedAction =
     useAssessmentInterviewBlockedActionMutation(assessmentId);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+
+  const activeQuestion = interview.activeQuestion;
+  const activeQuestionId = activeQuestion?.id ?? "";
+
+  const [draftMap, setDraftMap] = useState<Record<string, InterviewAnswerDraft>>({});
   const [lastSavedMessage, setLastSavedMessage] = useState<string | null>(null);
 
-  const draft = drafts[assessmentId] ?? interview.pendingDraft ?? "";
+  const activeDraft: InterviewAnswerDraft =
+    draftMap[assessmentId] && draftMap[assessmentId].questionId === activeQuestionId
+      ? draftMap[assessmentId]
+      : {
+          questionId: activeQuestionId,
+          freeText: interview.pendingDraft ?? "",
+          selectedChoiceIds: [],
+          otherText: "",
+        };
+
+  const selectedChoiceRequiresFreeText = Boolean(
+    activeQuestion?.choices?.some(
+      (choice) =>
+        choice.requiresFreeText &&
+        activeDraft.selectedChoiceIds.includes(choice.id),
+    ),
+  );
+
+  const composerValue = selectedChoiceRequiresFreeText
+    ? activeDraft.otherText
+    : activeDraft.freeText;
+
+  let isSubmitReady = false;
+  if (
+    interviewEnabled &&
+    customerActions.canAnswerQuestion &&
+    activeQuestion &&
+    !interview.stale &&
+    !interview.revalidating
+  ) {
+    if (activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
+      isSubmitReady = activeDraft.freeText.trim().length > 0;
+    } else if (
+      activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect ||
+      activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.boolean
+    ) {
+      if (activeDraft.selectedChoiceIds.length === 1) {
+        isSubmitReady = selectedChoiceRequiresFreeText
+          ? activeDraft.otherText.trim().length > 0
+          : true;
+      }
+    } else if (
+      activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.multiSelect
+    ) {
+      if (activeDraft.selectedChoiceIds.length > 0) {
+        isSubmitReady = selectedChoiceRequiresFreeText
+          ? activeDraft.otherText.trim().length > 0
+          : true;
+      }
+    }
+  }
+
+  let composerPlaceholderKey = composerAvailability.placeholderKey;
+  if (scanFailed) {
+    composerPlaceholderKey = "pages.assessmentFlow.scanner.failedPlaceholder";
+  } else if (!interviewEnabled) {
+    composerPlaceholderKey = "pages.assessmentFlow.scanner.runningPlaceholder";
+  } else if (customerActions.canAnswerQuestion && activeQuestion) {
+    if (selectedChoiceRequiresFreeText) {
+      composerPlaceholderKey = "pages.assessment.otherDescribe";
+    } else if (
+      activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect ||
+      activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.multiSelect ||
+      activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.boolean
+    ) {
+      composerPlaceholderKey = "pages.assessment.composerChooseOption";
+    } else if (composerAvailability.isEnabled) {
+      composerPlaceholderKey = "pages.assessmentFlow.interview.placeholder";
+    } else {
+      composerPlaceholderKey = interviewHandoff.placeholderKey;
+    }
+  } else if (composerAvailability.isEnabled) {
+    composerPlaceholderKey = "pages.assessmentFlow.interview.placeholder";
+  } else {
+    composerPlaceholderKey = interviewHandoff.placeholderKey;
+  }
+
   const answerHistory = interview.answerHistory;
   const autoScrollKey = [
     assessmentId,
@@ -184,25 +273,44 @@ function AssessmentInterviewFlow({
     workflow.currentRunId,
     workflow.status,
     normalized.workflow.latestRun?.updatedAt ?? workflow.lastEmittedAt,
-    // runtime.currentRun?.updatedAt
-    // runtime.currentRun?.activeTools
-    // runtime.recentActivity.map
-    workflow.activeTools
-      .map((tool) => `${tool.toolName}:${tool.status}:${tool.startedAt ?? ""}`)
-      .join("|"),
-    workflow.recentActivity.map((event) => event.eventId).join("|"),
     interviewQuery.dataUpdatedAt,
-    interview.activeQuestion?.id,
+    activeQuestionId,
     answerHistory.length,
     lastSavedMessage,
   ].join("::");
 
-  function persistDraft(value: string) {
-    setDrafts((current) => ({ ...current, [assessmentId]: value }));
+  function handleSelectedChoicesChange(selectedChoiceIds: string[]) {
+    setDraftMap((current) => ({
+      ...current,
+      [assessmentId]: {
+        ...activeDraft,
+        selectedChoiceIds,
+      },
+    }));
+  }
+
+  function handleComposerValueChange(value: string) {
+    if (selectedChoiceRequiresFreeText) {
+      setDraftMap((current) => ({
+        ...current,
+        [assessmentId]: {
+          ...activeDraft,
+          otherText: value,
+        },
+      }));
+    } else {
+      setDraftMap((current) => ({
+        ...current,
+        [assessmentId]: {
+          ...activeDraft,
+          freeText: value,
+        },
+      }));
+    }
   }
 
   function clearDraft() {
-    setDrafts((current) => {
+    setDraftMap((current) => {
       const next = { ...current };
       delete next[assessmentId];
       return next;
@@ -210,23 +318,34 @@ function AssessmentInterviewFlow({
   }
 
   function handleSubmit() {
-    if (
-      !interviewEnabled ||
-      !interview.activeQuestion ||
-      draft.trim().length === 0 ||
-      !customerActions.canSubmitDraft ||
-      !customerActions.canAnswerQuestion
-    ) {
+    if (!isSubmitReady || !activeQuestion || !interviewEnabled) {
       return;
     }
-    handleQuestionAnswer({
-      questionId: interview.activeQuestion.id,
-      freeText: draft,
-    });
+    const input: AssessmentQuestionAnswerInput = {
+      questionId: activeQuestion.id,
+    };
+    if (activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
+      input.freeText = activeDraft.freeText.trim();
+    } else if (
+      activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect ||
+      activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.boolean ||
+      activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.multiSelect
+    ) {
+      input.selectedChoiceIds = activeDraft.selectedChoiceIds;
+      if (selectedChoiceRequiresFreeText) {
+        input.otherText = activeDraft.otherText.trim();
+      }
+    }
+    handleQuestionAnswer(input);
   }
 
   function handleQuestionAnswer(input: AssessmentQuestionAnswerInput) {
-    if (!interviewEnabled || !customerActions.canAnswerQuestion) {
+    if (
+      !interviewEnabled ||
+      !customerActions.canAnswerQuestion ||
+      interview.stale ||
+      interview.revalidating
+    ) {
       return;
     }
     submitAnswer.mutate(input, {
@@ -246,7 +365,7 @@ function AssessmentInterviewFlow({
         action,
         draft:
           action === ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.saveAndExit
-            ? draft
+            ? composerValue.trim() || undefined
             : undefined,
       },
       {
@@ -283,9 +402,9 @@ function AssessmentInterviewFlow({
                 key={`${answer.questionId}:${answer.answeredAt}`}
                 role={ASSESSMENT_CHAT_ROLES.user}
               >
-                <p className="text-sm text-muted-foreground">
-                  {t("pages.assessment.answerHistoryPrefix")} {answer.summary}
-                </p>
+                <UserMessage>
+                  {answer.summary}
+                </UserMessage>
               </AgentTurn>
             ))}
 
@@ -304,10 +423,15 @@ function AssessmentInterviewFlow({
                 terminalAction={
                   <AssessmentQuestionTurn
                     question={interview.questionTurnProps.question}
+                    selectedChoiceIds={activeDraft.selectedChoiceIds}
+                    onSelectedChoiceIdsChange={handleSelectedChoicesChange}
                     blockedActions={interview.questionTurnProps.blockedActions}
-                    disabled={!customerActions.canAnswerQuestion}
-                    initialDraft={draft}
-                    onDraftChange={persistDraft}
+                    disabled={
+                      !customerActions.canAnswerQuestion ||
+                      interview.stale ||
+                      interview.revalidating ||
+                      submitAnswer.isPending
+                    }
                     onSubmitAnswer={handleQuestionAnswer}
                     onBlockedAction={handleBlockedAction}
                   />
@@ -360,6 +484,12 @@ function AssessmentInterviewFlow({
                   </div>
                 }
               />
+            ) : interview.isFailed ? (
+              <AgentTurn>
+                <AgentMessage className="font-medium text-destructive">
+                  {t("pages.appShell.chatActivityStatuses.failed")}
+                </AgentMessage>
+              </AgentTurn>
             ) : (
               <AgentTurn>
                 <AgentMessage>
@@ -385,21 +515,18 @@ function AssessmentInterviewFlow({
       </AssessmentTranscript>
 
       <AssessmentComposer
-        value={draft}
+        value={composerValue}
         disabled={
-          !interviewEnabled || scanFailed || !composerAvailability.isEnabled
+          !interviewEnabled ||
+          scanFailed ||
+          !composerAvailability.isEnabled ||
+          interview.stale ||
+          interview.revalidating
         }
+        submitReady={isSubmitReady}
         submitting={submitAnswer.isPending || recordBlockedAction.isPending}
-        placeholder={t(
-          scanFailed
-            ? "pages.assessmentFlow.scanner.failedPlaceholder"
-            : interviewEnabled
-              ? composerAvailability.isEnabled
-                ? "pages.assessmentFlow.interview.placeholder"
-                : interviewHandoff.placeholderKey
-              : "pages.assessmentFlow.scanner.runningPlaceholder",
-        )}
-        onValueChange={persistDraft}
+        placeholder={t(composerPlaceholderKey)}
+        onValueChange={handleComposerValueChange}
         onSubmit={handleSubmit}
       />
     </main>
