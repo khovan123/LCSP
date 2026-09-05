@@ -548,10 +548,17 @@ const GITHUB_ARTIFACTS = {
     name: `gh_${SUPPORTED_GITHUB_CLI_VERSION}_linux_amd64.tar.gz`,
     checksumName: `gh_${SUPPORTED_GITHUB_CLI_VERSION}_checksums.txt`,
   },
+  darwin: {
+    name:
+      process.arch === "arm64"
+        ? `gh_${SUPPORTED_GITHUB_CLI_VERSION}_macOS_arm64.zip`
+        : `gh_${SUPPORTED_GITHUB_CLI_VERSION}_macOS_amd64.zip`,
+    checksumName: `gh_${SUPPORTED_GITHUB_CLI_VERSION}_checksums.txt`,
+  },
 };
 
 const GITHUB_CHECKSUMS_SHA256 =
-  "0af03f03d2952a1e1c5bc658cecefef507af521929b5a7d0b267a09df2a1df18";
+  "275b90ae8a642fb8bdf4f21d7673e34643a445f7993f1821ac917ff8a2cc4db9";
 
 async function ensureManagedGitHubCli({
   repoRoot,
