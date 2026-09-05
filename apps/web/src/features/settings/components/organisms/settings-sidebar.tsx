@@ -1,13 +1,13 @@
 "use client";
 
 import {
-  BriefcaseBusinessIcon,
-  ChartNoAxesColumnIcon,
+  ChartNoAxesCombinedIcon,
   CreditCardIcon,
   PlugIcon,
   SearchIcon,
   SettingsIcon,
-  ShieldIcon,
+  ShieldCheckIcon,
+  ToolCaseIcon,
   UserIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -25,10 +25,10 @@ import { SettingsTab } from "../molecules/settings-tab";
 const settingsTabIcons = {
   [SETTINGS_SECTION_IDS.general]: SettingsIcon,
   [SETTINGS_SECTION_IDS.account]: UserIcon,
-  [SETTINGS_SECTION_IDS.privacy]: ShieldIcon,
+  [SETTINGS_SECTION_IDS.privacy]: ShieldCheckIcon,
   [SETTINGS_SECTION_IDS.billing]: CreditCardIcon,
-  [SETTINGS_SECTION_IDS.usage]: ChartNoAxesColumnIcon,
-  [SETTINGS_SECTION_IDS.capabilities]: BriefcaseBusinessIcon,
+  [SETTINGS_SECTION_IDS.usage]: ChartNoAxesCombinedIcon,
+  [SETTINGS_SECTION_IDS.capabilities]: ToolCaseIcon,
   [SETTINGS_SECTION_IDS.connectors]: PlugIcon,
 } satisfies Record<SettingsSectionId, LucideIcon>;
 

@@ -18,6 +18,12 @@ test("LCSP-269 modal shell preserves Figma desktop geometry", async () => {
   assert.match(sidebar, /md:w-60/);
   assert.match(sidebar, /h-9\.5 w-52/);
   assert.match(sidebar, /mt-3\.5/);
+  assert.match(sidebar, /ShieldCheckIcon/);
+  assert.match(sidebar, /ChartNoAxesCombinedIcon/);
+  assert.match(sidebar, /ToolCaseIcon/);
+  assert.doesNotMatch(sidebar, /ShieldIcon/);
+  assert.doesNotMatch(sidebar, /ChartNoAxesColumnIcon/);
+  assert.doesNotMatch(sidebar, /BriefcaseBusinessIcon/);
   assert.match(tab, /h-9 w-52/);
   assert.match(tab, /text-\[13px\]/);
 });
