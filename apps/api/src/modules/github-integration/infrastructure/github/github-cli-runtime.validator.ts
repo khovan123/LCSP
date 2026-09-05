@@ -6,7 +6,8 @@ import { GITHUB_CREDENTIAL_ERROR_CODES } from "@lcsp/contracts/github-integratio
 
 import { GitHubCliProviderError } from "./github-cli-repository.provider.js";
 
-export const SUPPORTED_GITHUB_CLI_VERSION = "2.98.0";
+/** Minimum GitHub CLI version supported by the provider adapter. */
+export const SUPPORTED_GITHUB_CLI_VERSION = "2.95.0";
 
 /** Resolve an explicit CLI override, or discover `gh` through PATH. */
 export function resolveGitHubCliExecutablePath(
@@ -71,9 +72,11 @@ export function assertGitHubCliRuntime(
       timeout: 5_000,
       env: minimalVersionEnvironment(),
     });
+    const version = parseGitHubCliVersion(result.stdout);
     if (
       result.status !== 0 ||
-      !result.stdout.startsWith(`gh version ${SUPPORTED_GITHUB_CLI_VERSION}`)
+      !version ||
+      !isAtLeast(version, SUPPORTED_GITHUB_CLI_VERSION)
     ) {
       throw new Error("unsupported");
     }
@@ -82,6 +85,22 @@ export function assertGitHubCliRuntime(
       GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable,
     );
   }
+}
+
+function parseGitHubCliVersion(output: string): string | null {
+  const match = /^gh version (\d+\.\d+\.\d+)/u.exec(output.trim());
+  return match?.[1] ?? null;
+}
+
+function isAtLeast(version: string, minimum: string): boolean {
+  const current = version.split(".").map(Number);
+  const required = minimum.split(".").map(Number);
+  for (let index = 0; index < required.length; index += 1) {
+    if (current[index] !== required[index]) {
+      return current[index] > required[index];
+    }
+  }
+  return true;
 }
 
 function minimalVersionEnvironment(): NodeJS.ProcessEnv {

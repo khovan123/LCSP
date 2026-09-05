@@ -173,6 +173,11 @@ function parseRepositorySnapshot(
   return {
     id: item.id,
     assessmentId: item.assessment_id,
+    provider: typeof item.provider === "string" ? item.provider : null,
+    repositoryFullName:
+      typeof item.repository_full_name === "string"
+        ? item.repository_full_name
+        : null,
     commitSha: item.commit_sha,
     createdAt: item.created_at,
   };
@@ -350,6 +355,8 @@ export function runtimeFingerprint(runtime: {
     repositorySnapshots: runtime.repositorySnapshots.map((snapshot) => [
       snapshot.id,
       snapshot.assessmentId,
+      snapshot.provider,
+      snapshot.repositoryFullName,
       snapshot.commitSha,
       snapshot.createdAt,
     ]),

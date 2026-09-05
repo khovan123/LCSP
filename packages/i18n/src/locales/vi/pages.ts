@@ -1256,6 +1256,72 @@ export const viPages = {
       conflicts: "Xem xét và ghi nhận quyết định cho các xung đột đang chờ.",
     },
   },
+  assessmentFlow: {
+    thought: "Đã suy nghĩ trong 2 giây",
+    repositorySetupDescription:
+      "Trước khi assessment bắt đầu, hãy kết nối repository cần quét. Tôi sẽ phân tích source đã pin trước, sau đó mới bắt đầu Interview.",
+    providerQuestion: "Chọn Git provider",
+    providerHelp:
+      "Chọn provider để mở kết nối bảo mật. Repository và commit đã pin là bắt buộc trước khi scan.",
+    providerComingSoon: "Sắp hỗ trợ",
+    configureProvider: "Cấu hình kết nối bảo mật",
+    repositoryPlaceholder: "Dán URL repository để tiếp tục...",
+    repositoryDisabledPlaceholder: "Kết nối provider để tiếp tục...",
+    providers: {
+      github: "GitHub",
+      gitlab: "GitLab",
+      bitbucket: "Bitbucket",
+      azureDevOps: "Azure DevOps",
+    },
+    repository: {
+      connected: "Repository đã kết nối",
+      connectedDescription:
+        "Repository đã kết nối. Assessment này được khóa theo repository và commit đã chọn.",
+      pinnedCommit: "commit đã pin {commit}",
+      pending: "Đang chờ",
+      loadingState: "Đang tải trạng thái repository...",
+    },
+    scanner: {
+      runningThinking: "Đang suy nghĩ...",
+      runningDescription:
+        "Repository đã được pin. Tôi đang quét source trước khi hỏi bất kỳ câu Interview nào.",
+      completeThinking: "Đã suy nghĩ trong 18 giây",
+      completeDescription:
+        "Scan hoàn tất. Source đã pin đã được index và evidence graph đã được xây dựng.",
+      runningPlaceholder: "Scanner đang chạy...",
+      failedPlaceholder:
+        "Scanner cần được xử lý trước khi Interview có thể bắt đầu.",
+      activities: {
+        connect: "Đã kết nối Git provider",
+        clone: "Đã clone source archive",
+        scan: "Đã quét source code",
+        buildGraph: "Đã xây dựng Program Evidence Graph",
+        collectEvidence: "Đã thu thập evidence",
+      },
+    },
+    graph: {
+      eyebrow: "Program Evidence Graph",
+      title: "Repository evidence snapshot",
+      description:
+        "Evidence đã được chấp nhận được pin theo revision của repository này và sẵn sàng cho Interview.",
+      repository: "Repository",
+      commit: "Commit đã pin",
+    },
+    interview: {
+      thought: "Đã suy nghĩ trong 2 giây",
+      description:
+        "Scanner đã hoàn tất. Tôi sẵn sàng bắt đầu Interview bằng ngữ cảnh dự án. Hãy mô tả project hoặc system này: hệ thống làm gì, ai sử dụng và AI tham gia ở đâu.",
+      placeholder: "Mô tả project hoặc system...",
+    },
+    errors: {
+      title: "Không thể hoàn tất repository setup",
+      repositoryUrl:
+        "Hãy nhập URL repository hợp lệ và khớp với provider đã chọn.",
+      createAssessment: "Không thể tạo assessment. Vui lòng thử lại.",
+      repositorySetup:
+        "Hãy kiểm tra provider credential và quyền truy cập repository, sau đó thử lại.",
+    },
+  },
   assessmentForm: {
     pageTitle: "Tạo assessment",
     pageDescription:

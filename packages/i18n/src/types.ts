@@ -1236,6 +1236,62 @@ export type PagesMessages = {
       conflicts: string;
     };
   };
+  assessmentFlow: {
+    thought: string;
+    repositorySetupDescription: string;
+    providerQuestion: string;
+    providerHelp: string;
+    providerComingSoon: string;
+    configureProvider: string;
+    repositoryPlaceholder: string;
+    repositoryDisabledPlaceholder: string;
+    providers: {
+      github: string;
+      gitlab: string;
+      bitbucket: string;
+      azureDevOps: string;
+    };
+    repository: {
+      connected: string;
+      connectedDescription: string;
+      pinnedCommit: string;
+      pending: string;
+      loadingState: string;
+    };
+    scanner: {
+      runningThinking: string;
+      runningDescription: string;
+      completeThinking: string;
+      completeDescription: string;
+      runningPlaceholder: string;
+      failedPlaceholder: string;
+      activities: {
+        connect: string;
+        clone: string;
+        scan: string;
+        buildGraph: string;
+        collectEvidence: string;
+      };
+    };
+    graph: {
+      eyebrow: string;
+      title: string;
+      description: string;
+      repository: string;
+      commit: string;
+    };
+    interview: {
+      thought: string;
+      description: string;
+      placeholder: string;
+    };
+    errors: {
+      title: string;
+      repositoryUrl: string;
+      createAssessment: string;
+      repositorySetup: string;
+    };
+  };
   assessmentForm: {
     pageTitle: string;
     pageDescription: string;

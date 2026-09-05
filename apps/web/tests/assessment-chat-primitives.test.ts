@@ -83,13 +83,14 @@ test("assessment transcript follows output only while the reader is near latest 
   assert.doesNotMatch(source, /scrollIntoView/);
 });
 
-test("assessment overview passes transcript updates from runtime and interview state", async () => {
+test("assessment overview gates Interview behind repository and scanner runtime", async () => {
   const source = await readFile(overviewPath, "utf8");
 
   assert.match(source, /const autoScrollKey = \[/);
-  assert.match(source, /runtime\.currentRun\?\.updatedAt/);
-  assert.match(source, /runtime\.currentRun\?\.activeTools/);
-  assert.match(source, /runtime\.recentActivity\.map/);
+  assert.match(source, /deriveAssessmentFlowRuntime/);
+  assert.match(source, /ASSESSMENT_FLOW_STAGES\.repositorySetup/);
+  assert.match(source, /ASSESSMENT_FLOW_STAGES\.interview/);
+  assert.match(source, /interviewEnabled/);
   assert.match(source, /interviewQuery\.dataUpdatedAt/);
   assert.match(
     source,

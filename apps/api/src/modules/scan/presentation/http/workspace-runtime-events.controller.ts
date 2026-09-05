@@ -120,6 +120,8 @@ function toLegacyRepositorySnapshotPayload(snapshot: unknown) {
   return {
     id: item.id,
     assessment_id: item.assessmentId,
+    provider: item.provider,
+    repository_full_name: item.repositoryFullName,
     commit_sha: item.commitSha,
     created_at:
       item.createdAt instanceof Date

@@ -1256,6 +1256,72 @@ export const enPages = {
       conflicts: "Review and record decisions for pending conflicts.",
     },
   },
+  assessmentFlow: {
+    thought: "Thought for 2s",
+    repositorySetupDescription:
+      "Before the assessment can start, connect the repository I should scan. I will analyze the pinned source first, then begin the interview.",
+    providerQuestion: "Choose Git provider",
+    providerHelp:
+      "Select a provider to open the secure connector. A repository and pinned commit are required before scanning.",
+    providerComingSoon: "Coming soon",
+    configureProvider: "Configure secure connection",
+    repositoryPlaceholder: "Paste a repository URL to continue...",
+    repositoryDisabledPlaceholder: "Connect a provider to continue...",
+    providers: {
+      github: "GitHub",
+      gitlab: "GitLab",
+      bitbucket: "Bitbucket",
+      azureDevOps: "Azure DevOps",
+    },
+    repository: {
+      connected: "Connected repository",
+      connectedDescription:
+        "Repository connected. This assessment is locked to the selected repository and pinned commit.",
+      pinnedCommit: "pinned commit {commit}",
+      pending: "Pending",
+      loadingState: "Loading repository state...",
+    },
+    scanner: {
+      runningThinking: "Thinking...",
+      runningDescription:
+        "Repository is pinned. I am scanning the source before asking any interview questions.",
+      completeThinking: "Thought for 18s",
+      completeDescription:
+        "Scan complete. I indexed the pinned source and built the evidence graph.",
+      runningPlaceholder: "Scanner is running...",
+      failedPlaceholder: "Scanner needs attention before Interview can begin.",
+      activities: {
+        connect: "Connected to Git provider",
+        clone: "Cloned source archive",
+        scan: "Scanned source code",
+        buildGraph: "Built program evidence graph",
+        collectEvidence: "Collected evidence",
+      },
+    },
+    graph: {
+      eyebrow: "Program Evidence Graph",
+      title: "Repository evidence snapshot",
+      description:
+        "The accepted evidence is pinned to this repository revision and ready for the interview.",
+      repository: "Repository",
+      commit: "Pinned commit",
+    },
+    interview: {
+      thought: "Thought for 2s",
+      description:
+        "Scanner is complete. I am ready to start the interview with the project context. Describe this project or system: what it does, who uses it, and where AI is involved.",
+      placeholder: "Describe the project or system...",
+    },
+    errors: {
+      title: "Repository setup could not be completed",
+      repositoryUrl:
+        "Enter a valid repository URL that matches the selected provider.",
+      createAssessment:
+        "The assessment could not be created. Please try again.",
+      repositorySetup:
+        "Check the provider credential and repository access, then try again.",
+    },
+  },
   assessmentForm: {
     pageTitle: "Create assessment",
     pageDescription:

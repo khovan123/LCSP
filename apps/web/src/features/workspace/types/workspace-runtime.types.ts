@@ -30,6 +30,8 @@ export type WorkspaceRuntimeEvidenceReport = {
 export type WorkspaceRuntimeRepositorySnapshot = {
   id: string;
   assessmentId: string;
+  provider: string | null;
+  repositoryFullName: string | null;
   commitSha: string;
   createdAt: string;
 };
