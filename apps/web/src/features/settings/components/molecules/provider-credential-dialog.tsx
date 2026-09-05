@@ -421,7 +421,13 @@ function CredentialForm({
         <Button
           className={cn("h-9", isUpdateMode ? "w-21" : "w-25")}
           type="submit"
-          disabled={isPending || credential.trim().length === 0}
+          disabled={
+            isPending ||
+            credential.trim().length === 0 ||
+            (provider === CREDENTIAL_PROVIDERS.azureDevOps &&
+              organization.trim().length === 0 &&
+              !credential.includes(":"))
+          }
         >
           {resolveMessage(
             appLocale,

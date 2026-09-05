@@ -1144,10 +1144,10 @@ export const enPages = {
         bitbucketRepositoryAccessGuidance:
           "Use an app password with repository read access. Add repository write access only when code fixes are enabled.",
         azureDevOpsRepositoryAccessGuidance:
-          "Use a PAT with Organization 'All accessible organizations' (or enter as 'organization:token') and Code (Read) scope.",
-        azureDevOpsOrganizationLabel: "Organization (optional)",
+          "Use your organization name and a personal access token with Code (Read) scope.",
+        azureDevOpsOrganizationLabel: "Organization",
         azureDevOpsOrganizationPlaceholder:
-          "Auto-detected (or enter organization name)",
+          "Enter Azure DevOps organization name (e.g. anhkn7)",
         githubPatAccessTitle: "GitHub PAT access",
         manageGithubPatTitle: "Manage GitHub PAT",
         manageGitlabPatTitle: "Manage GitLab PAT",
