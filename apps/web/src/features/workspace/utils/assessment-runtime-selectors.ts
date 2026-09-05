@@ -1,6 +1,5 @@
 import {
   ASSESSMENT_INTERVIEW_OUTCOMES,
-  ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   ASSESSMENT_RUNTIME_STAGE_CODES,
   ASSESSMENT_TECHNICAL_COVERAGE_STATES,
@@ -110,10 +109,12 @@ export function selectCustomerActions(normalized: NormalizedAssessmentRuntime) {
 
 export function selectComposerAvailability(normalized: NormalizedAssessmentRuntime) {
   const actions = normalized.customerActions;
-  const isEnabled = actions.canUseComposer && normalized.availability === ASSESSMENT_RUNTIME_AVAILABILITIES.ready;
+  const isEnabled =
+    actions.canUseComposer &&
+    normalized.availability === ASSESSMENT_RUNTIME_AVAILABILITIES.ready;
   const placeholderKey = actions.canAnswerQuestion
-    ? "pages.assessment.composerPlaceholder"
-    : "pages.assessment.composerDisabledPlaceholder";
+    ? "pages.appShell.chatComposerPlaceholder"
+    : "pages.assessment.noActiveInterviewQuestion";
 
   return {
     isEnabled,
@@ -151,9 +152,6 @@ export function selectAssessmentScreenProjection(
     coverage.state === ASSESSMENT_TECHNICAL_COVERAGE_STATES.partial
   ) {
     if (interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer) {
-      if (interview.activeQuestion?.intent === ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify) {
-        return ASSESSMENT_SCREEN_PROJECTIONS.f09;
-      }
       if (interview.activeQuestion) {
         return ASSESSMENT_SCREEN_PROJECTIONS.f05;
       }

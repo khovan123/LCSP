@@ -789,3 +789,130 @@ test("26. FIGMA PROJECTION TEST — F09: Targeted loop semantic projection", () 
   assert.equal(sidebar.businessContext.availability, ASSESSMENT_ARTIFACT_AVAILABILITIES.updating);
   assert.equal(sidebar.investigationNotes.availability, ASSESSMENT_ARTIFACT_AVAILABILITIES.paused);
 });
+
+test("27. REGRESSION: Question present in raw runtime is not answerable when coverage is denied or availability is invalid", () => {
+  const normalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-27",
+    interviewState: {
+      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      activeQuestion: {
+        id: "q-27",
+        intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+        control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+        prompt: "Describe your system architecture",
+      },
+    },
+    coverageOverride: {
+      state: ASSESSMENT_TECHNICAL_COVERAGE_STATES.unavailable,
+      limitations: ["Scanner coverage denied"],
+    },
+  });
+
+  const actions = selectCustomerActions(normalized);
+  assert.equal(actions.canAnswerQuestion, false);
+  assert.equal(actions.canSubmitDraft, false);
+  assert.equal(actions.canUseComposer, false);
+
+  const composer = selectComposerAvailability(normalized);
+  assert.equal(composer.isEnabled, false);
+  assert.equal(composer.canSubmit, false);
+});
+
+test("28. REGRESSION: BLOCKED_OR_UNRESOLVED with no active question surfaces exactly 3 approved semantic actions", () => {
+  const normalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-28",
+    interviewState: {
+      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved,
+      activeQuestion: null,
+      blockedActions: [
+        ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
+        ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.checkInternally,
+        ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.saveAndExit,
+      ],
+    },
+  });
+
+  const interview = selectInterviewPresentation(normalized);
+  assert.equal(interview.isBlocked, true);
+  assert.equal(interview.hasActiveQuestion, false);
+  assert.equal(interview.activeQuestion, null);
+  assert.equal(interview.questionTurnProps, null);
+
+  const actions = selectCustomerActions(normalized);
+  assert.equal(actions.canSubmitBlockedAction, true);
+  assert.deepEqual(actions.availableBlockedActions, [
+    ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
+    ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.checkInternally,
+    ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.saveAndExit,
+  ]);
+});
+
+test("29. REGRESSION: Bottom composer availability disabled state and placeholder synchronization", () => {
+  // Scenario A: Answerable question
+  const readyNormalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-29a",
+    interviewState: {
+      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      activeQuestion: {
+        id: "q-29a",
+        intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+        control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+        prompt: "Prompt",
+      },
+    },
+  });
+
+  const readyComposer = selectComposerAvailability(readyNormalized);
+  assert.equal(readyComposer.isEnabled, true);
+  assert.equal(readyComposer.placeholderKey, "pages.appShell.chatComposerPlaceholder");
+
+  // Scenario B: No active question waiting
+  const noQuestionNormalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-29b",
+    interviewState: {
+      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+      activeQuestion: null,
+    },
+  });
+
+  const noQuestionComposer = selectComposerAvailability(noQuestionNormalized);
+  assert.equal(noQuestionComposer.isEnabled, false);
+  assert.equal(noQuestionComposer.placeholderKey, "pages.assessment.noActiveInterviewQuestion");
+});
+
+test("30. REGRESSION: Non-targeted CLARIFY question stays in normal Interview question projection (F05 not F09)", () => {
+  const normalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-30",
+    interviewState: {
+      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      activeQuestion: {
+        id: "q-30",
+        intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
+        control: ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust,
+        prompt: "Confirm or adjust user identity flow",
+      },
+    },
+    timeline: {
+      currentRun: {
+        assessmentId: "asm-30",
+        runId: "run-30",
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+        status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+        activeTools: [],
+        updatedAt: "2026-09-05T10:00:00.000Z",
+      },
+      recentActivity: [],
+      latestRunId: "run-30",
+      connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+      lastEmittedAt: "2026-09-05T10:00:00.000Z",
+    },
+  });
+
+  const workflow = selectWorkflowPresentation(normalized);
+  assert.equal(workflow.isTargetedClarificationLoop, false);
+
+  const screen = selectAssessmentScreenProjection(normalized);
+  // Must NOT be F09 because it is not in the targeted Investigator loop
+  assert.equal(screen, ASSESSMENT_SCREEN_PROJECTIONS.f05);
+});
+

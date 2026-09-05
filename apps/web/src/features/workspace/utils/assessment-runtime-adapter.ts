@@ -488,8 +488,11 @@ function normalizeCustomerActions({
     };
   }
 
-  // If coverage policy explicitly denies interview:
-  if (coverage.policyDecision && !coverage.policyDecision.permittedForInterview) {
+  // If coverage is UNAVAILABLE or coverage policy explicitly denies interview:
+  if (
+    coverage.state === ASSESSMENT_TECHNICAL_COVERAGE_STATES.unavailable ||
+    (coverage.policyDecision && !coverage.policyDecision.permittedForInterview)
+  ) {
     return {
       canAnswerQuestion: false,
       canSubmitDraft: false,
