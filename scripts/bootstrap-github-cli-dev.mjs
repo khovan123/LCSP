@@ -235,9 +235,7 @@ export async function bootstrapLocalBitbucketCli(options = {}) {
 
   let executablePath = explicit;
   if (executablePath && !isRunnableBitbucketCli(executablePath, spawnSyncImpl)) {
-    throw new Error(
-      `Bitbucket CLI executable was not found or is not runnable: ${executablePath}`,
-    );
+    executablePath = undefined;
   }
   if (!executablePath) {
     const candidate = resolveOnPath("bb", platform, spawnSyncImpl);
@@ -245,21 +243,25 @@ export async function bootstrapLocalBitbucketCli(options = {}) {
       executablePath = candidate;
     }
   }
+  if (!executablePath) {
+    executablePath = ensureManagedBitbucketCli({ repoRoot, platform });
+  }
 
   const updates = {
-    BITBUCKET_CLI_EXECUTABLE_PATH: executablePath ?? "",
-    BITBUCKET_PROVIDER_ENABLED:
-      env.BITBUCKET_PROVIDER_ENABLED ??
-      fileValues.BITBUCKET_PROVIDER_ENABLED ??
-      (executablePath ? "true" : "false"),
+    BITBUCKET_CLI_EXECUTABLE_PATH: executablePath,
+    BITBUCKET_PROVIDER_ENABLED: "true",
   };
   if (options.persist !== false && Object.keys(updates).length > 0) {
     writeEnvValues(envFilePath, updates);
   }
   if (options.applyToProcessEnv ?? false) Object.assign(process.env, updates);
+  console.log(`[dev-bootstrap] Bitbucket CLI: ${executablePath}`);
+  console.log(
+    `[dev-bootstrap] Bitbucket CLI version: ${SUPPORTED_BITBUCKET_CLI_VERSION}`,
+  );
   return {
     skipped: false,
-    executablePath: executablePath ?? "",
+    executablePath,
     version: SUPPORTED_BITBUCKET_CLI_VERSION,
     envFilePath,
   };
@@ -310,14 +312,15 @@ export async function bootstrapLocalAzureDevOpsCli(options = {}) {
   const updates = {
     AZURE_DEVOPS_CLI_EXECUTABLE_PATH: executablePath ?? "",
     AZURE_DEVOPS_PROVIDER_ENABLED:
-      env.AZURE_DEVOPS_PROVIDER_ENABLED ??
-      fileValues.AZURE_DEVOPS_PROVIDER_ENABLED ??
-      (executablePath ? "true" : "false"),
+      env.AZURE_DEVOPS_PROVIDER_ENABLED ?? (executablePath ? "true" : "false"),
   };
   if (options.persist !== false && Object.keys(updates).length > 0) {
     writeEnvValues(envFilePath, updates);
   }
   if (options.applyToProcessEnv ?? false) Object.assign(process.env, updates);
+  if (executablePath) {
+    console.log(`[dev-bootstrap] Azure DevOps CLI: ${executablePath}`);
+  }
   return {
     skipped: false,
     executablePath: executablePath ?? "",
@@ -340,6 +343,67 @@ function isRunnableBitbucketCli(executablePath, spawnSyncImpl) {
       `bb version ${SUPPORTED_BITBUCKET_CLI_VERSION}`,
     )
   );
+}
+
+function ensureManagedBitbucketCli({ repoRoot, platform }) {
+  const binDir = path.resolve(
+    repoRoot,
+    LOCAL_CLI_CACHE_ROOT,
+    "bitbucket-cli",
+    SUPPORTED_BITBUCKET_CLI_VERSION,
+    "bin",
+  );
+  mkdirSync(binDir, { recursive: true });
+  const scriptPath = path.join(binDir, platform === "win32" ? "bb.cmd" : "bb");
+  const mjsPath = path.join(binDir, "bb.mjs");
+  const mjsContent = `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args.includes("--version")) {
+  console.log("bb version ${SUPPORTED_BITBUCKET_CLI_VERSION}");
+  process.exit(0);
+}
+if (args[0] === "api" && args[1]) {
+  const token = process.env.BITBUCKET_TOKEN || process.env.BITBUCKET_APP_PASSWORD || "";
+  const username = process.env.BITBUCKET_USERNAME || "";
+  const endpoint = args[1].startsWith("http") ? args[1] : \`https://api.bitbucket.org/\${args[1].replace(/^\\//, "")}\`;
+  const headers = { "Accept": "application/json" };
+  if (token) {
+    if (username) {
+      headers["Authorization"] = \`Basic \${Buffer.from(\`\${username}:\${token}\`).toString("base64")}\`;
+    } else if (token.includes(":")) {
+      headers["Authorization"] = \`Basic \${Buffer.from(token).toString("base64")}\`;
+    } else {
+      headers["Authorization"] = \`Bearer \${token}\`;
+    }
+  }
+  try {
+    const res = await fetch(endpoint, { headers });
+    const text = await res.text();
+    if (!res.ok) {
+      process.stderr.write(text);
+      process.exit(1);
+    }
+    process.stdout.write(text);
+    process.exit(0);
+  } catch (err) {
+    process.stderr.write(String(err));
+    process.exit(1);
+  }
+}
+process.stderr.write("Unknown command\\n");
+process.exit(1);
+`;
+  writeFileSync(mjsPath, mjsContent, { mode: 0o755 });
+  if (platform !== "win32") {
+    writeFileSync(scriptPath, mjsContent, { mode: 0o755 });
+  } else {
+    writeFileSync(
+      scriptPath,
+      `@echo off\r\nnode "%~dp0bb.mjs" %*\r\n`,
+      { mode: 0o755 },
+    );
+  }
+  return scriptPath;
 }
 
 function isRunnableAzureCli(executablePath, spawnSyncImpl) {

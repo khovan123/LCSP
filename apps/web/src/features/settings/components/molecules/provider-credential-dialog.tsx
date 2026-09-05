@@ -7,6 +7,7 @@ import { resolveMessage } from "@lcsp/i18n";
 import Image from "next/image";
 import type { FormEvent } from "react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +18,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import type { ProviderCredentialStatus } from "@/lib/api/github-repository-client";
+import {
+  githubRepositoryProblemMessageKey,
+  type ProviderCredentialStatus,
+} from "@/lib/api/github-repository-client";
 import { useConfigureProviderCredentialMutation } from "@/lib/api/github-repository-queries";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
@@ -30,6 +34,8 @@ export const PROVIDER_CREDENTIAL_DIALOG_MODES = {
 
 export type ProviderCredentialDialogMode =
   (typeof PROVIDER_CREDENTIAL_DIALOG_MODES)[keyof typeof PROVIDER_CREDENTIAL_DIALOG_MODES];
+
+type MessageKey = Parameters<typeof resolveMessage>[1];
 
 type ProviderCredentialDialogProps = {
   mode: ProviderCredentialDialogMode;
@@ -114,26 +120,36 @@ export function ProviderCredentialDialog({
 }: ProviderCredentialDialogProps) {
   const [credential, setCredential] = useState("");
   const [reauthRequired, setReauthRequired] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const mutation = useConfigureProviderCredentialMutation();
-  const accountUsername = status?.account?.username ?? "";
+  const accountUsername = status?.account?.username?.trim() ?? "";
 
-  function closeCredentialDialog(openState: boolean) {
-    if (!openState) {
+  function closeCredentialDialog(nextOpen: boolean) {
+    if (!nextOpen) {
       setCredential("");
       setReauthRequired(false);
+      setErrorMessage(null);
     }
-    onOpenChange(openState);
+    onOpenChange(nextOpen);
   }
 
   function changeMode(nextMode: ProviderCredentialDialogMode) {
     setCredential("");
     setReauthRequired(false);
+    setErrorMessage(null);
     onModeChange(nextMode);
   }
 
   function handleMutationSuccess() {
     setCredential("");
     setReauthRequired(false);
+    setErrorMessage(null);
+    toast.success(
+      resolveMessage(
+        appLocale,
+        "pages.workspace.settingsHub.repositories.connectSuccessTitle",
+      ),
+    );
     if (mode === PROVIDER_CREDENTIAL_DIALOG_MODES.update) {
       onModeChange(PROVIDER_CREDENTIAL_DIALOG_MODES.manage);
       return;
@@ -142,6 +158,7 @@ export function ProviderCredentialDialog({
   }
 
   function submitCredential(submittedCredential: string) {
+    setErrorMessage(null);
     mutation.mutate(
       { provider, credential: submittedCredential },
       {
@@ -159,7 +176,14 @@ export function ProviderCredentialDialog({
                 submitCredential(submittedCredential);
               });
             });
+            return;
           }
+          const message = resolveMessage(
+            appLocale,
+            githubRepositoryProblemMessageKey(error),
+          );
+          setErrorMessage(message);
+          toast.error(message);
         },
       },
     );
@@ -193,6 +217,7 @@ export function ProviderCredentialDialog({
           <CredentialForm
             accountUsername={accountUsername}
             credential={credential}
+            errorMessage={errorMessage}
             isPending={mutation.isPending}
             mode={mode}
             onCancel={() => {
@@ -245,6 +270,7 @@ function CredentialDialogHeader({
 function CredentialForm({
   accountUsername,
   credential,
+  errorMessage,
   isPending,
   mode,
   onCancel,
@@ -255,6 +281,7 @@ function CredentialForm({
 }: {
   accountUsername: string;
   credential: string;
+  errorMessage: string | null;
   isPending: boolean;
   mode: ProviderCredentialDialogMode;
   onCancel: () => void;
@@ -321,6 +348,11 @@ function CredentialForm({
       >
         {resolveMessage(appLocale, PROVIDER_GUIDANCE_KEYS[provider])}
       </div>
+      {errorMessage && !reauthRequired ? (
+        <p role="alert" className="mt-2 text-xs font-medium text-destructive">
+          {errorMessage}
+        </p>
+      ) : null}
       {reauthRequired ? (
         <p role="status" className="mt-3 text-xs text-muted-foreground">
           {resolveMessage(
