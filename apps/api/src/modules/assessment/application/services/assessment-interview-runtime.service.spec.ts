@@ -17,6 +17,8 @@ import type { AssessmentRuntimeEventService } from "../../../../platform/runtime
 import type { InterviewAuditService } from "../../../audit/application/services/interview-audit.service.js";
 import { AssessmentInterviewRuntimeService } from "./assessment-interview-runtime.service.js";
 
+const TEST_GUIDANCE_VERSION = "interview-context-test-v1";
+
 function confirmedStructuredContext(input: {
   assessmentId?: string;
   contextRevision?: number;
@@ -157,6 +159,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
   let mockTx: MockPrismaDelegates;
   let mockOutboxRepository: MockOutboxRepository;
   let mockInterviewAudit: MockInterviewAudit;
+  let mockInterviewGuidanceResolver: {
+    resolveActiveGuidanceVersion: jest.Mock<() => string>;
+  };
 
   beforeEach(() => {
     mockTx = {
@@ -249,12 +254,22 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         .mockResolvedValue(undefined),
     };
 
+    mockInterviewGuidanceResolver = {
+      resolveActiveGuidanceVersion: jest
+        .fn<() => string>()
+        .mockReturnValue(TEST_GUIDANCE_VERSION),
+    };
+
     service = new AssessmentInterviewRuntimeService(
       mockPrisma as unknown as PrismaService,
       mockRuntimeEvents as unknown as AssessmentRuntimeEventService,
       mockOutboxRepository as unknown as OutboxRepository,
       mockInterviewAudit as unknown as InterviewAuditService,
     );
+    Object.defineProperty(service, "guidanceResolver", {
+      configurable: true,
+      value: mockInterviewGuidanceResolver,
+    });
   });
 
   describe("submitAnswer", () => {
@@ -315,7 +330,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             pgeVersion: "report-1:v1",
             technicalCoverageState: "READY",
             coverageLimitations: [],
-            guidanceVersion: "interview-context-test-v1",
+            guidanceVersion: TEST_GUIDANCE_VERSION,
           }),
         }),
         mockTx,
@@ -1007,7 +1022,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       expect(mockTx.assessmentInterviewThread.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           create: expect.objectContaining({
-            guidanceVersion: "interview-context-test-v1",
+            guidanceVersion: TEST_GUIDANCE_VERSION,
             privateContextJson: expect.objectContaining({
               workingStrategy: expect.objectContaining({
                 terminologyMap: {},
@@ -1038,8 +1053,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
 
   describe("legacy guidance pinning", () => {
     it("pins a materialized legacy thread once and keeps the pin after active guidance changes", async () => {
-      const original = process.env.INTERVIEW_GUIDANCE_VERSION;
-      process.env.INTERVIEW_GUIDANCE_VERSION = "guidance-v3";
+      mockInterviewGuidanceResolver.resolveActiveGuidanceVersion.mockReturnValue(
+        "guidance-v3",
+      );
       const legacyThread = {
         assessmentId: "assessment-1",
         contextRevision: 0,
@@ -1086,7 +1102,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         mockTx,
       );
 
-      process.env.INTERVIEW_GUIDANCE_VERSION = "guidance-v4";
+      mockInterviewGuidanceResolver.resolveActiveGuidanceVersion.mockReturnValue(
+        "guidance-v4",
+      );
       const workerContext = await service.getPrivateContextForWorker({
         assessmentId: "assessment-1",
         contextRevision: 0,
@@ -1097,13 +1115,12 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         mockTx.assessmentInterviewThread.updateMany,
       ).not.toHaveBeenCalled();
 
-      if (original === undefined) delete process.env.INTERVIEW_GUIDANCE_VERSION;
-      else process.env.INTERVIEW_GUIDANCE_VERSION = original;
     });
 
     it("does not overwrite a pin won by a concurrent legacy-thread materialization", async () => {
-      const original = process.env.INTERVIEW_GUIDANCE_VERSION;
-      process.env.INTERVIEW_GUIDANCE_VERSION = "guidance-v4";
+      mockInterviewGuidanceResolver.resolveActiveGuidanceVersion.mockReturnValue(
+        "guidance-v4",
+      );
       const legacyThread = {
         assessmentId: "assessment-1",
         contextRevision: 1,
@@ -1144,8 +1161,6 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         data: { guidanceVersion: "guidance-v4" },
       });
 
-      if (original === undefined) delete process.env.INTERVIEW_GUIDANCE_VERSION;
-      else process.env.INTERVIEW_GUIDANCE_VERSION = original;
     });
   });
 });
