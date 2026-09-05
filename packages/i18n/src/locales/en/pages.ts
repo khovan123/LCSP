@@ -1085,10 +1085,16 @@ export const enPages = {
         repositoryUrlLabel: "Repository URL",
         repositoryUrlPlaceholder: "https://github.com/owner/repository",
         gitlabRepositoryUrlPlaceholder: "https://gitlab.com/group/project",
-        repositoryUrlRequired: "Enter a valid HTTPS GitHub repository URL.",
+        bitbucketRepositoryUrlPlaceholder:
+          "https://bitbucket.org/workspace/repository",
+        azureDevOpsRepositoryUrlPlaceholder:
+          "https://dev.azure.com/organization/project/_git/repository",
+        repositoryUrlRequired: "Enter a valid HTTPS repository URL.",
         credentialLabel: "GitHub personal access token",
         gitlabCredentialLabel: "GitLab access token",
-        credentialRequired: "Enter a GitHub personal access token.",
+        bitbucketCredentialLabel: "Bitbucket app password",
+        azureDevOpsCredentialLabel: "Azure DevOps personal access token",
+        credentialRequired: "Enter a personal access token or app password.",
         repositoryLabel: "Repository",
         discoverAction: "Validate and discover repositories",
         connectAction: "Connect repository",
@@ -1113,6 +1119,8 @@ export const enPages = {
         connect: "Connect",
         connectGithubTitle: "Connect GitHub",
         connectGitlabTitle: "Connect GitLab",
+        connectBitbucketTitle: "Connect Bitbucket",
+        connectAzureDevOpsTitle: "Connect Azure DevOps",
         connected: "Connected",
         connectionStatus: "Connection status",
         credentialStoredHelper:
@@ -1125,13 +1133,23 @@ export const enPages = {
           "Disconnect is not available from the current settings API.",
         enterNewPat: "Enter a new PAT",
         githubRepositoryCredentialSubtitle: "GitHub repository credential",
+        gitlabRepositoryCredentialSubtitle: "GitLab repository credential",
+        bitbucketRepositoryCredentialSubtitle:
+          "Bitbucket repository credential",
+        azureDevOpsRepositoryCredentialSubtitle:
+          "Azure DevOps repository credential",
         gitProvidersTitle: "Git providers",
         gitlabRepositoryAccessGuidance:
           "Use a token with repository read access. Add repository write access only when code fixes are enabled.",
-        gitlabRepositoryCredentialSubtitle: "GitLab repository credential",
+        bitbucketRepositoryAccessGuidance:
+          "Use an app password with repository read access. Add repository write access only when code fixes are enabled.",
+        azureDevOpsRepositoryAccessGuidance:
+          "Use a personal access token with Code (Read) scope. Add Code (Read & write) scope only when code fixes are enabled.",
         githubPatAccessTitle: "GitHub PAT access",
         manageGithubPatTitle: "Manage GitHub PAT",
         manageGitlabPatTitle: "Manage GitLab PAT",
+        manageBitbucketPatTitle: "Manage Bitbucket App Password",
+        manageAzureDevOpsPatTitle: "Manage Azure DevOps PAT",
         managePat: "Manage PAT",
         manageProvidersDescription:
           "Manage repository providers and workspace integrations.",
@@ -1145,6 +1163,8 @@ export const enPages = {
         save: "Save",
         updateGithubPatTitle: "Update GitHub PAT",
         updateGitlabPatTitle: "Update GitLab PAT",
+        updateBitbucketPatTitle: "Update Bitbucket App Password",
+        updateAzureDevOpsPatTitle: "Update Azure DevOps PAT",
         updatePat: "Update PAT",
         username: "Username",
       },

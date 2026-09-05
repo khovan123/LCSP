@@ -44,6 +44,9 @@ type ProviderCredentialDialogProps = {
 const PROVIDER_LOGOS: Record<CredentialProvider, string> = {
   [CREDENTIAL_PROVIDERS.github]: "/assets/figma/settings/logo-github.svg",
   [CREDENTIAL_PROVIDERS.gitlab]: "/assets/figma/settings/logo-gitlab.svg",
+  [CREDENTIAL_PROVIDERS.bitbucket]: "/assets/figma/settings/logo-bitbucket.svg",
+  [CREDENTIAL_PROVIDERS.azureDevOps]:
+    "/assets/figma/settings/logo-azure-devops.svg",
 };
 
 const PROVIDER_TITLE_KEYS = {
@@ -57,6 +60,16 @@ const PROVIDER_TITLE_KEYS = {
     manage: "pages.workspace.settingsHub.repositories.manageGitlabPatTitle",
     update: "pages.workspace.settingsHub.repositories.updateGitlabPatTitle",
   },
+  [CREDENTIAL_PROVIDERS.bitbucket]: {
+    connect: "pages.workspace.settingsHub.repositories.connectBitbucketTitle",
+    manage: "pages.workspace.settingsHub.repositories.manageBitbucketPatTitle",
+    update: "pages.workspace.settingsHub.repositories.updateBitbucketPatTitle",
+  },
+  [CREDENTIAL_PROVIDERS.azureDevOps]: {
+    connect: "pages.workspace.settingsHub.repositories.connectAzureDevOpsTitle",
+    manage: "pages.workspace.settingsHub.repositories.manageAzureDevOpsPatTitle",
+    update: "pages.workspace.settingsHub.repositories.updateAzureDevOpsPatTitle",
+  },
 } as const satisfies Record<
   CredentialProvider,
   Record<ProviderCredentialDialogMode, Parameters<typeof resolveMessage>[1]>
@@ -67,6 +80,10 @@ const PROVIDER_SUBTITLE_KEYS = {
     "pages.workspace.settingsHub.repositories.githubRepositoryCredentialSubtitle",
   [CREDENTIAL_PROVIDERS.gitlab]:
     "pages.workspace.settingsHub.repositories.gitlabRepositoryCredentialSubtitle",
+  [CREDENTIAL_PROVIDERS.bitbucket]:
+    "pages.workspace.settingsHub.repositories.bitbucketRepositoryCredentialSubtitle",
+  [CREDENTIAL_PROVIDERS.azureDevOps]:
+    "pages.workspace.settingsHub.repositories.azureDevOpsRepositoryCredentialSubtitle",
 } as const satisfies Record<
   CredentialProvider,
   Parameters<typeof resolveMessage>[1]
@@ -77,6 +94,10 @@ const PROVIDER_GUIDANCE_KEYS = {
     "pages.workspace.settingsHub.repositories.repositoryAccessGuidance",
   [CREDENTIAL_PROVIDERS.gitlab]:
     "pages.workspace.settingsHub.repositories.gitlabRepositoryAccessGuidance",
+  [CREDENTIAL_PROVIDERS.bitbucket]:
+    "pages.workspace.settingsHub.repositories.bitbucketRepositoryAccessGuidance",
+  [CREDENTIAL_PROVIDERS.azureDevOps]:
+    "pages.workspace.settingsHub.repositories.azureDevOpsRepositoryAccessGuidance",
 } as const satisfies Record<
   CredentialProvider,
   Parameters<typeof resolveMessage>[1]

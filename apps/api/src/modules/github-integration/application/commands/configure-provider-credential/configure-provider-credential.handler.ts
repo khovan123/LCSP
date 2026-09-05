@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { HttpStatus, Inject, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
@@ -6,6 +7,7 @@ import {
   CREDENTIAL_PROVIDERS,
   GITHUB_INTEGRATION_ERROR_CODES,
   PROVIDER_CREDENTIAL_STATUSES,
+  type CredentialProvider,
 } from "@lcsp/contracts/github-integration";
 
 import type { AppConfig } from "../../../../../config/config.types.js";
@@ -56,8 +58,9 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
     }
     assertCredential(command.credential, command.correlationId);
     if (
-      command.provider !== CREDENTIAL_PROVIDERS.github &&
-      command.provider !== CREDENTIAL_PROVIDERS.gitlab
+      !Object.values(CREDENTIAL_PROVIDERS).includes(
+        command.provider as (typeof CREDENTIAL_PROVIDERS)[keyof typeof CREDENTIAL_PROVIDERS],
+      )
     ) {
       throw problemException(
         GITHUB_INTEGRATION_ERROR_CODES.credentialRequestInvalid,
@@ -65,12 +68,13 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
         { status: HttpStatus.BAD_REQUEST },
       );
     }
+    const providerKey = command.provider as CredentialProvider;
     const provider =
-      this.registry.get(command.provider) ?? this.fallbackProvider;
+      this.registry.get(providerKey) ?? this.fallbackProvider;
     const existing = await this.unitOfWork.execute((transaction) =>
       transaction.providerCredentials.findActiveByOwnerProvider(
         command.userId,
-        command.provider as CredentialStorageContext["provider"],
+        providerKey,
       ),
     );
     const credentialId = existing?.id ?? crypto.randomUUID();
@@ -89,13 +93,14 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
         mapProviderFailure(error, command.correlationId);
       }
       const context: CredentialStorageContext = {
-        provider: command.provider,
+        provider: providerKey,
         providerCredentialId: credentialId,
         ownerUserId: command.userId,
         credentialVersion,
         envelopeVersion: ENVELOPE_VERSION,
       };
       const validatedAt = new Date();
+      const providerAccountId = toProviderAccountIdBigInt(identity.id);
       try {
         await this.unitOfWork.execute(async (transaction) => {
           if (existing) {
@@ -107,7 +112,7 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
                 {
                   ...existing,
                   provider: context.provider,
-                  providerAccountId: BigInt(identity.id),
+                  providerAccountId,
                   providerLogin: identity.login,
                   status: PROVIDER_CREDENTIAL_STATUSES.active,
                   currentVersion: credentialVersion,
@@ -126,7 +131,7 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
               id: credentialId,
               provider: context.provider,
               ownerUserId: command.userId,
-              providerAccountId: BigInt(identity.id),
+              providerAccountId,
               providerLogin: identity.login,
               status: PROVIDER_CREDENTIAL_STATUSES.active,
               currentVersion: credentialVersion,
@@ -168,3 +173,10 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
     }
   }
 }
+
+function toProviderAccountIdBigInt(id: string): bigint {
+  if (/^\d+$/u.test(id)) return BigInt(id);
+  const hash = createHash("sha256").update(id).digest();
+  return hash.readBigUInt64BE(0) & 0x7fffffffffffffffn;
+}
+
