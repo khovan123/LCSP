@@ -29,10 +29,10 @@ import { appLocale } from "@/lib/locale";
 import { useAssessmentRuntimeViewModel } from "../../hooks/use-assessment-runtime-view-model";
 import type { AssessmentOverviewProps } from "../../types/assessment-overview.types";
 import { ASSESSMENT_CHAT_ROLES } from "../../types/assessment-chat.types";
-import { ASSESSMENT_RUNTIME_AVAILABILITIES } from "../../types/assessment-runtime-adapter.types";
 import {
   selectComposerAvailability,
   selectCustomerActions,
+  selectInterviewHandoffPresentation,
   selectInterviewPresentation,
   selectWorkflowPresentation,
 } from "../../utils/assessment-runtime-selectors";
@@ -169,6 +169,7 @@ function AssessmentInterviewFlow({
   const workflow = selectWorkflowPresentation(normalized);
   const customerActions = selectCustomerActions(normalized);
   const composerAvailability = selectComposerAvailability(normalized);
+  const interviewHandoff = selectInterviewHandoffPresentation(normalized);
   const submitAnswer = useSubmitAssessmentInterviewAnswerMutation(assessmentId);
   const recordBlockedAction =
     useAssessmentInterviewBlockedActionMutation(assessmentId);
@@ -365,16 +366,8 @@ function AssessmentInterviewFlow({
                   <ThoughtLine
                     label={t("pages.assessmentFlow.interview.thought")}
                   />
-                  <p className="mt-2">
-                    {t("pages.assessmentFlow.interview.readyDescription")}
-                  </p>
                   <p className="mt-2 text-muted-foreground">
-                    {normalized.availability ===
-                    ASSESSMENT_RUNTIME_AVAILABILITIES.loading
-                      ? t("pages.assessment.loadingInterviewState")
-                      : interview.orchestrationRequested
-                        ? t("pages.assessment.runtimeWaitingForAgent")
-                        : t("pages.assessment.noActiveInterviewQuestion")}
+                    {t(interviewHandoff.messageKey)}
                   </p>
                 </AgentMessage>
               </AgentTurn>
@@ -403,7 +396,7 @@ function AssessmentInterviewFlow({
             : interviewEnabled
               ? composerAvailability.isEnabled
                 ? "pages.assessmentFlow.interview.placeholder"
-                : composerAvailability.placeholderKey
+                : interviewHandoff.placeholderKey
               : "pages.assessmentFlow.scanner.runningPlaceholder",
         )}
         onValueChange={persistDraft}

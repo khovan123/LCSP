@@ -1363,6 +1363,12 @@ export const enPages = {
       thought: "Thought for 2s",
       readyDescription:
         "The scan is complete. I am ready to start the interview with the project context.",
+      startingDescription:
+        "Evidence is ready. I am starting the Interview Agent and waiting for the first question.",
+      startingPlaceholder: "Starting Interview...",
+      pendingDescription:
+        "Evidence is ready. Waiting for Interview orchestration to provide the first question.",
+      pendingPlaceholder: "Waiting for Interview...",
       placeholder: "Describe the project or system...",
     },
     errors: {

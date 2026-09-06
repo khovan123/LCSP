@@ -240,6 +240,23 @@ test("LCSP-272 right assessment sidebar removes the generic runtime dashboard UI
   );
 });
 
+test("LCSP-272 right assessment sidebar follows Figma spacing, icon, and alignment contract", async () => {
+  const sidebarSource = await readFile(runtimeSidebarPath, "utf8");
+
+  assert.match(sidebarSource, /h-55/);
+  assert.match(sidebarSource, /h-8\.5/);
+  assert.match(sidebarSource, /top-3\.5 h-6 w-px/);
+  assert.match(sidebarSource, /grid h-15/);
+  assert.match(sidebarSource, /grid-cols-\[28px_minmax\(0,1fr\)_94px_14px\]/);
+  assert.match(
+    sidebarSource,
+    /\/assets\/figma\/assessment\/output-icon\.svg/,
+  );
+  assert.doesNotMatch(sidebarSource, /FileTextIcon/);
+  assert.match(sidebarSource, /whitespace-nowrap text-right text-\[11px\]/);
+  assert.match(sidebarSource, /compact \? "w-20" : "w-24"/);
+});
+
 test("LCSP-272 right assessment sidebar uses normalized state instead of F03/F04 screen branching", async () => {
   const [shellSource, selectorSource, sidebarSource, typesSource] =
     await Promise.all([

@@ -31,6 +31,7 @@ import {
   selectAssessmentScreenProjection,
   selectComposerAvailability,
   selectCustomerActions,
+  selectInterviewHandoffPresentation,
   selectInterviewPresentation,
   selectRightSidebarPresentation,
   selectWorkflowPresentation,
@@ -873,11 +874,12 @@ test("24. CROSS-CONSUMER CONSISTENCY: Chat, Workflow, Sidebar, and Artifacts sel
   assert.equal(composer.isEnabled, true);
 });
 
-test("25. FIGMA PROJECTION TEST — F04: Initial interview start projection", () => {
+test("25. LCSP-272 HANDOFF: accepted evidence without active question stays pending, not F04", () => {
   const normalized = normalizeAssessmentRuntime({
     assessmentId: "asm-f04",
     interviewState: {
       outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      orchestrationRequested: true,
       audit: {
         authenticatedActorId: "usr-f04",
         timestamp: "2026-09-05T10:00:00.000Z",
@@ -906,7 +908,23 @@ test("25. FIGMA PROJECTION TEST — F04: Initial interview start projection", ()
   });
 
   const screen = selectAssessmentScreenProjection(normalized);
-  assert.equal(screen, ASSESSMENT_SCREEN_PROJECTIONS.f04);
+  assert.equal(screen, ASSESSMENT_SCREEN_PROJECTIONS.f03);
+
+  const chat = selectInterviewPresentation(normalized);
+  assert.equal(chat.hasActiveQuestion, false);
+  assert.equal(chat.questionTurnProps, null);
+  assert.equal(chat.orchestrationRequested, true);
+
+  const handoff = selectInterviewHandoffPresentation(normalized);
+  assert.equal(handoff.isStartupPending, true);
+  assert.equal(
+    handoff.messageKey,
+    "pages.assessmentFlow.interview.startingDescription",
+  );
+  assert.equal(
+    handoff.placeholderKey,
+    "pages.assessmentFlow.interview.startingPlaceholder",
+  );
 
   const sidebar = selectRightSidebarPresentation(normalized);
   assert.equal(
@@ -917,6 +935,87 @@ test("25. FIGMA PROJECTION TEST — F04: Initial interview start projection", ()
     sidebar.businessContext.availability,
     ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting,
   );
+});
+
+test("LCSP-272 HANDOFF: evidence ready without orchestration request stays truthful", () => {
+  const normalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-handoff-pending",
+    interviewState: {
+      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      orchestrationRequested: false,
+    },
+    timeline: {
+      currentRun: null,
+      recentActivity: [],
+      latestRunId: "run-scan",
+      connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+      lastEmittedAt: "2026-09-05T10:00:00.000Z",
+    },
+    coverageOverride: {
+      state: ASSESSMENT_TECHNICAL_COVERAGE_STATES.ready,
+      limitations: [],
+      policyDecision: {
+        permittedForInterview: true,
+      },
+      recoveryReason: null,
+    },
+  });
+
+  const screen = selectAssessmentScreenProjection(normalized);
+  const handoff = selectInterviewHandoffPresentation(normalized);
+  assert.equal(screen, ASSESSMENT_SCREEN_PROJECTIONS.f03);
+  assert.equal(
+    handoff.messageKey,
+    "pages.assessmentFlow.interview.pendingDescription",
+  );
+  assert.equal(
+    handoff.placeholderKey,
+    "pages.assessmentFlow.interview.pendingPlaceholder",
+  );
+});
+
+test("LCSP-272 HANDOFF: active runtime question produces the real F04 projection", () => {
+  const normalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-f04-active",
+    interviewState: {
+      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      activeQuestion: {
+        id: "q-runtime-owned",
+        intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+        control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+        prompt: "Which teams operate this service in production?",
+      },
+      orchestrationRequested: false,
+    },
+    timeline: {
+      currentRun: {
+        assessmentId: "asm-f04-active",
+        runId: "run-f04-active",
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+        status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+        activeTools: [],
+        updatedAt: "2026-09-05T10:00:00.000Z",
+      },
+      recentActivity: [],
+      latestRunId: "run-f04-active",
+      connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+      lastEmittedAt: "2026-09-05T10:00:00.000Z",
+    },
+  });
+
+  const screen = selectAssessmentScreenProjection(normalized);
+  const chat = selectInterviewPresentation(normalized);
+  const composer = selectComposerAvailability(normalized);
+  assert.equal(screen, ASSESSMENT_SCREEN_PROJECTIONS.f04);
+  assert.equal(
+    chat.activeQuestion?.prompt,
+    "Which teams operate this service in production?",
+  );
+  assert.notEqual(
+    chat.activeQuestion?.prompt,
+    "Describe this project or system.",
+  );
+  assert.equal(composer.isEnabled, true);
 });
 
 test("26. FIGMA PROJECTION TEST — F09: Targeted loop semantic projection", () => {
@@ -1084,7 +1183,7 @@ test("29. REGRESSION: Bottom composer availability disabled state and placeholde
   );
 });
 
-test("30. REGRESSION: Non-targeted CLARIFY question stays in normal Interview question projection (F05 not F09)", () => {
+test("30. REGRESSION: Non-targeted CLARIFY question stays in normal Interview question projection (F04 not F09)", () => {
   const normalized = normalizeAssessmentRuntime({
     assessmentId: "asm-30",
     interviewState: {
@@ -1117,7 +1216,7 @@ test("30. REGRESSION: Non-targeted CLARIFY question stays in normal Interview qu
 
   const screen = selectAssessmentScreenProjection(normalized);
   // Must NOT be F09 because it is not in the targeted Investigator loop
-  assert.equal(screen, ASSESSMENT_SCREEN_PROJECTIONS.f05);
+  assert.equal(screen, ASSESSMENT_SCREEN_PROJECTIONS.f04);
 });
 
 function scannerTimeline(

@@ -1332,6 +1332,10 @@ export type PagesMessages = {
     interview: {
       thought: string;
       readyDescription: string;
+      startingDescription: string;
+      startingPlaceholder: string;
+      pendingDescription: string;
+      pendingPlaceholder: string;
       placeholder: string;
     };
     errors: {

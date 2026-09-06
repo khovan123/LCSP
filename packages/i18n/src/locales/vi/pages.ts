@@ -1364,6 +1364,12 @@ export const viPages = {
       thought: "Đã suy nghĩ trong 2 giây",
       readyDescription:
         "Scan hoàn tất. Tôi sẵn sàng bắt đầu Interview bằng ngữ cảnh dự án.",
+      startingDescription:
+        "Evidence đã sẵn sàng. Tôi đang khởi động Interview Agent và chờ câu hỏi đầu tiên.",
+      startingPlaceholder: "Đang khởi động Interview...",
+      pendingDescription:
+        "Evidence đã sẵn sàng. Đang chờ orchestration cung cấp câu hỏi Interview đầu tiên.",
+      pendingPlaceholder: "Đang chờ Interview...",
       placeholder: "Mô tả project hoặc system...",
     },
     errors: {

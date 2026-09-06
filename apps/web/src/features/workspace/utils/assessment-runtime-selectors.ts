@@ -298,6 +298,29 @@ export function selectComposerAvailability(
   };
 }
 
+export function selectInterviewHandoffPresentation(
+  normalized: NormalizedAssessmentRuntime,
+) {
+  const interview = selectInterviewPresentation(normalized);
+  const hasCustomerVisibleTurn =
+    Boolean(interview.questionTurnProps) || interview.isBlocked;
+  const isStartupPending = !hasCustomerVisibleTurn;
+  const messageKey =
+    normalized.availability === ASSESSMENT_RUNTIME_AVAILABILITIES.loading
+      ? "pages.assessment.loadingInterviewState"
+      : interview.orchestrationRequested
+        ? "pages.assessmentFlow.interview.startingDescription"
+        : "pages.assessmentFlow.interview.pendingDescription";
+
+  return {
+    isStartupPending,
+    messageKey,
+    placeholderKey: interview.orchestrationRequested
+      ? "pages.assessmentFlow.interview.startingPlaceholder"
+      : "pages.assessmentFlow.interview.pendingPlaceholder",
+  };
+}
+
 export function selectAssessmentScreenProjection(
   normalized: NormalizedAssessmentRuntime,
 ): AssessmentScreenProjection {
@@ -330,9 +353,9 @@ export function selectAssessmentScreenProjection(
       interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer
     ) {
       if (interview.activeQuestion) {
-        return ASSESSMENT_SCREEN_PROJECTIONS.f05;
+        return ASSESSMENT_SCREEN_PROJECTIONS.f04;
       }
-      return ASSESSMENT_SCREEN_PROJECTIONS.f04;
+      return ASSESSMENT_SCREEN_PROJECTIONS.f03;
     }
 
     if (interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved) {
@@ -363,5 +386,5 @@ export function selectAssessmentScreenProjection(
     return ASSESSMENT_SCREEN_PROJECTIONS.f14;
   }
 
-  return ASSESSMENT_SCREEN_PROJECTIONS.f04;
+  return ASSESSMENT_SCREEN_PROJECTIONS.f03;
 }

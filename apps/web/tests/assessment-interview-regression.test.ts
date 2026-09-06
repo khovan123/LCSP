@@ -38,6 +38,10 @@ const assessmentQueriesPath = new URL(
   "../src/lib/api/assessment-queries.ts",
   import.meta.url,
 );
+const runtimeSelectorsPath = new URL(
+  "../src/features/workspace/utils/assessment-runtime-selectors.ts",
+  import.meta.url,
+);
 
 test("canonical interview contract exposes only release-gated outcomes", () => {
   assert.deepEqual(Object.values(ASSESSMENT_INTERVIEW_OUTCOMES).sort(), [
@@ -161,9 +165,10 @@ test("blocked or unresolved actions expose exactly the MVP customer choices", ()
 });
 
 test("workflow run renders dynamic interview controls through shared workspace components", async () => {
-  const [overviewSource, questionSource] = await Promise.all([
+  const [overviewSource, questionSource, selectorSource] = await Promise.all([
     readFile(overviewPath, "utf8"),
     readFile(questionTurnPath, "utf8"),
+    readFile(runtimeSelectorsPath, "utf8"),
   ]);
 
   assert.match(overviewSource, /data-flow-stage=/);
@@ -175,8 +180,10 @@ test("workflow run renders dynamic interview controls through shared workspace c
   assert.match(overviewSource, /useAssessmentInterviewBlockedActionMutation/);
   assert.match(overviewSource, /pendingDraft/);
   assert.match(overviewSource, /answerHistory/);
-  assert.match(overviewSource, /orchestrationRequested/);
-  assert.match(overviewSource, /runtimeWaitingForAgent/);
+  assert.match(overviewSource, /selectInterviewHandoffPresentation/);
+  assert.match(selectorSource, /orchestrationRequested/);
+  assert.match(selectorSource, /assessmentFlow\.interview\.startingDescription/);
+  assert.doesNotMatch(overviewSource, /runtimeWaitingForAgent/);
   assert.doesNotMatch(
     overviewSource,
     /initialInterviewQuestion|targetedClarificationQuestion|localStorage|Card|modules\.map|\/wizard|\/readiness/,

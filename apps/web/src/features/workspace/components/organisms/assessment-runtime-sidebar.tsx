@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronRightIcon, FileTextIcon } from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
+import Image from "next/image";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
@@ -128,7 +129,7 @@ function WorkflowStatusList({
   items: NormalizedAssessmentSidebarWorkflowItem[];
 }) {
   return (
-    <ol className="h-55 rounded-[10px] border border-border/80 bg-card px-3.5 py-3">
+    <ol className="h-55 rounded-[10px] border border-border/80 bg-card px-3.5 py-2">
       {items.map((item, index) => (
         <WorkflowStatusRow
           item={item}
@@ -156,7 +157,7 @@ function WorkflowStatusRow({
       {!isLast ? (
         <span
           aria-hidden="true"
-          className="absolute left-1 top-3 h-6 w-px bg-border"
+          className="absolute left-1 top-3.5 h-6 w-px bg-border"
         />
       ) : null}
       <RuntimeStatusDot className="mt-1.5" status={item.status} />
@@ -194,28 +195,33 @@ function ArtifactEvidenceRow({
 }) {
   return (
     <div
-      className="flex h-15 w-full items-center gap-2.5 rounded-[10px] border border-border/80 bg-background px-3"
+      className="grid h-15 w-full grid-cols-[28px_minmax(0,1fr)_94px_14px] items-start gap-2.5 rounded-[10px] border border-border/80 bg-background px-3 py-2"
       data-artifact-id={item.artifact.id}
       data-artifact-kind={item.artifact.kind}
     >
-      <div className="flex size-7 shrink-0 items-center justify-center rounded-[7px] border border-border bg-muted/40 text-muted-foreground">
-        <FileTextIcon aria-hidden="true" className="size-3.5" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <p className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
-            {t(item.labelKey)}
-          </p>
-          <RuntimeStatusDot status={item.status} />
-          <RuntimeStatusBadge status={item.status} compact />
-        </div>
+      <Image
+        alt=""
+        aria-hidden="true"
+        className="mt-1.5 size-7"
+        height={28}
+        src="/assets/figma/assessment/output-icon.svg"
+        width={28}
+      />
+      <div className="min-w-0">
+        <p className="min-w-0 truncate text-xs font-medium text-foreground">
+          {t(item.labelKey)}
+        </p>
         <p className="mt-1 truncate text-[10.5px] text-muted-foreground">
           {formatMessage(item.descriptionKey, item.descriptionParams)}
         </p>
       </div>
+      <div className="flex min-w-0 items-center justify-end gap-2 pt-0.5">
+        <RuntimeStatusDot status={item.status} />
+        <RuntimeStatusBadge status={item.status} compact />
+      </div>
       <ChevronRightIcon
         aria-hidden="true"
-        className="size-3.5 shrink-0 text-muted-foreground"
+        className="mt-7 size-3.5 shrink-0 text-muted-foreground"
       />
     </div>
   );
@@ -231,8 +237,8 @@ function RuntimeStatusBadge({
   return (
     <span
       className={cn(
-        "shrink-0 text-right text-[11px]",
-        compact ? "w-14" : "w-20",
+        "shrink-0 whitespace-nowrap text-right text-[11px]",
+        compact ? "w-20" : "w-24",
         statusTextClassName(status),
       )}
     >
