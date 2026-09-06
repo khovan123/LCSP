@@ -161,6 +161,7 @@ test("assessment app shell exposes the LCSP-267 state machine and slots", async 
   assert.match(shellSource, /data-shell-screen/);
   assert.match(slotSource, /export function LeftSidebarSlot/);
   assert.match(slotSource, /export function CenterContentSlot/);
+  assert.match(shellSource, /flex h-full min-h-0 flex-1 overflow-hidden bg-muted\/10/);
   assert.match(slotSource, /export function AssessmentRightPanelSlot/);
 });
 
