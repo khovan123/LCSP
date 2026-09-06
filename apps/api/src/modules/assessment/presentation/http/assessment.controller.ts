@@ -292,7 +292,8 @@ export class InternalAssessmentInterviewController {
       typeof body === "object" &&
       typeof (body as { technicalEvidenceReportId?: unknown })
         .technicalEvidenceReportId === "string"
-        ? (body as { technicalEvidenceReportId: string }).technicalEvidenceReportId
+        ? (body as { technicalEvidenceReportId: string })
+            .technicalEvidenceReportId
         : undefined;
     return resultEnvelope(
       await this.interviewRuntime.seedInitialQuestionForWorker({

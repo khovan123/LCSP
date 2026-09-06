@@ -1250,13 +1250,13 @@ export class AssessmentInterviewRuntimeService {
         )
       : Array.isArray(evidencePayload?.coverageLimitations)
         ? evidencePayload.coverageLimitations.filter(
-          (item): item is string => typeof item === "string",
-        )
-      : Array.isArray(evidencePayload?.limitations)
-        ? evidencePayload.limitations.filter(
             (item): item is string => typeof item === "string",
           )
-        : [];
+        : Array.isArray(evidencePayload?.limitations)
+          ? evidencePayload.limitations.filter(
+              (item): item is string => typeof item === "string",
+            )
+          : [];
 
     return {
       snapshotId: snapshot?.id,
