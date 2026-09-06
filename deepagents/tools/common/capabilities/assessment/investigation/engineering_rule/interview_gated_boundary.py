@@ -230,6 +230,23 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
             f"repositorySnapshot:{snapshot_id}",
             "interviewRuntime:assessment-interview-runtime-v1",
         }
+        report_refs = (
+            evidence_report.get("evidence_refs")
+            or evidence_report.get("evidenceRefs")
+            or []
+        )
+        if isinstance(report_refs, (list, tuple, set)):
+            initial_refs.update(str(r) for r in report_refs if r)
+        graph = (evidence_report.get("evidence_payload") or {}).get("evidence_graph") or {}
+        if isinstance(graph, dict):
+            graph_refs = graph.get("evidence_refs") or graph.get("evidenceRefs") or []
+            if isinstance(graph_refs, (list, tuple, set)):
+                initial_refs.update(str(r) for r in graph_refs if r)
+            for node in graph.get("nodes") or []:
+                if isinstance(node, dict):
+                    node_refs = node.get("evidence_refs") or node.get("evidenceRefs") or []
+                    if isinstance(node_refs, (list, tuple, set)):
+                        initial_refs.update(str(r) for r in node_refs if r)
         ledger = TurnEvidenceLedger(
             initial_authorized_refs=initial_refs,
             initial_coverage_state=coverage_state,

@@ -248,12 +248,26 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         }
         if isinstance(private_revision, dict):
             authorized_refs.update(
-                private_revision.get("governedEvidenceRefs") or []
+                private_revision.get("governedEvidenceRefs")
+                or private_revision.get("governed_evidence_refs")
+                or private_revision.get("evidenceRefs")
+                or []
             )
         if isinstance(targeted_need, dict):
             authorized_refs.update(
-                targeted_need.get("governedEvidenceRefs") or []
+                targeted_need.get("governedEvidenceRefs")
+                or targeted_need.get("governed_evidence_refs")
+                or targeted_need.get("evidenceRefs")
+                or []
             )
+        ctx_refs = (
+            context.get("governedEvidenceRefs")
+            or context.get("governed_evidence_refs")
+            or context.get("evidenceRefs")
+            or []
+        )
+        if isinstance(ctx_refs, (list, tuple, set)):
+            authorized_refs.update(str(r) for r in ctx_refs if r)
 
         cov_state = str(context.get("technicalCoverageState") or "READY")
         cov_limitations = list(context.get("coverageLimitations") or [])
