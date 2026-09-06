@@ -1711,6 +1711,8 @@ export type PagesMessages = {
       claimsCollected: string;
       linkedToTracedPath: string;
       noPathAvailable: string;
+      viewInvestigationDetails: string;
+      artifactMetadata: string;
     };
     findingsTable: {
       priorityHeader: string;

@@ -1,8 +1,17 @@
 import * as React from "react";
 import { resolveMessage } from "@lcsp/i18n";
-import { RouteIcon } from "lucide-react";
+import { ArrowRightIcon, RouteIcon } from "lucide-react";
+import Link from "next/link";
 
-import type { ArtifactRef } from "@/features/artifacts/types/artifact.types";
+import { Button } from "@/components/ui/button";
+import {
+  ARTIFACT_OPEN_KINDS,
+  buildArtifactOpenTarget,
+} from "@/features/artifacts/utils/artifact-routes";
+import {
+  ARTIFACT_TYPES,
+  type ArtifactRef,
+} from "@/features/artifacts/types/artifact.types";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +27,7 @@ export type InvestigationTraceProps = {
   steps?: InvestigationTraceStep[];
   evidenceClaimCount?: number | null;
   summary?: string | null;
+  assessmentId?: string;
   artifactRef?: ArtifactRef | null;
   onOpenArtifact?: (ref: ArtifactRef) => void;
   className?: string;
@@ -54,6 +64,9 @@ export function InvestigationTrace({
   steps = [],
   evidenceClaimCount,
   summary,
+  assessmentId,
+  artifactRef,
+  onOpenArtifact,
   className,
 }: InvestigationTraceProps) {
   const currentStatusConfig = statusConfig[status] ?? statusConfig[INVESTIGATION_TRACE_STATUSES.inProgress];
@@ -69,6 +82,32 @@ export function InvestigationTrace({
         String(evidenceClaimCount),
       )
     : null;
+
+  const resolvedArtifactRef: ArtifactRef | null =
+    artifactRef ??
+    (assessmentId
+      ? {
+          assessmentId,
+          type: ARTIFACT_TYPES.investigationNotes,
+        }
+      : null);
+
+  const target = resolvedArtifactRef
+    ? buildArtifactOpenTarget(resolvedArtifactRef)
+    : null;
+
+  const canOpenArtifact =
+    Boolean(onOpenArtifact && resolvedArtifactRef) ||
+    (target !== null &&
+      (target.kind === ARTIFACT_OPEN_KINDS.internal ||
+        target.kind === ARTIFACT_OPEN_KINDS.download));
+
+  const href =
+    target &&
+    (target.kind === ARTIFACT_OPEN_KINDS.internal ||
+      target.kind === ARTIFACT_OPEN_KINDS.download)
+      ? target.href
+      : undefined;
 
   return (
     <ChatResultContainer
@@ -105,13 +144,55 @@ export function InvestigationTrace({
         </header>
       }
       footer={
-        hasClaims || summary ? (
-          <footer className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-[10px] text-muted-foreground">
-            <span className="min-w-0 truncate">
-              {claimsText ?? summary}
-            </span>
+        resolvedArtifactRef || hasClaims || summary ? (
+          <footer className="flex min-w-0 items-center justify-between gap-3 text-xs text-muted-foreground border-t border-border/60 pt-3 mt-2">
+            {resolvedArtifactRef ? (
+              href && !onOpenArtifact ? (
+                <Link
+                  href={href}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                  aria-label={t(
+                    "pages.structuredResults.investigationTrace.viewInvestigationDetails",
+                  )}
+                >
+                  {t(
+                    "pages.structuredResults.investigationTrace.viewInvestigationDetails",
+                  )}
+                  <ArrowRightIcon aria-hidden="true" className="size-3.5" />
+                </Link>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={!canOpenArtifact}
+                  onClick={() => {
+                    if (onOpenArtifact && resolvedArtifactRef) {
+                      onOpenArtifact(resolvedArtifactRef);
+                    }
+                  }}
+                  className="h-7 min-w-0 px-0 text-xs font-medium text-primary hover:bg-transparent hover:underline disabled:text-muted-foreground disabled:no-underline"
+                >
+                  {t(
+                    "pages.structuredResults.investigationTrace.viewInvestigationDetails",
+                  )}
+                  <ArrowRightIcon aria-hidden="true" className="size-3.5" />
+                </Button>
+              )
+            ) : (
+              <span className="min-w-0 truncate">
+                {claimsText ?? summary}
+              </span>
+            )}
             <span className="shrink-0 text-muted-foreground/80">
-              {t("pages.structuredResults.investigationTrace.linkedToTracedPath")}
+              {resolvedArtifactRef
+                ? (claimsText ??
+                  t(
+                    "pages.structuredResults.investigationTrace.linkedToTracedPath",
+                  ))
+                : t(
+                    "pages.structuredResults.investigationTrace.linkedToTracedPath",
+                  )}
             </span>
           </footer>
         ) : null

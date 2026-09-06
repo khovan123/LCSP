@@ -1979,6 +1979,8 @@ export const viPages = {
       claimsCollected: "{count} evidence claims đã thu thập",
       linkedToTracedPath: "liên kết với đường dẫn được trace này",
       noPathAvailable: "Chưa ghi nhận đường dẫn trace",
+      viewInvestigationDetails: "Xem chi tiết điều tra",
+      artifactMetadata: "Ghi chú điều tra",
     },
     findingsTable: {
       priorityHeader: "ĐỘ ƯU TIÊN",

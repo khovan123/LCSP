@@ -386,6 +386,7 @@ test("Finding status authority: deterministic evaluation statuses are preserved"
 });
 
 test("artifact navigation: CTAs resolve via LCSP-270 artifact routes", () => {
+  setAppLocale("en");
   const pgeTarget = buildArtifactOpenTarget({
     assessmentId: "asmt-1",
     type: ARTIFACT_TYPES.programEvidenceGraph,
@@ -406,6 +407,28 @@ test("artifact navigation: CTAs resolve via LCSP-270 artifact routes", () => {
   });
   assert.equal(traceTarget.kind, "INTERNAL");
   assert.equal(traceTarget.href, "/assessments/asmt-1");
+
+  // Verify InvestigationTrace renders the LCSP-270 artifact CTA link
+  const traceHtml = renderToStaticMarkup(
+    React.createElement(InvestigationTrace, {
+      assessmentId: "asmt-trace-1",
+      steps: [{ id: "s1", label: "Check API Gateway" }],
+      evidenceClaimCount: 3,
+    }),
+  );
+  assert.match(traceHtml, /href="\/assessments\/asmt-trace-1"/);
+  assert.match(traceHtml, /View investigation details/);
+  assert.match(traceHtml, /3 evidence claims collected/);
+
+  // Verify adapter creates investigationNotes artifactRef
+  const traceViewModel = toInvestigationTraceViewModel({
+    assessmentId: "asmt-trace-2",
+    steps: [{ id: "s1", label: "Check policy gate" }],
+  });
+  assert.deepEqual(traceViewModel.artifactRef, {
+    assessmentId: "asmt-trace-2",
+    type: ARTIFACT_TYPES.investigationNotes,
+  });
 });
 
 test("AgentTurn composition: structured results can be followed by Agent message in the same turn", async () => {

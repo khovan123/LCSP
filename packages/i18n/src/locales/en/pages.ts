@@ -1978,6 +1978,8 @@ export const enPages = {
       claimsCollected: "{count} evidence claims collected",
       linkedToTracedPath: "linked to this traced path",
       noPathAvailable: "No trace path recorded",
+      viewInvestigationDetails: "View investigation details",
+      artifactMetadata: "Investigation notes",
     },
     findingsTable: {
       priorityHeader: "PRIORITY",
