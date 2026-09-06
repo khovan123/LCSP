@@ -5,11 +5,11 @@ import {
   ASSESSMENT_TECHNICAL_COVERAGE_STATES,
 } from "@lcsp/contracts/evidence";
 
-import type { ProgramEvidenceSummary } from "@/features/assessment-flow/types/assessment-flow.types";
+import type { ProgramEvidenceSummary } from "../../assessment-flow/types/assessment-flow.types";
 import {
   ARTIFACT_STATUSES,
   ARTIFACT_TYPES,
-} from "@/features/artifacts/types/artifact.types";
+} from "../../artifacts/types/artifact.types";
 
 import {
   ASSESSMENT_ARTIFACT_AVAILABILITIES,
