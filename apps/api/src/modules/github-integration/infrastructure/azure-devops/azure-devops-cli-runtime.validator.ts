@@ -52,19 +52,16 @@ export function assertAzureDevOpsCliRuntime(
   const validationPath = isAbsolute(executablePath)
     ? executablePath
     : resolve(cwd, executablePath);
-  let fileAvailable = false;
   try {
     if (dependencies.access) {
       dependencies.access(validationPath, 1);
-      fileAvailable = true;
-    } else {
-      fileAvailable =
-        existsSync(validationPath) && statSync(validationPath).isFile();
+    } else if (
+      !existsSync(validationPath) ||
+      !statSync(validationPath).isFile()
+    ) {
+      throw new Error("az_unavailable");
     }
   } catch {
-    fileAvailable = false;
-  }
-  if (!fileAvailable) {
     throw new AzureDevOpsCliProviderError(
       GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable,
     );
