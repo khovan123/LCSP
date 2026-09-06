@@ -28,7 +28,6 @@ import {
   type AssessmentInterviewBlockedInput,
   type AssessmentInterviewControl,
   type AssessmentInterviewQuestion,
-  type AssessmentInterviewQuestionChoice,
   type AssessmentInterviewQuestionIntent,
   type AssessmentInterviewRuntimeState,
   EMPTY_INTERVIEW_WORKING_STRATEGY,
@@ -1840,29 +1839,6 @@ function parseStoredInterviewState(
     return null;
   }
   return record as AssessmentInterviewRuntimeState;
-}
-
-function parsePublicInterviewState(
-  value: unknown,
-): AssessmentInterviewRuntimeState | null {
-  const record = objectRecord(value);
-  if (
-    !record ||
-    !Object.values(ASSESSMENT_INTERVIEW_OUTCOMES).includes(
-      record.outcome as never,
-    )
-  ) {
-    return null;
-  }
-  const outcome = record.outcome as string;
-  const activeQuestion = parsePersistableInterviewQuestion(
-    record.activeQuestion,
-    outcome,
-  );
-  return {
-    ...(record as AssessmentInterviewRuntimeState),
-    activeQuestion,
-  };
 }
 
 function parsePrivateStore(value: unknown): PrivateInterviewStore {
