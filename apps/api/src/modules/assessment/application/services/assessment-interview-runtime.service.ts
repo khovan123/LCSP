@@ -623,8 +623,7 @@ export class AssessmentInterviewRuntimeService {
       select: { ownerId: true },
     });
     const authenticatedActorId =
-      privateRevision?.actorId ||
-      assessment?.ownerId;
+      privateRevision?.actorId || assessment?.ownerId;
     const workflowRunId =
       thread.privateStore.targetedContinuation?.workflowRunId ??
       thread.privateStore.workflowRunId;
@@ -863,13 +862,14 @@ export class AssessmentInterviewRuntimeService {
             { status: HttpStatus.CONFLICT },
           );
         }
-        decision.confirmedContext = materializeConfirmedStructuredBusinessContext(
-          decision.confirmedContext,
-          authorizedRefs,
-          input.assessmentId,
-          latestPrivate,
-          input.correlationId,
-        );
+        decision.confirmedContext =
+          materializeConfirmedStructuredBusinessContext(
+            decision.confirmedContext,
+            authorizedRefs,
+            input.assessmentId,
+            latestPrivate,
+            input.correlationId,
+          );
       }
 
       if (decision.activeQuestion) {
@@ -880,7 +880,6 @@ export class AssessmentInterviewRuntimeService {
           input.correlationId,
         );
       }
-
 
       const state = decisionState(thread.state, decision);
       const revisions = thread.privateRevisions.map((revision) =>
@@ -2455,10 +2454,7 @@ function sanitizePublicText(text?: string): string | undefined {
     /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}\b/g,
     "[redacted token]",
   );
-  sanitized = sanitized.replace(
-    /\bAKIA[0-9A-Z]{16}\b/g,
-    "[redacted secret]",
-  );
+  sanitized = sanitized.replace(/\bAKIA[0-9A-Z]{16}\b/g, "[redacted secret]");
   sanitized = sanitized.replace(
     /\bsk_(?:live|test)_[A-Za-z0-9_-]{12,}\b/gi,
     "[redacted secret]",
@@ -2481,7 +2477,10 @@ function sanitizePublicText(text?: string): string | undefined {
     /\bcheckpoint(?:Id)?\s*[:=]\s*['"][^'"]+['"]/gi,
     "",
   );
-  sanitized = sanitized.replace(/\bthread(?:Id)?\s*[:=]\s*['"][^'"]+['"]/gi, "");
+  sanitized = sanitized.replace(
+    /\bthread(?:Id)?\s*[:=]\s*['"][^'"]+['"]/gi,
+    "",
+  );
   sanitized = sanitized.replace(
     /\bcontinuation(?:Token)?\s*[:=]\s*['"][^'"]+['"]/gi,
     "",
@@ -2581,7 +2580,6 @@ function materializeConfirmedStructuredBusinessContext(
   };
 }
 
-
 function publicActiveQuestion(
   question?: AssessmentInterviewQuestion,
 ): AssessmentInterviewQuestion | undefined {
@@ -2590,9 +2588,9 @@ function publicActiveQuestion(
   }
   const hasSupportingEvidence = Boolean(
     (question.whyEvidenceRefs && question.whyEvidenceRefs.length > 0) ||
-      (question.frontier?.evidenceRefs &&
-        question.frontier.evidenceRefs.length > 0) ||
-      question.hasSupportingEvidence,
+    (question.frontier?.evidenceRefs &&
+      question.frontier.evidenceRefs.length > 0) ||
+    question.hasSupportingEvidence,
   );
   const frontier = question.frontier
     ? {

@@ -45,7 +45,9 @@ function confirmedStructuredContext(input: {
         statement: "Human approval is required before action.",
         normalizedValue: "human_approval_required",
         scope: { needId: "need-1" },
-        evidenceRefs: input.evidenceRefs ?? ["technicalEvidenceReport:report-1"],
+        evidenceRefs: input.evidenceRefs ?? [
+          "technicalEvidenceReport:report-1",
+        ],
         respondentRef: "actor:authenticated:user-1",
         createdAt: "2026-09-05T00:00:00Z",
         source:
@@ -303,7 +305,10 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         processedRevision: 0,
         activeQuestionId: "q-1",
         stateJson: activeState,
-        privateContextJson: { revisions: [], workflowRunId: "10000000-0000-4000-8000-000000000001" },
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
         sourceVersion: "snap-1:sha-123456",
         pgeVersion: "report-1:v1",
       });
@@ -390,7 +395,10 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         processedRevision: 0,
         activeQuestionId: "q-bool",
         stateJson: activeState,
-        privateContextJson: { revisions: [], workflowRunId: "10000000-0000-4000-8000-000000000001" },
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
         sourceVersion: "snap-1:sha-123456",
         pgeVersion: "report-1:v1",
       });
@@ -443,7 +451,10 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         processedRevision: 0,
         activeQuestionId: "q-multi",
         stateJson: activeState,
-        privateContextJson: { revisions: [], workflowRunId: "10000000-0000-4000-8000-000000000001" },
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
         sourceVersion: "snap-1:sha-123456",
         pgeVersion: "report-1:v1",
       });
@@ -488,7 +499,10 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         processedRevision: 1,
         activeQuestionId: "q-1",
         stateJson: currentState,
-        privateContextJson: { revisions: [], workflowRunId: "10000000-0000-4000-8000-000000000001" },
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
         sourceVersion: "snap-1:sha-123456",
         pgeVersion: "report-1:v1",
       });
@@ -539,7 +553,10 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         processedRevision: 2,
         activeQuestionId: null,
         stateJson: readyState,
-        privateContextJson: { revisions: [], workflowRunId: "10000000-0000-4000-8000-000000000001" },
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
         sourceVersion: "snap-1:sha-123456",
         pgeVersion: "report-1:v1",
       });
@@ -558,7 +575,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             edges: [],
           },
         },
-      } as never);
+      });
 
       await service.registerTargetedNeedForWorker({
         assessmentId: "assessment-1",
@@ -658,7 +675,10 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         processedRevision: 2,
         activeQuestionId: null,
         stateJson: readyState,
-        privateContextJson: { revisions: [], workflowRunId: "10000000-0000-4000-8000-000000000001" },
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
         sourceVersion: "snap-1:sha-123456",
         pgeVersion: "report-1:v1",
       });
@@ -1062,7 +1082,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           id: "report-unusable",
           schemaVersion: "v1",
           evidencePayload,
-        } as never);
+        });
 
         await expect(
           service.seedInitialQuestionForWorker({
@@ -1221,7 +1241,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             coverage_notes: ["dynamic routing was not statically resolved"],
           },
         },
-      } as never);
+      });
       const initialState: AssessmentInterviewRuntimeState = {
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
         activeQuestion: {
@@ -1249,7 +1269,11 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         mockTx.technicalEvidenceReport.findFirst as unknown as jest.Mock,
       ).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          where: { assessmentId: "assessment-1", id: "report-pinned", status: "ACCEPTED" },
+          where: {
+            assessmentId: "assessment-1",
+            id: "report-pinned",
+            status: "ACCEPTED",
+          },
         }),
       );
       expect(mockTx.assessmentInterviewThread.upsert).toHaveBeenCalledTimes(1);
@@ -1292,7 +1316,10 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             },
           },
         },
-        privateContextJson: { revisions: [], workflowRunId: "10000000-0000-4000-8000-000000000001" },
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
         sourceVersion: "snap-1:sha-123456",
         pgeVersion: "report-1:v1",
         guidanceVersion: null,
@@ -1357,7 +1384,10 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
           },
         },
-        privateContextJson: { revisions: [], workflowRunId: "10000000-0000-4000-8000-000000000001" },
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
         sourceVersion: "snap-1:sha-123456",
         pgeVersion: "report-1:v1",
         guidanceVersion: null,
@@ -1418,34 +1448,56 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
     });
 
     it.each([
-      ["TECHNICAL owner", { ...validFrontier, owner: INTERVIEW_FRONTIER_OWNERS.technical }, "INTERVIEW_QUESTION_FRONTIER_NOT_CUSTOMER_OWNED"],
-      ["SYSTEM owner", { ...validFrontier, owner: INTERVIEW_FRONTIER_OWNERS.system }, "INTERVIEW_QUESTION_FRONTIER_NOT_CUSTOMER_OWNED"],
-      ["NON_MATERIAL materiality", { ...validFrontier, materiality: INTERVIEW_FRONTIER_MATERIALITIES.nonMaterial }, "INTERVIEW_QUESTION_FRONTIER_NOT_MATERIAL"],
-      ["empty description", { ...validFrontier, description: "   " }, "INTERVIEW_QUESTION_FRONTIER_DESCRIPTION_REQUIRED"],
-    ])("rejects seedInitialQuestionForWorker with %s", async (_label, frontier, expectedCode) => {
-      await expect(
-        service.seedInitialQuestionForWorker({
-          assessmentId: "assessment-1",
-          correlationId: "corr-invalid-frontier",
-          workflowRunId: "10000000-0000-4000-8000-000000000001",
-          state: {
-            outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
-            activeQuestion: {
-              id: "q-invalid-frontier",
-              intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
-              prompt: "Question with invalid frontier?",
-              control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
-              frontier: frontier as never,
-            },
-          },
-        }),
-      ).rejects.toMatchObject({
-        response: {
-          ok: false,
-          problem: { code: expectedCode },
+      [
+        "TECHNICAL owner",
+        { ...validFrontier, owner: INTERVIEW_FRONTIER_OWNERS.technical },
+        "INTERVIEW_QUESTION_FRONTIER_NOT_CUSTOMER_OWNED",
+      ],
+      [
+        "SYSTEM owner",
+        { ...validFrontier, owner: INTERVIEW_FRONTIER_OWNERS.system },
+        "INTERVIEW_QUESTION_FRONTIER_NOT_CUSTOMER_OWNED",
+      ],
+      [
+        "NON_MATERIAL materiality",
+        {
+          ...validFrontier,
+          materiality: INTERVIEW_FRONTIER_MATERIALITIES.nonMaterial,
         },
-      });
-    });
+        "INTERVIEW_QUESTION_FRONTIER_NOT_MATERIAL",
+      ],
+      [
+        "empty description",
+        { ...validFrontier, description: "   " },
+        "INTERVIEW_QUESTION_FRONTIER_DESCRIPTION_REQUIRED",
+      ],
+    ])(
+      "rejects seedInitialQuestionForWorker with %s",
+      async (_label, frontier, expectedCode) => {
+        await expect(
+          service.seedInitialQuestionForWorker({
+            assessmentId: "assessment-1",
+            correlationId: "corr-invalid-frontier",
+            workflowRunId: "10000000-0000-4000-8000-000000000001",
+            state: {
+              outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+              activeQuestion: {
+                id: "q-invalid-frontier",
+                intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+                prompt: "Question with invalid frontier?",
+                control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+                frontier: frontier as never,
+              },
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: {
+            ok: false,
+            problem: { code: expectedCode },
+          },
+        });
+      },
+    );
 
     it("rejects seedInitialQuestionForWorker with unauthorized whyEvidenceRefs", async () => {
       await expect(
@@ -1503,62 +1555,80 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
 
     it.each([
       ["missing frontier", undefined, "INTERVIEW_QUESTION_FRONTIER_REQUIRED"],
-      ["TECHNICAL owner", { ...validFrontier, owner: INTERVIEW_FRONTIER_OWNERS.technical }, "INTERVIEW_QUESTION_FRONTIER_NOT_CUSTOMER_OWNED"],
-      ["SYSTEM owner", { ...validFrontier, owner: INTERVIEW_FRONTIER_OWNERS.system }, "INTERVIEW_QUESTION_FRONTIER_NOT_CUSTOMER_OWNED"],
-      ["NON_MATERIAL materiality", { ...validFrontier, materiality: INTERVIEW_FRONTIER_MATERIALITIES.nonMaterial }, "INTERVIEW_QUESTION_FRONTIER_NOT_MATERIAL"],
-    ])("rejects recordAgentDecision with %s", async (_label, frontier, expectedCode) => {
-      mockTx.assessmentInterviewThread.findUnique.mockResolvedValueOnce({
-        assessmentId: "assessment-1",
-        contextRevision: 2,
-        processedRevision: 1,
-        activeQuestionId: "q-1",
-        stateJson: {
-          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
-          contextRevision: 2,
+      [
+        "TECHNICAL owner",
+        { ...validFrontier, owner: INTERVIEW_FRONTIER_OWNERS.technical },
+        "INTERVIEW_QUESTION_FRONTIER_NOT_CUSTOMER_OWNED",
+      ],
+      [
+        "SYSTEM owner",
+        { ...validFrontier, owner: INTERVIEW_FRONTIER_OWNERS.system },
+        "INTERVIEW_QUESTION_FRONTIER_NOT_CUSTOMER_OWNED",
+      ],
+      [
+        "NON_MATERIAL materiality",
+        {
+          ...validFrontier,
+          materiality: INTERVIEW_FRONTIER_MATERIALITIES.nonMaterial,
         },
-        privateContextJson: {
-          revisions: [
-            {
-              questionId: "q-1",
-              answer: { questionId: "q-1", confirmed: true },
-              actorId: "user-1",
-              answeredAt: new Date().toISOString(),
-              contextRevision: 2,
-              priorRevision: 1,
-              authority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
-              sourceVersion: "snap-1:sha-123456",
-              pgeVersion: "report-1:v1",
-              governedEvidenceRefs: [],
-            },
-          ],
-        },
-        sourceVersion: "snap-1:sha-123456",
-        pgeVersion: "report-1:v1",
-      });
-
-      await expect(
-        service.recordAgentDecision({
+        "INTERVIEW_QUESTION_FRONTIER_NOT_MATERIAL",
+      ],
+    ])(
+      "rejects recordAgentDecision with %s",
+      async (_label, frontier, expectedCode) => {
+        mockTx.assessmentInterviewThread.findUnique.mockResolvedValueOnce({
           assessmentId: "assessment-1",
-          correlationId: "corr-decision-frontier-test",
-          decision: {
-            expectedContextRevision: 2,
+          contextRevision: 2,
+          processedRevision: 1,
+          activeQuestionId: "q-1",
+          stateJson: {
             outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
-            activeQuestion: {
-              id: "q-decision-invalid",
-              intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
-              prompt: "Decision question?",
-              control: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
-              frontier: frontier as never,
-            },
+            contextRevision: 2,
           },
-        }),
-      ).rejects.toMatchObject({
-        response: {
-          ok: false,
-          problem: { code: expectedCode },
-        },
-      });
-    });
+          privateContextJson: {
+            revisions: [
+              {
+                questionId: "q-1",
+                answer: { questionId: "q-1", confirmed: true },
+                actorId: "user-1",
+                answeredAt: new Date().toISOString(),
+                contextRevision: 2,
+                priorRevision: 1,
+                authority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
+                sourceVersion: "snap-1:sha-123456",
+                pgeVersion: "report-1:v1",
+                governedEvidenceRefs: [],
+              },
+            ],
+          },
+          sourceVersion: "snap-1:sha-123456",
+          pgeVersion: "report-1:v1",
+        });
+
+        await expect(
+          service.recordAgentDecision({
+            assessmentId: "assessment-1",
+            correlationId: "corr-decision-frontier-test",
+            decision: {
+              expectedContextRevision: 2,
+              outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+              activeQuestion: {
+                id: "q-decision-invalid",
+                intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
+                prompt: "Decision question?",
+                control: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+                frontier: frontier as never,
+              },
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: {
+            ok: false,
+            problem: { code: expectedCode },
+          },
+        });
+      },
+    );
 
     it("rejects recordAgentDecision with unauthorized evidence refs", async () => {
       mockTx.assessmentInterviewThread.findUnique.mockResolvedValueOnce({
@@ -1629,8 +1699,12 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
             control: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
             prompt: "Is this storage multi-region?",
-            whyAreWeAsking: "The available technical evidence does not establish whether multi-region is configured.",
-            whyEvidenceRefs: ["evidence:symbol:storage_config", "repositorySnapshot:snap-1"],
+            whyAreWeAsking:
+              "The available technical evidence does not establish whether multi-region is configured.",
+            whyEvidenceRefs: [
+              "evidence:symbol:storage_config",
+              "repositorySnapshot:snap-1",
+            ],
             frontier: {
               owner: INTERVIEW_FRONTIER_OWNERS.customer,
               materiality: INTERVIEW_FRONTIER_MATERIALITIES.material,
@@ -1639,7 +1713,10 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             },
           },
         },
-        privateContextJson: { revisions: [], workflowRunId: "10000000-0000-4000-8000-000000000001" },
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
         sourceVersion: "snap-1:sha-123456",
         pgeVersion: "report-1:v1",
         guidanceVersion: "guidance-v1",
@@ -1649,8 +1726,13 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         userId: "user-1",
         role: AUTH_USER_ROLES.customer,
       };
-      const publicOutput = await service.getState("assessment-1", actor as never);
-      expect(publicOutput.outcome).toBe(ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer);
+      const publicOutput = await service.getState(
+        "assessment-1",
+        actor as never,
+      );
+      expect(publicOutput.outcome).toBe(
+        ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      );
       expect(publicOutput.activeQuestion).toBeDefined();
 
       const q = publicOutput.activeQuestion!;
@@ -1659,14 +1741,18 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       expect(q.intent).toBe(ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify);
       expect(q.control).toBe(ASSESSMENT_INTERVIEW_CONTROLS.boolean);
       expect(q.prompt).toBe("Is this storage multi-region?");
-      expect(q.whyAreWeAsking).toBe("The available technical evidence does not establish whether multi-region is configured.");
+      expect(q.whyAreWeAsking).toBe(
+        "The available technical evidence does not establish whether multi-region is configured.",
+      );
       expect(q.hasSupportingEvidence).toBe(true);
 
       // Verify internal refs are stripped from public projection
       expect(q.whyEvidenceRefs).toBeUndefined();
       expect(q.frontier?.evidenceRefs).toBeUndefined();
       expect(q.frontier?.owner).toBe(INTERVIEW_FRONTIER_OWNERS.customer);
-      expect(q.frontier?.materiality).toBe(INTERVIEW_FRONTIER_MATERIALITIES.material);
+      expect(q.frontier?.materiality).toBe(
+        INTERVIEW_FRONTIER_MATERIALITIES.material,
+      );
       expect(q.frontier?.description).toBe("Storage replication topology");
     });
 
@@ -1680,10 +1766,16 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           programEvidenceGraph: {
             evidence_refs: ["evidence:graph:global"],
             nodes: [
-              { id: "node-auth-1", evidence_refs: ["evidence:symbol:valid_node_func"] },
+              {
+                id: "node-auth-1",
+                evidence_refs: ["evidence:symbol:valid_node_func"],
+              },
             ],
             edges: [
-              { id: "edge-auth-1", evidence_refs: ["evidence:flow:valid_edge_flow"] },
+              {
+                id: "edge-auth-1",
+                evidence_refs: ["evidence:flow:valid_edge_flow"],
+              },
             ],
           },
         },
@@ -1746,7 +1838,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         },
       });
 
-      expect(decisionResult.outcome).toBe(ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer);
+      expect(decisionResult.outcome).toBe(
+        ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      );
       expect(mockInterviewAudit.recordQuestionPersisted).toHaveBeenCalledWith(
         expect.objectContaining({
           questionId: "q-decision-valid-refs",
@@ -1837,7 +1931,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             edges: [],
           },
         },
-      } as never);
+      });
 
       await expect(
         service.registerTargetedNeedForWorker({
@@ -1849,7 +1943,8 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             businessContextNeed: "Who approves this action?",
             resolutionCriteria: ["decision_authority"],
             governedEvidenceRefs: ["evidence:fabricated:cross_assessment_999"],
-            originatingInvestigationReference: "investigator:exec-1:need-fabricated-ref",
+            originatingInvestigationReference:
+              "investigator:exec-1:need-fabricated-ref",
             investigatorExecutionId: "exec-1",
             workflowRunId: "20000000-0000-4000-8000-000000000001",
             checkpointId: "cp-target-1",
@@ -1875,7 +1970,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       const privateContext = thread.privateContextJson as {
         revisions: Array<{ answeredAt: string }>;
       };
-      const authoritativeAnsweredAt = privateContext.revisions[0]!.answeredAt;
+      const authoritativeAnsweredAt = privateContext.revisions[0].answeredAt;
       mockTx.assessmentInterviewThread.findUnique.mockResolvedValueOnce(thread);
 
       const result = await service.recordAgentDecision({
@@ -1978,8 +2073,10 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             needId: "need-auth",
             intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
             control: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
-            prompt: "Check Bearer eyJhbGciOiJIUzI1NiJ9.secret in /Users/admin/app/secret.py",
-            whyAreWeAsking: "Database is postgres://admin:secret123@db.internal:5432/app with token_abc1234567890def",
+            prompt:
+              "Check Bearer eyJhbGciOiJIUzI1NiJ9.secret in /Users/admin/app/secret.py",
+            whyAreWeAsking:
+              "Database is postgres://admin:secret123@db.internal:5432/app with token_abc1234567890def",
             whyEvidenceRefs: ["evidence:symbol:auth"],
             choices: [
               {
@@ -1996,7 +2093,10 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             },
           },
         },
-        privateContextJson: { revisions: [], workflowRunId: "10000000-0000-4000-8000-000000000001" },
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
         sourceVersion: "snap-1:sha-123456",
         pgeVersion: "report-1:v1",
       });
@@ -2005,24 +2105,42 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         userId: "user-1",
         role: AUTH_USER_ROLES.customer,
       };
-      const publicOutput = await service.getState("assessment-1", actor as never);
+      const publicOutput = await service.getState(
+        "assessment-1",
+        actor as never,
+      );
       const q = publicOutput.activeQuestion!;
 
       // Verify secrets redacted
       expect(q.prompt).not.toContain("Bearer eyJhbGciOiJIUzI1NiJ9.secret");
       expect(q.prompt).not.toContain("/Users/admin/app/secret.py");
-      expect(q.whyAreWeAsking).not.toContain("postgres://admin:secret123@db.internal:5432/app");
-      expect(q.choices?.[0]?.label).not.toContain("Bearer sec_tok_abcdef123456");
-      expect(q.choices?.[0]?.description).not.toContain("/var/run/secrets/token");
+      expect(q.whyAreWeAsking).not.toContain(
+        "postgres://admin:secret123@db.internal:5432/app",
+      );
+      expect(q.choices?.[0]?.label).not.toContain(
+        "Bearer sec_tok_abcdef123456",
+      );
+      expect(q.choices?.[0]?.description).not.toContain(
+        "/var/run/secrets/token",
+      );
       expect(q.priorAnswerSummary).not.toContain("postgres://user:pwd@host/db");
       expect(q.frontier?.description).not.toContain("/etc/passwd");
       expect(q.frontier?.description).not.toContain("Bearer sec_1234567890");
 
       // Verify no audit or internal version leakage in public projection
-      expect((publicOutput as unknown as Record<string, unknown>).audit).toBeUndefined();
-      expect((publicOutput as unknown as Record<string, unknown>).sourceVersion).toBeUndefined();
-      expect((publicOutput as unknown as Record<string, unknown>).pgeVersion).toBeUndefined();
-      expect((publicOutput as unknown as Record<string, unknown>).governedEvidenceRefs).toBeUndefined();
+      expect(
+        (publicOutput as unknown as Record<string, unknown>).audit,
+      ).toBeUndefined();
+      expect(
+        (publicOutput as unknown as Record<string, unknown>).sourceVersion,
+      ).toBeUndefined();
+      expect(
+        (publicOutput as unknown as Record<string, unknown>).pgeVersion,
+      ).toBeUndefined();
+      expect(
+        (publicOutput as unknown as Record<string, unknown>)
+          .governedEvidenceRefs,
+      ).toBeUndefined();
     });
   });
 });
