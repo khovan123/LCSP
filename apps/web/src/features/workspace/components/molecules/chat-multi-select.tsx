@@ -1,32 +1,35 @@
 "use client";
 
 import { resolveMessage } from "@lcsp/i18n";
+import { CheckIcon } from "lucide-react";
 import { useRef } from "react";
 import type { KeyboardEvent } from "react";
 
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
-import type { ChatSingleSelectOption } from "../../types/assessment-chat.types";
+import type { ChatMultiSelectOption } from "../../types/assessment-chat.types";
 
-type ChatSingleSelectProps = {
-  options: ChatSingleSelectOption[];
-  value?: string;
-  onValueChange: (value: string) => void;
+type ChatMultiSelectProps = {
+  options: ChatMultiSelectOption[];
+  values?: string[];
+  onValuesChange: (values: string[]) => void;
   disabled?: boolean;
   ariaLabel?: string;
   className?: string;
 };
 
-export function ChatSingleSelect({
+export function ChatMultiSelect({
   options,
-  value,
-  onValueChange,
+  values = [],
+  onValuesChange,
   disabled = false,
   ariaLabel = t("pages.appShell.chatOptionsLabel"),
   className,
-}: ChatSingleSelectProps) {
+}: ChatMultiSelectProps) {
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const selectedSet = new Set(values);
+
   const enabledOptionIndexes = options.reduce<number[]>(
     (indexes, option, index) => {
       if (!option.disabled) {
@@ -36,68 +39,70 @@ export function ChatSingleSelect({
     },
     [],
   );
-  const selectedIndex = options.findIndex((option) => option.id === value);
-  const selectedOption =
-    selectedIndex >= 0 ? options[selectedIndex] : undefined;
-  const firstEnabledIndex = options.findIndex((option) => !option.disabled);
-  const focusIndex =
-    selectedIndex >= 0 && !selectedOption?.disabled
-      ? selectedIndex
-      : Math.max(firstEnabledIndex, 0);
+
+  function toggleOption(optionId: string) {
+    if (disabled) {
+      return;
+    }
+    const nextValues = selectedSet.has(optionId)
+      ? values.filter((id) => id !== optionId)
+      : [...values, optionId];
+    onValuesChange(nextValues);
+  }
 
   function handleKeyDown(
     event: KeyboardEvent<HTMLButtonElement>,
     optionIndex: number,
   ) {
     const focusedEnabledIndex = enabledOptionIndexes.indexOf(optionIndex);
-    const selectedEnabledIndex = enabledOptionIndexes.indexOf(focusIndex);
-    const activeEnabledIndex =
-      focusedEnabledIndex >= 0
-        ? focusedEnabledIndex
-        : Math.max(selectedEnabledIndex, 0);
+    const activeEnabledIndex = Math.max(focusedEnabledIndex, 0);
 
     if (event.key === "ArrowDown" || event.key === "ArrowRight") {
       event.preventDefault();
-      selectEnabledOption(activeEnabledIndex + 1, true);
+      focusEnabledOption(activeEnabledIndex + 1);
       return;
     }
 
     if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
       event.preventDefault();
-      selectEnabledOption(activeEnabledIndex - 1, true);
+      focusEnabledOption(activeEnabledIndex - 1);
       return;
     }
 
     if (event.key === "Home") {
       event.preventDefault();
-      selectEnabledOption(0, true);
+      focusEnabledOption(0);
       return;
     }
 
     if (event.key === "End") {
       event.preventDefault();
-      selectEnabledOption(enabledOptionIndexes.length - 1, true);
+      focusEnabledOption(enabledOptionIndexes.length - 1);
+      return;
+    }
+
+    if (event.key === " " || event.key === "Enter") {
+      event.preventDefault();
+      const option = options[optionIndex];
+      if (option && !option.disabled) {
+        toggleOption(option.id);
+      }
     }
   }
 
-  function selectEnabledOption(index: number, shouldFocus = false) {
+  function focusEnabledOption(index: number) {
     if (disabled || enabledOptionIndexes.length === 0) {
       return;
     }
     const nextEnabledIndex =
       (index + enabledOptionIndexes.length) % enabledOptionIndexes.length;
     const nextOptionIndex = enabledOptionIndexes[nextEnabledIndex];
-    const nextOption = options[nextOptionIndex];
-
-    onValueChange(nextOption.id);
-    if (shouldFocus) {
-      optionRefs.current[nextOptionIndex]?.focus();
-    }
+    optionRefs.current[nextOptionIndex]?.focus();
   }
 
   return (
     <div
-      role="radiogroup"
+      role="group"
       aria-label={ariaLabel}
       className={cn(
         "grid max-w-170 min-w-0 gap-1 overflow-hidden rounded-xl border border-input bg-card",
@@ -105,7 +110,7 @@ export function ChatSingleSelect({
       )}
     >
       {options.map((option, index) => {
-        const selected = option.id === value;
+        const selected = selectedSet.has(option.id);
         const optionDisabled = disabled || option.disabled;
         const descriptionId = option.description
           ? `${option.id}-description`
@@ -123,14 +128,14 @@ export function ChatSingleSelect({
               optionRefs.current[index] = node;
             }}
             type="button"
-            role="radio"
+            role="checkbox"
             aria-checked={selected}
             aria-describedby={descriptionId}
             disabled={optionDisabled}
-            tabIndex={index === focusIndex ? 0 : -1}
+            tabIndex={index === 0 ? 0 : -1}
             onClick={() => {
               if (!optionDisabled) {
-                onValueChange(option.id);
+                toggleOption(option.id);
               }
             }}
             onKeyDown={(event) => handleKeyDown(event, index)}
@@ -143,14 +148,12 @@ export function ChatSingleSelect({
           >
             <span
               className={cn(
-                "relative size-4 shrink-0 rounded-full border border-muted-foreground/70",
-                selected && "border-primary bg-primary/10",
+                "flex size-4 shrink-0 items-center justify-center rounded-sm border border-muted-foreground/70",
+                selected && "border-primary bg-primary text-primary-foreground",
               )}
               aria-hidden="true"
             >
-              {selected ? (
-                <span className="absolute top-1/2 left-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary" />
-              ) : null}
+              {selected ? <CheckIcon className="size-3 stroke-2" /> : null}
             </span>
             <span className="min-w-0 flex-1 truncate">{option.label}</span>
             {assistiveText ? (
