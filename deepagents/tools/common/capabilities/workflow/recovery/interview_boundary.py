@@ -181,6 +181,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             TurnEvidenceLedger,
             build_why_are_we_asking_explanation,
             evaluate_question_eligibility,
+            extract_governed_evidence_refs,
             reset_active_turn_evidence_ledger,
             sanitize_customer_facing_text,
             set_active_turn_evidence_ledger,
@@ -193,9 +194,10 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             str(context.get("authenticatedActorId") or "").strip()
             or str(context.get("actorId") or "").strip()
             or str(context.get("userId") or "").strip()
+            or (str(private_revision.get("authenticatedActorId") or "").strip() if isinstance(private_revision, dict) else "")
+            or (str(private_revision.get("actorId") or "").strip() if isinstance(private_revision, dict) else "")
+            or (str(private_revision.get("userId") or "").strip() if isinstance(private_revision, dict) else "")
         )
-        if not actor_id and isinstance(private_revision, dict):
-            actor_id = str(private_revision.get("actorId") or "").strip()
         if not actor_id and isinstance(targeted_need, dict):
             actor_id = str(targeted_need.get("actorId") or "").strip()
         if not actor_id:
@@ -246,28 +248,9 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             f"technicalEvidenceReport:{technical_evidence_report_id}",
             "interviewRuntime:assessment-interview-runtime-v1",
         }
-        if isinstance(private_revision, dict):
-            authorized_refs.update(
-                private_revision.get("governedEvidenceRefs")
-                or private_revision.get("governed_evidence_refs")
-                or private_revision.get("evidenceRefs")
-                or []
-            )
-        if isinstance(targeted_need, dict):
-            authorized_refs.update(
-                targeted_need.get("governedEvidenceRefs")
-                or targeted_need.get("governed_evidence_refs")
-                or targeted_need.get("evidenceRefs")
-                or []
-            )
-        ctx_refs = (
-            context.get("governedEvidenceRefs")
-            or context.get("governed_evidence_refs")
-            or context.get("evidenceRefs")
-            or []
+        authorized_refs.update(
+            extract_governed_evidence_refs(private_revision, targeted_need, context)
         )
-        if isinstance(ctx_refs, (list, tuple, set)):
-            authorized_refs.update(str(r) for r in ctx_refs if r)
 
         cov_state = str(context.get("technicalCoverageState") or "READY")
         cov_limitations = list(context.get("coverageLimitations") or [])

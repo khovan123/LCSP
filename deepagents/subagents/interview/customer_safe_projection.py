@@ -381,6 +381,38 @@ def evaluate_question_eligibility(
     return True, "ELIGIBLE"
 
 
+def extract_governed_evidence_refs(*sources: Any) -> set[str]:
+    """Recursively extract all governed evidence references from payload structures."""
+    out: set[str] = set()
+
+    def _walk(item: Any) -> None:
+        if isinstance(item, dict):
+            for k, v in item.items():
+                if k in (
+                    "evidence_refs",
+                    "evidenceRefs",
+                    "governedEvidenceRefs",
+                    "governed_evidence_refs",
+                ):
+                    if isinstance(v, (list, tuple, set)):
+                        for r in v:
+                            if r and isinstance(r, str):
+                                out.add(r.strip())
+                elif k in ("evidence_ref", "evidenceRef"):
+                    if isinstance(v, str) and v.strip():
+                        out.add(v.strip())
+                else:
+                    _walk(v)
+        elif isinstance(item, (list, tuple, set)):
+            for elem in item:
+                _walk(elem)
+
+    for src in sources:
+        if src is not None:
+            _walk(src)
+    return out
+
+
 def validate_evidence_refs(
     requested_refs: list[str] | tuple[str, ...] | set[str],
     authorized_refs: list[str] | tuple[str, ...] | set[str],
