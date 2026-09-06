@@ -52,8 +52,28 @@ CHECKPOINT_URL = os.getenv("LCSP_TEST_CHECKPOINT_DATABASE_URL") or os.getenv(
 )
 WORKER_KEY = os.getenv("WORKER_API_KEY")
 
+
+def _is_server_reachable(url: str | None) -> bool:
+    if not url:
+        return False
+    try:
+        import socket
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        with socket.create_connection((host, port), timeout=1.0):
+            return True
+    except Exception:
+        return False
+
+
 pytestmark = pytest.mark.skipif(
-    not API_BASE_URL or not API_DATABASE_URL or not CHECKPOINT_URL or not WORKER_KEY,
+    not _is_server_reachable(API_BASE_URL)
+    or not API_DATABASE_URL
+    or not CHECKPOINT_URL
+    or not WORKER_KEY,
     reason="production vertical requires real Nest API, API Postgres and checkpoint Postgres",
 )
 
