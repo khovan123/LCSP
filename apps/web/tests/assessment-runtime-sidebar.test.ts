@@ -23,6 +23,13 @@ test("runtime sidebar consumes normalized runtime data and the shared artifact c
   assert.match(adapter, /pinnedCommit/);
   assert.match(shell, /<AssessmentRightPanelSlot open=\{rightPanelOpen\}>[\s\S]*<AssessmentRuntimeSidebar/);
   assert.match(shell, /<SheetContent side="right"[\s\S]*<AssessmentRuntimeSidebar/);
+  assert.match(shell, /min-h-0 min-w-0 flex-1 flex-col overflow-hidden/);
+  assert.match(sidebar, /h-full min-h-0 w-full flex-col overflow-hidden/);
+  assert.match(sidebar, /min-h-0 flex-1[\s\S]*overflow-y-auto/);
+  assert.match(
+    await read("features/workspace/components/organisms/assessment-shell-slots.tsx"),
+    /h-full min-h-0 w-105 shrink-0 overflow-hidden/,
+  );
 });
 
 test("runtime sidebar does not reconstruct workflow from screen or F-state branches", async () => {

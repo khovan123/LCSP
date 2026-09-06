@@ -199,7 +199,7 @@ export function AssessmentAppShell({
         />
       </LeftSidebarSlot>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex h-13 shrink-0 items-center border-b border-border/70 bg-background/95 px-3 backdrop-blur sm:px-4 lg:px-5">
           <Button
             type="button"

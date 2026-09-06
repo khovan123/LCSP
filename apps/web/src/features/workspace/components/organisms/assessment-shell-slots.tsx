@@ -67,7 +67,7 @@ export function AssessmentRightPanelSlot({
     <aside
       data-slot="assessment-right-panel"
       data-state="open"
-      className="hidden w-105 shrink-0 border-l border-border/70 bg-muted/20 xl:flex"
+      className="hidden h-full min-h-0 w-105 shrink-0 overflow-hidden border-l border-border/70 bg-muted/20 xl:flex"
     >
       {children}
     </aside>
