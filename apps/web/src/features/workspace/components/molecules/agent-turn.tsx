@@ -20,7 +20,7 @@ type AgentTurnProps = {
 };
 
 type MessageProps = {
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
 };
 
