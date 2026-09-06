@@ -287,7 +287,7 @@ def test_resume_interview_boundary_dispatches_with_distinct_thread_and_workflow_
         context_revision=1,
         resume_reason="INTERVIEW_AGENT_DECISION_REQUIRED",
         context=context,
-        correlationId=wf_uuid,
+        correlationId=str(uuid4()),
     )
 
     assert decision["expectedContextRevision"] == 1
@@ -1822,7 +1822,7 @@ def test_resume_interview_never_uses_correlation_id_as_workflow_run_id() -> None
         api_client=MagicMock(),
         dispatcher=MagicMock(),
     )
-    with pytest.raises(ValueError, match="valid UUID workflowRunId"):
+    with pytest.raises(ValueError, match="workflowRunId"):
         boundary._run_interview(
             assessment_id=str(uuid4()),
             thread_id="interview:assessment-test",

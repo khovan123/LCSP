@@ -170,18 +170,15 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
             validate_evidence_refs,
         )
 
-        def _is_uuid(val: Any) -> bool:
-            try:
-                UUID(str(val))
-                return True
-            except (ValueError, TypeError):
-                return False
-
-        if not workflow_run_id or not _is_uuid(workflow_run_id):
+        if not workflow_run_id or not str(workflow_run_id).strip():
             raise ValueError(
-                "Initial Interview requires a valid UUID workflowRunId from orchestration"
+                "Initial Interview requires a valid workflowRunId from orchestration"
             )
-        valid_wf_id = str(workflow_run_id)
+        valid_wf_id = str(workflow_run_id).strip()
+        if correlation_id and valid_wf_id == correlation_id:
+            raise ValueError(
+                "workflowRunId cannot be identical to correlationId"
+            )
 
 
         authenticated_actor_id = (

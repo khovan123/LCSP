@@ -203,14 +203,18 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 "Assessment Interview resume requires a trusted authenticated principal / actorId"
             )
 
-        workflow_run_id = context.get("workflowRunId")
-        try:
-            UUID(str(workflow_run_id))
-            valid_wf_id = str(workflow_run_id)
-        except (ValueError, TypeError) as exc:
+        workflow_run_id = context.get("workflowRunId") or context.get("workflow_run_id")
+        if not workflow_run_id and isinstance(context.get("targetedContinuation"), dict):
+            workflow_run_id = context["targetedContinuation"].get("workflowRunId")
+        if not workflow_run_id or not str(workflow_run_id).strip():
             raise ValueError(
-                "Assessment Interview resume requires a valid UUID workflowRunId from orchestration"
-            ) from exc
+                "Assessment Interview resume requires a valid workflowRunId from orchestration"
+            )
+        valid_wf_id = str(workflow_run_id).strip()
+        if correlationId and valid_wf_id == correlationId:
+            raise ValueError(
+                "workflowRunId cannot be identical to correlationId"
+            )
 
         source_version = str(context.get("sourceVersion") or "")
         pge_version = str(context.get("pgeVersion") or "")

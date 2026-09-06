@@ -377,6 +377,7 @@ class _VerticalApi:
             'status': status,
             'assessmentId': assessment_id,
             'threadId': f'interview:{assessment_id}',
+            'workflowRunId': f'assessment-run:{assessment_id}',
             'sourceVersion': SOURCE_VERSION,
             'pgeVersion': PGE_VERSION,
             'publicState': dict(self.state),
