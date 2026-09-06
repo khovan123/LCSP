@@ -83,7 +83,7 @@ def _confirmed_context(
                 'statement': statement,
                 'normalizedValue': statement,
                 'scope': {'topic': topic},
-                'evidenceRefs': ['evidence:customer:release'],
+                'evidenceRefs': [EVIDENCE_REF],
                 'respondentRef': 'actor:authenticated-release',
                 'createdAt': '2026-09-05T00:00:00Z',
                 'source': 'CUSTOMER_CONFIRMED',
@@ -317,8 +317,11 @@ class _VerticalApi:
         self.current_revision = 1
         self.private_revision = {
             'revision': 1,
+            'actorId': 'user-release-vertical',
+            'authenticatedActorId': 'user-release-vertical',
             'answer': {'freeText': 'The system provides recommendations only.'},
             'authority': 'CUSTOMER_STATED',
+            'governedEvidenceRefs': [EVIDENCE_REF],
         }
         self.state = {
             'outcome': 'WAITING_FOR_CUSTOMER',
@@ -333,6 +336,7 @@ class _VerticalApi:
             'needId': payload['needId'],
             'businessContextNeed': payload['businessContextNeed'],
             'resolutionCriteria': list(payload['resolutionCriteria']),
+            'governedEvidenceRefs': [EVIDENCE_REF],
             'originatingInvestigationReference': payload[
                 'originatingInvestigationReference'
             ],
@@ -378,8 +382,11 @@ class _VerticalApi:
             'assessmentId': assessment_id,
             'threadId': f'interview:{assessment_id}',
             'workflowRunId': f'assessment-run:{assessment_id}',
+            'actorId': 'user-release-vertical',
+            'authenticatedActorId': 'user-release-vertical',
             'sourceVersion': SOURCE_VERSION,
             'pgeVersion': PGE_VERSION,
+            'governedEvidenceRefs': [EVIDENCE_REF],
             'publicState': dict(self.state),
             'privateRevision': (
                 dict(self.private_revision)

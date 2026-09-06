@@ -74,12 +74,6 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             pge_version=pge_version,
         )
         server_thread_id = _required_text(context, "threadId")
-        server_workflow_run_id = _required_text(context, "workflowRunId")
-        if server_workflow_run_id != command_workflow_run_id:
-            raise ValueError(
-                "assessment Interview resume command workflowRunId does not match "
-                "the server-owned Interview workflow run"
-            )
         if server_thread_id != thread_id:
             raise ValueError(
                 "assessment Interview resume command threadId does not match "
@@ -96,6 +90,13 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 root=self._root_agent or self._load_root_agent(),
             )
             return
+
+        server_workflow_run_id = _required_text(context, "workflowRunId")
+        if server_workflow_run_id != command_workflow_run_id:
+            raise ValueError(
+                "assessment Interview resume command workflowRunId does not match "
+                "the server-owned Interview workflow run"
+            )
 
         # A guard-accepted broker delivery may be retried after the worker crashes.
         # DUPLICATE therefore means no new Interview model turn, not automatically no-op.
