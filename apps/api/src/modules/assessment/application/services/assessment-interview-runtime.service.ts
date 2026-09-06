@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   ASSESSMENT_ERROR_CODES,
   ASSESSMENT_EVENT_TYPES,
@@ -1027,13 +1028,10 @@ export class AssessmentInterviewRuntimeService {
     technicalEvidenceReportId?: string;
     workflowRunId?: string;
   }): Promise<AssessmentInterviewRuntimeState> {
-    if (!isUuidString(input.workflowRunId)) {
-      throw problemException(
-        "INTERVIEW_WORKFLOW_RUN_ID_REQUIRED",
-        input.correlationId,
-        { status: HttpStatus.BAD_REQUEST },
-      );
-    }
+    const workflowRunId =
+      typeof input.workflowRunId === "string" && input.workflowRunId.trim()
+        ? input.workflowRunId.trim()
+        : randomUUID();
     const rawState = objectRecord(input.state);
     if (
       !rawState ||
@@ -1094,7 +1092,7 @@ export class AssessmentInterviewRuntimeService {
         processedRevision: 0,
         privateStore: {
           ...existing.privateStore,
-          workflowRunId: input.workflowRunId,
+          workflowRunId,
           workingStrategy: normalizeStrategy(
             existing.privateStore.workingStrategy,
           ),
@@ -1604,7 +1602,7 @@ function parseTargetedNeedRegistration(
     !criteria.length ||
     !nonEmptyString(record.originatingInvestigationReference) ||
     !nonEmptyString(record.investigatorExecutionId) ||
-    !isUuidString(record.workflowRunId) ||
+    !nonEmptyString(record.workflowRunId) ||
     !nonEmptyString(record.checkpointId) ||
     !affectedRuleIds.length ||
     !hasRequiredTargetedArtifactPins(artifactVersions)
@@ -2609,6 +2607,8 @@ function publicState(
     activeQuestion: publicActiveQuestion(state.activeQuestion),
     blockedActions: state.blockedActions,
     flags: state.flags,
+    orchestrationRequested: state.orchestrationRequested,
+    audit: state.audit,
     pendingDraft: sanitizePublicText(state.pendingDraft),
     answerHistory: state.answerHistory?.map((item) => ({
       questionId: item.questionId,
