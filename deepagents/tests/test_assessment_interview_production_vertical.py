@@ -110,7 +110,7 @@ def _confirmed_context(
                 "statement": statement,
                 "normalizedValue": statement,
                 "scope": {"topic": topic},
-                "evidenceRefs": ["evidence:customer:production"],
+                "evidenceRefs": [EVIDENCE_REF],
                 "respondentRef": "actor:authenticated-production",
                 "createdAt": "2026-09-05T00:00:00Z",
                 "source": "CUSTOMER_CONFIRMED",

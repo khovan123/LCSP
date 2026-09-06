@@ -494,6 +494,7 @@ def _resume_message(assessment_id: str, *, revision: int, targeted: bool) -> dic
     return {
         'assessmentId': assessment_id,
         'threadId': f'interview:{assessment_id}',
+        'workflowRunId': f'assessment-run:{assessment_id}',
         'questionId': NEED_ID if targeted else 'question-initial-1',
         'contextRevision': revision,
         'sourceVersion': SOURCE_VERSION,
