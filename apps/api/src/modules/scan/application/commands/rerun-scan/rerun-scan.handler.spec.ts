@@ -19,7 +19,7 @@ import { RerunScanHandler } from "./rerun-scan.handler.js";
 
 describe("RerunScanHandler", () => {
   let handler: RerunScanHandler;
-  let prisma: jest.Mocked<PrismaService>;
+  let prisma: any;
   let auditWriter: jest.Mocked<AuditWriterService>;
   let outbox: jest.Mocked<OutboxRepository>;
 
@@ -136,68 +136,68 @@ describe("RerunScanHandler", () => {
     outbox = module.get(OutboxRepository);
 
     (
-      prisma.assessmentRuntimeEvent.findFirst as jest.Mock<any>
+      prisma.assessmentRuntimeEvent.findFirst as any
     ).mockResolvedValue(null);
-    (prisma.repositoryScanJob.findMany as jest.Mock<any>).mockResolvedValue([]);
-    (prisma.repositoryScanJob.updateMany as jest.Mock<any>).mockResolvedValue({
+    (prisma.repositoryScanJob.findMany as any).mockResolvedValue([]);
+    (prisma.repositoryScanJob.updateMany as any).mockResolvedValue({
       count: 0,
     });
     (
-      prisma.technicalEvidenceReport.findMany as jest.Mock<any>
+      prisma.technicalEvidenceReport.findMany as any
     ).mockResolvedValue([]);
-    (prisma.technicalProfile.findMany as jest.Mock<any>).mockResolvedValue([]);
-    (prisma.aIUsageFlow.findMany as jest.Mock<any>).mockResolvedValue([]);
-    (prisma.verifiedProfile.findMany as jest.Mock<any>).mockResolvedValue([]);
-    (prisma.legalRuleMatch.findMany as jest.Mock<any>).mockResolvedValue([]);
-    (prisma.classificationResult.findMany as jest.Mock<any>).mockResolvedValue(
+    (prisma.technicalProfile.findMany as any).mockResolvedValue([]);
+    (prisma.aIUsageFlow.findMany as any).mockResolvedValue([]);
+    (prisma.verifiedProfile.findMany as any).mockResolvedValue([]);
+    (prisma.legalRuleMatch.findMany as any).mockResolvedValue([]);
+    (prisma.classificationResult.findMany as any).mockResolvedValue(
       [],
     );
     (
-      prisma.targetedReanalysisRequest.findMany as jest.Mock<any>
+      prisma.targetedReanalysisRequest.findMany as any
     ).mockResolvedValue([]);
-    (prisma.repositoryScanJob.deleteMany as jest.Mock<any>).mockResolvedValue({
+    (prisma.repositoryScanJob.deleteMany as any).mockResolvedValue({
       count: 0,
     });
     (
-      prisma.technicalEvidenceReport.deleteMany as jest.Mock<any>
+      prisma.technicalEvidenceReport.deleteMany as any
     ).mockResolvedValue({ count: 0 });
-    (prisma.technicalProfile.deleteMany as jest.Mock<any>).mockResolvedValue({
+    (prisma.technicalProfile.deleteMany as any).mockResolvedValue({
       count: 0,
     });
-    (prisma.aIUsageFlow.deleteMany as jest.Mock<any>).mockResolvedValue({
+    (prisma.aIUsageFlow.deleteMany as any).mockResolvedValue({
       count: 0,
     });
-    (prisma.conflictRecord.deleteMany as jest.Mock<any>).mockResolvedValue({
+    (prisma.conflictRecord.deleteMany as any).mockResolvedValue({
       count: 0,
     });
-    (prisma.verifiedProfile.deleteMany as jest.Mock<any>).mockResolvedValue({
+    (prisma.verifiedProfile.deleteMany as any).mockResolvedValue({
       count: 0,
     });
-    (prisma.legalRuleMatch.deleteMany as jest.Mock<any>).mockResolvedValue({
+    (prisma.legalRuleMatch.deleteMany as any).mockResolvedValue({
       count: 0,
     });
     (
-      prisma.classificationResult.deleteMany as jest.Mock<any>
+      prisma.classificationResult.deleteMany as any
     ).mockResolvedValue({ count: 0 });
     (
-      prisma.classificationReviewRequest.deleteMany as jest.Mock<any>
+      prisma.classificationReviewRequest.deleteMany as any
     ).mockResolvedValue({ count: 0 });
-    (prisma.documentRequest.deleteMany as jest.Mock<any>).mockResolvedValue({
+    (prisma.documentRequest.deleteMany as any).mockResolvedValue({
       count: 0,
     });
     (
-      prisma.targetedReanalysisCheckpoint.deleteMany as jest.Mock<any>
+      prisma.targetedReanalysisCheckpoint.deleteMany as any
     ).mockResolvedValue({ count: 0 });
     (
-      prisma.targetedReanalysisRequest.deleteMany as jest.Mock<any>
+      prisma.targetedReanalysisRequest.deleteMany as any
     ).mockResolvedValue({ count: 0 });
-    (prisma.outboxMessage.deleteMany as jest.Mock<any>).mockResolvedValue({
+    (prisma.outboxMessage.deleteMany as any).mockResolvedValue({
       count: 0,
     });
     (
-      prisma.assessmentRuntimeEvent.deleteMany as jest.Mock<any>
+      prisma.assessmentRuntimeEvent.deleteMany as any
     ).mockResolvedValue({ count: 0 });
-    (prisma.readinessExport.deleteMany as jest.Mock<any>).mockResolvedValue({
+    (prisma.readinessExport.deleteMany as any).mockResolvedValue({
       count: 0,
     });
   });
@@ -215,7 +215,7 @@ describe("RerunScanHandler", () => {
 
   it("[T02] returns existing job if idempotencyKey matches identically", async () => {
     (
-      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+      prisma.repositoryScanJob.findUnique as any
     ).mockResolvedValueOnce({
       id: "job-1",
       status: REPOSITORY_SCAN_JOB_STATUSES.queued,
@@ -230,7 +230,7 @@ describe("RerunScanHandler", () => {
 
   it("throws ConflictException if idempotencyKey exists but fields mismatch", async () => {
     (
-      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+      prisma.repositoryScanJob.findUnique as any
     ).mockResolvedValueOnce({
       id: "job-1",
       assessmentId: "diff-assessment",
@@ -243,10 +243,10 @@ describe("RerunScanHandler", () => {
 
   it("[T05] throws NotFoundException if snapshot not found", async () => {
     (
-      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+      prisma.repositoryScanJob.findUnique as any
     ).mockResolvedValueOnce(null);
     (
-      prisma.repositorySnapshot.findUnique as jest.Mock<any>
+      prisma.repositorySnapshot.findUnique as any
     ).mockResolvedValueOnce(null);
 
     await expect(handler.execute(defaultCommand)).rejects.toThrow(
@@ -256,16 +256,16 @@ describe("RerunScanHandler", () => {
 
   it("throws NotFoundException if assessment not found", async () => {
     (
-      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+      prisma.repositoryScanJob.findUnique as any
     ).mockResolvedValueOnce(null);
     (
-      prisma.repositorySnapshot.findUnique as jest.Mock<any>
+      prisma.repositorySnapshot.findUnique as any
     ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
       commitSha: "a".repeat(40),
     });
-    (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce(
+    (prisma.assessment.findUnique as any).mockResolvedValueOnce(
       null,
     );
 
@@ -276,16 +276,16 @@ describe("RerunScanHandler", () => {
 
   it("[T04] throws ForbiddenException if user is not owner and is manager", async () => {
     (
-      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+      prisma.repositoryScanJob.findUnique as any
     ).mockResolvedValueOnce(null);
     (
-      prisma.repositorySnapshot.findUnique as jest.Mock<any>
+      prisma.repositorySnapshot.findUnique as any
     ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
       commitSha: "a".repeat(40),
     });
-    (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce({
+    (prisma.assessment.findUnique as any).mockResolvedValueOnce({
       id: "assessment-1",
       ownerId: "other-user",
       status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
@@ -298,16 +298,16 @@ describe("RerunScanHandler", () => {
 
   it("throws ConflictException if assessment state is invalid", async () => {
     (
-      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+      prisma.repositoryScanJob.findUnique as any
     ).mockResolvedValueOnce(null);
     (
-      prisma.repositorySnapshot.findUnique as jest.Mock<any>
+      prisma.repositorySnapshot.findUnique as any
     ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
       commitSha: "a".repeat(40),
     });
-    (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce({
+    (prisma.assessment.findUnique as any).mockResolvedValueOnce({
       id: "assessment-1",
       ownerId: "user-1",
       status: "INVALID_STATE",
@@ -320,26 +320,26 @@ describe("RerunScanHandler", () => {
 
   it("[T01] creates new scan job, enqueues commit-pinned event, and writes audit", async () => {
     (
-      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+      prisma.repositoryScanJob.findUnique as any
     ).mockResolvedValueOnce(null);
     (
-      prisma.repositorySnapshot.findUnique as jest.Mock<any>
+      prisma.repositorySnapshot.findUnique as any
     ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
       commitSha: "a".repeat(40),
     });
-    (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce({
+    (prisma.assessment.findUnique as any).mockResolvedValueOnce({
       id: "assessment-1",
       ownerId: "user-1",
       status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
     });
 
     (
-      prisma.repositoryScanJob.findFirst as jest.Mock<any>
+      prisma.repositoryScanJob.findFirst as any
     ).mockResolvedValueOnce(null);
     (
-      prisma.repositoryScanJob.findFirst as jest.Mock<any>
+      prisma.repositoryScanJob.findFirst as any
     ).mockResolvedValueOnce({
       id: "prior-job",
     });
@@ -369,22 +369,22 @@ describe("RerunScanHandler", () => {
 
   it("throws ConflictException when a scan is already active", async () => {
     (
-      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+      prisma.repositoryScanJob.findUnique as any
     ).mockResolvedValueOnce(null);
     (
-      prisma.repositorySnapshot.findUnique as jest.Mock<any>
+      prisma.repositorySnapshot.findUnique as any
     ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
       commitSha: "a".repeat(40),
     });
-    (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce({
+    (prisma.assessment.findUnique as any).mockResolvedValueOnce({
       id: "assessment-1",
       ownerId: "user-1",
       status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
     });
     (
-      prisma.repositoryScanJob.findFirst as jest.Mock<any>
+      prisma.repositoryScanJob.findFirst as any
     ).mockResolvedValueOnce({ id: "active-job" });
 
     await expect(handler.execute(defaultCommand)).rejects.toThrow(
@@ -398,21 +398,21 @@ describe("RerunScanHandler", () => {
 
   it("fails stale active scans before creating a rerun", async () => {
     (
-      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+      prisma.repositoryScanJob.findUnique as any
     ).mockResolvedValueOnce(null);
     (
-      prisma.repositorySnapshot.findUnique as jest.Mock<any>
+      prisma.repositorySnapshot.findUnique as any
     ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
       commitSha: "a".repeat(40),
     });
-    (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce({
+    (prisma.assessment.findUnique as any).mockResolvedValueOnce({
       id: "assessment-1",
       ownerId: "user-1",
       status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
     });
-    (prisma.repositoryScanJob.findMany as jest.Mock<any>)
+    (prisma.repositoryScanJob.findMany as any)
       .mockResolvedValueOnce([
         {
           id: "stale-job",
@@ -421,13 +421,13 @@ describe("RerunScanHandler", () => {
       ])
       .mockResolvedValueOnce([{ id: "stale-job" }]);
     (
-      prisma.assessmentRuntimeEvent.findFirst as jest.Mock<any>
+      prisma.assessmentRuntimeEvent.findFirst as any
     ).mockResolvedValueOnce(null);
     (
-      prisma.repositoryScanJob.findFirst as jest.Mock<any>
+      prisma.repositoryScanJob.findFirst as any
     ).mockResolvedValueOnce(null);
     (
-      prisma.repositoryScanJob.findFirst as jest.Mock<any>
+      prisma.repositoryScanJob.findFirst as any
     ).mockResolvedValueOnce({ id: "stale-job" });
 
     const result = await handler.execute(defaultCommand);
@@ -449,31 +449,31 @@ describe("RerunScanHandler", () => {
 
   it("deletes prior scan and evidence artifacts for the same snapshot before rerun", async () => {
     (
-      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+      prisma.repositoryScanJob.findUnique as any
     ).mockResolvedValueOnce(null);
     (
-      prisma.repositorySnapshot.findUnique as jest.Mock<any>
+      prisma.repositorySnapshot.findUnique as any
     ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
       commitSha: "a".repeat(40),
     });
-    (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce({
+    (prisma.assessment.findUnique as any).mockResolvedValueOnce({
       id: "assessment-1",
       ownerId: "user-1",
       status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
     });
     (
-      prisma.repositoryScanJob.findFirst as jest.Mock<any>
+      prisma.repositoryScanJob.findFirst as any
     ).mockResolvedValueOnce(null);
     (
-      prisma.repositoryScanJob.findFirst as jest.Mock<any>
+      prisma.repositoryScanJob.findFirst as any
     ).mockResolvedValueOnce({ id: "old-job" });
-    (prisma.repositoryScanJob.findMany as jest.Mock<any>)
+    (prisma.repositoryScanJob.findMany as any)
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ id: "old-job" }]);
     (
-      prisma.technicalEvidenceReport.findMany as jest.Mock<any>
+      prisma.technicalEvidenceReport.findMany as any
     ).mockResolvedValueOnce([{ id: "report-1" }]);
 
     const result = await handler.execute(defaultCommand);

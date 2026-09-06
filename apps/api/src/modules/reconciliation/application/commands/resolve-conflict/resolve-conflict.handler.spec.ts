@@ -12,13 +12,13 @@ import { ResolveConflictHandler } from "./resolve-conflict.handler.js";
 describe("ResolveConflictHandler", () => {
   it("resolves a pending conflict and records audit data", async () => {
     const conflictRecord = {
-      findFirst: jest.fn<any>().mockResolvedValue({
+      findFirst: (jest.fn() as any).mockResolvedValue({
         id: "conflict-1",
         assessmentId: "assessment-1",
         status: "PENDING",
       }),
-      update: jest.fn<any>().mockResolvedValue({}),
-      count: jest.fn<any>().mockResolvedValue(0),
+      update: (jest.fn() as any).mockResolvedValue({}),
+      count: (jest.fn() as any).mockResolvedValue(0),
     };
     const prisma = {
       conflictRecord,
@@ -28,10 +28,10 @@ describe("ResolveConflictHandler", () => {
       ),
     } as unknown as jest.Mocked<PrismaService>;
     const auditWriter = {
-      writeInTx: jest.fn<any>().mockResolvedValue(undefined),
+      writeInTx: (jest.fn() as any).mockResolvedValue(undefined),
     } as unknown as jest.Mocked<AuditWriterService>;
     const outboxRepository = {
-      enqueue: jest.fn<any>().mockResolvedValue(undefined),
+      enqueue: (jest.fn() as any).mockResolvedValue(undefined),
     } as unknown as jest.Mocked<OutboxRepository>;
     const handler = new ResolveConflictHandler(
       prisma,

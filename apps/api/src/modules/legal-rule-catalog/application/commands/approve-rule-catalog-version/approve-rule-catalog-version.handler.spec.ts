@@ -23,14 +23,14 @@ describe("ApproveRuleCatalogVersionHandler", () => {
   beforeEach(async () => {
     prisma = {
       legalRuleCatalogVersion: {
-        findUnique: jest.fn<any>(),
-        update: jest.fn<any>(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
       },
       ruleApprovalRecord: {
-        create: jest.fn<any>(),
+        create: jest.fn(),
       },
       legalRule: {
-        findMany: jest.fn<any>().mockResolvedValue([
+        findMany: (jest.fn() as any).mockResolvedValue([
           {
             citationLocatorRefs: [
               {
@@ -41,9 +41,9 @@ describe("ApproveRuleCatalogVersionHandler", () => {
             ],
           },
         ]),
-        updateMany: jest.fn<any>(),
+        updateMany: jest.fn(),
       },
-      $transaction: jest.fn<any>((cb: any) => cb(prisma)),
+      $transaction: jest.fn((cb: any) => cb(prisma)),
     } as unknown as jest.Mocked<PrismaService>;
 
     auditWriter = {
