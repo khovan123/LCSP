@@ -8,7 +8,13 @@ import {
   type AssessmentInterviewFlag,
   type AssessmentInterviewOutcome,
   type AssessmentInterviewQuestion,
+  type AssessmentPostFindingActivity,
+  type AssessmentPostFindingRuntimeState,
   type AssessmentTechnicalCoverageState,
+  type FinalAssessmentResultStatus,
+  type RemediationApprovalStatus,
+  type RemediationDecision,
+  type VerificationResultStatus,
 } from "@lcsp/contracts/evidence";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 
@@ -238,6 +244,28 @@ export type NormalizedAssessmentArtifacts = {
   programEvidenceGraph: NormalizedAssessmentArtifactItem;
   businessContext: NormalizedAssessmentArtifactItem;
   investigationNotes: NormalizedAssessmentArtifactItem;
+  remediationPatch: NormalizedAssessmentArtifactItem | null;
+  verificationReport: NormalizedAssessmentArtifactItem | null;
+  finalReport: NormalizedAssessmentArtifactItem | null;
+};
+
+export type NormalizedPostFindingActivity = AssessmentPostFindingActivity;
+
+export type NormalizedAssessmentPostFinding = {
+  phase: AssessmentPostFindingRuntimeState["phase"];
+  codeReviewActivities: NormalizedPostFindingActivity[];
+  availableDecisions: RemediationDecision[];
+  selectedDecision: RemediationDecision | null;
+  selectedDecisionAt: string | null;
+  detectedPullRequest: AssessmentPostFindingRuntimeState["detectedPullRequest"] | null;
+  createdPullRequest: AssessmentPostFindingRuntimeState["createdPullRequest"] | null;
+  approvalStatus: RemediationApprovalStatus;
+  approvedPatchVersion: string | null;
+  verificationActivities: NormalizedPostFindingActivity[];
+  verificationStatus: VerificationResultStatus | null;
+  finalResult: FinalAssessmentResultStatus | null;
+  canContinueRemediation: boolean;
+  artifacts: NonNullable<AssessmentPostFindingRuntimeState["artifacts"]>;
 };
 
 export type NormalizedCustomerActions = {
@@ -246,6 +274,8 @@ export type NormalizedCustomerActions = {
   canSubmitBlockedAction: boolean;
   availableBlockedActions: AssessmentInterviewBlockedAction[];
   canUseComposer: boolean;
+  canSelectRemediationDecision: boolean;
+  availableRemediationDecisions: RemediationDecision[];
 };
 
 export type NormalizedAssessmentIntegration = {
@@ -262,6 +292,7 @@ export type NormalizedAssessmentRuntime = {
   coverage: NormalizedAssessmentCoverage;
   workflow: NormalizedAssessmentWorkflow;
   interview: NormalizedAssessmentInterview;
+  postFinding: NormalizedAssessmentPostFinding | null;
   artifacts: NormalizedAssessmentArtifacts;
   customerActions: NormalizedCustomerActions;
   integration: NormalizedAssessmentIntegration;
@@ -284,6 +315,7 @@ export type AdapterTimelineInput = {
   repositorySnapshot?: WorkspaceRuntimeRepositorySnapshot | null;
   scanJobs?: WorkspaceRuntimeScanJob[];
   evidenceReports?: WorkspaceRuntimeEvidenceReport[];
+  postFinding?: AssessmentPostFindingRuntimeState | null;
 };
 
 export type NormalizeAssessmentRuntimeParams = {

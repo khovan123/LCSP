@@ -35,6 +35,10 @@ export const ASSESSMENT_RUNTIME_STAGE_CODES = {
   conflicts: "CONFLICTS",
   documents: "DOCUMENTS",
   legalRetrieval: "LEGAL_RETRIEVAL",
+  codeReview: "CODE_REVIEW",
+  remediation: "REMEDIATION",
+  verification: "VERIFICATION",
+  finalAssessment: "FINAL_ASSESSMENT",
 } as const;
 
 export type AssessmentRuntimeStageCode =
