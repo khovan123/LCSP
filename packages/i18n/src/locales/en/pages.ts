@@ -1282,6 +1282,8 @@ export const enPages = {
       "This question clarifies system implementation scope and operational authority.",
     continueInComposer: "Continue in composer ↓",
     composerChooseOption: "Choose an option...",
+    adjustPlaceholder: "Enter your adjustment or correction...",
+    composerChooseConfirmAdjust: "Choose Confirm or Adjust above...",
     submitAnswer: "Send answer",
     answerSavedForRuntime:
       "Answer captured for the runtime thread. The Interview Agent will evaluate sufficiency before downstream resume.",

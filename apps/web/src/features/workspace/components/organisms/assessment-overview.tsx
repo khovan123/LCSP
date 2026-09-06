@@ -57,6 +57,7 @@ type InterviewAnswerDraft = {
   freeText: string;
   selectedChoiceIds: string[];
   otherText: string;
+  isAdjusting?: boolean;
 };
 
 export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
@@ -197,6 +198,7 @@ function AssessmentInterviewFlow({
           freeText: interview.pendingDraft ?? "",
           selectedChoiceIds: [],
           otherText: "",
+          isAdjusting: false,
         };
 
   const selectedChoiceRequiresFreeText = Boolean(
@@ -221,6 +223,11 @@ function AssessmentInterviewFlow({
   ) {
     if (activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
       isSubmitReady = activeDraft.freeText.trim().length > 0;
+    } else if (
+      activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust
+    ) {
+      isSubmitReady =
+        activeDraft.isAdjusting === true && activeDraft.freeText.trim().length > 0;
     } else if (
       activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect ||
       activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.boolean
@@ -247,7 +254,13 @@ function AssessmentInterviewFlow({
   } else if (!interviewEnabled) {
     composerPlaceholderKey = "pages.assessmentFlow.scanner.runningPlaceholder";
   } else if (customerActions.canAnswerQuestion && activeQuestion) {
-    if (selectedChoiceRequiresFreeText) {
+    if (
+      activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust
+    ) {
+      composerPlaceholderKey = activeDraft.isAdjusting
+        ? "pages.assessment.adjustPlaceholder"
+        : "pages.assessment.composerChooseConfirmAdjust";
+    } else if (selectedChoiceRequiresFreeText) {
       composerPlaceholderKey = "pages.assessment.otherDescribe";
     } else if (
       activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect ||
@@ -289,6 +302,16 @@ function AssessmentInterviewFlow({
     }));
   }
 
+  function handleAdjust() {
+    setDraftMap((current) => ({
+      ...current,
+      [assessmentId]: {
+        ...activeDraft,
+        isAdjusting: true,
+      },
+    }));
+  }
+
   function handleComposerValueChange(value: string) {
     if (selectedChoiceRequiresFreeText) {
       setDraftMap((current) => ({
@@ -325,6 +348,11 @@ function AssessmentInterviewFlow({
       questionId: activeQuestion.id,
     };
     if (activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
+      input.freeText = activeDraft.freeText.trim();
+    } else if (
+      activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust
+    ) {
+      input.adjusted = true;
       input.freeText = activeDraft.freeText.trim();
     } else if (
       activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect ||
@@ -381,6 +409,15 @@ function AssessmentInterviewFlow({
     );
   }
 
+  const isComposerDisabled =
+    !interviewEnabled ||
+    scanFailed ||
+    !composerAvailability.isEnabled ||
+    interview.stale ||
+    interview.revalidating ||
+    (activeQuestion?.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust &&
+      !activeDraft.isAdjusting);
+
   return (
     <main
       className="flex h-full min-h-0 flex-col"
@@ -425,6 +462,8 @@ function AssessmentInterviewFlow({
                     question={interview.questionTurnProps.question}
                     selectedChoiceIds={activeDraft.selectedChoiceIds}
                     onSelectedChoiceIdsChange={handleSelectedChoicesChange}
+                    isAdjusting={activeDraft.isAdjusting}
+                    onAdjust={handleAdjust}
                     blockedActions={interview.questionTurnProps.blockedActions}
                     disabled={
                       !customerActions.canAnswerQuestion ||
@@ -516,13 +555,7 @@ function AssessmentInterviewFlow({
 
       <AssessmentComposer
         value={composerValue}
-        disabled={
-          !interviewEnabled ||
-          scanFailed ||
-          !composerAvailability.isEnabled ||
-          interview.stale ||
-          interview.revalidating
-        }
+        disabled={isComposerDisabled}
         submitReady={isSubmitReady}
         submitting={submitAnswer.isPending || recordBlockedAction.isPending}
         placeholder={t(composerPlaceholderKey)}

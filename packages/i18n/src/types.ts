@@ -1265,6 +1265,8 @@ export type PagesMessages = {
     whyAskingSafeNote: string;
     continueInComposer: string;
     composerChooseOption: string;
+    adjustPlaceholder: string;
+    composerChooseConfirmAdjust: string;
     submitAnswer: string;
     answerSavedForRuntime: string;
     draftSavedForResume: string;

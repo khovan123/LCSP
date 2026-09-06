@@ -133,6 +133,7 @@ function InterviewInteractiveHarness({
   const [selectedChoiceIds, setSelectedChoiceIds] = useState<string[]>([]);
   const [freeText, setFreeText] = useState("");
   const [otherText, setOtherText] = useState("");
+  const [isAdjusting, setIsAdjusting] = useState(false);
 
   const selectedChoiceRequiresFreeText = (question.choices ?? []).some(
     (c) => c.requiresFreeText && selectedChoiceIds.includes(c.id),
@@ -142,6 +143,10 @@ function InterviewInteractiveHarness({
   if (!disabled) {
     if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
       isSubmitReady = freeText.trim().length > 0;
+    } else if (
+      question.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust
+    ) {
+      isSubmitReady = isAdjusting && freeText.trim().length > 0;
     } else if (
       question.control === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect ||
       question.control === ASSESSMENT_INTERVIEW_CONTROLS.boolean
@@ -167,6 +172,14 @@ function InterviewInteractiveHarness({
     if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
       onSubmit({ questionId: question.id, freeText: freeText.trim() });
     } else if (
+      question.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust
+    ) {
+      onSubmit({
+        questionId: question.id,
+        adjusted: true,
+        freeText: freeText.trim(),
+      });
+    } else if (
       question.control === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect ||
       question.control === ASSESSMENT_INTERVIEW_CONTROLS.boolean ||
       question.control === ASSESSMENT_INTERVIEW_CONTROLS.multiSelect
@@ -182,6 +195,11 @@ function InterviewInteractiveHarness({
     }
   }
 
+  const isComposerDisabled =
+    disabled ||
+    (question.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust &&
+      !isAdjusting);
+
   const composerValue = selectedChoiceRequiresFreeText ? otherText : freeText;
   const onComposerChange = selectedChoiceRequiresFreeText
     ? setOtherText
@@ -192,13 +210,15 @@ function InterviewInteractiveHarness({
     null,
     React.createElement(AssessmentQuestionTurn, {
       disabled,
+      isAdjusting,
+      onAdjust: () => setIsAdjusting(true),
       onSubmitAnswer: onSubmit,
       onSelectedChoiceIdsChange: setSelectedChoiceIds,
       question,
       selectedChoiceIds,
     }),
     React.createElement(AssessmentComposer, {
-      disabled,
+      disabled: isComposerDisabled,
       onSubmit: handleSubmit,
       onValueChange: onComposerChange,
       submitReady: isSubmitReady,
@@ -530,7 +550,7 @@ test("MULTI_SELECT: supports toggle selection, deselect, and multi-value submiss
   });
 });
 
-test("CONFIRM_ADJUST: renders Confirm and Adjust terminal actions with exact payloads", async () => {
+test("CONFIRM_ADJUST: Confirm submits directly, Adjust routes through composer and submits adjusted text", async () => {
   const submissions: unknown[] = [];
   const question: AssessmentInterviewQuestion = {
     control: ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust,
@@ -540,8 +560,8 @@ test("CONFIRM_ADJUST: renders Confirm and Adjust terminal actions with exact pay
   };
 
   const { container } = await renderElement(
-    React.createElement(AssessmentQuestionTurn, {
-      onSubmitAnswer: (payload) => submissions.push(payload),
+    React.createElement(InterviewInteractiveHarness, {
+      onSubmit: (payload) => submissions.push(payload),
       question,
     }),
   );
@@ -553,7 +573,15 @@ test("CONFIRM_ADJUST: renders Confirm and Adjust terminal actions with exact pay
   const buttons = actionContainer.querySelectorAll("button");
   assert.equal(buttons.length, 2);
 
-  // Click Confirm
+  const composer = container.querySelector("[data-slot='assessment-composer']");
+  assert.ok(composer);
+  const textarea = composer.querySelector("textarea") as HTMLTextAreaElement;
+  assert.ok(textarea);
+
+  // Initially before clicking Adjust, composer is disabled
+  assert.equal(textarea.disabled, true);
+
+  // Click Confirm -> submits immediately with { confirmed: true, questionId }
   await click(buttons[0]);
   assert.equal(submissions.length, 1);
   assert.deepEqual(submissions[0], {
@@ -561,11 +589,30 @@ test("CONFIRM_ADJUST: renders Confirm and Adjust terminal actions with exact pay
     questionId: "q-confirm-1",
   });
 
-  // Click Adjust
+  // Click Adjust -> activates composer, displays continue in composer hint
   await click(buttons[1]);
+  assert.equal(textarea.disabled, false);
+  assert.match(
+    actionContainer.textContent ?? "",
+    /Continue in composer|Tiếp tục trong ô nhập/i,
+  );
+
+  // Empty adjustment cannot be submitted
+  await keyDown(textarea, { key: "Enter" });
+  assert.equal(submissions.length, 1);
+
+  // Enter adjustment text -> submit ready -> Enter submits adjusted: true + freeText
+  await changeText(
+    textarea,
+    "Payment overrides require three-party authorization in production.",
+  );
+  await keyDown(textarea, { key: "Enter" });
+
   assert.equal(submissions.length, 2);
   assert.deepEqual(submissions[1], {
     adjusted: true,
+    freeText:
+      "Payment overrides require three-party authorization in production.",
     questionId: "q-confirm-1",
   });
 });
@@ -605,7 +652,7 @@ test("ASK vs CLARIFY: preserves semantic data-intent attribute without rewrite",
   );
 });
 
-test("CUSTOMER-SAFE EVIDENCE: raw evidence refs are not dumped directly into visible text", async () => {
+test("CUSTOMER-SAFE EVIDENCE: raw evidence refs are absent from visible text, DOM attributes, and markup", async () => {
   const question: AssessmentInterviewQuestion = {
     control: ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
     id: "q-safe-1",
@@ -621,13 +668,21 @@ test("CUSTOMER-SAFE EVIDENCE: raw evidence refs are not dumped directly into vis
     React.createElement(AssessmentQuestionTurn, { question }),
   );
 
-  // Raw evidence strings should NOT be visible in the rendered output
+  // Raw evidence strings must NOT appear in visible text or ANY rendered DOM attributes / innerHTML
   assert.equal(
     container.textContent?.includes("raw_internal_ast_node_9941a"),
     false,
   );
   assert.equal(
     container.textContent?.includes("pge_edge_secret_calc_3301"),
+    false,
+  );
+  assert.equal(
+    container.innerHTML.includes("raw_internal_ast_node_9941a"),
+    false,
+  );
+  assert.equal(
+    container.innerHTML.includes("pge_edge_secret_calc_3301"),
     false,
   );
 
@@ -638,9 +693,19 @@ test("CUSTOMER-SAFE EVIDENCE: raw evidence refs are not dumped directly into vis
   assert.ok(whyButton);
   await click(whyButton);
 
-  // Safe note is shown, raw internal IDs are NOT printed
+  // Safe note is shown, raw internal IDs are NOT printed in text or markup
   assert.equal(
     container.textContent?.includes("raw_internal_ast_node_9941a"),
+    false,
+  );
+  assert.equal(
+    container.innerHTML.includes("raw_internal_ast_node_9941a"),
+    false,
+  );
+  assert.equal(
+    container
+      .querySelector("[data-slot='why-asking-disclosure']")
+      ?.hasAttribute("data-evidence-refs"),
     false,
   );
 });

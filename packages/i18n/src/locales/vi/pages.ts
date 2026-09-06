@@ -1282,6 +1282,8 @@ export const viPages = {
       "Câu hỏi này giúp làm rõ phạm vi triển khai và thẩm quyền quy trình.",
     continueInComposer: "Tiếp tục trong ô nhập ↓",
     composerChooseOption: "Chọn một phương án...",
+    adjustPlaceholder: "Nhập nội dung điều chỉnh hoặc bổ sung...",
+    composerChooseConfirmAdjust: "Chọn Xác nhận hoặc Điều chỉnh ở trên...",
     submitAnswer: "Gửi câu trả lời",
     answerSavedForRuntime:
       "Câu trả lời đã được ghi cho thread runtime. Interview Agent sẽ đánh giá đủ bối cảnh trước khi resume downstream.",

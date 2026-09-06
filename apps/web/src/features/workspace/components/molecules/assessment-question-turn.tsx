@@ -37,6 +37,8 @@ type AssessmentQuestionTurnProps = {
   question: AssessmentInterviewQuestion;
   selectedChoiceIds?: string[];
   onSelectedChoiceIdsChange?: (choiceIds: string[]) => void;
+  isAdjusting?: boolean;
+  onAdjust?: () => void;
   blockedActions?: AssessmentInterviewBlockedAction[];
   className?: string;
   disabled?: boolean;
@@ -48,6 +50,8 @@ export function AssessmentQuestionTurn({
   question,
   selectedChoiceIds = [],
   onSelectedChoiceIdsChange,
+  isAdjusting = false,
+  onAdjust,
   blockedActions = [],
   className,
   disabled = false,
@@ -125,7 +129,7 @@ export function AssessmentQuestionTurn({
         {question.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust ? (
           <div
             data-slot="confirm-adjust-actions"
-            className="flex flex-wrap gap-2"
+            className="flex flex-wrap items-center gap-2"
           >
             <Button
               type="button"
@@ -144,25 +148,24 @@ export function AssessmentQuestionTurn({
             <Button
               type="button"
               size="sm"
-              variant="outline"
+              variant={isAdjusting ? "secondary" : "outline"}
               disabled={disabled}
-              onClick={() =>
-                onSubmitAnswer?.({
-                  questionId: question.id,
-                  adjusted: true,
-                })
-              }
+              onClick={() => onAdjust?.()}
             >
               <Edit3Icon />
               {t("pages.assessment.adjust")}
             </Button>
+            {isAdjusting ? (
+              <span className="text-xs text-muted-foreground">
+                {t("pages.assessment.continueInComposer")}
+              </span>
+            ) : null}
           </div>
         ) : null}
 
         {question.whyEvidenceRefs && question.whyEvidenceRefs.length > 0 ? (
           <div
             data-slot="why-asking-disclosure"
-            data-evidence-refs={question.whyEvidenceRefs.join(",")}
             className="space-y-2 pt-1"
           >
             <Button
