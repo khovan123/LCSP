@@ -945,6 +945,11 @@ export class AssessmentInterviewRuntimeService {
         tx,
         input.technicalEvidenceReportId,
       );
+      this.assertInitialInterviewCoverageUsable(
+        provenance.technicalCoverageState,
+        provenance.coverageLimitations,
+        input.correlationId,
+      );
       const computedState: AssessmentInterviewRuntimeState = {
         ...state,
         threadId: this.threadId(input.assessmentId),
@@ -1010,6 +1015,33 @@ export class AssessmentInterviewRuntimeService {
     });
 
     return nextState;
+  }
+
+  private assertInitialInterviewCoverageUsable(
+    technicalCoverageState: InterviewTechnicalCoverageState,
+    coverageLimitations: string[],
+    correlationId: string,
+  ): void {
+    if (
+      technicalCoverageState === INTERVIEW_TECHNICAL_COVERAGE_STATES.unavailable
+    ) {
+      throw problemException(
+        ASSESSMENT_ERROR_CODES.interviewTechnicalCoverageUnusable,
+        correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
+    }
+
+    if (
+      technicalCoverageState === INTERVIEW_TECHNICAL_COVERAGE_STATES.partial &&
+      coverageLimitations.length === 0
+    ) {
+      throw problemException(
+        ASSESSMENT_ERROR_CODES.interviewPartialCoverageLimitationsRequired,
+        correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
+    }
   }
 
   private async assertAssessmentVisible(
