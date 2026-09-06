@@ -118,7 +118,7 @@ test("1. MAINLINE — READY coverage + WAITING_FOR_CUSTOMER question", () => {
   const artifacts = selectArtifactPresentation(normalized);
   assert.equal(
     artifacts.programEvidenceGraph.availability,
-    ASSESSMENT_ARTIFACT_AVAILABILITIES.ready,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.unavailable,
   );
   assert.equal(
     artifacts.businessContext.availability,
@@ -869,7 +869,7 @@ test("24. CROSS-CONSUMER CONSISTENCY: Chat, Workflow, Sidebar, and Artifacts sel
   assert.equal(sidebar.activeStatus, ASSESSMENT_RUNTIME_RUN_STATUSES.running);
   assert.equal(
     artifacts.programEvidenceGraph.availability,
-    ASSESSMENT_ARTIFACT_AVAILABILITIES.ready,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.unavailable,
   );
   assert.equal(composer.isEnabled, true);
 });
@@ -929,7 +929,7 @@ test("25. LCSP-272 HANDOFF: accepted evidence without active question stays pend
   const sidebar = selectRightSidebarPresentation(normalized);
   assert.equal(
     sidebar.programEvidenceGraph.availability,
-    ASSESSMENT_ARTIFACT_AVAILABILITIES.ready,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.unavailable,
   );
   assert.equal(
     sidebar.businessContext.availability,

@@ -6,6 +6,10 @@ import {
 } from "@lcsp/contracts/evidence";
 
 import type { ProgramEvidenceSummary } from "@/features/assessment-flow/types/assessment-flow.types";
+import {
+  ARTIFACT_STATUSES,
+  ARTIFACT_TYPES,
+} from "@/features/artifacts/types/artifact.types";
 
 import {
   ASSESSMENT_ARTIFACT_AVAILABILITIES,
@@ -13,6 +17,7 @@ import {
   ASSESSMENT_SCREEN_PROJECTIONS,
   ASSESSMENT_SIDEBAR_STATUSES,
   ASSESSMENT_SIDEBAR_WORKFLOW_STAGES,
+  NORMALIZED_ARTIFACT_CATEGORIES,
   type AssessmentScreenProjection,
   type AssessmentSidebarStatus,
   type NormalizedAssessmentSidebarArtifactItem,
@@ -238,6 +243,13 @@ function sidebarScannerArtifacts(
       artifact: {
         id: "collected-evidence",
         kind: "COLLECTED_EVIDENCE",
+        ref: {
+          assessmentId: normalized.artifacts.programEvidenceGraph.ref.assessmentId,
+          type: ARTIFACT_TYPES.technicalEvidence,
+        },
+        type: ARTIFACT_TYPES.technicalEvidence,
+        status: ARTIFACT_STATUSES.updating,
+        category: NORMALIZED_ARTIFACT_CATEGORIES.technicalEvidence,
         labelKey: "artifacts.collectedEvidence.label",
         availability: ASSESSMENT_ARTIFACT_AVAILABILITIES.updating,
         customerSafeSummary: null,
