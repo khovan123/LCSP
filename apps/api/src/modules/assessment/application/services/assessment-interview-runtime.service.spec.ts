@@ -1049,6 +1049,55 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         mockTx,
       );
     });
+
+    it("pins nested PGE PARTIAL coverage and limitations from the worker-selected report", async () => {
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValueOnce({
+        id: "report-pinned",
+        schemaVersion: "v2",
+        evidencePayload: {
+          evidence_graph: {
+            coverage_state: "LIMITED",
+            coverage_notes: ["dynamic routing was not statically resolved"],
+          },
+        },
+      } as never);
+      const initialState: AssessmentInterviewRuntimeState = {
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        activeQuestion: {
+          id: "q-partial-1",
+          intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+          prompt: "How is the recommendation used?",
+          control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+        },
+      };
+
+      await service.seedInitialQuestionForWorker({
+        assessmentId: "assessment-1",
+        correlationId: "corr-partial-1",
+        state: initialState,
+        technicalEvidenceReportId: "report-pinned",
+      });
+
+      expect(
+        mockTx.technicalEvidenceReport.findFirst as unknown as jest.Mock,
+      ).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          where: { assessmentId: "assessment-1", id: "report-pinned" },
+        }),
+      );
+      expect(mockInterviewAudit.recordQuestionPersisted).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sourceSnapshot: expect.objectContaining({
+            pgeVersion: "report-pinned:v2",
+            technicalCoverageState: "PARTIAL",
+            coverageLimitations: [
+              "dynamic routing was not statically resolved",
+            ],
+          }),
+        }),
+        mockTx,
+      );
+    });
   });
 
   describe("legacy guidance pinning", () => {
