@@ -1,10 +1,5 @@
 import { ASSESSMENT_RUNTIME_RUN_STATUSES } from "@lcsp/contracts/evidence";
 import type { ArtifactRef } from "@/features/artifacts/types/artifact.types";
-import type {
-  ProgramEvidenceMetric,
-  ProgramEvidenceSummary,
-} from "@/features/assessment-flow/types/assessment-flow.types";
-
 export {
   PROGRAM_EVIDENCE_METRIC_FORMATS,
   PROGRAM_EVIDENCE_UNAVAILABLE_REASONS,

@@ -35,14 +35,6 @@ const scannerStepPath = new URL(
   "../src/features/assessment-flow/components/organisms/scanner-step.tsx",
   import.meta.url,
 );
-const investigationTracePath = new URL(
-  "../src/features/workspace/components/molecules/investigation-trace.tsx",
-  import.meta.url,
-);
-const findingsTablePath = new URL(
-  "../src/features/workspace/components/molecules/engineering-rule-findings-table.tsx",
-  import.meta.url,
-);
 
 test("single PGE implementation: legacy component is a thin compatibility wrapper", async () => {
   const [sharedPge, legacyPge, scannerStep] = await Promise.all([
@@ -451,11 +443,11 @@ test("AgentTurn composition: structured results can be followed by Agent message
         ],
         assessmentId: "asmt-turn",
       }),
-      React.createElement(AgentMessage, {
-        className: "mt-3",
-        children:
-          "Next, we can review the remediation plan or adjust policy gate conditions.",
-      }),
+      React.createElement(
+        AgentMessage,
+        { className: "mt-3" },
+        "Next, we can review the remediation plan or adjust policy gate conditions.",
+      ),
     ),
   );
 
