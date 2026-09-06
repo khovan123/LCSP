@@ -23,6 +23,7 @@ import {
   ASSESSMENT_SCREEN_PROJECTIONS,
   ASSESSMENT_SIDEBAR_STATUSES,
   ASSESSMENT_SIDEBAR_WORKFLOW_STAGES,
+  NORMALIZED_WORKFLOW_STEP_STATUSES,
 } from "../src/features/workspace/types/assessment-runtime-adapter.types.ts";
 import { normalizeAssessmentRuntime } from "../src/features/workspace/utils/assessment-runtime-adapter.ts";
 import {
@@ -123,6 +124,40 @@ test("1. MAINLINE — READY coverage + WAITING_FOR_CUSTOMER question", () => {
   assert.equal(
     artifacts.businessContext.availability,
     ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting,
+  );
+});
+
+test("production sidebar normalization preserves repository metadata and canonical workflow order", () => {
+  const normalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-sidebar",
+    timeline: {
+      currentRun: null,
+      recentActivity: [],
+      latestRunId: null,
+      connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+      lastEmittedAt: null,
+      repositorySnapshot: repositorySnapshot({ branch: "develop" }),
+    },
+  });
+
+  assert.deepEqual(normalized.repository, {
+    provider: "GITHUB",
+    repositoryFullName: "khovan123/LCSP",
+    branch: "develop",
+    pinnedCommit: "e5e2118fd03b",
+    sourceState: "AVAILABLE",
+  });
+  assert.deepEqual(
+    normalized.workflow.steps.map((step) => step.id),
+    ["REPOSITORY", "SCANNER", "INTERVIEW", "RULES", "PLANNER", "INVESTIGATE", "GATE"],
+  );
+  assert.equal(
+    normalized.workflow.steps[0]?.status,
+    NORMALIZED_WORKFLOW_STEP_STATUSES.completed,
+  );
+  assert.equal(
+    normalized.workflow.steps[1]?.status,
+    NORMALIZED_WORKFLOW_STEP_STATUSES.queued,
   );
 });
 

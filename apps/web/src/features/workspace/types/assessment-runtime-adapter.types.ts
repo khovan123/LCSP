@@ -72,6 +72,7 @@ export type AssessmentScreenProjection =
   (typeof ASSESSMENT_SCREEN_PROJECTIONS)[keyof typeof ASSESSMENT_SCREEN_PROJECTIONS];
 
 export const ASSESSMENT_SIDEBAR_WORKFLOW_STAGES = {
+  repository: "REPOSITORY",
   scanner: "SCANNER",
   interview: "INTERVIEW",
   rules: "RULES",

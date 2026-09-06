@@ -25,14 +25,14 @@ test("runtime sidebar preview is development-gated and uses the real sidebar", a
   assert.match(shell, /<AssessmentRuntimeSidebar/);
 });
 
-test("runtime sidebar preview does not alter production workflow normalization", async () => {
+test("runtime sidebar preview supplements, but does not replace, production workflow normalization", async () => {
   const [fixture, adapter] = await Promise.all([
     read("features/assessment-runtime/dev/assessment-runtime-sidebar-preview.ts"),
     read("features/workspace/utils/assessment-runtime-adapter.ts"),
   ]);
 
   assert.match(fixture, /Development-only Figma fixture/);
-  for (const label of ["Rules", "Planner", "Gate"]) {
-    assert.doesNotMatch(adapter, new RegExp(`label: "${label}"`));
+  for (const label of ["rules", "planner", "gate"]) {
+    assert.match(adapter, new RegExp(`assessmentSidebar\\.workflow\\.${label}`));
   }
 });

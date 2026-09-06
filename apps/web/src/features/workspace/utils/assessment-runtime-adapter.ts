@@ -20,6 +20,7 @@ import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import {
   ASSESSMENT_ARTIFACT_AVAILABILITIES,
   ASSESSMENT_RUNTIME_AVAILABILITIES,
+  ASSESSMENT_SIDEBAR_WORKFLOW_STAGES,
   NORMALIZED_WORKFLOW_STEP_STATUSES,
   type AdapterInterviewStateInput,
   type AdapterTimelineInput,
@@ -50,6 +51,8 @@ import {
   ARTIFACT_TYPES,
 } from "../../artifacts/types/artifact.types";
 import { stageLabel } from "./assessment-runtime-formatter";
+import { resolveMessage, type MessageKey } from "@lcsp/i18n";
+import { appLocale } from "../../../lib/locale";
 
 const APPROVED_BLOCKED_ACTIONS = new Set<AssessmentInterviewBlockedAction>([
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
@@ -123,6 +126,7 @@ export function normalizeAssessmentRuntime(
   const workflow = normalizeWorkflow({
     timeline: rawTimeline,
     sanitizedInterview,
+    repositorySnapshot: rawTimeline?.repositorySnapshot,
   });
 
   // 6. Interview normalization
@@ -273,9 +277,11 @@ function normalizeCoverage({
 function normalizeWorkflow({
   timeline,
   sanitizedInterview,
+  repositorySnapshot,
 }: {
   timeline?: AdapterTimelineInput | null;
   sanitizedInterview: AssessmentInterviewRuntimeState | null;
+  repositorySnapshot: AdapterTimelineInput["repositorySnapshot"];
 }): NormalizedAssessmentWorkflow {
   const currentRun = timeline?.currentRun ?? null;
   const recentActivity = timeline?.recentActivity ?? [];
@@ -310,7 +316,11 @@ function normalizeWorkflow({
     lastEmittedAt: timeline?.lastEmittedAt ?? (recentActivity[0]?.emittedAt ?? null),
     isTargetedClarificationLoop,
     latestRun: currentRun,
-    steps: normalizeWorkflowSteps({ currentRun, recentActivity }),
+    steps: normalizeWorkflowSteps({
+      currentRun,
+      recentActivity,
+      repositorySnapshot,
+    }),
   };
 }
 
@@ -327,9 +337,9 @@ function normalizeRepository(
     };
   }
   return {
-    provider: null,
-    repositoryFullName: null,
-    branch: null,
+    provider: snapshot.provider,
+    repositoryFullName: snapshot.repositoryFullName,
+    branch: snapshot.branch,
     pinnedCommit: snapshot.commitSha,
     sourceState: "AVAILABLE",
   };
@@ -338,28 +348,56 @@ function normalizeRepository(
 function normalizeWorkflowSteps({
   currentRun,
   recentActivity,
+  repositorySnapshot,
 }: {
   currentRun: WorkspaceRuntimeRun | null;
   recentActivity: WorkspaceRuntimeActivityItem[];
+  repositorySnapshot: AdapterTimelineInput["repositorySnapshot"];
 }): NormalizedWorkflowStep[] {
-  const observed = new Map<string, NormalizedWorkflowStep>();
+  const defaultSteps = [
+    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.repository, "pages.appShell.runtimePanelRepository"],
+    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.scanner, "pages.appShell.assessmentSidebar.workflow.scanner"],
+    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.interview, "pages.appShell.assessmentSidebar.workflow.interview"],
+    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.rules, "pages.appShell.assessmentSidebar.workflow.rules"],
+    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.planner, "pages.appShell.assessmentSidebar.workflow.planner"],
+    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.investigate, "pages.appShell.assessmentSidebar.workflow.investigate"],
+    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.gate, "pages.appShell.assessmentSidebar.workflow.gate"],
+  ] as const;
+  const steps = new Map<string, NormalizedWorkflowStep>([
+    ...defaultSteps.map(([id, labelKey]) => [id, {
+      id,
+      label: resolveMessage(appLocale, labelKey as MessageKey),
+      status: id === ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.repository && repositorySnapshot
+        ? NORMALIZED_WORKFLOW_STEP_STATUSES.completed
+        : NORMALIZED_WORKFLOW_STEP_STATUSES.queued,
+      detail: null,
+    } satisfies NormalizedWorkflowStep] as const),
+  ]);
+  const stageId = (stage: string) =>
+    stage === ASSESSMENT_RUNTIME_STAGE_CODES.snapshot
+      ? ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.repository
+      : stage === ASSESSMENT_RUNTIME_STAGE_CODES.scan
+        ? ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.scanner
+        : stage;
   for (const activity of [...recentActivity].reverse()) {
-    observed.set(activity.stage, {
-      id: activity.stage,
-      label: stageLabel(activity.stage),
+    const id = stageId(activity.stage);
+    steps.set(id, {
+      id,
+      label: steps.has(id) ? steps.get(id)!.label : stageLabel(activity.stage),
       status: normalizeStepStatus(activity.runStatus),
       detail: activity.summary || null,
     });
   }
   if (currentRun) {
-    observed.set(currentRun.stage, {
-      id: currentRun.stage,
-      label: stageLabel(currentRun.stage),
+    const id = stageId(currentRun.stage);
+    steps.set(id, {
+      id,
+      label: steps.has(id) ? steps.get(id)!.label : stageLabel(currentRun.stage),
       status: normalizeStepStatus(currentRun.status),
       detail: null,
     });
   }
-  return [...observed.values()];
+  return [...steps.values()];
 }
 
 function normalizeStepStatus(status: string) {
