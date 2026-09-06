@@ -11,6 +11,11 @@ import {
   assertBitbucketCliRuntime,
 } from "./bitbucket-cli-runtime.validator.js";
 
+type BitbucketCliRuntimeDependencies = NonNullable<
+  Parameters<typeof assertBitbucketCliRuntime>[1]
+>;
+type BitbucketCliSpawn = NonNullable<BitbucketCliRuntimeDependencies["spawn"]>;
+
 describe("Bitbucket CLI runtime validation", () => {
   it("resolves bb from PATH to an absolute executable path", () => {
     expect(
@@ -37,7 +42,7 @@ describe("Bitbucket CLI runtime validation", () => {
   });
 
   it("validates the supported bb runtime", () => {
-    const spawn = jest.fn(() => ({
+    const spawn = jest.fn<BitbucketCliSpawn>(() => ({
       status: 0,
       stdout: `bb version ${SUPPORTED_BITBUCKET_CLI_VERSION} (test)\n`,
     }));
@@ -48,7 +53,7 @@ describe("Bitbucket CLI runtime validation", () => {
   });
 
   it("uses the Windows command shell for a managed .cmd wrapper", () => {
-    const spawn = jest.fn(() => ({
+    const spawn = jest.fn<BitbucketCliSpawn>(() => ({
       status: 0,
       stdout: `bb version ${SUPPORTED_BITBUCKET_CLI_VERSION} (test)\n`,
     }));
