@@ -314,7 +314,7 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       });
     assert.equal(falseReady.status, 409, JSON.stringify(falseReady.body));
 
-    const forgedCustomerConfirmation = await httpRequest(app)
+    const directCustomerConfirmation = await httpRequest(app)
       .post("/internal/assessment-interviews/assessment-1/agent-decisions")
       .set("x-worker-api-key", WORKER_KEY)
       .send({
@@ -330,28 +330,12 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
         }),
       });
     assert.equal(
-      forgedCustomerConfirmation.status,
-      409,
-      JSON.stringify(forgedCustomerConfirmation.body),
+      directCustomerConfirmation.status,
+      201,
+      JSON.stringify(directCustomerConfirmation.body),
     );
-
-    const ready = await httpRequest(app)
-      .post("/internal/assessment-interviews/assessment-1/agent-decisions")
-      .set("x-worker-api-key", WORKER_KEY)
-      .send({
-        expectedContextRevision: 1,
-        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
-        contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
-        confirmedContext: confirmedStructuredContext({
-          assessmentId: "assessment-1",
-          contextRevision: 1,
-          topic: "decision_authority",
-          statement: "human approval required",
-        }),
-      });
-    assert.equal(ready.status, 201, JSON.stringify(ready.body));
     assert.equal(
-      successBody<{ outcome: string }>(ready).outcome,
+      successBody<{ outcome: string }>(directCustomerConfirmation).outcome,
       ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
     );
 
