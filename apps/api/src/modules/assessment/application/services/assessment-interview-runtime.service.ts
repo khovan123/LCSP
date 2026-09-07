@@ -854,12 +854,19 @@ export class AssessmentInterviewRuntimeService {
       // Materialize authoritative confirmed context after guarded transition
       // checks. Model output supplies semantic facts only; runtime owns actor,
       // assessment, timestamp, source, resolution and evidence membership.
-      if (decision.confirmedContext) {
+      if (isAuthoritative(decision.contextAuthority)) {
         if (!latestPrivate) {
           throw problemException(
             "INTERVIEW_AUTHORITATIVE_CONTEXT_REQUIRES_CUSTOMER_REVISION",
             input.correlationId,
             { status: HttpStatus.CONFLICT },
+          );
+        }
+        if (!decision.confirmedContext) {
+          throw problemException(
+            "INTERVIEW_CONFIRMED_CONTEXT_INVALID",
+            input.correlationId,
+            { status: HttpStatus.BAD_REQUEST },
           );
         }
         decision.confirmedContext =

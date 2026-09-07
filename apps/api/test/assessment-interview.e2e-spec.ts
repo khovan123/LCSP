@@ -359,6 +359,12 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
         expectedContextRevision: 1,
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
         contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+        confirmedContext: confirmedStructuredContext({
+          assessmentId: "assessment-1",
+          contextRevision: 1,
+          topic: "decision_authority",
+          statement: "human approval required",
+        }),
       });
     assert.equal(duplicate.status, 409, JSON.stringify(duplicate.body));
   });
