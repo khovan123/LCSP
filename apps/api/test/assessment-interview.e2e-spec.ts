@@ -140,8 +140,7 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
     assert.equal(state.orchestrationRequested, true);
     assert.equal(state.answerHistory[0]?.questionId, QUESTION_ID);
     assert.notEqual(state.answerHistory[0]?.summary, RAW_ANSWER);
-    assert.equal(state.audit.authenticatedActorId, "user-1");
-    assert.equal(state.audit.relatedQuestionId, QUESTION_ID);
+    assert.equal((state as unknown as Record<string, unknown>).audit, undefined);
 
     const event = await prisma.assessmentRuntimeEvent.findFirstOrThrow({
       where: { assessmentId: "assessment-1", toolName: "assessment_interview" },
@@ -320,7 +319,12 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
         contextAuthority:
           ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
-        confirmedContext: { decision_authority: "human approval required" },
+        confirmedContext: confirmedStructuredContext({
+          assessmentId: "assessment-1",
+          contextRevision: 1,
+          topic: "decision_authority",
+          statement: "human approval required",
+        }),
       });
     assert.equal(
       forgedCustomerConfirmation.status,
@@ -335,7 +339,12 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
         expectedContextRevision: 1,
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
         contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
-        confirmedContext: { decision_authority: "human approval required" },
+        confirmedContext: confirmedStructuredContext({
+          assessmentId: "assessment-1",
+          contextRevision: 1,
+          topic: "decision_authority",
+          statement: "human approval required",
+        }),
       });
     assert.equal(ready.status, 201, JSON.stringify(ready.body));
     assert.equal(
@@ -513,7 +522,12 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
         expectedContextRevision: 1,
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
         contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
-        confirmedContext: { baseline: "confirmed" },
+        confirmedContext: confirmedStructuredContext({
+          assessmentId: "assessment-1",
+          contextRevision: 1,
+          topic: "baseline",
+          statement: "confirmed",
+        }),
       });
     assert.equal(ready.status, 201, JSON.stringify(ready.body));
 

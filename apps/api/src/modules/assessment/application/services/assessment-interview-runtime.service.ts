@@ -2467,8 +2467,12 @@ function materializeConfirmedStructuredBusinessContext(
   privateRevision: PrivateInterviewAnswerRevision,
   correlationId: string,
 ): Record<string, unknown> {
-  if (!Array.isArray(context.statements)) {
-    return context;
+  if (!Array.isArray(context.statements) || context.statements.length === 0) {
+    throw problemException(
+      "INTERVIEW_CONFIRMED_CONTEXT_INVALID",
+      correlationId,
+      { status: HttpStatus.BAD_REQUEST },
+    );
   }
 
   const respondentRef = `actor:authenticated:${privateRevision.actorId}`;
@@ -2512,9 +2516,9 @@ function materializeConfirmedStructuredBusinessContext(
       assessmentId,
       topic: stmt.topic.trim(),
       statement: stmt.statement.trim(),
-      ...(Object.hasOwn(stmt, "normalizedValue")
-        ? { normalizedValue: stmt.normalizedValue }
-        : {}),
+      normalizedValue: Object.hasOwn(stmt, "normalizedValue")
+        ? stmt.normalizedValue
+        : stmt.statement.trim(),
       scope,
       evidenceRefs,
       respondentRef,
@@ -2526,14 +2530,6 @@ function materializeConfirmedStructuredBusinessContext(
       resolutionState: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
     };
   });
-
-  if (!statements.length) {
-    throw problemException(
-      "INTERVIEW_CONFIRMED_CONTEXT_INVALID",
-      correlationId,
-      { status: HttpStatus.BAD_REQUEST },
-    );
-  }
 
   return {
     authority:
@@ -2599,7 +2595,7 @@ function publicState(
     blockedActions: state.blockedActions,
     flags: state.flags,
     orchestrationRequested: state.orchestrationRequested,
-    audit: state.audit,
+    audit: undefined,
     pendingDraft: sanitizePublicText(state.pendingDraft),
     answerHistory: state.answerHistory?.map((item) => ({
       questionId: item.questionId,
@@ -2612,7 +2608,7 @@ function publicState(
 function runtimeEventState(
   state: AssessmentInterviewRuntimeState,
 ): AssessmentInterviewRuntimeState {
-  return { ...publicState(state), pendingDraft: undefined };
+  return { ...publicState(state), pendingDraft: undefined, audit: undefined };
 }
 
 function objectRecord(value: unknown): Record<string, unknown> | null {

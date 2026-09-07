@@ -873,7 +873,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             mode: "INITIAL_INTERVIEW",
             outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
             contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
-            confirmedContext: { decision_authority: "human" },
+            confirmedContext: confirmedStructuredContext({}),
           },
         }),
       ).rejects.toMatchObject({
@@ -886,41 +886,33 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       });
     });
 
-    it("rejects targeted bootstrap questions that escape the registered need", async () => {
+    it("rejects recordAgentDecision with CONTEXT_READY when confirmedContext is non-structured", async () => {
       mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
         assessmentId: "assessment-1",
-        contextRevision: 2,
-        processedRevision: 2,
-        activeQuestionId: null,
+        contextRevision: 1,
+        processedRevision: 0,
+        activeQuestionId: "q-1",
         stateJson: {
           outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
-          contextRevision: 2,
+          contextRevision: 1,
         },
         privateContextJson: {
-          revisions: [],
-          targetedNeed: {
-            needId: "need-1",
-            businessContextNeed: "Who approves this action?",
-            resolutionCriteria: ["decision_authority"],
-            originatingInvestigationReference: "inv-ref-1",
-            sourceVersion: "snap-1:sha-123456",
-            pgeVersion: "report-1:v1",
-          },
-          targetedContinuation: {
-            originatingInvestigationReference: "inv-ref-1",
-            investigatorExecutionId: "exec-1",
-            workflowRunId: "10000000-0000-4000-8000-000000000001",
-            checkpointId: "cp-1",
-            affectedRuleIds: ["ENG-1"],
-            artifactVersions: {
-              technicalEvidenceReportId: "report-1",
-              repositorySnapshotId: "snap-1",
-              legalRuleCatalogVersionId: "catalog-1",
-              legalCorpusVersionId: "corpus-1",
+          revisions: [
+            {
+              questionId: "q-1",
+              answer: { questionId: "q-1", freeText: "ans" },
+              actorId: "user-1",
+              answeredAt: "2026-09-07T00:00:00.000Z",
+              contextRevision: 1,
+              priorRevision: 0,
+              authority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
+              questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+              questionControl: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+              sourceVersion: "snap-1:sha-123456",
+              pgeVersion: "report-1:v1",
+              governedEvidenceRefs: [],
             },
-            sourceVersion: "snap-1:sha-123456",
-            pgeVersion: "report-1:v1",
-          },
+          ],
         },
         sourceVersion: "snap-1:sha-123456",
         pgeVersion: "report-1:v1",
@@ -929,34 +921,50 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       await expect(
         service.recordAgentDecision({
           assessmentId: "assessment-1",
-          correlationId: "corr-target-question",
+          correlationId: "corr-ready-non-structured",
           decision: {
-            expectedContextRevision: 2,
-            mode: "TARGETED_INTERVIEW",
-            outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
-            activeQuestion: {
-              id: "q-escape",
-              needId: "need-other",
-              intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
-              control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
-              prompt: "Who approves this action?",
-              frontier: {
-                owner: INTERVIEW_FRONTIER_OWNERS.customer,
-                materiality: INTERVIEW_FRONTIER_MATERIALITIES.material,
-                description: "Who approves this action?",
-              },
-            },
+            expectedContextRevision: 1,
+            mode: "INITIAL_INTERVIEW",
+            outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+            contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+            confirmedContext: { decision_authority: true },
           },
         }),
       ).rejects.toMatchObject({
         response: {
           ok: false,
-          problem: { code: "INTERVIEW_TARGETED_QUESTION_NEED_MISMATCH" },
+          problem: { code: "INTERVIEW_CONFIRMED_CONTEXT_INVALID" },
         },
       });
     });
 
-    it("rejects targeted resolution without satisfied criteria", async () => {
+    it("rejects recordAgentDecision with CONTEXT_RESOLVED when confirmedContext is non-structured", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        targetedResolutionThreadFixture(),
+      );
+
+      await expect(
+        service.recordAgentDecision({
+          assessmentId: "assessment-1",
+          correlationId: "corr-target-non-structured",
+          decision: {
+            expectedContextRevision: 2,
+            mode: "TARGETED_INTERVIEW",
+            outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
+            contextAuthority:
+              ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+            confirmedContext: { decision_authority: true },
+          },
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          ok: false,
+          problem: { code: "INTERVIEW_CONFIRMED_CONTEXT_INVALID" },
+        },
+      });
+    });
+
+    it("rejects targeted resolution when criteria are unsatisfied", async () => {
       mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
         targetedResolutionThreadFixture(),
       );
@@ -971,7 +979,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
             contextAuthority:
               ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
-            confirmedContext: { unrelated: "human" },
+            confirmedContext: confirmedStructuredContext({
+              topic: "unrelated",
+            }),
           },
         }),
       ).rejects.toMatchObject({
@@ -2141,6 +2151,58 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         (publicOutput as unknown as Record<string, unknown>)
           .governedEvidenceRefs,
       ).toBeUndefined();
+    });
+
+    it("strips stored internal audit refs from public state and runtime event projections", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValueOnce({
+        assessmentId: "assessment-1",
+        contextRevision: 1,
+        processedRevision: 0,
+        activeQuestionId: "q-1",
+        stateJson: {
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+          contextRevision: 1,
+          activeQuestion: {
+            id: "q-1",
+            intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+            control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+            prompt: "Please explain the system purpose.",
+          },
+          audit: {
+            authenticatedActorId: "actor-leak-internal-123",
+            timestamp: "2026-09-07T00:00:00.000Z",
+            assessmentId: "assessment-1",
+            sourceVersion: "snap-1:sha-123456",
+            pgeVersion: "report-1:v1",
+            guidanceVersion: "guidance-v1",
+            sessionId: "session-leak-internal-456",
+            turnId: "turn-leak-internal-789",
+            contextRevision: 1,
+            governedEvidenceRefs: ["secret:governed:evidence:ref:1"],
+          },
+        },
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+      });
+
+      const actor = {
+        userId: "user-1",
+        role: AUTH_USER_ROLES.customer,
+      };
+      const publicOutput = await service.getState(
+        "assessment-1",
+        actor as never,
+      );
+
+      expect((publicOutput as unknown as Record<string, unknown>).audit).toBeUndefined();
+      expect(JSON.stringify(publicOutput)).not.toContain("actor-leak-internal-123");
+      expect(JSON.stringify(publicOutput)).not.toContain("session-leak-internal-456");
+      expect(JSON.stringify(publicOutput)).not.toContain("turn-leak-internal-789");
+      expect(JSON.stringify(publicOutput)).not.toContain("secret:governed:evidence:ref:1");
     });
   });
 });
