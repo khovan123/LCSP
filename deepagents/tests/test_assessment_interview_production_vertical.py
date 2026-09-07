@@ -326,9 +326,18 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
                 "activeQuestion": {
                     "id": "question-lcsp-278-targeted-confirm",
                     "intent": "CLARIFY",
-                    "control": "FREE_TEXT",
+                    "control": "CONFIRM_ADJUST",
                     "prompt": "Please confirm the approval authority before resume.",
                     "priorAnswerSummary": "A human manager must approve before action.",
+                    "proposedInterpretation": "A human manager must approve before action.",
+                    "choices": [
+                        {"id": "CONFIRM", "label": "Confirm"},
+                        {
+                            "id": "ADJUST",
+                            "label": "Adjust",
+                            "requiresFreeText": True,
+                        },
+                    ],
                     "needId": NEED_ID,
                     "frontier": {
                         "owner": "CUSTOMER",

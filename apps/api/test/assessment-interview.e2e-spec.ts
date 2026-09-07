@@ -299,10 +299,14 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
 
   it("uses internal guarded decision write-back and blocks false ready", async () => {
     await seedWaitingQuestion(prisma);
-    await httpRequest(app)
+    const answered = await httpRequest(app)
       .post("/assessments/assessment-1/interview/answers")
       .set("Authorization", `Bearer ${token}`)
-      .send({ questionId: QUESTION_ID, freeText: RAW_ANSWER });
+      .send({
+        questionId: QUESTION_ID,
+        freeText: "Human approval is required.",
+      });
+    assert.equal(answered.status, 201, JSON.stringify(answered.body));
 
     const falseReady = await httpRequest(app)
       .post("/internal/assessment-interviews/assessment-1/agent-decisions")
@@ -659,6 +663,12 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
           prompt:
             "Please confirm this interpretation before it becomes authoritative.",
           priorAnswerSummary: "The human operations lead has final approval.",
+          proposedInterpretation:
+            "The human operations lead has final approval.",
+          choices: [
+            { id: "CONFIRM", label: "Confirm" },
+            { id: "ADJUST", label: "Adjust", requiresFreeText: true },
+          ],
           frontier: {
             owner: INTERVIEW_FRONTIER_OWNERS.customer,
             materiality: INTERVIEW_FRONTIER_MATERIALITIES.material,

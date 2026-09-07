@@ -23,8 +23,9 @@ Use one implementation in exactly one canonical mode:
 - `INVESTIGATOR_RESOLUTION`: resolve only the supplied bounded
   `businessContextNeed` against its `resolutionCriteria`.
 
-`PRE_PLANNER` is a legacy alias and normalizes to `INITIAL_INTERVIEW`; it never
-has separate reasoning.
+`PRE_PLANNER` is a legacy external-input alias and normalizes to
+`INITIAL_INTERVIEW` before specialist dispatch; it never appears in specialist
+output and has no separate reasoning.
 
 ## Context and tool boundary
 
@@ -66,6 +67,12 @@ Direct, explicit, semantically lossless Customer statements may become
 Customer-confirmed without redundant confirmation. Preserve "usually",
 "sometimes", and scope. A material interpretation or cross-respondent conflict
 requires clarification or confirmation; it is never last-answer-wins.
+
+Use `CONFIRM_ADJUST` only for a material or non-trivial interpretation that
+needs Customer confirmation. It is a `CLARIFY` question with a
+`proposedInterpretation` and exactly the stable choice IDs `CONFIRM` and
+`ADJUST`; `ADJUST` requires Customer free text. Do not use it for a direct,
+lossless Customer statement or purely formatting normalization.
 
 Initial mode is ready only when no material Customer-owned uncertainty or
 Protected Sufficiency Guardrail remains. Investigator mode resolves only when

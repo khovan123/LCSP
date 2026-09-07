@@ -1867,19 +1867,45 @@ function parsePersistableInterviewQuestion(
         })
         .filter((c): c is NonNullable<typeof c> => c !== null)
     : undefined;
+  const control = record.control as AssessmentInterviewControl;
+  const proposedInterpretation =
+    typeof record.proposedInterpretation === "string"
+      ? record.proposedInterpretation.trim()
+      : undefined;
+  if (control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust) {
+    const choicesById = new Map(
+      (choices ?? []).map((choice) => [choice.id, choice]),
+    );
+    if (
+      record.intent !== ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify ||
+      !proposedInterpretation ||
+      choicesById.size !== 2 ||
+      !choicesById.has("CONFIRM") ||
+      !choicesById.has("ADJUST") ||
+      choicesById.get("CONFIRM")?.requiresFreeText === true ||
+      choicesById.get("ADJUST")?.requiresFreeText !== true
+    ) {
+      throw problemException(
+        "INTERVIEW_CONFIRM_ADJUST_QUESTION_INVALID",
+        correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
+    }
+  }
 
   return {
     id: record.id.trim(),
     needId:
       typeof record.needId === "string" ? record.needId.trim() : undefined,
     intent: record.intent as AssessmentInterviewQuestionIntent,
-    control: record.control as AssessmentInterviewControl,
+    control,
     prompt: record.prompt.trim(),
     choices,
     priorAnswerSummary:
       typeof record.priorAnswerSummary === "string"
         ? record.priorAnswerSummary.trim()
         : undefined,
+    proposedInterpretation,
     whyEvidenceRefs,
     whyAreWeAsking:
       typeof record.whyAreWeAsking === "string"
@@ -2363,6 +2389,8 @@ function assertAuthorityProvenance(
   }
 
   const explicitlyConfirmed =
+    privateRevision.questionControl ===
+      ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust &&
     privateRevision.answer.confirmed === true &&
     privateRevision.answer.adjusted !== true;
 
@@ -2415,13 +2443,6 @@ function assertAnswerMatchesQuestion(
   const hasFreeText = Boolean(answer.freeText?.trim());
 
   if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
-    const confirmedPriorInterpretation =
-      answer.confirmed === true &&
-      answer.adjusted !== true &&
-      !hasFreeText &&
-      !selected.length &&
-      !hasOtherText;
-    if (confirmedPriorInterpretation) return;
     if (
       !hasFreeText ||
       selected.length ||
@@ -2466,7 +2487,13 @@ function assertAnswerMatchesQuestion(
     return;
   }
   if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust) {
-    if (answer.confirmed === answer.adjusted || selected.length || hasOtherText)
+    if (
+      answer.confirmed === answer.adjusted ||
+      selected.length ||
+      hasOtherText ||
+      (answer.confirmed === true && hasFreeText) ||
+      (answer.adjusted === true && !hasFreeText)
+    )
       invalid();
     return;
   }
@@ -2701,6 +2728,7 @@ function publicActiveQuestion(
     prompt: sanitizePublicText(question.prompt) ?? question.prompt,
     choices,
     priorAnswerSummary: sanitizePublicText(question.priorAnswerSummary),
+    proposedInterpretation: sanitizePublicText(question.proposedInterpretation),
     whyAreWeAsking: sanitizePublicText(question.whyAreWeAsking),
     hasSupportingEvidence,
     frontier,

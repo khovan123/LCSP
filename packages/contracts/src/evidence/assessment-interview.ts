@@ -167,6 +167,7 @@ export type AssessmentInterviewQuestion = {
   prompt: string;
   choices?: AssessmentInterviewQuestionChoice[];
   priorAnswerSummary?: string;
+  proposedInterpretation?: string;
   whyEvidenceRefs?: string[];
   whyAreWeAsking?: string;
   hasSupportingEvidence?: boolean;

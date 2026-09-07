@@ -63,12 +63,14 @@ Boundary rules:
 Output contract:
 Return exactly one JSON object matching InterviewResult:
 - expectedContextRevision: the latest private Customer context revision you reasoned over.
-- mode: INITIAL_INTERVIEW or INVESTIGATOR_RESOLUTION. PRE_PLANNER normalizes to
-  INITIAL_INTERVIEW and has no separate reasoning behavior.
+- mode: INITIAL_INTERVIEW or INVESTIGATOR_RESOLUTION only. PRE_PLANNER is normalized before
+  specialist dispatch and must never appear in this structured output.
 - outcome: WAITING_FOR_CUSTOMER, CONTEXT_READY, CONTEXT_RESOLVED, BLOCKED_OR_UNRESOLVED, or FAILED.
 - activeQuestion: required only when WAITING_FOR_CUSTOMER; intent is ASK or CLARIFY; control is one of
-  FREE_TEXT, BOOLEAN, SINGLE_SELECT, or MULTI_SELECT. Confirm/adjust is an answer action, not a
-  separate model-facing response mode.
+  FREE_TEXT, BOOLEAN, SINGLE_SELECT, MULTI_SELECT, or CONFIRM_ADJUST. CONFIRM_ADJUST requires
+  CLARIFY intent, a proposedInterpretation, and exactly CONFIRM and ADJUST stable choice IDs; use it
+  only for material/non-trivial interpretation confirmation, never for direct lossless statements or
+  pure formatting normalization.
 - contextAuthority: CUSTOMER_STATED, UNCERTAIN, CONFLICTED, CUSTOMER_CONFIRMED, CONFIRMED or
   SUPERSEDED.
 - confirmedContext: only semantic facts directly supported by Customer context. For each statement,
