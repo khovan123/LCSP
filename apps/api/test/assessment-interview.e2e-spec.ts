@@ -594,7 +594,7 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       .set("x-worker-api-key", WORKER_KEY)
       .send({
         expectedContextRevision: 1,
-        mode: "TARGETED_INTERVIEW",
+        mode: "INVESTIGATOR_RESOLUTION",
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
         activeQuestion: {
           id: "target-question-1",
@@ -629,7 +629,7 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       .set("x-worker-api-key", WORKER_KEY)
       .send({
         expectedContextRevision: 2,
-        mode: "TARGETED_INTERVIEW",
+        mode: "INVESTIGATOR_RESOLUTION",
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
         contextAuthority:
           ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
@@ -648,7 +648,7 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       .set("x-worker-api-key", WORKER_KEY)
       .send({
         expectedContextRevision: 2,
-        mode: "TARGETED_INTERVIEW",
+        mode: "INVESTIGATOR_RESOLUTION",
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
         contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
         confirmedContext: { decision_authority: "human operations lead" },
@@ -664,7 +664,7 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       .set("x-worker-api-key", WORKER_KEY)
       .send({
         expectedContextRevision: 2,
-        mode: "TARGETED_INTERVIEW",
+        mode: "INVESTIGATOR_RESOLUTION",
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
         contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
         activeQuestion: {
@@ -703,7 +703,7 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       .set("x-worker-api-key", WORKER_KEY)
       .send({
         expectedContextRevision: 3,
-        mode: "TARGETED_INTERVIEW",
+        mode: "INVESTIGATOR_RESOLUTION",
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
         contextAuthority:
           ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,

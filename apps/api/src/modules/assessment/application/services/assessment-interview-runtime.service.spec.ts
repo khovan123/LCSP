@@ -1017,7 +1017,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           correlationId: "corr-target-non-structured",
           decision: {
             expectedContextRevision: 2,
-            mode: "TARGETED_INTERVIEW",
+            mode: "INVESTIGATOR_RESOLUTION",
             outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
             contextAuthority:
               ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
@@ -1043,7 +1043,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           correlationId: "corr-target-unsatisfied",
           decision: {
             expectedContextRevision: 2,
-            mode: "TARGETED_INTERVIEW",
+            mode: "INVESTIGATOR_RESOLUTION",
             outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
             contextAuthority:
               ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
@@ -1070,7 +1070,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         correlationId: "corr-target-structured-resolved",
         decision: {
           expectedContextRevision: 2,
-          mode: "TARGETED_INTERVIEW",
+          mode: "INVESTIGATOR_RESOLUTION",
           outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
           contextAuthority:
             ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
@@ -1116,7 +1116,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           correlationId: "corr-target-structured-unconfirmed",
           decision: {
             expectedContextRevision: 2,
-            mode: "TARGETED_INTERVIEW",
+            mode: "INVESTIGATOR_RESOLUTION",
             outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
             contextAuthority:
               ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
@@ -1942,7 +1942,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           correlationId: "corr-target-fake-statement-ref",
           decision: {
             expectedContextRevision: 2,
-            mode: "TARGETED_INTERVIEW",
+            mode: "INVESTIGATOR_RESOLUTION",
             outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
             contextAuthority:
               ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
@@ -2056,7 +2056,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         correlationId: "corr-runtime-owned-confirmed-context",
         decision: {
           expectedContextRevision: 2,
-          mode: "TARGETED_INTERVIEW",
+          mode: "INVESTIGATOR_RESOLUTION",
           outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
           contextAuthority:
             ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,

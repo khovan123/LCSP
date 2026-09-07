@@ -86,7 +86,7 @@ class InterviewQuestionResult(BaseModel):
 
     id: str = Field(min_length=1, max_length=240)
     intent: Literal["ASK", "CLARIFY"]
-    control: Literal["FREE_TEXT", "BOOLEAN", "SINGLE_SELECT", "MULTI_SELECT", "CONFIRM_ADJUST"]
+    control: Literal["FREE_TEXT", "BOOLEAN", "SINGLE_SELECT", "MULTI_SELECT"]
     prompt: str = Field(min_length=1, max_length=2_000)
     choices: list[InterviewQuestionChoice] = Field(default_factory=list, max_length=20)
     priorAnswerSummary: str | None = Field(default=None, max_length=1_000)
@@ -110,7 +110,9 @@ class InterviewResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     expectedContextRevision: int = Field(ge=0)
-    mode: Literal["INITIAL_INTERVIEW", "TARGETED_INTERVIEW"] = "INITIAL_INTERVIEW"
+    mode: Literal[
+        "INITIAL_INTERVIEW", "INVESTIGATOR_RESOLUTION", "PRE_PLANNER"
+    ] = "INITIAL_INTERVIEW"
     outcome: Literal[
         "WAITING_FOR_CUSTOMER",
         "CONTEXT_READY",
@@ -137,6 +139,8 @@ class InterviewResult(BaseModel):
 
     @model_validator(mode="after")
     def validate_transition_shape(self) -> Self:
+        if self.mode == "PRE_PLANNER":
+            self.mode = "INITIAL_INTERVIEW"
         if self.activeQuestion is not None and self.outcome != "WAITING_FOR_CUSTOMER":
             raise ValueError("activeQuestion requires WAITING_FOR_CUSTOMER outcome")
         if self.outcome == "WAITING_FOR_CUSTOMER":
@@ -157,8 +161,8 @@ class InterviewResult(BaseModel):
                 "CHECK_INTERNALLY",
                 "SAVE_AND_EXIT",
             ]
-        if self.outcome == "CONTEXT_RESOLVED" and self.mode != "TARGETED_INTERVIEW":
-            raise ValueError("CONTEXT_RESOLVED is only valid for TARGETED_INTERVIEW")
+        if self.outcome == "CONTEXT_RESOLVED" and self.mode != "INVESTIGATOR_RESOLUTION":
+            raise ValueError("CONTEXT_RESOLVED is only valid for INVESTIGATOR_RESOLUTION")
         return self
 
 

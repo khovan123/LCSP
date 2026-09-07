@@ -10,6 +10,7 @@ import os
 import pytest
 
 from orchestration.context import LCSPRunContext
+from contracts.handoffs import InterviewResult
 from subagents.interview.customer_safe_projection import (
     GovernedEvidenceMetadata,
     InterviewEvidenceDTO,
@@ -59,6 +60,22 @@ from tools.common.search_program_graph.code import (
     SearchProgramGraphRequest,
     search_program_graph,
 )
+
+
+def test_interview_contract_normalizes_pre_planner_and_rejects_legacy_targeted_mode() -> None:
+    result = InterviewResult(
+        expectedContextRevision=0,
+        mode="PRE_PLANNER",
+        outcome="BLOCKED_OR_UNRESOLVED",
+    )
+
+    assert result.mode == "INITIAL_INTERVIEW"
+    with pytest.raises(ValueError):
+        InterviewResult(
+            expectedContextRevision=0,
+            mode="TARGETED_INTERVIEW",
+            outcome="BLOCKED_OR_UNRESOLVED",
+        )
 from tools.investigator.inspect_data_path.code import (
     InspectDataPathRequest,
     inspect_data_path,

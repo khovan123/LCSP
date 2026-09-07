@@ -298,7 +298,7 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
             },
             {
                 "expectedContextRevision": 1,
-                "mode": "TARGETED_INTERVIEW",
+                "mode": "INVESTIGATOR_RESOLUTION",
                 "outcome": "WAITING_FOR_CUSTOMER",
                 "activeQuestion": {
                     "id": "question-lcsp-278-targeted",
@@ -320,13 +320,13 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
             },
             {
                 "expectedContextRevision": 2,
-                "mode": "TARGETED_INTERVIEW",
+                "mode": "INVESTIGATOR_RESOLUTION",
                 "outcome": "WAITING_FOR_CUSTOMER",
                 "contextAuthority": "CUSTOMER_STATED",
                 "activeQuestion": {
                     "id": "question-lcsp-278-targeted-confirm",
                     "intent": "CLARIFY",
-                    "control": "CONFIRM_ADJUST",
+                    "control": "FREE_TEXT",
                     "prompt": "Please confirm the approval authority before resume.",
                     "priorAnswerSummary": "A human manager must approve before action.",
                     "needId": NEED_ID,
@@ -344,7 +344,7 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
             },
             {
                 "expectedContextRevision": 3,
-                "mode": "TARGETED_INTERVIEW",
+                "mode": "INVESTIGATOR_RESOLUTION",
                 "outcome": "CONTEXT_RESOLVED",
                 "contextAuthority": "CUSTOMER_CONFIRMED",
                 "confirmedContext": _confirmed_context(
@@ -559,7 +559,7 @@ def test_release_gate_blocks_unresolved_targeted_context_without_resume(
             },
             {
                 "expectedContextRevision": 1,
-                "mode": "TARGETED_INTERVIEW",
+                "mode": "INVESTIGATOR_RESOLUTION",
                 "outcome": "WAITING_FOR_CUSTOMER",
                 "activeQuestion": {
                     "id": "question-lcsp-278-blocked-targeted",
@@ -581,7 +581,7 @@ def test_release_gate_blocks_unresolved_targeted_context_without_resume(
             },
             {
                 "expectedContextRevision": 2,
-                "mode": "TARGETED_INTERVIEW",
+                "mode": "INVESTIGATOR_RESOLUTION",
                 "outcome": "BLOCKED_OR_UNRESOLVED",
                 "contextAuthority": "CUSTOMER_STATED",
                 "confirmedContext": {},
