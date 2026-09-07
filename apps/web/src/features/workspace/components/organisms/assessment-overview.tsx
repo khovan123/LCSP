@@ -35,6 +35,7 @@ import {
   selectCustomerActions,
   selectInterviewHandoffPresentation,
   selectInterviewPresentation,
+  selectPostFindingPresentation,
   selectWorkflowPresentation,
 } from "../../utils/assessment-runtime-selectors";
 import {
@@ -48,6 +49,7 @@ import {
   AssessmentQuestionTurn,
   type AssessmentQuestionAnswerInput,
 } from "../molecules/assessment-question-turn";
+import { PostFindingFlowSteps } from "../molecules/post-finding-flow-steps";
 import { AssessmentComposer } from "./assessment-composer";
 import { AssessmentTranscript } from "./assessment-transcript";
 import { useWorkspaceRuntime } from "./workspace-runtime-provider";
@@ -180,6 +182,7 @@ function AssessmentInterviewFlow({
   const customerActions = selectCustomerActions(normalized);
   const composerAvailability = selectComposerAvailability(normalized);
   const interviewHandoff = selectInterviewHandoffPresentation(normalized);
+  const postFinding = selectPostFindingPresentation(normalized);
   const submitAnswer = useSubmitAssessmentInterviewAnswerMutation(assessmentId);
   const recordBlockedAction =
     useAssessmentInterviewBlockedActionMutation(assessmentId);
@@ -187,11 +190,14 @@ function AssessmentInterviewFlow({
   const activeQuestion = interview.activeQuestion;
   const activeQuestionId = activeQuestion?.id ?? "";
 
-  const [draftMap, setDraftMap] = useState<Record<string, InterviewAnswerDraft>>({});
+  const [draftMap, setDraftMap] = useState<
+    Record<string, InterviewAnswerDraft>
+  >({});
   const [lastSavedMessage, setLastSavedMessage] = useState<string | null>(null);
 
   const activeDraft: InterviewAnswerDraft =
-    draftMap[assessmentId] && draftMap[assessmentId].questionId === activeQuestionId
+    draftMap[assessmentId] &&
+    draftMap[assessmentId].questionId === activeQuestionId
       ? draftMap[assessmentId]
       : {
           questionId: activeQuestionId,
@@ -227,7 +233,8 @@ function AssessmentInterviewFlow({
       activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust
     ) {
       isSubmitReady =
-        activeDraft.isAdjusting === true && activeDraft.freeText.trim().length > 0;
+        activeDraft.isAdjusting === true &&
+        activeDraft.freeText.trim().length > 0;
     } else if (
       activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect ||
       activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.boolean
@@ -289,6 +296,8 @@ function AssessmentInterviewFlow({
     interviewQuery.dataUpdatedAt,
     activeQuestionId,
     answerHistory.length,
+    postFinding?.screenProjection,
+    postFinding?.selectedDecision,
     lastSavedMessage,
   ].join("::");
 
@@ -439,9 +448,7 @@ function AssessmentInterviewFlow({
                 key={`${answer.questionId}:${answer.answeredAt}`}
                 role={ASSESSMENT_CHAT_ROLES.user}
               >
-                <UserMessage>
-                  {answer.summary}
-                </UserMessage>
+                <UserMessage>{answer.summary}</UserMessage>
               </AgentTurn>
             ))}
 
@@ -541,6 +548,35 @@ function AssessmentInterviewFlow({
                 </AgentMessage>
               </AgentTurn>
             )}
+
+            {postFinding ? (
+              <AgentTurn
+                content={
+                  <AgentMessage>
+                    <ThoughtLine
+                      label={t("pages.assessmentFlow.postFinding.thought")}
+                    />
+                    <p className="mt-2">
+                      {t("pages.assessmentFlow.postFinding.description")}
+                    </p>
+                  </AgentMessage>
+                }
+                terminalAction={
+                  <PostFindingFlowSteps
+                    postFinding={postFinding}
+                    artifacts={{
+                      remediationPatch: normalized.artifacts.remediationPatch,
+                      verificationReport:
+                        normalized.artifacts.verificationReport,
+                      finalReport: normalized.artifacts.finalReport,
+                    }}
+                    disabled={
+                      submitAnswer.isPending || recordBlockedAction.isPending
+                    }
+                  />
+                }
+              />
+            ) : null}
 
             {lastSavedMessage ? (
               <AgentTurn>
