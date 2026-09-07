@@ -2363,8 +2363,6 @@ function assertAuthorityProvenance(
   }
 
   const explicitlyConfirmed =
-    privateRevision.questionControl ===
-      ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust &&
     privateRevision.answer.confirmed === true &&
     privateRevision.answer.adjusted !== true;
 
@@ -2417,6 +2415,13 @@ function assertAnswerMatchesQuestion(
   const hasFreeText = Boolean(answer.freeText?.trim());
 
   if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
+    const confirmedPriorInterpretation =
+      answer.confirmed === true &&
+      answer.adjusted !== true &&
+      !hasFreeText &&
+      !selected.length &&
+      !hasOtherText;
+    if (confirmedPriorInterpretation) return;
     if (
       !hasFreeText ||
       selected.length ||

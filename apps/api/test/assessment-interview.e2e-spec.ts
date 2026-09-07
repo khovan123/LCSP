@@ -871,6 +871,9 @@ async function seedUsableTechnicalCoverage(
 }
 
 async function seedWaitingQuestion(prisma: PrismaClient): Promise<void> {
+  // Directly materialized Interview threads still require the same accepted,
+  // usable technical-report provenance as a worker-seeded question.
+  await seedUsableTechnicalCoverage(prisma);
   const privateContext = {
     revisions: [],
     workflowRunId: "00000000-0000-4000-8000-000000000001",

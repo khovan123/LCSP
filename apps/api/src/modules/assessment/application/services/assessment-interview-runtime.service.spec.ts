@@ -363,7 +363,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           id: "q-1",
           intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
           prompt: "What is your data residency?",
-          control: ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust,
+          control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
         },
       };
 
@@ -403,7 +403,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           assessmentId: "assessment-1",
           questionId: "q-1",
           questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
-          responseMode: ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust,
+          responseMode: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
           responseAction: ASSESSMENT_INTERVIEW_ANSWER_ACTIONS.confirm,
           sessionId: "interview:assessment-1",
           threadId: "interview:assessment-1",

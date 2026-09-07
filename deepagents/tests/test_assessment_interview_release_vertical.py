@@ -386,6 +386,11 @@ class _VerticalApi:
             'authenticatedActorId': 'user-release-vertical',
             'sourceVersion': SOURCE_VERSION,
             'pgeVersion': PGE_VERSION,
+            # The release fixture represents an accepted, usable report.  Resume
+            # must not enter the Root recovery branch reserved for unavailable
+            # technical coverage.
+            'technicalCoverageState': 'READY',
+            'coverageLimitations': [],
             'governedEvidenceRefs': [EVIDENCE_REF],
             'publicState': dict(self.state),
             'privateRevision': (
