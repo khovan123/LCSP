@@ -2198,11 +2198,21 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         actor as never,
       );
 
-      expect((publicOutput as unknown as Record<string, unknown>).audit).toBeUndefined();
-      expect(JSON.stringify(publicOutput)).not.toContain("actor-leak-internal-123");
-      expect(JSON.stringify(publicOutput)).not.toContain("session-leak-internal-456");
-      expect(JSON.stringify(publicOutput)).not.toContain("turn-leak-internal-789");
-      expect(JSON.stringify(publicOutput)).not.toContain("secret:governed:evidence:ref:1");
+      expect(
+        (publicOutput as unknown as Record<string, unknown>).audit,
+      ).toBeUndefined();
+      expect(JSON.stringify(publicOutput)).not.toContain(
+        "actor-leak-internal-123",
+      );
+      expect(JSON.stringify(publicOutput)).not.toContain(
+        "session-leak-internal-456",
+      );
+      expect(JSON.stringify(publicOutput)).not.toContain(
+        "turn-leak-internal-789",
+      );
+      expect(JSON.stringify(publicOutput)).not.toContain(
+        "secret:governed:evidence:ref:1",
+      );
     });
   });
 });

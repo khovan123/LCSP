@@ -140,7 +140,10 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
     assert.equal(state.orchestrationRequested, true);
     assert.equal(state.answerHistory[0]?.questionId, QUESTION_ID);
     assert.notEqual(state.answerHistory[0]?.summary, RAW_ANSWER);
-    assert.equal((state as unknown as Record<string, unknown>).audit, undefined);
+    assert.equal(
+      (state as unknown as Record<string, unknown>).audit,
+      undefined,
+    );
 
     const event = await prisma.assessmentRuntimeEvent.findFirstOrThrow({
       where: { assessmentId: "assessment-1", toolName: "assessment_interview" },
