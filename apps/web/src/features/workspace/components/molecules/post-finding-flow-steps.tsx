@@ -16,7 +16,6 @@ import {
   ShieldCheckIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
 
 import { ArtifactStatusBadge } from "@/features/artifacts/components/artifact-status-badge";
 import {
@@ -48,25 +47,25 @@ type PostFindingFlowStepsProps = {
     "remediationPatch" | "verificationReport" | "finalReport"
   >;
   disabled?: boolean;
+  onDecisionSelect: (decision: RemediationDecision) => void;
 };
 
 export function PostFindingFlowSteps({
   postFinding,
   artifacts,
   disabled = false,
+  onDecisionSelect,
 }: PostFindingFlowStepsProps) {
-  const [draftDecision, setDraftDecision] =
-    useState<RemediationDecision | null>(postFinding.selectedDecision);
-  const selectedDecision = postFinding.selectedDecision ?? draftDecision;
   const shouldShowDecision =
     postFinding.canSelectDecision || postFinding.selectedDecision !== null;
   const shouldShowExistingPr =
     postFinding.phase === POST_FINDING_RUNTIME_PHASES.existingPr ||
-    selectedDecision === REMEDIATION_DECISIONS.continueDetectedPr ||
+    postFinding.selectedDecision === REMEDIATION_DECISIONS.continueDetectedPr ||
     postFinding.detectedPullRequest !== null;
   const shouldShowCreatePr =
     postFinding.phase === POST_FINDING_RUNTIME_PHASES.createPr ||
-    selectedDecision === REMEDIATION_DECISIONS.createRemediationPr ||
+    postFinding.selectedDecision ===
+      REMEDIATION_DECISIONS.createRemediationPr ||
     postFinding.createdPullRequest !== null;
   const shouldShowVerification =
     postFinding.phase === POST_FINDING_RUNTIME_PHASES.verification ||
@@ -91,9 +90,8 @@ export function PostFindingFlowSteps({
         <RemediationDecisionGroup
           availableDecisions={postFinding.availableDecisions}
           selectedDecision={postFinding.selectedDecision}
-          draftDecision={draftDecision}
           disabled={disabled || !postFinding.canSelectDecision}
-          onDecisionChange={setDraftDecision}
+          onDecisionSelect={onDecisionSelect}
         />
       ) : null}
       {shouldShowExistingPr ? (
@@ -152,18 +150,16 @@ export function CodeReviewStep({
 export function RemediationDecisionGroup({
   availableDecisions,
   selectedDecision,
-  draftDecision,
   disabled,
-  onDecisionChange,
+  onDecisionSelect,
 }: {
   availableDecisions: RemediationDecision[];
   selectedDecision: RemediationDecision | null;
-  draftDecision: RemediationDecision | null;
   disabled: boolean;
-  onDecisionChange: (decision: RemediationDecision) => void;
+  onDecisionSelect: (decision: RemediationDecision) => void;
 }) {
   const options = remediationOptions(availableDecisions);
-  const value = selectedDecision ?? draftDecision ?? undefined;
+  const value = selectedDecision ?? undefined;
 
   if (selectedDecision) {
     return (
@@ -191,7 +187,7 @@ export function RemediationDecisionGroup({
         value={value}
         onValueChange={(nextValue) => {
           if (isAvailableDecision(nextValue, availableDecisions)) {
-            onDecisionChange(nextValue);
+            onDecisionSelect(nextValue);
           }
         }}
       />

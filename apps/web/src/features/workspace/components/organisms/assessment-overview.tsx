@@ -8,6 +8,7 @@ import {
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
   ASSESSMENT_INTERVIEW_CONTROLS,
   type AssessmentInterviewBlockedAction,
+  type RemediationDecision,
 } from "@lcsp/contracts/evidence";
 import { REPOSITORY_CONNECTION_STATUSES } from "@lcsp/contracts/github-integration";
 import { resolveMessage } from "@lcsp/i18n";
@@ -22,6 +23,7 @@ import {
   useAssessmentInterviewBlockedActionMutation,
   useAssessmentInterviewStateQuery,
   useReadinessStatusQuery,
+  useSubmitAssessmentPostFindingDecisionMutation,
   useSubmitAssessmentInterviewAnswerMutation,
 } from "@/lib/api/assessment-queries";
 import { API_OUTCOME_KINDS } from "@/lib/api/outcome-kinds";
@@ -186,6 +188,8 @@ function AssessmentInterviewFlow({
   const submitAnswer = useSubmitAssessmentInterviewAnswerMutation(assessmentId);
   const recordBlockedAction =
     useAssessmentInterviewBlockedActionMutation(assessmentId);
+  const submitPostFindingDecision =
+    useSubmitAssessmentPostFindingDecisionMutation(assessmentId);
 
   const activeQuestion = interview.activeQuestion;
   const activeQuestionId = activeQuestion?.id ?? "";
@@ -418,6 +422,16 @@ function AssessmentInterviewFlow({
     );
   }
 
+  function handlePostFindingDecision(decision: RemediationDecision) {
+    if (
+      !postFinding?.canSelectDecision ||
+      submitPostFindingDecision.isPending
+    ) {
+      return;
+    }
+    submitPostFindingDecision.mutate({ decision });
+  }
+
   const isComposerDisabled =
     !interviewEnabled ||
     scanFailed ||
@@ -571,8 +585,11 @@ function AssessmentInterviewFlow({
                       finalReport: normalized.artifacts.finalReport,
                     }}
                     disabled={
-                      submitAnswer.isPending || recordBlockedAction.isPending
+                      submitAnswer.isPending ||
+                      recordBlockedAction.isPending ||
+                      submitPostFindingDecision.isPending
                     }
+                    onDecisionSelect={handlePostFindingDecision}
                   />
                 }
               />

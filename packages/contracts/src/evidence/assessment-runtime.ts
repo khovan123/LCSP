@@ -1,3 +1,5 @@
+import type { AssessmentPostFindingRuntimeState } from "./assessment-post-finding-runtime.ts";
+
 export const ASSESSMENT_RUNTIME_EVENT_TYPES = {
   runStarted: "RUN_STARTED",
   runStageChanged: "RUN_STAGE_CHANGED",
@@ -103,4 +105,5 @@ export type AssessmentRuntimeSnapshot = {
   repositorySnapshots: unknown[];
   scanJobs: unknown[];
   evidenceReports: unknown[];
+  postFindingStates: AssessmentPostFindingRuntimeState[];
 };

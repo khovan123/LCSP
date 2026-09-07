@@ -88,6 +88,11 @@ const read = (path: string) => readFile(new URL(path, sourceRoot), "utf8");
 
 const mountedRoots: Root[] = [];
 
+type PostFindingTestState = Partial<NormalizedAssessmentPostFinding> & {
+  canSelectDecision?: boolean;
+  screenProjection: AssessmentScreenProjection;
+};
+
 afterEach(() => {
   for (const root of mountedRoots.splice(0)) {
     act(() => {
@@ -152,6 +157,69 @@ test("F12 NEEDS_INPUT renders ChatSingleSelect with stable remediation values", 
   assert.equal(buttons[2].disabled, false);
 });
 
+test("selecting each remediation value submits the exact runtime customer action", async () => {
+  const submitted: string[] = [];
+  const decisions = [
+    REMEDIATION_DECISIONS.updateGithubPat,
+    REMEDIATION_DECISIONS.continueDetectedPr,
+    REMEDIATION_DECISIONS.createRemediationPr,
+  ];
+
+  for (const decision of decisions) {
+    const { container } = await renderFlow(
+      {
+        phase: POST_FINDING_RUNTIME_PHASES.needsInput,
+        screenProjection: "F12",
+      },
+      (value) => submitted.push(value),
+    );
+    const button = container.querySelector<HTMLButtonElement>(
+      `[data-option-id="${decision}"]`,
+    );
+    assert.ok(button);
+    await act(async () => {
+      button.dispatchEvent(
+        new testWindow.MouseEvent("click", { bubbles: true }),
+      );
+    });
+  }
+
+  assert.deepEqual(submitted, decisions);
+});
+
+test("local selection does not unlock post-finding branches before runtime persistence", async () => {
+  const { container } = await renderFlow(
+    {
+      phase: POST_FINDING_RUNTIME_PHASES.needsInput,
+      screenProjection: "F12",
+      selectedDecision: null,
+      detectedPullRequest: null,
+      createdPullRequest: null,
+      canSelectDecision: true,
+    },
+    () => undefined,
+  );
+  const createButton = container.querySelector<HTMLButtonElement>(
+    `[data-option-id="${REMEDIATION_DECISIONS.createRemediationPr}"]`,
+  );
+  assert.ok(createButton);
+
+  await act(async () => {
+    createButton.dispatchEvent(
+      new testWindow.MouseEvent("click", { bubbles: true }),
+    );
+  });
+
+  assert.doesNotMatch(
+    container.textContent ?? "",
+    /Existing PR branch|Nhánh PR hiện có/,
+  );
+  assert.doesNotMatch(
+    container.textContent ?? "",
+    /Create PR branch|Tạo nhánh PR/,
+  );
+});
+
 test("completed remediation decision renders SelectionHistoryRow and preserves prior Other history", async () => {
   const { container } = await renderElement(
     React.createElement(
@@ -164,6 +232,7 @@ test("completed remediation decision renders SelectionHistoryRow and preserves p
       }),
       React.createElement(PostFindingFlowSteps, {
         artifacts: postFindingArtifacts(),
+        onDecisionSelect: () => undefined,
         postFinding: postFindingState({
           phase: POST_FINDING_RUNTIME_PHASES.existingPr,
           screenProjection: "F13",
@@ -264,13 +333,18 @@ test("F16 final assessment renders terminal artifact links", async () => {
 });
 
 test("assessment overview uses the post-finding selector and shared artifact routes support post-finding documents", async () => {
-  const [overview, routes] = await Promise.all([
+  const [overview, routes, queries, client, route] = await Promise.all([
     read("features/workspace/components/organisms/assessment-overview.tsx"),
     read("features/artifacts/utils/artifact-routes.ts"),
+    read("lib/api/assessment-queries.ts"),
+    read("lib/api/assessment-interview-client.ts"),
+    read("app/api/assessments/[id]/post-finding/decisions/route.ts"),
   ]);
 
   assert.match(overview, /selectPostFindingPresentation\(normalized\)/);
+  assert.match(overview, /useSubmitAssessmentPostFindingDecisionMutation/);
   assert.match(overview, /<PostFindingFlowSteps/);
+  assert.match(overview, /onDecisionSelect=\{handlePostFindingDecision\}/);
   assert.match(
     overview,
     /remediationPatch: normalized\.artifacts\.remediationPatch/,
@@ -292,16 +366,30 @@ test("assessment overview uses the post-finding selector and shared artifact rou
     routes,
     /documents\/\$\{encodeURIComponent\(ref\.resourceId\)\}\/download/,
   );
+  assert.match(queries, /submitAssessmentPostFindingDecision/);
+  assert.match(client, /post-finding\/decisions/);
+  assert.match(
+    route,
+    /\/assessments\/\$\{encodeURIComponent\(id\)\}\/post-finding\/decisions/,
+  );
+  assert.doesNotMatch(
+    await read(
+      "features/workspace/components/molecules/post-finding-flow-steps.tsx",
+    ),
+    /draftDecision|useState<RemediationDecision/,
+  );
 });
 
 async function renderFlow(
-  override: Partial<NormalizedAssessmentPostFinding> & {
-    screenProjection: AssessmentScreenProjection;
-  },
+  override: PostFindingTestState,
+  onDecisionSelect: (
+    decision: (typeof REMEDIATION_DECISIONS)[keyof typeof REMEDIATION_DECISIONS],
+  ) => void = () => undefined,
 ) {
   return renderElement(
     React.createElement(PostFindingFlowSteps, {
       artifacts: postFindingArtifacts(),
+      onDecisionSelect,
       postFinding: postFindingState(override),
     }),
   );
@@ -328,9 +416,7 @@ async function renderElement(element: React.ReactElement) {
 }
 
 function postFindingState(
-  override: Partial<NormalizedAssessmentPostFinding> & {
-    screenProjection: AssessmentScreenProjection;
-  },
+  override: PostFindingTestState,
 ): NormalizedAssessmentPostFinding & {
   canSelectDecision: boolean;
   screenProjection: AssessmentScreenProjection;

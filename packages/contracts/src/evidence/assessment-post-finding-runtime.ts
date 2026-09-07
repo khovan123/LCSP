@@ -92,10 +92,26 @@ export type AssessmentPostFindingRuntimeState = {
   artifacts?: AssessmentPostFindingArtifactRefs;
 };
 
-export function isRemediationDecision(value: unknown): value is RemediationDecision {
-  return typeof value === "string" && Object.values(REMEDIATION_DECISIONS).includes(value as RemediationDecision);
+export type AssessmentPostFindingDecisionInput = {
+  decision: RemediationDecision;
+};
+
+export function isRemediationDecision(
+  value: unknown,
+): value is RemediationDecision {
+  return (
+    typeof value === "string" &&
+    Object.values(REMEDIATION_DECISIONS).includes(value as RemediationDecision)
+  );
 }
 
-export function isPostFindingRuntimePhase(value: unknown): value is PostFindingRuntimePhase {
-  return typeof value === "string" && Object.values(POST_FINDING_RUNTIME_PHASES).includes(value as PostFindingRuntimePhase);
+export function isPostFindingRuntimePhase(
+  value: unknown,
+): value is PostFindingRuntimePhase {
+  return (
+    typeof value === "string" &&
+    Object.values(POST_FINDING_RUNTIME_PHASES).includes(
+      value as PostFindingRuntimePhase,
+    )
+  );
 }
