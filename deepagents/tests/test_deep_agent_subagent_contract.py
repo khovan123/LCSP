@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 import harness
 from middleware.interview_runtime_context import inject_interview_runtime_context
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
@@ -11,15 +13,20 @@ from model_policy import (
     DEFAULT_INTERVIEW_MODEL_SPEC,
     DEFAULT_INVESTIGATOR_MODEL_SPEC,
     DEFAULT_PLANNER_MODEL_SPEC,
+    DEFAULT_REASONING_EFFORT,
     DEFAULT_ROOT_MODEL_SPEC,
     DEFAULT_TRIAGE_MODEL_SPEC,
-    _model_spec,
-    effective_model_configs,
     INTERVIEW_MODEL_SPEC,
     INVESTIGATOR_MODEL_SPEC,
     PLANNER_MODEL_SPEC,
+    REASONING_EFFORT,
+    RESPONSES_OUTPUT_VERSION,
     ROOT_MODEL_SPEC,
     TRIAGE_MODEL_SPEC,
+    _model_spec,
+    _reasoning_effort_status,
+    effective_model_configs,
+    openai_responses_init_kwargs,
 )
 from subagents import FLOW_SUBAGENTS
 from contracts.handoffs import (
@@ -190,11 +197,13 @@ def test_engineering_rules_are_pinned_inputs_not_subagent_discovery() -> None:
 
 
 def test_default_role_models_match_lcsp_cost_and_reasoning_policy() -> None:
-    assert DEFAULT_ROOT_MODEL_SPEC == "openai:gpt-4o-mini"
-    assert DEFAULT_TRIAGE_MODEL_SPEC == "openai:gpt-4o-mini"
-    assert DEFAULT_PLANNER_MODEL_SPEC == "openai:gpt-4o-mini"
-    assert DEFAULT_INTERVIEW_MODEL_SPEC == "openai:gpt-4o-mini"
-    assert DEFAULT_INVESTIGATOR_MODEL_SPEC == "openai:gpt-4o-mini"
+    assert DEFAULT_ROOT_MODEL_SPEC == "openai:gpt-5.6-terra"
+    assert DEFAULT_TRIAGE_MODEL_SPEC == "openai:gpt-5.6-sol"
+    assert DEFAULT_PLANNER_MODEL_SPEC == "openai:gpt-5.6-sol"
+    assert DEFAULT_INTERVIEW_MODEL_SPEC == "openai:gpt-5.6-sol"
+    assert DEFAULT_INVESTIGATOR_MODEL_SPEC == "openai:gpt-5.6-terra"
+    assert DEFAULT_REASONING_EFFORT == "medium"
+    assert RESPONSES_OUTPUT_VERSION == "responses/v1"
 
     assert ROOT_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
     assert TRIAGE_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
@@ -203,7 +212,18 @@ def test_default_role_models_match_lcsp_cost_and_reasoning_policy() -> None:
     assert INVESTIGATOR_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
 
 
-def test_effective_model_config_logs_non_secret_defaults() -> None:
+def test_openai_model_policy_forces_responses_api_reasoning_contract() -> None:
+    kwargs = openai_responses_init_kwargs()
+
+    assert kwargs == {
+        "use_responses_api": True,
+        "output_version": "responses/v1",
+        "reasoning": {"effort": REASONING_EFFORT},
+    }
+    assert "reasoning_effort" not in kwargs
+
+
+def test_effective_model_config_logs_responses_api_defaults() -> None:
     configs = effective_model_configs()
 
     assert tuple(config.role for config in configs) == (
@@ -214,35 +234,77 @@ def test_effective_model_config_logs_non_secret_defaults() -> None:
         "investigator",
     )
     assert all(config.provider == "openai" for config in configs)
-    assert all(config.model == "gpt-4o-mini" for config in configs)
+    assert tuple(config.model for config in configs) == (
+        "gpt-5.6-terra",
+        "gpt-5.6-sol",
+        "gpt-5.6-sol",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+    )
     assert all(config.source in {"default", "env"} for config in configs)
-    assert all(config.client == "chat_completions" for config in configs)
+    assert all(config.client == "responses_api" for config in configs)
     assert all(config.tools is True for config in configs)
-    assert all(config.reasoning_effort == "unset" for config in configs)
+    assert all(config.reasoning_effort == REASONING_EFFORT for config in configs)
+    assert all(config.output_version == "responses/v1" for config in configs)
+
+
+def test_reasoning_effort_defaults_to_medium(monkeypatch) -> None:
+    for env_name in (
+        "LCSP_REASONING_EFFORT",
+        "OPENAI_REASONING_EFFORT",
+        "REASONING_EFFORT",
+    ):
+        monkeypatch.delenv(env_name, raising=False)
+
+    assert _reasoning_effort_status() == "medium"
+
+
+def test_invalid_reasoning_effort_fails_closed(monkeypatch) -> None:
+    monkeypatch.setenv("LCSP_REASONING_EFFORT", "turbo")
+
+    with pytest.raises(RuntimeError, match="supported reasoning efforts"):
+        _reasoning_effort_status()
 
 
 def test_blank_model_env_does_not_override_default(monkeypatch) -> None:
     monkeypatch.setenv("LCSP_TRIAGE_MODEL", "  ")
 
-    model_spec, source = _model_spec("LCSP_TRIAGE_MODEL", "openai:gpt-4o-mini")
+    model_spec, source = _model_spec("LCSP_TRIAGE_MODEL", "openai:gpt-5.6-sol")
 
-    assert model_spec == "openai:gpt-4o-mini"
+    assert model_spec == "openai:gpt-5.6-sol"
     assert source == "default"
 
 
-def test_harness_profile_is_registered_for_every_role_model(monkeypatch) -> None:
-    registered: list[tuple[str, object]] = []
+def test_harness_registers_openai_provider_and_every_role_profile(monkeypatch) -> None:
+    provider_registrations: list[tuple[str, object]] = []
+    harness_registrations: list[tuple[str, object]] = []
 
     monkeypatch.setattr(
         harness,
+        "register_provider_profile",
+        lambda key, profile: provider_registrations.append((key, profile)),
+    )
+    monkeypatch.setattr(
+        harness,
         "register_harness_profile",
-        lambda model_spec, profile: registered.append((model_spec, profile)),
+        lambda model_spec, profile: harness_registrations.append((model_spec, profile)),
     )
 
     harness.configure_lcsp_harness()
 
-    assert tuple(model_spec for model_spec, _ in registered) == ALL_LCSP_MODEL_SPECS
-    assert all(profile is harness.LCSP_HARNESS_PROFILE for _, profile in registered)
+    assert provider_registrations == [
+        ("openai", harness.LCSP_OPENAI_PROVIDER_PROFILE)
+    ]
+    assert dict(harness.LCSP_OPENAI_PROVIDER_PROFILE.init_kwargs) == (
+        openai_responses_init_kwargs()
+    )
+    assert tuple(model_spec for model_spec, _ in harness_registrations) == (
+        ALL_LCSP_MODEL_SPECS
+    )
+    assert all(
+        profile is harness.LCSP_HARNESS_PROFILE
+        for _, profile in harness_registrations
+    )
 
 
 def test_root_agent_uses_managed_instructions_context_and_todos() -> None:

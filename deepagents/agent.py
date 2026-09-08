@@ -30,7 +30,8 @@ from tools.orchestration.request_targeted_reanalysis.code import (
 ROOT_TOOLS = [request_targeted_reanalysis]
 
 
-# Register the same restricted harness profile for the root and every child model.
+# Register model-construction policy plus the same restricted harness profile for
+# the root and every child model before Managed Deep Agents resolves model specs.
 configure_lcsp_harness()
 suppress_langgraph_heartbeat_logs()
 logger = get_logger(__name__)
@@ -44,6 +45,7 @@ for model_config in effective_model_configs():
         client=model_config.client,
         tools=model_config.tools,
         reasoning_effort=model_config.reasoning_effort,
+        output_version=model_config.output_version,
     )
 
 if os.environ.get("MDA_LOCAL_DEV") == "1":

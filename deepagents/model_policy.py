@@ -6,11 +6,24 @@ import os
 from dataclasses import dataclass
 
 
-DEFAULT_ROOT_MODEL_SPEC = "openai:gpt-4o-mini"
-DEFAULT_TRIAGE_MODEL_SPEC = "openai:gpt-4o-mini"
-DEFAULT_PLANNER_MODEL_SPEC = "openai:gpt-4o-mini"
-DEFAULT_INTERVIEW_MODEL_SPEC = "openai:gpt-4o-mini"
-DEFAULT_INVESTIGATOR_MODEL_SPEC = "openai:gpt-4o-mini"
+DEFAULT_ROOT_MODEL_SPEC = "openai:gpt-5.6-terra"
+DEFAULT_TRIAGE_MODEL_SPEC = "openai:gpt-5.6-sol"
+DEFAULT_PLANNER_MODEL_SPEC = "openai:gpt-5.6-sol"
+DEFAULT_INTERVIEW_MODEL_SPEC = "openai:gpt-5.6-sol"
+DEFAULT_INVESTIGATOR_MODEL_SPEC = "openai:gpt-5.6-terra"
+
+DEFAULT_REASONING_EFFORT = "medium"
+RESPONSES_OUTPUT_VERSION = "responses/v1"
+SUPPORTED_REASONING_EFFORTS = frozenset(
+    {
+        "none",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -19,21 +32,29 @@ class EffectiveModelConfig:
     provider: str
     model: str
     source: str
-    client: str = "chat_completions"
+    client: str
     tools: bool = True
-    reasoning_effort: str = "unset"
+    reasoning_effort: str = "provider_default"
+    output_version: str = "provider_default"
 
 
 def _reasoning_effort_status() -> str:
+    """Resolve the OpenAI Responses API reasoning effort with fail-closed validation."""
     for env_name in (
         "LCSP_REASONING_EFFORT",
         "OPENAI_REASONING_EFFORT",
         "REASONING_EFFORT",
     ):
-        value = (os.getenv(env_name) or "").strip()
-        if value:
-            return value
-    return "unset"
+        value = (os.getenv(env_name) or "").strip().lower()
+        if not value:
+            continue
+        if value not in SUPPORTED_REASONING_EFFORTS:
+            supported = ", ".join(sorted(SUPPORTED_REASONING_EFFORTS))
+            raise RuntimeError(
+                f"{env_name} must be one of the supported reasoning efforts: {supported}"
+            )
+        return value
+    return DEFAULT_REASONING_EFFORT
 
 
 def _model_spec(env_name: str, default: str) -> tuple[str, str]:
@@ -44,6 +65,8 @@ def _model_spec(env_name: str, default: str) -> tuple[str, str]:
         raise RuntimeError(f"{env_name} must use LangChain provider:model format")
     return value, "env" if env_value else "default"
 
+
+REASONING_EFFORT = _reasoning_effort_status()
 
 ROOT_MODEL_SPEC, ROOT_MODEL_SOURCE = _model_spec(
     "LCSP_ROOT_AGENT_MODEL", DEFAULT_ROOT_MODEL_SPEC
@@ -82,9 +105,17 @@ ALL_LCSP_MODEL_SPECS = tuple(
 )
 
 
+def openai_responses_init_kwargs() -> dict[str, object]:
+    """Return the explicit OpenAI Responses API construction contract for LCSP."""
+    return {
+        "use_responses_api": True,
+        "output_version": RESPONSES_OUTPUT_VERSION,
+        "reasoning": {"effort": REASONING_EFFORT},
+    }
+
+
 def effective_model_configs() -> tuple[EffectiveModelConfig, ...]:
     """Return non-secret model telemetry for startup diagnostics."""
-    reasoning_effort = _reasoning_effort_status()
     role_specs = (
         ("root", ROOT_MODEL_SPEC, ROOT_MODEL_SOURCE),
         ("triage", TRIAGE_MODEL_SPEC, TRIAGE_MODEL_SOURCE),
@@ -95,13 +126,20 @@ def effective_model_configs() -> tuple[EffectiveModelConfig, ...]:
     configs: list[EffectiveModelConfig] = []
     for role, spec, source in role_specs:
         provider, model = spec.split(":", 1)
+        is_openai = provider == "openai"
         configs.append(
             EffectiveModelConfig(
                 role=role,
                 provider=provider,
                 model=model,
                 source=source,
-                reasoning_effort=reasoning_effort,
+                client="responses_api" if is_openai else "provider_default",
+                reasoning_effort=(
+                    REASONING_EFFORT if is_openai else "provider_default"
+                ),
+                output_version=(
+                    RESPONSES_OUTPUT_VERSION if is_openai else "provider_default"
+                ),
             )
         )
     return tuple(configs)

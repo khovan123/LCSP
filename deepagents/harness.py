@@ -10,14 +10,27 @@ from deepagents import (
     FilesystemPermission,
     GeneralPurposeSubagentProfile,
     HarnessProfile,
+    ProviderProfile,
     register_harness_profile,
+    register_provider_profile,
 )
 
-from model_policy import ALL_LCSP_MODEL_SPECS, ROOT_MODEL_SPEC
+from model_policy import (
+    ALL_LCSP_MODEL_SPECS,
+    ROOT_MODEL_SPEC,
+    openai_responses_init_kwargs,
+)
 
 
 # Backward-compatible name used by the managed entrypoint/tests.
 LCSP_MODEL_SPEC = ROOT_MODEL_SPEC
+
+# Deep Agents resolves provider:model strings through ProviderProfile before
+# constructing ChatOpenAI. Make the OpenAI Responses API + reasoning contract
+# explicit instead of relying on model-name routing inference or Chat Completions.
+LCSP_OPENAI_PROVIDER_PROFILE = ProviderProfile(
+    init_kwargs=openai_responses_init_kwargs(),
+)
 
 # Deep Agents injects filesystem tools in addition to authored tools. LCSP keeps
 # only read_file visible because Managed Skills use it for progressive disclosure.
@@ -57,6 +70,7 @@ LCSP_FILESYSTEM_PERMISSIONS = [
 
 
 def configure_lcsp_harness() -> None:
-    """Register identical LCSP restrictions for root and role-specific model specs."""
+    """Register LCSP model-construction policy and identical harness restrictions."""
+    register_provider_profile("openai", LCSP_OPENAI_PROVIDER_PROFILE)
     for model_spec in ALL_LCSP_MODEL_SPECS:
         register_harness_profile(model_spec, LCSP_HARNESS_PROFILE)
