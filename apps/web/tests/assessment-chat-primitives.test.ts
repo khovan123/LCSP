@@ -265,6 +265,7 @@ test("scanner renders the dedicated Program Evidence Graph artifact only after e
   ]);
 
   assert.match(scannerSource, /ProgramEvidenceSummary/);
+  assert.match(scannerSource, /assessmentId=\{assessmentId\}/);
   assert.match(scannerSource, /evidenceReady \? \(/);
   assert.doesNotMatch(scannerSource, /ChatResultContainer/);
   assert.doesNotMatch(

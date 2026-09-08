@@ -14,6 +14,9 @@ import {
 } from "@/features/artifacts/types/artifact.types";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
+import { useProgramEvidenceGraphDrawer } from "@/features/assessment-runtime";
+import { deriveProgramEvidenceSummary } from "@/features/assessment-flow/utils/program-evidence-summary";
+import type { ProgramEvidenceGraphOverview } from "@/lib/api/evidence-graph-detail-client";
 
 import type {
   ProgramEvidenceMetric,
@@ -24,6 +27,7 @@ import { ChatResultContainer } from "./chat-result-container";
 export type ProgramEvidenceSummaryProps = {
   commitSha: string;
   summary: ProgramEvidenceSummaryData;
+  canonicalOverview?: ProgramEvidenceGraphOverview | null;
   assessmentId?: string;
   referenceUrl?: string;
   artifactRef?: ArtifactRef | null;
@@ -34,12 +38,19 @@ export type ProgramEvidenceSummaryProps = {
 export function ProgramEvidenceSummary({
   commitSha,
   summary,
+  canonicalOverview,
   assessmentId,
   referenceUrl,
   artifactRef,
   onOpenArtifact,
   className,
 }: ProgramEvidenceSummaryProps) {
+  const graphDrawer = useProgramEvidenceGraphDrawer();
+  const canonicalSummary = deriveProgramEvidenceSummary({
+    canonicalOverview: canonicalOverview ?? graphDrawer.overview,
+  });
+  // Keep the existing prop for callers during the runtime migration; metric authority is canonicalOverview only.
+  void summary;
   const shortSha = commitSha ? commitSha.slice(0, 7) : "";
 
   const resolvedArtifactRef: ArtifactRef | null =
@@ -56,12 +67,13 @@ export function ProgramEvidenceSummary({
     : null;
 
   const canOpenArtifact =
-    Boolean(onOpenArtifact && resolvedArtifactRef) ||
+    Boolean(resolvedArtifactRef) ||
     (target !== null &&
       (target.kind === ARTIFACT_OPEN_KINDS.internal ||
         target.kind === ARTIFACT_OPEN_KINDS.download)) ||
     Boolean(referenceUrl);
 
+  const openHandler = onOpenArtifact ?? (resolvedArtifactRef?.type === ARTIFACT_TYPES.programEvidenceGraph ? graphDrawer.openArtifact : undefined);
   const href =
     target &&
     (target.kind === ARTIFACT_OPEN_KINDS.internal ||
@@ -97,7 +109,7 @@ export function ProgramEvidenceSummary({
       }
       footer={
         <footer className="flex min-w-0 items-center justify-between gap-3">
-          {href && !onOpenArtifact ? (
+          {href && !openHandler ? (
             <Link
               href={href}
               className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
@@ -113,8 +125,8 @@ export function ProgramEvidenceSummary({
               size="sm"
               disabled={!canOpenArtifact}
               onClick={() => {
-                if (onOpenArtifact && resolvedArtifactRef) {
-                  onOpenArtifact(resolvedArtifactRef);
+                if (openHandler && resolvedArtifactRef) {
+                  openHandler(resolvedArtifactRef);
                 }
               }}
               className="h-7 min-w-0 px-0 text-xs font-medium text-primary hover:bg-transparent hover:underline disabled:text-muted-foreground disabled:no-underline"
@@ -136,28 +148,28 @@ export function ProgramEvidenceSummary({
             description={t(
               "pages.assessmentFlow.graph.servicesScannedDescription",
             )}
-            metric={summary.servicesScanned}
+            metric={canonicalSummary.servicesScanned}
           />
           <MetricItem
             label={t("pages.assessmentFlow.graph.codeSymbolsIndexed")}
             description={t(
               "pages.assessmentFlow.graph.codeSymbolsIndexedDescription",
             )}
-            metric={summary.codeSymbolsIndexed}
+            metric={canonicalSummary.codeSymbolsIndexed}
           />
           <MetricItem
             label={t("pages.assessmentFlow.graph.aiProviderCallPaths")}
             description={t(
               "pages.assessmentFlow.graph.aiProviderCallPathsDescription",
             )}
-            metric={summary.aiProviderCallPaths}
+            metric={canonicalSummary.aiProviderCallPaths}
           />
           <MetricItem
             label={t("pages.assessmentFlow.graph.evidenceMappedScope")}
             description={t(
               "pages.assessmentFlow.graph.evidenceMappedScopeDescription",
             )}
-            metric={summary.evidenceMappedScope}
+            metric={canonicalSummary.evidenceMappedScope}
           />
         </dl>
       </div>

@@ -1409,6 +1409,22 @@ export type PagesMessages = {
       unavailableValue: string;
       viewEvidenceGraph: string;
       artifactMetadata: string;
+      drawerDescription: string;
+      close: string;
+      loading: string;
+      loadError: string;
+      repositorySnapshot: string;
+      overview: string;
+      pathMap: string;
+      claims: string;
+      provenance: string;
+      finding: string;
+      evidenceSource: string;
+      generated: string;
+      evidenceReference: string;
+      openArtifacts: string;
+      noClaims: string;
+      unavailable: string;
     };
     interview: {
       thought: string;

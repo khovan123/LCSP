@@ -212,7 +212,7 @@ test("completed scan waits for accepted evidence before rendering F04", () => {
   );
 });
 
-test("program evidence graph metrics are derived from runtime data", () => {
+test("program evidence graph metrics ignore runtime summaries and use canonical overview", () => {
   const summary = deriveProgramEvidenceSummary({
     recentActivity: [
       runtimeActivity({
@@ -230,10 +230,30 @@ test("program evidence graph metrics are derived from runtime data", () => {
     ],
   });
 
-  assert.equal(summary.codeSymbolsIndexed.value, 61);
-  assert.equal(summary.aiProviderCallPaths.value, 13);
+  assert.equal(summary.codeSymbolsIndexed.value, null);
+  assert.equal(summary.aiProviderCallPaths.value, null);
   assert.equal(summary.servicesScanned.value, null);
   assert.equal(summary.evidenceMappedScope.value, null);
+
+  const canonical = deriveProgramEvidenceSummary({
+    recentActivity: [
+      runtimeActivity({
+        eventId: "event-conflicting-runtime-summary",
+        toolName: "build_evidence_graph",
+        inputSummary: { structuralFacts: 999, technicalFindings: 888 },
+      }),
+    ],
+    canonicalOverview: {
+      services_scanned: 0,
+      code_symbols_indexed: 12,
+      ai_provider_call_paths: 4,
+      evidence_mapped_scope: 0,
+    },
+  });
+  assert.equal(canonical.servicesScanned.value, 0);
+  assert.equal(canonical.codeSymbolsIndexed.value, 12);
+  assert.equal(canonical.aiProviderCallPaths.value, 4);
+  assert.equal(canonical.evidenceMappedScope.value, 0);
 });
 
 test("scanner activity composition reuses the shared ToolActivity rows", async () => {

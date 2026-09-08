@@ -70,6 +70,12 @@ test("ProgramEvidenceSummary renders 4 explicit semantic metrics with canonical 
     React.createElement(ProgramEvidenceSummary, {
       commitSha: "9f31ca234567890abcdef",
       summary: summaryFixture,
+      canonicalOverview: {
+        services_scanned: 12,
+        code_symbols_indexed: 93,
+        ai_provider_call_paths: 5,
+        evidence_mapped_scope: 71,
+      },
       assessmentId: "asmt-101",
     }),
   );
@@ -99,7 +105,8 @@ test("ProgramEvidenceSummary renders 4 explicit semantic metrics with canonical 
 
   // Assert LCSP-270 CTA
   assert.match(htmlEn, /View evidence graph/);
-  assert.match(htmlEn, /href="\/assessments\/asmt-101"/);
+  assert.match(htmlEn, /data-slot="button"/);
+  assert.doesNotMatch(htmlEn, /href="\/assessments\/asmt-101"/);
   assert.match(htmlEn, /Artifact · repository evidence/);
 
   // Assert Vietnamese locale
@@ -128,6 +135,12 @@ test("ProgramEvidenceSummary handles unavailable metrics with unavailable format
     React.createElement(ProgramEvidenceSummary, {
       commitSha: "abc1234567890",
       summary: partialSummary,
+      canonicalOverview: {
+        services_scanned: 0,
+        code_symbols_indexed: null,
+        ai_provider_call_paths: null,
+        evidence_mapped_scope: null,
+      },
       assessmentId: "asmt-102",
     }),
   );
@@ -492,6 +505,7 @@ test("chat rail contract: structured results enforce max-w-170 (680px) and flexi
         aiProviderCallPaths: { value: 3, format: "count" },
         evidenceMappedScope: { value: 50, format: "percent" },
       },
+      canonicalOverview: null,
     }),
   );
   assert.match(pgeHtml, /max-w-170/);
