@@ -711,6 +711,158 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       );
     });
 
+    it("accepts canonical SINGLE_SELECT Other comments and persists them for resume", async () => {
+      const activeState: AssessmentInterviewRuntimeState = {
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        contextRevision: 1,
+        activeQuestion: {
+          id: "q-single-other",
+          intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+          prompt: "Select the deployment model.",
+          control: ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
+          choices: [
+            { id: "standard", label: "Standard" },
+            { id: "other", label: "Other", requiresFreeText: true },
+          ],
+        },
+      };
+
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
+        assessmentId: "assessment-1",
+        contextRevision: 1,
+        processedRevision: 0,
+        activeQuestionId: "q-single-other",
+        stateJson: activeState,
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+      });
+
+      const result = await service.submitAnswer({
+        assessmentId: "assessment-1",
+        actor: {
+          userId: "user-1",
+          sessionId: "session-1",
+          role: AUTH_USER_ROLES.customer,
+          scope: "assessment:assessment-1",
+        },
+        correlationId: "corr-submit-single-other",
+        answer: submitAnswerCommand({
+          questionId: "q-single-other",
+          clientRequestId: "client-request-single-other",
+          answer: {
+            kind: ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
+            value: "other",
+            comment: "Hosted in a customer-managed region.",
+          },
+        }),
+      });
+
+      expect(result.contextRevision).toBe(2);
+      expect(result.answerHistory).toEqual([
+        expect.objectContaining({
+          questionId: "q-single-other",
+          summary: "Customer selected 1 option(s).",
+        }),
+      ]);
+      expect(mockTx.assessmentInterviewThread.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            privateContextJson: expect.objectContaining({
+              revisions: [
+                expect.objectContaining({
+                  questionId: "q-single-other",
+                  answer: expect.objectContaining({
+                    selectedChoiceIds: ["other"],
+                    comment: "Hosted in a customer-managed region.",
+                  }),
+                }),
+              ],
+            }),
+          }),
+        }),
+      );
+    });
+
+    it("accepts canonical MULTI_SELECT Other comments and persists them for resume", async () => {
+      const activeState: AssessmentInterviewRuntimeState = {
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        contextRevision: 1,
+        activeQuestion: {
+          id: "q-multi-other",
+          intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+          prompt: "Select compliance frameworks.",
+          control: ASSESSMENT_INTERVIEW_CONTROLS.multiSelect,
+          choices: [
+            { id: "soc2", label: "SOC 2" },
+            { id: "other", label: "Other", requiresFreeText: true },
+          ],
+        },
+      };
+
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
+        assessmentId: "assessment-1",
+        contextRevision: 1,
+        processedRevision: 0,
+        activeQuestionId: "q-multi-other",
+        stateJson: activeState,
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+      });
+
+      const result = await service.submitAnswer({
+        assessmentId: "assessment-1",
+        actor: {
+          userId: "user-1",
+          sessionId: "session-1",
+          role: AUTH_USER_ROLES.customer,
+          scope: "assessment:assessment-1",
+        },
+        correlationId: "corr-submit-multi-other",
+        answer: submitAnswerCommand({
+          questionId: "q-multi-other",
+          clientRequestId: "client-request-multi-other",
+          answer: {
+            kind: ASSESSMENT_INTERVIEW_CONTROLS.multiSelect,
+            values: ["soc2", "other"],
+            comment: "PCI DSS also applies to this flow.",
+          },
+        }),
+      });
+
+      expect(result.contextRevision).toBe(2);
+      expect(result.answerHistory).toEqual([
+        expect.objectContaining({
+          questionId: "q-multi-other",
+          summary: "Customer selected 2 option(s).",
+        }),
+      ]);
+      expect(mockTx.assessmentInterviewThread.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            privateContextJson: expect.objectContaining({
+              revisions: [
+                expect.objectContaining({
+                  questionId: "q-multi-other",
+                  answer: expect.objectContaining({
+                    selectedChoiceIds: ["soc2", "other"],
+                    comment: "PCI DSS also applies to this flow.",
+                  }),
+                }),
+              ],
+            }),
+          }),
+        }),
+      );
+    });
+
     it("accepts canonical SubmitInterviewAnswerCommand and persists the clientRequestId fingerprint", async () => {
       const activeState: AssessmentInterviewRuntimeState = {
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,

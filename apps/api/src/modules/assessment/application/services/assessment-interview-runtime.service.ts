@@ -3015,7 +3015,9 @@ function assertAnswerMatchesQuestion(
   const requiresOtherText = selected.some(
     (choiceId) => choiceById.get(choiceId)?.requiresFreeText === true,
   );
-  const hasOtherText = Boolean(answer.otherText?.trim());
+  const hasOtherText = Boolean(
+    answer.otherText?.trim() || answer.comment?.trim(),
+  );
   const hasFreeText = Boolean(answer.freeText?.trim());
   const hasComment = Boolean(answer.comment?.trim());
 
