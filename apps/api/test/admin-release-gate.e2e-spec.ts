@@ -1,4 +1,4 @@
-import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import * as assert from "node:assert/strict";
 import crypto from "node:crypto";
 
@@ -8,13 +8,8 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
 
-import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES, REQUIRED_ACTIONS } from "@lcsp/contracts/auth";
-import { RBAC_REASON_CODES } from "@lcsp/contracts/rbac";
-
 import { AppModule } from "../src/app.module.js";
 import {
-  type AuthFixture,
   TEST_DATABASE_URL,
   ensureTestMfaEncryptionKey,
   pushPrismaSchema,
@@ -31,7 +26,6 @@ import {
 describe("Admin Release Gate & Security Integrity (e2e)", () => {
   let app: INestApplication;
   let prisma: PrismaClient;
-  let fixture: AuthFixture;
 
   let adminUser: { id: string; email: string };
   let adminSessionToken: string;
@@ -57,7 +51,7 @@ describe("Admin Release Gate & Security Integrity (e2e)", () => {
 
   beforeEach(async () => {
     await resetAuthWorkspaceDatabase(prisma);
-    fixture = await seedAuthWorkspaceFixture(prisma);
+    await seedAuthWorkspaceFixture(prisma);
 
     // Create Admin user
     const adminId = crypto.randomUUID();
@@ -120,8 +114,7 @@ describe("Admin Release Gate & Security Integrity (e2e)", () => {
         .set("Accept", "application/json");
 
       assert.equal(res.status, 401);
-      assert.equal(res.body.ok, false);
-      assert.equal(res.body.problem.code, AUTH_ERROR_CODES.sessionInvalid);
+      assert.equal(problemCode(res), AUTH_ERROR_CODES.sessionInvalid);
     });
 
     it("rejects customer role accessing admin-restricted routes server-side", async () => {
@@ -132,7 +125,7 @@ describe("Admin Release Gate & Security Integrity (e2e)", () => {
 
       // Customer can access their own session, but not administrative actions
       assert.equal(res.status, 200);
-      assert.equal(res.body.ok, true);
+      successBody(res);
     });
 
     it("prevents locked/invalid accounts from accessing protected API endpoints", async () => {
@@ -189,7 +182,11 @@ describe("Admin Release Gate & Security Integrity (e2e)", () => {
         .set("Authorization", `Bearer ${customerSessionToken}`)
         .set("Accept", "application/json");
 
-      assert.equal(restoreCheckRes.status, 401, "Old revoked session must not be resurrected");
+      assert.equal(
+        restoreCheckRes.status,
+        401,
+        "Old revoked session must not be resurrected",
+      );
     });
 
     it("protects last-admin from accidental demotion", async () => {
@@ -208,14 +205,24 @@ describe("Admin Release Gate & Security Integrity (e2e)", () => {
         return true;
       }
 
-      assert.equal(guardLastAdminDemotion(1), false, "Last admin demotion must be blocked");
-      assert.equal(guardLastAdminDemotion(2), true, "Demotion allowed when multiple admins exist");
+      assert.equal(
+        guardLastAdminDemotion(1),
+        false,
+        "Last admin demotion must be blocked",
+      );
+      assert.equal(
+        guardLastAdminDemotion(2),
+        true,
+        "Demotion allowed when multiple admins exist",
+      );
     });
   });
 
   describe("Section 3: Corpus Lifecycle & Concurrency Invariants", () => {
-    it("enforces that publication readiness requires READY state", async () => {
-      function evaluatePublicationReadiness(state: "PENDING" | "BLOCKED" | "FAILED" | "READY"): boolean {
+    it("enforces that publication readiness requires READY state", () => {
+      function evaluatePublicationReadiness(
+        state: "PENDING" | "BLOCKED" | "FAILED" | "READY",
+      ): boolean {
         return state === "READY";
       }
 
@@ -225,14 +232,18 @@ describe("Admin Release Gate & Security Integrity (e2e)", () => {
       assert.equal(evaluatePublicationReadiness("READY"), true);
     });
 
-    it("preserves single-active corpus version invariant under concurrent publishing", async () => {
+    it("preserves single-active corpus version invariant under concurrent publishing", () => {
       const activeVersionsCount = 1; // Invariant
-      assert.equal(activeVersionsCount, 1, "Must never have more than 1 active published corpus version");
+      assert.equal(
+        activeVersionsCount,
+        1,
+        "Must never have more than 1 active published corpus version",
+      );
     });
   });
 
   describe("Section 4: Audit Trail Security & Secret Redaction", () => {
-    it("ensures audit log payloads never contain sensitive credentials", async () => {
+    it("ensures audit log payloads never contain sensitive credentials", () => {
       const rawAuditEntry = {
         action: "ADMIN_ROLE_CHANGE",
         actorId: adminUser.id,
@@ -248,20 +259,28 @@ describe("Admin Release Gate & Security Integrity (e2e)", () => {
       };
 
       // Apply redaction
-      const sensitiveKeys = ["password", "passwordHash", "mfaSecret", "sessionToken", "workerApiKey"];
-      const sanitizedMeta = { ...rawAuditEntry.metadata };
+      const sensitiveKeys = [
+        "password",
+        "passwordHash",
+        "mfaSecret",
+        "sessionToken",
+        "workerApiKey",
+      ];
+      const sanitizedMeta: Record<string, unknown> = {
+        ...rawAuditEntry.metadata,
+      };
       for (const key of sensitiveKeys) {
         if (key in sanitizedMeta) {
-          delete (sanitizedMeta as Record<string, unknown>)[key];
+          delete sanitizedMeta[key];
         }
       }
 
       assert.equal(sanitizedMeta.newRole, AUTH_USER_ROLES.admin);
-      assert.equal((sanitizedMeta as Record<string, unknown>).password, undefined);
-      assert.equal((sanitizedMeta as Record<string, unknown>).passwordHash, undefined);
-      assert.equal((sanitizedMeta as Record<string, unknown>).mfaSecret, undefined);
-      assert.equal((sanitizedMeta as Record<string, unknown>).sessionToken, undefined);
-      assert.equal((sanitizedMeta as Record<string, unknown>).workerApiKey, undefined);
+      assert.equal(sanitizedMeta.password, undefined);
+      assert.equal(sanitizedMeta.passwordHash, undefined);
+      assert.equal(sanitizedMeta.mfaSecret, undefined);
+      assert.equal(sanitizedMeta.sessionToken, undefined);
+      assert.equal(sanitizedMeta.workerApiKey, undefined);
     });
   });
 

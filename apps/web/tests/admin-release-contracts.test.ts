@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
-import { RBAC_REASON_CODES } from "@lcsp/contracts/rbac";
 
 // Section 1: Unavailable metrics mapping vs Zero
 test("Admin overview data mapping: unavailable metrics must not be coerced to zero", () => {
