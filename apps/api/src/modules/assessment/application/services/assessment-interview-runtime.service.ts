@@ -612,8 +612,7 @@ export class AssessmentInterviewRuntimeService {
         partialCoveragePolicyDecision:
           result.partialCoveragePolicyDecision ?? null,
       },
-      waitingReason:
-        ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewBlockedOrUnresolved,
+      waitingReason: blocked.action,
       startedAt: now,
     });
 
@@ -1374,7 +1373,8 @@ export class AssessmentInterviewRuntimeService {
     ) {
       await this.runtimeEvents.recordToolWaitingInput({
         ...base,
-        summary: "Interview is waiting for Customer response.",
+        summary:
+          "Interview Agent guarded decision persisted; Interview is waiting for Customer response.",
         waitingReason: input.transition.workflowEvent,
       });
       return;
