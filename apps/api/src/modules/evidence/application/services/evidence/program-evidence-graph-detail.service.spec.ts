@@ -4,7 +4,9 @@ import type { ArtifactStorageService } from "../../../../../platform/storage/art
 describe("ProgramEvidenceGraphDetailService", () => {
   it("projects canonical graph data and preserves real zero metrics", async () => {
     const result = await new ProgramEvidenceGraphDetailService({
-      readJsonArtifactReference: async () => { throw new Error("missing"); },
+      readJsonArtifactReference: async () => {
+        throw new Error("missing");
+      },
     } as unknown as ArtifactStorageService).project({
       report: {
         id: "report-1",
@@ -77,7 +79,12 @@ describe("ProgramEvidenceGraphDetailService", () => {
     });
     expect(result.provenance.finding).toMatchObject({
       meaning: "Authorization reaches the provider boundary",
-      source: { file: "src/auth.ts", symbol: "authorize", start_line: 12, end_line: 12 },
+      source: {
+        file: "src/auth.ts",
+        symbol: "authorize",
+        start_line: 12,
+        end_line: 12,
+      },
     });
     expect(result.provenance.source).toMatchObject({
       file: "src/auth.ts",
@@ -90,7 +97,9 @@ describe("ProgramEvidenceGraphDetailService", () => {
 
   it("does not fabricate repository branch or unavailable metrics", async () => {
     const result = await new ProgramEvidenceGraphDetailService({
-      readJsonArtifactReference: async () => { throw new Error("missing"); },
+      readJsonArtifactReference: async () => {
+        throw new Error("missing");
+      },
     } as unknown as ArtifactStorageService).project({
       report: {
         id: "report-1",
@@ -130,7 +139,9 @@ describe("ProgramEvidenceGraphDetailService", () => {
         snapshotId: "snapshot-1",
         createdAt: new Date("2026-01-01T00:00:00.000Z"),
         evidencePayload: {
-          evidence_graph: { evidence_graph_ref: "/app/deepagents/tmp/graph.json" },
+          evidence_graph: {
+            evidence_graph_ref: "/app/deepagents/tmp/graph.json",
+          },
         },
       },
       snapshot: null,

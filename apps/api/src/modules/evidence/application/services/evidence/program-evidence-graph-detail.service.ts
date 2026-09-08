@@ -98,7 +98,11 @@ export class ProgramEvidenceGraphDetailService {
         scan_job_id: input.report.scanJobId,
         generated_at: input.report.createdAt.toISOString(),
         finding: provenanceFinding(
-          claims(payload?.claims ?? payload?.evidence_claims ?? payload?.evidenceClaims),
+          claims(
+            payload?.claims ??
+              payload?.evidence_claims ??
+              payload?.evidenceClaims,
+          ),
         ),
         source: provenanceSource(sourceGraph),
       },
@@ -106,7 +110,9 @@ export class ProgramEvidenceGraphDetailService {
   }
 }
 
-function provenanceFinding(value: unknown): ProgramEvidenceGraphFindingDto | null {
+function provenanceFinding(
+  value: unknown,
+): ProgramEvidenceGraphFindingDto | null {
   const claim = claims(value)[0];
   if (!claim) return null;
   return {
@@ -122,42 +128,77 @@ function provenanceFinding(value: unknown): ProgramEvidenceGraphFindingDto | nul
   };
 }
 
-function provenanceSource(graph: Record<string, unknown> | null): ProgramEvidenceGraphSourceDto | null {
+function provenanceSource(
+  graph: Record<string, unknown> | null,
+): ProgramEvidenceGraphSourceDto | null {
   const candidates = Array.isArray(graph?.nodes)
     ? graph.nodes.flatMap((entry) => {
         const node = record(entry);
         const source = record(node?.source);
         const file = safePath(source?.file_path ?? source?.filePath);
         if (!file || file === "<workspace>") return [];
-        return [{
-          file,
-          symbol: text(source?.symbol_ref ?? source?.symbolRef),
-          start_line: line(source?.start_line ?? source?.startLine ?? source?.line_number ?? source?.lineNumber),
-          end_line: line(source?.end_line ?? source?.endLine ?? source?.line_number ?? source?.lineNumber),
-          evidence_reference: strings(node?.evidence_refs ?? node?.evidenceRefs).find(isSafeReference) ?? null,
-        }];
+        return [
+          {
+            file,
+            symbol: text(source?.symbol_ref ?? source?.symbolRef),
+            start_line: line(
+              source?.start_line ??
+                source?.startLine ??
+                source?.line_number ??
+                source?.lineNumber,
+            ),
+            end_line: line(
+              source?.end_line ??
+                source?.endLine ??
+                source?.line_number ??
+                source?.lineNumber,
+            ),
+            evidence_reference:
+              strings(node?.evidence_refs ?? node?.evidenceRefs).find(
+                isSafeReference,
+              ) ?? null,
+          },
+        ];
       })
     : [];
-  return candidates.sort((left, right) =>
-    left.file.localeCompare(right.file) ||
-    (left.start_line ?? 0) - (right.start_line ?? 0) ||
-    (left.symbol ?? "").localeCompare(right.symbol ?? ""),
-  )[0] ?? null;
+  return (
+    candidates.sort(
+      (left, right) =>
+        left.file.localeCompare(right.file) ||
+        (left.start_line ?? 0) - (right.start_line ?? 0) ||
+        (left.symbol ?? "").localeCompare(right.symbol ?? ""),
+    )[0] ?? null
+  );
 }
 
 function boundedGraph(
   nodes: ProgramEvidenceGraphNodeDto[],
   edges: ProgramEvidenceGraphEdgeDto[],
-): { nodes: ProgramEvidenceGraphNodeDto[]; edges: ProgramEvidenceGraphEdgeDto[] } {
-  if (nodes.length <= MAX_PROJECTED_NODES && edges.length <= MAX_PROJECTED_EDGES) {
+): {
+  nodes: ProgramEvidenceGraphNodeDto[];
+  edges: ProgramEvidenceGraphEdgeDto[];
+} {
+  if (
+    nodes.length <= MAX_PROJECTED_NODES &&
+    edges.length <= MAX_PROJECTED_EDGES
+  ) {
     const ids = new Set(nodes.map((node) => node.id));
-    return { nodes, edges: edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)) };
+    return {
+      nodes,
+      edges: edges.filter(
+        (edge) => ids.has(edge.source) && ids.has(edge.target),
+      ),
+    };
   }
   const ranked = [...nodes].sort((left, right) => {
     const score = (node: ProgramEvidenceGraphNodeDto) => {
       const kind = node.kind.toUpperCase();
-      return kind.includes("AI_") || kind.includes("AGENT_BOUNDARY") ||
-        kind.includes("HTTP_ROUTE") || kind === "ENTRYPOINT" ? 0 : 1;
+      return kind.includes("AI_") ||
+        kind.includes("AGENT_BOUNDARY") ||
+        kind.includes("HTTP_ROUTE") ||
+        kind === "ENTRYPOINT"
+        ? 0
+        : 1;
     };
     return score(left) - score(right) || left.id.localeCompare(right.id);
   });
@@ -249,7 +290,9 @@ function claims(value: unknown): ProgramEvidenceGraphClaimDto[] {
         symbol: text(claim?.symbol ?? claim?.symbol_ref ?? claim?.symbolRef),
         file: safePath(claim?.file ?? claim?.file_path ?? claim?.filePath),
         line: line(claim?.line ?? claim?.line_number ?? claim?.lineNumber),
-        evidence_refs: strings(claim?.evidence_refs ?? claim?.evidenceRefs).filter(isSafeReference),
+        evidence_refs: strings(
+          claim?.evidence_refs ?? claim?.evidenceRefs,
+        ).filter(isSafeReference),
       },
     ];
   });
@@ -309,6 +352,9 @@ function strings(value: unknown): string[] {
     : [];
 }
 function isSafeReference(value: string): boolean {
-  return !value.includes("\\") && !value.includes("/") &&
-    !/\b(token|secret|password|credential|authorization)\b/i.test(value);
+  return (
+    !value.includes("\\") &&
+    !value.includes("/") &&
+    !/\b(token|secret|password|credential|authorization)\b/i.test(value)
+  );
 }

@@ -62,9 +62,7 @@ export class EvidenceController {
   @Get(":assessmentId/evidence-graph")
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
-  async getEvidenceGraph(
-    @Param("assessmentId") assessmentId: string,
-  ) {
+  async getEvidenceGraph(@Param("assessmentId") assessmentId: string) {
     const report = await this.prisma.technicalEvidenceReport.findFirst({
       where: {
         assessmentId,

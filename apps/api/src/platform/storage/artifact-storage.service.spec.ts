@@ -106,7 +106,9 @@ describe("ArtifactStorageService", () => {
       "utf8",
     );
     await expect(
-      service.readJsonArtifactReference("/app/deepagents/tmp/graphs/graph.json"),
+      service.readJsonArtifactReference(
+        "/app/deepagents/tmp/graphs/graph.json",
+      ),
     ).resolves.toEqual({ nodes: [] });
     await expect(
       service.readJsonArtifactReference("/app/deepagents/tmp/../secret.json"),

@@ -70,7 +70,9 @@ export class ArtifactStorageService {
     return reconstructed;
   }
 
-  async readJsonArtifactReference(reference: string): Promise<StoredJsonArtifact> {
+  async readJsonArtifactReference(
+    reference: string,
+  ): Promise<StoredJsonArtifact> {
     if (typeof reference !== "string" || !reference.trim()) {
       throw new BadRequestException("Invalid artifact reference");
     }
@@ -82,7 +84,8 @@ export class ArtifactStorageService {
     if (!/^[a-zA-Z0-9_./-]+\.json$/.test(relative) || relative.includes("..")) {
       throw new BadRequestException("Invalid artifact reference");
     }
-    const root = process.env.LCSP_GRAPH_STORAGE_PATH || path.join(getRepoRoot(), "tmp");
+    const root =
+      process.env.LCSP_GRAPH_STORAGE_PATH || path.join(getRepoRoot(), "tmp");
     const artifactPath = path.resolve(root, relative);
     const storageRoot = path.resolve(root) + path.sep;
     if (!artifactPath.startsWith(storageRoot)) {
@@ -90,7 +93,11 @@ export class ArtifactStorageService {
     }
     const content = await fs.promises.readFile(artifactPath, "utf8");
     const parsed = JSON.parse(content) as unknown;
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
       throw new BadRequestException("Invalid JSON artifact");
     }
     return parsed as StoredJsonArtifact;
