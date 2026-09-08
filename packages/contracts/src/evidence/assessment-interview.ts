@@ -66,6 +66,9 @@ export const ASSESSMENT_INTERVIEW_ANSWER_ACTIONS = {
 export type AssessmentInterviewAnswerAction =
   (typeof ASSESSMENT_INTERVIEW_ANSWER_ACTIONS)[keyof typeof ASSESSMENT_INTERVIEW_ANSWER_ACTIONS];
 
+export const INTERVIEW_TECHNICAL_CONTRACT_VERSION =
+  "interview-technical-contract-v1.0.0";
+
 export const ASSESSMENT_TECHNICAL_COVERAGE_STATES = {
   ready: "READY",
   partial: "PARTIAL",

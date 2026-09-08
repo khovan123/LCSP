@@ -14,9 +14,11 @@ import {
   CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES,
   INTERVIEW_FRONTIER_MATERIALITIES,
   INTERVIEW_FRONTIER_OWNERS,
+  INTERVIEW_TECHNICAL_CONTRACT_VERSION,
   POST_FINDING_RUNTIME_PHASES,
   REMEDIATION_APPROVAL_STATUSES,
   REMEDIATION_DECISIONS,
+  type CustomerAnswer,
   type AssessmentPostFindingRuntimeState,
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
@@ -70,6 +72,24 @@ function confirmedStructuredContext(input: {
     sourceVersionRef: "snap-1:sha-123456",
     pgeVersion: "report-1:v1",
     guidanceVersion: "guidance-1",
+  };
+}
+
+function submitAnswerCommand(input: {
+  questionId: string;
+  expectedSessionRevision?: number;
+  clientRequestId?: string;
+  answer: CustomerAnswer;
+}) {
+  return {
+    contractVersion: INTERVIEW_TECHNICAL_CONTRACT_VERSION,
+    assessmentId: "assessment-1",
+    sessionId: "interview:assessment-1",
+    questionRef: input.questionId,
+    expectedSessionRevision: input.expectedSessionRevision ?? 1,
+    clientRequestId:
+      input.clientRequestId ?? `client-request-${input.questionId}`,
+    answer: input.answer,
   };
 }
 
@@ -420,10 +440,13 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           scope: "assessment:assessment-1",
         },
         correlationId: "corr-submit-1",
-        answer: {
+        answer: submitAnswerCommand({
           questionId: "q-1",
-          confirmed: true,
-        },
+          answer: {
+            kind: ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust,
+            action: ASSESSMENT_INTERVIEW_ANSWER_ACTIONS.confirm,
+          },
+        }),
       });
 
       expect(result.contextRevision).toBe(2);
@@ -493,7 +516,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         sourceVersion: "snap-1:sha-123456",
         pgeVersion: "report-1:v1",
       });
-      const submit = (answer: Record<string, unknown>) =>
+      const submit = (input: { questionId: string; answer: CustomerAnswer }) =>
         service.submitAnswer({
           assessmentId: "assessment-1",
           actor: {
@@ -503,7 +526,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             scope: "assessment:assessment-1",
           },
           correlationId: "corr-submit-control",
-          answer: answer as { questionId: string },
+          answer: submitAnswerCommand(input),
         });
 
       mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
@@ -515,7 +538,13 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         }),
       );
       await expect(
-        submit({ questionId: "q-free-text", confirmed: true }),
+        submit({
+          questionId: "q-free-text",
+          answer: {
+            kind: ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust,
+            action: ASSESSMENT_INTERVIEW_ANSWER_ACTIONS.confirm,
+          },
+        }),
       ).rejects.toMatchObject({
         response: { code: "INTERVIEW_ANSWER_CONTROL_INVALID" },
       });
@@ -534,15 +563,25 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         }),
       );
       await expect(
-        submit({ questionId: "q-confirm-adjust", adjusted: true }),
+        submit({
+          questionId: "q-confirm-adjust",
+          answer: {
+            kind: ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust,
+            action: ASSESSMENT_INTERVIEW_ANSWER_ACTIONS.adjust,
+            adjustmentText: "",
+          },
+        }),
       ).rejects.toMatchObject({
-        response: { code: "INTERVIEW_ANSWER_CONTROL_INVALID" },
+        response: { code: "INTERVIEW_ANSWER_INVALID" },
       });
 
       const adjusted = await submit({
         questionId: "q-confirm-adjust",
-        adjusted: true,
-        freeText: "A senior manager approves before action.",
+        answer: {
+          kind: ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust,
+          action: ASSESSMENT_INTERVIEW_ANSWER_ACTIONS.adjust,
+          adjustmentText: "A senior manager approves before action.",
+        },
       });
       expect(adjusted.contextRevision).toBe(2);
       expect(mockInterviewAudit.recordCustomerAnswer).toHaveBeenCalledWith(
@@ -593,10 +632,13 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           scope: "assessment:assessment-1",
         },
         correlationId: "corr-submit-bool",
-        answer: {
+        answer: submitAnswerCommand({
           questionId: "q-bool",
-          selectedChoiceIds: ["yes"],
-        },
+          answer: {
+            kind: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+            value: true,
+          },
+        }),
       });
 
       expect(result.contextRevision).toBe(2);
@@ -649,10 +691,13 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           scope: "assessment:assessment-1",
         },
         correlationId: "corr-submit-multi",
-        answer: {
+        answer: submitAnswerCommand({
           questionId: "q-multi",
-          selectedChoiceIds: ["soc2", "iso27001"],
-        },
+          answer: {
+            kind: ASSESSMENT_INTERVIEW_CONTROLS.multiSelect,
+            values: ["soc2", "iso27001"],
+          },
+        }),
       });
 
       expect(result.contextRevision).toBe(2);
@@ -706,16 +751,14 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         },
         correlationId: "corr-submit-canonical",
         answer: {
-          contractVersion: "interview-technical-contract-v1.0.0",
-          assessmentId: "assessment-1",
-          sessionId: "interview:assessment-1",
-          questionRef: "q-canonical-bool",
-          expectedSessionRevision: 1,
-          clientRequestId: "client-request-1",
-          answer: {
-            kind: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
-            value: true,
-          },
+          ...submitAnswerCommand({
+            questionId: "q-canonical-bool",
+            clientRequestId: "client-request-1",
+            answer: {
+              kind: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+              value: true,
+            },
+          }),
         },
       });
 

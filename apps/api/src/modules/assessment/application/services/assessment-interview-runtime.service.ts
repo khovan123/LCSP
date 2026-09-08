@@ -27,6 +27,7 @@ import {
   CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES,
   INTERVIEW_FRONTIER_MATERIALITIES,
   INTERVIEW_FRONTIER_OWNERS,
+  INTERVIEW_TECHNICAL_CONTRACT_VERSION,
   isRemediationDecision,
   POST_FINDING_RUNTIME_PHASES,
   REMEDIATION_DECISIONS,
@@ -243,7 +244,7 @@ export class AssessmentInterviewRuntimeService {
     assessmentId: string;
     actor: RbacRequestContext;
     correlationId: string;
-    answer: AssessmentInterviewAnswerInput | SubmitInterviewAnswerCommand;
+    answer: SubmitInterviewAnswerCommand;
   }): Promise<AssessmentInterviewRuntimeState> {
     const command = parseSubmitAnswerCommand(input.answer, input.assessmentId);
     const answer = command.answer;
@@ -1900,45 +1901,21 @@ export class AssessmentInterviewRuntimeService {
   }
 }
 
-function parseAnswer(value: unknown): AssessmentInterviewAnswerInput {
-  const record = objectRecord(value);
-  if (!record || typeof record.questionId !== "string") {
-    throw new BadRequestException({ code: "INTERVIEW_ANSWER_INVALID" });
-  }
-  return {
-    questionId: record.questionId,
-    freeText: typeof record.freeText === "string" ? record.freeText : undefined,
-    selectedChoiceIds: Array.isArray(record.selectedChoiceIds)
-      ? record.selectedChoiceIds.filter(
-          (item): item is string => typeof item === "string",
-        )
-      : undefined,
-    otherText:
-      typeof record.otherText === "string" ? record.otherText : undefined,
-    comment: typeof record.comment === "string" ? record.comment : undefined,
-    confirmed:
-      typeof record.confirmed === "boolean" ? record.confirmed : undefined,
-    adjusted:
-      typeof record.adjusted === "boolean" ? record.adjusted : undefined,
-  };
-}
-
 function parseSubmitAnswerCommand(
   value: unknown,
   routeAssessmentId: string,
 ): {
   answer: AssessmentInterviewAnswerInput;
-  sessionId?: string;
-  expectedSessionRevision?: number;
-  clientRequestId?: string;
+  sessionId: string;
+  expectedSessionRevision: number;
+  clientRequestId: string;
 } {
   const record = objectRecord(value);
   if (!record || !objectRecord(record.answer)) {
-    return { answer: parseAnswer(value) };
+    throw new BadRequestException({ code: "INTERVIEW_SUBMIT_COMMAND_INVALID" });
   }
   if (
-    typeof record.contractVersion !== "string" ||
-    !record.contractVersion.trim() ||
+    record.contractVersion !== INTERVIEW_TECHNICAL_CONTRACT_VERSION ||
     record.assessmentId !== routeAssessmentId ||
     typeof record.sessionId !== "string" ||
     !record.sessionId.trim() ||
@@ -1946,6 +1923,7 @@ function parseSubmitAnswerCommand(
     !record.questionRef.trim() ||
     typeof record.expectedSessionRevision !== "number" ||
     !Number.isInteger(record.expectedSessionRevision) ||
+    record.expectedSessionRevision < 0 ||
     typeof record.clientRequestId !== "string" ||
     !record.clientRequestId.trim()
   ) {
@@ -3340,6 +3318,7 @@ function publicState(
 ): AssessmentInterviewRuntimeState {
   return {
     outcome: state.outcome,
+    threadId: state.threadId,
     contextRevision: state.contextRevision,
     contextAuthority: state.contextAuthority,
     activeQuestion: publicActiveQuestion(state.activeQuestion),
