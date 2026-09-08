@@ -13,6 +13,8 @@ from model_policy import (
     DEFAULT_PLANNER_MODEL_SPEC,
     DEFAULT_ROOT_MODEL_SPEC,
     DEFAULT_TRIAGE_MODEL_SPEC,
+    _model_spec,
+    effective_model_configs,
     INTERVIEW_MODEL_SPEC,
     INVESTIGATOR_MODEL_SPEC,
     PLANNER_MODEL_SPEC,
@@ -188,17 +190,44 @@ def test_engineering_rules_are_pinned_inputs_not_subagent_discovery() -> None:
 
 
 def test_default_role_models_match_lcsp_cost_and_reasoning_policy() -> None:
-    assert DEFAULT_ROOT_MODEL_SPEC == "openai:gpt-5.6-terra"
-    assert DEFAULT_TRIAGE_MODEL_SPEC == "openai:gpt-5.6-sol"
-    assert DEFAULT_PLANNER_MODEL_SPEC == "openai:gpt-5.6-sol"
-    assert DEFAULT_INTERVIEW_MODEL_SPEC == "openai:gpt-5.6-sol"
-    assert DEFAULT_INVESTIGATOR_MODEL_SPEC == "openai:gpt-5.6-terra"
+    assert DEFAULT_ROOT_MODEL_SPEC == "openai:gpt-4o-mini"
+    assert DEFAULT_TRIAGE_MODEL_SPEC == "openai:gpt-4o-mini"
+    assert DEFAULT_PLANNER_MODEL_SPEC == "openai:gpt-4o-mini"
+    assert DEFAULT_INTERVIEW_MODEL_SPEC == "openai:gpt-4o-mini"
+    assert DEFAULT_INVESTIGATOR_MODEL_SPEC == "openai:gpt-4o-mini"
 
     assert ROOT_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
     assert TRIAGE_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
     assert PLANNER_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
     assert INTERVIEW_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
     assert INVESTIGATOR_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
+
+
+def test_effective_model_config_logs_non_secret_defaults() -> None:
+    configs = effective_model_configs()
+
+    assert tuple(config.role for config in configs) == (
+        "root",
+        "triage",
+        "planner",
+        "interview",
+        "investigator",
+    )
+    assert all(config.provider == "openai" for config in configs)
+    assert all(config.model == "gpt-4o-mini" for config in configs)
+    assert all(config.source in {"default", "env"} for config in configs)
+    assert all(config.client == "chat_completions" for config in configs)
+    assert all(config.tools is True for config in configs)
+    assert all(config.reasoning_effort == "unset" for config in configs)
+
+
+def test_blank_model_env_does_not_override_default(monkeypatch) -> None:
+    monkeypatch.setenv("LCSP_TRIAGE_MODEL", "  ")
+
+    model_spec, source = _model_spec("LCSP_TRIAGE_MODEL", "openai:gpt-4o-mini")
+
+    assert model_spec == "openai:gpt-4o-mini"
+    assert source == "default"
 
 
 def test_harness_profile_is_registered_for_every_role_model(monkeypatch) -> None:

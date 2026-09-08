@@ -181,9 +181,9 @@ Defaults live in `model_policy.py` and can be overridden by deployment env vars.
 
 | Role | Default model | Workload |
 | --- | --- | --- |
-| Root orchestrator | `openai:gpt-5.6-terra` | coordination, delegation, todo/state management |
-| Planner | `openai:gpt-5.6-sol` | highest-reasoning scope construction |
-| Investigator | `openai:gpt-5.6-terra` | repeated tool-heavy technical investigation |
+| Root orchestrator | `openai:gpt-4o-mini` | coordination, delegation, todo/state management |
+| Planner | `openai:gpt-4o-mini` | scope construction |
+| Investigator | `openai:gpt-4o-mini` | repeated tool-heavy technical investigation |
 
 All role models receive the same LCSP harness profile.
 
