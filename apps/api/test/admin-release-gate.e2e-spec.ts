@@ -217,10 +217,10 @@ describe("Admin Release Gate & Security Integrity (e2e)", () => {
         .set("Accept", "application/json");
 
       assert.equal(resAudit.status, 200);
-      const auditData = successBody<{ items?: unknown[]; total?: number }>(
+      const auditData = successBody<{ events?: unknown[]; total?: number }>(
         resAudit,
       );
-      assert.ok(Array.isArray(auditData.items));
+      assert.ok(Array.isArray(auditData.events));
     });
   });
 
@@ -238,7 +238,7 @@ describe("Admin Release Gate & Security Integrity (e2e)", () => {
         .post("/auth/revoke-session")
         .send({ session_token: customerSessionToken })
         .set("Accept", "application/json");
-      assert.equal(revokeRes.status, 200);
+      assert.equal(revokeRes.status, 201);
 
       // 3. Verify revoked session token cannot access any protected endpoints
       const postRevokeRes = await httpRequest(app)
@@ -318,11 +318,11 @@ describe("Admin Release Gate & Security Integrity (e2e)", () => {
 
       assert.equal(res.status, 200);
       const data = successBody<{
-        items: { id: string; payload?: Record<string, unknown> }[];
+        events: { event_id: string; payload?: Record<string, unknown> }[];
       }>(res);
-      assert.ok(Array.isArray(data.items));
+      assert.ok(Array.isArray(data.events));
 
-      const seededItem = data.items.find((item) => item.id === auditId);
+      const seededItem = data.events.find((item) => item.event_id === auditId);
       assert.ok(seededItem, "Seeded audit event must be returned in query");
 
       const sanitizedPayload = seededItem.payload || {};
