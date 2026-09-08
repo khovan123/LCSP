@@ -1,3 +1,16 @@
+export type JsonPrimitive = string | number | boolean | null;
+
+export type JsonValue =
+  JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+
+export type NonEmptyArray<T> = [T, ...T[]];
+
+export const INTERVIEW_TECHNICAL_CONTRACT_VERSION =
+  "interview-technical-contract-v1.0.0";
+
+export type InterviewContractVersion =
+  typeof INTERVIEW_TECHNICAL_CONTRACT_VERSION;
+
 export const ASSESSMENT_INTERVIEW_OUTCOMES = {
   waitingForCustomer: "WAITING_FOR_CUSTOMER",
   contextReady: "CONTEXT_READY",
@@ -9,27 +22,41 @@ export const ASSESSMENT_INTERVIEW_OUTCOMES = {
 export type AssessmentInterviewOutcome =
   (typeof ASSESSMENT_INTERVIEW_OUTCOMES)[keyof typeof ASSESSMENT_INTERVIEW_OUTCOMES];
 
+export type InterviewOutcome = AssessmentInterviewOutcome;
+
 /** Canonical Interview reasoning modes. PRE_PLANNER is input-only compatibility. */
 export const ASSESSMENT_INTERVIEW_MODES = {
   initialInterview: "INITIAL_INTERVIEW",
   investigatorResolution: "INVESTIGATOR_RESOLUTION",
-  prePlanner: "PRE_PLANNER",
 } as const;
 
 export type AssessmentInterviewMode =
   (typeof ASSESSMENT_INTERVIEW_MODES)[keyof typeof ASSESSMENT_INTERVIEW_MODES];
 
-export type CanonicalAssessmentInterviewMode = Exclude<
-  AssessmentInterviewMode,
-  typeof ASSESSMENT_INTERVIEW_MODES.prePlanner
->;
+export type InterviewMode = AssessmentInterviewMode;
+export type CanonicalAssessmentInterviewMode = InterviewMode;
+
+export const LEGACY_ASSESSMENT_INTERVIEW_MODES = {
+  prePlanner: "PRE_PLANNER",
+} as const;
+
+export type LegacyAssessmentInterviewMode =
+  (typeof LEGACY_ASSESSMENT_INTERVIEW_MODES)[keyof typeof LEGACY_ASSESSMENT_INTERVIEW_MODES];
+
+export type LegacyInterviewMode = LegacyAssessmentInterviewMode;
+
+export type AssessmentInterviewModeCompatibilityInput =
+  AssessmentInterviewMode | LegacyAssessmentInterviewMode;
+
+export type InterviewModeCompatibilityInput =
+  AssessmentInterviewModeCompatibilityInput;
 
 export function normalizeAssessmentInterviewMode(
   value: unknown,
 ): CanonicalAssessmentInterviewMode | undefined {
   if (
     value === ASSESSMENT_INTERVIEW_MODES.initialInterview ||
-    value === ASSESSMENT_INTERVIEW_MODES.prePlanner
+    value === LEGACY_ASSESSMENT_INTERVIEW_MODES.prePlanner
   ) {
     return ASSESSMENT_INTERVIEW_MODES.initialInterview;
   }
@@ -47,6 +74,8 @@ export const ASSESSMENT_INTERVIEW_QUESTION_INTENTS = {
 export type AssessmentInterviewQuestionIntent =
   (typeof ASSESSMENT_INTERVIEW_QUESTION_INTENTS)[keyof typeof ASSESSMENT_INTERVIEW_QUESTION_INTENTS];
 
+export type QuestionIntent = AssessmentInterviewQuestionIntent;
+
 export const ASSESSMENT_INTERVIEW_CONTROLS = {
   freeText: "FREE_TEXT",
   boolean: "BOOLEAN",
@@ -58,6 +87,8 @@ export const ASSESSMENT_INTERVIEW_CONTROLS = {
 export type AssessmentInterviewControl =
   (typeof ASSESSMENT_INTERVIEW_CONTROLS)[keyof typeof ASSESSMENT_INTERVIEW_CONTROLS];
 
+export type QuestionResponseMode = AssessmentInterviewControl;
+
 export const ASSESSMENT_INTERVIEW_ANSWER_ACTIONS = {
   confirm: "CONFIRM",
   adjust: "ADJUST",
@@ -65,9 +96,6 @@ export const ASSESSMENT_INTERVIEW_ANSWER_ACTIONS = {
 
 export type AssessmentInterviewAnswerAction =
   (typeof ASSESSMENT_INTERVIEW_ANSWER_ACTIONS)[keyof typeof ASSESSMENT_INTERVIEW_ANSWER_ACTIONS];
-
-export const INTERVIEW_TECHNICAL_CONTRACT_VERSION =
-  "interview-technical-contract-v1.0.0";
 
 export const ASSESSMENT_TECHNICAL_COVERAGE_STATES = {
   ready: "READY",
@@ -78,17 +106,62 @@ export const ASSESSMENT_TECHNICAL_COVERAGE_STATES = {
 export type AssessmentTechnicalCoverageState =
   (typeof ASSESSMENT_TECHNICAL_COVERAGE_STATES)[keyof typeof ASSESSMENT_TECHNICAL_COVERAGE_STATES];
 
-export const ASSESSMENT_CONTEXT_AUTHORITY_STATUSES = {
+export const INTERVIEW_REASONING_TECHNICAL_COVERAGE_STATES = {
+  ready: ASSESSMENT_TECHNICAL_COVERAGE_STATES.ready,
+  partial: ASSESSMENT_TECHNICAL_COVERAGE_STATES.partial,
+} as const;
+
+export type TechnicalCoverageState =
+  (typeof INTERVIEW_REASONING_TECHNICAL_COVERAGE_STATES)[keyof typeof INTERVIEW_REASONING_TECHNICAL_COVERAGE_STATES];
+
+export const BUSINESS_CONTEXT_SOURCES = {
   customerStated: "CUSTOMER_STATED",
+  customerConfirmed: "CUSTOMER_CONFIRMED",
+} as const;
+
+export type BusinessContextSource =
+  (typeof BUSINESS_CONTEXT_SOURCES)[keyof typeof BUSINESS_CONTEXT_SOURCES];
+
+export const BUSINESS_CONTEXT_RESOLUTION_STATES = {
   uncertain: "UNCERTAIN",
   conflicted: "CONFLICTED",
-  customerConfirmed: "CUSTOMER_CONFIRMED",
   confirmed: "CONFIRMED",
   superseded: "SUPERSEDED",
 } as const;
 
+export type BusinessContextResolutionState =
+  (typeof BUSINESS_CONTEXT_RESOLUTION_STATES)[keyof typeof BUSINESS_CONTEXT_RESOLUTION_STATES];
+
+export const ASSESSMENT_CONTEXT_AUTHORITY_STATUSES = {
+  customerStated: BUSINESS_CONTEXT_SOURCES.customerStated,
+  uncertain: BUSINESS_CONTEXT_RESOLUTION_STATES.uncertain,
+  conflicted: BUSINESS_CONTEXT_RESOLUTION_STATES.conflicted,
+  customerConfirmed: BUSINESS_CONTEXT_SOURCES.customerConfirmed,
+  confirmed: BUSINESS_CONTEXT_RESOLUTION_STATES.confirmed,
+  superseded: BUSINESS_CONTEXT_RESOLUTION_STATES.superseded,
+} as const;
+
 export type AssessmentContextAuthorityStatus =
   (typeof ASSESSMENT_CONTEXT_AUTHORITY_STATUSES)[keyof typeof ASSESSMENT_CONTEXT_AUTHORITY_STATUSES];
+
+export const EVIDENCE_SOURCE_TYPES = {
+  technicalEvidence: "TECHNICAL_EVIDENCE",
+  documentaryEvidence: "DOCUMENTARY_EVIDENCE",
+} as const;
+
+export type EvidenceSourceType =
+  (typeof EVIDENCE_SOURCE_TYPES)[keyof typeof EVIDENCE_SOURCE_TYPES];
+
+export const EVIDENCE_RESOLUTION_STATES = {
+  observed: "OBSERVED",
+  corroborated: "CORROBORATED",
+  inferred: "INFERRED",
+  unresolved: "UNRESOLVED",
+  stale: "STALE",
+} as const;
+
+export type EvidenceResolutionState =
+  (typeof EVIDENCE_RESOLUTION_STATES)[keyof typeof EVIDENCE_RESOLUTION_STATES];
 
 export const CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES = {
   customerConfirmedConfirmedOnly: "CUSTOMER_CONFIRMED_CONFIRMED_ONLY",
@@ -111,6 +184,8 @@ export const ASSESSMENT_INTERVIEW_FLAGS = {
 
 export type AssessmentInterviewFlag =
   (typeof ASSESSMENT_INTERVIEW_FLAGS)[keyof typeof ASSESSMENT_INTERVIEW_FLAGS];
+
+export type InterviewFlag = AssessmentInterviewFlag;
 
 export const ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS = {
   waitForCustomer: "WAIT_FOR_CUSTOMER",
@@ -182,6 +257,166 @@ export type PersistedCustomerQuestionFrontier = {
 export type AssessmentInterviewFrontier =
   PersistedCustomerQuestionFrontier | AssessmentInterviewFrontierCandidate;
 
+export type ScopeExtension = {
+  namespace: string;
+  key: string;
+  values: NonEmptyArray<string>;
+};
+
+export type BusinessContextScope = {
+  systemRefs: NonEmptyArray<string>;
+  componentRefs?: string[];
+  workflowRefs?: string[];
+  actorGroupRefs?: string[];
+  environmentRefs?: string[];
+  operatingRegionRefs?: string[];
+  extensions?: ScopeExtension[];
+};
+
+export type BusinessContextStatementBase = {
+  statementId: string;
+  assessmentId: string;
+  topic: string;
+  statement: string;
+  normalizedValue?: JsonValue;
+  scope: BusinessContextScope;
+  evidenceRefs: string[];
+  respondentRef: string;
+  createdAt: string;
+  supersedesStatementId?: string;
+};
+
+export type CustomerStatedContextStatement = BusinessContextStatementBase & {
+  source: typeof BUSINESS_CONTEXT_SOURCES.customerStated;
+  resolutionState:
+    | typeof BUSINESS_CONTEXT_RESOLUTION_STATES.uncertain
+    | typeof BUSINESS_CONTEXT_RESOLUTION_STATES.conflicted
+    | typeof BUSINESS_CONTEXT_RESOLUTION_STATES.superseded;
+};
+
+export type CustomerConfirmedContextStatement = BusinessContextStatementBase & {
+  source: typeof BUSINESS_CONTEXT_SOURCES.customerConfirmed;
+  resolutionState:
+    | typeof BUSINESS_CONTEXT_RESOLUTION_STATES.confirmed
+    | typeof BUSINESS_CONTEXT_RESOLUTION_STATES.conflicted
+    | typeof BUSINESS_CONTEXT_RESOLUTION_STATES.superseded;
+};
+
+export type BusinessContextStatement =
+  CustomerStatedContextStatement | CustomerConfirmedContextStatement;
+
+export type ConfirmedBusinessContextStatement =
+  CustomerConfirmedContextStatement & {
+    resolutionState: typeof BUSINESS_CONTEXT_RESOLUTION_STATES.confirmed;
+  };
+
+export type BusinessContextUpdateBase = {
+  topic: string;
+  statement: string;
+  normalizedValue?: JsonValue;
+  scope: BusinessContextScope;
+  evidenceRefs: string[];
+  supersedesStatementId?: string;
+};
+
+export type CustomerStatedContextUpdate = BusinessContextUpdateBase & {
+  source: typeof BUSINESS_CONTEXT_SOURCES.customerStated;
+  resolutionState:
+    | typeof BUSINESS_CONTEXT_RESOLUTION_STATES.uncertain
+    | typeof BUSINESS_CONTEXT_RESOLUTION_STATES.conflicted
+    | typeof BUSINESS_CONTEXT_RESOLUTION_STATES.superseded;
+};
+
+export type CustomerConfirmedContextUpdate = BusinessContextUpdateBase & {
+  source: typeof BUSINESS_CONTEXT_SOURCES.customerConfirmed;
+  resolutionState:
+    | typeof BUSINESS_CONTEXT_RESOLUTION_STATES.confirmed
+    | typeof BUSINESS_CONTEXT_RESOLUTION_STATES.conflicted
+    | typeof BUSINESS_CONTEXT_RESOLUTION_STATES.superseded;
+};
+
+export type BusinessContextUpdate =
+  CustomerStatedContextUpdate | CustomerConfirmedContextUpdate;
+
+export type GovernedEvidenceItem = {
+  evidenceRef: string;
+  sourceType: EvidenceSourceType;
+  resolutionState: EvidenceResolutionState;
+  observation: string;
+  sourceVersionRef: string;
+  scope: BusinessContextScope;
+  customerSafeSummary?: string;
+};
+
+export type SafeEvidenceContext = {
+  items: GovernedEvidenceItem[];
+};
+
+export type ChoiceOption = {
+  value: string;
+  label: string;
+};
+
+export type ProposedInterpretation = {
+  topic: string;
+  statement: string;
+  normalizedValue?: JsonValue;
+  scope: BusinessContextScope;
+  evidenceRefs: string[];
+};
+
+export type QuestionBase = {
+  intent: QuestionIntent;
+  text: string;
+  reasonSummary: string;
+  evidenceRefs: string[];
+};
+
+export type FreeTextQuestion = QuestionBase & {
+  responseMode: typeof ASSESSMENT_INTERVIEW_CONTROLS.freeText;
+};
+
+export type SingleSelectQuestion = QuestionBase & {
+  responseMode: typeof ASSESSMENT_INTERVIEW_CONTROLS.singleSelect;
+  choices: NonEmptyArray<ChoiceOption>;
+};
+
+export type MultiSelectQuestion = QuestionBase & {
+  responseMode: typeof ASSESSMENT_INTERVIEW_CONTROLS.multiSelect;
+  choices: NonEmptyArray<ChoiceOption>;
+};
+
+export type BooleanQuestion = QuestionBase & {
+  responseMode: typeof ASSESSMENT_INTERVIEW_CONTROLS.boolean;
+};
+
+export type ConfirmAdjustQuestion = QuestionBase & {
+  intent: typeof ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify;
+  responseMode: typeof ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust;
+  proposedInterpretation: NonEmptyArray<ProposedInterpretation>;
+  choices: [
+    {
+      value: typeof ASSESSMENT_INTERVIEW_ANSWER_ACTIONS.confirm;
+      label: string;
+    },
+    { value: typeof ASSESSMENT_INTERVIEW_ANSWER_ACTIONS.adjust; label: string },
+  ];
+};
+
+export type InterviewQuestionDraft =
+  | FreeTextQuestion
+  | SingleSelectQuestion
+  | MultiSelectQuestion
+  | BooleanQuestion
+  | ConfirmAdjustQuestion;
+
+export type InterviewQuestion = InterviewQuestionDraft & {
+  questionRef: string;
+  sessionId: string;
+  sequence: number;
+  createdAt: string;
+};
+
 export type AssessmentInterviewQuestionChoice = {
   id: string;
   label: string;
@@ -209,12 +444,12 @@ export type ConfirmedStructuredBusinessStatement = {
   assessmentId: string;
   topic: string;
   statement: string;
-  normalizedValue?: unknown;
-  scope?: Record<string, unknown>;
+  normalizedValue?: JsonValue;
+  scope?: BusinessContextScope;
   respondentRef: string;
   createdAt: string;
-  source: typeof ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed;
-  resolutionState: typeof ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed;
+  source: typeof BUSINESS_CONTEXT_SOURCES.customerConfirmed;
+  resolutionState: typeof BUSINESS_CONTEXT_RESOLUTION_STATES.confirmed;
   evidenceRefs: string[];
 };
 
@@ -313,7 +548,7 @@ export type CustomerSingleSelectAnswer = {
 
 export type CustomerMultiSelectAnswer = {
   kind: typeof ASSESSMENT_INTERVIEW_CONTROLS.multiSelect;
-  values: string[];
+  values: NonEmptyArray<string>;
   comment?: string;
 };
 
@@ -344,13 +579,201 @@ export type CustomerAnswer =
   | CustomerAdjustAnswer;
 
 export type SubmitInterviewAnswerCommand = {
-  contractVersion: string;
+  contractVersion: InterviewContractVersion;
   assessmentId: string;
   sessionId: string;
   questionRef: string;
   expectedSessionRevision: number;
   clientRequestId: string;
   answer: CustomerAnswer;
+};
+
+export type InvestigatorNeed = {
+  businessContextNeed: string;
+  resolutionCriteria: string;
+  whyNeeded?: string;
+  relatedEvidenceRefs?: string[];
+  originatingInvestigationReference: string;
+};
+
+export type InterviewTurnSnapshot = {
+  turnRef: string;
+  sequence: number;
+  question: InterviewQuestion;
+  answer?: CustomerAnswer;
+  respondentRef?: string;
+  contextStatementRefs: string[];
+  unresolvedTopics: string[];
+};
+
+export type IncomingCustomerTurn = {
+  questionRef: string;
+  answer: CustomerAnswer;
+  respondentRef: string;
+};
+
+export type SubjectSystemIdentity = {
+  systemRef: string;
+  displayName: string;
+  workspaceRef: string;
+  projectRef?: string;
+};
+
+export type ArtifactVersions = {
+  sourceVersionRef: string;
+  scannerRunRef: string;
+  programEvidenceGraphVersion: string;
+};
+
+export type CoverageLimitation = {
+  code: string;
+  summary: string;
+  affectedScopeRefs?: string[];
+};
+
+export type ReadyTechnicalCoverage = {
+  state: typeof INTERVIEW_REASONING_TECHNICAL_COVERAGE_STATES.ready;
+  limitations: [];
+  policyDecisionRef: string;
+};
+
+export type PartialTechnicalCoverage = {
+  state: typeof INTERVIEW_REASONING_TECHNICAL_COVERAGE_STATES.partial;
+  limitations: NonEmptyArray<CoverageLimitation>;
+  policyDecisionRef: string;
+};
+
+export type TechnicalCoverage =
+  ReadyTechnicalCoverage | PartialTechnicalCoverage;
+
+export type LocaleTag = string;
+
+export const INTERVIEW_HOST_PLATFORMS = {
+  lcsp: "LCSP",
+} as const;
+
+export type InterviewHostPlatform =
+  (typeof INTERVIEW_HOST_PLATFORMS)[keyof typeof INTERVIEW_HOST_PLATFORMS];
+
+export type InterviewAgentInputCommon = {
+  contractVersion: InterviewContractVersion;
+  hostPlatform: InterviewHostPlatform;
+  assessmentId: string;
+  sessionId: string;
+  sessionRevision: number;
+  subjectSystemIdentity: SubjectSystemIdentity;
+  guidanceVersion: string;
+  locale: LocaleTag;
+  artifactVersions: ArtifactVersions;
+  technicalCoverage: TechnicalCoverage;
+  currentConfirmedBusinessContext: ConfirmedBusinessContextStatement[];
+  safeEvidenceContext: SafeEvidenceContext;
+  interviewHistory: InterviewTurnSnapshot[];
+  incomingCustomerTurn?: IncomingCustomerTurn;
+  workingStrategy?: InterviewWorkingStrategy;
+};
+
+export type InitialInterviewAgentInput = InterviewAgentInputCommon & {
+  mode: typeof ASSESSMENT_INTERVIEW_MODES.initialInterview;
+  investigatorNeed?: never;
+};
+
+export type InvestigatorResolutionAgentInput = InterviewAgentInputCommon & {
+  mode: typeof ASSESSMENT_INTERVIEW_MODES.investigatorResolution;
+  investigatorNeed: InvestigatorNeed;
+};
+
+export type InterviewAgentInput =
+  InitialInterviewAgentInput | InvestigatorResolutionAgentInput;
+
+export type UnresolvedBusinessContext = {
+  topic: string;
+  reason: string;
+  scope?: BusinessContextScope;
+};
+
+export type InterviewLimitation = {
+  code: string;
+  summary: string;
+};
+
+export type WaitingForCustomerResult = {
+  outcome: typeof ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer;
+  question: InterviewQuestionDraft;
+  contextUpdates: BusinessContextUpdate[];
+  unresolved: UnresolvedBusinessContext[];
+  flags: InterviewFlag[];
+  limitations: InterviewLimitation[];
+};
+
+export type ContextReadyResult = {
+  outcome: typeof ASSESSMENT_INTERVIEW_OUTCOMES.contextReady;
+  question?: never;
+  contextUpdates: BusinessContextUpdate[];
+  unresolved: [];
+  flags: InterviewFlag[];
+  limitations: InterviewLimitation[];
+};
+
+export type ContextResolvedResult = {
+  outcome: typeof ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved;
+  question?: never;
+  contextUpdates: BusinessContextUpdate[];
+  unresolved: [];
+  flags: InterviewFlag[];
+  limitations: InterviewLimitation[];
+};
+
+export type BlockedOrUnresolvedResult = {
+  outcome: typeof ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved;
+  question?: never;
+  contextUpdates: BusinessContextUpdate[];
+  unresolved: NonEmptyArray<UnresolvedBusinessContext>;
+  flags: InterviewFlag[];
+  limitations: InterviewLimitation[];
+};
+
+export type FailedResult = {
+  outcome: typeof ASSESSMENT_INTERVIEW_OUTCOMES.failed;
+  question?: never;
+  contextUpdates: [];
+  unresolved: [];
+  flags: [];
+  limitations: NonEmptyArray<InterviewLimitation>;
+};
+
+export type InterviewAgentResult =
+  | WaitingForCustomerResult
+  | ContextReadyResult
+  | ContextResolvedResult
+  | BlockedOrUnresolvedResult
+  | FailedResult;
+
+export type InterviewRuntimeResult = {
+  contractVersion: InterviewContractVersion;
+  assessmentId: string;
+  sessionId: string;
+  invocationRef: string;
+  mode: InterviewMode;
+  guidanceVersion: string;
+  modelId?: string;
+  artifactVersions: ArtifactVersions;
+  contextRevisionBefore: string;
+  contextRevisionAfter?: string;
+  sessionRevisionBefore: number;
+  sessionRevisionAfter: number;
+  persistedQuestionRef?: string;
+  generatedAt: string;
+  agentResult: InterviewAgentResult;
+};
+
+export type ContextRevision = {
+  contextRevisionRef: string;
+  assessmentId: string;
+  parentRevisionRef?: string;
+  confirmedStatementRefs: string[];
+  createdAt: string;
+  createdByActorRef: string;
 };
 
 export type AssessmentInterviewBlockedInput = {

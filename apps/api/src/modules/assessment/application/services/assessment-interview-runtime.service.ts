@@ -28,6 +28,7 @@ import {
   INTERVIEW_FRONTIER_MATERIALITIES,
   INTERVIEW_FRONTIER_OWNERS,
   INTERVIEW_TECHNICAL_CONTRACT_VERSION,
+  LEGACY_ASSESSMENT_INTERVIEW_MODES,
   isRemediationDecision,
   POST_FINDING_RUNTIME_PHASES,
   REMEDIATION_DECISIONS,
@@ -2462,7 +2463,7 @@ function parseAgentDecision(value: unknown): AgentDecisionInput {
   return {
     expectedContextRevision: record.expectedContextRevision,
     mode:
-      record.mode === ASSESSMENT_INTERVIEW_MODES.prePlanner ||
+      record.mode === LEGACY_ASSESSMENT_INTERVIEW_MODES.prePlanner ||
       record.mode === ASSESSMENT_INTERVIEW_MODES.initialInterview
         ? ASSESSMENT_INTERVIEW_MODES.initialInterview
         : record.mode === ASSESSMENT_INTERVIEW_MODES.investigatorResolution

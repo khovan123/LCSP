@@ -19,6 +19,7 @@ import {
   REMEDIATION_APPROVAL_STATUSES,
   REMEDIATION_DECISIONS,
   type CustomerAnswer,
+  type SubmitInterviewAnswerCommand,
   type AssessmentPostFindingRuntimeState,
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
@@ -80,7 +81,7 @@ function submitAnswerCommand(input: {
   expectedSessionRevision?: number;
   clientRequestId?: string;
   answer: CustomerAnswer;
-}) {
+}): SubmitInterviewAnswerCommand {
   return {
     contractVersion: INTERVIEW_TECHNICAL_CONTRACT_VERSION,
     assessmentId: "assessment-1",

@@ -10,14 +10,17 @@ import {
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
   ASSESSMENT_INTERVIEW_CONTROLS,
   ASSESSMENT_INTERVIEW_FLAGS,
+  ASSESSMENT_INTERVIEW_MODES,
   ASSESSMENT_INTERVIEW_OUTCOMES,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
   ASSESSMENT_TECHNICAL_COVERAGE_STATES,
   INTERVIEW_TECHNICAL_CONTRACT_VERSION,
+  LEGACY_ASSESSMENT_INTERVIEW_MODES,
   hasValidInterviewWaitingInvariant,
   isAssessmentInterviewOutcome,
   isAssessmentInterviewQuestionIntent,
   isAuthoritativeAssessmentContextStatus,
+  normalizeAssessmentInterviewMode,
   type AssessmentInterviewAuditRef,
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
@@ -62,6 +65,22 @@ test("canonical interview contract exposes only release-gated outcomes", () => {
   assert.equal(
     ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved,
     "BLOCKED_OR_UNRESOLVED",
+  );
+});
+
+test("canonical interview modes exclude compatibility-only PRE_PLANNER", () => {
+  assert.deepEqual(Object.values(ASSESSMENT_INTERVIEW_MODES).sort(), [
+    "INITIAL_INTERVIEW",
+    "INVESTIGATOR_RESOLUTION",
+  ]);
+  assert.deepEqual(Object.values(LEGACY_ASSESSMENT_INTERVIEW_MODES), [
+    "PRE_PLANNER",
+  ]);
+  assert.equal(
+    normalizeAssessmentInterviewMode(
+      LEGACY_ASSESSMENT_INTERVIEW_MODES.prePlanner,
+    ),
+    ASSESSMENT_INTERVIEW_MODES.initialInterview,
   );
 });
 
