@@ -377,6 +377,9 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Build runtime packages
+        run: pnpm run build:runtime-packages
+
       - name: Run Admin Playwright E2E tests
         run: pnpm run test:admin:e2e
 
