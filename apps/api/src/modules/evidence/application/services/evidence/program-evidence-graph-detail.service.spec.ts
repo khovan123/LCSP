@@ -4,9 +4,7 @@ import type { ArtifactStorageService } from "../../../../../platform/storage/art
 describe("ProgramEvidenceGraphDetailService", () => {
   it("projects canonical graph data and preserves real zero metrics", async () => {
     const result = await new ProgramEvidenceGraphDetailService({
-      readJsonArtifactReference: async () => {
-        throw new Error("missing");
-      },
+      readJsonArtifactReference: () => Promise.reject(new Error("missing")),
     } as unknown as ArtifactStorageService).project({
       report: {
         id: "report-1",
@@ -97,9 +95,7 @@ describe("ProgramEvidenceGraphDetailService", () => {
 
   it("does not fabricate repository branch or unavailable metrics", async () => {
     const result = await new ProgramEvidenceGraphDetailService({
-      readJsonArtifactReference: async () => {
-        throw new Error("missing");
-      },
+      readJsonArtifactReference: () => Promise.reject(new Error("missing")),
     } as unknown as ArtifactStorageService).project({
       report: {
         id: "report-1",
@@ -130,7 +126,7 @@ describe("ProgramEvidenceGraphDetailService", () => {
       edge_type: "CALLS",
     }));
     const result = await new ProgramEvidenceGraphDetailService({
-      readJsonArtifactReference: async () => ({ nodes, edges }),
+      readJsonArtifactReference: () => Promise.resolve({ nodes, edges }),
     } as unknown as ArtifactStorageService).project({
       report: {
         id: "report-1",
