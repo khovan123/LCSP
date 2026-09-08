@@ -25,6 +25,21 @@ SUPPORTED_REASONING_EFFORTS = frozenset(
     }
 )
 
+# LangChain provider identifiers are canonical routing keys. Deployment-friendly
+# aliases are normalized before Deep Agents resolves provider:model specs.
+PROVIDER_ALIASES = {
+    "google": "google_genai",
+    "google_ai": "google_genai",
+    "googleai": "google_genai",
+    "gemini": "google_genai",
+}
+
+PROVIDER_CLIENTS = {
+    "openai": "responses_api",
+    "anthropic": "anthropic",
+    "google_genai": "google_genai",
+}
+
 
 @dataclass(frozen=True)
 class EffectiveModelConfig:
@@ -36,6 +51,15 @@ class EffectiveModelConfig:
     tools: bool = True
     reasoning_effort: str = "provider_default"
     output_version: str = "provider_default"
+    router: str = "langchain_init_chat_model"
+
+
+def canonical_provider(provider: str) -> str:
+    """Return the canonical LangChain provider key used for model routing."""
+    normalized = provider.strip().lower().replace("-", "_")
+    if not normalized:
+        raise RuntimeError("model provider must not be blank")
+    return PROVIDER_ALIASES.get(normalized, normalized)
 
 
 def _reasoning_effort_status() -> str:
@@ -57,13 +81,34 @@ def _reasoning_effort_status() -> str:
     return DEFAULT_REASONING_EFFORT
 
 
+def normalize_model_spec(value: str, *, source_name: str = "model spec") -> str:
+    """Normalize one ``provider:model`` spec to a canonical LangChain provider key."""
+    provider, separator, model = value.strip().partition(":")
+    if not separator or not provider.strip() or not model.strip() or ":" in model:
+        raise RuntimeError(f"{source_name} must use LangChain provider:model format")
+    return f"{canonical_provider(provider)}:{model.strip()}"
+
+
 def _model_spec(env_name: str, default: str) -> tuple[str, str]:
     """Resolve one LangChain ``provider:model`` spec with a fail-closed shape check."""
     env_value = (os.getenv(env_name) or "").strip()
     value = env_value or default
-    if not value or ":" not in value:
-        raise RuntimeError(f"{env_name} must use LangChain provider:model format")
-    return value, "env" if env_value else "default"
+    return (
+        normalize_model_spec(value, source_name=env_name),
+        "env" if env_value else "default",
+    )
+
+
+def provider_from_model_spec(spec: str) -> str:
+    """Return the canonical provider routing key from one model spec."""
+    normalized = normalize_model_spec(spec)
+    provider, _, _ = normalized.partition(":")
+    return provider
+
+
+def providers_for_model_specs(model_specs: tuple[str, ...]) -> tuple[str, ...]:
+    """Return active provider routing keys in first-seen order."""
+    return tuple(dict.fromkeys(provider_from_model_spec(spec) for spec in model_specs))
 
 
 REASONING_EFFORT = _reasoning_effort_status()
@@ -114,6 +159,25 @@ def openai_responses_init_kwargs() -> dict[str, object]:
     }
 
 
+def provider_init_kwargs(provider: str) -> dict[str, object]:
+    """Return constructor kwargs scoped to one provider only.
+
+    The provider:model prefix selects the LangChain integration. OpenAI additionally
+    needs the LCSP Responses API contract. Other providers intentionally receive no
+    OpenAI-only kwargs and use their native LangChain constructor defaults.
+    """
+    canonical = canonical_provider(provider)
+    if canonical == "openai":
+        return openai_responses_init_kwargs()
+    return {}
+
+
+def provider_client(provider: str) -> str:
+    """Return non-secret telemetry describing the selected provider client."""
+    canonical = canonical_provider(provider)
+    return PROVIDER_CLIENTS.get(canonical, "langchain_provider_default")
+
+
 def effective_model_configs() -> tuple[EffectiveModelConfig, ...]:
     """Return non-secret model telemetry for startup diagnostics."""
     role_specs = (
@@ -133,7 +197,7 @@ def effective_model_configs() -> tuple[EffectiveModelConfig, ...]:
                 provider=provider,
                 model=model,
                 source=source,
-                client="responses_api" if is_openai else "provider_default",
+                client=provider_client(provider),
                 reasoning_effort=(
                     REASONING_EFFORT if is_openai else "provider_default"
                 ),

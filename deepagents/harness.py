@@ -18,19 +18,31 @@ from deepagents import (
 from model_policy import (
     ALL_LCSP_MODEL_SPECS,
     ROOT_MODEL_SPEC,
+    canonical_provider,
     openai_responses_init_kwargs,
+    provider_init_kwargs,
+    providers_for_model_specs,
 )
 
 
 # Backward-compatible name used by the managed entrypoint/tests.
 LCSP_MODEL_SPEC = ROOT_MODEL_SPEC
 
-# Deep Agents resolves provider:model strings through ProviderProfile before
-# constructing ChatOpenAI. Make the OpenAI Responses API + reasoning contract
-# explicit instead of relying on model-name routing inference or Chat Completions.
+# OpenAI needs an explicit LCSP Responses API contract. Other providers get
+# provider-scoped pass-through profiles and are routed by their provider:model
+# prefix through LangChain init_chat_model.
 LCSP_OPENAI_PROVIDER_PROFILE = ProviderProfile(
     init_kwargs=openai_responses_init_kwargs(),
 )
+
+
+def provider_profile_for(provider: str) -> ProviderProfile:
+    """Return the LCSP construction profile for one canonical provider."""
+    canonical = canonical_provider(provider)
+    if canonical == "openai":
+        return LCSP_OPENAI_PROVIDER_PROFILE
+    return ProviderProfile(init_kwargs=provider_init_kwargs(canonical))
+
 
 # Deep Agents injects filesystem tools in addition to authored tools. LCSP keeps
 # only read_file visible because Managed Skills use it for progressive disclosure.
@@ -70,7 +82,14 @@ LCSP_FILESYSTEM_PERMISSIONS = [
 
 
 def configure_lcsp_harness() -> None:
-    """Register LCSP model-construction policy and identical harness restrictions."""
-    register_provider_profile("openai", LCSP_OPENAI_PROVIDER_PROFILE)
+    """Register active provider routes and identical LCSP harness restrictions.
+
+    Deep Agents resolves each ``provider:model`` string through LangChain's
+    ``init_chat_model`` router. Provider profiles are registered separately so
+    provider-specific constructor kwargs never bleed across integrations.
+    """
+    for provider in providers_for_model_specs(ALL_LCSP_MODEL_SPECS):
+        register_provider_profile(provider, provider_profile_for(provider))
+
     for model_spec in ALL_LCSP_MODEL_SPECS:
         register_harness_profile(model_spec, LCSP_HARNESS_PROFILE)
