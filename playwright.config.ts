@@ -8,8 +8,15 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: "list",
   use: {
+    baseURL: "http://127.0.0.1:3100",
     viewport: { width: 1440, height: 900 },
     trace: "on-first-retry",
+  },
+  webServer: {
+    command: "pnpm --filter @lcsp/web dev --port 3100",
+    url: "http://127.0.0.1:3100",
+    reuseExistingServer: !process.env.CI,
+    timeout: 120 * 1000,
   },
   projects: [
     {

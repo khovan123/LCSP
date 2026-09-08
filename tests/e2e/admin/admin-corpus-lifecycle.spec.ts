@@ -1,28 +1,10 @@
 import { test, expect } from "@playwright/test";
-import {
-  createAdminTestServer,
-  type AdminTestServer,
-} from "./support/admin-test-server.js";
 
 test.describe("Admin Corpus Lifecycle & Publication Readiness (E2E)", () => {
-  let server: AdminTestServer;
-
-  test.beforeAll(async () => {
-    server = await createAdminTestServer();
-  });
-
-  test.afterAll(async () => {
-    await server.close();
-  });
-
-  test.beforeEach(() => {
-    server.resetMutationCount();
-  });
-
   test("publication readiness gating: publishing forbidden unless authoritative state is READY in UI", async ({
     page,
   }) => {
-    await page.goto(`${server.url}/admin`);
+    await page.goto("/admin");
 
     // Ready draft has enabled Publish button
     const readyPublishBtn = page.locator('[data-testid="publish-corpus-btn"]');
@@ -40,7 +22,26 @@ test.describe("Admin Corpus Lifecycle & Publication Readiness (E2E)", () => {
   test("destructive publish & discard modal dismissals cause 0 mutations in live browser", async ({
     page,
   }) => {
-    await page.goto(`${server.url}/admin`);
+    let publishMutations = 0;
+    let discardMutations = 0;
+
+    await page.route("**/api/admin/corpus/*/publish", async (route) => {
+      publishMutations += 1;
+      await route.fulfill({
+        status: 200,
+        json: { ok: true, data: { status: "ACTIVE" } },
+      });
+    });
+
+    await page.route("**/api/admin/corpus/*/discard", async (route) => {
+      discardMutations += 1;
+      await route.fulfill({
+        status: 200,
+        json: { ok: true, data: { status: "DISCARDED" } },
+      });
+    });
+
+    await page.goto("/admin");
 
     // 1. Publish modal dismissal
     const publishBtn = page.locator('[data-testid="publish-corpus-btn"]');
@@ -53,10 +54,12 @@ test.describe("Admin Corpus Lifecycle & Publication Readiness (E2E)", () => {
     await expect(publishModal).toBeVisible();
     await cancelPublishBtn.click();
     await expect(publishModal).toBeHidden();
-    expect(server.getMutationCount()).toBe(0);
+    expect(publishMutations).toBe(0);
 
     // 2. Discard modal dismissal
-    const discardBtn = page.locator('[data-testid="discard-corpus-btn"]');
+    const discardBtn = page
+      .locator('[data-testid="discard-corpus-btn"]')
+      .first();
     const discardModal = page.locator('[data-testid="discard-modal"]');
     const cancelDiscardBtn = page.locator(
       '[data-testid="cancel-discard-btn"]',
@@ -66,7 +69,7 @@ test.describe("Admin Corpus Lifecycle & Publication Readiness (E2E)", () => {
     await expect(discardModal).toBeVisible();
     await cancelDiscardBtn.click();
     await expect(discardModal).toBeHidden();
-    expect(server.getMutationCount()).toBe(0);
+    expect(discardMutations).toBe(0);
 
     // 3. Confirm Publish -> 1 mutation
     const confirmPublishBtn = page.locator(
@@ -76,6 +79,6 @@ test.describe("Admin Corpus Lifecycle & Publication Readiness (E2E)", () => {
     await expect(publishModal).toBeVisible();
     await confirmPublishBtn.click();
     await expect(publishModal).toBeHidden();
-    expect(server.getMutationCount()).toBe(1);
+    expect(publishMutations).toBe(1);
   });
 });
