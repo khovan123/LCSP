@@ -445,7 +445,7 @@ export type ConfirmedStructuredBusinessStatement = {
   topic: string;
   statement: string;
   normalizedValue?: JsonValue;
-  scope?: BusinessContextScope;
+  scope: BusinessContextScope;
   respondentRef: string;
   createdAt: string;
   source: typeof BUSINESS_CONTEXT_SOURCES.customerConfirmed;
@@ -780,6 +780,884 @@ export type AssessmentInterviewBlockedInput = {
   action: AssessmentInterviewBlockedAction;
   draft?: string;
 };
+
+type StringLiteralRecord = Record<string, string>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasOnlyKeys(
+  value: Record<string, unknown>,
+  allowedKeys: readonly string[],
+): boolean {
+  const allowed = new Set(allowedKeys);
+  return Object.keys(value).every((key) => allowed.has(key));
+}
+
+function hasRequiredKeys(
+  value: Record<string, unknown>,
+  requiredKeys: readonly string[],
+): boolean {
+  return requiredKeys.every((key) => key in value);
+}
+
+function hasExactKeys(
+  value: Record<string, unknown>,
+  requiredKeys: readonly string[],
+  optionalKeys: readonly string[] = [],
+): boolean {
+  return (
+    hasRequiredKeys(value, requiredKeys) &&
+    hasOnlyKeys(value, [...requiredKeys, ...optionalKeys])
+  );
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === "boolean";
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(isString);
+}
+
+function isNonEmptyStringArray(value: unknown): value is NonEmptyArray<string> {
+  return isStringArray(value) && value.length > 0;
+}
+
+function isKnownValue<TValues extends StringLiteralRecord>(
+  values: TValues,
+  value: unknown,
+): value is TValues[keyof TValues] {
+  return isString(value) && Object.values(values).includes(value);
+}
+
+export function isJsonValue(value: unknown): value is JsonValue {
+  if (
+    value === null ||
+    isString(value) ||
+    isNumber(value) ||
+    isBoolean(value)
+  ) {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return value.every(isJsonValue);
+  }
+  if (!isRecord(value)) {
+    return false;
+  }
+  return Object.values(value).every(isJsonValue);
+}
+
+function isOptionalJsonValue(value: Record<string, unknown>, key: string) {
+  return !(key in value) || isJsonValue(value[key]);
+}
+
+function isOptionalString(value: Record<string, unknown>, key: string) {
+  return !(key in value) || isString(value[key]);
+}
+
+function isOptionalStringArray(value: Record<string, unknown>, key: string) {
+  return !(key in value) || isStringArray(value[key]);
+}
+
+export function isBusinessContextScope(
+  value: unknown,
+): value is BusinessContextScope {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (
+    !hasExactKeys(
+      value,
+      ["systemRefs"],
+      [
+        "componentRefs",
+        "workflowRefs",
+        "actorGroupRefs",
+        "environmentRefs",
+        "operatingRegionRefs",
+        "extensions",
+      ],
+    ) ||
+    !isNonEmptyStringArray(value.systemRefs) ||
+    !isOptionalStringArray(value, "componentRefs") ||
+    !isOptionalStringArray(value, "workflowRefs") ||
+    !isOptionalStringArray(value, "actorGroupRefs") ||
+    !isOptionalStringArray(value, "environmentRefs") ||
+    !isOptionalStringArray(value, "operatingRegionRefs")
+  ) {
+    return false;
+  }
+  if (!("extensions" in value)) {
+    return true;
+  }
+  return (
+    Array.isArray(value.extensions) &&
+    value.extensions.every((extension) => {
+      if (!isRecord(extension)) {
+        return false;
+      }
+      return (
+        hasExactKeys(extension, ["namespace", "key", "values"]) &&
+        isString(extension.namespace) &&
+        isString(extension.key) &&
+        isNonEmptyStringArray(extension.values)
+      );
+    })
+  );
+}
+
+function hasValidBusinessContextPair(
+  source: unknown,
+  resolutionState: unknown,
+): boolean {
+  if (source === BUSINESS_CONTEXT_SOURCES.customerStated) {
+    return (
+      resolutionState === BUSINESS_CONTEXT_RESOLUTION_STATES.uncertain ||
+      resolutionState === BUSINESS_CONTEXT_RESOLUTION_STATES.conflicted ||
+      resolutionState === BUSINESS_CONTEXT_RESOLUTION_STATES.superseded
+    );
+  }
+  if (source === BUSINESS_CONTEXT_SOURCES.customerConfirmed) {
+    return (
+      resolutionState === BUSINESS_CONTEXT_RESOLUTION_STATES.confirmed ||
+      resolutionState === BUSINESS_CONTEXT_RESOLUTION_STATES.conflicted ||
+      resolutionState === BUSINESS_CONTEXT_RESOLUTION_STATES.superseded
+    );
+  }
+  return false;
+}
+
+export function isBusinessContextStatement(
+  value: unknown,
+): value is BusinessContextStatement {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    hasExactKeys(
+      value,
+      [
+        "statementId",
+        "assessmentId",
+        "topic",
+        "statement",
+        "scope",
+        "evidenceRefs",
+        "respondentRef",
+        "createdAt",
+        "source",
+        "resolutionState",
+      ],
+      ["normalizedValue", "supersedesStatementId"],
+    ) &&
+    isString(value.statementId) &&
+    isString(value.assessmentId) &&
+    isString(value.topic) &&
+    isString(value.statement) &&
+    isBusinessContextScope(value.scope) &&
+    isStringArray(value.evidenceRefs) &&
+    isString(value.respondentRef) &&
+    isString(value.createdAt) &&
+    isOptionalJsonValue(value, "normalizedValue") &&
+    isOptionalString(value, "supersedesStatementId") &&
+    hasValidBusinessContextPair(value.source, value.resolutionState)
+  );
+}
+
+export function isConfirmedBusinessContextStatement(
+  value: unknown,
+): value is ConfirmedBusinessContextStatement {
+  return (
+    isBusinessContextStatement(value) &&
+    value.source === BUSINESS_CONTEXT_SOURCES.customerConfirmed &&
+    value.resolutionState === BUSINESS_CONTEXT_RESOLUTION_STATES.confirmed
+  );
+}
+
+export function isBusinessContextUpdate(
+  value: unknown,
+): value is BusinessContextUpdate {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    hasExactKeys(
+      value,
+      [
+        "topic",
+        "statement",
+        "scope",
+        "evidenceRefs",
+        "source",
+        "resolutionState",
+      ],
+      ["normalizedValue", "supersedesStatementId"],
+    ) &&
+    isString(value.topic) &&
+    isString(value.statement) &&
+    isBusinessContextScope(value.scope) &&
+    isStringArray(value.evidenceRefs) &&
+    isOptionalJsonValue(value, "normalizedValue") &&
+    isOptionalString(value, "supersedesStatementId") &&
+    hasValidBusinessContextPair(value.source, value.resolutionState)
+  );
+}
+
+export function isGovernedEvidenceItem(
+  value: unknown,
+): value is GovernedEvidenceItem {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    hasExactKeys(
+      value,
+      [
+        "evidenceRef",
+        "sourceType",
+        "resolutionState",
+        "observation",
+        "sourceVersionRef",
+        "scope",
+      ],
+      ["customerSafeSummary"],
+    ) &&
+    isString(value.evidenceRef) &&
+    isKnownValue(EVIDENCE_SOURCE_TYPES, value.sourceType) &&
+    isKnownValue(EVIDENCE_RESOLUTION_STATES, value.resolutionState) &&
+    isString(value.observation) &&
+    isString(value.sourceVersionRef) &&
+    isBusinessContextScope(value.scope) &&
+    isOptionalString(value, "customerSafeSummary")
+  );
+}
+
+export function isSafeEvidenceContext(
+  value: unknown,
+): value is SafeEvidenceContext {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, ["items"]) &&
+    Array.isArray(value.items) &&
+    value.items.every(isGovernedEvidenceItem)
+  );
+}
+
+function isChoiceOption(value: unknown): value is ChoiceOption {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, ["value", "label"]) &&
+    isString(value.value) &&
+    isString(value.label)
+  );
+}
+
+function hasUniqueChoiceValues(choices: NonEmptyArray<ChoiceOption>): boolean {
+  return new Set(choices.map((choice) => choice.value)).size === choices.length;
+}
+
+function isProposedInterpretation(
+  value: unknown,
+): value is ProposedInterpretation {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    hasExactKeys(
+      value,
+      ["topic", "statement", "scope", "evidenceRefs"],
+      ["normalizedValue"],
+    ) &&
+    isString(value.topic) &&
+    isString(value.statement) &&
+    isBusinessContextScope(value.scope) &&
+    isStringArray(value.evidenceRefs) &&
+    isOptionalJsonValue(value, "normalizedValue")
+  );
+}
+
+export function isInterviewQuestionDraft(
+  value: unknown,
+): value is InterviewQuestionDraft {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const baseValid =
+    isKnownValue(ASSESSMENT_INTERVIEW_QUESTION_INTENTS, value.intent) &&
+    isString(value.text) &&
+    isString(value.reasonSummary) &&
+    isStringArray(value.evidenceRefs);
+  if (!baseValid) {
+    return false;
+  }
+  if (value.responseMode === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
+    return hasExactKeys(value, [
+      "intent",
+      "text",
+      "reasonSummary",
+      "evidenceRefs",
+      "responseMode",
+    ]);
+  }
+  if (value.responseMode === ASSESSMENT_INTERVIEW_CONTROLS.boolean) {
+    return hasExactKeys(value, [
+      "intent",
+      "text",
+      "reasonSummary",
+      "evidenceRefs",
+      "responseMode",
+    ]);
+  }
+  if (
+    value.responseMode === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect ||
+    value.responseMode === ASSESSMENT_INTERVIEW_CONTROLS.multiSelect
+  ) {
+    if (
+      !hasExactKeys(value, [
+        "intent",
+        "text",
+        "reasonSummary",
+        "evidenceRefs",
+        "responseMode",
+        "choices",
+      ]) ||
+      !Array.isArray(value.choices) ||
+      value.choices.length === 0 ||
+      !value.choices.every(isChoiceOption)
+    ) {
+      return false;
+    }
+    return hasUniqueChoiceValues(value.choices as NonEmptyArray<ChoiceOption>);
+  }
+  if (value.responseMode !== ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust) {
+    return false;
+  }
+  return (
+    hasExactKeys(value, [
+      "intent",
+      "text",
+      "reasonSummary",
+      "evidenceRefs",
+      "responseMode",
+      "proposedInterpretation",
+      "choices",
+    ]) &&
+    value.intent === ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify &&
+    Array.isArray(value.proposedInterpretation) &&
+    value.proposedInterpretation.length > 0 &&
+    value.proposedInterpretation.every(isProposedInterpretation) &&
+    Array.isArray(value.choices) &&
+    value.choices.length === 2 &&
+    isChoiceOption(value.choices[0]) &&
+    isChoiceOption(value.choices[1]) &&
+    value.choices[0].value === ASSESSMENT_INTERVIEW_ANSWER_ACTIONS.confirm &&
+    value.choices[1].value === ASSESSMENT_INTERVIEW_ANSWER_ACTIONS.adjust
+  );
+}
+
+export function isInterviewQuestion(
+  value: unknown,
+): value is InterviewQuestion {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const { questionRef, sessionId, sequence, createdAt, ...draft } = value;
+  return (
+    isString(questionRef) &&
+    isString(sessionId) &&
+    isNumber(sequence) &&
+    isString(createdAt) &&
+    isInterviewQuestionDraft(draft)
+  );
+}
+
+export function isCustomerAnswer(value: unknown): value is CustomerAnswer {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (value.kind === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
+    return hasExactKeys(value, ["kind", "text"]) && isString(value.text);
+  }
+  if (value.kind === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect) {
+    return (
+      hasExactKeys(value, ["kind", "value"], ["comment"]) &&
+      isString(value.value) &&
+      isOptionalString(value, "comment")
+    );
+  }
+  if (value.kind === ASSESSMENT_INTERVIEW_CONTROLS.multiSelect) {
+    return (
+      hasExactKeys(value, ["kind", "values"], ["comment"]) &&
+      isNonEmptyStringArray(value.values) &&
+      isOptionalString(value, "comment") &&
+      new Set(value.values).size === value.values.length
+    );
+  }
+  if (value.kind === ASSESSMENT_INTERVIEW_CONTROLS.boolean) {
+    return (
+      hasExactKeys(value, ["kind", "value"], ["comment"]) &&
+      isBoolean(value.value) &&
+      isOptionalString(value, "comment")
+    );
+  }
+  if (value.kind !== ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust) {
+    return false;
+  }
+  if (value.action === ASSESSMENT_INTERVIEW_ANSWER_ACTIONS.confirm) {
+    return (
+      hasExactKeys(value, ["kind", "action"], ["comment"]) &&
+      isOptionalString(value, "comment")
+    );
+  }
+  return (
+    value.action === ASSESSMENT_INTERVIEW_ANSWER_ACTIONS.adjust &&
+    hasExactKeys(value, ["kind", "action", "adjustmentText"]) &&
+    isString(value.adjustmentText) &&
+    value.adjustmentText.trim().length > 0
+  );
+}
+
+function isInvestigatorNeed(value: unknown): value is InvestigatorNeed {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    hasExactKeys(
+      value,
+      [
+        "businessContextNeed",
+        "resolutionCriteria",
+        "originatingInvestigationReference",
+      ],
+      ["whyNeeded", "relatedEvidenceRefs"],
+    ) &&
+    isString(value.businessContextNeed) &&
+    isString(value.resolutionCriteria) &&
+    isString(value.originatingInvestigationReference) &&
+    isOptionalString(value, "whyNeeded") &&
+    isOptionalStringArray(value, "relatedEvidenceRefs")
+  );
+}
+
+function isInterviewTurnSnapshot(
+  value: unknown,
+): value is InterviewTurnSnapshot {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    hasExactKeys(
+      value,
+      [
+        "turnRef",
+        "sequence",
+        "question",
+        "contextStatementRefs",
+        "unresolvedTopics",
+      ],
+      ["answer", "respondentRef"],
+    ) &&
+    isString(value.turnRef) &&
+    isNumber(value.sequence) &&
+    isInterviewQuestion(value.question) &&
+    isStringArray(value.contextStatementRefs) &&
+    isStringArray(value.unresolvedTopics) &&
+    (!("answer" in value) || isCustomerAnswer(value.answer)) &&
+    isOptionalString(value, "respondentRef")
+  );
+}
+
+function isIncomingCustomerTurn(value: unknown): value is IncomingCustomerTurn {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, ["questionRef", "answer", "respondentRef"]) &&
+    isString(value.questionRef) &&
+    isCustomerAnswer(value.answer) &&
+    isString(value.respondentRef)
+  );
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return isRecord(value) && Object.values(value).every(isString);
+}
+
+function isInterviewWorkingStrategy(
+  value: unknown,
+): value is InterviewWorkingStrategy {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    hasExactKeys(value, [
+      "terminologyMap",
+      "avoidReaskingTopics",
+      "effectiveQuestionPatterns",
+      "observedAmbiguities",
+      "interactionNotes",
+    ]) &&
+    isStringRecord(value.terminologyMap) &&
+    isStringArray(value.avoidReaskingTopics) &&
+    isStringArray(value.effectiveQuestionPatterns) &&
+    isStringArray(value.observedAmbiguities) &&
+    isStringArray(value.interactionNotes)
+  );
+}
+
+function isSubjectSystemIdentity(
+  value: unknown,
+): value is SubjectSystemIdentity {
+  return (
+    isRecord(value) &&
+    hasExactKeys(
+      value,
+      ["systemRef", "displayName", "workspaceRef"],
+      ["projectRef"],
+    ) &&
+    isString(value.systemRef) &&
+    isString(value.displayName) &&
+    isString(value.workspaceRef) &&
+    isOptionalString(value, "projectRef")
+  );
+}
+
+function isArtifactVersions(value: unknown): value is ArtifactVersions {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, [
+      "sourceVersionRef",
+      "scannerRunRef",
+      "programEvidenceGraphVersion",
+    ]) &&
+    isString(value.sourceVersionRef) &&
+    isString(value.scannerRunRef) &&
+    isString(value.programEvidenceGraphVersion)
+  );
+}
+
+function isTechnicalCoverage(value: unknown): value is TechnicalCoverage {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (value.state === INTERVIEW_REASONING_TECHNICAL_COVERAGE_STATES.ready) {
+    return (
+      hasExactKeys(value, ["state", "limitations", "policyDecisionRef"]) &&
+      Array.isArray(value.limitations) &&
+      value.limitations.length === 0 &&
+      isString(value.policyDecisionRef)
+    );
+  }
+  if (value.state !== INTERVIEW_REASONING_TECHNICAL_COVERAGE_STATES.partial) {
+    return false;
+  }
+  return (
+    hasExactKeys(value, ["state", "limitations", "policyDecisionRef"]) &&
+    Array.isArray(value.limitations) &&
+    value.limitations.length > 0 &&
+    value.limitations.every((limitation) => {
+      if (!isRecord(limitation)) {
+        return false;
+      }
+      return (
+        hasExactKeys(limitation, ["code", "summary"], ["affectedScopeRefs"]) &&
+        isString(limitation.code) &&
+        isString(limitation.summary) &&
+        isOptionalStringArray(limitation, "affectedScopeRefs")
+      );
+    }) &&
+    isString(value.policyDecisionRef)
+  );
+}
+
+export function isConfirmedStructuredBusinessContext(
+  value: unknown,
+): value is ConfirmedStructuredBusinessContext {
+  return (
+    isRecord(value) &&
+    hasExactKeys(
+      value,
+      ["assessmentId", "contextRevision", "authority", "statements"],
+      ["createdByActorRef"],
+    ) &&
+    isString(value.assessmentId) &&
+    isNumber(value.contextRevision) &&
+    value.authority ===
+      CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES.customerConfirmedConfirmedOnly &&
+    Array.isArray(value.statements) &&
+    value.statements.every(isConfirmedBusinessContextStatement) &&
+    isOptionalString(value, "createdByActorRef")
+  );
+}
+
+export function isInterviewAgentInput(
+  value: unknown,
+): value is InterviewAgentInput {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const commonRequiredKeys = [
+    "contractVersion",
+    "hostPlatform",
+    "assessmentId",
+    "sessionId",
+    "sessionRevision",
+    "subjectSystemIdentity",
+    "guidanceVersion",
+    "locale",
+    "artifactVersions",
+    "technicalCoverage",
+    "currentConfirmedBusinessContext",
+    "safeEvidenceContext",
+    "interviewHistory",
+    "mode",
+  ];
+  const commonOptionalKeys = ["incomingCustomerTurn", "workingStrategy"];
+  const modeOptionalKeys =
+    value.mode === ASSESSMENT_INTERVIEW_MODES.investigatorResolution
+      ? ["investigatorNeed"]
+      : [];
+  if (
+    !hasExactKeys(value, commonRequiredKeys, [
+      ...commonOptionalKeys,
+      ...modeOptionalKeys,
+    ])
+  ) {
+    return false;
+  }
+  const commonValid =
+    value.contractVersion === INTERVIEW_TECHNICAL_CONTRACT_VERSION &&
+    value.hostPlatform === INTERVIEW_HOST_PLATFORMS.lcsp &&
+    isString(value.assessmentId) &&
+    isString(value.sessionId) &&
+    isNumber(value.sessionRevision) &&
+    isSubjectSystemIdentity(value.subjectSystemIdentity) &&
+    isString(value.guidanceVersion) &&
+    isString(value.locale) &&
+    isArtifactVersions(value.artifactVersions) &&
+    isTechnicalCoverage(value.technicalCoverage) &&
+    Array.isArray(value.currentConfirmedBusinessContext) &&
+    value.currentConfirmedBusinessContext.every(
+      isConfirmedBusinessContextStatement,
+    ) &&
+    isSafeEvidenceContext(value.safeEvidenceContext) &&
+    Array.isArray(value.interviewHistory) &&
+    value.interviewHistory.every(isInterviewTurnSnapshot) &&
+    (!("incomingCustomerTurn" in value) ||
+      isIncomingCustomerTurn(value.incomingCustomerTurn)) &&
+    (!("workingStrategy" in value) ||
+      isInterviewWorkingStrategy(value.workingStrategy));
+  if (!commonValid) {
+    return false;
+  }
+  if (value.mode === ASSESSMENT_INTERVIEW_MODES.initialInterview) {
+    return !("investigatorNeed" in value);
+  }
+  return (
+    value.mode === ASSESSMENT_INTERVIEW_MODES.investigatorResolution &&
+    isInvestigatorNeed(value.investigatorNeed)
+  );
+}
+
+function isUnresolvedBusinessContext(
+  value: unknown,
+): value is UnresolvedBusinessContext {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, ["topic", "reason"], ["scope"]) &&
+    isString(value.topic) &&
+    isString(value.reason) &&
+    (!("scope" in value) || isBusinessContextScope(value.scope))
+  );
+}
+
+function isInterviewLimitation(value: unknown): value is InterviewLimitation {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, ["code", "summary"]) &&
+    isString(value.code) &&
+    isString(value.summary)
+  );
+}
+
+function isInterviewFlagArray(value: unknown): value is InterviewFlag[] {
+  return (
+    Array.isArray(value) &&
+    value.every((item) => item === ASSESSMENT_INTERVIEW_FLAGS.downstreamImpact)
+  );
+}
+
+export function isInterviewAgentResult(
+  value: unknown,
+): value is InterviewAgentResult {
+  if (
+    !isRecord(value) ||
+    !isKnownValue(ASSESSMENT_INTERVIEW_OUTCOMES, value.outcome)
+  ) {
+    return false;
+  }
+  const baseArraysValid =
+    Array.isArray(value.contextUpdates) &&
+    value.contextUpdates.every(isBusinessContextUpdate) &&
+    Array.isArray(value.unresolved) &&
+    value.unresolved.every(isUnresolvedBusinessContext) &&
+    isInterviewFlagArray(value.flags) &&
+    Array.isArray(value.limitations) &&
+    value.limitations.every(isInterviewLimitation);
+  if (!baseArraysValid) {
+    return false;
+  }
+  const contextUpdates = value.contextUpdates as BusinessContextUpdate[];
+  const unresolved = value.unresolved as UnresolvedBusinessContext[];
+  const flags = value.flags as InterviewFlag[];
+  const limitations = value.limitations as InterviewLimitation[];
+  if (value.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer) {
+    return (
+      hasExactKeys(value, [
+        "outcome",
+        "question",
+        "contextUpdates",
+        "unresolved",
+        "flags",
+        "limitations",
+      ]) && isInterviewQuestionDraft(value.question)
+    );
+  }
+  if (
+    value.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextReady ||
+    value.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved
+  ) {
+    return (
+      hasExactKeys(value, [
+        "outcome",
+        "contextUpdates",
+        "unresolved",
+        "flags",
+        "limitations",
+      ]) && unresolved.length === 0
+    );
+  }
+  if (value.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved) {
+    return (
+      hasExactKeys(value, [
+        "outcome",
+        "contextUpdates",
+        "unresolved",
+        "flags",
+        "limitations",
+      ]) && unresolved.length > 0
+    );
+  }
+  return (
+    hasExactKeys(value, [
+      "outcome",
+      "contextUpdates",
+      "unresolved",
+      "flags",
+      "limitations",
+    ]) &&
+    contextUpdates.length === 0 &&
+    unresolved.length === 0 &&
+    flags.length === 0 &&
+    limitations.length > 0
+  );
+}
+
+export function isInterviewAgentResultForMode(
+  value: unknown,
+  mode: InterviewMode,
+): value is InterviewAgentResult {
+  if (!isInterviewAgentResult(value)) {
+    return false;
+  }
+  if (mode === ASSESSMENT_INTERVIEW_MODES.initialInterview) {
+    return value.outcome !== ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved;
+  }
+  return value.outcome !== ASSESSMENT_INTERVIEW_OUTCOMES.contextReady;
+}
+
+export function isInterviewRuntimeResult(
+  value: unknown,
+): value is InterviewRuntimeResult {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (
+    !hasExactKeys(
+      value,
+      [
+        "contractVersion",
+        "assessmentId",
+        "sessionId",
+        "invocationRef",
+        "mode",
+        "guidanceVersion",
+        "artifactVersions",
+        "contextRevisionBefore",
+        "sessionRevisionBefore",
+        "sessionRevisionAfter",
+        "generatedAt",
+        "agentResult",
+      ],
+      ["modelId", "contextRevisionAfter", "persistedQuestionRef"],
+    ) ||
+    value.contractVersion !== INTERVIEW_TECHNICAL_CONTRACT_VERSION ||
+    !isString(value.assessmentId) ||
+    !isString(value.sessionId) ||
+    !isString(value.invocationRef) ||
+    !isKnownValue(ASSESSMENT_INTERVIEW_MODES, value.mode) ||
+    !isString(value.guidanceVersion) ||
+    !isArtifactVersions(value.artifactVersions) ||
+    !isString(value.contextRevisionBefore) ||
+    !isNumber(value.sessionRevisionBefore) ||
+    !isNumber(value.sessionRevisionAfter) ||
+    value.sessionRevisionAfter <= value.sessionRevisionBefore ||
+    !isString(value.generatedAt) ||
+    isOptionalString(value, "modelId") === false ||
+    isOptionalString(value, "contextRevisionAfter") === false ||
+    isInterviewAgentResultForMode(value.agentResult, value.mode) === false
+  ) {
+    return false;
+  }
+  const waitsForCustomer =
+    value.agentResult.outcome ===
+    ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer;
+  return waitsForCustomer
+    ? isString(value.persistedQuestionRef)
+    : !("persistedQuestionRef" in value);
+}
+
+export function isContextRevision(value: unknown): value is ContextRevision {
+  return (
+    isRecord(value) &&
+    hasExactKeys(
+      value,
+      [
+        "contextRevisionRef",
+        "assessmentId",
+        "confirmedStatementRefs",
+        "createdAt",
+        "createdByActorRef",
+      ],
+      ["parentRevisionRef"],
+    ) &&
+    isString(value.contextRevisionRef) &&
+    isString(value.assessmentId) &&
+    isStringArray(value.confirmedStatementRefs) &&
+    isString(value.createdAt) &&
+    isString(value.createdByActorRef) &&
+    isOptionalString(value, "parentRevisionRef")
+  );
+}
 
 const INTERVIEW_OUTCOME_SET = new Set<string>(
   Object.values(ASSESSMENT_INTERVIEW_OUTCOMES),

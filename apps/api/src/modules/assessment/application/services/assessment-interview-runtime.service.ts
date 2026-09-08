@@ -28,7 +28,6 @@ import {
   INTERVIEW_FRONTIER_MATERIALITIES,
   INTERVIEW_FRONTIER_OWNERS,
   INTERVIEW_TECHNICAL_CONTRACT_VERSION,
-  LEGACY_ASSESSMENT_INTERVIEW_MODES,
   isRemediationDecision,
   POST_FINDING_RUNTIME_PHASES,
   REMEDIATION_DECISIONS,
@@ -2460,15 +2459,18 @@ function parseAgentDecision(value: unknown): AgentDecisionInput {
     record.activeQuestion,
     outcome,
   );
+  const mode =
+    record.mode === ASSESSMENT_INTERVIEW_MODES.initialInterview
+      ? ASSESSMENT_INTERVIEW_MODES.initialInterview
+      : record.mode === ASSESSMENT_INTERVIEW_MODES.investigatorResolution
+        ? ASSESSMENT_INTERVIEW_MODES.investigatorResolution
+        : undefined;
+  if (!mode) {
+    throw new BadRequestException({ code: "INTERVIEW_AGENT_DECISION_INVALID" });
+  }
   return {
     expectedContextRevision: record.expectedContextRevision,
-    mode:
-      record.mode === LEGACY_ASSESSMENT_INTERVIEW_MODES.prePlanner ||
-      record.mode === ASSESSMENT_INTERVIEW_MODES.initialInterview
-        ? ASSESSMENT_INTERVIEW_MODES.initialInterview
-        : record.mode === ASSESSMENT_INTERVIEW_MODES.investigatorResolution
-          ? ASSESSMENT_INTERVIEW_MODES.investigatorResolution
-          : undefined,
+    mode,
     outcome,
     activeQuestion,
     contextAuthority: Object.values(
