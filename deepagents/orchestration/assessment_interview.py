@@ -20,6 +20,26 @@ InterviewOutcome = Literal[
     "BLOCKED_OR_UNRESOLVED",
     "FAILED",
 ]
+InterviewMode = Literal["INITIAL_INTERVIEW", "INVESTIGATOR_RESOLUTION"]
+OrchestratorInterviewAction = Literal[
+    "WAIT_FOR_CUSTOMER",
+    "CONTINUE_TO_ENGINEERING_RULE",
+    "KEEP_BUSINESS_CONTEXT_BLOCKED",
+    "ROUTE_RUNTIME_RECOVERY",
+    "RESUME_EXACT_INVESTIGATOR",
+    "SELECTIVE_RERUN_RESCOPE",
+]
+InterviewWorkflowEvent = Literal[
+    "INTERVIEW_STARTED",
+    "INTERVIEW_WAITING_FOR_CUSTOMER",
+    "INTERVIEW_CONTEXT_UPDATED",
+    "INTERVIEW_CONTEXT_READY",
+    "INTERVIEW_CONTEXT_RESOLVED",
+    "INTERVIEW_BLOCKED_OR_UNRESOLVED",
+    "INTERVIEW_FAILED",
+    "DOWNSTREAM_REEVALUATION_STARTED",
+    "INVESTIGATION_RESUMED",
+]
 QuestionIntent = Literal["ASK", "CLARIFY"]
 CoverageState = Literal["READY", "PARTIAL", "UNAVAILABLE"]
 ContextAuthority = Literal[
@@ -121,6 +141,15 @@ class InterviewAgentDecision:
 
 
 @dataclass(frozen=True)
+class OrchestratorInterviewTransition:
+    mode: InterviewMode
+    action: OrchestratorInterviewAction
+    workflow_event: InterviewWorkflowEvent
+    exact_resume_allowed: bool = False
+    requires_downstream_rescope: bool = False
+
+
+@dataclass(frozen=True)
 class InterviewRuntimeState:
     outcome: InterviewOutcome
     active_question: InterviewQuestion | None = None
@@ -135,6 +164,90 @@ class InterviewRuntimeState:
     engineering_rule_can_start: bool = False
     interview_payload: dict[str, Any] = field(default_factory=dict)
     resume: dict[str, Any] | None = None
+    transition: OrchestratorInterviewTransition | None = None
+
+
+@dataclass(frozen=True)
+class PartialCoveragePolicyDecision:
+    policy_decision_ref: str
+    policy_version: str
+    permitted_for_interview: bool
+    limitations: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.policy_decision_ref.strip() or not self.policy_version.strip():
+            raise ValueError("PARTIAL coverage policy requires stable decision refs")
+        if self.permitted_for_interview and not self.limitations:
+            raise ValueError("permitted PARTIAL coverage requires preserved limitations")
+
+
+def orchestrator_transition(
+    *,
+    mode: InterviewMode,
+    decision: InterviewAgentDecision,
+) -> OrchestratorInterviewTransition:
+    """Deterministically map a validated Interview result to Orchestrator action."""
+    has_downstream_impact = _DOWNSTREAM_IMPACT_FLAG in decision.flags
+    if mode == "INITIAL_INTERVIEW":
+        if decision.outcome == "WAITING_FOR_CUSTOMER":
+            return OrchestratorInterviewTransition(
+                mode=mode,
+                action="WAIT_FOR_CUSTOMER",
+                workflow_event="INTERVIEW_WAITING_FOR_CUSTOMER",
+            )
+        if decision.outcome == "CONTEXT_READY":
+            return OrchestratorInterviewTransition(
+                mode=mode,
+                action="CONTINUE_TO_ENGINEERING_RULE",
+                workflow_event="INTERVIEW_CONTEXT_READY",
+            )
+        if decision.outcome == "BLOCKED_OR_UNRESOLVED":
+            return OrchestratorInterviewTransition(
+                mode=mode,
+                action="KEEP_BUSINESS_CONTEXT_BLOCKED",
+                workflow_event="INTERVIEW_BLOCKED_OR_UNRESOLVED",
+            )
+        if decision.outcome == "FAILED":
+            return OrchestratorInterviewTransition(
+                mode=mode,
+                action="ROUTE_RUNTIME_RECOVERY",
+                workflow_event="INTERVIEW_FAILED",
+            )
+        raise ValueError("INITIAL_INTERVIEW cannot resolve an Investigator continuation")
+
+    if decision.outcome == "WAITING_FOR_CUSTOMER":
+        return OrchestratorInterviewTransition(
+            mode=mode,
+            action="WAIT_FOR_CUSTOMER",
+            workflow_event="INTERVIEW_WAITING_FOR_CUSTOMER",
+        )
+    if decision.outcome == "CONTEXT_RESOLVED":
+        if has_downstream_impact:
+            return OrchestratorInterviewTransition(
+                mode=mode,
+                action="SELECTIVE_RERUN_RESCOPE",
+                workflow_event="DOWNSTREAM_REEVALUATION_STARTED",
+                requires_downstream_rescope=True,
+            )
+        return OrchestratorInterviewTransition(
+            mode=mode,
+            action="RESUME_EXACT_INVESTIGATOR",
+            workflow_event="INVESTIGATION_RESUMED",
+            exact_resume_allowed=True,
+        )
+    if decision.outcome == "BLOCKED_OR_UNRESOLVED":
+        return OrchestratorInterviewTransition(
+            mode=mode,
+            action="KEEP_BUSINESS_CONTEXT_BLOCKED",
+            workflow_event="INTERVIEW_BLOCKED_OR_UNRESOLVED",
+        )
+    if decision.outcome == "FAILED":
+        return OrchestratorInterviewTransition(
+            mode=mode,
+            action="ROUTE_RUNTIME_RECOVERY",
+            workflow_event="INTERVIEW_FAILED",
+        )
+    raise ValueError("INVESTIGATOR_RESOLUTION cannot produce CONTEXT_READY")
 
 
 def initial_interview(
@@ -159,6 +272,10 @@ def initial_interview(
 
     if agent_decision.outcome == "CONTEXT_READY":
         _assert_authoritative_revision(latest, "CONTEXT_READY")
+        transition = orchestrator_transition(
+            mode="INITIAL_INTERVIEW",
+            decision=agent_decision,
+        )
         return InterviewRuntimeState(
             outcome="CONTEXT_READY",
             confirmed_context=dict(latest.facts if latest else agent_decision.confirmed_context),
@@ -168,9 +285,17 @@ def initial_interview(
             planner_can_start=True,
             engineering_rule_can_start=True,
             interview_payload=_decision_payload(agent_decision),
+            transition=transition,
         )
 
-    return _waiting_or_blocked(agent_decision, coverage_limitations=coverage.limitations)
+    state = _waiting_or_blocked(agent_decision, coverage_limitations=coverage.limitations)
+    return replace(
+        state,
+        transition=orchestrator_transition(
+            mode="INITIAL_INTERVIEW",
+            decision=agent_decision,
+        ),
+    )
 
 
 def investigator_resolution(
@@ -204,8 +329,12 @@ def investigator_resolution(
         _assert_authoritative_revision(latest, "CONTEXT_RESOLVED")
         _assert_resolution_criteria_satisfied(need, latest)
         flags = tuple(sorted(agent_decision.flags))
+        transition = orchestrator_transition(
+            mode="INVESTIGATOR_RESOLUTION",
+            decision=replace(agent_decision, flags=flags),
+        )
         resume = None
-        if _DOWNSTREAM_IMPACT_FLAG not in flags:
+        if transition.exact_resume_allowed:
             resume = {
                 "investigatorExecutionId": continuation.investigator_execution_id,
                 "originatingInvestigationReference": continuation.originating_investigation_reference,
@@ -216,9 +345,10 @@ def investigator_resolution(
             confirmed_context=dict(latest.facts if latest else agent_decision.confirmed_context),
             context_revision=latest.revision if latest else agent_decision.context_revision,
             flags=flags,
-            orchestration_recovery_required=_DOWNSTREAM_IMPACT_FLAG in flags,
+            orchestration_recovery_required=transition.requires_downstream_rescope,
             interview_payload={**payload, **_decision_payload(agent_decision)},
             resume=resume,
+            transition=transition,
         )
 
     state = _waiting_or_blocked(agent_decision)
@@ -226,7 +356,14 @@ def investigator_resolution(
         if state.active_question.need_id not in {None, need.need_id}:
             raise ValueError("Investigator-resolution question escaped its registered need")
         _assert_neutral_targeted_text(state.active_question.prompt)
-    return replace(state, interview_payload={**payload, **state.interview_payload})
+    return replace(
+        state,
+        interview_payload={**payload, **state.interview_payload},
+        transition=orchestrator_transition(
+            mode="INVESTIGATOR_RESOLUTION",
+            decision=agent_decision,
+        ),
+    )
 
 
 def validate_continuation(
@@ -321,8 +458,11 @@ __all__ = [
     "InterviewQuestion",
     "InterviewRuntimeState",
     "InvestigatorContinuation",
+    "OrchestratorInterviewTransition",
+    "PartialCoveragePolicyDecision",
     "TechnicalCoverage",
     "initial_interview",
     "investigator_resolution",
+    "orchestrator_transition",
     "validate_continuation",
 ]

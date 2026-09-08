@@ -5,8 +5,11 @@ import {
   ASSESSMENT_INTERVIEW_ANSWER_ACTIONS,
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
   ASSESSMENT_INTERVIEW_CONTROLS,
+  ASSESSMENT_INTERVIEW_FLAGS,
+  ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS,
   ASSESSMENT_INTERVIEW_OUTCOMES,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
+  ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES,
   INTERVIEW_FRONTIER_MATERIALITIES,
@@ -170,6 +173,8 @@ type MockInterviewAudit = {
 
 type MockRuntimeEvents = {
   recordToolWaitingInput: jest.Mock<(...args: unknown[]) => Promise<void>>;
+  recordToolCompleted: jest.Mock<(...args: unknown[]) => Promise<void>>;
+  recordToolFailed: jest.Mock<(...args: unknown[]) => Promise<void>>;
   getLatestPostFindingState: jest.Mock<
     () => Promise<AssessmentPostFindingRuntimeState | null>
   >;
@@ -251,6 +256,12 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
 
     mockRuntimeEvents = {
       recordToolWaitingInput: jest
+        .fn<(...args: unknown[]) => Promise<void>>()
+        .mockResolvedValue(undefined),
+      recordToolCompleted: jest
+        .fn<(...args: unknown[]) => Promise<void>>()
+        .mockResolvedValue(undefined),
+      recordToolFailed: jest
         .fn<(...args: unknown[]) => Promise<void>>()
         .mockResolvedValue(undefined),
       getLatestPostFindingState: jest
@@ -943,7 +954,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
               description: "Storage multi-region configuration",
             },
           },
-          flags: ["DOWNSTREAM_IMPACT"],
+          flags: [ASSESSMENT_INTERVIEW_FLAGS.downstreamImpact],
         },
       });
 
@@ -985,6 +996,20 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           threadId: "interview:assessment-1",
         }),
         mockTx,
+      );
+      expect(mockRuntimeEvents.recordToolWaitingInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runId: "interview:assessment-1",
+          waitingReason:
+            ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewWaitingForCustomer,
+          outputSummary: expect.objectContaining({
+            interviewWorkflowEvent:
+              ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewWaitingForCustomer,
+            orchestratorAction:
+              ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.waitForCustomer,
+            interviewMode: "INITIAL_INTERVIEW",
+          }),
+        }),
       );
     });
 
@@ -1173,6 +1198,22 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           checkpointId: "cp-1",
         }),
       });
+      expect(mockRuntimeEvents.recordToolCompleted).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runId: "10000000-0000-4000-8000-000000000001",
+          outputSummary: expect.objectContaining({
+            interviewWorkflowEvent:
+              ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.investigationResumed,
+            interviewWorkflowEvents: [
+              ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewContextResolved,
+              ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.investigationResumed,
+            ],
+            orchestratorAction:
+              ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.resumeExactInvestigator,
+            interviewMode: "INVESTIGATOR_RESOLUTION",
+          }),
+        }),
+      );
       const updateCalls =
         mockTx.assessmentInterviewThread.updateMany.mock.calls;
       const updateInput = updateCalls[0]?.[0] as {
@@ -1191,6 +1232,109 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           ],
         },
       });
+    });
+
+    it("routes targeted downstream impact to selective rerun instead of exact resume", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        targetedResolutionThreadFixture(),
+      );
+
+      const result = await service.recordAgentDecision({
+        assessmentId: "assessment-1",
+        correlationId: "corr-target-downstream-impact",
+        decision: {
+          expectedContextRevision: 2,
+          mode: "INVESTIGATOR_RESOLUTION",
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
+          contextAuthority:
+            ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+          confirmedContext: confirmedStructuredContext({}),
+          flags: [ASSESSMENT_INTERVIEW_FLAGS.downstreamImpact],
+        },
+      });
+
+      expect(result).toMatchObject({
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
+      });
+      expect(result).not.toHaveProperty("continuation");
+      expect(mockRuntimeEvents.recordToolCompleted).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runId: "10000000-0000-4000-8000-000000000001",
+          outputSummary: expect.objectContaining({
+            interviewWorkflowEvent:
+              ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.downstreamReevaluationStarted,
+            interviewWorkflowEvents: [
+              ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewContextResolved,
+              ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.downstreamReevaluationStarted,
+            ],
+            orchestratorAction:
+              ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.selectiveRerunRescope,
+            interviewMode: "INVESTIGATOR_RESOLUTION",
+          }),
+        }),
+      );
+    });
+
+    it("routes initial CONTEXT_READY to engineering rule evaluation workflow", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
+        assessmentId: "assessment-1",
+        contextRevision: 1,
+        processedRevision: 0,
+        activeQuestionId: "q-1",
+        stateJson: {
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+          contextRevision: 1,
+        },
+        privateContextJson: {
+          revisions: [
+            {
+              questionId: "q-1",
+              answer: { questionId: "q-1", freeText: "Human approval" },
+              actorId: "user-1",
+              answeredAt: "2026-09-07T00:00:00.000Z",
+              contextRevision: 1,
+              priorRevision: 0,
+              authority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
+              questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+              questionControl: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+              sourceVersion: "snap-1:sha-123456",
+              pgeVersion: "report-1:v1",
+              governedEvidenceRefs: [],
+            },
+          ],
+          workflowRunId: "10000000-0000-4000-8000-000000000002",
+        },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+      });
+
+      const result = await service.recordAgentDecision({
+        assessmentId: "assessment-1",
+        correlationId: "corr-initial-context-ready",
+        decision: {
+          expectedContextRevision: 1,
+          mode: "INITIAL_INTERVIEW",
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+          contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+          confirmedContext: confirmedStructuredContext({
+            contextRevision: 1,
+          }),
+        },
+      });
+
+      expect(result.outcome).toBe(ASSESSMENT_INTERVIEW_OUTCOMES.contextReady);
+      expect(mockRuntimeEvents.recordToolCompleted).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runId: "10000000-0000-4000-8000-000000000002",
+          outputSummary: expect.objectContaining({
+            interviewWorkflowEvent:
+              ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewContextReady,
+            orchestratorAction:
+              ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.continueToEngineeringRule,
+            interviewMode: "INITIAL_INTERVIEW",
+          }),
+        }),
+      );
     });
 
     it("rejects structured targeted resolution criteria from non-confirmed statements", async () => {
@@ -1454,6 +1598,21 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           }),
         }),
         mockTx,
+      );
+      expect(mockRuntimeEvents.recordToolWaitingInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runId: "10000000-0000-4000-8000-000000000001",
+          waitingReason: ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
+          outputSummary: expect.objectContaining({
+            interviewWorkflowEvent:
+              ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
+            orchestratorAction:
+              ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.waitForCustomer,
+            assessmentInterview: expect.objectContaining({
+              outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+            }),
+          }),
+        }),
       );
     });
   });

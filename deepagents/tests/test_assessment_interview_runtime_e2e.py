@@ -11,9 +11,11 @@ from orchestration.assessment_interview import (
     InterviewAgentDecision,
     InterviewQuestion,
     InvestigatorContinuation,
+    PartialCoveragePolicyDecision,
     TechnicalCoverage,
     initial_interview,
     investigator_resolution,
+    orchestrator_transition,
     validate_continuation,
 )
 from orchestration.context import LCSPRunContext
@@ -68,6 +70,55 @@ def _program_graph() -> dict:
         "evidence_refs": ["EV-7"],
         "graph_hash": "sha256:graph",
     }
+
+
+def test_orchestrator_transition_matrix_and_partial_policy_contract() -> None:
+    permitted_partial = PartialCoveragePolicyDecision(
+        policy_decision_ref="coverage-policy:assessment-1:rev-1",
+        policy_version="partial-coverage-v1",
+        permitted_for_interview=True,
+        limitations=("dynamic_path_unresolved",),
+    )
+    assert permitted_partial.limitations == ("dynamic_path_unresolved",)
+    with pytest.raises(ValueError, match="preserved limitations"):
+        PartialCoveragePolicyDecision(
+            policy_decision_ref="coverage-policy:assessment-1:rev-2",
+            policy_version="partial-coverage-v1",
+            permitted_for_interview=True,
+        )
+
+    ready_transition = orchestrator_transition(
+        mode="INITIAL_INTERVIEW",
+        decision=InterviewAgentDecision(outcome="CONTEXT_READY"),
+    )
+    assert ready_transition.action == "CONTINUE_TO_ENGINEERING_RULE"
+    assert ready_transition.workflow_event == "INTERVIEW_CONTEXT_READY"
+
+    exact_resume_transition = orchestrator_transition(
+        mode="INVESTIGATOR_RESOLUTION",
+        decision=InterviewAgentDecision(outcome="CONTEXT_RESOLVED"),
+    )
+    assert exact_resume_transition.action == "RESUME_EXACT_INVESTIGATOR"
+    assert exact_resume_transition.workflow_event == "INVESTIGATION_RESUMED"
+    assert exact_resume_transition.exact_resume_allowed is True
+
+    downstream_transition = orchestrator_transition(
+        mode="INVESTIGATOR_RESOLUTION",
+        decision=InterviewAgentDecision(
+            outcome="CONTEXT_RESOLVED",
+            flags=("DOWNSTREAM_IMPACT",),
+        ),
+    )
+    assert downstream_transition.action == "SELECTIVE_RERUN_RESCOPE"
+    assert downstream_transition.workflow_event == "DOWNSTREAM_REEVALUATION_STARTED"
+    assert downstream_transition.exact_resume_allowed is False
+    assert downstream_transition.requires_downstream_rescope is True
+
+    with pytest.raises(ValueError, match="cannot resolve"):
+        orchestrator_transition(
+            mode="INITIAL_INTERVIEW",
+            decision=InterviewAgentDecision(outcome="CONTEXT_RESOLVED"),
+        )
 
 
 def test_e2e_a_initial_interview_reaches_planner_after_guarded_context_ready() -> None:
