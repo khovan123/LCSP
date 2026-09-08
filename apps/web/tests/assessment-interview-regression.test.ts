@@ -30,6 +30,7 @@ import {
   isAuthoritativeAssessmentContextStatus,
   isBusinessContextStatement,
   isBusinessContextUpdate,
+  isCustomerAnswer,
   isConfirmedStructuredBusinessContext,
   isInterviewAgentInput,
   isInterviewAgentResultForMode,
@@ -361,6 +362,24 @@ test("canonical confirmed structured context requires confirmed authority, scope
       createdByActorRef: "actor:authenticated:user-1",
     }),
     false,
+  );
+});
+
+test("canonical customer answer guard rejects empty free-text answers", () => {
+  assert.equal(
+    isCustomerAnswer({ kind: ASSESSMENT_INTERVIEW_CONTROLS.freeText, text: "" }),
+    false,
+  );
+  assert.equal(
+    isCustomerAnswer({ kind: ASSESSMENT_INTERVIEW_CONTROLS.freeText, text: "   " }),
+    false,
+  );
+  assert.equal(
+    isCustomerAnswer({
+      kind: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+      text: "Customer confirmed the approval workflow.",
+    }),
+    true,
   );
 });
 

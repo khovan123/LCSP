@@ -1187,7 +1187,11 @@ export function isCustomerAnswer(value: unknown): value is CustomerAnswer {
     return false;
   }
   if (value.kind === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
-    return hasExactKeys(value, ["kind", "text"]) && isString(value.text);
+    return (
+      hasExactKeys(value, ["kind", "text"]) &&
+      isString(value.text) &&
+      value.text.trim().length > 0
+    );
   }
   if (value.kind === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect) {
     return (
