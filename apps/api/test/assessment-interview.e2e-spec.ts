@@ -297,6 +297,92 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
     assert.equal(revisions.length, 1);
   });
 
+  it("makes canonical SubmitInterviewAnswerCommand delivery idempotent across persisted thread state", async () => {
+    await seedWaitingQuestion(prisma);
+    const command = {
+      contractVersion: "interview-technical-contract-v1.0.0",
+      assessmentId: "assessment-1",
+      sessionId: "interview:assessment-1",
+      questionRef: QUESTION_ID,
+      expectedSessionRevision: 0,
+      clientRequestId: "client-request-e2e-idempotent-1",
+      answer: {
+        kind: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+        text: RAW_ANSWER,
+      },
+    };
+
+    const first = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send(command);
+    assert.equal(first.status, 201, JSON.stringify(first.body));
+    const firstState = successBody<{
+      contextRevision: number;
+      answerHistory: unknown[];
+    }>(first);
+    assert.equal(firstState.contextRevision, 1);
+    assert.equal(firstState.answerHistory.length, 1);
+
+    const duplicate = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send(command);
+    assert.equal(duplicate.status, 201, JSON.stringify(duplicate.body));
+    const duplicateState = successBody<{
+      contextRevision: number;
+      answerHistory: unknown[];
+    }>(duplicate);
+    assert.equal(duplicateState.contextRevision, 1);
+    assert.equal(duplicateState.answerHistory.length, 1);
+
+    const conflict = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        ...command,
+        answer: {
+          kind: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+          text: "Contradictory replay payload.",
+        },
+      });
+    assert.equal(conflict.status, 409, JSON.stringify(conflict.body));
+
+    const stale = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        ...command,
+        clientRequestId: "client-request-e2e-stale-1",
+        expectedSessionRevision: 0,
+      });
+    assert.equal(stale.status, 409, JSON.stringify(stale.body));
+
+    const thread = await prisma.assessmentInterviewThread.findUniqueOrThrow({
+      where: { assessmentId: "assessment-1" },
+    });
+    assert.equal(thread.contextRevision, 1);
+    const privateStore = jsonRecord(thread.privateContextJson);
+    const revisions = Array.isArray(privateStore.revisions)
+      ? privateStore.revisions
+      : [];
+    const submittedAnswerRequests = Array.isArray(
+      privateStore.submittedAnswerRequests,
+    )
+      ? privateStore.submittedAnswerRequests
+      : [];
+    assert.equal(revisions.length, 1);
+    assert.equal(submittedAnswerRequests.length, 1);
+
+    const resumeCommands = await prisma.outboxMessage.findMany({
+      where: {
+        aggregateId: "assessment-1",
+        eventType: ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox,
+      },
+    });
+    assert.equal(resumeCommands.length, 1);
+  });
+
   it("uses internal guarded decision write-back and blocks false ready", async () => {
     await seedWaitingQuestion(prisma);
     const answered = await httpRequest(app)
