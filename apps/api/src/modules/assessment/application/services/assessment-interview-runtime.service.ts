@@ -45,6 +45,7 @@ import {
   type AssessmentInterviewRuntimeState,
   EMPTY_INTERVIEW_WORKING_STRATEGY,
   type InterviewWorkingStrategy,
+  type PartialCoveragePolicyDecision,
 } from "@lcsp/contracts/evidence";
 import {
   buildOutboxMessageInput,
@@ -150,6 +151,7 @@ type PrivateInterviewStore = {
   workingStrategy?: InterviewWorkingStrategy;
   targetedNeed?: TargetedInterviewNeed;
   targetedContinuation?: TargetedInterviewContinuation;
+  partialCoveragePolicyDecision?: PartialCoveragePolicyDecision;
 };
 
 type TargetedNeedRegistrationInput = {
@@ -180,6 +182,7 @@ type WorkerPrivateContext = {
   pgeVersion: string;
   technicalCoverageState?: InterviewTechnicalCoverageState;
   coverageLimitations?: string[];
+  partialCoveragePolicyDecision?: PartialCoveragePolicyDecision;
   publicState: AssessmentInterviewRuntimeState;
   privateRevision?: PrivateInterviewAnswerRevision;
   targetedNeed?: TargetedInterviewNeed;
@@ -380,6 +383,7 @@ export class AssessmentInterviewRuntimeService {
         pgeVersion: provenance.pgeVersion,
         technicalCoverageState: provenance.technicalCoverageState,
         coverageLimitations: provenance.coverageLimitations,
+        partialCoveragePolicyDecision: provenance.partialCoveragePolicyDecision,
         guidanceVersion:
           thread.guidanceVersion ?? this.resolveGuidanceVersion(),
       };
@@ -445,6 +449,9 @@ export class AssessmentInterviewRuntimeService {
         revision: nextRevision,
         questionId: answer.questionId,
         workflowRunId,
+        partialCoveragePolicyDecision:
+          provenance.partialCoveragePolicyDecision ??
+          thread.privateStore.partialCoveragePolicyDecision,
       };
     });
 
@@ -464,6 +471,8 @@ export class AssessmentInterviewRuntimeService {
         assessmentInterview: publicState(next.state),
         interviewWorkflowEvent:
           ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewContextUpdated,
+        partialCoveragePolicyDecision:
+          next.partialCoveragePolicyDecision ?? null,
       },
       waitingReason:
         ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewContextUpdated,
@@ -574,7 +583,12 @@ export class AssessmentInterviewRuntimeService {
         tx,
       );
 
-      return { state: nextState, workflowRunId };
+      return {
+        state: nextState,
+        workflowRunId,
+        partialCoveragePolicyDecision:
+          current.privateStore.partialCoveragePolicyDecision,
+      };
     });
 
     await this.runtimeEvents.recordToolWaitingInput({
@@ -595,6 +609,8 @@ export class AssessmentInterviewRuntimeService {
         }),
         interviewWorkflowEvent:
           ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewBlockedOrUnresolved,
+        partialCoveragePolicyDecision:
+          result.partialCoveragePolicyDecision ?? null,
       },
       waitingReason:
         ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewBlockedOrUnresolved,
@@ -734,6 +750,9 @@ export class AssessmentInterviewRuntimeService {
       pgeVersion: authoritative.pgeVersion,
       technicalCoverageState: authoritative.technicalCoverageState,
       coverageLimitations: authoritative.coverageLimitations,
+      partialCoveragePolicyDecision:
+        authoritative.partialCoveragePolicyDecision ??
+        thread.privateStore.partialCoveragePolicyDecision,
       publicState: publicState(thread.state),
       privateRevision,
       targetedNeed: target,
@@ -764,6 +783,7 @@ export class AssessmentInterviewRuntimeService {
       this.assertInitialInterviewCoverageUsable(
         provenance.technicalCoverageState,
         provenance.coverageLimitations,
+        provenance.partialCoveragePolicyDecision,
         input.correlationId,
       );
       if (
@@ -821,6 +841,7 @@ export class AssessmentInterviewRuntimeService {
         workflowRunId: target.workflowRunId,
         targetedNeed,
         targetedContinuation,
+        partialCoveragePolicyDecision: provenance.partialCoveragePolicyDecision,
       };
       await this.persistThreadState(input.assessmentId, nextState, tx, {
         contextRevision: thread.contextRevision,
@@ -865,6 +886,8 @@ export class AssessmentInterviewRuntimeService {
             pgeVersion: thread.pgeVersion ?? undefined,
             technicalCoverageState: provenance.technicalCoverageState,
             coverageLimitations: provenance.coverageLimitations,
+            partialCoveragePolicyDecision:
+              provenance.partialCoveragePolicyDecision,
             guidanceVersion:
               thread.guidanceVersion ?? this.resolveGuidanceVersion(),
           },
@@ -873,7 +896,11 @@ export class AssessmentInterviewRuntimeService {
         tx,
       );
 
-      return { state: nextState, workflowRunId: target.workflowRunId };
+      return {
+        state: nextState,
+        workflowRunId: target.workflowRunId,
+        partialCoveragePolicyDecision: provenance.partialCoveragePolicyDecision,
+      };
     });
 
     await this.runtimeEvents.recordToolWaitingInput({
@@ -891,6 +918,8 @@ export class AssessmentInterviewRuntimeService {
         orchestratorAction:
           ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.waitForCustomer,
         interviewMode: ASSESSMENT_INTERVIEW_MODES.investigatorResolution,
+        partialCoveragePolicyDecision:
+          targetResult.partialCoveragePolicyDecision ?? null,
       },
       waitingReason: ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
       startedAt: new Date(),
@@ -935,6 +964,7 @@ export class AssessmentInterviewRuntimeService {
       this.assertInitialInterviewCoverageUsable(
         authoritative.technicalCoverageState,
         authoritative.coverageLimitations,
+        authoritative.partialCoveragePolicyDecision,
         input.correlationId,
       );
       if (
@@ -1091,6 +1121,8 @@ export class AssessmentInterviewRuntimeService {
               pgeVersion: authoritative.pgeVersion,
               technicalCoverageState: authoritative.technicalCoverageState,
               coverageLimitations: authoritative.coverageLimitations,
+              partialCoveragePolicyDecision:
+                authoritative.partialCoveragePolicyDecision,
               guidanceVersion:
                 thread.guidanceVersion ?? this.resolveGuidanceVersion(),
             },
@@ -1118,6 +1150,8 @@ export class AssessmentInterviewRuntimeService {
               pgeVersion: authoritative.pgeVersion,
               technicalCoverageState: authoritative.technicalCoverageState,
               coverageLimitations: authoritative.coverageLimitations,
+              partialCoveragePolicyDecision:
+                authoritative.partialCoveragePolicyDecision,
               guidanceVersion:
                 thread.guidanceVersion ?? this.resolveGuidanceVersion(),
             },
@@ -1134,6 +1168,9 @@ export class AssessmentInterviewRuntimeService {
           thread.privateStore.targetedContinuation?.workflowRunId ??
           thread.privateStore.workflowRunId ??
           this.threadId(input.assessmentId),
+        partialCoveragePolicyDecision:
+          authoritative.partialCoveragePolicyDecision ??
+          thread.privateStore.partialCoveragePolicyDecision,
         continuation:
           transition.exactResumeAllowed &&
           transition.action ===
@@ -1149,6 +1186,7 @@ export class AssessmentInterviewRuntimeService {
       correlationId: input.correlationId,
       transition: result.transition,
       state: result.state,
+      partialCoveragePolicyDecision: result.partialCoveragePolicyDecision,
     });
 
     return result.continuation
@@ -1181,7 +1219,7 @@ export class AssessmentInterviewRuntimeService {
         },
       );
     }
-    const nextState = await this.prisma.$transaction(async (tx) => {
+    const seedResult = await this.prisma.$transaction(async (tx) => {
       const existing = await this.readThread(input.assessmentId, tx);
       const guidanceVersion =
         existing.guidanceVersion ?? this.resolveGuidanceVersion();
@@ -1193,6 +1231,7 @@ export class AssessmentInterviewRuntimeService {
       this.assertInitialInterviewCoverageUsable(
         provenance.technicalCoverageState,
         provenance.coverageLimitations,
+        provenance.partialCoveragePolicyDecision,
         input.correlationId,
       );
       const authorizedRefs = new Set(provenance.governedEvidenceRefs);
@@ -1228,6 +1267,8 @@ export class AssessmentInterviewRuntimeService {
         privateStore: {
           ...existing.privateStore,
           workflowRunId,
+          partialCoveragePolicyDecision:
+            provenance.partialCoveragePolicyDecision,
           workingStrategy: normalizeStrategy(
             existing.privateStore.workingStrategy,
           ),
@@ -1257,6 +1298,8 @@ export class AssessmentInterviewRuntimeService {
               pgeVersion: provenance.pgeVersion,
               technicalCoverageState: provenance.technicalCoverageState,
               coverageLimitations: provenance.coverageLimitations,
+              partialCoveragePolicyDecision:
+                provenance.partialCoveragePolicyDecision,
               guidanceVersion,
             },
             correlationId: input.correlationId,
@@ -1265,7 +1308,10 @@ export class AssessmentInterviewRuntimeService {
         );
       }
 
-      return computedState;
+      return {
+        state: computedState,
+        partialCoveragePolicyDecision: provenance.partialCoveragePolicyDecision,
+      };
     });
 
     await this.runtimeEvents.recordToolWaitingInput({
@@ -1276,18 +1322,20 @@ export class AssessmentInterviewRuntimeService {
       toolName: INTERVIEW_TOOL_NAME,
       summary: "Interview Agent question is waiting for Customer response.",
       outputSummary: {
-        assessmentInterview: publicState(nextState),
+        assessmentInterview: publicState(seedResult.state),
         interviewWorkflowEvent:
           ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
         orchestratorAction:
           ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.waitForCustomer,
         interviewMode: ASSESSMENT_INTERVIEW_MODES.initialInterview,
+        partialCoveragePolicyDecision:
+          seedResult.partialCoveragePolicyDecision ?? null,
       },
       waitingReason: ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
       startedAt: new Date(),
     });
 
-    return nextState;
+    return seedResult.state;
   }
 
   private async recordTransitionWorkflowEvent(input: {
@@ -1296,6 +1344,7 @@ export class AssessmentInterviewRuntimeService {
     correlationId: string;
     transition: OrchestratorInterviewTransition;
     state: AssessmentInterviewRuntimeState;
+    partialCoveragePolicyDecision?: PartialCoveragePolicyDecision;
   }): Promise<void> {
     const payload = {
       assessmentInterview: runtimeEventState(input.state),
@@ -1305,6 +1354,8 @@ export class AssessmentInterviewRuntimeService {
       ),
       orchestratorAction: input.transition.action,
       interviewMode: input.transition.mode,
+      partialCoveragePolicyDecision:
+        input.partialCoveragePolicyDecision ?? null,
     };
     const base = {
       assessmentId: input.assessmentId,
@@ -1371,6 +1422,7 @@ export class AssessmentInterviewRuntimeService {
   private assertInitialInterviewCoverageUsable(
     technicalCoverageState: InterviewTechnicalCoverageState,
     coverageLimitations: string[],
+    partialCoveragePolicyDecision: PartialCoveragePolicyDecision | undefined,
     correlationId: string,
   ): void {
     if (
@@ -1384,7 +1436,17 @@ export class AssessmentInterviewRuntimeService {
     }
 
     if (
-      technicalCoverageState === INTERVIEW_TECHNICAL_COVERAGE_STATES.partial &&
+      technicalCoverageState !== INTERVIEW_TECHNICAL_COVERAGE_STATES.partial
+    ) {
+      return;
+    }
+
+    if (
+      !partialCoveragePolicyDecision ||
+      partialCoveragePolicyDecision.permittedForInterview !== true ||
+      !partialCoveragePolicyDecision.policyDecisionRef.trim() ||
+      !partialCoveragePolicyDecision.policyVersion.trim() ||
+      partialCoveragePolicyDecision.limitations.length === 0 ||
       coverageLimitations.length === 0
     ) {
       throw problemException(
@@ -1596,6 +1658,7 @@ export class AssessmentInterviewRuntimeService {
     commitSha?: string;
     technicalCoverageState: InterviewTechnicalCoverageState;
     coverageLimitations: string[];
+    partialCoveragePolicyDecision?: PartialCoveragePolicyDecision;
     governedEvidenceRefs: string[];
   }> {
     const client = tx ?? this.prisma;
@@ -1643,9 +1706,17 @@ export class AssessmentInterviewRuntimeService {
       (report
         ? INTERVIEW_TECHNICAL_COVERAGE_STATES.unavailable
         : INTERVIEW_TECHNICAL_COVERAGE_STATES.unavailable);
+    const partialCoveragePolicyDecision = parsePartialCoveragePolicyDecision(
+      evidenceGraph?.partialCoveragePolicyDecision ??
+        evidenceGraph?.partial_coverage_policy_decision ??
+        evidencePayload?.partialCoveragePolicyDecision ??
+        evidencePayload?.partial_coverage_policy_decision ??
+        evidencePayload?.coveragePolicyDecision ??
+        evidencePayload?.coverage_policy_decision,
+    );
     const graphCoverageNotes =
       evidenceGraph?.coverage_notes ?? evidenceGraph?.coverageNotes;
-    const coverageLimitations = Array.isArray(graphCoverageNotes)
+    const rawCoverageLimitations = Array.isArray(graphCoverageNotes)
       ? graphCoverageNotes.filter(
           (item): item is string => typeof item === "string",
         )
@@ -1658,6 +1729,11 @@ export class AssessmentInterviewRuntimeService {
               (item): item is string => typeof item === "string",
             )
           : [];
+    const coverageLimitations =
+      technicalCoverageState === INTERVIEW_TECHNICAL_COVERAGE_STATES.partial &&
+      partialCoveragePolicyDecision
+        ? partialCoveragePolicyDecision.limitations
+        : rawCoverageLimitations;
 
     const rawGraphRefs =
       evidenceGraph?.evidence_refs ?? evidenceGraph?.evidenceRefs;
@@ -1716,6 +1792,7 @@ export class AssessmentInterviewRuntimeService {
         : MISSING_PGE_VERSION,
       technicalCoverageState,
       coverageLimitations,
+      partialCoveragePolicyDecision,
       governedEvidenceRefs: Array.from(
         new Set([
           ...(snapshot ? [`repositorySnapshot:${snapshot.id}`] : []),
@@ -2273,6 +2350,9 @@ function parsePrivateStore(value: unknown): PrivateInterviewStore {
         : undefined,
     targetedNeed,
     targetedContinuation,
+    partialCoveragePolicyDecision: parsePartialCoveragePolicyDecision(
+      record.partialCoveragePolicyDecision,
+    ),
     workingStrategy: normalizeStrategy(
       record.workingStrategy as Partial<InterviewWorkingStrategy> | undefined,
     ),
@@ -2336,6 +2416,38 @@ function parseStoredTargetedContinuation(
     return undefined;
   }
   return record as TargetedInterviewContinuation;
+}
+
+function parsePartialCoveragePolicyDecision(
+  value: unknown,
+): PartialCoveragePolicyDecision | undefined {
+  const record = objectRecord(value);
+  if (!record) {
+    return undefined;
+  }
+  const limitations = Array.isArray(record.limitations)
+    ? record.limitations
+        .filter(
+          (item): item is string =>
+            typeof item === "string" && item.trim().length > 0,
+        )
+        .map((item) => item.trim())
+    : [];
+  if (
+    typeof record.policyDecisionRef !== "string" ||
+    !record.policyDecisionRef.trim() ||
+    typeof record.policyVersion !== "string" ||
+    !record.policyVersion.trim() ||
+    typeof record.permittedForInterview !== "boolean"
+  ) {
+    return undefined;
+  }
+  return {
+    policyDecisionRef: record.policyDecisionRef.trim(),
+    policyVersion: record.policyVersion.trim(),
+    permittedForInterview: record.permittedForInterview,
+    limitations,
+  };
 }
 
 function isPrivateRevision(

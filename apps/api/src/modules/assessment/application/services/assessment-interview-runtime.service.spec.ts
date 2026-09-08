@@ -129,6 +129,20 @@ function targetedResolutionThreadFixture(): Record<string, unknown> {
   };
 }
 
+function partialCoveragePolicyDecision(overrides?: {
+  permittedForInterview?: boolean;
+  limitations?: string[];
+}): Record<string, unknown> {
+  return {
+    policyDecisionRef: "coverage-policy:assessment-1:report-pinned",
+    policyVersion: "partial-coverage-policy-v1",
+    permittedForInterview: overrides?.permittedForInterview ?? true,
+    limitations: overrides?.limitations ?? [
+      "dynamic routing was not statically resolved",
+    ],
+  };
+}
+
 type MockPrismaDelegates = {
   assessment: {
     findUnique: jest.Mock<() => Promise<{ id: string; ownerId: string }>>;
@@ -1276,6 +1290,14 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
     });
 
     it("routes initial CONTEXT_READY to engineering rule evaluation workflow", async () => {
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValueOnce({
+        id: "report-1",
+        schemaVersion: "v1",
+        evidencePayload: {
+          technicalCoverageState: INTERVIEW_TECHNICAL_COVERAGE_STATES.partial,
+          partialCoveragePolicyDecision: partialCoveragePolicyDecision(),
+        },
+      });
       mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
         assessmentId: "assessment-1",
         contextRevision: 1,
@@ -1303,6 +1325,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             },
           ],
           workflowRunId: "10000000-0000-4000-8000-000000000002",
+          partialCoveragePolicyDecision: partialCoveragePolicyDecision(),
         },
         sourceVersion: "snap-1:sha-123456",
         pgeVersion: "report-1:v1",
@@ -1332,6 +1355,12 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             orchestratorAction:
               ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.continueToEngineeringRule,
             interviewMode: "INITIAL_INTERVIEW",
+            partialCoveragePolicyDecision: {
+              policyDecisionRef: "coverage-policy:assessment-1:report-pinned",
+              policyVersion: "partial-coverage-policy-v1",
+              permittedForInterview: true,
+              limitations: ["dynamic routing was not statically resolved"],
+            },
           }),
         }),
       );
@@ -1458,7 +1487,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         schemaVersion: "v1",
         evidencePayload: {
           technicalCoverageState: INTERVIEW_TECHNICAL_COVERAGE_STATES.partial,
-          coverageLimitations: [],
+          partialCoveragePolicyDecision: partialCoveragePolicyDecision({
+            limitations: [],
+          }),
         },
       });
 
@@ -1469,6 +1500,72 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           workflowRunId: "10000000-0000-4000-8000-000000000001",
           state: initialQuestionState(),
           technicalEvidenceReportId: "report-partial-without-limitations",
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          ok: false,
+          problem: {
+            code: ASSESSMENT_ERROR_CODES.interviewPartialCoverageLimitationsRequired,
+          },
+        },
+      });
+
+      expect(mockTx.assessmentInterviewThread.upsert).not.toHaveBeenCalled();
+      expect(mockInterviewAudit.recordQuestionPersisted).not.toHaveBeenCalled();
+      expect(mockRuntimeEvents.recordToolWaitingInput).not.toHaveBeenCalled();
+    });
+
+    it("does not invoke Interview for PARTIAL coverage without a policy decision", async () => {
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValueOnce({
+        id: "report-partial-without-policy",
+        schemaVersion: "v1",
+        evidencePayload: {
+          technicalCoverageState: INTERVIEW_TECHNICAL_COVERAGE_STATES.partial,
+          coverageLimitations: ["static analyzer missed a dynamic import"],
+        },
+      });
+
+      await expect(
+        service.seedInitialQuestionForWorker({
+          assessmentId: "assessment-1",
+          correlationId: "corr-partial-without-policy",
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+          state: initialQuestionState(),
+          technicalEvidenceReportId: "report-partial-without-policy",
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          ok: false,
+          problem: {
+            code: ASSESSMENT_ERROR_CODES.interviewPartialCoverageLimitationsRequired,
+          },
+        },
+      });
+
+      expect(mockTx.assessmentInterviewThread.upsert).not.toHaveBeenCalled();
+      expect(mockInterviewAudit.recordQuestionPersisted).not.toHaveBeenCalled();
+      expect(mockRuntimeEvents.recordToolWaitingInput).not.toHaveBeenCalled();
+    });
+
+    it("does not invoke Interview when PARTIAL coverage policy denies Interview", async () => {
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValueOnce({
+        id: "report-partial-denied-policy",
+        schemaVersion: "v1",
+        evidencePayload: {
+          technicalCoverageState: INTERVIEW_TECHNICAL_COVERAGE_STATES.partial,
+          partialCoveragePolicyDecision: partialCoveragePolicyDecision({
+            permittedForInterview: false,
+          }),
+        },
+      });
+
+      await expect(
+        service.seedInitialQuestionForWorker({
+          assessmentId: "assessment-1",
+          correlationId: "corr-partial-denied-policy",
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+          state: initialQuestionState(),
+          technicalEvidenceReportId: "report-partial-denied-policy",
         }),
       ).rejects.toMatchObject({
         response: {
@@ -1549,6 +1646,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           evidence_graph: {
             coverage_state: "LIMITED",
             coverage_notes: ["dynamic routing was not statically resolved"],
+            partialCoveragePolicyDecision: partialCoveragePolicyDecision(),
           },
         },
       });
@@ -1595,9 +1693,29 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             coverageLimitations: [
               "dynamic routing was not statically resolved",
             ],
+            partialCoveragePolicyDecision: {
+              policyDecisionRef: "coverage-policy:assessment-1:report-pinned",
+              policyVersion: "partial-coverage-policy-v1",
+              permittedForInterview: true,
+              limitations: ["dynamic routing was not statically resolved"],
+            },
           }),
         }),
         mockTx,
+      );
+      expect(mockTx.assessmentInterviewThread.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            privateContextJson: expect.objectContaining({
+              partialCoveragePolicyDecision: {
+                policyDecisionRef: "coverage-policy:assessment-1:report-pinned",
+                policyVersion: "partial-coverage-policy-v1",
+                permittedForInterview: true,
+                limitations: ["dynamic routing was not statically resolved"],
+              },
+            }),
+          }),
+        }),
       );
       expect(mockRuntimeEvents.recordToolWaitingInput).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1611,9 +1729,64 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             assessmentInterview: expect.objectContaining({
               outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
             }),
+            partialCoveragePolicyDecision: {
+              policyDecisionRef: "coverage-policy:assessment-1:report-pinned",
+              policyVersion: "partial-coverage-policy-v1",
+              permittedForInterview: true,
+              limitations: ["dynamic routing was not statically resolved"],
+            },
           }),
         }),
       );
+    });
+
+    it("preserves permitted PARTIAL policy decision in worker Interview input", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValueOnce({
+        assessmentId: "assessment-1",
+        contextRevision: 0,
+        processedRevision: 0,
+        activeQuestionId: "q-partial-policy",
+        stateJson: {
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+          contextRevision: 0,
+        },
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+          partialCoveragePolicyDecision: partialCoveragePolicyDecision(),
+        },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+        guidanceVersion: TEST_GUIDANCE_VERSION,
+      });
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValueOnce({
+        id: "report-1",
+        schemaVersion: "v1",
+        evidencePayload: {
+          technicalCoverageState: INTERVIEW_TECHNICAL_COVERAGE_STATES.partial,
+          partialCoveragePolicyDecision: partialCoveragePolicyDecision(),
+        },
+      });
+
+      const workerContext = await service.getPrivateContextForWorker({
+        assessmentId: "assessment-1",
+        contextRevision: 0,
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+      });
+
+      expect(workerContext.technicalCoverageState).toBe(
+        INTERVIEW_TECHNICAL_COVERAGE_STATES.partial,
+      );
+      expect(workerContext.coverageLimitations).toEqual([
+        "dynamic routing was not statically resolved",
+      ]);
+      expect(workerContext.partialCoveragePolicyDecision).toEqual({
+        policyDecisionRef: "coverage-policy:assessment-1:report-pinned",
+        policyVersion: "partial-coverage-policy-v1",
+        permittedForInterview: true,
+        limitations: ["dynamic routing was not statically resolved"],
+      });
     });
   });
 

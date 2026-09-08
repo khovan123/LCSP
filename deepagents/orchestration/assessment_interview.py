@@ -70,13 +70,6 @@ _TARGETED_TEXT_LEAK_PATTERNS = (
 
 
 @dataclass(frozen=True)
-class TechnicalCoverage:
-    state: CoverageState
-    limitations: tuple[str, ...] = ()
-    missing_evidence_refs: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
 class InterviewQuestion:
     id: str
     intent: QuestionIntent
@@ -150,6 +143,28 @@ class OrchestratorInterviewTransition:
 
 
 @dataclass(frozen=True)
+class PartialCoveragePolicyDecision:
+    policy_decision_ref: str
+    policy_version: str
+    permitted_for_interview: bool
+    limitations: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.policy_decision_ref.strip() or not self.policy_version.strip():
+            raise ValueError("PARTIAL coverage policy requires stable decision refs")
+        if self.permitted_for_interview and not self.limitations:
+            raise ValueError("permitted PARTIAL coverage requires preserved limitations")
+
+
+@dataclass(frozen=True)
+class TechnicalCoverage:
+    state: CoverageState
+    limitations: tuple[str, ...] = ()
+    missing_evidence_refs: tuple[str, ...] = ()
+    partial_policy_decision: PartialCoveragePolicyDecision | None = None
+
+
+@dataclass(frozen=True)
 class InterviewRuntimeState:
     outcome: InterviewOutcome
     active_question: InterviewQuestion | None = None
@@ -165,20 +180,6 @@ class InterviewRuntimeState:
     interview_payload: dict[str, Any] = field(default_factory=dict)
     resume: dict[str, Any] | None = None
     transition: OrchestratorInterviewTransition | None = None
-
-
-@dataclass(frozen=True)
-class PartialCoveragePolicyDecision:
-    policy_decision_ref: str
-    policy_version: str
-    permitted_for_interview: bool
-    limitations: tuple[str, ...] = ()
-
-    def __post_init__(self) -> None:
-        if not self.policy_decision_ref.strip() or not self.policy_version.strip():
-            raise ValueError("PARTIAL coverage policy requires stable decision refs")
-        if self.permitted_for_interview and not self.limitations:
-            raise ValueError("permitted PARTIAL coverage requires preserved limitations")
 
 
 def orchestrator_transition(
@@ -257,16 +258,15 @@ def initial_interview(
     agent_decision: InterviewAgentDecision | None = None,
 ) -> InterviewRuntimeState:
     """Apply protected initial-Interview guardrails to an agent-authored decision."""
+    coverage_limitations = _validated_coverage_limitations(coverage)
     if coverage.state not in {"READY", "PARTIAL"}:
         raise ValueError("unusable coverage requires Root Orchestration recovery before Interview")
-    if coverage.state == "PARTIAL" and not coverage.limitations:
-        raise ValueError("PARTIAL coverage requires preserved limitations before Interview")
 
     latest = customer_revisions[-1] if customer_revisions else None
     if agent_decision is None:
         return InterviewRuntimeState(
             outcome="WAITING_FOR_CUSTOMER",
-            coverage_limitations=coverage.limitations,
+            coverage_limitations=coverage_limitations,
             flags=("INTERVIEW_AGENT_DECISION_REQUIRED",),
         )
 
@@ -280,15 +280,15 @@ def initial_interview(
             outcome="CONTEXT_READY",
             confirmed_context=dict(latest.facts if latest else agent_decision.confirmed_context),
             context_revision=latest.revision if latest else agent_decision.context_revision,
-            coverage_limitations=coverage.limitations,
+            coverage_limitations=coverage_limitations,
             missing_evidence_is_absence_proof=False,
-            planner_can_start=True,
+            planner_can_start=False,
             engineering_rule_can_start=True,
             interview_payload=_decision_payload(agent_decision),
             transition=transition,
         )
 
-    state = _waiting_or_blocked(agent_decision, coverage_limitations=coverage.limitations)
+    state = _waiting_or_blocked(agent_decision, coverage_limitations=coverage_limitations)
     return replace(
         state,
         transition=orchestrator_transition(
@@ -296,6 +296,15 @@ def initial_interview(
             decision=agent_decision,
         ),
     )
+
+
+def engineering_rule_completed_after_initial_interview(
+    state: InterviewRuntimeState,
+) -> InterviewRuntimeState:
+    """Authorize Planner only after the EngineeringRule boundary completes."""
+    if state.outcome != "CONTEXT_READY" or not state.engineering_rule_can_start:
+        raise ValueError("Planner requires completed EngineeringRule stage after Interview")
+    return replace(state, planner_can_start=True)
 
 
 def investigator_resolution(
@@ -411,6 +420,21 @@ def _assert_resolution_criteria_satisfied(
         )
 
 
+def _validated_coverage_limitations(coverage: TechnicalCoverage) -> tuple[str, ...]:
+    if coverage.state not in {"READY", "PARTIAL"}:
+        raise ValueError("unusable coverage requires Root Orchestration recovery before Interview")
+    if coverage.state == "READY":
+        return coverage.limitations
+    policy = coverage.partial_policy_decision
+    if policy is None:
+        raise ValueError("PARTIAL coverage requires explicit policy decision before Interview")
+    if not policy.permitted_for_interview:
+        raise ValueError("PARTIAL coverage policy does not permit Interview invocation")
+    if not policy.limitations:
+        raise ValueError("PARTIAL coverage requires preserved limitations before Interview")
+    return policy.limitations
+
+
 def _waiting_or_blocked(
     decision: InterviewAgentDecision,
     *,
@@ -461,6 +485,7 @@ __all__ = [
     "OrchestratorInterviewTransition",
     "PartialCoveragePolicyDecision",
     "TechnicalCoverage",
+    "engineering_rule_completed_after_initial_interview",
     "initial_interview",
     "investigator_resolution",
     "orchestrator_transition",
