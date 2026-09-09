@@ -209,6 +209,7 @@ type AgentDecisionInput = {
   mode?: CanonicalAssessmentInterviewMode;
   outcome: AssessmentInterviewRuntimeState["outcome"];
   activeQuestion?: AssessmentInterviewRuntimeState["activeQuestion"];
+  rationale?: string;
   contextAuthority?: AssessmentContextAuthorityStatus;
   confirmedContext?: Record<string, unknown>;
   blockedActions?: AssessmentInterviewRuntimeState["blockedActions"];
@@ -243,7 +244,7 @@ export class AssessmentInterviewRuntimeService {
     const state = publicState(thread.state);
     const answerHistory = await Promise.all(
       (state.answerHistory ?? []).map(async (item) => {
-        if (item.questionPrompt) return item;
+        if (item.question) return item;
         const event = await this.prisma.auditEvent.findFirst({
           where: {
             resourceId: assessmentId,
@@ -256,12 +257,37 @@ export class AssessmentInterviewRuntimeService {
           select: { payload: true },
         });
         const payload = objectRecord(event?.payload);
+        const control =
+          payload?.control as AssessmentInterviewQuestion["control"];
+        const intent =
+          payload?.questionIntent as AssessmentInterviewQuestion["intent"];
+        const question =
+          typeof payload?.prompt === "string" &&
+          Object.values(ASSESSMENT_INTERVIEW_CONTROLS).includes(control) &&
+          Object.values(ASSESSMENT_INTERVIEW_QUESTION_INTENTS).includes(intent)
+            ? publicActiveQuestion({
+                id: item.questionId,
+                prompt: payload.prompt,
+                control,
+                intent,
+                choices: Array.isArray(payload.choices)
+                  ? payload.choices.flatMap((value) => {
+                      const choice = objectRecord(value);
+                      return typeof choice?.id === "string" &&
+                        typeof choice.label === "string"
+                        ? [{ id: choice.id, label: choice.label }]
+                        : [];
+                    })
+                  : undefined,
+              })
+            : undefined;
         return {
           ...item,
+          question,
           questionPrompt:
             typeof payload?.prompt === "string"
               ? sanitizePublicText(payload.prompt)
-              : undefined,
+              : item.questionPrompt,
         };
       }),
     );
@@ -275,9 +301,13 @@ export class AssessmentInterviewRuntimeService {
             entry.actorId === actor.userId,
         );
         const text = revision?.answer.freeText;
-        return text
-          ? { ...item, summary: sanitizePublicText(text) ?? item.summary }
-          : item;
+        return {
+          ...item,
+          selectedChoiceIds: revision?.answer.selectedChoiceIds,
+          summary: text
+            ? (sanitizePublicText(text) ?? item.summary)
+            : item.summary,
+        };
       }),
     };
   }
@@ -2594,6 +2624,10 @@ function parseAgentDecision(value: unknown): AgentDecisionInput {
     mode,
     outcome,
     activeQuestion,
+    rationale:
+      typeof record.rationale === "string" && record.rationale.trim()
+        ? record.rationale.trim()
+        : undefined,
     contextAuthority: Object.values(
       ASSESSMENT_CONTEXT_AUTHORITY_STATUSES,
     ).includes(record.contextAuthority as never)
@@ -3208,9 +3242,15 @@ function decisionState(
   current: AssessmentInterviewRuntimeState,
   decision: AgentDecisionInput,
 ): AssessmentInterviewRuntimeState {
+  const assistantMessage =
+    decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextReady ||
+    decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved
+      ? sanitizePublicText(decision.rationale)
+      : undefined;
   return {
     ...current,
     outcome: decision.outcome,
+    assistantMessage,
     activeQuestion:
       decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer
         ? decision.activeQuestion
@@ -3447,6 +3487,7 @@ function publicState(
     threadId: state.threadId,
     contextRevision: state.contextRevision,
     contextAuthority: state.contextAuthority,
+    assistantMessage: sanitizePublicText(state.assistantMessage),
     activeQuestion: publicActiveQuestion(state.activeQuestion),
     blockedActions: state.blockedActions,
     flags: state.flags,

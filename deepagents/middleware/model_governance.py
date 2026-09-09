@@ -37,6 +37,13 @@ MODEL_GOVERNANCE_MIDDLEWARE = (
     _redacting_pii("aws_access_key", AWS_ACCESS_KEY_PATTERN.pattern),
     _redacting_pii("anthropic_key", ANTHROPIC_KEY_PATTERN.pattern),
     _redacting_pii("credential_assignment", GENERIC_ASSIGNMENT_PATTERN.pattern),
-    ModelRetryMiddleware(max_retries=2, on_failure="continue"),
+    # A synthetic error message has no structured handoff and hides the cause.
+    ModelRetryMiddleware(max_retries=2, on_failure="error"),
     ModelCallLimitMiddleware(run_limit=2, exit_behavior="error"),
+)
+
+TRIAGE_MODEL_GOVERNANCE_MIDDLEWARE = (
+    *MODEL_GOVERNANCE_MIDDLEWARE[:-1],
+    # Read/persist up to 500 claimed rules, then finish and return the handoff.
+    ModelCallLimitMiddleware(run_limit=1100, exit_behavior="error"),
 )

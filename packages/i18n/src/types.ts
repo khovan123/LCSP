@@ -144,6 +144,24 @@ export type PagesMessages = {
         lastActivity: string;
       };
     };
+    assessmentActions: {
+      menuLabel: string;
+      rename: string;
+      delete: string;
+      renameTitle: string;
+      renameDescription: string;
+      nameLabel: string;
+      cancel: string;
+      save: string;
+      saving: string;
+      deleteTitle: string;
+      deleteDescription: string;
+      deleteConfirm: string;
+      deleting: string;
+      renameError: string;
+      deleteError: string;
+      close: string;
+    };
     settings: string;
     language: string;
     getHelp: string;

@@ -31,7 +31,6 @@ import { appLocale } from "@/lib/locale";
 
 import { useAssessmentRuntimeViewModel } from "../../hooks/use-assessment-runtime-view-model";
 import type { AssessmentOverviewProps } from "../../types/assessment-overview.types";
-import { ASSESSMENT_CHAT_ROLES } from "../../types/assessment-chat.types";
 import {
   selectComposerAvailability,
   selectCustomerActions,
@@ -52,7 +51,7 @@ import {
 } from "../molecules/assessment-question-turn";
 import { PostFindingFlowSteps } from "../molecules/post-finding-flow-steps";
 import { AssessmentComposer } from "./assessment-composer";
-import { InterviewAnswerMessage } from "../molecules/interview-answer-message";
+import { InterviewAnswerHistory } from "../molecules/interview-answer-history";
 import { AssessmentTranscript } from "./assessment-transcript";
 import { useWorkspaceRuntime } from "./workspace-runtime-provider";
 
@@ -301,6 +300,7 @@ function AssessmentInterviewFlow({
     interviewQuery.dataUpdatedAt,
     activeQuestionId,
     answerHistory.length,
+    interview.assistantMessage,
     postFinding?.screenProjection,
     postFinding?.selectedDecision,
     lastSavedMessage,
@@ -463,23 +463,10 @@ function AssessmentInterviewFlow({
         {interviewEnabled ? (
           <>
             {answerHistory.map((answer) => (
-              <div
+              <InterviewAnswerHistory
                 key={`${answer.questionId}:${answer.answeredAt}`}
-                className="space-y-6"
-              >
-                {answer.questionPrompt ? (
-                  <AgentTurn>
-                    <AgentMessage>
-                      <p className="whitespace-pre-wrap break-words">
-                        {answer.questionPrompt}
-                      </p>
-                    </AgentMessage>
-                  </AgentTurn>
-                ) : null}
-                <AgentTurn role={ASSESSMENT_CHAT_ROLES.user}>
-                  <InterviewAnswerMessage text={answer.summary} />
-                </AgentTurn>
-              </div>
+                answer={answer}
+              />
             ))}
 
             {interview.questionTurnProps ? (
@@ -570,8 +557,8 @@ function AssessmentInterviewFlow({
             ) : (
               <AgentTurn>
                 <AgentMessage>
-                  <p className="mt-2 text-muted-foreground">
-                    {t(interviewHandoff.messageKey)}
+                  <p className="mt-2 whitespace-pre-wrap break-words text-muted-foreground">
+                    {interview.assistantMessage ?? t(interviewHandoff.messageKey)}
                   </p>
                 </AgentMessage>
               </AgentTurn>

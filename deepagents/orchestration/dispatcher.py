@@ -117,6 +117,8 @@ class RootSubagentDispatcher:
 
         specialist = self._agent_factory(**agent_kwargs)
         config: dict[str, Any] = {"metadata": dict(metadata or {})}
+        if subagent_type == "triage":
+            config["recursion_limit"] = 2400
         from .interview_progress import active_progress
         progress = active_progress.get()
         if progress is not None:
@@ -249,7 +251,7 @@ class RootSubagentDispatcher:
     ) -> dict[str, Any] | None:
         if response_format is None:
             return None
-        if not isinstance(invocation_result, dict) or "structured_response" not in invocation_result:
+        if not isinstance(invocation_result, dict) or invocation_result.get("structured_response") is None:
             raise RuntimeError(
                 f"{subagent_type} did not return a structured_response handoff"
             )

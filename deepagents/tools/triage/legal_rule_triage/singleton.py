@@ -168,6 +168,23 @@ class TriageSingletonCoordinator:
             )
             self._write_active_state_unlocked(state)
 
+    def assert_rule_pending(self, *, execution_id: str, legal_rule_id: str) -> None:
+        """Reject an out-of-scope proposal before any artifact is written."""
+        self.assert_owner(execution_id)
+        with self._locked_state():
+            state = self._read_active_state_unlocked()
+            self._assert_execution_state(state, execution_id)
+            if legal_rule_id not in (state.get("activeBatchLegalRuleIds") or []):
+                raise ValueError("LegalRule is not pending in the claimed triage scope")
+
+    def get_completed_rule_ids(self, *, execution_id: str) -> set[str]:
+        """Read progress for pagination, including explicit reprocessing runs."""
+        self.assert_owner(execution_id)
+        with self._locked_state():
+            state = self._read_active_state_unlocked()
+            self._assert_execution_state(state, execution_id)
+            return set(state.get("completedLegalRuleIds") or [])
+
     def mark_rule_completed(self, *, execution_id: str, legal_rule_id: str) -> None:
         """Remove one successfully persisted LegalRule from the owner batch."""
         self.assert_owner(execution_id)

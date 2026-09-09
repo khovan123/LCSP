@@ -61,6 +61,19 @@ test("public interview history survives sanitization without private actor ident
   assert.deepEqual(sanitizeAssessmentInterviewState(state)?.answerHistory, [answer]);
 });
 
+test("terminal Interview assistant output survives the public client boundary", () => {
+  const state = sanitizeAssessmentInterviewState({
+    outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+    assistantMessage:
+      "I have enough confirmed business context to continue the assessment.",
+  });
+
+  assert.equal(
+    state?.assistantMessage,
+    "I have enough confirmed business context to continue the assessment.",
+  );
+});
+
 const workspaceRoot = new URL("../src/", import.meta.url);
 const contractsPath = new URL(
   "../../../packages/contracts/src/evidence/assessment-interview.ts",
@@ -520,6 +533,7 @@ test("workflow run renders dynamic interview controls through shared workspace c
   assert.match(overviewSource, /useAssessmentInterviewBlockedActionMutation/);
   assert.match(overviewSource, /pendingDraft/);
   assert.match(overviewSource, /answerHistory/);
+  assert.match(overviewSource, /interview\.assistantMessage/);
   assert.match(overviewSource, /state:\s*runtimeInterviewState/);
   assert.match(overviewSource, /selectInterviewHandoffPresentation/);
   assert.match(overviewSource, /selectedChoiceRequiresFreeText/);

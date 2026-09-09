@@ -8,7 +8,8 @@ import pytest
 import harness
 import model_policy
 from middleware.interview_runtime_context import inject_interview_runtime_context
-from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE, TRIAGE_MODEL_GOVERNANCE_MIDDLEWARE
+from middleware.triage_progress import require_triage_progress
 from middleware.runtime_context import inject_lcsp_runtime_context
 from model_policy import (
     ALL_LCSP_MODEL_SPECS,
@@ -85,7 +86,9 @@ def test_subagents_follow_deep_agents_dictionary_contract() -> None:
                 inject_interview_runtime_context,
                 *MODEL_GOVERNANCE_MIDDLEWARE,
             ]
-        elif name != "triage":
+        elif name == "triage":
+            expected_middleware = [require_triage_progress, *TRIAGE_MODEL_GOVERNANCE_MIDDLEWARE]
+        else:
             expected_middleware = [
                 inject_lcsp_runtime_context,
                 *MODEL_GOVERNANCE_MIDDLEWARE,

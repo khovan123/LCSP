@@ -76,9 +76,7 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
 
     def handle(self, message: dict[str, Any], correlationId: str) -> None:
         evidence_report_id = self._evidence_report_id(message)
-        evidence_report = self._api_client.get_accepted_technical_evidence_report(
-            evidence_report_id
-        )
+        evidence_report = self._get_accepted_evidence_report(evidence_report_id)
         assessment_id = str(
             evidence_report.get("assessment_id")
             or evidence_report.get("assessmentId")

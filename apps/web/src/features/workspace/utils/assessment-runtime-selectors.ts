@@ -40,6 +40,11 @@ export function selectInterviewPresentation(
   return {
     outcome: interview.outcome,
     activeQuestion: interview.activeQuestion,
+    assistantMessage:
+      interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextReady ||
+      interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved
+        ? interview.assistantMessage
+        : null,
     hasActiveQuestion,
     isWaitingForCustomer: isWaiting,
     isContextReady:

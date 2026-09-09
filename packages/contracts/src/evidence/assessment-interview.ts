@@ -491,6 +491,9 @@ export type AssessmentInterviewAuditRef = {
 export type AssessmentInterviewAnswerHistoryItem = {
   questionId: string;
   questionPrompt?: string;
+  question?: AssessmentInterviewQuestion;
+  /** Returned only for the authenticated respondent's own answer. */
+  selectedChoiceIds?: string[];
   answeredAt: string;
   /** Internal history stores actorId; Customer projections omit it. */
   actorId?: string;
@@ -500,6 +503,8 @@ export type AssessmentInterviewAnswerHistoryItem = {
 export type AssessmentInterviewRuntimeState = {
   outcome: AssessmentInterviewOutcome;
   activeQuestion?: AssessmentInterviewQuestion;
+  /** Customer-safe assistant output for terminal Interview turns. */
+  assistantMessage?: string;
   flags?: AssessmentInterviewFlag[];
   contextAuthority?: AssessmentContextAuthorityStatus;
   /** Worker-only authoritative context; public runtime surfaces redact this field. */

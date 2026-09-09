@@ -110,6 +110,26 @@ export const viPages = {
         lastActivity: "Hoạt động gần nhất",
       },
     },
+    assessmentActions: {
+      menuLabel: "Tùy chọn assessment",
+      rename: "Đổi tên",
+      delete: "Xóa",
+      renameTitle: "Đổi tên assessment",
+      renameDescription:
+        "Cập nhật tên hiển thị của assessment trong workspace.",
+      nameLabel: "Tên assessment",
+      cancel: "Hủy",
+      save: "Lưu",
+      saving: "Đang lưu...",
+      deleteTitle: "Xóa assessment?",
+      deleteDescription:
+        "Thao tác này sẽ xóa vĩnh viễn assessment và toàn bộ dữ liệu đã thu thập.",
+      deleteConfirm: "Xóa assessment",
+      deleting: "Đang xóa...",
+      renameError: "Không thể đổi tên assessment. Vui lòng thử lại.",
+      deleteError: "Không thể xóa assessment. Vui lòng thử lại.",
+      close: "Đóng",
+    },
     settings: "Cài đặt",
     language: "Ngôn ngữ",
     getHelp: "Trợ giúp",
@@ -1410,7 +1430,8 @@ export const viPages = {
       progressRunning: "Đang đánh giá câu trả lời của bạn.",
       progressTool: "Đang kiểm tra thông tin hỗ trợ.",
       progressCompleted: "Đánh giá Interview đã hoàn tất. Kết quả đã được lưu.",
-      progressFailed: "Lượt đánh giá này gặp lỗi. Câu trả lời của bạn vẫn được lưu.",
+      progressFailed:
+        "Lượt đánh giá này gặp lỗi. Câu trả lời của bạn vẫn được lưu.",
       continuingDescription:
         "Câu trả lời đã được lưu. Đang chờ kết quả đánh giá hoặc câu hỏi tiếp theo.",
       placeholder: "Mô tả project hoặc system...",

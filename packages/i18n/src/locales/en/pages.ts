@@ -107,6 +107,25 @@ export const enPages = {
         lastActivity: "Last activity",
       },
     },
+    assessmentActions: {
+      menuLabel: "Assessment options",
+      rename: "Rename",
+      delete: "Delete",
+      renameTitle: "Rename assessment",
+      renameDescription: "Update the name shown across the workspace.",
+      nameLabel: "Assessment name",
+      cancel: "Cancel",
+      save: "Save",
+      saving: "Saving...",
+      deleteTitle: "Delete assessment?",
+      deleteDescription:
+        "This permanently deletes the assessment and its collected data.",
+      deleteConfirm: "Delete assessment",
+      deleting: "Deleting...",
+      renameError: "Unable to rename this assessment. Try again.",
+      deleteError: "Unable to delete this assessment. Try again.",
+      close: "Close",
+    },
     settings: "Settings",
     language: "Language",
     getHelp: "Get help",
@@ -1405,8 +1424,10 @@ export const enPages = {
       progressQueued: "Your answer is queued for evaluation.",
       progressRunning: "Evaluating your answer.",
       progressTool: "Checking supporting information.",
-      progressCompleted: "Interview evaluation completed. The result has been saved.",
-      progressFailed: "This evaluation attempt failed. Your answer remains saved.",
+      progressCompleted:
+        "Interview evaluation completed. The result has been saved.",
+      progressFailed:
+        "This evaluation attempt failed. Your answer remains saved.",
       continuingDescription:
         "Your answer has been saved. Waiting for the evaluation result or the next question.",
       placeholder: "Describe the project or system...",

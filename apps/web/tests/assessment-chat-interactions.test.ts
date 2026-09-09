@@ -5,6 +5,10 @@ import { JSDOM } from "jsdom";
 import React, { useState } from "react";
 import { act } from "react";
 import type { Root } from "react-dom/client";
+import {
+  ASSESSMENT_INTERVIEW_CONTROLS,
+  ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
+} from "@lcsp/contracts/evidence";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "http://localhost/",
@@ -85,6 +89,9 @@ actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 const { createRoot } = await import("react-dom/client");
 const { ChatSingleSelect } =
   await import("../src/features/workspace/components/molecules/chat-single-select");
+const { InterviewAnswerHistory } =
+  await import("../src/features/workspace/components/molecules/interview-answer-history");
+
 const { SelectionHistoryRow } =
   await import("../src/features/workspace/components/molecules/selection-history-row");
 const { AssessmentComposer } =
@@ -434,4 +441,50 @@ function setScrollState(element: HTMLElement, scrollCalls: ScrollToOptions[]) {
   });
 
   return state;
+}
+
+for (const control of [
+  ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
+  ASSESSMENT_INTERVIEW_CONTROLS.multiSelect,
+  ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+]) {
+  test(`answered ${control} retains disabled choices and saved selection`, async () => {
+    const { container } = await renderElement(
+      React.createElement(InterviewAnswerHistory, {
+        answer: {
+          questionId: "q-1",
+          answeredAt: "2026-09-09T00:00:00Z",
+          summary: "Generic count summary",
+          selectedChoiceIds: ["internal"],
+          question: {
+            id: "q-1",
+            intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+            control,
+            prompt: "How are results used?",
+            choices: [
+              { id: "internal", label: "Internal advice" },
+              { id: "external", label: "External sharing" },
+            ],
+          },
+        },
+      }),
+    );
+    const options = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("button[aria-checked]"),
+    );
+    assert.equal(options.length, 2);
+    assert.ok(options.every((option) => option.disabled));
+    assert.deepEqual(
+      options.map((option) => option.getAttribute("aria-checked")),
+      ["true", "false"],
+    );
+    await act(async () => {
+      options[1].click();
+    });
+    assert.deepEqual(
+      options.map((option) => option.getAttribute("aria-checked")),
+      ["true", "false"],
+    );
+    assert.ok(!container.textContent?.includes("Generic count summary"));
+  });
 }

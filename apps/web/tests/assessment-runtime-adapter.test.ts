@@ -532,11 +532,17 @@ test("11. CONTEXT_READY: maps distinctly with no active question", () => {
     assessmentId: "asm-11",
     interviewState: {
       outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+      assistantMessage:
+        "I have enough confirmed business context to continue the assessment.",
     },
   });
 
   const chat = selectInterviewPresentation(normalized);
   assert.equal(chat.isContextReady, true);
+  assert.equal(
+    chat.assistantMessage,
+    "I have enough confirmed business context to continue the assessment.",
+  );
   assert.equal(chat.hasActiveQuestion, false);
   assert.equal(chat.activeQuestion, null);
   assert.equal(chat.isWaitingForCustomer, false);

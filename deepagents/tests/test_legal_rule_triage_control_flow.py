@@ -49,6 +49,13 @@ class FakeCoordinator:
             value for value in self.batch_rule_ids if value != legal_rule_id
         ]
 
+    def assert_rule_pending(self, *, execution_id: str, legal_rule_id: str) -> None:
+        self.assert_owner(execution_id)
+
+    def get_completed_rule_ids(self, *, execution_id: str):
+        self.assert_owner(execution_id)
+        return set(self.completed_rule_ids)
+
     def finish_or_drain(self, *, execution_id: str):
         self.assert_owner(execution_id)
         if self.batch_rule_ids:
@@ -141,6 +148,27 @@ def test_work_items_include_only_approved_rules_and_exact_chunks() -> None:
     assert result["completedRuleCount"] == 0
 
 
+def test_work_pages_keep_full_scope_pending_and_skip_persisted_fingerprints() -> None:
+    api = _api_client()
+    template = api.get_active_legal_rule_catalog.return_value["rules"][0]
+    api.get_active_legal_rule_catalog.return_value["rules"] = [
+        {**template, "legalRuleId": f"RULE-{index}"} for index in range(7)
+    ]
+    completed = set()
+    coordinator = FakeCoordinator()
+    service = _service(api_client=api, retriever=MagicMock(), rule_service=_rule_service(),
+        coordinator=coordinator, triage_completion_lookup=lambda fingerprint: fingerprint in completed)
+    page = service.get_work_items()
+    assert len(page["workItems"]) == 5
+    assert page["pendingRuleCount"] == len(coordinator.batch_rule_ids) == 7
+    with pytest.raises(RuntimeError, match="work remains"):
+        service.finish_or_drain(triage_execution_id=coordinator.execution_id)
+    completed.update(item["sourceFingerprint"] for item in page["workItems"])
+    next_page = service.get_work_items()
+    assert [item["legalRuleId"] for item in next_page["workItems"]] == ["RULE-5", "RULE-6"]
+    assert next_page["pendingRuleCount"] == 2
+
+
 def test_work_items_can_be_bounded_to_affected_rule_ids() -> None:
     service = _service(
         api_client=_api_client(),
@@ -153,6 +181,55 @@ def test_work_items_can_be_bounded_to_affected_rule_ids() -> None:
 
     assert [item["legalRuleId"] for item in result["workItems"]] == ["RULE-2"]
     assert result["workItems"][0]["sourceChunkIds"] == ["LAW:A2"]
+
+
+def test_explicit_reprocessing_advances_past_rules_completed_this_execution() -> None:
+    coordinator = FakeCoordinator()
+    service = _service(api_client=_api_client(), retriever=MagicMock(),
+        rule_service=_rule_service(), coordinator=coordinator,
+        triage_completion_lookup=lambda _: True)
+    first = service.get_work_items(include_completed=True)
+    assert first["pendingRuleCount"] == 2
+    coordinator.mark_rule_completed(execution_id=coordinator.execution_id, legal_rule_id="RULE-1")
+    next_page = service.get_work_items(include_completed=True)
+    assert [item["legalRuleId"] for item in next_page["workItems"]] == ["RULE-2"]
+
+
+def test_missing_claimed_rule_cannot_be_treated_as_empty_completed_scope() -> None:
+    service = _service(api_client=_api_client(), retriever=MagicMock(),
+        rule_service=_rule_service())
+    with pytest.raises(ValueError, match="missing from the approved catalog"):
+        service.get_work_items(affected_rule_ids=["RULE-MISSING"])
+
+
+def test_missing_chunks_remain_pending_and_block_finish() -> None:
+    api = _api_client()
+    api.get_legal_corpus_chunks.return_value = {"chunks": []}
+    service = _service(api_client=api, retriever=MagicMock(), rule_service=_rule_service())
+    assert service.get_work_items()["pendingRuleCount"] == 2
+    with pytest.raises(RuntimeError, match="work remains"):
+        service.finish_or_drain(triage_execution_id="triage:test")
+
+
+def test_out_of_scope_persistence_is_rejected_before_loading_or_writing(tmp_path) -> None:
+    coordinator = TriageSingletonCoordinator(storage_root=tmp_path)
+    lease = coordinator.claim_or_observe(affected_rule_ids=["RULE-1"],
+        idempotency_key="scope-test", trigger="TEST")
+    api = _api_client()
+    rules = _rule_service()
+    service = _service(api_client=api, retriever=MagicMock(), rule_service=rules,
+        coordinator=coordinator)
+    try:
+        coordinator.set_batch_work(execution_id=lease.execution_id, legal_rule_ids=["RULE-1"])
+        with pytest.raises(ValueError, match="not pending"):
+            service.persist_result(triage_execution_id=lease.execution_id,
+                legal_rule_id="RULE-2", legal_rule_catalog_version_id="catalog-v1",
+                legal_corpus_version_id="corpus-v1", chunk_analyses=[],
+                engineering_rules=[], workflow_run_id="scope-test")
+        api.get_active_legal_rule_catalog.assert_not_called()
+        rules.prepare_from_triage.assert_not_called()
+    finally:
+        coordinator.abandon_execution(execution_id=lease.execution_id)
 
 
 def test_completed_work_items_are_skipped_by_default() -> None:

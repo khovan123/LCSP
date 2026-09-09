@@ -285,7 +285,32 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
     );
     expect(state.answerHistory?.[0].summary).not.toContain("sensitive");
     expect(state.answerHistory?.[0]).not.toHaveProperty("actorId");
+    store.revisions[0].answer = {
+      questionId: "q-1",
+      selectedChoiceIds: ["internal"],
+    };
+    findHistoricalQuestion.mockResolvedValue({
+      payload: {
+        prompt: "How are results used?",
+        questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+        control: ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
+        choices: [
+          { id: "internal", label: "Internal advice" },
+          { id: "external", label: "External sharing" },
+        ],
+        whyEvidenceRefs: ["private-ref"],
+      },
+    });
+    const selection = (await service.getState("assessment-1", actor))
+      .answerHistory?.[0];
+    expect(selection?.selectedChoiceIds).toEqual(["internal"]);
+    expect(selection?.question?.choices).toHaveLength(2);
+    expect(selection?.question).not.toHaveProperty("whyEvidenceRefs");
     store.revisions[0].actorId = "another-user";
+    expect(
+      (await service.getState("assessment-1", actor)).answerHistory?.[0]
+        .selectedChoiceIds,
+    ).toBeUndefined();
     expect(
       (await service.getState("assessment-1", actor)).answerHistory?.[0]
         .summary,
@@ -1899,6 +1924,8 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           expectedContextRevision: 1,
           mode: "INITIAL_INTERVIEW",
           outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+          rationale:
+            "I have enough confirmed business context to continue the assessment.",
           contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
           confirmedContext: confirmedStructuredContext({
             contextRevision: 1,
@@ -1907,6 +1934,17 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       });
 
       expect(result.outcome).toBe(ASSESSMENT_INTERVIEW_OUTCOMES.contextReady);
+      expect(result.assistantMessage).toBe(
+        "I have enough confirmed business context to continue the assessment.",
+      );
+      const stateUpdate = mockTx.assessmentInterviewThread.updateMany.mock
+        .calls[0]?.[0] as {
+        data?: { stateJson?: unknown };
+      };
+      expect(stateUpdate.data?.stateJson).toMatchObject({
+        assistantMessage:
+          "I have enough confirmed business context to continue the assessment.",
+      });
       expect(mockRuntimeEvents.recordToolCompleted).toHaveBeenCalledWith(
         expect.objectContaining({
           runId: "10000000-0000-4000-8000-000000000002",

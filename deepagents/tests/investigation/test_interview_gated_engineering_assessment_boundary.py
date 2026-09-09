@@ -9,6 +9,8 @@ from tools.common.capabilities.assessment.investigation.engineering_rule.intervi
 from tools.common.capabilities.assessment.investigation.engineering_rule.managed_targeted_investigator import (
     ManagedTargetedInvestigatorPipeline,
 )
+from tools.common.capabilities.managed.boundary import NonRetryableAgentBoundaryError
+from tools.common.capabilities.platform.api_client import WorkerCallbackError
 
 
 class FakeApi:
@@ -108,6 +110,24 @@ def _report():
             }
         },
     }
+
+
+def test_stale_accepted_evidence_event_is_terminal_before_interview_dispatch() -> None:
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    api.get_accepted_technical_evidence_report = lambda _report_id: (_ for _ in ()).throw(
+        WorkerCallbackError("VALIDATION_FAILED: Callback failed with client error 404.")
+    )
+    dispatcher = FakeDispatcher()
+    boundary = _boundary(api, dispatcher)
+
+    with pytest.raises(NonRetryableAgentBoundaryError, match="client error 404"):
+        boundary.handle(
+            {"evidenceReportId": "stale-ter", "assessmentId": "assessment-1"},
+            "corr-stale",
+        )
+
+    assert dispatcher.calls == []
+    assert api.seeded == []
 
 
 @pytest.mark.parametrize("invalid_policy", [None, {},
