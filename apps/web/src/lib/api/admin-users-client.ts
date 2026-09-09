@@ -8,6 +8,9 @@ import type {
 
 import { apiRequest } from "./api-request";
 
+/**
+ * Fetches the paginated and filtered list of user accounts for Admin view.
+ */
 export async function fetchAdminUsersList(
   query: AdminUserListQuery = {},
 ): Promise<AdminUserListResponse> {
@@ -28,6 +31,9 @@ export async function fetchAdminUsersList(
   return response.payload as AdminUserListResponse;
 }
 
+/**
+ * Fetches authoritative user detail with 30-day usage summary for Admin.
+ */
 export async function fetchAdminUserDetail(
   userId: string,
 ): Promise<AdminUserDetail> {
@@ -38,6 +44,9 @@ export async function fetchAdminUserDetail(
   return response.payload as AdminUserDetail;
 }
 
+/**
+ * Mutates a user's role (promote/demote) with backend safeguards.
+ */
 export async function updateAdminUserRole(
   userId: string,
   input: AdminUpdateRoleInput,
@@ -53,6 +62,9 @@ export async function updateAdminUserRole(
   return response.payload as AdminUserDetail;
 }
 
+/**
+ * Suspends a user account and triggers session revocation.
+ */
 export async function suspendAdminUser(
   userId: string,
   input?: AdminSuspendUserInput,
@@ -67,3 +79,4 @@ export async function suspendAdminUser(
   }
   return response.payload as AdminUserDetail;
 }
+

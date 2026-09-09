@@ -55,6 +55,7 @@ async function continueProxy(request: NextRequest, requestHeaders: Headers) {
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
+  // Verify active session against upstream auth profile
   const verification = await upstreamRequest("/auth/profile", {
     bearerToken: sessionToken,
   });
@@ -77,6 +78,8 @@ async function continueProxy(request: NextRequest, requestHeaders: Headers) {
     return response;
   }
 
+  // LCSP-295: Server-side RBAC gate for Admin Portal routes.
+  // Non-admin authenticated users are redirected to the customer workspace.
   const pathname = request.nextUrl.pathname;
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
     const userRole = verification.result?.ok

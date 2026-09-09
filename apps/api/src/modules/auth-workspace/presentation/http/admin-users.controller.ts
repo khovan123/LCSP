@@ -61,6 +61,11 @@ function computeUserStatus(user: {
   return AUTH_ACCOUNT_STATUSES.active;
 }
 
+/**
+ * LCSP-295: Authoritative Admin User Management Controller.
+ * Provides administrative endpoints to list, inspect, update roles, and suspend user accounts.
+ * Enforces admin RBAC, prevents self/last-admin lockouts, and writes audit event trails.
+ */
 @Controller("admin/users")
 export class AdminUsersController {
   constructor(
@@ -68,6 +73,9 @@ export class AdminUsersController {
     private readonly authAudit: AuthAuditService,
   ) {}
 
+  /**
+   * Lists users with search query filtering, role/status filters, and pagination.
+   */
   @Get()
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.admin)
@@ -165,6 +173,9 @@ export class AdminUsersController {
     return resultEnvelope(response);
   }
 
+  /**
+   * Helper to construct authoritative AdminUserDetail from Prisma entities.
+   */
   private async buildUserDetail(
     user: {
       id: string;
@@ -208,6 +219,9 @@ export class AdminUsersController {
     };
   }
 
+  /**
+   * Fetches detailed information for a single user, including 30-day usage metrics.
+   */
   @Get(":id")
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.admin)
@@ -241,6 +255,10 @@ export class AdminUsersController {
     return resultEnvelope(detail);
   }
 
+  /**
+   * Mutates a user's role (e.g. promoting or demoting).
+   * Enforces self-demotion prevention and last-admin demotion safeguards.
+   */
   @Post(":id/role")
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.admin)
@@ -284,7 +302,7 @@ export class AdminUsersController {
 
     const currentRole = fromPrismaAuthUserRole(user.role);
 
-    // Safeguard against self-demotion
+    // Safeguard 1: Prevent self-demotion
     if (
       user.id === request.rbacContext.userId &&
       targetRole === AUTH_USER_ROLES.customer
@@ -296,7 +314,7 @@ export class AdminUsersController {
       );
     }
 
-    // Safeguard against demoting the last active admin
+    // Safeguard 2: Prevent demoting the last active administrator
     if (
       currentRole === AUTH_USER_ROLES.admin &&
       targetRole === AUTH_USER_ROLES.customer
@@ -335,7 +353,7 @@ export class AdminUsersController {
       },
     });
 
-    // Record Audit Event
+    // Record Audit Event Trail
     await this.authAudit.write({
       eventType: AUTH_AUDIT_EVENT_TYPES.authAdminUserRoleUpdated,
       actorId: request.rbacContext.userId,
@@ -356,6 +374,10 @@ export class AdminUsersController {
     return resultEnvelope(detail);
   }
 
+  /**
+   * Suspends a user account and immediately invalidates all active sessions.
+   * Enforces self-suspension and last-admin suspension safeguards.
+   */
   @Post(":id/suspend")
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.admin)
@@ -383,7 +405,7 @@ export class AdminUsersController {
       );
     }
 
-    // Protect against self-suspension
+    // Safeguard 1: Prevent self-suspension
     if (user.id === request.rbacContext.userId) {
       throw problemException(
         AUTH_ERROR_CODES.validationFailed,
@@ -392,7 +414,7 @@ export class AdminUsersController {
       );
     }
 
-    // Protect against suspending the last admin
+    // Safeguard 2: Prevent suspending the last active administrator
     if (user.role === toPrismaAuthUserRole(AUTH_USER_ROLES.admin)) {
       const otherAdminsCount = await this.prisma.user.count({
         where: {
@@ -413,6 +435,7 @@ export class AdminUsersController {
 
     const suspendUntil = new Date("9999-12-31T23:59:59.999Z");
 
+    // Perform suspension and session revocation in a database transaction
     const [updated] = await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id },
@@ -442,7 +465,7 @@ export class AdminUsersController {
       }),
     ]);
 
-    // Record Audit Event
+    // Record Audit Event Trail
     await this.authAudit.write({
       eventType: AUTH_AUDIT_EVENT_TYPES.authAdminUserSuspended,
       actorId: request.rbacContext.userId,
