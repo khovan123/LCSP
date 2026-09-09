@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -56,6 +57,26 @@ export function ProgramEvidenceGraphProvider({
   const [loading, setLoading] = useState(false);
   const triggerRef = useRef<HTMLElement | null>(null);
   const wasOpenRef = useRef(false);
+  const requestVersionRef = useRef(0);
+  const loadDetail = useCallback(() => {
+    if (!assessmentId) return;
+    const requestVersion = ++requestVersionRef.current;
+    // Keep a previously rendered graph visible while a later open refreshes it.
+    setLoading(true);
+    void getProgramEvidenceGraphDetail(assessmentId)
+      .then((value) => {
+        if (requestVersion === requestVersionRef.current) {
+          setDetail(value);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (requestVersion === requestVersionRef.current) {
+          setDetail(null);
+          setLoading(false);
+        }
+      });
+  }, [assessmentId]);
   const openArtifact = (ref: ArtifactRef, trigger?: HTMLElement | null) => {
     if (
       ref.type === ARTIFACT_TYPES.programEvidenceGraph &&
@@ -63,6 +84,7 @@ export function ProgramEvidenceGraphProvider({
     ) {
       triggerRef.current = trigger ?? null;
       setOpen(true);
+      loadDetail();
     }
   };
   useEffect(() => {
@@ -74,27 +96,10 @@ export function ProgramEvidenceGraphProvider({
   }, [open]);
   useEffect(() => {
     if (!assessmentId) return;
-    let active = true;
     // The assessment remains mounted while optional graph metrics load.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
-    void getProgramEvidenceGraphDetail(assessmentId)
-      .then((value) => {
-        if (active) {
-          setDetail(value);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setDetail(null);
-          setLoading(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [assessmentId]);
+    loadDetail();
+  }, [assessmentId, loadDetail]);
   return (
     <DrawerContext.Provider
       value={{ openArtifact, overview: detail?.overview ?? null }}
