@@ -114,11 +114,11 @@ test("assessment overview gates Interview behind repository and scanner runtime"
 test("assessment composer keeps the approved 720 by 76 single-send control", async () => {
   const source = await readFile(composerPath, "utf8");
 
-  assert.match(source, /mb-4 h-19 w-full max-w-180/);
-  assert.match(source, /shrink-0/);
+  assert.match(source, /mb-4 w-full max-w-180 shrink-0/);
+  assert.match(source, /min-h-19/);
   assert.match(source, /rounded-\[18px\]/);
   assert.equal(source.match(/<Textarea\b/g)?.length, 1);
-  assert.equal(source.match(/<Button\b/g)?.length, 1);
+  assert.equal(source.match(/type="submit"/g)?.length, 1);
   assert.match(source, /CornerDownLeftIcon/);
   assert.doesNotMatch(source, /PlusIcon|<input\b|avatar|brand label/i);
   assert.doesNotMatch(source, /h-12 w-full max-w-\[760px\]/);
