@@ -67,8 +67,8 @@ export function AdminUserFilters({
         />
       </div>
 
-      {/* Status Filter (136px x 42px) */}
-      <div className="w-[136px]">
+      {/* Status Filter (160px x 42px) */}
+      <div className="w-[160px]">
         <Select
           value={filters.statusFilter}
           onValueChange={(val) =>
@@ -76,10 +76,20 @@ export function AdminUserFilters({
           }
         >
           <SelectTrigger
-            className="h-[42px] w-full rounded-[10px] border-border bg-card text-[12.5px] text-foreground focus:ring-1 focus:ring-primary shadow-xs"
+            className="!h-[42px] data-[size=default]:!h-[42px] w-full rounded-[10px] border-border bg-card text-[12.5px] text-foreground focus:ring-1 focus:ring-primary shadow-xs"
             aria-label={resolveAppMessage("pages.admin.usersList.statusFilterLabel" as MessageKey)}
           >
-            <SelectValue placeholder={statusFilterAll} />
+            <SelectValue placeholder={statusFilterAll}>
+              {filters.statusFilter === "ALL"
+                ? statusFilterAll
+                : filters.statusFilter === AUTH_ACCOUNT_STATUSES.active
+                  ? resolveAppMessage("pages.admin.usersList.statuses.ACTIVE" as MessageKey)
+                  : filters.statusFilter === AUTH_ACCOUNT_STATUSES.suspended
+                    ? resolveAppMessage("pages.admin.usersList.statuses.SUSPENDED" as MessageKey)
+                    : filters.statusFilter === AUTH_ACCOUNT_STATUSES.invited
+                      ? resolveAppMessage("pages.admin.usersList.statuses.INVITED" as MessageKey)
+                      : statusFilterAll}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent className="border-border bg-card text-foreground">
             <SelectItem value="ALL" className="text-[12.5px]">
@@ -107,17 +117,25 @@ export function AdminUserFilters({
         </Select>
       </div>
 
-      {/* Role Filter (126px x 42px) */}
-      <div className="w-[126px]">
+      {/* Role Filter (150px x 42px) */}
+      <div className="w-[150px]">
         <Select
           value={filters.roleFilter}
           onValueChange={(val) => onRoleChange(val as AuthUserRole | "ALL")}
         >
           <SelectTrigger
-            className="h-[42px] w-full rounded-[10px] border-border bg-card text-[12.5px] text-foreground focus:ring-1 focus:ring-primary shadow-xs"
+            className="!h-[42px] data-[size=default]:!h-[42px] w-full rounded-[10px] border-border bg-card text-[12.5px] text-foreground focus:ring-1 focus:ring-primary shadow-xs"
             aria-label={resolveAppMessage("pages.admin.usersList.roleFilterLabel" as MessageKey)}
           >
-            <SelectValue placeholder={roleFilterAll} />
+            <SelectValue placeholder={roleFilterAll}>
+              {filters.roleFilter === "ALL"
+                ? roleFilterAll
+                : filters.roleFilter === AUTH_USER_ROLES.admin
+                  ? resolveAppMessage("pages.admin.usersList.roles.ADMIN" as MessageKey)
+                  : filters.roleFilter === AUTH_USER_ROLES.customer
+                    ? resolveAppMessage("pages.admin.usersList.roles.CUSTOMER" as MessageKey)
+                    : roleFilterAll}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent className="border-border bg-card text-foreground">
             <SelectItem value="ALL" className="text-[12.5px]">

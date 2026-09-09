@@ -77,10 +77,14 @@ export function AdminAdministrativeActionsCard({
               onValueChange={(val) => setSelectedRole(val as AuthUserRole)}
             >
               <SelectTrigger
-                className="h-[38px] w-full rounded-[9px] border-border bg-background text-[12.5px] text-foreground focus:ring-1 focus:ring-primary shadow-xs"
+                className="!h-[38px] data-[size=default]:!h-[38px] w-full rounded-[9px] border-border bg-background text-[12.5px] text-foreground focus:ring-1 focus:ring-primary shadow-xs"
                 aria-label={roleLabel}
               >
-                <SelectValue />
+                <SelectValue>
+                  {selectedRole === AUTH_USER_ROLES.admin
+                    ? resolveAppMessage("pages.admin.usersList.roles.ADMIN" as MessageKey)
+                    : resolveAppMessage("pages.admin.usersList.roles.CUSTOMER" as MessageKey)}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent className="border-border bg-card text-foreground">
                 <SelectItem
