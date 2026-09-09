@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import type { MessageKey } from "@lcsp/i18n";
 import type { AuthAccountStatus, AuthUserRole } from "@lcsp/contracts/auth";
 
-import { AdminShell } from "@/features/admin/components/organisms/admin-shell";
 import { AdminUserFilters } from "@/features/admin/components/molecules/admin-user-filters";
 import { AdminUserTable } from "@/features/admin/components/organisms/admin-user-table";
 import { AdminPagination } from "@/features/admin/components/molecules/admin-pagination";
@@ -63,54 +62,52 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <AdminShell>
-      <div className="flex flex-col space-y-6 pb-12">
-        {/* Page Header */}
-        <div className="flex flex-col space-y-1">
-          <h1 className="text-[28px] font-semibold text-foreground tracking-tight">
-            {pageTitle}
-          </h1>
-          <p className="text-[13px] text-muted-foreground">{pageDescription}</p>
-        </div>
-
-        {/* Filter Bar */}
-        <div className="pt-2">
-          <AdminUserFilters
-            filters={{
-              searchQuery,
-              statusFilter,
-              roleFilter,
-            }}
-            onSearchChange={handleSearchChange}
-            onStatusChange={handleStatusChange}
-            onRoleChange={handleRoleChange}
-          />
-        </div>
-
-        {/* Result Count */}
-        <div className="pt-1">
-          <span className="text-[11.5px] font-medium text-muted-foreground">
-            {accountsCountTemplate.replace("{count}", totalCount.toLocaleString())}
-          </span>
-        </div>
-
-        {/* Users Table */}
-        <AdminUserTable
-          users={users}
-          isLoading={isLoading}
-          onViewUser={handleViewUser}
-        />
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <AdminPagination
-            page={page}
-            totalPages={totalPages}
-            onPageChange={setPage}
-            disabled={isLoading}
-          />
-        )}
+    <div className="flex flex-col space-y-6 pb-12">
+      {/* Page Header */}
+      <div className="flex flex-col space-y-1">
+        <h1 className="text-[28px] font-semibold text-foreground tracking-tight">
+          {pageTitle}
+        </h1>
+        <p className="text-[13px] text-muted-foreground">{pageDescription}</p>
       </div>
-    </AdminShell>
+
+      {/* Filter Bar */}
+      <div className="pt-2">
+        <AdminUserFilters
+          filters={{
+            searchQuery,
+            statusFilter,
+            roleFilter,
+          }}
+          onSearchChange={handleSearchChange}
+          onStatusChange={handleStatusChange}
+          onRoleChange={handleRoleChange}
+        />
+      </div>
+
+      {/* Result Count */}
+      <div className="pt-1">
+        <span className="text-[11.5px] font-medium text-muted-foreground">
+          {accountsCountTemplate.replace("{count}", totalCount.toLocaleString())}
+        </span>
+      </div>
+
+      {/* Users Table */}
+      <AdminUserTable
+        users={users}
+        isLoading={isLoading}
+        onViewUser={handleViewUser}
+      />
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <AdminPagination
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          disabled={isLoading}
+        />
+      )}
+    </div>
   );
 }
