@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AdminSidebar } from "./admin-sidebar";
+import { AdminSidebar } from "@/features/admin/components/organisms/admin-sidebar";
 
 type AdminShellProps = {
   children: ReactNode;

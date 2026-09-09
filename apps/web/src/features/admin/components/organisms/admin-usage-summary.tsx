@@ -2,7 +2,7 @@
 
 import type { MessageKey } from "@lcsp/i18n";
 import { resolveAppMessage } from "@/lib/i18n";
-import type { AdminUsageSummaryProps } from "../../types/admin.types";
+import type { AdminUsageSummaryProps } from "@/features/admin/types/admin.types";
 
 function formatTimestamp(isoString: string | null | undefined): string {
   if (!isoString) return "—";

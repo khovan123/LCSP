@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { resolveAppMessage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import type { AdminUsersTableProps } from "../../types/admin.types";
+import type { AdminUsersTableProps } from "@/features/admin/types/admin.types";
 
 function formatDate(isoString: string | null | undefined): string {
   if (!isoString) return "—";

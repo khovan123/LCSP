@@ -4,7 +4,7 @@ import type { MessageKey } from "@lcsp/i18n";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import { resolveAppMessage } from "@/lib/i18n";
-import type { AdminAccountDetailsCardProps } from "../../types/admin.types";
+import type { AdminAccountDetailsCardProps } from "@/features/admin/types/admin.types";
 
 function formatDate(isoString: string | null | undefined): string {
   if (!isoString) return "—";

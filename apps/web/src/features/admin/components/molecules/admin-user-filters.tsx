@@ -24,7 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { resolveAppMessage } from "@/lib/i18n";
-import type { AdminUserFiltersProps } from "../../types/admin.types";
+import type { AdminUserFiltersProps } from "@/features/admin/types/admin.types";
 
 export function AdminUserFilters({
   filters,

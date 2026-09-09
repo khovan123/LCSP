@@ -6,7 +6,7 @@ import type { MessageKey } from "@lcsp/i18n";
 
 import { Button } from "@/components/ui/button";
 import { resolveAppMessage } from "@/lib/i18n";
-import type { AdminSuspendModalProps } from "../../types/admin.types";
+import type { AdminSuspendModalProps } from "@/features/admin/types/admin.types";
 
 export function AdminSuspendModal({
   isOpen,

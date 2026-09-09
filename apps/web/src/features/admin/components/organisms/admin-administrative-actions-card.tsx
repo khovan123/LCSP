@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { resolveAppMessage } from "@/lib/i18n";
-import type { AdminAdministrativeActionsCardProps } from "../../types/admin.types";
+import type { AdminAdministrativeActionsCardProps } from "@/features/admin/types/admin.types";
 
 export function AdminAdministrativeActionsCard({
   user,

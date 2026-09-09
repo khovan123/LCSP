@@ -5,7 +5,7 @@ import type { MessageKey } from "@lcsp/i18n";
 
 import { Button } from "@/components/ui/button";
 import { resolveAppMessage } from "@/lib/i18n";
-import type { AdminPaginationProps } from "../../types/admin.types";
+import type { AdminPaginationProps } from "@/features/admin/types/admin.types";
 
 export function AdminPagination({
   page,
