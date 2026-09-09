@@ -188,7 +188,9 @@ export class AdminUsersController {
     }
 
     const lastSession = user.authRecords.find((r) => r.type === "SESSION");
-    const oauthRecord = user.authRecords.find((r) => r.type === "OAUTH_IDENTITY");
+    const oauthRecord = user.authRecords.find(
+      (r) => r.type === "OAUTH_IDENTITY",
+    );
 
     let authProvider = "EMAIL_PASSWORD";
     if (oauthRecord) {
