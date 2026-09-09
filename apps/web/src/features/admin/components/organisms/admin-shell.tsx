@@ -10,25 +10,33 @@ type AdminShellProps = {
   children: ReactNode;
   adminName?: string;
   adminEmail?: string;
+  isServerVerified?: boolean;
 };
 
 export function AdminShell({
   children,
   adminName,
   adminEmail,
+  isServerVerified = false,
 }: AdminShellProps) {
   const router = useRouter();
-  const { data: profile } = useAuthSettingsProfileQuery();
+  const { data: profile, isSuccess } = useAuthSettingsProfileQuery();
 
-  const isNonAdmin = profile?.role && profile.role !== AUTH_USER_ROLES.admin;
+  const isAdmin =
+    isServerVerified ||
+    (isSuccess && profile?.role === AUTH_USER_ROLES.admin);
+
+  const shouldRedirect =
+    isSuccess && profile?.role !== AUTH_USER_ROLES.admin;
 
   useEffect(() => {
-    if (isNonAdmin) {
+    if (shouldRedirect) {
       router.replace("/workspace");
     }
-  }, [isNonAdmin, router]);
+  }, [shouldRedirect, router]);
 
-  if (isNonAdmin) {
+  // Only render once admin status is strictly confirmed
+  if (!isAdmin) {
     return null;
   }
 

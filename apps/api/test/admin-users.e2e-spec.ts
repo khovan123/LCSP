@@ -238,6 +238,8 @@ describe("Admin User Management API (e2e)", () => {
       assert.equal(data.status, AUTH_ACCOUNT_STATUSES.active);
       assert.ok(data.usageSummary);
       assert.equal(typeof data.usageSummary.assessments30d, "number");
+      assert.equal(data.usageSummary.creditSpend30d, null);
+      assert.equal(data.usageSummary.openFindingsCount, null);
     });
 
     it("returns 404 userNotFound when querying non-existent user", async () => {

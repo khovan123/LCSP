@@ -191,20 +191,21 @@ export class AdminUsersController {
     forcedStatus?: AuthAccountStatus,
   ): Promise<AdminUserDetail> {
     const lastSession = user.authRecords.find((r) => r.type === "SESSION");
-    const assessmentsCount = user.assessmentOwners.length;
-    const scansCount = await this.prisma.repositoryScanJob.count({
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const assessments30d = await this.prisma.assessment.count({
       where: {
-        assessment: { ownerId: user.id },
+        ownerId: user.id,
+        createdAt: { gte: thirtyDaysAgo },
       },
     });
 
     const latestAssessment = user.assessmentOwners[0];
 
     const usageSummary: AdminUserUsageSummary = {
-      assessments30d: assessmentsCount,
+      assessments30d,
       lastAssessmentAt: latestAssessment?.createdAt.toISOString() ?? null,
-      creditSpend30d: assessmentsCount * 25,
-      openFindingsCount: scansCount,
+      creditSpend30d: null,
+      openFindingsCount: null,
     };
 
     return {

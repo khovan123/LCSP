@@ -43,7 +43,11 @@ export default async function AdminRouteLayout({
     : undefined;
 
   return (
-    <AdminShell adminName={adminName} adminEmail={adminEmail}>
+    <AdminShell
+      adminName={adminName}
+      adminEmail={adminEmail}
+      isServerVerified={true}
+    >
       {children}
     </AdminShell>
   );
