@@ -1,0 +1,166 @@
+"use client";
+
+import { SearchIcon, UserPlusIcon } from "lucide-react";
+import {
+  AUTH_ACCOUNT_STATUSES,
+  AUTH_USER_ROLES,
+  type AuthAccountStatus,
+  type AuthUserRole,
+} from "@lcsp/contracts/auth";
+import type { MessageKey } from "@lcsp/i18n";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { resolveAppMessage } from "@/lib/i18n";
+import type { AdminUserFiltersProps } from "../../types/admin.types";
+
+export function AdminUserFilters({
+  filters,
+  onSearchChange,
+  onStatusChange,
+  onRoleChange,
+  onCreateUserClick,
+}: AdminUserFiltersProps) {
+  const searchPlaceholder = resolveAppMessage(
+    "pages.admin.usersList.searchPlaceholder" as MessageKey,
+  );
+  const searchAriaLabel = resolveAppMessage(
+    "pages.admin.usersList.searchAriaLabel" as MessageKey,
+  );
+  const statusFilterAll = resolveAppMessage(
+    "pages.admin.usersList.statusFilterAll" as MessageKey,
+  );
+  const roleFilterAll = resolveAppMessage(
+    "pages.admin.usersList.roleFilterAll" as MessageKey,
+  );
+  const createUserLabel = resolveAppMessage(
+    "pages.admin.usersList.createUser" as MessageKey,
+  );
+  const createUserDisabledTooltip = resolveAppMessage(
+    "pages.admin.usersList.createUserDisabledTooltip" as MessageKey,
+  );
+
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      {/* Search Input (420px x 42px) */}
+      <div className="relative w-[420px]">
+        <SearchIcon className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <Input
+          type="search"
+          value={filters.searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder={searchPlaceholder}
+          aria-label={searchAriaLabel}
+          className="h-[42px] w-full rounded-[10px] border-border/80 bg-[#242424] pl-10 pr-3 text-[12.5px] text-foreground placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-primary"
+        />
+      </div>
+
+      {/* Status Filter (136px x 42px) */}
+      <div className="w-[136px]">
+        <Select
+          value={filters.statusFilter}
+          onValueChange={(val) =>
+            onStatusChange(val as AuthAccountStatus | "ALL")
+          }
+        >
+          <SelectTrigger
+            className="h-[42px] w-full rounded-[10px] border-border/80 bg-[#242424] text-[12.5px] text-foreground focus:ring-1 focus:ring-primary"
+            aria-label={resolveAppMessage("pages.admin.usersList.statusFilterLabel" as MessageKey)}
+          >
+            <SelectValue placeholder={statusFilterAll} />
+          </SelectTrigger>
+          <SelectContent className="border-border bg-[#242424] text-foreground">
+            <SelectItem value="ALL" className="text-[12.5px]">
+              {statusFilterAll}
+            </SelectItem>
+            <SelectItem
+              value={AUTH_ACCOUNT_STATUSES.active}
+              className="text-[12.5px]"
+            >
+              {resolveAppMessage("pages.admin.usersList.statuses.ACTIVE" as MessageKey)}
+            </SelectItem>
+            <SelectItem
+              value={AUTH_ACCOUNT_STATUSES.suspended}
+              className="text-[12.5px]"
+            >
+              {resolveAppMessage("pages.admin.usersList.statuses.SUSPENDED" as MessageKey)}
+            </SelectItem>
+            <SelectItem
+              value={AUTH_ACCOUNT_STATUSES.invited}
+              className="text-[12.5px]"
+            >
+              {resolveAppMessage("pages.admin.usersList.statuses.INVITED" as MessageKey)}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Role Filter (126px x 42px) */}
+      <div className="w-[126px]">
+        <Select
+          value={filters.roleFilter}
+          onValueChange={(val) => onRoleChange(val as AuthUserRole | "ALL")}
+        >
+          <SelectTrigger
+            className="h-[42px] w-full rounded-[10px] border-border/80 bg-[#242424] text-[12.5px] text-foreground focus:ring-1 focus:ring-primary"
+            aria-label={resolveAppMessage("pages.admin.usersList.roleFilterLabel" as MessageKey)}
+          >
+            <SelectValue placeholder={roleFilterAll} />
+          </SelectTrigger>
+          <SelectContent className="border-border bg-[#242424] text-foreground">
+            <SelectItem value="ALL" className="text-[12.5px]">
+              {roleFilterAll}
+            </SelectItem>
+            <SelectItem
+              value={AUTH_USER_ROLES.admin}
+              className="text-[12.5px]"
+            >
+              {resolveAppMessage("pages.admin.usersList.roles.ADMIN" as MessageKey)}
+            </SelectItem>
+            <SelectItem
+              value={AUTH_USER_ROLES.customer}
+              className="text-[12.5px]"
+            >
+              {resolveAppMessage("pages.admin.usersList.roles.CUSTOMER" as MessageKey)}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Create User Button (146px x 42px, light on dark, right-aligned) */}
+      <div className="ml-auto">
+        <Tooltip>
+          <TooltipTrigger>
+            <Button
+              type="button"
+              onClick={onCreateUserClick}
+              disabled={!onCreateUserClick}
+              className="h-[42px] w-[146px] rounded-[10px] bg-[#f0ede8] text-[12.5px] font-semibold text-[#171717] hover:bg-[#e4e1dc] disabled:opacity-50"
+            >
+              <UserPlusIcon className="size-4 mr-1.5" />
+              {createUserLabel}
+            </Button>
+          </TooltipTrigger>
+          {!onCreateUserClick && (
+            <TooltipContent className="max-w-xs text-xs">
+              {createUserDisabledTooltip}
+            </TooltipContent>
+          )}
+        </Tooltip>
+      </div>
+
+    </div>
+  );
+}

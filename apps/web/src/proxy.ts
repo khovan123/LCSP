@@ -104,5 +104,7 @@ export const config = {
     "/workspace/:path*",
     "/assessments/:path*",
     "/laws/:path*",
+    "/admin/:path*",
   ],
 };
+

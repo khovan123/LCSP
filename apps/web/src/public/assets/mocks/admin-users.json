@@ -1,0 +1,82 @@
+[
+  {
+    "id": "usr_adm_01J8F9A1B2C3D4E5F6G7H8J9K0",
+    "fullName": "Nguyen Van A",
+    "email": "nguyen.a@enterprise.corp",
+    "role": "ADMIN",
+    "status": "ACTIVE",
+    "createdAt": "2026-01-15T08:30:00.000Z",
+    "lastActiveAt": "2026-09-09T09:42:00.000Z",
+    "assessmentCount": 35,
+    "usageSummary": {
+      "assessments30d": 12,
+      "lastAssessmentAt": "2026-09-09T09:42:00.000Z",
+      "creditSpend30d": 18.4,
+      "openFindingsCount": 6
+    }
+  },
+  {
+    "id": "usr_cust_02K9G0B2C3D4E5F6G7H8J9K1L2",
+    "fullName": "Tran Thi B",
+    "email": "tran.b@techcorp.io",
+    "role": "CUSTOMER",
+    "status": "ACTIVE",
+    "createdAt": "2026-03-22T14:15:00.000Z",
+    "lastActiveAt": "2026-09-08T16:20:00.000Z",
+    "assessmentCount": 18,
+    "usageSummary": {
+      "assessments30d": 5,
+      "lastAssessmentAt": "2026-09-08T16:20:00.000Z",
+      "creditSpend30d": 8.5,
+      "openFindingsCount": 2
+    }
+  },
+  {
+    "id": "usr_cust_03L0H1C3D4E5F6G7H8J9K2M3N4",
+    "fullName": "Le Van C",
+    "email": "le.c@fintech.vn",
+    "role": "CUSTOMER",
+    "status": "SUSPENDED",
+    "createdAt": "2026-02-10T10:00:00.000Z",
+    "lastActiveAt": "2026-08-20T11:00:00.000Z",
+    "assessmentCount": 7,
+    "usageSummary": {
+      "assessments30d": null,
+      "lastAssessmentAt": "2026-08-20T11:00:00.000Z",
+      "creditSpend30d": null,
+      "openFindingsCount": 0
+    }
+  },
+  {
+    "id": "usr_adm_04M1I2D4E5F6G7H8J9K3N4P5Q6",
+    "fullName": "Pham Thi D",
+    "email": "pham.d@security.org",
+    "role": "ADMIN",
+    "status": "ACTIVE",
+    "createdAt": "2026-04-05T09:12:00.000Z",
+    "lastActiveAt": "2026-09-09T07:15:00.000Z",
+    "assessmentCount": 64,
+    "usageSummary": {
+      "assessments30d": 28,
+      "lastAssessmentAt": "2026-09-09T07:15:00.000Z",
+      "creditSpend30d": 45.2,
+      "openFindingsCount": 14
+    }
+  },
+  {
+    "id": "usr_cust_05N2J3E5F6G7H8J9K4P5Q6R7S8",
+    "fullName": "Hoang Van E",
+    "email": "hoang.e@startup.dev",
+    "role": "CUSTOMER",
+    "status": "INVITED",
+    "createdAt": "2026-09-01T13:40:00.000Z",
+    "lastActiveAt": null,
+    "assessmentCount": null,
+    "usageSummary": {
+      "assessments30d": null,
+      "lastAssessmentAt": null,
+      "creditSpend30d": null,
+      "openFindingsCount": null
+    }
+  }
+]

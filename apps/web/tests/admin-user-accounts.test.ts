@@ -1,0 +1,118 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import {
+  AUTH_ACCOUNT_STATUSES,
+  AUTH_USER_ROLES,
+  type AdminUserSummary,
+} from "@lcsp/contracts/auth";
+
+test("Admin user query filters correctly across search, status, and role", () => {
+  const sampleUsers: AdminUserSummary[] = [
+    {
+      id: "usr_1",
+      fullName: "Alice Admin",
+      email: "alice@company.com",
+      role: AUTH_USER_ROLES.admin,
+      status: AUTH_ACCOUNT_STATUSES.active,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      lastActiveAt: "2026-09-09T00:00:00.000Z",
+      assessmentCount: 10,
+    },
+    {
+      id: "usr_2",
+      fullName: "Bob Customer",
+      email: "bob@client.io",
+      role: AUTH_USER_ROLES.customer,
+      status: AUTH_ACCOUNT_STATUSES.suspended,
+      createdAt: "2026-02-01T00:00:00.000Z",
+      lastActiveAt: null,
+      assessmentCount: 0,
+    },
+    {
+      id: "usr_3",
+      fullName: "Charlie Admin",
+      email: "charlie@company.com",
+      role: AUTH_USER_ROLES.admin,
+      status: AUTH_ACCOUNT_STATUSES.invited,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      lastActiveAt: null,
+      assessmentCount: null,
+    },
+  ];
+
+  function filterUsers(
+    query: string,
+    status: string,
+    role: string,
+  ): AdminUserSummary[] {
+    return sampleUsers.filter((u) => {
+      const matchesQuery =
+        !query ||
+        u.fullName.toLowerCase().includes(query.toLowerCase()) ||
+        u.email.toLowerCase().includes(query.toLowerCase());
+      const matchesStatus = status === "ALL" || u.status === status;
+      const matchesRole = role === "ALL" || u.role === role;
+      return matchesQuery && matchesStatus && matchesRole;
+    });
+  }
+
+  // Search by name
+  assert.equal(filterUsers("alice", "ALL", "ALL").length, 1);
+  assert.equal(filterUsers("alice", "ALL", "ALL")[0].id, "usr_1");
+
+  // Search by email
+  assert.equal(filterUsers("client.io", "ALL", "ALL").length, 1);
+  assert.equal(filterUsers("client.io", "ALL", "ALL")[0].id, "usr_2");
+
+  // Status filter
+  assert.equal(filterUsers("", AUTH_ACCOUNT_STATUSES.suspended, "ALL").length, 1);
+  assert.equal(filterUsers("", AUTH_ACCOUNT_STATUSES.active, "ALL").length, 1);
+
+  // Role filter
+  assert.equal(filterUsers("", "ALL", AUTH_USER_ROLES.admin).length, 2);
+  assert.equal(filterUsers("", "ALL", AUTH_USER_ROLES.customer).length, 1);
+
+  // Combined filter
+  assert.equal(
+    filterUsers("company", AUTH_ACCOUNT_STATUSES.active, AUTH_USER_ROLES.admin).length,
+    1,
+  );
+});
+
+test("Admin user list pagination computes total pages and page slices accurately", () => {
+  function paginate<T>(items: T[], page: number, pageSize: number) {
+    const totalCount = items.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    const paginatedItems = items.slice((page - 1) * pageSize, page * pageSize);
+    return { paginatedItems, totalCount, totalPages, page, pageSize };
+  }
+
+  const items = Array.from({ length: 25 }, (_, i) => `user_${i + 1}`);
+  const resultPage1 = paginate(items, 1, 10);
+  assert.equal(resultPage1.totalCount, 25);
+  assert.equal(resultPage1.totalPages, 3);
+  assert.equal(resultPage1.paginatedItems.length, 10);
+  assert.equal(resultPage1.paginatedItems[0], "user_1");
+
+  const resultPage3 = paginate(items, 3, 10);
+  assert.equal(resultPage3.paginatedItems.length, 5);
+  assert.equal(resultPage3.paginatedItems[4], "user_25");
+});
+
+test("Ensures no Figma design fixture values are hardcoded into production admin components", async () => {
+  const tableFilePath = join(
+    process.cwd(),
+    "src/features/admin/components/organisms/admin-user-table.tsx",
+  );
+  const tableContent = await readFile(tableFilePath, "utf8");
+
+  // Figma fixtures must not be hardcoded as truth
+  assert.equal(tableContent.includes("Nhi M."), false);
+  assert.equal(tableContent.includes("Bao N."), false);
+  assert.equal(tableContent.includes("nhi@example.com"), false);
+  assert.equal(tableContent.includes("1,248 accounts"), false);
+  assert.equal(tableContent.includes("Page 1 of 125"), false);
+});

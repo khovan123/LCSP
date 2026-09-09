@@ -4,7 +4,9 @@ export const protectedWorkspacePathPrefixes = Object.freeze([
   "/workspace",
   "/assessments",
   "/laws",
+  "/admin",
 ]);
+
 
 export function isProtectedWorkspacePath(pathname: string): boolean {
   return protectedWorkspacePathPrefixes.some(
