@@ -31,7 +31,7 @@ export type ProgramEvidenceSummaryProps = {
   assessmentId?: string;
   referenceUrl?: string;
   artifactRef?: ArtifactRef | null;
-  onOpenArtifact?: (ref: ArtifactRef) => void;
+  onOpenArtifact?: (ref: ArtifactRef, trigger?: HTMLElement | null) => void;
   className?: string;
 };
 
@@ -73,7 +73,11 @@ export function ProgramEvidenceSummary({
         target.kind === ARTIFACT_OPEN_KINDS.download)) ||
     Boolean(referenceUrl);
 
-  const openHandler = onOpenArtifact ?? (resolvedArtifactRef?.type === ARTIFACT_TYPES.programEvidenceGraph ? graphDrawer.openArtifact : undefined);
+  const openHandler =
+    onOpenArtifact ??
+    (resolvedArtifactRef?.type === ARTIFACT_TYPES.programEvidenceGraph
+      ? graphDrawer.openArtifact
+      : undefined);
   const href =
     target &&
     (target.kind === ARTIFACT_OPEN_KINDS.internal ||
@@ -124,9 +128,9 @@ export function ProgramEvidenceSummary({
               variant="ghost"
               size="sm"
               disabled={!canOpenArtifact}
-              onClick={() => {
+              onClick={(event) => {
                 if (openHandler && resolvedArtifactRef) {
-                  openHandler(resolvedArtifactRef);
+                  openHandler(resolvedArtifactRef, event.currentTarget);
                 }
               }}
               className="h-7 min-w-0 px-0 text-xs font-medium text-primary hover:bg-transparent hover:underline disabled:text-muted-foreground disabled:no-underline"

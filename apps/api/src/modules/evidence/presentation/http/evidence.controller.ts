@@ -6,6 +6,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  HttpStatus,
   NotFoundException,
   Param,
   Post,
@@ -14,6 +15,7 @@ import {
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
@@ -28,6 +30,7 @@ import type { TechnicalProfileCallbackRequest } from "../../application/contract
 import { GetEvidenceQuery } from "../../application/queries/get-evidence/get-evidence.query.js";
 import { ProgramEvidenceGraphDetailService } from "../../application/services/evidence/program-evidence-graph-detail.service.js";
 import { toPrismaEvidenceAcceptanceStatus } from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
+import { problemException } from "../../../../platform/problems/problem-factory.js";
 
 @Controller("assessments")
 export class EvidenceController {
@@ -62,7 +65,24 @@ export class EvidenceController {
   @Get(":assessmentId/evidence-graph")
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
-  async getEvidenceGraph(@Param("assessmentId") assessmentId: string) {
+  async getEvidenceGraph(
+    @Param("assessmentId") assessmentId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const context = request.rbacContext;
+    if (context.role !== AUTH_USER_ROLES.admin) {
+      const assessment = await this.prisma.assessment.findUnique({
+        where: { id: assessmentId },
+        select: { ownerId: true },
+      });
+      if (!assessment || assessment.ownerId !== context.userId) {
+        throw problemException(
+          ASSESSMENT_ERROR_CODES.notFound,
+          request.correlationId ?? randomUUID(),
+          { status: HttpStatus.NOT_FOUND },
+        );
+      }
+    }
     const report = await this.prisma.technicalEvidenceReport.findFirst({
       where: {
         assessmentId,
