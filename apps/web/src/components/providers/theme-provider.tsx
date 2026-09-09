@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
 import {
   ThemeProvider as NextThemesProvider,
   useTheme,
   type ThemeProviderProps,
 } from "next-themes";
+import { useEffect } from "react";
 
 function ThemeKeyboardShortcut() {
   const { resolvedTheme, setTheme } = useTheme();
@@ -13,28 +13,15 @@ function ThemeKeyboardShortcut() {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (
-        event.key.toLowerCase() !== "d" ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.altKey ||
-        event.repeat
+        event.key.toLowerCase() === "d" &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !event.repeat
       ) {
-        return;
+        event.preventDefault();
+        setTheme(resolvedTheme === "dark" ? "light" : "dark");
       }
-
-      const target = event.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT" ||
-          target.isContentEditable ||
-          target.getAttribute("role") === "textbox")
-      ) {
-        return;
-      }
-
-      setTheme(resolvedTheme === "dark" ? "light" : "dark");
     }
 
     window.addEventListener("keydown", handleKeyDown);
