@@ -241,59 +241,97 @@ export class AssessmentInterviewRuntimeService {
     await this.assertAssessmentVisible(assessmentId, actor);
     const thread = await this.readThread(assessmentId);
     const state = publicState(thread.state);
-    const answerHistory = await Promise.all((state.answerHistory ?? []).map(async (item) => {
-      if (item.questionPrompt) return item;
-      const event = await this.prisma.auditEvent.findFirst({
-        where: {
-          resourceId: assessmentId,
-          sessionId: this.threadId(assessmentId),
-          eventType: INTERVIEW_AUDIT_EVENT_TYPES.questionPersisted,
-          createdAt: { lte: new Date(item.answeredAt) },
-          payload: { path: ["questionId"], equals: item.questionId },
-        },
-        orderBy: { createdAt: "desc" },
-        select: { payload: true },
-      });
-      const payload = objectRecord(event?.payload);
-      return {
-        ...item,
-        questionPrompt: typeof payload?.prompt === "string"
-          ? sanitizePublicText(payload.prompt) : undefined,
-      };
-    }));
+    const answerHistory = await Promise.all(
+      (state.answerHistory ?? []).map(async (item) => {
+        if (item.questionPrompt) return item;
+        const event = await this.prisma.auditEvent.findFirst({
+          where: {
+            resourceId: assessmentId,
+            sessionId: this.threadId(assessmentId),
+            eventType: INTERVIEW_AUDIT_EVENT_TYPES.questionPersisted,
+            createdAt: { lte: new Date(item.answeredAt) },
+            payload: { path: ["questionId"], equals: item.questionId },
+          },
+          orderBy: { createdAt: "desc" },
+          select: { payload: true },
+        });
+        const payload = objectRecord(event?.payload);
+        return {
+          ...item,
+          questionPrompt:
+            typeof payload?.prompt === "string"
+              ? sanitizePublicText(payload.prompt)
+              : undefined,
+        };
+      }),
+    );
     return {
       ...state,
       answerHistory: answerHistory.map((item) => {
         const revision = thread.privateRevisions.find(
-          (entry) => entry.questionId === item.questionId &&
-            entry.answeredAt === item.answeredAt && entry.actorId === actor.userId,
+          (entry) =>
+            entry.questionId === item.questionId &&
+            entry.answeredAt === item.answeredAt &&
+            entry.actorId === actor.userId,
         );
         const text = revision?.answer.freeText;
-        return text ? { ...item, summary: sanitizePublicText(text) ?? item.summary } : item;
+        return text
+          ? { ...item, summary: sanitizePublicText(text) ?? item.summary }
+          : item;
       }),
     };
   }
 
-  async recordWorkerProgress(assessmentId: string, body: unknown, correlationId: string) {
+  async recordWorkerProgress(
+    assessmentId: string,
+    body: unknown,
+    correlationId: string,
+  ) {
     const input = objectRecord(body);
-    const phases = [INTERVIEW_PROGRESS_PHASES.running, INTERVIEW_PROGRESS_PHASES.toolRunning, INTERVIEW_PROGRESS_PHASES.failed];
-    if (!input || !Number.isSafeInteger(input.contextRevision) || Number(input.contextRevision) < 1 ||
+    const phases = [
+      INTERVIEW_PROGRESS_PHASES.running,
+      INTERVIEW_PROGRESS_PHASES.toolRunning,
+      INTERVIEW_PROGRESS_PHASES.failed,
+    ];
+    if (
+      !input ||
+      !Number.isSafeInteger(input.contextRevision) ||
+      Number(input.contextRevision) < 1 ||
       !phases.some((phase) => phase === input.phase) ||
-      Object.keys(input).some((key) => key !== "contextRevision" && key !== "phase")) {
-      throw problemException("INTERVIEW_CONFIRMED_CONTEXT_INVALID", correlationId, { status: HttpStatus.BAD_REQUEST });
+      Object.keys(input).some(
+        (key) => key !== "contextRevision" && key !== "phase",
+      )
+    ) {
+      throw problemException(
+        "INTERVIEW_CONFIRMED_CONTEXT_INVALID",
+        correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
     const thread = await this.readThread(assessmentId);
-    if (thread.contextRevision !== input.contextRevision || thread.processedRevision >= Number(input.contextRevision)) {
+    if (
+      thread.contextRevision !== input.contextRevision ||
+      thread.processedRevision >= Number(input.contextRevision)
+    ) {
       return { recorded: false };
     }
-    const runId = thread.privateStore.targetedContinuation?.workflowRunId ?? thread.privateStore.workflowRunId;
+    const runId =
+      thread.privateStore.targetedContinuation?.workflowRunId ??
+      thread.privateStore.workflowRunId;
     if (!runId) return { recorded: false };
     const event = {
-      assessmentId, runId, correlationId,
+      assessmentId,
+      runId,
+      correlationId,
       stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
       toolName: INTERVIEW_TOOL_NAME,
       summary: `Interview progress: ${String(input.phase)}`,
-      outputSummary: { interviewProgress: { contextRevision: input.contextRevision, phase: input.phase } },
+      outputSummary: {
+        interviewProgress: {
+          contextRevision: input.contextRevision,
+          phase: input.phase,
+        },
+      },
     };
     if (input.phase === INTERVIEW_PROGRESS_PHASES.failed) {
       await this.runtimeEvents.recordToolFailed(event);
@@ -618,7 +656,10 @@ export class AssessmentInterviewRuntimeService {
       },
       outputSummary: {
         assessmentInterview: publicState(next.state),
-        interviewProgress: { contextRevision: next.revision, phase: INTERVIEW_PROGRESS_PHASES.queued },
+        interviewProgress: {
+          contextRevision: next.revision,
+          phase: INTERVIEW_PROGRESS_PHASES.queued,
+        },
         interviewWorkflowEvent:
           ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewContextUpdated,
         partialCoveragePolicyDecision:
@@ -1345,7 +1386,12 @@ export class AssessmentInterviewRuntimeService {
       stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
       toolName: INTERVIEW_TOOL_NAME,
       summary: "Interview decision persisted.",
-      outputSummary: { interviewProgress: { contextRevision: result.state.contextRevision, phase: INTERVIEW_PROGRESS_PHASES.completed } },
+      outputSummary: {
+        interviewProgress: {
+          contextRevision: result.state.contextRevision,
+          phase: INTERVIEW_PROGRESS_PHASES.completed,
+        },
+      },
     });
 
     return result.continuation

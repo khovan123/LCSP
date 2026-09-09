@@ -290,9 +290,13 @@ export class InternalAssessmentInterviewController {
     @Body() body: unknown,
     @Req() request: AuthenticatedRequest,
   ) {
-    return resultEnvelope(await this.interviewRuntime.recordWorkerProgress(
-      assessmentId, body, request.correlationId ?? "worker-interview-context",
-    ));
+    return resultEnvelope(
+      await this.interviewRuntime.recordWorkerProgress(
+        assessmentId,
+        body,
+        request.correlationId ?? "worker-interview-context",
+      ),
+    );
   }
 
   @Post(":assessmentId/agent-decisions")
