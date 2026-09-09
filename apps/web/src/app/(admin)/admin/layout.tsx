@@ -2,15 +2,14 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
-
 import { SESSION_COOKIE_NAME } from "@/lib/session/session-store";
 import { upstreamRequest } from "@/lib/server/upstream-request";
 import { AdminShell } from "@/features/admin/components/organisms/admin-shell";
 
 /**
  * Isolated Admin Route Layout (LCSP-295).
- * Server-side gate that executes BEFORE rendering any HTML or client components.
- * Non-admins are immediately redirected to /workspace, and unauthenticated users to /sign-in.
+ * Enforces strict server-side RBAC guard before rendering any admin UI.
+ * Unauthenticated users are redirected to sign-in; non-admin users are redirected to /workspace.
  */
 export default async function AdminRouteLayout({
   children,
@@ -49,5 +48,4 @@ export default async function AdminRouteLayout({
     </AdminShell>
   );
 }
-
 
