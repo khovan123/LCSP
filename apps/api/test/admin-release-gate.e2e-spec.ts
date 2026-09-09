@@ -342,10 +342,11 @@ describe("Admin Release Gate & Security Integrity (e2e)", () => {
         .set("Accept", "application/json");
 
       assert.equal(exportRes.status, 202);
-      const exportData = successBody<{ export_id: string; status: string }>(
-        exportRes,
-      );
-      assert.ok(exportData.export_id);
+      const exportData = successBody<{
+        export_request_id: string;
+        status: string;
+      }>(exportRes);
+      assert.ok(exportData.export_request_id);
     });
 
     it("revoking Admin session immediately denies access to Admin endpoints", async () => {
