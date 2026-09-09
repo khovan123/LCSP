@@ -118,7 +118,7 @@ export default function AdminUserDetailPage({
             type="button"
             variant="outline"
             onClick={() => router.push("/admin/users")}
-            className="h-[38px] w-[136px] rounded-[10px] border-border bg-secondary text-[12.5px] font-semibold text-secondary-foreground hover:bg-secondary/80 shadow-xs"
+            className="h-[38px] w-auto px-3.5 rounded-[10px] border-border bg-secondary text-[12.5px] font-semibold text-secondary-foreground hover:bg-secondary/80 shadow-xs"
           >
             <ArrowLeftIcon className="size-4 mr-1.5" />
             {backToUsersLabel}
