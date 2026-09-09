@@ -7,7 +7,7 @@ import { upstreamRequest } from "@/lib/server/upstream-request";
 import { AdminShell } from "@/features/admin/components/organisms/admin-shell";
 
 /**
- * Isolated Admin Route Layout (LCSP-295).
+ * Isolated Admin Route Layout.
  * Enforces strict server-side RBAC guard before rendering any admin UI.
  * Unauthenticated users are redirected to sign-in; non-admin users are redirected to /workspace.
  */

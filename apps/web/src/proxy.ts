@@ -78,7 +78,7 @@ async function continueProxy(request: NextRequest, requestHeaders: Headers) {
     return response;
   }
 
-  // LCSP-295: Server-side RBAC gate for Admin Portal routes.
+  // Server-side RBAC gate for Admin Portal routes.
   // Non-admin authenticated users are redirected to the customer workspace.
   const pathname = request.nextUrl.pathname;
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {

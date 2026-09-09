@@ -62,7 +62,7 @@ function computeUserStatus(user: {
 }
 
 /**
- * LCSP-295: Authoritative Admin User Management Controller.
+ * Authoritative Admin User Management Controller.
  * Provides administrative endpoints to list, inspect, update roles, and suspend user accounts.
  * Enforces admin RBAC, prevents self/last-admin lockouts, and writes audit event trails.
  */
