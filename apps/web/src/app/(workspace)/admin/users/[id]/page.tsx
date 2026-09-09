@@ -118,7 +118,7 @@ export default function AdminUserDetailPage({
             type="button"
             variant="outline"
             onClick={() => router.push("/admin/users")}
-            className="h-[38px] w-[136px] rounded-[10px] border-border/80 bg-white/5 text-[12.5px] font-semibold text-foreground hover:bg-white/10"
+            className="h-[38px] w-[136px] rounded-[10px] border-border bg-secondary text-[12.5px] font-semibold text-secondary-foreground hover:bg-secondary/80 shadow-xs"
           >
             <ArrowLeftIcon className="size-4 mr-1.5" />
             {backToUsersLabel}
@@ -126,7 +126,7 @@ export default function AdminUserDetailPage({
         </div>
 
         {/* User Identity Header + Status Pill */}
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/60 bg-[#202020] p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-card p-6 shadow-xs">
           <div className="flex flex-col space-y-1">
             <h2 className="text-[24px] font-semibold text-foreground tracking-tight">
               {user.fullName}
@@ -140,22 +140,23 @@ export default function AdminUserDetailPage({
           <div
             className={cn(
               "flex h-[32px] w-[142px] items-center justify-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold",
-              isActive && "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
-              isSuspended && "border-rose-500/30 bg-rose-500/10 text-rose-400",
-              !isActive && !isSuspended && "border-border bg-white/5 text-muted-foreground",
+              isActive && "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+              isSuspended && "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+              !isActive && !isSuspended && "border-border bg-secondary text-muted-foreground",
             )}
           >
             <span
               className={cn(
                 "size-2 rounded-full",
-                isActive && "bg-emerald-400",
-                isSuspended && "bg-rose-400",
+                isActive && "bg-emerald-500",
+                isSuspended && "bg-rose-500",
                 !isActive && !isSuspended && "bg-muted-foreground",
               )}
             />
             {statusLabel}
           </div>
         </div>
+
 
         {/* Two Details / Actions Cards */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

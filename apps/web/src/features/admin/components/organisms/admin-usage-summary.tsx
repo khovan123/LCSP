@@ -75,7 +75,7 @@ export function AdminUsageSummary({ usageSummary }: AdminUsageSummaryProps) {
         {cards.map((card) => (
           <div
             key={card.label}
-            className={`flex h-[112px] ${card.widthClass} flex-col justify-between rounded-xl border border-border/80 bg-[#242424] p-5 shadow-xs`}
+            className={`flex h-[112px] ${card.widthClass} flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs`}
           >
             <span className="text-[11.5px] font-medium text-muted-foreground">
               {card.label}
@@ -86,6 +86,7 @@ export function AdminUsageSummary({ usageSummary }: AdminUsageSummaryProps) {
           </div>
         ))}
       </div>
+
     </section>
   );
 }

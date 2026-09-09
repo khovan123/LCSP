@@ -37,7 +37,7 @@ export function AdminPagination({
           variant="outline"
           onClick={() => onPageChange(page - 1)}
           disabled={!canPrevious}
-          className="h-[36px] w-[120px] rounded-[10px] border-border/80 bg-white/5 text-[12.5px] font-medium text-foreground hover:bg-white/10 disabled:opacity-40"
+          className="h-[36px] w-[120px] rounded-[10px] border-border bg-secondary text-[12.5px] font-medium text-secondary-foreground hover:bg-secondary/80 shadow-xs disabled:opacity-40"
         >
           <ChevronLeftIcon className="size-4 mr-1" />
           {previousLabel}
@@ -48,12 +48,13 @@ export function AdminPagination({
           variant="outline"
           onClick={() => onPageChange(page + 1)}
           disabled={!canNext}
-          className="h-[36px] w-[130px] rounded-[10px] border-border/80 bg-white/5 text-[12.5px] font-medium text-foreground hover:bg-white/10 disabled:opacity-40"
+          className="h-[36px] w-[130px] rounded-[10px] border-border bg-secondary text-[12.5px] font-medium text-secondary-foreground hover:bg-secondary/80 shadow-xs disabled:opacity-40"
         >
           {nextLabel}
           <ChevronRightIcon className="size-4 ml-1" />
         </Button>
       </div>
+
     </div>
   );
 }

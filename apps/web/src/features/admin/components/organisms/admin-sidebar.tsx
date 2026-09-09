@@ -49,7 +49,7 @@ export function AdminSidebar({
 
   return (
     <aside
-      className="flex h-screen w-[248px] shrink-0 flex-col justify-between border-r border-sidebar-border bg-[#121212] text-sidebar-foreground select-none"
+      className="flex h-screen w-[248px] shrink-0 flex-col justify-between border-r border-sidebar-border bg-sidebar text-sidebar-foreground select-none"
       aria-label="Admin Navigation"
     >
       <div className="flex flex-col">
@@ -63,12 +63,11 @@ export function AdminSidebar({
             />
           </div>
           <div className="mt-2.5 flex items-center">
-            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase bg-white/5 border border-white/10">
+            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase bg-sidebar-accent border border-sidebar-border">
               {resolveAppMessage("pages.admin.sidebar.adminBadge" as MessageKey)}
             </span>
           </div>
         </div>
-
 
         {/* Navigation Rows */}
         <nav className="mt-4 flex flex-col gap-1 px-3" aria-label="Admin Sections">
@@ -83,12 +82,12 @@ export function AdminSidebar({
                 className={cn(
                   "flex h-10 w-[224px] items-center gap-3 rounded-[10px] px-3 text-[13px] font-medium transition-colors",
                   item.isActive
-                    ? "bg-[#2e2e2e] font-semibold text-white shadow-xs"
-                    : "text-muted-foreground hover:bg-white/5 hover:text-sidebar-foreground",
+                    ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground shadow-xs"
+                    : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
                 )}
                 aria-current={item.isActive ? "page" : undefined}
               >
-                <Icon className={cn("size-4 shrink-0", item.isActive ? "text-white" : "text-muted-foreground")} />
+                <Icon className={cn("size-4 shrink-0", item.isActive ? "text-sidebar-accent-foreground" : "text-muted-foreground")} />
                 <span>{label}</span>
               </Link>
             );
@@ -111,8 +110,8 @@ export function AdminSidebar({
 
       {/* Bottom Authenticated Admin Identity */}
       <div className="p-3">
-        <div className="flex h-14 w-[224px] items-center gap-3 rounded-xl border border-white/10 bg-[#1e1e1e]/60 px-3 py-2">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-semibold text-emerald-400">
+        <div className="flex h-14 w-[224px] items-center gap-3 rounded-xl border border-sidebar-border bg-sidebar-accent/50 px-3 py-2">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
             {adminName.charAt(0).toUpperCase()}
           </div>
           <div className="flex min-w-0 flex-1 flex-col justify-center">
@@ -126,5 +125,6 @@ export function AdminSidebar({
         </div>
       </div>
     </aside>
+
   );
 }

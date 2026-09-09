@@ -63,7 +63,7 @@ export function AdminUserFilters({
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder={searchPlaceholder}
           aria-label={searchAriaLabel}
-          className="h-[42px] w-full rounded-[10px] border-border/80 bg-[#242424] pl-10 pr-3 text-[12.5px] text-foreground placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-primary"
+          className="h-[42px] w-full rounded-[10px] border-border bg-card pl-10 pr-3 text-[12.5px] text-foreground placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-primary shadow-xs"
         />
       </div>
 
@@ -76,12 +76,12 @@ export function AdminUserFilters({
           }
         >
           <SelectTrigger
-            className="h-[42px] w-full rounded-[10px] border-border/80 bg-[#242424] text-[12.5px] text-foreground focus:ring-1 focus:ring-primary"
+            className="h-[42px] w-full rounded-[10px] border-border bg-card text-[12.5px] text-foreground focus:ring-1 focus:ring-primary shadow-xs"
             aria-label={resolveAppMessage("pages.admin.usersList.statusFilterLabel" as MessageKey)}
           >
             <SelectValue placeholder={statusFilterAll} />
           </SelectTrigger>
-          <SelectContent className="border-border bg-[#242424] text-foreground">
+          <SelectContent className="border-border bg-card text-foreground">
             <SelectItem value="ALL" className="text-[12.5px]">
               {statusFilterAll}
             </SelectItem>
@@ -114,12 +114,12 @@ export function AdminUserFilters({
           onValueChange={(val) => onRoleChange(val as AuthUserRole | "ALL")}
         >
           <SelectTrigger
-            className="h-[42px] w-full rounded-[10px] border-border/80 bg-[#242424] text-[12.5px] text-foreground focus:ring-1 focus:ring-primary"
+            className="h-[42px] w-full rounded-[10px] border-border bg-card text-[12.5px] text-foreground focus:ring-1 focus:ring-primary shadow-xs"
             aria-label={resolveAppMessage("pages.admin.usersList.roleFilterLabel" as MessageKey)}
           >
             <SelectValue placeholder={roleFilterAll} />
           </SelectTrigger>
-          <SelectContent className="border-border bg-[#242424] text-foreground">
+          <SelectContent className="border-border bg-card text-foreground">
             <SelectItem value="ALL" className="text-[12.5px]">
               {roleFilterAll}
             </SelectItem>
@@ -139,7 +139,7 @@ export function AdminUserFilters({
         </Select>
       </div>
 
-      {/* Create User Button (146px x 42px, light on dark, right-aligned) */}
+      {/* Create User Button (146px x 42px, light on dark / dark on light, right-aligned) */}
       <div className="ml-auto">
         <Tooltip>
           <TooltipTrigger>
@@ -147,7 +147,7 @@ export function AdminUserFilters({
               type="button"
               onClick={onCreateUserClick}
               disabled={!onCreateUserClick}
-              className="h-[42px] w-[146px] rounded-[10px] bg-[#f0ede8] text-[12.5px] font-semibold text-[#171717] hover:bg-[#e4e1dc] disabled:opacity-50"
+              className="h-[42px] w-[146px] rounded-[10px] bg-primary text-[12.5px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
               <UserPlusIcon className="size-4 mr-1.5" />
               {createUserLabel}
@@ -160,6 +160,7 @@ export function AdminUserFilters({
           )}
         </Tooltip>
       </div>
+
 
     </div>
   );

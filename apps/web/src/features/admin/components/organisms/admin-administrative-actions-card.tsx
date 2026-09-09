@@ -61,7 +61,7 @@ export function AdminAdministrativeActionsCard({
   };
 
   return (
-    <div className="flex h-[252px] w-full max-w-[556px] flex-col justify-between rounded-xl border border-border/80 bg-[#242424] p-6 shadow-xs">
+    <div className="flex h-[252px] w-full max-w-[556px] flex-col justify-between rounded-xl border border-border bg-card p-6 shadow-xs">
       <h2 className="text-[15px] font-semibold text-foreground">{cardTitle}</h2>
 
       {/* Role Management Row */}
@@ -77,12 +77,12 @@ export function AdminAdministrativeActionsCard({
               onValueChange={(val) => setSelectedRole(val as AuthUserRole)}
             >
               <SelectTrigger
-                className="h-[38px] w-full rounded-[9px] border-border/80 bg-[#1e1e1e] text-[12.5px] text-foreground focus:ring-1 focus:ring-primary"
+                className="h-[38px] w-full rounded-[9px] border-border bg-background text-[12.5px] text-foreground focus:ring-1 focus:ring-primary shadow-xs"
                 aria-label={roleLabel}
               >
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="border-border bg-[#242424] text-foreground">
+              <SelectContent className="border-border bg-card text-foreground">
                 <SelectItem
                   value={AUTH_USER_ROLES.admin}
                   className="text-[12.5px]"
@@ -103,14 +103,14 @@ export function AdminAdministrativeActionsCard({
             type="button"
             onClick={handleSaveRole}
             disabled={!isRoleChanged || isSavingRole}
-            className="h-[38px] w-[150px] rounded-[10px] bg-[#f0ede8] text-[12.5px] font-semibold text-[#171717] hover:bg-[#e4e1dc] disabled:opacity-40"
+            className="h-[38px] w-[150px] rounded-[10px] bg-primary text-[12.5px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
           >
             {isSavingRole ? savingRoleLabel : saveRoleLabel}
           </Button>
         </div>
       </div>
 
-      <div className="h-px bg-border/40" />
+      <div className="h-px bg-border/60" />
 
       {/* Account Access & Suspend Row */}
       <div className="flex items-center justify-between gap-4">
@@ -128,11 +128,12 @@ export function AdminAdministrativeActionsCard({
           variant="outline"
           onClick={onOpenSuspendModal}
           disabled={isSuspended}
-          className="h-[38px] w-[180px] rounded-[10px] border-rose-500/40 bg-rose-500/10 text-[12.5px] font-semibold text-rose-300 hover:bg-rose-500/20 disabled:opacity-40"
+          className="h-[38px] w-[180px] rounded-[10px] border-rose-500/40 bg-rose-500/10 text-[12.5px] font-semibold text-rose-600 dark:text-rose-300 hover:bg-rose-500/20 disabled:opacity-40"
         >
           {suspendAccountLabel}
         </Button>
       </div>
     </div>
   );
+
 }

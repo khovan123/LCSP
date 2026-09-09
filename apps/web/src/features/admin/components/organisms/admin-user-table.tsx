@@ -39,10 +39,10 @@ export function AdminUserTable({
 
   if (isLoading) {
     return (
-      <div className="w-full max-w-[1112px] rounded-xl border border-border/80 bg-[#242424] p-4">
+      <div className="w-full max-w-[1112px] rounded-xl border border-border bg-card p-4 shadow-xs">
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-16 w-full rounded-lg bg-white/5" />
+            <Skeleton key={i} className="h-16 w-full rounded-lg bg-muted" />
           ))}
         </div>
       </div>
@@ -51,7 +51,7 @@ export function AdminUserTable({
 
   if (users.length === 0) {
     return (
-      <div className="flex w-full max-w-[1112px] flex-col items-center justify-center rounded-xl border border-border/80 bg-[#242424] py-16 text-center">
+      <div className="flex w-full max-w-[1112px] flex-col items-center justify-center rounded-xl border border-border bg-card py-16 text-center shadow-xs">
         <p className="text-sm font-semibold text-foreground">
           {resolveAppMessage("pages.admin.usersList.emptyTitle" as MessageKey)}
         </p>
@@ -63,11 +63,11 @@ export function AdminUserTable({
   }
 
   return (
-    <div className="w-full max-w-[1112px] overflow-hidden rounded-xl border border-border/80 bg-[#242424] shadow-xs">
+    <div className="w-full max-w-[1112px] overflow-hidden rounded-xl border border-border bg-card shadow-xs">
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse" aria-label="User Accounts Table">
           <thead>
-            <tr className="border-b border-border/60 bg-white/[0.02]">
+            <tr className="border-b border-border bg-muted/40">
               <th className="w-[300px] py-3.5 pl-6 pr-4 text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase">
                 {colUser}
               </th>
@@ -91,7 +91,7 @@ export function AdminUserTable({
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border/40">
+          <tbody className="divide-y divide-border/60">
             {users.map((user) => {
               const roleDisplay =
                 user.role === AUTH_USER_ROLES.admin
@@ -113,7 +113,7 @@ export function AdminUserTable({
               return (
                 <tr
                   key={user.id}
-                  className="h-[68px] transition-colors hover:bg-white/[0.02]"
+                  className="h-[68px] transition-colors hover:bg-muted/30"
                 >
                   {/* User (Name + Email) */}
                   <td className="w-[300px] py-3 pl-6 pr-4">
@@ -139,16 +139,16 @@ export function AdminUserTable({
                     <span
                       className={cn(
                         "inline-flex items-center gap-1.5 text-[11.5px] font-medium",
-                        isActive && "text-emerald-400",
-                        isSuspended && "text-rose-400",
+                        isActive && "text-emerald-600 dark:text-emerald-400",
+                        isSuspended && "text-rose-600 dark:text-rose-400",
                         !isActive && !isSuspended && "text-muted-foreground",
                       )}
                     >
                       <span
                         className={cn(
                           "size-1.5 rounded-full",
-                          isActive && "bg-emerald-400",
-                          isSuspended && "bg-rose-400",
+                          isActive && "bg-emerald-500",
+                          isSuspended && "bg-rose-500",
                           !isActive && !isSuspended && "bg-muted-foreground",
                         )}
                       />
@@ -180,7 +180,7 @@ export function AdminUserTable({
                       variant="outline"
                       onClick={() => onViewUser(user.id)}
                       aria-label={`View ${user.fullName}`}
-                      className="h-[34px] w-[90px] rounded-[10px] border-border/80 bg-white/5 text-[12.5px] font-medium text-foreground hover:bg-white/10"
+                      className="h-[34px] w-[90px] rounded-[10px] border-border bg-secondary text-[12.5px] font-medium text-secondary-foreground hover:bg-secondary/80 shadow-xs"
                     >
                       {viewLabel}
                     </Button>
@@ -193,4 +193,5 @@ export function AdminUserTable({
       </div>
     </div>
   );
+
 }

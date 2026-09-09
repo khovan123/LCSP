@@ -55,8 +55,9 @@ export function AdminAccountDetailsCard({ user }: AdminAccountDetailsCardProps) 
   ];
 
   return (
-    <div className="flex h-[252px] w-full max-w-[536px] flex-col justify-between rounded-xl border border-border/80 bg-[#242424] p-6 shadow-xs">
+    <div className="flex h-[252px] w-full max-w-[536px] flex-col justify-between rounded-xl border border-border bg-card p-6 shadow-xs">
       <h2 className="text-[15px] font-semibold text-foreground">{cardTitle}</h2>
+
 
       <div className="flex flex-col space-y-3.5 pt-2">
         {rows.map((row) => (
