@@ -16,6 +16,8 @@ export function AdminSuspendModal({
   isPending = false,
 }: AdminSuspendModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const previousActiveElementRef = useRef<HTMLElement | null>(null);
 
   const eyebrow = resolveAppMessage(
     "pages.admin.suspendModal.eyebrow" as MessageKey,
@@ -44,18 +46,57 @@ export function AdminSuspendModal({
     .replace("{name}", user.fullName)
     .replace("{email}", user.email);
 
-  // Close on Escape key without mutation
+  // Manage focus: capture previous active element, set initial focus, trap focus, and restore on dismiss
   useEffect(() => {
     if (!isOpen) return;
 
+    if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+      previousActiveElementRef.current = document.activeElement;
+    }
+
+    const timer = setTimeout(() => {
+      cancelButtonRef.current?.focus();
+    }, 50);
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !isPending) {
+        e.preventDefault();
         onClose();
+        return;
+      }
+
+      if (e.key === "Tab" && modalRef.current) {
+        const focusableElements = modalRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        const focusable = Array.from(focusableElements);
+        if (focusable.length === 0) return;
+
+        const firstElement = focusable[0];
+        const lastElement = focusable[focusable.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousActiveElementRef.current && typeof previousActiveElementRef.current.focus === "function") {
+        previousActiveElementRef.current.focus();
+      }
+    };
   }, [isOpen, isPending, onClose]);
 
   if (!isOpen) return null;
@@ -109,6 +150,7 @@ export function AdminSuspendModal({
         {/* Action Buttons */}
         <div className="flex items-center justify-end gap-2 pt-2">
           <Button
+            ref={cancelButtonRef}
             type="button"
             variant="outline"
             onClick={onClose}
@@ -128,7 +170,6 @@ export function AdminSuspendModal({
           </Button>
         </div>
       </div>
-
     </div>
   );
 }

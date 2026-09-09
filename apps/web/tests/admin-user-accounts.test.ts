@@ -116,3 +116,25 @@ test("Ensures no Figma design fixture values are hardcoded into production admin
   assert.equal(tableContent.includes("1,248 accounts"), false);
   assert.equal(tableContent.includes("Page 1 of 125"), false);
 });
+
+test("Ensures production BFF admin user routes forward upstream directly without mock json fallbacks", async () => {
+  const routes = [
+    "src/app/api/admin/users/route.ts",
+    "src/app/api/admin/users/[id]/route.ts",
+    "src/app/api/admin/users/[id]/role/route.ts",
+    "src/app/api/admin/users/[id]/suspend/route.ts",
+  ];
+
+  for (const routePath of routes) {
+    const fullPath = join(process.cwd(), routePath);
+    const content = await readFile(fullPath, "utf8");
+
+    // Must not read mock JSON in production BFF handlers
+    assert.equal(content.includes("readMockJson"), false, `${routePath} must not use readMockJson`);
+    assert.equal(content.includes("admin-users.json"), false, `${routePath} must not use admin-users.json`);
+    // Must forward upstream
+    assert.equal(content.includes("upstreamRequest"), true, `${routePath} must use upstreamRequest`);
+    assert.equal(content.includes("upstreamJson"), true, `${routePath} must use upstreamJson`);
+  }
+});
+

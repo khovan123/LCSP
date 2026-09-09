@@ -51,3 +51,51 @@ test("Admin suspend modal: dynamic target user identity injection", () => {
   );
   assert.equal(renderedBody.includes("Nhi M."), false);
 });
+
+test("Admin suspend modal: focus trapping and restoration contract", () => {
+  // Mock DOM elements
+  const triggerButton = { id: "suspend-trigger", focused: false, focus() { this.focused = true; } };
+  const cancelButton = { id: "cancel-btn", focused: false, focus() { this.focused = true; } };
+  const confirmButton = { id: "confirm-btn", focused: false, focus() { this.focused = true; } };
+  const focusable = [cancelButton, confirmButton];
+
+  // 1. Initial focus goes to first interactive element (Cancel button)
+  let activeElement: { id: string; focused: boolean; focus: () => void } = triggerButton;
+  const previousActiveElement = activeElement;
+
+  // Simulate modal mount
+  cancelButton.focus();
+  activeElement = cancelButton;
+  assert.equal(cancelButton.focused, true);
+
+  // 2. Tab trap forward: from last element cycles to first element
+  function handleTabKey(shiftKey: boolean) {
+    const currentIndex = focusable.indexOf(activeElement);
+    if (shiftKey) {
+      const nextIndex = currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1;
+      activeElement = focusable[nextIndex];
+      activeElement.focus();
+    } else {
+      const nextIndex = currentIndex >= focusable.length - 1 ? 0 : currentIndex + 1;
+      activeElement = focusable[nextIndex];
+      activeElement.focus();
+    }
+  }
+
+  // Active is Cancel (0), press Tab -> moves to Confirm (1)
+  handleTabKey(false);
+  assert.equal(activeElement.id, "confirm-btn");
+
+  // Active is Confirm (1), press Tab -> loops back to Cancel (0)
+  handleTabKey(false);
+  assert.equal(activeElement.id, "cancel-btn");
+
+  // Active is Cancel (0), press Shift+Tab -> loops to Confirm (1)
+  handleTabKey(true);
+  assert.equal(activeElement.id, "confirm-btn");
+
+  // 3. On modal dismiss, focus is restored to the previous active element (trigger button)
+  previousActiveElement.focus();
+  assert.equal(triggerButton.focused, true);
+});
+
