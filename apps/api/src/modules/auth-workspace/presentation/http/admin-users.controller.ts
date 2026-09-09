@@ -31,6 +31,10 @@ import { problemException } from "../../../../platform/problems/problem-factory.
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { AuthAuditService } from "../../application/services/auth-workspace/auth-audit.service.js";
+import type {
+  Prisma,
+  AuthUserRole as PrismaAuthUserRole,
+} from "@prisma/client";
 import {
   toPrismaAuthUserRole,
   fromPrismaAuthUserRole,
@@ -88,7 +92,7 @@ export class AdminUsersController {
       ),
     );
 
-    const where: any = {};
+    const where: Prisma.UserWhereInput = {};
     if (query) {
       where.OR = [
         { email: { contains: query, mode: "insensitive" } },
@@ -166,7 +170,7 @@ export class AdminUsersController {
       id: string;
       email: string;
       displayName: string | null;
-      role: any;
+      role: PrismaAuthUserRole;
       lockUntil: Date | null;
       emailVerified: boolean;
       createdAt: Date;
@@ -187,9 +191,7 @@ export class AdminUsersController {
 
     const usageSummary: AdminUserUsageSummary = {
       assessments30d: assessmentsCount,
-      lastAssessmentAt: latestAssessment
-        ? latestAssessment.createdAt.toISOString()
-        : null,
+      lastAssessmentAt: latestAssessment?.createdAt.toISOString() ?? null,
       creditSpend30d: assessmentsCount * 25,
       openFindingsCount: scansCount,
     };
