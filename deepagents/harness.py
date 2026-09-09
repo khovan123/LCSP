@@ -19,20 +19,23 @@ from model_policy import (
     ALL_LCSP_MODEL_SPECS,
     ROOT_MODEL_SPEC,
     canonical_provider,
+    openai_responses_base_init_kwargs,
     openai_responses_init_kwargs,
     provider_init_kwargs,
+    provider_from_model_spec,
     providers_for_model_specs,
+    supports_openai_reasoning,
 )
 
 
 # Backward-compatible name used by the managed entrypoint/tests.
 LCSP_MODEL_SPEC = ROOT_MODEL_SPEC
 
-# OpenAI needs an explicit LCSP Responses API contract. Other providers get
-# provider-scoped pass-through profiles and are routed by their provider:model
-# prefix through LangChain init_chat_model.
+# OpenAI needs an explicit LCSP Responses API client contract. Reasoning is
+# registered only for exact model specs that support it; it is not a provider-
+# wide default because non-reasoning agents can share the same OpenAI provider.
 LCSP_OPENAI_PROVIDER_PROFILE = ProviderProfile(
-    init_kwargs=openai_responses_init_kwargs(),
+    init_kwargs=openai_responses_base_init_kwargs(),
 )
 
 
@@ -42,6 +45,14 @@ def provider_profile_for(provider: str) -> ProviderProfile:
     if canonical == "openai":
         return LCSP_OPENAI_PROVIDER_PROFILE
     return ProviderProfile(init_kwargs=provider_init_kwargs(canonical))
+
+
+def model_provider_profile_for(model_spec: str) -> ProviderProfile:
+    """Return the exact-model construction profile for LCSP reasoning-capable models."""
+    provider = provider_from_model_spec(model_spec)
+    if provider == "openai" and supports_openai_reasoning(model_spec):
+        return ProviderProfile(init_kwargs=openai_responses_init_kwargs(model_spec))
+    return ProviderProfile(init_kwargs=provider_init_kwargs(provider))
 
 
 # Deep Agents injects filesystem tools in addition to authored tools. LCSP keeps
@@ -92,4 +103,5 @@ def configure_lcsp_harness() -> None:
         register_provider_profile(provider, provider_profile_for(provider))
 
     for model_spec in ALL_LCSP_MODEL_SPECS:
+        register_provider_profile(model_spec, model_provider_profile_for(model_spec))
         register_harness_profile(model_spec, LCSP_HARNESS_PROFILE)

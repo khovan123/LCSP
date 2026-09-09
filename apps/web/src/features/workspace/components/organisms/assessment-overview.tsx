@@ -45,7 +45,6 @@ import {
   AgentTurn,
   ThinkingLine,
   ThoughtLine,
-  UserMessage,
 } from "../molecules/agent-turn";
 import {
   AssessmentQuestionTurn,
@@ -53,6 +52,7 @@ import {
 } from "../molecules/assessment-question-turn";
 import { PostFindingFlowSteps } from "../molecules/post-finding-flow-steps";
 import { AssessmentComposer } from "./assessment-composer";
+import { InterviewAnswerMessage } from "../molecules/interview-answer-message";
 import { AssessmentTranscript } from "./assessment-transcript";
 import { useWorkspaceRuntime } from "./workspace-runtime-provider";
 
@@ -463,12 +463,23 @@ function AssessmentInterviewFlow({
         {interviewEnabled ? (
           <>
             {answerHistory.map((answer) => (
-              <AgentTurn
+              <div
                 key={`${answer.questionId}:${answer.answeredAt}`}
-                role={ASSESSMENT_CHAT_ROLES.user}
+                className="space-y-6"
               >
-                <UserMessage>{answer.summary}</UserMessage>
-              </AgentTurn>
+                {answer.questionPrompt ? (
+                  <AgentTurn>
+                    <AgentMessage>
+                      <p className="whitespace-pre-wrap break-words">
+                        {answer.questionPrompt}
+                      </p>
+                    </AgentMessage>
+                  </AgentTurn>
+                ) : null}
+                <AgentTurn role={ASSESSMENT_CHAT_ROLES.user}>
+                  <InterviewAnswerMessage text={answer.summary} />
+                </AgentTurn>
+              </div>
             ))}
 
             {interview.questionTurnProps ? (
@@ -486,6 +497,7 @@ function AssessmentInterviewFlow({
                 terminalAction={
                   <AssessmentQuestionTurn
                     question={interview.questionTurnProps.question}
+                    answerHistoryVisible={answerHistory.length > 0}
                     selectedChoiceIds={activeDraft.selectedChoiceIds}
                     onSelectedChoiceIdsChange={handleSelectedChoicesChange}
                     isAdjusting={activeDraft.isAdjusting}
@@ -558,9 +570,6 @@ function AssessmentInterviewFlow({
             ) : (
               <AgentTurn>
                 <AgentMessage>
-                  <ThoughtLine
-                    label={t("pages.assessmentFlow.interview.thought")}
-                  />
                   <p className="mt-2 text-muted-foreground">
                     {t(interviewHandoff.messageKey)}
                   </p>

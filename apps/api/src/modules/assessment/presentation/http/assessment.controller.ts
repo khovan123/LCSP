@@ -284,6 +284,17 @@ export class InternalAssessmentInterviewController {
     );
   }
 
+  @Post(":assessmentId/runtime-progress")
+  async recordRuntimeProgress(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(await this.interviewRuntime.recordWorkerProgress(
+      assessmentId, body, request.correlationId ?? "worker-interview-context",
+    ));
+  }
+
   @Post(":assessmentId/agent-decisions")
   async recordAgentDecision(
     @Param("assessmentId") assessmentId: string,

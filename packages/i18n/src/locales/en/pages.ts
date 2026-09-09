@@ -53,6 +53,10 @@ export const enPages = {
     chatTranscriptLabel: "Assessment conversation",
     chatComposerPlaceholder: "Message LCSP",
     chatSend: "Send message",
+    chatExpand: "Expand editor",
+    chatCollapse: "Collapse editor",
+    chatShowMore: "Show more",
+    chatShowLess: "Show less",
     chatCopy: "Copy response",
     chatThinking: "Thinking...",
     chatOptionsLabel: "Response options",
@@ -1398,6 +1402,13 @@ export const enPages = {
       pendingDescription:
         "Evidence is ready. Waiting for Interview orchestration to provide the first question.",
       pendingPlaceholder: "Waiting for Interview...",
+      progressQueued: "Your answer is queued for evaluation.",
+      progressRunning: "Evaluating your answer.",
+      progressTool: "Checking supporting information.",
+      progressCompleted: "Interview evaluation completed. The result has been saved.",
+      progressFailed: "This evaluation attempt failed. Your answer remains saved.",
+      continuingDescription:
+        "Your answer has been saved. Waiting for the evaluation result or the next question.",
       placeholder: "Describe the project or system...",
     },
     postFinding: {

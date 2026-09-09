@@ -158,6 +158,25 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 # above so it cannot be accidentally swallowed here.
                 return
 
+        from orchestration.interview_progress import active_progress, InterviewProgressCallback
+        def emit(phase):
+            reporter = getattr(api_client, "post_interview_progress", None)
+            if reporter is not None:
+                reporter(assessment_id, context_revision, phase)
+        token = active_progress.set(InterviewProgressCallback(emit))
+        emit("RUNNING")
+        try:
+            self._run_and_persist_decision(api_client, assessment_id, thread_id, question_id,
+                context_revision, resume_reason, context, correlationId, source_version, pge_version)
+        except Exception:
+            emit("FAILED")
+            raise
+        finally:
+            active_progress.reset(token)
+
+    def _run_and_persist_decision(self, api_client, assessment_id, thread_id, question_id,
+                                  context_revision, resume_reason, context, correlationId,
+                                  source_version, pge_version):
         decision = self._run_interview(
             assessment_id=assessment_id,
             thread_id=thread_id,
@@ -855,6 +874,15 @@ def _interview_instruction(
     private_revision = context.get("privateRevision")
     public_state = context.get("publicState")
     targeted_need = context.get("targetedNeed")
+    # The complete authorization inventory belongs to the turn ledger, not the
+    # model prompt. It can contain millions of characters for a large repository.
+    if isinstance(private_revision, dict):
+        refs = private_revision.get("governedEvidenceRefs")
+        private_revision = {
+            key: value for key, value in private_revision.items()
+            if key != "governedEvidenceRefs"
+        }
+        private_revision["governedEvidenceRefCount"] = len(refs) if isinstance(refs, list) else 0
     mode = (
         "INVESTIGATOR_RESOLUTION"
         if isinstance(targeted_need, dict)

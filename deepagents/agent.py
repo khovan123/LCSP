@@ -7,6 +7,10 @@ per-run context, TodoList planning and the bounded LCSP subagent pipeline.
 
 import os
 
+from langsmith_bootstrap import disable_langsmith_tracing_by_default
+
+disable_langsmith_tracing_by_default()
+
 from langchain.agents.middleware import TodoListMiddleware
 from managed_deepagents import define_deep_agent
 
@@ -46,6 +50,7 @@ for model_config in effective_model_configs():
         router=model_config.router,
         tools=model_config.tools,
         reasoning_effort=model_config.reasoning_effort,
+        reasoning_policy=model_config.reasoning_policy,
         output_version=model_config.output_version,
     )
 

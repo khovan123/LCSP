@@ -4,16 +4,58 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import Any, Literal
+
+from langsmith_bootstrap import disable_langsmith_tracing_by_default
+
+disable_langsmith_tracing_by_default()
+
+from langchain.agents import create_agent as _langchain_create_agent
+from langchain.chat_models import init_chat_model
 
 
-DEFAULT_ROOT_MODEL_SPEC = "openai:gpt-5.6-terra"
-DEFAULT_TRIAGE_MODEL_SPEC = "openai:gpt-5.6-sol"
-DEFAULT_PLANNER_MODEL_SPEC = "openai:gpt-5.6-sol"
-DEFAULT_INTERVIEW_MODEL_SPEC = "openai:gpt-5.6-sol"
-DEFAULT_INVESTIGATOR_MODEL_SPEC = "openai:gpt-5.6-terra"
+DEFAULT_ROOT_MODEL_SPEC = "openai:gpt-5-mini"
+DEFAULT_TRIAGE_MODEL_SPEC = "openai:gpt-5-mini"
+DEFAULT_PLANNER_MODEL_SPEC = "openai:gpt-5-mini"
+DEFAULT_INTERVIEW_MODEL_SPEC = "openai:gpt-5-mini"
+DEFAULT_INVESTIGATOR_MODEL_SPEC = "openai:gpt-5-mini"
+DEFAULT_NARRATOR_MODEL_SPEC = "openai:gpt-4o-mini"
 
-DEFAULT_REASONING_EFFORT = "medium"
+DEFAULT_REASONING_EFFORT = "low"
 RESPONSES_OUTPUT_VERSION = "responses/v1"
+OPENAI_REASONING_MODEL_PREFIXES = (
+    "gpt-5.6-",
+    "gpt-5.1",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "gpt-5-pro",
+    "o1",
+    "o3",
+    "o4",
+)
+OPENAI_REASONING_MODEL_IDS = frozenset({"gpt-5"})
+REASONING_AGENT_NAMES = frozenset(
+    {
+        "lcsp-agent",
+        "triage",
+        "lcsp-legal-chunk-triage",
+        "lcsp-engineering-rule-compiler",
+        "planner",
+        "lcsp-engineering-rule-planner",
+        "interview",
+        "investigator",
+        "law_guided_investigator",
+        "lcsp-investigator-durable-execution",
+    }
+)
+NON_REASONING_AGENT_NAMES = frozenset(
+    {
+        "lcsp-final-report-narrator",
+        "lcsp-classification-rationale-narrator",
+        "lcsp-classification-proposer",
+        "lcsp-ai-usage-flow-proposer",
+    }
+)
 SUPPORTED_REASONING_EFFORTS = frozenset(
     {
         "none",
@@ -52,6 +94,7 @@ class EffectiveModelConfig:
     reasoning_effort: str = "provider_default"
     output_version: str = "provider_default"
     router: str = "langchain_init_chat_model"
+    reasoning_policy: str = "provider_default"
 
 
 def canonical_provider(provider: str) -> str:
@@ -106,6 +149,24 @@ def provider_from_model_spec(spec: str) -> str:
     return provider
 
 
+def model_name_from_spec(spec: str) -> str:
+    """Return the provider-local model name from one normalized model spec."""
+    normalized = normalize_model_spec(spec)
+    _, _, model = normalized.partition(":")
+    return model
+
+
+def supports_openai_reasoning(model_spec: str) -> bool:
+    """Return whether one OpenAI model spec supports Responses API reasoning kwargs."""
+    normalized = normalize_model_spec(model_spec)
+    provider, _, model = normalized.partition(":")
+    if provider != "openai":
+        return False
+    return model in OPENAI_REASONING_MODEL_IDS or model.startswith(
+        OPENAI_REASONING_MODEL_PREFIXES
+    )
+
+
 def providers_for_model_specs(model_specs: tuple[str, ...]) -> tuple[str, ...]:
     """Return active provider routing keys in first-seen order."""
     return tuple(dict.fromkeys(provider_from_model_spec(spec) for spec in model_specs))
@@ -128,6 +189,9 @@ INTERVIEW_MODEL_SPEC, INTERVIEW_MODEL_SOURCE = _model_spec(
 INVESTIGATOR_MODEL_SPEC, INVESTIGATOR_MODEL_SOURCE = _model_spec(
     "LCSP_INVESTIGATOR_MODEL", DEFAULT_INVESTIGATOR_MODEL_SPEC
 )
+NARRATOR_MODEL_SPEC, NARRATOR_MODEL_SOURCE = _model_spec(
+    "LCSP_NARRATOR_MODEL", DEFAULT_NARRATOR_MODEL_SPEC
+)
 
 SUBAGENT_MODEL_SPECS = {
     "triage": TRIAGE_MODEL_SPEC,
@@ -145,30 +209,103 @@ ALL_LCSP_MODEL_SPECS = tuple(
             PLANNER_MODEL_SPEC,
             INTERVIEW_MODEL_SPEC,
             INVESTIGATOR_MODEL_SPEC,
+            NARRATOR_MODEL_SPEC,
         )
     )
 )
 
 
-def openai_responses_init_kwargs() -> dict[str, object]:
-    """Return the explicit OpenAI Responses API construction contract for LCSP."""
+def openai_responses_base_init_kwargs() -> dict[str, object]:
+    """Return the OpenAI Responses API construction contract without reasoning."""
     return {
         "use_responses_api": True,
         "output_version": RESPONSES_OUTPUT_VERSION,
-        "reasoning": {"effort": REASONING_EFFORT},
     }
+
+
+def openai_responses_init_kwargs(
+    model_spec: str | None = None,
+    *,
+    reasoning: bool = True,
+) -> dict[str, object]:
+    """Return OpenAI Responses API kwargs, gated by model reasoning capability."""
+    kwargs = openai_responses_base_init_kwargs()
+    if reasoning and (model_spec is None or supports_openai_reasoning(model_spec)):
+        kwargs["reasoning"] = {"effort": REASONING_EFFORT}
+    return kwargs
+
+
+def reasoning_policy_for_agent(
+    *,
+    agent_name: str,
+    model_spec: str,
+) -> Literal["enabled", "unsupported_model", "disabled_for_agent"]:
+    """Resolve LCSP reasoning policy from agent purpose and model capability."""
+    if agent_name in NON_REASONING_AGENT_NAMES:
+        return "disabled_for_agent"
+    if agent_name not in REASONING_AGENT_NAMES:
+        return "disabled_for_agent"
+    if not supports_openai_reasoning(model_spec):
+        return "unsupported_model"
+    return "enabled"
+
+
+def model_init_kwargs_for_agent(*, agent_name: str, model_spec: str) -> dict[str, object]:
+    """Return LangChain model kwargs for a specific LCSP agent construction."""
+    normalized = normalize_model_spec(model_spec)
+    provider, _, _ = normalized.partition(":")
+    if provider != "openai":
+        return provider_init_kwargs(provider)
+
+    return openai_responses_init_kwargs(
+        normalized,
+        reasoning=reasoning_policy_for_agent(
+            agent_name=agent_name,
+            model_spec=normalized,
+        )
+        == "enabled",
+    )
+
+
+def resolve_agent_model(*, agent_name: str, model_spec: str):
+    """Instantiate a LangChain chat model with LCSP agent-scoped reasoning policy."""
+    return init_chat_model(
+        normalize_model_spec(model_spec),
+        **model_init_kwargs_for_agent(agent_name=agent_name, model_spec=model_spec),
+    )
+
+
+def create_lcsp_agent(
+    *,
+    agent_name: str,
+    model: Any,
+    **kwargs: Any,
+):
+    """Create a LangChain agent with LCSP agent-scoped model policy applied."""
+    resolved_model = (
+        resolve_agent_model(agent_name=agent_name, model_spec=model)
+        if isinstance(model, str)
+        else model
+    )
+    langchain_name = kwargs.pop("name", agent_name)
+    return _langchain_create_agent(
+        model=resolved_model,
+        name=langchain_name,
+        **kwargs,
+    )
 
 
 def provider_init_kwargs(provider: str) -> dict[str, object]:
     """Return constructor kwargs scoped to one provider only.
 
     The provider:model prefix selects the LangChain integration. OpenAI additionally
-    needs the LCSP Responses API contract. Other providers intentionally receive no
-    OpenAI-only kwargs and use their native LangChain constructor defaults.
+    needs the LCSP Responses API client contract. Reasoning is decided per agent and
+    per model capability so OpenAI-only kwargs never bleed across integrations and
+    non-reasoning OpenAI agents do not inherit reasoning merely by provider prefix.
     """
     canonical = canonical_provider(provider)
     if canonical == "openai":
-        return openai_responses_init_kwargs()
+        return openai_responses_base_init_kwargs()
     return {}
 
 
@@ -186,11 +323,17 @@ def effective_model_configs() -> tuple[EffectiveModelConfig, ...]:
         ("planner", PLANNER_MODEL_SPEC, PLANNER_MODEL_SOURCE),
         ("interview", INTERVIEW_MODEL_SPEC, INTERVIEW_MODEL_SOURCE),
         ("investigator", INVESTIGATOR_MODEL_SPEC, INVESTIGATOR_MODEL_SOURCE),
+        ("narrator", NARRATOR_MODEL_SPEC, NARRATOR_MODEL_SOURCE),
     )
     configs: list[EffectiveModelConfig] = []
     for role, spec, source in role_specs:
         provider, model = spec.split(":", 1)
         is_openai = provider == "openai"
+        agent_name = "lcsp-agent" if role == "root" else role
+        reasoning_policy = reasoning_policy_for_agent(
+            agent_name=agent_name,
+            model_spec=spec,
+        )
         configs.append(
             EffectiveModelConfig(
                 role=role,
@@ -199,11 +342,16 @@ def effective_model_configs() -> tuple[EffectiveModelConfig, ...]:
                 source=source,
                 client=provider_client(provider),
                 reasoning_effort=(
-                    REASONING_EFFORT if is_openai else "provider_default"
+                    REASONING_EFFORT
+                    if is_openai and reasoning_policy == "enabled"
+                    else "unset"
+                    if is_openai
+                    else "provider_default"
                 ),
                 output_version=(
                     RESPONSES_OUTPUT_VERSION if is_openai else "provider_default"
                 ),
+                reasoning_policy=reasoning_policy,
             )
         )
     return tuple(configs)

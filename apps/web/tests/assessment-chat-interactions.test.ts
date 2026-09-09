@@ -10,6 +10,10 @@ const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "http://localhost/",
 });
 const testWindow = dom.window;
+Object.defineProperty(globalThis, "Element", {
+  configurable: true,
+  value: testWindow.Element,
+});
 
 Object.defineProperty(globalThis, "window", {
   configurable: true,
@@ -85,6 +89,8 @@ const { SelectionHistoryRow } =
   await import("../src/features/workspace/components/molecules/selection-history-row");
 const { AssessmentComposer } =
   await import("../src/features/workspace/components/organisms/assessment-composer");
+const { InterviewAnswerMessage } =
+  await import("../src/features/workspace/components/molecules/interview-answer-message");
 const { AssessmentTranscript } =
   await import("../src/features/workspace/components/organisms/assessment-transcript");
 
@@ -162,6 +168,49 @@ test("assessment composer blocks empty disabled submitting and multiline submits
   await keyDown(getTextarea(container), { key: "Enter", shiftKey: true });
   await keyDown(getTextarea(container), { isComposing: true, key: "Enter" });
   assert.equal(submitCount, 0);
+});
+
+test("composer expands and collapses without changing the draft or submitting", async () => {
+  const draft = "A long answer\n".repeat(30);
+  let submits = 0;
+  const { container } = await renderElement(
+    React.createElement(AssessmentComposer, {
+      value: draft,
+      onValueChange: () => undefined,
+      onSubmit: () => {
+        submits += 1;
+      },
+    }),
+  );
+  const toggle = container.querySelector<HTMLButtonElement>(
+    "button[aria-expanded]",
+  );
+  assert.ok(toggle);
+  await click(toggle);
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
+  assert.equal(getTextarea(container).value, draft);
+  await keyDown(getTextarea(container), { key: "Escape" });
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  assert.equal(getTextarea(container).value, draft);
+  assert.equal(submits, 0);
+  assert.equal(container.querySelector("button button"), null);
+});
+
+test("long customer answers expand and collapse without losing text", async () => {
+  const text = "Customer's original answer.\n".repeat(40);
+  const { container } = await renderElement(
+    React.createElement(InterviewAnswerMessage, { text }),
+  );
+  const toggle = container.querySelector<HTMLButtonElement>(
+    "button[aria-expanded]",
+  );
+  assert.ok(toggle);
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  await click(toggle);
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
+  assert.equal(container.querySelector("p")?.textContent, text);
+  await click(toggle);
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
 });
 
 test("chat single select changes by click and ignores disabled options", async () => {
@@ -316,7 +365,9 @@ async function keyDown(
 }
 
 function getButton(container: HTMLElement) {
-  const button = container.querySelector("button");
+  const button = container.querySelector<HTMLButtonElement>(
+    'button[type="submit"]',
+  );
   assert.ok(button);
   return button;
 }

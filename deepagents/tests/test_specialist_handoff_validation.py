@@ -148,6 +148,21 @@ def test_specialist_handoff_rejects_forbidden_final_verdicts() -> None:
         validate_specialist_handoff("investigator", payload)
 
 
+def test_specialist_handoff_allows_unknown_as_non_verdict_value() -> None:
+    payload = _investigator_payload()
+    payload["claims"][0]["limitations"] = ["UNKNOWN"]
+
+    handoff = validate_specialist_handoff(
+        "investigator",
+        payload,
+        graph=_graph(),
+        pinned_rule_ids=("eng-1",),
+        pinned_versions={"technicalEvidenceReportId": "ter-1"},
+    )
+
+    assert handoff.claims[0].limitations == ["UNKNOWN"]
+
+
 def test_planner_handoff_allows_unknown_coverage_state() -> None:
     handoff = validate_specialist_handoff(
         "planner",

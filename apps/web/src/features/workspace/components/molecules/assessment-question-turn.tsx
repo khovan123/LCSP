@@ -35,6 +35,7 @@ export type AssessmentQuestionAnswerInput = {
 
 type AssessmentQuestionTurnProps = {
   question: AssessmentInterviewQuestion;
+  answerHistoryVisible?: boolean;
   selectedChoiceIds?: string[];
   onSelectedChoiceIdsChange?: (choiceIds: string[]) => void;
   isAdjusting?: boolean;
@@ -48,6 +49,7 @@ type AssessmentQuestionTurnProps = {
 
 export function AssessmentQuestionTurn({
   question,
+  answerHistoryVisible = false,
   selectedChoiceIds = [],
   onSelectedChoiceIdsChange,
   isAdjusting = false,
@@ -89,11 +91,8 @@ export function AssessmentQuestionTurn({
       data-intent={question.intent}
       className={cn("w-full max-w-170 space-y-3", className)}
     >
-      {question.priorAnswerSummary ? (
-        <SelectionHistoryRow
-          prompt={question.prompt}
-          selectedValue={question.priorAnswerSummary}
-        />
+      {question.priorAnswerSummary && !answerHistoryVisible ? (
+        <SelectionHistoryRow selectedValue={question.priorAnswerSummary} />
       ) : null}
 
       <div className="space-y-3">
@@ -164,10 +163,7 @@ export function AssessmentQuestionTurn({
         ) : null}
 
         {question.whyEvidenceRefs && question.whyEvidenceRefs.length > 0 ? (
-          <div
-            data-slot="why-asking-disclosure"
-            className="space-y-2 pt-1"
-          >
+          <div data-slot="why-asking-disclosure" className="space-y-2 pt-1">
             <Button
               type="button"
               size="sm"

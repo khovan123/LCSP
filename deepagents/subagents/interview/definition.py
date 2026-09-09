@@ -89,8 +89,9 @@ Return exactly one JSON object matching InterviewResult:
   pure formatting normalization.
 - contextAuthority: CUSTOMER_STATED, UNCERTAIN, CONFLICTED, CUSTOMER_CONFIRMED, CONFIRMED or
   SUPERSEDED.
-- confirmedContext: only semantic facts directly supported by Customer context. For each statement,
-  provide topic, statement, optional normalizedValue/scope, and governed evidence refs only. Runtime
+- confirmedContext: an object with a statements array, never a flat topic-to-value map.
+  For CUSTOMER_CONFIRMED or CONFIRMED authority this array must be non-empty. For each statement,
+  provide a non-empty statementId, topic, statement, optional normalizedValue/scope, and evidenceRefs. Runtime
   owns assessmentId, respondent identity, timestamps, source and CONFIRMED resolution provenance.
 - flags: include DOWNSTREAM_IMPACT when targeted resolution changes downstream investigation scope.
 - blockedActions: only PROVIDE_MORE_CONTEXT, CHECK_INTERNALLY, SAVE_AND_EXIT.

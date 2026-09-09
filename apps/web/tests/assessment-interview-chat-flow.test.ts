@@ -29,6 +29,10 @@ Object.defineProperty(globalThis, "navigator", {
   configurable: true,
   value: testWindow.navigator,
 });
+Object.defineProperty(globalThis, "Element", {
+  configurable: true,
+  value: testWindow.Element,
+});
 Object.defineProperty(globalThis, "HTMLElement", {
   configurable: true,
   value: testWindow.HTMLElement,
@@ -243,7 +247,10 @@ test("FREE_TEXT: renders question without inline textarea, uses shared composer 
     }),
   );
 
-  assert.match(container.textContent ?? "", /Describe this system architecture/);
+  assert.match(
+    container.textContent ?? "",
+    /Describe this system architecture/,
+  );
 
   const questionTurn = container.querySelector(
     "[data-slot='assessment-question-turn']",
@@ -306,7 +313,8 @@ test("SINGLE_SELECT: click updates selection only (no mutation), Enter/Send subm
     }),
   );
 
-  const radios = container.querySelectorAll<HTMLButtonElement>("[role='radio']");
+  const radios =
+    container.querySelectorAll<HTMLButtonElement>("[role='radio']");
   assert.equal(radios.length, 2);
 
   // Click option A -> selects A only, mutation NOT called
@@ -362,7 +370,8 @@ test("OTHER / requiresFreeText: requires custom text in shared composer before s
     }),
   );
 
-  const radios = container.querySelectorAll<HTMLButtonElement>("[role='radio']");
+  const radios =
+    container.querySelectorAll<HTMLButtonElement>("[role='radio']");
   assert.equal(radios.length, 2);
 
   // Select option with requiresFreeText
@@ -424,7 +433,8 @@ test("OTHER IS NOT HARDCODED: custom choice where label is not 'Other' triggers 
     }),
   );
 
-  const radios = container.querySelectorAll<HTMLButtonElement>("[role='radio']");
+  const radios =
+    container.querySelectorAll<HTMLButtonElement>("[role='radio']");
   await click(radios[1]);
 
   const sendButton = container.querySelector(
@@ -463,7 +473,8 @@ test("BOOLEAN: uses ChatSingleSelect, selection on click, submits on Enter/Send"
     }),
   );
 
-  const radios = container.querySelectorAll<HTMLButtonElement>("[role='radio']");
+  const radios =
+    container.querySelectorAll<HTMLButtonElement>("[role='radio']");
   assert.equal(radios.length, 2);
 
   // Click Yes
@@ -504,9 +515,8 @@ test("MULTI_SELECT: supports toggle selection, deselect, and multi-value submiss
     }),
   );
 
-  const checkboxes = container.querySelectorAll<HTMLButtonElement>(
-    "[role='checkbox']",
-  );
+  const checkboxes =
+    container.querySelectorAll<HTMLButtonElement>("[role='checkbox']");
   assert.equal(checkboxes.length, 3);
 
   // Select A and B
@@ -650,6 +660,33 @@ test("ASK vs CLARIFY: preserves semantic data-intent attribute without rewrite",
       ?.getAttribute("data-intent"),
     "CLARIFY",
   );
+});
+
+test("question renders once and prior answer summary is hidden when history is visible", async () => {
+  const question: AssessmentInterviewQuestion = {
+    control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+    id: "q-summary",
+    intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
+    prompt: "What does workflow gating block?",
+    priorAnswerSummary: "Only the assessment is paused.",
+  };
+
+  for (const answerHistoryVisible of [false, true]) {
+    const { container } = await renderElement(
+      React.createElement(AssessmentQuestionTurn, {
+        question,
+        answerHistoryVisible,
+      }),
+    );
+    assert.equal(container.textContent?.split(question.prompt).length, 2);
+    const summary = container.querySelector(
+      "[data-slot='selection-history-row']",
+    );
+    assert.equal(
+      summary?.textContent ?? null,
+      answerHistoryVisible ? null : question.priorAnswerSummary,
+    );
+  }
 });
 
 test("CUSTOMER-SAFE EVIDENCE: raw evidence refs are absent from visible text, DOM attributes, and markup", async () => {

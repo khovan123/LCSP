@@ -1018,6 +1018,15 @@ test("LCSP-272 HANDOFF: evidence ready without orchestration request stays truth
     handoff.placeholderKey,
     "pages.assessmentFlow.interview.pendingPlaceholder",
   );
+  const resumed = {
+    ...normalized,
+    interview: {
+      ...normalized.interview,
+      answerHistory: [{ questionId: "answered-question", answeredAt: "2026-09-05T10:00:00.000Z", summary: "Saved answer" }],
+    },
+  };
+  assert.equal(selectInterviewHandoffPresentation(resumed).messageKey,
+    "pages.assessmentFlow.interview.continuingDescription");
 });
 
 test("LCSP-272 HANDOFF: active runtime question produces the real F04 projection", () => {

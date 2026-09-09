@@ -209,6 +209,7 @@ type MockInterviewAudit = {
 };
 
 type MockRuntimeEvents = {
+  recordToolStarted: jest.Mock<(...args: unknown[]) => Promise<void>>;
   recordToolWaitingInput: jest.Mock<(...args: unknown[]) => Promise<void>>;
   recordToolCompleted: jest.Mock<(...args: unknown[]) => Promise<void>>;
   recordToolFailed: jest.Mock<(...args: unknown[]) => Promise<void>>;
@@ -219,6 +220,7 @@ type MockRuntimeEvents = {
 
 describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => {
   let service: AssessmentInterviewRuntimeService;
+  const findHistoricalQuestion = jest.fn<(...args: unknown[]) => Promise<{ payload: Record<string, unknown> } | null>>();
   let mockTx: MockPrismaDelegates;
   let mockOutboxRepository: MockOutboxRepository;
   let mockInterviewAudit: MockInterviewAudit;
@@ -227,7 +229,34 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
   };
   let mockRuntimeEvents: MockRuntimeEvents;
 
+  it("projects the author's stored answer with redaction instead of the generic history summary", async () => {
+    const thread = targetedResolutionThreadFixture();
+    const timestamp = "2026-09-09T00:00:00.000Z";
+    const store = thread.privateContextJson as { revisions: Record<string, unknown>[] };
+    store.revisions[0].answeredAt = timestamp;
+    store.revisions[0].answer = { questionId: "q-1", freeText: 'Original answer\napi_key="sensitive"' };
+    thread.stateJson = {
+      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      answerHistory: [{ questionId: "q-1", answeredAt: timestamp, summary: "Generic summary" }],
+    };
+    mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(thread);
+    findHistoricalQuestion.mockResolvedValue({ payload: { prompt: "What does workflow gating block?", whyEvidenceRefs: ["private-ref"] } });
+    const actor = { userId: "user-1", sessionId: "session-1", role: AUTH_USER_ROLES.customer, scope: "assessment:assessment-1" };
+    const state = await service.getState("assessment-1", actor);
+    expect(state.answerHistory?.[0].summary).toContain("Original answer");
+    expect(state.answerHistory?.[0].questionPrompt).toBe("What does workflow gating block?");
+    expect(state.answerHistory?.[0]).not.toHaveProperty("whyEvidenceRefs");
+    expect(findHistoricalQuestion).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ resourceId: "assessment-1", sessionId: "interview:assessment-1", payload: { path: ["questionId"], equals: "q-1" } }),
+    }));
+    expect(state.answerHistory?.[0].summary).not.toContain("sensitive");
+    expect(state.answerHistory?.[0]).not.toHaveProperty("actorId");
+    store.revisions[0].actorId = "another-user";
+    expect((await service.getState("assessment-1", actor)).answerHistory?.[0].summary).toBe("Generic summary");
+  });
+
   beforeEach(() => {
+    findHistoricalQuestion.mockReset().mockResolvedValue(null);
     mockTx = {
       assessment: {
         findUnique: jest
@@ -278,6 +307,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
     };
 
     const mockPrisma = {
+      auditEvent: { findFirst: findHistoricalQuestion },
       ...mockTx,
       $transaction: jest.fn(
         async <T>(cb: (tx: MockPrismaDelegates) => Promise<T>): Promise<T> =>
@@ -292,6 +322,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
     };
 
     mockRuntimeEvents = {
+      recordToolStarted: jest.fn<(...args: unknown[]) => Promise<void>>().mockResolvedValue(undefined),
       recordToolWaitingInput: jest
         .fn<(...args: unknown[]) => Promise<void>>()
         .mockResolvedValue(undefined),
@@ -769,6 +800,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         expect.objectContaining({
           questionId: "q-single-other",
           summary: "Customer selected 1 option(s).",
+          questionPrompt: "Select the deployment model.",
         }),
       ]);
       expect(mockTx.assessmentInterviewThread.updateMany).toHaveBeenCalledWith(
@@ -845,6 +877,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         expect.objectContaining({
           questionId: "q-multi-other",
           summary: "Customer selected 2 option(s).",
+          questionPrompt: "Select compliance frameworks.",
         }),
       ]);
       expect(mockTx.assessmentInterviewThread.updateMany).toHaveBeenCalledWith(

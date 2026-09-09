@@ -441,7 +441,9 @@ function isAnswerHistoryItem(
     !!record &&
     typeof record.questionId === "string" &&
     typeof record.answeredAt === "string" &&
-    typeof record.actorId === "string" &&
+    (record.questionPrompt === undefined ||
+      typeof record.questionPrompt === "string") &&
+    (record.actorId === undefined || typeof record.actorId === "string") &&
     typeof record.summary === "string"
   );
 }

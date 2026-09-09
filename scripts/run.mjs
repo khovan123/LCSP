@@ -825,6 +825,9 @@ function dockerWorkerEnv() {
     "LCSP_PLANNER_MODEL",
     "LCSP_INTERVIEW_MODEL",
     "LCSP_INVESTIGATOR_MODEL",
+    "LCSP_NARRATOR_MODEL",
+    "LCSP_REASONING_EFFORT",
+    "LCSP_LANGSMITH_TRACING",
     "WORKER_RUNTIME_VERSION",
     "WORKER_RUNTIME_BUILD_REF",
     "PHOENIX_TRACING",
@@ -861,6 +864,14 @@ function dockerWorkerEnv() {
     PHOENIX_PROJECT: defaultPhoenixProject,
     HEALTH_PORT: "8080",
     PYTHONPATH: dockerManagedAgentPythonPath,
+    LANGSMITH_TRACING:
+      process.env.LCSP_LANGSMITH_TRACING ??
+      rootEnv.LCSP_LANGSMITH_TRACING ??
+      "false",
+    LANGCHAIN_TRACING_V2:
+      process.env.LCSP_LANGSMITH_TRACING ??
+      rootEnv.LCSP_LANGSMITH_TRACING ??
+      "false",
     KNIP_BINARY: "/usr/local/bin/knip",
   };
 }

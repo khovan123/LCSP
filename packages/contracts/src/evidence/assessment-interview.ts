@@ -24,6 +24,17 @@ export type AssessmentInterviewOutcome =
 
 export type InterviewOutcome = AssessmentInterviewOutcome;
 
+export const INTERVIEW_PROGRESS_PHASES = {
+  queued: "QUEUED",
+  running: "RUNNING",
+  toolRunning: "TOOL_RUNNING",
+  completed: "COMPLETED",
+  failed: "FAILED",
+} as const;
+
+export type InterviewProgressPhase =
+  (typeof INTERVIEW_PROGRESS_PHASES)[keyof typeof INTERVIEW_PROGRESS_PHASES];
+
 /** Canonical Interview reasoning modes. PRE_PLANNER is input-only compatibility. */
 export const ASSESSMENT_INTERVIEW_MODES = {
   initialInterview: "INITIAL_INTERVIEW",
@@ -479,6 +490,7 @@ export type AssessmentInterviewAuditRef = {
 
 export type AssessmentInterviewAnswerHistoryItem = {
   questionId: string;
+  questionPrompt?: string;
   answeredAt: string;
   /** Internal history stores actorId; Customer projections omit it. */
   actorId?: string;

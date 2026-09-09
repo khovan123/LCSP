@@ -40,7 +40,26 @@ import {
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
 
-import { buildSubmitInterviewAnswerCommand } from "../src/lib/api/assessment-interview-client";
+import {
+  buildSubmitInterviewAnswerCommand,
+  sanitizeAssessmentInterviewState,
+} from "../src/lib/api/assessment-interview-client";
+
+test("public interview history survives sanitization without private actor identity", () => {
+  const answer = {
+    questionId: "purpose-question",
+    answeredAt: "2026-09-09T00:00:00.000Z",
+    summary: "The system pauses assessment for human review.",
+  };
+  const state = sanitizeAssessmentInterviewState({
+    mode: ASSESSMENT_INTERVIEW_MODES.initialInterview,
+    outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+    answerHistory: [answer, { questionId: "invalid" }],
+  });
+  assert.ok(state);
+  assert.deepEqual(state.answerHistory, [answer]);
+  assert.deepEqual(sanitizeAssessmentInterviewState(state)?.answerHistory, [answer]);
+});
 
 const workspaceRoot = new URL("../src/", import.meta.url);
 const contractsPath = new URL(

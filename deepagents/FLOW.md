@@ -181,20 +181,46 @@ Defaults live in `model_policy.py` and can be overridden by deployment env vars.
 
 | Role | Default model | Workload |
 | --- | --- | --- |
-| Root orchestrator | `openai:gpt-5.6-terra` | coordination, delegation, todo/state management |
-| Legal triage | `openai:gpt-5.6-sol` | legal work-item triage |
-| Interview | `openai:gpt-5.6-sol` | Customer business-context reasoning and clarification |
-| Planner | `openai:gpt-5.6-sol` | high-reasoning scope construction |
-| Investigator | `openai:gpt-5.6-terra` | repeated tool-heavy technical investigation |
+| Root orchestrator | `openai:gpt-5-mini` | coordination, delegation, todo/state management |
+| Legal triage | `openai:gpt-5-mini` | legal work-item triage |
+| Interview | `openai:gpt-5-mini` | Customer business-context reasoning and clarification |
+| Planner | `openai:gpt-5-mini` | high-reasoning scope construction |
+| Investigator | `openai:gpt-5-mini` | repeated tool-heavy technical investigation |
+| Narrators/proposers | `openai:gpt-4o-mini` | bounded narration and proposal fields without reasoning kwargs |
 
-OpenAI `provider:model` specs are constructed through an LCSP `ProviderProfile`
-that explicitly sets `use_responses_api=True`, `output_version="responses/v1"`,
-and `reasoning={"effort": ...}`. Reasoning effort defaults to `medium` and can be
-overridden with `LCSP_REASONING_EFFORT` (with legacy aliases retained for deployment
-compatibility). This keeps tool/reasoning turns on the Responses API path and
-preserves Responses-format reasoning items in LangGraph message state rather than
-relying on model-name routing inference or the stateless Chat Completions path.
-LCSP does not request reasoning summaries and does not expose hidden chain-of-thought.
+OpenAI `provider:model` specs are constructed through an LCSP provider profile
+that explicitly sets the Responses API client contract:
+`use_responses_api=True` and `output_version="responses/v1"`. Reasoning is not
+enabled merely because the provider is OpenAI. LCSP attaches
+`reasoning={"effort": ...}` only when both conditions are true:
+
+1. the agent role is a reasoning owner (`root`, `triage`, `interview`, `planner`,
+   `investigator`, `lcsp-legal-chunk-triage`, `lcsp-engineering-rule-compiler`,
+   `lcsp-engineering-rule-planner`, `law_guided_investigator`, or
+   `lcsp-investigator-durable-execution`);
+2. the model is an OpenAI reasoning-capable model such as `gpt-5-mini`,
+   `gpt-5.1`, `gpt-5.6-*`, or an o-series reasoning model.
+
+Non-reasoning narrators/proposers omit reasoning even when their model is OpenAI:
+`lcsp-final-report-narrator`, `lcsp-classification-rationale-narrator`,
+`lcsp-classification-proposer`, and `lcsp-ai-usage-flow-proposer`. Overrides to
+non-reasoning models such as `openai:gpt-4o-mini` also omit reasoning regardless
+of whether the Responses API or Chat Completions path is used. Reasoning effort
+defaults to `low` and can be overridden with `LCSP_REASONING_EFFORT` (with
+legacy aliases retained for deployment compatibility). LCSP does not request
+reasoning summaries and does not expose hidden chain-of-thought.
+
+Development-cost defaults can be overridden with:
+
+```env
+LCSP_ROOT_AGENT_MODEL=openai:gpt-5.1
+LCSP_TRIAGE_MODEL=openai:gpt-5.1
+LCSP_PLANNER_MODEL=openai:gpt-5.1
+LCSP_INTERVIEW_MODEL=openai:gpt-5.1
+LCSP_INVESTIGATOR_MODEL=openai:gpt-5.1
+LCSP_REASONING_EFFORT=low
+LCSP_NARRATOR_MODEL=openai:gpt-4o-mini
+```
 
 All role models receive the same LCSP harness profile.
 

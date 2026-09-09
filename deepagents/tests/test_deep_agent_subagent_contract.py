@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
 import pytest
 
 import harness
+import model_policy
 from middleware.interview_runtime_context import inject_interview_runtime_context
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.runtime_context import inject_lcsp_runtime_context
@@ -12,12 +14,14 @@ from model_policy import (
     ALL_LCSP_MODEL_SPECS,
     DEFAULT_INTERVIEW_MODEL_SPEC,
     DEFAULT_INVESTIGATOR_MODEL_SPEC,
+    DEFAULT_NARRATOR_MODEL_SPEC,
     DEFAULT_PLANNER_MODEL_SPEC,
     DEFAULT_REASONING_EFFORT,
     DEFAULT_ROOT_MODEL_SPEC,
     DEFAULT_TRIAGE_MODEL_SPEC,
     INTERVIEW_MODEL_SPEC,
     INVESTIGATOR_MODEL_SPEC,
+    NARRATOR_MODEL_SPEC,
     PLANNER_MODEL_SPEC,
     REASONING_EFFORT,
     RESPONSES_OUTPUT_VERSION,
@@ -26,7 +30,11 @@ from model_policy import (
     _model_spec,
     _reasoning_effort_status,
     effective_model_configs,
+    model_init_kwargs_for_agent,
+    openai_responses_base_init_kwargs,
     openai_responses_init_kwargs,
+    reasoning_policy_for_agent,
+    supports_openai_reasoning,
 )
 from subagents import FLOW_SUBAGENTS
 from contracts.handoffs import (
@@ -197,12 +205,13 @@ def test_engineering_rules_are_pinned_inputs_not_subagent_discovery() -> None:
 
 
 def test_default_role_models_match_lcsp_cost_and_reasoning_policy() -> None:
-    assert DEFAULT_ROOT_MODEL_SPEC == "openai:gpt-5.6-terra"
-    assert DEFAULT_TRIAGE_MODEL_SPEC == "openai:gpt-5.6-sol"
-    assert DEFAULT_PLANNER_MODEL_SPEC == "openai:gpt-5.6-sol"
-    assert DEFAULT_INTERVIEW_MODEL_SPEC == "openai:gpt-5.6-sol"
-    assert DEFAULT_INVESTIGATOR_MODEL_SPEC == "openai:gpt-5.6-terra"
-    assert DEFAULT_REASONING_EFFORT == "medium"
+    assert DEFAULT_ROOT_MODEL_SPEC == "openai:gpt-5-mini"
+    assert DEFAULT_TRIAGE_MODEL_SPEC == "openai:gpt-5-mini"
+    assert DEFAULT_PLANNER_MODEL_SPEC == "openai:gpt-5-mini"
+    assert DEFAULT_INTERVIEW_MODEL_SPEC == "openai:gpt-5-mini"
+    assert DEFAULT_INVESTIGATOR_MODEL_SPEC == "openai:gpt-5-mini"
+    assert DEFAULT_NARRATOR_MODEL_SPEC == "openai:gpt-4o-mini"
+    assert DEFAULT_REASONING_EFFORT == "low"
     assert RESPONSES_OUTPUT_VERSION == "responses/v1"
 
     assert ROOT_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
@@ -210,10 +219,16 @@ def test_default_role_models_match_lcsp_cost_and_reasoning_policy() -> None:
     assert PLANNER_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
     assert INTERVIEW_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
     assert INVESTIGATOR_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
+    assert NARRATOR_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
 
 
-def test_openai_model_policy_forces_responses_api_reasoning_contract() -> None:
-    kwargs = openai_responses_init_kwargs()
+def test_openai_model_policy_gates_reasoning_by_model_capability() -> None:
+    assert openai_responses_base_init_kwargs() == {
+        "use_responses_api": True,
+        "output_version": "responses/v1",
+    }
+
+    kwargs = openai_responses_init_kwargs("openai:gpt-5-mini")
 
     assert kwargs == {
         "use_responses_api": True,
@@ -221,6 +236,92 @@ def test_openai_model_policy_forces_responses_api_reasoning_contract() -> None:
         "reasoning": {"effort": REASONING_EFFORT},
     }
     assert "reasoning_effort" not in kwargs
+    assert openai_responses_init_kwargs("openai:gpt-4o-mini") == {
+        "use_responses_api": True,
+        "output_version": "responses/v1",
+    }
+    assert supports_openai_reasoning("openai:gpt-5-mini") is True
+    assert supports_openai_reasoning("openai:gpt-5.1") is True
+    assert supports_openai_reasoning("openai:gpt-5") is True
+    assert supports_openai_reasoning("openai:gpt-5-chat-latest") is False
+    assert supports_openai_reasoning("openai:gpt-4o-mini") is False
+    assert supports_openai_reasoning("anthropic:claude-sonnet-4-6") is False
+
+
+def test_agent_reasoning_policy_is_role_and_model_scoped() -> None:
+    assert (
+        reasoning_policy_for_agent(
+            agent_name="lcsp-engineering-rule-planner",
+            model_spec="openai:gpt-5-mini",
+        )
+        == "enabled"
+    )
+    assert (
+        reasoning_policy_for_agent(
+            agent_name="lcsp-engineering-rule-planner",
+            model_spec="openai:gpt-4o-mini",
+        )
+        == "unsupported_model"
+    )
+    assert (
+        reasoning_policy_for_agent(
+            agent_name="lcsp-final-report-narrator",
+            model_spec="openai:gpt-5-mini",
+        )
+        == "disabled_for_agent"
+    )
+    assert "reasoning" not in model_init_kwargs_for_agent(
+        agent_name="lcsp-final-report-narrator",
+        model_spec="openai:gpt-5-mini",
+    )
+    assert "reasoning" not in model_init_kwargs_for_agent(
+        agent_name="lcsp-engineering-rule-planner",
+        model_spec="openai:gpt-4o-mini",
+    )
+    assert model_init_kwargs_for_agent(
+        agent_name="lcsp-engineering-rule-planner",
+        model_spec="openai:gpt-5-mini",
+    )["reasoning"] == {"effort": REASONING_EFFORT}
+
+
+def test_openai_non_reasoning_env_override_omits_reasoning(monkeypatch) -> None:
+    monkeypatch.setenv("LCSP_TRIAGE_MODEL", "openai:gpt-4o-mini")
+
+    try:
+        reloaded = importlib.reload(model_policy)
+        configs = {config.role: config for config in reloaded.effective_model_configs()}
+
+        assert reloaded.TRIAGE_MODEL_SPEC == "openai:gpt-4o-mini"
+        assert configs["triage"].client == "responses_api"
+        assert configs["triage"].reasoning_effort == "unset"
+        assert configs["triage"].reasoning_policy == "unsupported_model"
+        assert "reasoning" not in reloaded.model_init_kwargs_for_agent(
+            agent_name="triage",
+            model_spec=reloaded.TRIAGE_MODEL_SPEC,
+        )
+    finally:
+        monkeypatch.delenv("LCSP_TRIAGE_MODEL", raising=False)
+        importlib.reload(model_policy)
+
+
+def test_narrator_model_env_defaults_to_non_reasoning_model(monkeypatch) -> None:
+    monkeypatch.setenv("LCSP_NARRATOR_MODEL", "openai:gpt-4o-mini")
+
+    try:
+        reloaded = importlib.reload(model_policy)
+        configs = {config.role: config for config in reloaded.effective_model_configs()}
+
+        assert reloaded.NARRATOR_MODEL_SPEC == "openai:gpt-4o-mini"
+        assert configs["narrator"].client == "responses_api"
+        assert configs["narrator"].reasoning_effort == "unset"
+        assert configs["narrator"].reasoning_policy == "disabled_for_agent"
+        assert "reasoning" not in reloaded.model_init_kwargs_for_agent(
+            agent_name="lcsp-final-report-narrator",
+            model_spec=reloaded.NARRATOR_MODEL_SPEC,
+        )
+    finally:
+        monkeypatch.delenv("LCSP_NARRATOR_MODEL", raising=False)
+        importlib.reload(model_policy)
 
 
 def test_effective_model_config_logs_responses_api_defaults() -> None:
@@ -232,23 +333,40 @@ def test_effective_model_config_logs_responses_api_defaults() -> None:
         "planner",
         "interview",
         "investigator",
+        "narrator",
     )
     assert all(config.provider == "openai" for config in configs)
     assert tuple(config.model for config in configs) == (
-        "gpt-5.6-terra",
-        "gpt-5.6-sol",
-        "gpt-5.6-sol",
-        "gpt-5.6-sol",
-        "gpt-5.6-terra",
+        "gpt-5-mini",
+        "gpt-5-mini",
+        "gpt-5-mini",
+        "gpt-5-mini",
+        "gpt-5-mini",
+        "gpt-4o-mini",
     )
     assert all(config.source in {"default", "env"} for config in configs)
     assert all(config.client == "responses_api" for config in configs)
     assert all(config.tools is True for config in configs)
-    assert all(config.reasoning_effort == REASONING_EFFORT for config in configs)
+    assert tuple(config.reasoning_effort for config in configs) == (
+        REASONING_EFFORT,
+        REASONING_EFFORT,
+        REASONING_EFFORT,
+        REASONING_EFFORT,
+        REASONING_EFFORT,
+        "unset",
+    )
+    assert tuple(config.reasoning_policy for config in configs) == (
+        "enabled",
+        "enabled",
+        "enabled",
+        "enabled",
+        "enabled",
+        "disabled_for_agent",
+    )
     assert all(config.output_version == "responses/v1" for config in configs)
 
 
-def test_reasoning_effort_defaults_to_medium(monkeypatch) -> None:
+def test_reasoning_effort_defaults_to_low(monkeypatch) -> None:
     for env_name in (
         "LCSP_REASONING_EFFORT",
         "OPENAI_REASONING_EFFORT",
@@ -256,7 +374,7 @@ def test_reasoning_effort_defaults_to_medium(monkeypatch) -> None:
     ):
         monkeypatch.delenv(env_name, raising=False)
 
-    assert _reasoning_effort_status() == "medium"
+    assert _reasoning_effort_status() == "low"
 
 
 def test_invalid_reasoning_effort_fails_closed(monkeypatch) -> None:
@@ -269,9 +387,9 @@ def test_invalid_reasoning_effort_fails_closed(monkeypatch) -> None:
 def test_blank_model_env_does_not_override_default(monkeypatch) -> None:
     monkeypatch.setenv("LCSP_TRIAGE_MODEL", "  ")
 
-    model_spec, source = _model_spec("LCSP_TRIAGE_MODEL", "openai:gpt-5.6-sol")
+    model_spec, source = _model_spec("LCSP_TRIAGE_MODEL", "openai:gpt-5-mini")
 
-    assert model_spec == "openai:gpt-5.6-sol"
+    assert model_spec == "openai:gpt-5-mini"
     assert source == "default"
 
 
@@ -292,11 +410,23 @@ def test_harness_registers_openai_provider_and_every_role_profile(monkeypatch) -
 
     harness.configure_lcsp_harness()
 
-    assert provider_registrations == [
-        ("openai", harness.LCSP_OPENAI_PROVIDER_PROFILE)
-    ]
+    assert tuple(key for key, _ in provider_registrations) == (
+        "openai",
+        *ALL_LCSP_MODEL_SPECS,
+    )
+    profiles = {key: profile for key, profile in provider_registrations}
     assert dict(harness.LCSP_OPENAI_PROVIDER_PROFILE.init_kwargs) == (
-        openai_responses_init_kwargs()
+        openai_responses_base_init_kwargs()
+    )
+    assert dict(profiles["openai"].init_kwargs) == openai_responses_base_init_kwargs()
+    assert dict(profiles[ROOT_MODEL_SPEC].init_kwargs) == openai_responses_init_kwargs(
+        ROOT_MODEL_SPEC
+    )
+    assert dict(profiles[TRIAGE_MODEL_SPEC].init_kwargs) == openai_responses_init_kwargs(
+        TRIAGE_MODEL_SPEC
+    )
+    assert dict(profiles[NARRATOR_MODEL_SPEC].init_kwargs) == (
+        openai_responses_base_init_kwargs()
     )
     assert tuple(model_spec for model_spec, _ in harness_registrations) == (
         ALL_LCSP_MODEL_SPECS

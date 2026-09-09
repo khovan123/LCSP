@@ -90,6 +90,10 @@ export type PagesMessages = {
     chatTranscriptLabel: string;
     chatComposerPlaceholder: string;
     chatSend: string;
+    chatExpand: string;
+    chatCollapse: string;
+    chatShowMore: string;
+    chatShowLess: string;
     chatCopy: string;
     chatThinking: string;
     chatOptionsLabel: string;
@@ -1362,6 +1366,12 @@ export type PagesMessages = {
       startingDescription: string;
       startingPlaceholder: string;
       pendingDescription: string;
+      continuingDescription: string;
+      progressQueued: string;
+      progressRunning: string;
+      progressTool: string;
+      progressCompleted: string;
+      progressFailed: string;
       pendingPlaceholder: string;
       placeholder: string;
     };

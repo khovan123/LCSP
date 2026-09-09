@@ -47,6 +47,10 @@ class WorkerCallbackError(Exception):
     pass
 
 
+class InterviewCoverageCallbackError(WorkerCallbackError):
+    """Coverage changed or failed validation; the boundary must request recovery."""
+
+
 class WorkerApiClient:
     """Internal API adapter used by workers for canonical reads and callbacks.
 
@@ -110,6 +114,11 @@ class WorkerApiClient:
                     message = client_error_message(resp.status_code)
                     if error_code:
                         message = f"{error_code}: {message}"
+                    if resp.status_code == 409 and error_code in {
+                        "INTERVIEW_PARTIAL_COVERAGE_LIMITATIONS_REQUIRED",
+                        "INTERVIEW_TECHNICAL_COVERAGE_UNUSABLE",
+                    }:
+                        raise InterviewCoverageCallbackError(message)
                     raise WorkerCallbackError(message)
 
                 if resp.status_code >= 500:
@@ -327,6 +336,19 @@ class WorkerApiClient:
         else:
             resp_data = self._post_with_retry(path, request_payload)
         return CallbackResponse(**resp_data)
+
+    def post_interview_progress(self, assessment_id: str, revision: int, phase: str) -> None:
+        try:
+            response = httpx.post(
+                f"{self._base_url}/internal/assessment-interviews/{assessment_id}/runtime-progress",
+                headers={WORKER_API_KEY_HEADER: self._api_key, correlationId_HEADER: get_correlationId()},
+                json={"contextRevision": revision, "phase": phase},
+                timeout=3,
+            )
+            response.raise_for_status()
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning("Interview progress delivery failed phase=%s", phase)
 
     def post_scan_runtime_event(self, scan_job_id: str, payload: dict) -> None:
         """Submit best-effort privacy-safe runtime progress for an active scan job."""
