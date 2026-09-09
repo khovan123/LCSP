@@ -161,6 +161,49 @@ export class AdminUsersController {
     return resultEnvelope(response);
   }
 
+  private async buildUserDetail(
+    user: {
+      id: string;
+      email: string;
+      displayName: string | null;
+      role: any;
+      lockUntil: Date | null;
+      emailVerified: boolean;
+      createdAt: Date;
+      authRecords: Array<{ type: string; createdAt: Date }>;
+      assessmentOwners: Array<{ id: string; createdAt: Date }>;
+    },
+    forcedStatus?: AuthAccountStatus,
+  ): Promise<AdminUserDetail> {
+    const lastSession = user.authRecords.find((r) => r.type === "SESSION");
+    const assessmentsCount = user.assessmentOwners.length;
+    const scansCount = await this.prisma.repositoryScanJob.count({
+      where: {
+        assessment: { ownerId: user.id },
+      },
+    });
+
+    const latestAssessment = user.assessmentOwners[0];
+
+    const usageSummary: AdminUserUsageSummary = {
+      assessments30d: assessmentsCount,
+      lastAssessmentAt: latestAssessment ? latestAssessment.createdAt.toISOString() : null,
+      creditSpend30d: assessmentsCount * 25,
+      openFindingsCount: scansCount,
+    };
+
+    return {
+      id: user.id,
+      fullName: user.displayName || user.email.split("@")[0] || "User",
+      email: user.email,
+      role: fromPrismaAuthUserRole(user.role),
+      status: forcedStatus ?? computeUserStatus(user),
+      createdAt: user.createdAt.toISOString(),
+      lastActiveAt: lastSession?.createdAt.toISOString() ?? null,
+      usageSummary,
+    };
+  }
+
   @Get(":id")
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.admin)
@@ -171,9 +214,12 @@ export class AdminUsersController {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
-        assessmentOwners: { select: { id: true } },
+        assessmentOwners: {
+          select: { id: true, createdAt: true },
+          orderBy: { createdAt: "desc" },
+        },
         authRecords: {
-          where: { type: { in: ["SESSION", "OAUTH_IDENTITY"] } },
+          where: { type: "SESSION" },
           orderBy: { createdAt: "desc" },
         },
       },
@@ -187,43 +233,7 @@ export class AdminUsersController {
       );
     }
 
-    const lastSession = user.authRecords.find((r) => r.type === "SESSION");
-    const oauthRecord = user.authRecords.find(
-      (r) => r.type === "OAUTH_IDENTITY",
-    );
-
-    let authProvider = "EMAIL_PASSWORD";
-    if (oauthRecord) {
-      const meta = oauthRecord.metadata as { provider?: string } | null;
-      authProvider = meta?.provider?.toUpperCase() || "OAUTH";
-    }
-
-    const assessmentsCount = user.assessmentOwners.length;
-    const scansCount = await this.prisma.repositoryScanJob.count({
-      where: {
-        assessment: { ownerId: user.id },
-      },
-    });
-
-    const usageSummary: AdminUserUsageSummary = {
-      assessments30d: assessmentsCount,
-      scans30d: scansCount,
-      storageMb: assessmentsCount * 12 + scansCount * 4,
-    };
-
-    const detail: AdminUserDetail = {
-      id: user.id,
-      fullName: user.displayName || user.email.split("@")[0] || "User",
-      email: user.email,
-      role: fromPrismaAuthUserRole(user.role),
-      status: computeUserStatus(user),
-      authProvider,
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
-      lastActiveAt: lastSession?.createdAt.toISOString() ?? null,
-      usageSummary,
-    };
-
+    const detail = await this.buildUserDetail(user);
     return resultEnvelope(detail);
   }
 
@@ -252,9 +262,9 @@ export class AdminUsersController {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
-        assessmentOwners: { select: { id: true } },
+        assessmentOwners: { select: { id: true, createdAt: true } },
         authRecords: {
-          where: { type: { in: ["SESSION", "OAUTH_IDENTITY"] } },
+          where: { type: "SESSION" },
           orderBy: { createdAt: "desc" },
         },
       },
@@ -310,9 +320,12 @@ export class AdminUsersController {
         role: toPrismaAuthUserRole(targetRole),
       },
       include: {
-        assessmentOwners: { select: { id: true } },
+        assessmentOwners: {
+          select: { id: true, createdAt: true },
+          orderBy: { createdAt: "desc" },
+        },
         authRecords: {
-          where: { type: { in: ["SESSION", "OAUTH_IDENTITY"] } },
+          where: { type: "SESSION" },
           orderBy: { createdAt: "desc" },
         },
       },
@@ -335,35 +348,7 @@ export class AdminUsersController {
       },
     });
 
-    const lastSession = updated.authRecords.find((r) => r.type === "SESSION");
-    const oauthRecord = updated.authRecords.find(
-      (r) => r.type === "OAUTH_IDENTITY",
-    );
-    const authProvider = oauthRecord
-      ? (oauthRecord.metadata as any)?.provider?.toUpperCase() || "OAUTH"
-      : "EMAIL_PASSWORD";
-    const assessmentsCount = updated.assessmentOwners.length;
-    const scansCount = await this.prisma.repositoryScanJob.count({
-      where: { assessment: { ownerId: updated.id } },
-    });
-
-    const detail: AdminUserDetail = {
-      id: updated.id,
-      fullName: updated.displayName || updated.email.split("@")[0] || "User",
-      email: updated.email,
-      role: fromPrismaAuthUserRole(updated.role),
-      status: computeUserStatus(updated),
-      authProvider,
-      createdAt: updated.createdAt.toISOString(),
-      updatedAt: updated.updatedAt.toISOString(),
-      lastActiveAt: lastSession?.createdAt.toISOString() ?? null,
-      usageSummary: {
-        assessments30d: assessmentsCount,
-        scans30d: scansCount,
-        storageMb: assessmentsCount * 12 + scansCount * 4,
-      },
-    };
-
+    const detail = await this.buildUserDetail(updated);
     return resultEnvelope(detail);
   }
 
@@ -378,9 +363,9 @@ export class AdminUsersController {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
-        assessmentOwners: { select: { id: true } },
+        assessmentOwners: { select: { id: true, createdAt: true } },
         authRecords: {
-          where: { type: { in: ["SESSION", "OAUTH_IDENTITY"] } },
+          where: { type: "SESSION" },
           orderBy: { createdAt: "desc" },
         },
       },
@@ -431,9 +416,12 @@ export class AdminUsersController {
           lockUntil: suspendUntil,
         },
         include: {
-          assessmentOwners: { select: { id: true } },
+          assessmentOwners: {
+            select: { id: true, createdAt: true },
+            orderBy: { createdAt: "desc" },
+          },
           authRecords: {
-            where: { type: { in: ["SESSION", "OAUTH_IDENTITY"] } },
+            where: { type: "SESSION" },
             orderBy: { createdAt: "desc" },
           },
         },
@@ -466,35 +454,7 @@ export class AdminUsersController {
       },
     });
 
-    const lastSession = updated.authRecords.find((r) => r.type === "SESSION");
-    const oauthRecord = updated.authRecords.find(
-      (r) => r.type === "OAUTH_IDENTITY",
-    );
-    const authProvider = oauthRecord
-      ? (oauthRecord.metadata as any)?.provider?.toUpperCase() || "OAUTH"
-      : "EMAIL_PASSWORD";
-    const assessmentsCount = updated.assessmentOwners.length;
-    const scansCount = await this.prisma.repositoryScanJob.count({
-      where: { assessment: { ownerId: updated.id } },
-    });
-
-    const detail: AdminUserDetail = {
-      id: updated.id,
-      fullName: updated.displayName || updated.email.split("@")[0] || "User",
-      email: updated.email,
-      role: fromPrismaAuthUserRole(updated.role),
-      status: AUTH_ACCOUNT_STATUSES.suspended,
-      authProvider,
-      createdAt: updated.createdAt.toISOString(),
-      updatedAt: updated.updatedAt.toISOString(),
-      lastActiveAt: lastSession?.createdAt.toISOString() ?? null,
-      usageSummary: {
-        assessments30d: assessmentsCount,
-        scans30d: scansCount,
-        storageMb: assessmentsCount * 12 + scansCount * 4,
-      },
-    };
-
+    const detail = await this.buildUserDetail(updated, AUTH_ACCOUNT_STATUSES.suspended);
     return resultEnvelope(detail);
   }
 }
