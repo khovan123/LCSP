@@ -374,8 +374,10 @@ describe("Admin Release Gate & Security Integrity (e2e)", () => {
         "LCSP-295": "PENDING_UPSTREAM_MERGE (User Accounts Management UI)",
         "LCSP-296": "PENDING_UPSTREAM_MERGE (Corpus Versions UI)",
         "LCSP-298": "PENDING_UPSTREAM_MERGE (Admin Overview API & Read Model)",
-        "LCSP-299": "PENDING_UPSTREAM_MERGE (Admin User Lifecycle API & Mutations)",
-        "LCSP-300": "PENDING_UPSTREAM_MERGE (Corpus Administration API & Readiness Engine)",
+        "LCSP-299":
+          "PENDING_UPSTREAM_MERGE (Admin User Lifecycle API & Mutations)",
+        "LCSP-300":
+          "PENDING_UPSTREAM_MERGE (Corpus Administration API & Readiness Engine)",
       };
 
       assert.ok(DEPENDENCY_STATUSES["LCSP-294"]);
