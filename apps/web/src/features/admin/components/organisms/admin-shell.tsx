@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { AdminSidebar } from "@/features/admin/components/organisms/admin-sidebar";
+import { useAuthSettingsProfileQuery } from "@/lib/api/auth-queries";
 
 type AdminShellProps = {
   children: ReactNode;
@@ -14,10 +15,20 @@ export function AdminShell({
   adminName,
   adminEmail,
 }: AdminShellProps) {
+  const { data: profile } = useAuthSettingsProfileQuery();
+
+  const resolvedName =
+    adminName ??
+    profile?.display_name ??
+    (profile?.email ? profile.email.split("@")[0] : undefined) ??
+    "Administrator";
+  const resolvedEmail =
+    adminEmail ?? profile?.email ?? "admin@lcsp.internal";
+
   return (
     <div className="flex min-h-screen w-full bg-background text-foreground antialiased selection:bg-primary/20">
       {/* 248px Desktop Admin Sidebar */}
-      <AdminSidebar adminName={adminName} adminEmail={adminEmail} />
+      <AdminSidebar adminName={resolvedName} adminEmail={resolvedEmail} />
 
 
       {/* Main Content Surface (1192px at 1440px desktop viewport) */}

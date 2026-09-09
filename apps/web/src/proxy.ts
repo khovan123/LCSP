@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
   AUTH_ERROR_CODES,
+  AUTH_USER_ROLES,
   REQUIRED_ACTIONS,
   type RequiredAction,
 } from "@lcsp/contracts/auth";
@@ -74,6 +75,16 @@ async function continueProxy(request: NextRequest, requestHeaders: Headers) {
     );
     response.cookies.delete(SESSION_COOKIE_NAME);
     return response;
+  }
+
+  const pathname = request.nextUrl.pathname;
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    const userRole = verification.result?.ok
+      ? (verification.result.data as { role?: string })?.role
+      : undefined;
+    if (userRole !== AUTH_USER_ROLES.admin) {
+      return NextResponse.redirect(new URL("/workspace", request.url));
+    }
   }
 
   return NextResponse.next({ request: { headers: requestHeaders } });
