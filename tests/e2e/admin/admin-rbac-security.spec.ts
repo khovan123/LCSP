@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Admin RBAC & Security Isolation (E2E)", () => {
+test.describe("Admin Release Gate: RBAC & Security Isolation (Sentinel)", () => {
   test("asserts browser never sends worker credentials or hits internal worker endpoints during live navigation", async ({
     page,
   }) => {

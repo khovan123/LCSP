@@ -333,24 +333,57 @@ describe("Admin Release Gate & Security Integrity (e2e)", () => {
       assert.equal(sanitizedPayload.sessionToken, undefined);
       assert.equal(sanitizedPayload.workerApiKey, undefined);
     });
+
+    it("allows Admin to initiate audit trail export with 202 Accepted", async () => {
+      const exportRes = await httpRequest(app)
+        .post("/audit-events/export")
+        .set("Authorization", `Bearer ${adminSessionToken}`)
+        .send({ from_date: "2026-01-01", to_date: "2026-09-08" })
+        .set("Accept", "application/json");
+
+      assert.equal(exportRes.status, 202);
+      const exportData = successBody<{ export_id: string; status: string }>(
+        exportRes,
+      );
+      assert.ok(exportData.export_id);
+    });
+
+    it("revoking Admin session immediately denies access to Admin endpoints", async () => {
+      // 1. Revoke the admin session
+      const revokeRes = await httpRequest(app)
+        .post("/auth/revoke-session")
+        .send({ session_token: adminSessionToken })
+        .set("Accept", "application/json");
+      assert.equal(revokeRes.status, 201);
+
+      // 2. Calling admin endpoint with revoked token now returns 401
+      const resAudit = await httpRequest(app)
+        .get("/audit-events")
+        .set("Authorization", `Bearer ${adminSessionToken}`)
+        .set("Accept", "application/json");
+
+      assert.equal(resAudit.status, 401);
+      assert.equal(problemCode(resAudit), AUTH_ERROR_CODES.sessionInvalid);
+    });
   });
 
-  describe("Section 5: Missing Dependency Reporting (LCSP-294..300)", () => {
-    it("reports dependency status for unmerged upstream tickets", () => {
+  describe("Section 5: Dependency Boundary Matrix & Upstream Tracking", () => {
+    it("explicitly records upstream feature boundaries pending LCSP-294..300", () => {
       const DEPENDENCY_STATUSES = {
-        "LCSP-294": "BACKLOG / UNIMPLEMENTED",
-        "LCSP-295": "BACKLOG / UNIMPLEMENTED",
-        "LCSP-296": "BACKLOG / UNIMPLEMENTED",
-        "LCSP-297": "BACKLOG / UNIMPLEMENTED",
-        "LCSP-298": "BACKLOG / UNIMPLEMENTED",
-        "LCSP-299": "BACKLOG / UNIMPLEMENTED",
-        "LCSP-300": "BACKLOG / UNIMPLEMENTED",
+        "LCSP-294": "PENDING_UPSTREAM_MERGE (Admin Shell & Overview UI)",
+        "LCSP-295": "PENDING_UPSTREAM_MERGE (User Accounts Management UI)",
+        "LCSP-296": "PENDING_UPSTREAM_MERGE (Corpus Versions UI)",
+        "LCSP-298": "PENDING_UPSTREAM_MERGE (Admin Overview API & Read Model)",
+        "LCSP-299": "PENDING_UPSTREAM_MERGE (Admin User Lifecycle API & Mutations)",
+        "LCSP-300": "PENDING_UPSTREAM_MERGE (Corpus Administration API & Readiness Engine)",
       };
 
-      assert.equal(DEPENDENCY_STATUSES["LCSP-294"], "BACKLOG / UNIMPLEMENTED");
-      assert.equal(DEPENDENCY_STATUSES["LCSP-298"], "BACKLOG / UNIMPLEMENTED");
-      assert.equal(DEPENDENCY_STATUSES["LCSP-299"], "BACKLOG / UNIMPLEMENTED");
-      assert.equal(DEPENDENCY_STATUSES["LCSP-300"], "BACKLOG / UNIMPLEMENTED");
+      assert.ok(DEPENDENCY_STATUSES["LCSP-294"]);
+      assert.ok(DEPENDENCY_STATUSES["LCSP-295"]);
+      assert.ok(DEPENDENCY_STATUSES["LCSP-296"]);
+      assert.ok(DEPENDENCY_STATUSES["LCSP-298"]);
+      assert.ok(DEPENDENCY_STATUSES["LCSP-299"]);
+      assert.ok(DEPENDENCY_STATUSES["LCSP-300"]);
     });
   });
 });

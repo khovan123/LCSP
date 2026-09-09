@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Admin Corpus Lifecycle & Publication Readiness (E2E)", () => {
+test.describe("Admin Release Gate: Corpus Lifecycle & Publication Readiness (Contract Invariants)", () => {
   test("publication readiness gating: publishing forbidden unless authoritative state is READY", async () => {
     function isPublishAllowed(readinessState: string): boolean {
       return readinessState === "READY";

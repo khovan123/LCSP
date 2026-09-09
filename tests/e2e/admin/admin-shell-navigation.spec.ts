@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Admin Shell & Layout Visual Invariants (Figma 1440x900)", () => {
+test.describe("Admin Release Gate: Shell & Layout Invariants (Figma 1440x900)", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test("validates 1440x900 desktop viewport geometry and no horizontal overflow", async ({

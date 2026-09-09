@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Admin User Lifecycle & Destructive Action Safeguards (E2E)", () => {
+test.describe("Admin Release Gate: User Lifecycle & Destructive Action Safeguards (Contract Invariants)", () => {
   test("destructive suspend modal dismissal contracts: Cancel, Escape, Backdrop cause 0 mutations", async () => {
     let mutationCount = 0;
 
