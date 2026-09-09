@@ -187,7 +187,9 @@ export class AdminUsersController {
 
     const usageSummary: AdminUserUsageSummary = {
       assessments30d: assessmentsCount,
-      lastAssessmentAt: latestAssessment ? latestAssessment.createdAt.toISOString() : null,
+      lastAssessmentAt: latestAssessment
+        ? latestAssessment.createdAt.toISOString()
+        : null,
       creditSpend30d: assessmentsCount * 25,
       openFindingsCount: scansCount,
     };
@@ -454,7 +456,10 @@ export class AdminUsersController {
       },
     });
 
-    const detail = await this.buildUserDetail(updated, AUTH_ACCOUNT_STATUSES.suspended);
+    const detail = await this.buildUserDetail(
+      updated,
+      AUTH_ACCOUNT_STATUSES.suspended,
+    );
     return resultEnvelope(detail);
   }
 }
