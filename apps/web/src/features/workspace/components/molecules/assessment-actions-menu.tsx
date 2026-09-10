@@ -3,7 +3,7 @@
 import { ASSESSMENT_NAME_MAX_LENGTH } from "@lcsp/contracts/assessment";
 import { MoreHorizontalIcon, PencilIcon, Trash2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -51,8 +51,6 @@ export function AssessmentActionsMenu({
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [renameName, setRenameName] = useState(assessment.name);
-
-  useEffect(() => setRenameName(assessment.name), [assessment.name]);
 
   function openRenameDialog() {
     renameMutation.reset();

@@ -208,11 +208,13 @@ test("chat single select uses generic exclusive radio-row semantics and selected
   assert.match(source, /aria-checked=\{selected\}/);
   assert.match(source, /onValueChange\(option\.id\)/);
   assert.match(source, /ArrowDown|ArrowRight|ArrowUp|ArrowLeft|Home|End/);
-  assert.match(source, /h-9 min-w-0 items-center/);
+  assert.match(source, /min-h-9 min-w-0 items-start/);
+  assert.match(source, /whitespace-normal wrap-anywhere/);
+  assert.doesNotMatch(source, /(?:^|\s)h-9(?:\s|$)|truncate|line-clamp-/);
   assert.match(source, /rounded-xl border border-input bg-card/);
   assert.match(source, /bg-chart-3\/20/);
   assert.doesNotMatch(source, /GitHub|GitLab|Bitbucket|Azure DevOps/);
-  assert.doesNotMatch(source, /CheckIcon|items-start/);
+  assert.doesNotMatch(source, /CheckIcon/);
 });
 
 test("selection history preserves the submitted value as compact transcript history", async () => {
