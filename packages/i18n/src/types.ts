@@ -1892,7 +1892,7 @@ export type PagesMessages = {
       created: string;
       published: string;
       actions: string;
-      none: string;
+      noValue: string;
       unavailable: string;
       loading: string;
       error: string;

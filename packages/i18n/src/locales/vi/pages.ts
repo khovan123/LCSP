@@ -2177,7 +2177,7 @@ export const viPages = {
       created: "Ngày tạo",
       published: "Đã công bố",
       actions: "Thao tác",
-      none: "Không có",
+      noValue: "Không có",
       unavailable: "Không khả dụng",
       loading: "Đang tải phiên bản corpus",
       error: "Không thể tải phiên bản corpus",

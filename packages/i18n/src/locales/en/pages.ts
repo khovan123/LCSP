@@ -2172,7 +2172,7 @@ export const enPages = {
       created: "Created",
       published: "Published",
       actions: "Actions",
-      none: "None",
+      noValue: "None",
       unavailable: "Unavailable",
       loading: "Loading corpus versions",
       error: "Unable to load corpus versions",

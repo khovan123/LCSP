@@ -57,7 +57,7 @@ const date = (value: string | null) =>
         dateStyle: "medium",
         timeStyle: "short",
       }).format(new Date(value))
-    : text("none");
+    : text("noValue");
 
 export function CorpusVersionsPage({
   versions,
@@ -114,7 +114,9 @@ export function CorpusVersionsPage({
             </Button>
           </div>
         ) : (
-          <p className="mt-2 text-sm text-muted-foreground">{text("none")}</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {text("noValue")}
+          </p>
         )}
       </section>
       <section>
