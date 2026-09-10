@@ -291,3 +291,62 @@ def test_resolver_handoff_rejects_nested_final_verdict_in_free_value() -> None:
                 "can_resume_existing_plan": True,
             },
         )
+
+
+def test_rule_scope_not_applicable_requires_confirmed_statement_ref() -> None:
+    payload = _investigator_payload()
+    payload["claims"] = [
+        {
+            "claim_id": "claim-scope-1",
+            "engineering_rule_id": "eng-1",
+            "claim_type": "RULE_SCOPE_NOT_APPLICABLE",
+            "value": None,
+            "evidence_refs": [],
+            "graph_path_refs": [],
+            "source_anchor_refs": [],
+            "customer_context_refs": ["stmt-good", "stmt-bad"],
+            "confidence": 0.0,
+            "limitations": [],
+            "criterion": "TARGETED_SCOPE_EXCLUDED",
+        }
+    ]
+
+    with pytest.raises(SpecialistHandoffValidationError, match="confirmed statements"):
+        validate_specialist_handoff(
+            "investigator",
+            payload,
+            graph=_graph(),
+            pinned_rule_ids=("eng-1",),
+            pinned_versions={"technicalEvidenceReportId": "ter-1"},
+            confirmed_statement_refs=("stmt-good",),
+        )
+
+
+def test_rule_scope_not_applicable_allows_confirmed_statement_refs_without_graph_refs() -> None:
+    payload = _investigator_payload()
+    payload["claims"] = [
+        {
+            "claim_id": "claim-scope-1",
+            "engineering_rule_id": "eng-1",
+            "claim_type": "RULE_SCOPE_NOT_APPLICABLE",
+            "value": None,
+            "evidence_refs": [],
+            "graph_path_refs": [],
+            "source_anchor_refs": [],
+            "customer_context_refs": ["stmt-good"],
+            "confidence": 0.0,
+            "limitations": [],
+            "criterion": "TARGETED_SCOPE_EXCLUDED",
+        }
+    ]
+
+    handoff = validate_specialist_handoff(
+        "investigator",
+        payload,
+        graph=_graph(),
+        pinned_rule_ids=("eng-1",),
+        pinned_versions={"technicalEvidenceReportId": "ter-1"},
+        confirmed_statement_refs=("stmt-good",),
+    )
+
+    assert handoff.claims[0].customer_context_refs == ["stmt-good"]

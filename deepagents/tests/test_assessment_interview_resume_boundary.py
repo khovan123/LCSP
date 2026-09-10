@@ -605,3 +605,111 @@ def test_interview_resume_boundary_rejects_missing_revision() -> None:
         message = _message()
         message.pop("contextRevision")
         boundary.handle(message, "corr-1")
+
+def test_context_resolved_targeted_scope_exclusion_closes_without_investigator() -> None:
+    continuation = {
+        "originatingInvestigationReference": "investigator:investigator-exec-17:need-1",
+        "investigatorExecutionId": "investigator-exec-17",
+        "workflowRunId": "investigator:investigator-exec-17",
+        "checkpointId": "checkpoint-original",
+        "affectedRuleIds": ["ENG-1"],
+        "artifactVersions": {
+            "technicalEvidenceReportId": "ter-1",
+            "repositorySnapshotId": "snapshot-1",
+        },
+        "sourceVersion": "snapshot-1:abc",
+        "pgeVersion": "ter-1:v1",
+    }
+    confirmed_context = _confirmed_context()
+    confirmed_context["statements"] = [
+        {
+            "statementId": "stmt-national-data",
+            "topic": "national_data_source_reuse",
+            "statement": "No national data repository source is reused.",
+            "normalizedValue": False,
+            "scope": {"needId": "need-1"},
+            "evidenceRefs": ["technicalEvidenceReport:ter-1"],
+            "respondentRef": "actor:authenticated:1",
+            "createdAt": "2026-09-05T00:00:00Z",
+            "source": "CUSTOMER_CONFIRMED",
+            "resolutionState": "CONFIRMED",
+        }
+    ]
+
+    class TargetedApi(RecordingApi):
+        def get_interview_private_context(self, *args, **kwargs):
+            result = super().get_interview_private_context(*args, **kwargs)
+            result["targetedNeed"] = {
+                "needId": "need-1",
+                "businessContextNeed": "Confirm whether the system reuses a national data repository source.",
+                "resolutionCriteria": ["national_data_source_reuse"],
+                "originatingInvestigationReference": continuation[
+                    "originatingInvestigationReference"
+                ],
+            }
+            return result
+
+        def post_interview_agent_decision(self, assessment_id, payload):
+            super().post_interview_agent_decision(assessment_id, payload)
+            return {
+                "outcome": "CONTEXT_RESOLVED",
+                "confirmedContext": confirmed_context,
+                "continuation": continuation,
+            }
+
+        def get_active_legal_rule_catalog(self):
+            return {
+                "versionId": "catalog-v1",
+                "rules": [
+                    {
+                        "legalRuleId": "legal-national-data",
+                        "status": "APPROVED",
+                        "engineeringRuleIds": ["ENG-1"],
+                        "requiredFacts": [
+                            {
+                                "field": "nationalDataSourceReuse",
+                                "expectedValue": True,
+                            }
+                        ],
+                    }
+                ],
+            }
+
+    targeted_handoff = {
+        "expectedContextRevision": 0,
+        "mode": "INVESTIGATOR_RESOLUTION",
+        "outcome": "CONTEXT_RESOLVED",
+        "contextAuthority": "CUSTOMER_CONFIRMED",
+        "confirmedContext": confirmed_context,
+        "flags": [],
+        "blockedActions": [],
+        "targetedResolution": {},
+    }
+    api = TargetedApi()
+    resume_calls = []
+    completion_calls = []
+
+    def exact_resumer(**kwargs):
+        resume_calls.append(kwargs)
+        raise AssertionError("Investigator must not be resumed")
+
+    def exact_completer(**kwargs):
+        completion_calls.append(kwargs)
+
+    boundary = AssessmentInterviewResumeBoundary(
+        SimpleNamespace(),
+        api_client=api,
+        dispatcher=RecordingDispatcher(targeted_handoff),
+        investigator_resumer=exact_resumer,
+        investigation_completer=exact_completer,
+    )
+
+    boundary.handle(_message(reason="INVESTIGATOR_RESOLUTION_REQUIRED"), "corr-1")
+
+    assert resume_calls == []
+    assert len(completion_calls) == 1
+    handoff = completion_calls[0]["resumed_handoff"]
+    assert handoff["status"] == "READY"
+    assert handoff["claims"][0]["claim_type"] == "RULE_SCOPE_NOT_APPLICABLE"
+    assert handoff["claims"][0]["customer_context_refs"] == ["stmt-national-data"]
+    assert handoff["claims"][0]["criterion"] == "TARGETED_SCOPE_EXCLUDED"

@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from contracts.handoffs import (
+    InvestigatorClaim,
     InvestigatorResult,
     ResolverResult,
     SPECIALIST_RESPONSE_FORMATS,
@@ -14,6 +15,9 @@ from contracts.handoffs import (
 from tools.common.capabilities.assessment.claims.evidence_claim.evidence_claim_validator import (
     EvidenceClaimValidationError,
     EvidenceClaimValidator,
+)
+from tools.common.capabilities.assessment.claims.evidence_claim.models import (
+    ENGINEERING_EVIDENCE_CLAIM_TYPES,
 )
 
 
@@ -32,6 +36,24 @@ CONTROLLED_NON_VERDICT_PATHS = frozenset(
     }
 )
 
+
+def _validate_customer_context_claim_refs(
+    claims: list[InvestigatorClaim],
+    *,
+    confirmed_statement_refs: tuple[str, ...],
+) -> None:
+    known = {str(ref) for ref in confirmed_statement_refs if str(ref).strip()}
+    for claim in claims:
+        if (
+            claim.claim_type
+            != ENGINEERING_EVIDENCE_CLAIM_TYPES["rule_scope_not_applicable"]
+        ):
+            continue
+        missing = [ref for ref in claim.customer_context_refs if ref not in known]
+        if missing or not known:
+            raise SpecialistHandoffValidationError(
+                "RULE_SCOPE_NOT_APPLICABLE customer_context_refs must reference confirmed statements"
+            )
 
 def _response_model(subagent_type: str) -> type[BaseModel]:
     if subagent_type == "resolver":
@@ -86,6 +108,7 @@ def validate_specialist_handoff(
     graph: Any | None = None,
     pinned_rule_ids: tuple[str, ...] | list[str] | None = None,
     pinned_versions: dict[str, str] | None = None,
+    confirmed_statement_refs: tuple[str, ...] | list[str] | None = None,
 ) -> BaseModel:
     """Validate a specialist handoff before root or deterministic gates consume it."""
     model = _response_model(subagent_type)
@@ -110,6 +133,7 @@ def validate_specialist_handoff(
                 pinned_rule_ids=tuple(pinned_rule_ids),
                 pinned_versions=pinned_versions,
                 program_graph=graph,
+                confirmed_statement_refs=confirmed_statement_refs,
             )
         elif investigator.status == "READY":
             raise SpecialistHandoffValidationError(
@@ -125,6 +149,7 @@ def validate_investigator_handoff(
     pinned_rule_ids: tuple[str, ...],
     pinned_versions: dict[str, str],
     program_graph: Any,
+    confirmed_statement_refs: tuple[str, ...] | list[str] | None = None,
 ) -> tuple[Any, ...]:
     """Validate an Investigator handoff against immutable run pins."""
     handoff = (
@@ -152,10 +177,21 @@ def validate_investigator_handoff(
     if handoff.status != "READY":
         return ()
 
+    _validate_customer_context_claim_refs(
+        handoff.claims,
+        confirmed_statement_refs=tuple(confirmed_statement_refs or ()),
+    )
+
     validator = EvidenceClaimValidator()
     validated_claims: list[Any] = []
     try:
         for claim in handoff.claims:
+            if (
+                claim.claim_type
+                == ENGINEERING_EVIDENCE_CLAIM_TYPES["rule_scope_not_applicable"]
+            ):
+                validated_claims.append(claim.to_evidence_claim())
+                continue
             validated_claims.append(validator.validate(claim.to_evidence_claim(), program_graph))
     except EvidenceClaimValidationError as exc:
         raise SpecialistHandoffValidationError(

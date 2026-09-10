@@ -14,6 +14,16 @@ from tools.common.capabilities.assessment.planning.engineering_rule.confirmed_bu
     ConfirmedStructuredBusinessContext,
     normalize_confirmed_structured_business_context,
 )
+from tools.common.capabilities.assessment.claims.evidence_claim.models import (
+    ENGINEERING_EVIDENCE_CLAIM_TYPES,
+)
+from tools.common.capabilities.assessment.planning.engineering_rule.engineering_rule_planner import (
+    ENGINEERING_RULE_PLAN_REASON_CODES,
+)
+from tools.legal.retrieval.legal_basis.rule_applicability_evaluator import (
+    RuleApplicabilityEvaluator,
+    RULE_APPLICABILITY_STATUSES,
+)
 
 INTERVIEW_RESUME_COMMAND = "command.assessment-interview.resume-agent.v1"
 CURRENT_CONTEXT = "CURRENT"
@@ -22,6 +32,18 @@ STALE_CONTEXT = "STALE"
 STALE_PROVENANCE_CONTEXT = "STALE_PROVENANCE"
 _TERMINAL_GUARDED_OUTCOMES = {"CONTEXT_READY", "CONTEXT_RESOLVED"}
 _DOWNSTREAM_IMPACT_FLAG = "DOWNSTREAM_IMPACT"
+_LEGAL_RULE_NOT_APPLICABLE_STATUS = RULE_APPLICABILITY_STATUSES["not_applicable"]
+
+# Targeted Interview resolution criteria are authored as customer-facing snake_case
+# keys, while LegalRule.requiredFacts fields remain catalog-owned facts. Keep this
+# bridge explicit and narrow so administrative customer facts can exclude only the
+# parent legal rule fact they were requested to resolve.
+_TARGETED_RESOLUTION_FACT_FIELDS = {
+    "national_data_source_reuse": (
+        "nationalDataSourceReuse",
+        "national_data_source_reuse",
+    ),
+}
 
 
 class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
@@ -710,6 +732,24 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         confirmed_context: ConfirmedStructuredBusinessContext,
         correlationId: str,
     ) -> None:
+        api_client = self._api_client or self._load_api_client()
+        scope_excluded_handoff = _deterministic_not_applicable_handoff(
+            api_client=api_client,
+            continuation=continuation,
+            confirmed_context=confirmed_context,
+        )
+        if scope_excluded_handoff is not None:
+            self._complete_exact_investigator_resume(
+                api_client=api_client,
+                assessment_id=assessment_id,
+                context_revision=context_revision,
+                continuation=continuation,
+                confirmed_context=confirmed_context,
+                handoff=scope_excluded_handoff,
+                correlationId=correlationId,
+            )
+            return
+
         resumer = self._investigator_resumer
         if resumer is None:
             from tools.common.capabilities.assessment.investigation.engineering_rule.managed_targeted_investigator import (
@@ -718,7 +758,6 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
 
             resumer = resume_managed_investigator
 
-        api_client = self._api_client or self._load_api_client()
         result = resumer(
             config=self._config,
             api_client=api_client,
@@ -744,6 +783,27 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 "exact Investigator resume must complete the original bounded investigation"
             )
 
+        self._complete_exact_investigator_resume(
+            api_client=api_client,
+            assessment_id=assessment_id,
+            context_revision=context_revision,
+            continuation=continuation,
+            confirmed_context=confirmed_context,
+            handoff=handoff,
+            correlationId=correlationId,
+        )
+
+    def _complete_exact_investigator_resume(
+        self,
+        *,
+        api_client: Any,
+        assessment_id: str,
+        context_revision: int,
+        continuation: dict[str, Any],
+        confirmed_context: ConfirmedStructuredBusinessContext,
+        handoff: dict[str, Any],
+        correlationId: str,
+    ) -> None:
         completer = self._investigation_completer
         if completer is None:
             from tools.common.capabilities.assessment.investigation.engineering_rule.managed_targeted_investigator import (
@@ -857,6 +917,146 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
 
         return agent
 
+
+
+def _deterministic_not_applicable_handoff(
+    *,
+    api_client: Any,
+    continuation: dict[str, Any],
+    confirmed_context: ConfirmedStructuredBusinessContext,
+) -> dict[str, Any] | None:
+    rules = _active_legal_rules(api_client)
+    if not rules:
+        return None
+    affected_rule_ids = [
+        str(value)
+        for value in continuation.get("affectedRuleIds") or []
+        if str(value or "").strip()
+    ]
+    for affected_rule_id in affected_rule_ids:
+        legal_rule = _parent_legal_rule_for_engineering_rule(rules, affected_rule_id)
+        if legal_rule is None:
+            continue
+        profile = _profile_with_confirmed_context_facts(
+            _base_verified_profile(legal_rule),
+            legal_rule=legal_rule,
+            confirmed_context=confirmed_context,
+        )
+        outcome = RuleApplicabilityEvaluator().evaluate_rule(
+            rule=legal_rule,
+            verified_profile=profile,
+        )
+        if outcome.status != _LEGAL_RULE_NOT_APPLICABLE_STATUS:
+            continue
+        statement_refs = tuple(
+            ref for refs in profile.get("factEvidenceRefs", {}).values() for ref in refs
+        )
+        if not statement_refs:
+            continue
+        return {
+            "status": "READY",
+            "artifact_versions": dict(continuation.get("artifactVersions") or {}),
+            "claims": [
+                {
+                    "claim_id": f"claim:targeted-scope-excluded:{affected_rule_id}",
+                    "engineering_rule_id": affected_rule_id,
+                    "claim_type": ENGINEERING_EVIDENCE_CLAIM_TYPES[
+                        "rule_scope_not_applicable"
+                    ],
+                    "value": None,
+                    "evidence_refs": [],
+                    "graph_path_refs": [],
+                    "source_anchor_refs": [],
+                    "customer_context_refs": list(dict.fromkeys(statement_refs)),
+                    "confidence": outcome.confidence,
+                    "limitations": [],
+                    "criterion": ENGINEERING_RULE_PLAN_REASON_CODES[
+                        "targeted_scope_excluded"
+                    ],
+                }
+            ],
+            "limitations": [],
+            "missing_input": None,
+            "next_step": "GATE",
+        }
+    return None
+
+
+def _active_legal_rules(api_client: Any) -> list[dict[str, Any]]:
+    try:
+        catalog = api_client.get_active_legal_rule_catalog()
+    except Exception:
+        return []
+    if not isinstance(catalog, dict):
+        return []
+    return [rule for rule in catalog.get("rules") or [] if isinstance(rule, dict)]
+
+
+def _parent_legal_rule_for_engineering_rule(
+    rules: list[dict[str, Any]],
+    engineering_rule_id: str,
+) -> dict[str, Any] | None:
+    for rule in rules:
+        legal_rule_id = str(rule.get("legalRuleId") or rule.get("legal_rule_id") or "")
+        if engineering_rule_id.startswith(f"{legal_rule_id}::PRECOMPILED::"):
+            return rule
+        if engineering_rule_id in _legal_rule_engineering_rule_ids(rule):
+            return rule
+    return None
+
+
+def _legal_rule_engineering_rule_ids(rule: dict[str, Any]) -> set[str]:
+    values: set[str] = set()
+    for key in ("engineeringRuleIds", "engineering_rule_ids"):
+        raw = rule.get(key)
+        if isinstance(raw, list):
+            values.update(str(item) for item in raw if str(item or "").strip())
+    raw_rules = rule.get("engineeringRules") or rule.get("engineering_rules")
+    if isinstance(raw_rules, list):
+        for item in raw_rules:
+            if isinstance(item, dict):
+                value = item.get("engineeringRuleId") or item.get("engineering_rule_id")
+                if str(value or "").strip():
+                    values.add(str(value))
+    return values
+
+
+def _base_verified_profile(rule: dict[str, Any]) -> dict[str, Any]:
+    raw = rule.get("verifiedProfile") or rule.get("verified_profile") or {}
+    if not isinstance(raw, dict):
+        raw = {}
+    merged = raw.get("mergedProfile") or raw.get("merged_profile") or {}
+    refs = raw.get("factEvidenceRefs") or raw.get("fact_evidence_refs") or {}
+    return {
+        "mergedProfile": dict(merged) if isinstance(merged, dict) else {},
+        "factEvidenceRefs": dict(refs) if isinstance(refs, dict) else {},
+    }
+
+
+def _profile_with_confirmed_context_facts(
+    profile: dict[str, Any],
+    *,
+    legal_rule: dict[str, Any],
+    confirmed_context: ConfirmedStructuredBusinessContext,
+) -> dict[str, Any]:
+    merged = dict(profile.get("mergedProfile") or {})
+    fact_refs = dict(profile.get("factEvidenceRefs") or {})
+    required_fields = {
+        str(fact.get("field"))
+        for fact in legal_rule.get("requiredFacts") or []
+        if isinstance(fact, dict) and str(fact.get("field") or "").strip()
+    }
+    for statement in confirmed_context.statements:
+        candidate_fields = _TARGETED_RESOLUTION_FACT_FIELDS.get(statement.topic, ())
+        target_field = next(
+            (field for field in candidate_fields if field in required_fields),
+            None,
+        )
+        if target_field is None:
+            continue
+        merged[target_field] = statement.normalized_value
+        fact_refs[target_field] = [statement.statement_id]
+    return {"mergedProfile": merged, "factEvidenceRefs": fact_refs}
 
 def _terminal_guarded_state(context: dict[str, Any]) -> bool:
     state = context.get("publicState")
