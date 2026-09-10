@@ -356,10 +356,9 @@ export function GraphFirstDetail({
             </Button>
           </div>
           <svg
-            className="h-full min-h-[620px] w-full cursor-grab active:cursor-grabbing"
+            className="h-full min-h-[620px] w-full cursor-grab touch-none select-none active:cursor-grabbing"
             viewBox={`0 0 ${width} ${height}`}
             role="img"
-            style={{ touchAction: "none", userSelect: "none" }}
             onPointerDown={(event) => {
               const target = event.target as Element;
               dragRef.current = {
