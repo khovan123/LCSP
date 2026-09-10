@@ -134,8 +134,8 @@ export function AdminUserTable({
                     <span
                       className={cn(
                         "inline-flex items-center gap-1.5 text-[11.5px] font-medium",
-                        isActive && "text-emerald-600 dark:text-emerald-400",
-                        isSuspended && "text-rose-600 dark:text-rose-400",
+                        isActive && "text-admin-status-active-foreground",
+                        isSuspended && "text-admin-status-suspended-foreground",
                         !isActive && !isSuspended && "text-muted-foreground",
                       )}
                     >

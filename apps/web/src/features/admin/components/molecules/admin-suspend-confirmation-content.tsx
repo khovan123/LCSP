@@ -25,7 +25,7 @@ export function AdminSuspendConfirmationContent({
   return (
     <div className="flex flex-col space-y-4">
       {/* Warning Notice Banner */}
-      <div className="flex items-start gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-rose-600 dark:text-rose-400">
+      <div className="flex items-start gap-3 rounded-xl border border-admin-danger-border bg-admin-danger-surface p-3.5 text-admin-danger-foreground">
         <AlertTriangleIcon className="size-5 shrink-0 mt-0.5" />
         <p className="text-[12.5px] font-medium leading-relaxed">
           {warningText}

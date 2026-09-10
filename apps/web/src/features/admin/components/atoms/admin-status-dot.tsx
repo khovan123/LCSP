@@ -14,8 +14,8 @@ export function AdminStatusDot({ status, className }: AdminStatusDotProps) {
     <span
       className={cn(
         "size-2 shrink-0 rounded-full",
-        isActive && "bg-emerald-500",
-        isSuspended && "bg-rose-500",
+        isActive && "bg-admin-status-active",
+        isSuspended && "bg-admin-status-suspended",
         !isActive && !isSuspended && "bg-muted-foreground",
         className,
       )}

@@ -61,7 +61,7 @@ export function AdminSuspendModal({
       <DialogContent className="max-w-[520px] rounded-[14px] p-0 border border-border shadow-2xl">
         <DialogHeader className="flex flex-col space-y-1.5 border-b-0 pb-0 bg-transparent px-6 pt-6">
           <div className="flex items-center gap-1.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase">
-            <ShieldAlertIcon className="size-3.5 text-amber-500 dark:text-amber-400" />
+            <ShieldAlertIcon className="size-3.5 text-admin-warning-foreground" />
             <span>{eyebrow}</span>
           </div>
           <DialogTitle className="text-[20px] font-semibold text-foreground">

@@ -132,7 +132,7 @@ export function AdminAdministrativeActionsCard({
           variant="outline"
           onClick={onOpenSuspendModal}
           disabled={isSuspended}
-          className="h-[38px] w-[180px] rounded-[10px] border-rose-500/40 bg-rose-500/10 text-[12.5px] font-semibold text-rose-600 dark:text-rose-300 hover:bg-rose-500/20 disabled:opacity-40"
+          className="h-[38px] w-[180px] rounded-[10px] border-admin-danger-border bg-admin-danger-surface text-[12.5px] font-semibold text-admin-danger-foreground hover:bg-admin-danger-surface-hover disabled:opacity-40"
         >
           {suspendAccountLabel}
         </Button>

@@ -34,9 +34,9 @@ export function AdminStatusBadge({
         size === "sm" && "h-[26px] px-2.5 text-[11.5px]",
         size === "md" && "h-[32px] px-3.5 text-[12.5px]",
         isActive &&
-          "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+          "border-admin-status-active-border bg-admin-status-active-surface text-admin-status-active-foreground",
         isSuspended &&
-          "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+          "border-admin-status-suspended-border bg-admin-status-suspended-surface text-admin-status-suspended-foreground",
         !isActive &&
           !isSuspended &&
           "border-border bg-secondary text-muted-foreground",

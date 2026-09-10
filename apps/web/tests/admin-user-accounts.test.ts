@@ -182,3 +182,36 @@ test("Admin mutations invalidate list queries through the shared admin query key
   assert.equal(queryContent.includes("apiQueryKeys.admin.usersRoot()"), true);
   assert.equal(queryContent.includes('queryKey: ["admin", "users"]'), false);
 });
+
+test("Admin UI components use semantic color tokens instead of raw palette colors", async () => {
+  const adminFiles = [
+    "src/app/(admin)/admin/users/[id]/page.tsx",
+    "src/app/(admin)/admin/users/page.tsx",
+    "src/features/admin/components/atoms/admin-detail-row.tsx",
+    "src/features/admin/components/atoms/admin-metric-card.tsx",
+    "src/features/admin/components/atoms/admin-role-badge.tsx",
+    "src/features/admin/components/atoms/admin-status-badge.tsx",
+    "src/features/admin/components/atoms/admin-status-dot.tsx",
+    "src/features/admin/components/molecules/admin-page-header.tsx",
+    "src/features/admin/components/molecules/admin-pagination.tsx",
+    "src/features/admin/components/molecules/admin-suspend-confirmation-content.tsx",
+    "src/features/admin/components/molecules/admin-user-filters.tsx",
+    "src/features/admin/components/molecules/admin-user-identity-cell.tsx",
+    "src/features/admin/components/organisms/admin-account-details-card.tsx",
+    "src/features/admin/components/organisms/admin-administrative-actions-card.tsx",
+    "src/features/admin/components/organisms/admin-shell.tsx",
+    "src/features/admin/components/organisms/admin-sidebar.tsx",
+    "src/features/admin/components/organisms/admin-suspend-modal.tsx",
+    "src/features/admin/components/organisms/admin-usage-summary.tsx",
+    "src/features/admin/components/organisms/admin-user-table.tsx",
+    "src/features/admin/components/templates/admin-shell.tsx",
+    "src/features/admin/components/templates/admin-sidebar.tsx",
+  ];
+  const rawColorPattern =
+    /\b(?:emerald|rose|amber)-\d{2,3}\b|\b(?:black|white)\b|rgb\(|#[0-9a-fA-F]{3,8}\b/;
+
+  for (const relativePath of adminFiles) {
+    const content = await readFile(join(process.cwd(), relativePath), "utf8");
+    assert.equal(rawColorPattern.test(content), false, relativePath);
+  }
+});
