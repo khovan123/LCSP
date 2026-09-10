@@ -50,10 +50,11 @@ class EvidenceClaim:
     evidence_refs: tuple[str, ...]
     graph_path_refs: tuple[str, ...] = ()
     source_anchor_refs: tuple[str, ...] = ()
-    customer_context_refs: tuple[str, ...] = ()
     confidence: float = 0.0
     limitations: tuple[str, ...] = ()
     criterion: str | None = None
+    # Appended to preserve positional construction compatibility at this boundary.
+    customer_context_refs: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
