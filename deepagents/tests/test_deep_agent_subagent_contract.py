@@ -239,6 +239,20 @@ def test_interview_prompt_states_every_enforced_control_shape_rule() -> None:
     assert "exactly CONFIRM and ADJUST stable choice IDs" in interview_prompt
 
 
+def test_investigator_prompt_requires_seeded_flow_trace_before_closure() -> None:
+    investigator_prompt = str(
+        next(item for item in FLOW_SUBAGENTS if item["name"] == "investigator")[
+            "system_prompt"
+        ]
+    )
+
+    assert "substring node search, not path proof or absence proof" in investigator_prompt
+    assert "Do not close a MET or NOT_MET technical claim based solely on `search_program_graph`" in investigator_prompt
+    assert "`trace_static_flow` or `inspect_data_path` starting from concrete seed refs" in investigator_prompt
+    assert "matchMode=SUBSTRING" in investigator_prompt
+    assert "absenceProven=false" in investigator_prompt
+
+
 def test_default_role_models_match_lcsp_cost_and_reasoning_policy() -> None:
     assert DEFAULT_ROOT_MODEL_SPEC == "openai:gpt-5-nano"
     assert DEFAULT_TRIAGE_MODEL_SPEC == "openai:gpt-5-nano"
