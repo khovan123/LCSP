@@ -470,8 +470,6 @@ function stopStaleManagedAgentProcesses() {
 
 function stopDevProcesses() {
   const patterns = [
-    "pnpm dev:fogewise",
-    "node scripts/run.mjs fogewise",
     "node scripts/run.mjs dev",
     "node scripts/run.mjs dev_app",
     ".venv/bin/mda dev --no-reload .",
@@ -498,6 +496,13 @@ function stopDevProcesses() {
     process.ppid,
     ...listParentPids(process.pid),
   ]);
+  // Fogewise owns proxy/infra independently of the application dev processes.
+  // Protect its group too when both launchers share the same terminal/session.
+  for (const pattern of ["scripts/run.mjs fogewise", "fogewise-dev-launchers/"]) {
+    for (const entry of findMatchingProcesses(pattern, protectedPids)) {
+      protectedPids.add(entry.pid);
+    }
+  }
   const protectedProcessGroups = new Set(
     [...protectedPids]
       .map((pid) => readProcessGroupId(pid))
