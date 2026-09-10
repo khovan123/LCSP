@@ -144,7 +144,9 @@ def _deterministic_durable_agent_factory(run_counter: list[int]):
                             "graph_path_refs": [],
                             "source_anchor_refs": [],
                             "confidence": 0.8,
-                            "limitations": [],
+                            "limitations": [
+                                ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]
+                            ],
                             "criterion": None,
                         }
                     ],

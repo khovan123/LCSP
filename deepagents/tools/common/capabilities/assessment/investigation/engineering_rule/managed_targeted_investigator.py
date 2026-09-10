@@ -19,9 +19,14 @@ from contracts.handoffs import InvestigatorResult
 from middleware.specialist_handoff_validation import _persist_targeted_interview_need
 from model_policy import create_lcsp_agent as create_agent
 from orchestration.context import LCSPRunContext
-from orchestration.result_validation import validate_specialist_handoff
+from orchestration.result_validation import (
+    SpecialistHandoffValidationError,
+    validate_specialist_handoff,
+)
 from subagents.investigator.definition import SUBAGENT as INVESTIGATOR_SUBAGENT
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
+    ENGINEERING_EVIDENCE_CLAIM_TYPES,
+    ENGINEERING_LIMITATION_CODES,
     EvidenceClaim,
     InvestigationPacket,
 )
@@ -34,8 +39,16 @@ from tools.common.capabilities.assessment.planning.engineering_rule.confirmed_bu
     coerce_confirmed_structured_business_context,
 )
 from tools.common.capabilities.platform.graph_runtime import checkpoint_database_url
+from tools.common.capabilities.platform.logging import get_logger
 
-from .managed_investigator_execution_store import ManagedInvestigatorExecutionStore
+from .managed_investigator_execution_store import (
+    MANAGED_INVESTIGATOR_EXECUTION_STATUSES,
+    ManagedInvestigatorExecutionStore,
+)
+
+
+logger = get_logger(__name__)
+MAX_MANAGED_INVESTIGATOR_REJECTED_ATTEMPTS = 2
 
 
 class TargetedInterviewPending(BaseException):
@@ -514,7 +527,9 @@ def resume_managed_investigator(
         execution_id=execution_id,
         correlation_id=correlation_id,
     )
-    if resumed_checkpoint_id == checkpoint_id:
+    if resumed_checkpoint_id == checkpoint_id and not _is_failed_investigator_handoff(
+        handoff
+    ):
         raise RuntimeError("exact Investigator resume did not advance its child checkpoint")
     result = InvestigatorResult.model_validate(handoff)
     return {
@@ -607,25 +622,82 @@ def _invoke_managed_investigator(
             if latest_checkpoint and latest_checkpoint != checkpoint_id:
                 structured = _snapshot_structured_response(latest)
                 if structured is not None:
-                    validated = validate_specialist_handoff(
-                        "investigator",
-                        structured,
-                        graph=graph,
-                        pinned_rule_ids=context.engineering_rule_ids,
-                        pinned_versions=dict(context.artifact_versions),
-                    )
-                    recovered = InvestigatorResult.model_validate(validated)
-                    if recovered.status == "READY":
+                    try:
+                        validated = validate_specialist_handoff(
+                            "investigator",
+                            structured,
+                            graph=graph,
+                            pinned_rule_ids=context.engineering_rule_ids,
+                            pinned_versions=dict(context.artifact_versions),
+                        )
+                    except SpecialistHandoffValidationError as error:
+                        record = registry.get(execution_id)
+                        rejected_attempts = (record.attempt_count if record else 0) + 1
+                        error_message = str(error)[:2_000]
+                        logger.warning(
+                            "MANAGED_INVESTIGATOR_STORED_HANDOFF_REJECTED",
+                            execution_id=execution_id,
+                            assessment_id=context.assessment_id,
+                            thread_id=thread_id,
+                            original_checkpoint_id=checkpoint_id,
+                            rejected_checkpoint_id=latest_checkpoint,
+                            rejected_attempts=rejected_attempts,
+                            error_type=type(error).__name__,
+                            error_message=error_message,
+                            correlationId=correlation_id,
+                        )
+                        if (
+                            rejected_attempts
+                            >= MAX_MANAGED_INVESTIGATOR_REJECTED_ATTEMPTS
+                        ):
+                            registry.save(
+                                execution_id=execution_id,
+                                assessment_id=context.assessment_id,
+                                thread_id=thread_id,
+                                checkpoint_id=checkpoint_id,
+                                affected_rule_ids=context.engineering_rule_ids,
+                                artifact_versions=dict(context.artifact_versions),
+                                status=MANAGED_INVESTIGATOR_EXECUTION_STATUSES["failed"],
+                                attempt_count=rejected_attempts,
+                                last_error=error_message,
+                            )
+                            return (
+                                _failed_investigator_handoff(
+                                    context=context,
+                                    last_error=error_message,
+                                ),
+                                checkpoint_id,
+                            )
                         registry.save(
                             execution_id=execution_id,
                             assessment_id=context.assessment_id,
                             thread_id=thread_id,
-                            checkpoint_id=latest_checkpoint,
+                            checkpoint_id=checkpoint_id,
                             affected_rule_ids=context.engineering_rule_ids,
                             artifact_versions=dict(context.artifact_versions),
-                            status="READY",
+                            status=MANAGED_INVESTIGATOR_EXECUTION_STATUSES["rejected"],
+                            attempt_count=rejected_attempts,
+                            last_error=error_message,
                         )
-                        return recovered.model_dump(mode="json"), latest_checkpoint
+                        instruction = _recovery_instruction(
+                            instruction=instruction,
+                            validation_error=error_message,
+                        )
+                    else:
+                        recovered = InvestigatorResult.model_validate(validated)
+                        if recovered.status == "READY":
+                            registry.save(
+                                execution_id=execution_id,
+                                assessment_id=context.assessment_id,
+                                thread_id=thread_id,
+                                checkpoint_id=latest_checkpoint,
+                                affected_rule_ids=context.engineering_rule_ids,
+                                artifact_versions=dict(context.artifact_versions),
+                                status=MANAGED_INVESTIGATOR_EXECUTION_STATUSES["ready"],
+                                attempt_count=0,
+                                last_error=None,
+                            )
+                            return recovered.model_dump(mode="json"), latest_checkpoint
 
         configurable: dict[str, str] = {"thread_id": thread_id}
         if checkpoint_id:
@@ -665,7 +737,13 @@ def _invoke_managed_investigator(
             checkpoint_id=checkpoint_text,
             affected_rule_ids=context.engineering_rule_ids,
             artifact_versions=dict(context.artifact_versions),
-            status="READY" if result.status == "READY" else "WAITING",
+            status=(
+                MANAGED_INVESTIGATOR_EXECUTION_STATUSES["ready"]
+                if result.status == "READY"
+                else MANAGED_INVESTIGATOR_EXECUTION_STATUSES["waiting"]
+            ),
+            attempt_count=0,
+            last_error=None,
         )
         return result.model_dump(mode="json"), checkpoint_text
 
@@ -693,8 +771,64 @@ def _assert_execution_registry_matches_continuation(
     if record.artifact_versions != artifact_versions:
         raise RuntimeError("managed Investigator execution artifact pins drifted")
     if record.checkpoint_id != checkpoint_id:
-        if not (allow_ready_advanced and record.status == "READY"):
+        if not (
+            allow_ready_advanced
+            and record.status == MANAGED_INVESTIGATOR_EXECUTION_STATUSES["ready"]
+        ):
             raise RuntimeError("managed Investigator execution checkpoint identity drifted")
+
+
+def _recovery_instruction(*, instruction: str, validation_error: str) -> str:
+    return (
+        instruction
+        + "\n\nPrevious structured Investigator response was rejected before deterministic "
+        "gate completion. Retry from the original checkpoint and correct this validation "
+        "error explicitly: "
+        + validation_error
+    )
+
+
+def _failed_investigator_handoff(
+    *,
+    context: LCSPRunContext,
+    last_error: str,
+) -> dict[str, Any]:
+    rule_id = context.engineering_rule_ids[0]
+    return {
+        "status": MANAGED_INVESTIGATOR_EXECUTION_STATUSES["ready"],
+        "artifact_versions": dict(context.artifact_versions),
+        "claims": [
+            {
+                "claim_id": f"claim:failed:{rule_id}",
+                "engineering_rule_id": rule_id,
+                "claim_type": ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"],
+                "value": None,
+                "evidence_refs": [],
+                "graph_path_refs": [],
+                "source_anchor_refs": [],
+                "confidence": 0.0,
+                "limitations": [
+                    ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
+                ],
+                "criterion": last_error[:500] or None,
+            }
+        ],
+        "limitations": [
+            ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
+        ],
+        "missing_input": None,
+        "business_context_need": None,
+        "next_step": "GATE",
+    }
+
+
+def _is_failed_investigator_handoff(handoff: dict[str, Any]) -> bool:
+    limitations = handoff.get("limitations")
+    return (
+        isinstance(limitations, list)
+        and ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
+        in limitations
+    )
 
 
 def _durable_investigator_agent(checkpointer: Any):

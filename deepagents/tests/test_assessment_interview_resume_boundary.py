@@ -5,6 +5,9 @@ from unittest.mock import Mock
 
 import pytest
 
+from tools.common.capabilities.assessment.claims.evidence_claim.models import (
+    ENGINEERING_LIMITATION_CODES,
+)
 from tools.common.capabilities.managed.invocation import invocation_boundary_manifest
 from tools.common.capabilities.platform.api_client import (
     InterviewResolutionCallbackError, WorkerCallbackError,
@@ -514,6 +517,9 @@ def test_context_resolved_resumes_exact_managed_investigator_without_root() -> N
                         "value": None,
                         "evidence_refs": ["evidence:1"],
                         "confidence": 0.5,
+                        "limitations": [
+                            ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]
+                        ],
                     }
                 ],
                 "limitations": [],

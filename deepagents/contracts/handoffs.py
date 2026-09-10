@@ -7,7 +7,12 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from tools.common.capabilities.assessment.claims.evidence_claim.models import EvidenceClaim
+from tools.common.capabilities.assessment.claims.evidence_claim.models import (
+    ENGINEERING_EVIDENCE_CLAIM_TYPES,
+    ENGINEERING_LIMITATION_CODES,
+    MODEL_SELECTABLE_LIMITATION_CODES,
+    EvidenceClaim,
+)
 
 
 _TARGETED_TEXT_LEAK_PATTERNS = (
@@ -26,6 +31,22 @@ _TARGETED_TEXT_LEAK_PATTERNS = (
         re.IGNORECASE,
     ),
 )
+
+INVESTIGATOR_CLAIM_TYPES = {
+    "requirement_met": ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"],
+    "requirement_not_met": ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_not_met"],
+    "unresolved": ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"],
+}
+MODEL_AUTHORED_INVESTIGATOR_LIMITATION_CODES = frozenset(
+    MODEL_SELECTABLE_LIMITATION_CODES
+)
+SYSTEM_AUTHORED_INVESTIGATOR_LIMITATION_CODES = frozenset(
+    (
+        *MODEL_SELECTABLE_LIMITATION_CODES,
+        ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"],
+    )
+)
+SYSTEM_FAILED_INVESTIGATOR_CLAIM_PREFIX = "claim:failed:"
 
 
 def _assert_neutral_targeted_text(*values: str | None) -> None:
@@ -248,6 +269,15 @@ class InvestigatorClaim(BaseModel):
     limitations: list[str] = Field(default_factory=list, max_length=50)
     criterion: str | None = Field(default=None, max_length=500)
 
+    @model_validator(mode="after")
+    def validate_claim_shape(self) -> Self:
+        _validate_investigator_limitation_codes(self)
+        validator = _INVESTIGATOR_CLAIM_VALIDATORS.get(self.claim_type)
+        if validator is None:
+            raise ValueError(f"unsupported Investigator claim_type: {self.claim_type}")
+        validator(self)
+        return self
+
     def to_evidence_claim(self) -> EvidenceClaim:
         return EvidenceClaim(
             claim_id=self.claim_id,
@@ -261,6 +291,64 @@ class InvestigatorClaim(BaseModel):
             limitations=tuple(self.limitations),
             criterion=self.criterion,
         )
+
+
+def _has_investigator_ref(claim: InvestigatorClaim) -> bool:
+    return bool(
+        claim.evidence_refs or claim.graph_path_refs or claim.source_anchor_refs
+    )
+
+
+def _validate_investigator_limitation_codes(claim: InvestigatorClaim) -> None:
+    allowed = (
+        SYSTEM_AUTHORED_INVESTIGATOR_LIMITATION_CODES
+        if claim.claim_id.startswith(SYSTEM_FAILED_INVESTIGATOR_CLAIM_PREFIX)
+        else MODEL_AUTHORED_INVESTIGATOR_LIMITATION_CODES
+    )
+    invalid = sorted({code for code in claim.limitations if code not in allowed})
+    if invalid:
+        raise ValueError(
+            f"Investigator claim limitations contain unsupported codes: {invalid}"
+        )
+
+
+def _validate_requirement_met_claim(claim: InvestigatorClaim) -> None:
+    if claim.value is not True:
+        raise ValueError("RULE_REQUIREMENT_MET claims require value=True")
+    _validate_decided_requirement_claim(claim)
+
+
+def _validate_requirement_not_met_claim(claim: InvestigatorClaim) -> None:
+    if claim.value is not False:
+        raise ValueError("RULE_REQUIREMENT_NOT_MET claims require value=False")
+    _validate_decided_requirement_claim(claim)
+
+
+def _validate_decided_requirement_claim(claim: InvestigatorClaim) -> None:
+    if not claim.criterion:
+        raise ValueError("decided Investigator claims require criterion")
+    if claim.confidence <= 0:
+        raise ValueError("decided Investigator claims require confidence > 0")
+    if not _has_investigator_ref(claim):
+        raise ValueError(
+            "decided Investigator claims require at least one evidence, graph-path, or source-anchor ref"
+        )
+
+
+def _validate_unresolved_claim(claim: InvestigatorClaim) -> None:
+    if claim.value is not None:
+        raise ValueError("UNRESOLVED_ENGINEERING_FACT claims require value=None")
+    if not claim.limitations:
+        raise ValueError(
+            "UNRESOLVED_ENGINEERING_FACT claims require at least one limitation code"
+        )
+
+
+_INVESTIGATOR_CLAIM_VALIDATORS = {
+    INVESTIGATOR_CLAIM_TYPES["requirement_met"]: _validate_requirement_met_claim,
+    INVESTIGATOR_CLAIM_TYPES["requirement_not_met"]: _validate_requirement_not_met_claim,
+    INVESTIGATOR_CLAIM_TYPES["unresolved"]: _validate_unresolved_claim,
+}
 
 
 class BusinessContextNeed(BaseModel):

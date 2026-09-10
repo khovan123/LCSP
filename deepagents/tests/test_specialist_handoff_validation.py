@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from tools.common.capabilities.assessment.claims.evidence_claim.models import (
+    ENGINEERING_LIMITATION_CODES,
+)
 from orchestration.result_validation import (
     SpecialistHandoffValidationError,
     validate_specialist_handoff,
@@ -22,7 +25,9 @@ def _investigator_payload() -> dict:
                 "graph_path_refs": ["node:ai", "edge:receives", "node:output"],
                 "source_anchor_refs": [],
                 "confidence": 0.9,
-                "limitations": [],
+                "limitations": [
+                    ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]
+                ],
                 "criterion": "AI output path",
             }
         ],
@@ -113,7 +118,9 @@ def test_recorded_misrouted_investigator_outputs_remain_rejected(empty_claims) -
         "graph_path_refs": [],
         "source_anchor_refs": [],
         "confidence": 0.9,
-        "limitations": ["ENGINEERING_RULE_NOT_READY_LEGAL_MAINTENANCE"],
+        "limitations": [
+            ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]
+        ],
         "criterion": "ENGINEERING_RULE_NOT_READY_LEGAL_MAINTENANCE",
     }]
     expected = "schema validation" if empty_claims else "evidence-claim validation"
@@ -168,25 +175,63 @@ def test_investigator_handoff_rejects_stale_artifact_versions() -> None:
 
 def test_specialist_handoff_rejects_forbidden_final_verdicts() -> None:
     payload = _investigator_payload()
-    payload["claims"][0]["limitations"] = ["COMPLIANT"]
+    payload["limitations"] = ["COMPLIANT"]
 
     with pytest.raises(SpecialistHandoffValidationError, match="forbidden"):
         validate_specialist_handoff("investigator", payload)
 
 
-def test_specialist_handoff_allows_unknown_as_non_verdict_value() -> None:
+def test_specialist_handoff_rejects_unknown_investigator_limitation_code() -> None:
     payload = _investigator_payload()
     payload["claims"][0]["limitations"] = ["UNKNOWN"]
 
-    handoff = validate_specialist_handoff(
-        "investigator",
-        payload,
-        graph=_graph(),
-        pinned_rule_ids=("eng-1",),
-        pinned_versions={"technicalEvidenceReportId": "ter-1"},
+    with pytest.raises(SpecialistHandoffValidationError, match="schema validation"):
+        validate_specialist_handoff(
+            "investigator",
+            payload,
+            graph=_graph(),
+            pinned_rule_ids=("eng-1",),
+            pinned_versions={"technicalEvidenceReportId": "ter-1"},
+        )
+
+
+def test_investigator_claim_schema_rejects_met_without_refs() -> None:
+    payload = _investigator_payload()
+    payload["claims"][0].update(
+        {
+            "claim_type": "RULE_REQUIREMENT_MET",
+            "value": True,
+            "evidence_refs": [],
+            "graph_path_refs": [],
+            "source_anchor_refs": [],
+            "limitations": [],
+        }
     )
 
-    assert handoff.claims[0].limitations == ["UNKNOWN"]
+    with pytest.raises(SpecialistHandoffValidationError, match="schema validation"):
+        validate_specialist_handoff("investigator", payload)
+
+
+def test_investigator_claim_schema_rejects_met_with_false_value() -> None:
+    payload = _investigator_payload()
+    payload["claims"][0].update(
+        {
+            "claim_type": "RULE_REQUIREMENT_MET",
+            "value": False,
+            "limitations": [],
+        }
+    )
+
+    with pytest.raises(SpecialistHandoffValidationError, match="schema validation"):
+        validate_specialist_handoff("investigator", payload)
+
+
+def test_investigator_claim_schema_rejects_unresolved_without_limitation() -> None:
+    payload = _investigator_payload()
+    payload["claims"][0]["limitations"] = []
+
+    with pytest.raises(SpecialistHandoffValidationError, match="schema validation"):
+        validate_specialist_handoff("investigator", payload)
 
 
 def test_planner_handoff_allows_unknown_coverage_state() -> None:
