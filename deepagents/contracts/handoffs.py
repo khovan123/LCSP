@@ -260,11 +260,13 @@ class InvestigatorClaim(BaseModel):
         "RULE_REQUIREMENT_MET",
         "RULE_REQUIREMENT_NOT_MET",
         "UNRESOLVED_ENGINEERING_FACT",
+        ENGINEERING_EVIDENCE_CLAIM_TYPES["rule_scope_not_applicable"],
     ]
     value: bool | None
     evidence_refs: list[str] = Field(default_factory=list, max_length=100)
     graph_path_refs: list[str] = Field(default_factory=list, max_length=100)
     source_anchor_refs: list[str] = Field(default_factory=list, max_length=100)
+    customer_context_refs: list[str] = Field(default_factory=list, max_length=100)
     confidence: float = Field(ge=0, le=1)
     limitations: list[str] = Field(default_factory=list, max_length=50)
     criterion: str | None = Field(default=None, max_length=500)
@@ -287,6 +289,7 @@ class InvestigatorClaim(BaseModel):
             evidence_refs=tuple(self.evidence_refs),
             graph_path_refs=tuple(self.graph_path_refs),
             source_anchor_refs=tuple(self.source_anchor_refs),
+            customer_context_refs=tuple(self.customer_context_refs),
             confidence=self.confidence,
             limitations=tuple(self.limitations),
             criterion=self.criterion,
@@ -344,10 +347,20 @@ def _validate_unresolved_claim(claim: InvestigatorClaim) -> None:
         )
 
 
+def _validate_scope_not_applicable_claim(claim: InvestigatorClaim) -> None:
+    if claim.value is not None:
+        raise ValueError("RULE_SCOPE_NOT_APPLICABLE requires value=None")
+    if not claim.customer_context_refs:
+        raise ValueError("RULE_SCOPE_NOT_APPLICABLE requires customer_context_refs")
+    if claim.evidence_refs or claim.graph_path_refs or claim.source_anchor_refs:
+        raise ValueError("RULE_SCOPE_NOT_APPLICABLE must not carry graph/source refs")
+
+
 _INVESTIGATOR_CLAIM_VALIDATORS = {
     INVESTIGATOR_CLAIM_TYPES["requirement_met"]: _validate_requirement_met_claim,
     INVESTIGATOR_CLAIM_TYPES["requirement_not_met"]: _validate_requirement_not_met_claim,
     INVESTIGATOR_CLAIM_TYPES["unresolved"]: _validate_unresolved_claim,
+    ENGINEERING_EVIDENCE_CLAIM_TYPES["rule_scope_not_applicable"]: _validate_scope_not_applicable_claim,
 }
 
 

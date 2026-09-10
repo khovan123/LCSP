@@ -526,6 +526,7 @@ def resume_managed_investigator(
         graph=graph,
         execution_id=execution_id,
         correlation_id=correlation_id,
+        confirmed_statement_refs=typed_confirmed_context.confirmed_statement_refs,
     )
     if resumed_checkpoint_id == checkpoint_id and not _is_failed_investigator_handoff(
         handoff
@@ -593,6 +594,7 @@ def _invoke_managed_investigator(
     graph: Any,
     execution_id: str,
     correlation_id: str | None,
+    confirmed_statement_refs: tuple[str, ...] = (),
 ) -> tuple[dict[str, Any], str]:
     from langgraph.checkpoint.postgres import PostgresSaver
 
@@ -629,6 +631,7 @@ def _invoke_managed_investigator(
                             graph=graph,
                             pinned_rule_ids=context.engineering_rule_ids,
                             pinned_versions=dict(context.artifact_versions),
+                            confirmed_statement_refs=confirmed_statement_refs,
                         )
                     except SpecialistHandoffValidationError as error:
                         record = registry.get(execution_id)
@@ -726,6 +729,7 @@ def _invoke_managed_investigator(
             graph=graph,
             pinned_rule_ids=context.engineering_rule_ids,
             pinned_versions=dict(context.artifact_versions),
+            confirmed_statement_refs=confirmed_statement_refs,
         )
         result = InvestigatorResult.model_validate(validated)
         snapshot = agent.get_state({"configurable": {"thread_id": thread_id}})
