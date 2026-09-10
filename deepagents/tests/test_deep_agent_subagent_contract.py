@@ -185,6 +185,7 @@ def test_structured_handoffs_match_deep_research_report_fields() -> None:
                 value=True,
                 evidence_refs=["evidence:1"],
                 confidence=0.9,
+                criterion="AI invocation exists",
             )
         ],
         next_step="GATE",
