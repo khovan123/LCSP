@@ -138,3 +138,47 @@ test("Ensures production BFF admin user routes forward upstream directly without
   }
 });
 
+test("Admin user filters expose every account status from the shared contract", async () => {
+  const filterFilePath = join(
+    process.cwd(),
+    "src/features/admin/components/molecules/admin-user-filters.tsx",
+  );
+  const filterContent = await readFile(filterFilePath, "utf8");
+
+  assert.equal(filterContent.includes("AUTH_ACCOUNT_STATUSES.active"), true);
+  assert.equal(filterContent.includes("AUTH_ACCOUNT_STATUSES.suspended"), true);
+  assert.equal(filterContent.includes("AUTH_ACCOUNT_STATUSES.invited"), true);
+  assert.equal(filterContent.includes("AUTH_ACCOUNT_STATUSES.deactivated"), true);
+});
+
+test("Admin UI chrome resolves labels from i18n instead of hardcoded English copy", async () => {
+  const checkedFiles = [
+    "src/features/admin/components/organisms/admin-user-table.tsx",
+    "src/features/admin/components/molecules/admin-pagination.tsx",
+    "src/features/admin/components/templates/admin-sidebar.tsx",
+    "src/features/admin/components/organisms/admin-usage-summary.tsx",
+    "src/app/(admin)/admin/users/[id]/page.tsx",
+  ];
+
+  for (const relativePath of checkedFiles) {
+    const content = await readFile(join(process.cwd(), relativePath), "utf8");
+
+    assert.equal(content.includes("User Accounts Table"), false, relativePath);
+    assert.equal(content.includes(">Actions<"), false, relativePath);
+    assert.equal(content.includes("Page {page} of"), false, relativePath);
+    assert.equal(content.includes(">Soon<"), false, relativePath);
+    assert.equal(content.includes("Admin Navigation"), false, relativePath);
+    assert.equal(content.includes("Admin Sections"), false, relativePath);
+    assert.equal(content.includes("LCSP Admin\""), false, relativePath);
+    assert.equal(content.includes('aria-label="Usage Summary"'), false, relativePath);
+    assert.equal(content.includes("Administrative suspension"), false, relativePath);
+  }
+});
+
+test("Admin mutations invalidate list queries through the shared admin query key", async () => {
+  const queryFilePath = join(process.cwd(), "src/lib/api/admin-users-queries.ts");
+  const queryContent = await readFile(queryFilePath, "utf8");
+
+  assert.equal(queryContent.includes("apiQueryKeys.admin.usersRoot()"), true);
+  assert.equal(queryContent.includes('queryKey: ["admin", "users"]'), false);
+});

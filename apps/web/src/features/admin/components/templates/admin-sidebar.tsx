@@ -16,10 +16,18 @@ type AdminSidebarProps = {
 };
 
 export function AdminSidebar({
-  adminName = "Administrator",
-  adminEmail = "admin@lcsp.internal",
+  adminName,
+  adminEmail,
 }: AdminSidebarProps) {
   const pathname = usePathname();
+  const fallbackName = resolveAppMessage(
+    "pages.admin.sidebar.identityFallbackName" as MessageKey,
+  );
+  const fallbackEmail = resolveAppMessage(
+    "pages.admin.sidebar.identityFallbackEmail" as MessageKey,
+  );
+  const resolvedAdminName = adminName ?? fallbackName;
+  const resolvedAdminEmail = adminEmail ?? fallbackEmail;
 
   const isUserAccountsActive =
     pathname === "/admin/users" || pathname.startsWith("/admin/users/");
@@ -53,7 +61,7 @@ export function AdminSidebar({
   return (
     <aside
       className="flex h-screen w-[248px] shrink-0 flex-col justify-between border-r border-sidebar-border bg-sidebar text-sidebar-foreground select-none"
-      aria-label="Admin Navigation"
+      aria-label={resolveAppMessage("pages.admin.sidebar.navigationAria" as MessageKey)}
     >
       <div className="flex flex-col">
         {/* Brand Lockup & ADMIN Tag */}
@@ -62,7 +70,7 @@ export function AdminSidebar({
             <LCSPLogo
               variant={LCSP_LOGO_VARIANTS.lockup}
               size={LCSP_LOGO_SIZES.md}
-              label="LCSP Admin"
+              label={resolveAppMessage("pages.admin.sidebar.logoLabel" as MessageKey)}
             />
           </div>
           <div className="mt-2.5 flex items-center">
@@ -73,7 +81,10 @@ export function AdminSidebar({
         </div>
 
         {/* Navigation Rows */}
-        <nav className="mt-4 flex flex-col gap-1 px-3" aria-label="Admin Sections">
+        <nav
+          className="mt-4 flex flex-col gap-1 px-3"
+          aria-label={resolveAppMessage("pages.admin.sidebar.sectionsAria" as MessageKey)}
+        >
           {navItems.map((item) => {
             const Icon = item.icon;
             const label = resolveAppMessage(item.labelKey);
@@ -90,7 +101,7 @@ export function AdminSidebar({
                     <span>{label}</span>
                   </div>
                   <span className="rounded bg-sidebar-border/40 px-1 py-0.5 text-[9.5px] font-medium text-muted-foreground uppercase">
-                    Soon
+                    {resolveAppMessage("pages.admin.sidebar.soonLabel" as MessageKey)}
                   </span>
                 </div>
               );
@@ -140,14 +151,14 @@ export function AdminSidebar({
       <div className="p-3">
         <div className="flex h-14 w-[224px] items-center gap-3 rounded-xl border border-sidebar-border bg-sidebar-accent/50 px-3 py-2">
           <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-            {adminName.charAt(0).toUpperCase()}
+            {resolvedAdminName.charAt(0).toUpperCase()}
           </div>
           <div className="flex min-w-0 flex-1 flex-col justify-center">
             <span className="truncate text-[12.5px] font-medium text-sidebar-foreground">
-              {adminName}
+              {resolvedAdminName}
             </span>
             <span className="truncate text-[10.5px] text-muted-foreground">
-              {adminEmail}
+              {resolvedAdminEmail}
             </span>
           </div>
         </div>

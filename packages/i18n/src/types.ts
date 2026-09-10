@@ -1823,6 +1823,12 @@ export type PagesMessages = {
       administrationLabel: string;
       administrationDescription: string;
       roleAdminLabel: string;
+      navigationAria: string;
+      sectionsAria: string;
+      logoLabel: string;
+      soonLabel: string;
+      identityFallbackName: string;
+      identityFallbackEmail: string;
     };
     usersList: {
       title: string;
@@ -1836,6 +1842,7 @@ export type PagesMessages = {
       createUser: string;
       createUserDisabledTooltip: string;
       accountsCount: string;
+      tableAriaLabel: string;
       columns: {
         user: string;
         role: string;
@@ -1917,6 +1924,7 @@ export type PagesMessages = {
       cancel: string;
       confirmSuspend: string;
       suspending: string;
+      defaultReason: string;
     };
   };
 };

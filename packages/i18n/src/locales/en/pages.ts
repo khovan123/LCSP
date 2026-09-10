@@ -2098,6 +2098,12 @@ export const enPages = {
       administrationDescription:
         "System configuration, platform access control, and legal corpus management.",
       roleAdminLabel: "Administrator",
+      navigationAria: "Admin navigation",
+      sectionsAria: "Admin sections",
+      logoLabel: "LCSP Admin",
+      soonLabel: "Soon",
+      identityFallbackName: "Administrator",
+      identityFallbackEmail: "admin@lcsp.internal",
     },
     usersList: {
       title: "User accounts",
@@ -2112,6 +2118,7 @@ export const enPages = {
       createUserDisabledTooltip:
         "User creation is managed via customer signup or organization invitations.",
       accountsCount: "{count} accounts",
+      tableAriaLabel: "User accounts table",
       columns: {
         user: "User",
         role: "Role",
@@ -2197,7 +2204,7 @@ export const enPages = {
       cancel: "Cancel",
       confirmSuspend: "Suspend account",
       suspending: "Suspending...",
+      defaultReason: "Administrative suspension",
     },
   },
 } as const satisfies PagesMessages;
-

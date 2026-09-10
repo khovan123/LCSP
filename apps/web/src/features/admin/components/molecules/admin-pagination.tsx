@@ -19,6 +19,9 @@ export function AdminPagination({
   const nextLabel = resolveAppMessage(
     "pages.admin.usersList.pagination.next" as MessageKey,
   );
+  const pageOfTemplate = resolveAppMessage(
+    "pages.admin.usersList.pagination.pageOf" as MessageKey,
+  );
 
   const canPrevious = page > 1 && !disabled;
   const canNext = page < totalPages && !disabled;
@@ -27,7 +30,9 @@ export function AdminPagination({
     <div className="flex w-full max-w-[1112px] items-center justify-between pt-4">
       {/* Left: Page Status */}
       <span className="text-[11.5px] text-muted-foreground">
-        Page {page} of {Math.max(1, totalPages)}
+        {pageOfTemplate
+          .replace("{page}", String(page))
+          .replace("{totalPages}", String(Math.max(1, totalPages)))}
       </span>
 
       {/* Right: Prev & Next Buttons */}

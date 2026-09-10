@@ -1,7 +1,7 @@
 "use client";
 
 import type { MessageKey } from "@lcsp/i18n";
-import { AUTH_ACCOUNT_STATUSES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { AUTH_ACCOUNT_STATUSES } from "@lcsp/contracts/auth";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,7 +38,10 @@ export function AdminUserTable({
   const colCreated = resolveAppMessage("pages.admin.usersList.columns.created" as MessageKey);
   const colLastActive = resolveAppMessage("pages.admin.usersList.columns.lastActive" as MessageKey);
   const colAssessments = resolveAppMessage("pages.admin.usersList.columns.assessments" as MessageKey);
+  const colActions = resolveAppMessage("pages.admin.usersList.columns.actions" as MessageKey);
   const viewLabel = resolveAppMessage("pages.admin.usersList.viewAction" as MessageKey);
+  const viewUserAriaTemplate = resolveAppMessage("pages.admin.usersList.viewUserAria" as MessageKey);
+  const tableAriaLabel = resolveAppMessage("pages.admin.usersList.tableAriaLabel" as MessageKey);
 
   if (isLoading) {
     return (
@@ -68,7 +71,7 @@ export function AdminUserTable({
   return (
     <div className="w-full max-w-[1112px] overflow-hidden rounded-xl border border-border bg-card shadow-xs">
       <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse" aria-label="User Accounts Table">
+        <table className="w-full text-left border-collapse" aria-label={tableAriaLabel}>
           <thead>
             <tr className="border-b border-border bg-muted/40">
               <th className="w-[300px] py-3.5 pl-6 pr-4 text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase">
@@ -90,7 +93,7 @@ export function AdminUserTable({
                 {colAssessments}
               </th>
               <th className="py-3.5 pl-4 pr-6 text-right">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{colActions}</span>
               </th>
             </tr>
           </thead>
@@ -164,7 +167,7 @@ export function AdminUserTable({
                       type="button"
                       variant="outline"
                       onClick={() => onViewUser(user.id)}
-                      aria-label={`View ${user.fullName}`}
+                      aria-label={viewUserAriaTemplate.replace("{name}", user.fullName)}
                       className="h-[34px] w-[90px] rounded-[10px] border-border bg-secondary text-[12.5px] font-medium text-secondary-foreground hover:bg-secondary/80 shadow-xs"
                     >
                       {viewLabel}

@@ -88,7 +88,9 @@ export function AdminUserFilters({
                     ? resolveAppMessage("pages.admin.usersList.statuses.SUSPENDED" as MessageKey)
                     : filters.statusFilter === AUTH_ACCOUNT_STATUSES.invited
                       ? resolveAppMessage("pages.admin.usersList.statuses.INVITED" as MessageKey)
-                      : statusFilterAll}
+                      : filters.statusFilter === AUTH_ACCOUNT_STATUSES.deactivated
+                        ? resolveAppMessage("pages.admin.usersList.statuses.DEACTIVATED" as MessageKey)
+                        : statusFilterAll}
             </SelectValue>
           </SelectTrigger>
           <SelectContent className="border-border bg-card text-foreground">
@@ -112,6 +114,12 @@ export function AdminUserFilters({
               className="text-[12.5px]"
             >
               {resolveAppMessage("pages.admin.usersList.statuses.INVITED" as MessageKey)}
+            </SelectItem>
+            <SelectItem
+              value={AUTH_ACCOUNT_STATUSES.deactivated}
+              className="text-[12.5px]"
+            >
+              {resolveAppMessage("pages.admin.usersList.statuses.DEACTIVATED" as MessageKey)}
             </SelectItem>
           </SelectContent>
         </Select>

@@ -44,13 +44,16 @@ export default function AdminUserDetailPage({
   const backToUsersLabel = resolveAppMessage(
     "pages.admin.userDetail.backToUsers" as MessageKey,
   );
+  const defaultSuspendReason = resolveAppMessage(
+    "pages.admin.suspendModal.defaultReason" as MessageKey,
+  );
 
   const handleRoleSave = async (newRole: AuthUserRole) => {
     await updateRoleMutation.mutateAsync({ role: newRole });
   };
 
   const handleConfirmSuspend = async () => {
-    await suspendUserMutation.mutateAsync({ reason: "Administrative suspension" });
+    await suspendUserMutation.mutateAsync({ reason: defaultSuspendReason });
     setIsSuspendModalOpen(false);
   };
 

@@ -66,7 +66,7 @@ export function AdminUsageSummary({ usageSummary }: AdminUsageSummaryProps) {
   ];
 
   return (
-    <section className="flex flex-col space-y-4 pt-8" aria-label="Usage Summary">
+    <section className="flex flex-col space-y-4 pt-8" aria-label={sectionTitle}>
       <div className="flex flex-col">
         <h2 className="text-[15px] font-semibold text-foreground">{sectionTitle}</h2>
         <p className="text-[11.5px] text-muted-foreground">{sectionDescription}</p>

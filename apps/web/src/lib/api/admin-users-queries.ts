@@ -41,7 +41,7 @@ export function useAdminUpdateRoleMutation(userId: string) {
         queryKey: apiQueryKeys.admin.userDetail(userId),
       });
       await queryClient.invalidateQueries({
-        queryKey: ["admin", "users"],
+        queryKey: apiQueryKeys.admin.usersRoot(),
       });
     },
   });
@@ -58,7 +58,7 @@ export function useAdminSuspendUserMutation(userId: string) {
         queryKey: apiQueryKeys.admin.userDetail(userId),
       });
       await queryClient.invalidateQueries({
-        queryKey: ["admin", "users"],
+        queryKey: apiQueryKeys.admin.usersRoot(),
       });
     },
   });

@@ -1,8 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { MessageKey } from "@lcsp/i18n";
+
 import { AdminSidebar } from "./admin-sidebar";
 import { useAuthSettingsProfileQuery } from "@/lib/api/auth-queries";
+import { resolveAppMessage } from "@/lib/i18n";
 
 type AdminShellProps = {
   children: ReactNode;
@@ -16,14 +19,20 @@ export function AdminShell({
   adminEmail,
 }: AdminShellProps) {
   const { data: profile } = useAuthSettingsProfileQuery();
+  const fallbackName = resolveAppMessage(
+    "pages.admin.sidebar.identityFallbackName" as MessageKey,
+  );
+  const fallbackEmail = resolveAppMessage(
+    "pages.admin.sidebar.identityFallbackEmail" as MessageKey,
+  );
 
   const resolvedName =
     adminName ??
     profile?.display_name ??
     (profile?.email ? profile.email.split("@")[0] : undefined) ??
-    "Administrator";
+    fallbackName;
   const resolvedEmail =
-    adminEmail ?? profile?.email ?? "admin@lcsp.internal";
+    adminEmail ?? profile?.email ?? fallbackEmail;
 
   return (
     <div className="flex min-h-screen w-full bg-background text-foreground antialiased selection:bg-primary/20">

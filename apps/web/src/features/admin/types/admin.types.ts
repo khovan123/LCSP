@@ -1,7 +1,5 @@
 import type {
   AdminUserDetail,
-  AdminUserListQuery,
-  AdminUserListResponse,
   AdminUserSummary,
   AuthAccountStatus,
   AuthUserRole,

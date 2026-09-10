@@ -2102,6 +2102,12 @@ export const viPages = {
       administrationDescription:
         "Cấu hình hệ thống, quản lý quyền truy cập nền tảng và văn bản luật.",
       roleAdminLabel: "Quản trị viên",
+      navigationAria: "Điều hướng quản trị",
+      sectionsAria: "Khu vực quản trị",
+      logoLabel: "LCSP Quản trị",
+      soonLabel: "Sắp có",
+      identityFallbackName: "Quản trị viên",
+      identityFallbackEmail: "admin@lcsp.internal",
     },
     usersList: {
       title: "Tài khoản người dùng",
@@ -2117,6 +2123,7 @@ export const viPages = {
       createUserDisabledTooltip:
         "Tạo người dùng được quản lý qua đăng ký khách hàng hoặc thư mời tổ chức.",
       accountsCount: "{count} tài khoản",
+      tableAriaLabel: "Bảng tài khoản người dùng",
       columns: {
         user: "Người dùng",
         role: "Vai trò",
@@ -2203,7 +2210,7 @@ export const viPages = {
       cancel: "Hủy",
       confirmSuspend: "Khóa tài khoản",
       suspending: "Đang khóa...",
+      defaultReason: "Tạm khóa bởi quản trị viên",
     },
   },
 } as const satisfies PagesMessages;
-
