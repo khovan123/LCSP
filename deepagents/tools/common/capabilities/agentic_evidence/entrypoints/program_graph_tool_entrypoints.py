@@ -3,9 +3,24 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from tools.common.capabilities.evidence.graph.query.query_engine import ProgramGraphQueryEngine
+from tools.common.capabilities.evidence.graph.query.query_engine import (
+    EVIDENCE_SEARCH_MATCH_MODE_SUBSTRING,
+    ProgramGraphQueryEngine,
+)
 
 from ..governance.registry import AgenticToolRequest
+
+
+AGENTIC_TOOL_COVERAGE_STATES = {
+    "ready": "READY",
+    "partial": "PARTIAL",
+    "unavailable": "UNAVAILABLE",
+}
+SEARCH_EVIDENCE_RESULT_FIELDS = {
+    "match_mode": "matchMode",
+    "absence_proven": "absenceProven",
+}
+SEARCH_EVIDENCE_ABSENCE_PROVEN_FALSE = False
 
 
 def _graph(
@@ -191,6 +206,14 @@ def _safe_coverage_fields(graph) -> dict[str, Any]:
         "coverageLimitations": _safe_text_list(graph.coverage_notes or []),
     }
 
+
+def _search_absence_proven(nodes: list[dict], coverage_state: str) -> bool:
+    if not nodes or coverage_state != AGENTIC_TOOL_COVERAGE_STATES["ready"]:
+        return SEARCH_EVIDENCE_ABSENCE_PROVEN_FALSE
+    # SUBSTRING search returns candidates only; it is not a bounded negative proof.
+    return SEARCH_EVIDENCE_ABSENCE_PROVEN_FALSE
+
+
 def get_scan_coverage(request: AgenticToolRequest, context) -> Mapping[str, Any]:
     engine, _ = _graph(request, context)
     graph = engine.graph
@@ -213,13 +236,20 @@ def search_evidence(request: AgenticToolRequest, context) -> Mapping[str, Any]:
         path_prefixes=_input(request, "pathPrefixes", ()),
         max_results=_max_results(request),
     )
+    coverage_fields = _safe_coverage_fields(engine.graph)
+    safe_nodes = [_project_safe_node(n) for n in result.nodes]
     return {
-        "nodes": [_project_safe_node(n) for n in result.nodes],
+        "nodes": safe_nodes,
+        SEARCH_EVIDENCE_RESULT_FIELDS["match_mode"]: EVIDENCE_SEARCH_MATCH_MODE_SUBSTRING,
+        SEARCH_EVIDENCE_RESULT_FIELDS["absence_proven"]: _search_absence_proven(
+            safe_nodes,
+            str(coverage_fields["coverageState"]),
+        ),
         "truncated": result.truncated,
         "continuationFrontiers": _safe_text_list(result.continuation_frontiers),
         "unresolvedFrontiers": _safe_text_list(result.unresolved_frontiers),
         "evidenceRefs": result.evidence_refs,
-        **_safe_coverage_fields(engine.graph),
+        **coverage_fields,
     }
 
 

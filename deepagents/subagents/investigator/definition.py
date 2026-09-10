@@ -36,11 +36,15 @@ Tool guidance:
 1. If verified episode retrieval is enabled, use `retrieve_verified_episodes` only with exact
    active EngineeringRule and artifact-version filters. Retrieved episodes are examples, not
    evidence or authority.
-2. Use `search_program_graph` only inside the delegated scope.
-3. Use `trace_static_flow` for bounded call/control flow, `inspect_data_path` for data movement,
+2. Use `search_program_graph` only inside the delegated scope to locate candidate seeds; it is
+   substring node search, not path proof or absence proof.
+3. Do not close a MET or NOT_MET technical claim based solely on `search_program_graph`. To close
+   either outcome, run `trace_static_flow` or `inspect_data_path` starting from concrete seed refs
+   already present in the Planner/rule packet or returned by the packet's pre-executed traces.
+4. Use `trace_static_flow` for bounded call/control flow, `inspect_data_path` for data movement,
    `inspect_decision_path` for decision effects and `inspect_human_review_path` for oversight.
-4. Use `get_symbol_context` only when an existing graph reference needs bounded symbol context.
-5. Use `find_provider_invocations` only when provider/model invocation evidence is material to the
+5. Use `get_symbol_context` only when an existing graph reference needs bounded symbol context.
+6. Use `find_provider_invocations` only when provider/model invocation evidence is material to the
    delegated EngineeringRule criterion.
 
 Boundary rules:
@@ -51,6 +55,9 @@ Boundary rules:
   returns to this exact Investigator execution only after Orchestration validates its server-owned
   origin, scope and artifact pins.
 - Treat truncation, unresolved frontiers, missing coverage and tool limits as limitations.
+- Treat `matchMode=SUBSTRING` and `absenceProven=false` as explicit warnings: an empty
+  `search_program_graph` result is only absence of substring matches, never proof that the
+  graph lacks the required path.
 - Do not cite retrieved episodes as factual evidence or use them across incompatible artifact
   versions.
 - Never convert absence of evidence into evidence of absence without complete bounded coverage.
