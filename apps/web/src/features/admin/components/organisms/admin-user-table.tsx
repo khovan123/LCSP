@@ -8,6 +8,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { resolveAppMessage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { AdminUsersTableProps } from "@/features/admin/types/admin.types";
+import { AdminUserIdentityCell } from "@/features/admin/components/molecules/admin-user-identity-cell";
+import { AdminRoleBadge } from "@/features/admin/components/atoms/admin-role-badge";
+import { AdminStatusDot } from "@/features/admin/components/atoms/admin-status-dot";
 
 function formatDate(isoString: string | null | undefined): string {
   if (!isoString) return "—";
@@ -93,11 +96,6 @@ export function AdminUserTable({
           </thead>
           <tbody className="divide-y divide-border/60">
             {users.map((user) => {
-              const roleDisplay =
-                user.role === AUTH_USER_ROLES.admin
-                  ? resolveAppMessage("pages.admin.usersList.roles.ADMIN" as MessageKey)
-                  : resolveAppMessage("pages.admin.usersList.roles.CUSTOMER" as MessageKey);
-
               const statusDisplay =
                 user.status === AUTH_ACCOUNT_STATUSES.active
                   ? resolveAppMessage("pages.admin.usersList.statuses.ACTIVE" as MessageKey)
@@ -117,21 +115,15 @@ export function AdminUserTable({
                 >
                   {/* User (Name + Email) */}
                   <td className="w-[300px] py-3 pl-6 pr-4">
-                    <div className="flex flex-col">
-                      <span className="text-[12.5px] font-medium text-foreground">
-                        {user.fullName}
-                      </span>
-                      <span className="text-[10.5px] text-muted-foreground">
-                        {user.email}
-                      </span>
-                    </div>
+                    <AdminUserIdentityCell
+                      fullName={user.fullName}
+                      email={user.email}
+                    />
                   </td>
 
                   {/* Role */}
                   <td className="w-[88px] px-4 py-3">
-                    <span className="text-[11.5px] font-medium text-foreground">
-                      {roleDisplay}
-                    </span>
+                    <AdminRoleBadge role={user.role} size="sm" />
                   </td>
 
                   {/* Status */}
@@ -144,14 +136,7 @@ export function AdminUserTable({
                         !isActive && !isSuspended && "text-muted-foreground",
                       )}
                     >
-                      <span
-                        className={cn(
-                          "size-1.5 rounded-full",
-                          isActive && "bg-emerald-500",
-                          isSuspended && "bg-rose-500",
-                          !isActive && !isSuspended && "bg-muted-foreground",
-                        )}
-                      />
+                      <AdminStatusDot status={user.status} />
                       {statusDisplay}
                     </span>
                   </td>
@@ -193,5 +178,4 @@ export function AdminUserTable({
       </div>
     </div>
   );
-
 }

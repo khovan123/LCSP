@@ -3,6 +3,7 @@
 import type { MessageKey } from "@lcsp/i18n";
 import { resolveAppMessage } from "@/lib/i18n";
 import type { AdminUsageSummaryProps } from "@/features/admin/types/admin.types";
+import { AdminMetricCard } from "@/features/admin/components/atoms/admin-metric-card";
 
 function formatTimestamp(isoString: string | null | undefined): string {
   if (!isoString) return "—";
@@ -73,20 +74,14 @@ export function AdminUsageSummary({ usageSummary }: AdminUsageSummaryProps) {
 
       <div className="flex flex-wrap items-center gap-[22px]">
         {cards.map((card) => (
-          <div
+          <AdminMetricCard
             key={card.label}
-            className={`flex h-[112px] ${card.widthClass} flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs`}
-          >
-            <span className="text-[11.5px] font-medium text-muted-foreground">
-              {card.label}
-            </span>
-            <span className="text-[24px] font-semibold text-foreground tracking-tight">
-              {card.value}
-            </span>
-          </div>
+            label={card.label}
+            value={card.value}
+            widthClass={card.widthClass}
+          />
         ))}
       </div>
-
     </section>
   );
 }

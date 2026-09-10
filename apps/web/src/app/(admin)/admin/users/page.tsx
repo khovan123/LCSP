@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { MessageKey } from "@lcsp/i18n";
 import type { AuthAccountStatus, AuthUserRole } from "@lcsp/contracts/auth";
 
+import { AdminPageHeader } from "@/features/admin/components/molecules/admin-page-header";
 import { AdminUserFilters } from "@/features/admin/components/molecules/admin-user-filters";
 import { AdminUserTable } from "@/features/admin/components/organisms/admin-user-table";
 import { AdminPagination } from "@/features/admin/components/molecules/admin-pagination";
@@ -64,12 +65,10 @@ export default function AdminUsersPage() {
   return (
     <div className="flex flex-col space-y-6 pb-12">
       {/* Page Header */}
-      <div className="flex flex-col space-y-1">
-        <h1 className="text-[28px] font-semibold text-foreground tracking-tight">
-          {pageTitle}
-        </h1>
-        <p className="text-[13px] text-muted-foreground">{pageDescription}</p>
-      </div>
+      <AdminPageHeader
+        title={pageTitle}
+        description={pageDescription}
+      />
 
       {/* Filter Bar */}
       <div className="pt-2">

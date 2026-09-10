@@ -4,7 +4,6 @@ export const protectedWorkspacePathPrefixes = Object.freeze([
   "/workspace",
   "/assessments",
   "/laws",
-  "/admin",
 ]);
 
 

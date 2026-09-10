@@ -5,6 +5,7 @@ import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import { resolveAppMessage } from "@/lib/i18n";
 import type { AdminAccountDetailsCardProps } from "@/features/admin/types/admin.types";
+import { AdminDetailRow } from "@/features/admin/components/atoms/admin-detail-row";
 
 function formatDate(isoString: string | null | undefined): string {
   if (!isoString) return "—";
@@ -58,17 +59,14 @@ export function AdminAccountDetailsCard({ user }: AdminAccountDetailsCardProps) 
     <div className="flex h-[252px] w-full max-w-[536px] flex-col justify-between rounded-xl border border-border bg-card p-6 shadow-xs">
       <h2 className="text-[15px] font-semibold text-foreground">{cardTitle}</h2>
 
-
-      <div className="flex flex-col space-y-3.5 pt-2">
+      <div className="flex flex-col space-y-1 pt-2">
         {rows.map((row) => (
-          <div key={row.label} className="flex items-center text-[11.5px]">
-            <span className="w-[150px] shrink-0 font-medium text-muted-foreground">
-              {row.label}
-            </span>
-            <span className="truncate font-medium text-foreground">
-              {row.value}
-            </span>
-          </div>
+          <AdminDetailRow
+            key={row.label}
+            label={row.label}
+            value={row.value}
+            className="border-none py-1.5"
+          />
         ))}
       </div>
     </div>
