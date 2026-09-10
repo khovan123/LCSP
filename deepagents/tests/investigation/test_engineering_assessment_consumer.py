@@ -54,7 +54,7 @@ def _boundary(*, api_client, pipeline, publisher=None) -> EngineeringAssessmentB
 def test_evidence_lookup_4xx_is_terminal_and_not_outer_retryable() -> None:
     api_client = _api_client()
     api_client.get_accepted_technical_evidence_report.side_effect = WorkerCallbackError(
-        "VALIDATION_FAILED: Callback failed with client error 404."
+        "VALIDATION_FAILED: Callback failed with client error 404.", status_code=404
     )
     pipeline = MagicMock()
     boundary = _boundary(api_client=api_client, pipeline=pipeline)
@@ -89,7 +89,7 @@ def test_evidence_lookup_server_failure_remains_outer_retryable() -> None:
 def test_classification_callback_4xx_is_terminal_and_not_outer_retryable() -> None:
     api_client = _api_client()
     api_client.post_classification_callback.side_effect = WorkerCallbackError(
-        "CLASSIFICATION_OVERCLAIM: Callback failed with client error 422."
+        "CLASSIFICATION_OVERCLAIM: Callback failed with client error 422.", status_code=422
     )
 
     result = MagicMock()

@@ -487,7 +487,8 @@ def resume_managed_investigator(
     context = LCSPRunContext(
         assessment_id=assessment_id,
         user_id=original_user_id,
-        workflow_run_id=thread_id,
+        workflow_run_id=continuation.get("rootWorkflowRunId") or thread_id,
+        correlation_id=correlation_id,
         checkpoint_id=checkpoint_id,
         artifact_versions=dict(artifact_versions),
         engineering_rule_ids=affected_rule_ids,

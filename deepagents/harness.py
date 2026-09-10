@@ -15,8 +15,11 @@ from deepagents import (
     register_provider_profile,
 )
 
+from provider_credentials import credential_init_kwargs
+
 from model_policy import (
     ALL_LCSP_MODEL_SPECS,
+    model_init_kwargs_for_agent,
     ROOT_MODEL_SPEC,
     canonical_provider,
     openai_responses_base_init_kwargs,
@@ -50,6 +53,10 @@ def provider_profile_for(provider: str) -> ProviderProfile:
 def model_provider_profile_for(model_spec: str) -> ProviderProfile:
     """Return the exact-model construction profile for LCSP reasoning-capable models."""
     provider = provider_from_model_spec(model_spec)
+    if model_spec == "google_genai:gemini-3.5-flash-lite":
+        return ProviderProfile(init_kwargs=model_init_kwargs_for_agent(
+            agent_name="lcsp-agent", model_spec=model_spec
+        ))
     if provider == "openai" and supports_openai_reasoning(model_spec):
         return ProviderProfile(init_kwargs=openai_responses_init_kwargs(model_spec))
     return ProviderProfile(init_kwargs=provider_init_kwargs(provider))
@@ -100,8 +107,14 @@ def configure_lcsp_harness() -> None:
     provider-specific constructor kwargs never bleed across integrations.
     """
     for provider in providers_for_model_specs(ALL_LCSP_MODEL_SPECS):
-        register_provider_profile(provider, provider_profile_for(provider))
+        profile = provider_profile_for(provider)
+        if credentials := credential_init_kwargs(provider):
+            profile = ProviderProfile(init_kwargs={**profile.init_kwargs, **credentials})
+        register_provider_profile(provider, profile)
 
     for model_spec in ALL_LCSP_MODEL_SPECS:
-        register_provider_profile(model_spec, model_provider_profile_for(model_spec))
+        profile = model_provider_profile_for(model_spec)
+        if credentials := credential_init_kwargs(provider_from_model_spec(model_spec)):
+            profile = ProviderProfile(init_kwargs={**profile.init_kwargs, **credentials})
+        register_provider_profile(model_spec, profile)
         register_harness_profile(model_spec, LCSP_HARNESS_PROFILE)

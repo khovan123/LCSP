@@ -12,14 +12,15 @@ disable_langsmith_tracing_by_default()
 
 from langchain.agents import create_agent as _langchain_create_agent
 from langchain.chat_models import init_chat_model
+from provider_credentials import credential_init_kwargs
 
 
-DEFAULT_ROOT_MODEL_SPEC = "openai:gpt-5-mini"
-DEFAULT_TRIAGE_MODEL_SPEC = "openai:gpt-5-mini"
-DEFAULT_PLANNER_MODEL_SPEC = "openai:gpt-5-mini"
-DEFAULT_INTERVIEW_MODEL_SPEC = "openai:gpt-5-mini"
-DEFAULT_INVESTIGATOR_MODEL_SPEC = "openai:gpt-5-mini"
-DEFAULT_NARRATOR_MODEL_SPEC = "openai:gpt-4o-mini"
+DEFAULT_ROOT_MODEL_SPEC = "openai:gpt-5-nano"
+DEFAULT_TRIAGE_MODEL_SPEC = "openai:gpt-5-nano"
+DEFAULT_PLANNER_MODEL_SPEC = "openai:gpt-5-nano"
+DEFAULT_INTERVIEW_MODEL_SPEC = "openai:gpt-5-nano"
+DEFAULT_INVESTIGATOR_MODEL_SPEC = "openai:gpt-5-nano"
+DEFAULT_NARRATOR_MODEL_SPEC = "openai:gpt-4.1-nano"
 
 DEFAULT_REASONING_EFFORT = "low"
 RESPONSES_OUTPUT_VERSION = "responses/v1"
@@ -105,8 +106,42 @@ def canonical_provider(provider: str) -> str:
     return PROVIDER_ALIASES.get(normalized, normalized)
 
 
+@dataclass(frozen=True)
+class ProviderPreset:
+    reasoning_model: str
+    narrator_model: str
+    reasoning_effort: str = "low"
+
+
+PROVIDER_PRESETS = {
+    "openai": ProviderPreset("openai:gpt-5-nano", "openai:gpt-4.1-nano"),
+    "google_genai": ProviderPreset(
+        "google_genai:gemini-3.5-flash-lite",
+        "google_genai:gemini-3.5-flash-lite",
+    ),
+}
+GOOGLE_THINKING_LEVEL = "low"
+
+
+def _selected_provider() -> str | None:
+    value = (os.getenv("LCSP_MODEL_PROVIDER") or "").strip()
+    if not value:
+        return None
+    provider = canonical_provider(value)
+    if provider not in PROVIDER_PRESETS:
+        raise RuntimeError(
+            "LCSP_MODEL_PROVIDER must be one of: " + ", ".join(PROVIDER_PRESETS)
+        )
+    return provider
+
+
+SELECTED_PROVIDER = _selected_provider()
+
+
 def _reasoning_effort_status() -> str:
     """Resolve the OpenAI Responses API reasoning effort with fail-closed validation."""
+    if SELECTED_PROVIDER:
+        return PROVIDER_PRESETS[SELECTED_PROVIDER].reasoning_effort
     for env_name in (
         "LCSP_REASONING_EFFORT",
         "OPENAI_REASONING_EFFORT",
@@ -134,6 +169,12 @@ def normalize_model_spec(value: str, *, source_name: str = "model spec") -> str:
 
 def _model_spec(env_name: str, default: str) -> tuple[str, str]:
     """Resolve one LangChain ``provider:model`` spec with a fail-closed shape check."""
+    if SELECTED_PROVIDER:
+        preset = PROVIDER_PRESETS[SELECTED_PROVIDER]
+        return (
+            preset.narrator_model if env_name == "LCSP_NARRATOR_MODEL" else preset.reasoning_model,
+            "provider_preset",
+        )
     env_value = (os.getenv(env_name) or "").strip()
     value = env_value or default
     return (
@@ -245,7 +286,7 @@ def reasoning_policy_for_agent(
         return "disabled_for_agent"
     if agent_name not in REASONING_AGENT_NAMES:
         return "disabled_for_agent"
-    if not supports_openai_reasoning(model_spec):
+    if not (supports_openai_reasoning(model_spec) or normalize_model_spec(model_spec) == "google_genai:gemini-3.5-flash-lite"):
         return "unsupported_model"
     return "enabled"
 
@@ -254,6 +295,10 @@ def model_init_kwargs_for_agent(*, agent_name: str, model_spec: str) -> dict[str
     """Return LangChain model kwargs for a specific LCSP agent construction."""
     normalized = normalize_model_spec(model_spec)
     provider, _, _ = normalized.partition(":")
+    if normalized == "google_genai:gemini-3.5-flash-lite":
+        return {"thinking_level": GOOGLE_THINKING_LEVEL if reasoning_policy_for_agent(
+            agent_name=agent_name, model_spec=normalized
+        ) == "enabled" else "minimal"}
     if provider != "openai":
         return provider_init_kwargs(provider)
 
@@ -272,6 +317,7 @@ def resolve_agent_model(*, agent_name: str, model_spec: str):
     return init_chat_model(
         normalize_model_spec(model_spec),
         **model_init_kwargs_for_agent(agent_name=agent_name, model_spec=model_spec),
+        **credential_init_kwargs(provider_from_model_spec(model_spec)),
     )
 
 
@@ -346,7 +392,7 @@ def effective_model_configs() -> tuple[EffectiveModelConfig, ...]:
                     if is_openai and reasoning_policy == "enabled"
                     else "unset"
                     if is_openai
-                    else "provider_default"
+                    else str(model_init_kwargs_for_agent(agent_name=agent_name, model_spec=spec).get("thinking_level", "provider_default"))
                 ),
                 output_version=(
                     RESPONSES_OUTPUT_VERSION if is_openai else "provider_default"

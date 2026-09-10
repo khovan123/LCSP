@@ -213,11 +213,13 @@ function InterviewInteractiveHarness({
     "div",
     null,
     React.createElement(AssessmentQuestionTurn, {
+      canSubmitSelection: isSubmitReady,
       disabled,
       isAdjusting,
       onAdjust: () => setIsAdjusting(true),
       onSubmitAnswer: onSubmit,
       onSelectedChoiceIdsChange: setSelectedChoiceIds,
+      onSubmitSelection: handleSubmit,
       question,
       selectedChoiceIds,
     }),
@@ -455,6 +457,58 @@ test("OTHER IS NOT HARDCODED: custom choice where label is not 'Other' triggers 
     questionId: "q-semantic-1",
     selectedChoiceIds: ["special_delegate"],
   });
+});
+
+test("selection controls expose an inline send action that arms only after a choice", async () => {
+  // Regression: choosing an option only staged a draft. The sole way to send it was the
+  // composer arrow inside an empty text box, so a chosen answer looked submitted while
+  // nothing reached the API.
+  for (const question of [
+    {
+      control: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+      id: "q-bool-send",
+      intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+      prompt: "Does this workflow require secondary human review?",
+    },
+    {
+      control: ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
+      id: "q-single-send",
+      intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+      prompt: "How are results used?",
+      choices: [
+        { id: "internal", label: "Internal advice" },
+        { id: "gate", label: "Formal gate" },
+      ],
+    },
+  ] satisfies AssessmentInterviewQuestion[]) {
+    const submissions: unknown[] = [];
+    const { container } = await renderElement(
+      React.createElement(InterviewInteractiveHarness, {
+        onSubmit: (payload) => submissions.push(payload),
+        question,
+      }),
+    );
+
+    const sendAction = container.querySelector<HTMLButtonElement>(
+      "[data-slot='selection-submit-action'] button",
+    );
+    assert.ok(sendAction, `${question.control} must offer an inline send action`);
+    assert.equal(sendAction.disabled, true);
+    await click(sendAction);
+    assert.equal(submissions.length, 0);
+
+    await click(container.querySelectorAll<HTMLButtonElement>("[role='radio']")[1]);
+    assert.equal(sendAction.disabled, false);
+    await click(sendAction);
+
+    assert.equal(submissions.length, 1);
+    assert.deepEqual(submissions[0], {
+      questionId: question.id,
+      selectedChoiceIds: [
+        question.control === ASSESSMENT_INTERVIEW_CONTROLS.boolean ? "no" : "gate",
+      ],
+    });
+  }
 });
 
 test("BOOLEAN: uses ChatSingleSelect, selection on click, submits on Enter/Send", async () => {

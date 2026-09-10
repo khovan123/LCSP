@@ -1,10 +1,22 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic import ValidationError
 
+from tools.legal.corpus.engineering_rules.compilation.chunk_triage import (
+    LegalChunkEngineeringRuleTriage,
+)
+from tools.legal.corpus.engineering_rules.orchestration.service import EngineeringRuleService
+from tools.triage.legal_rule_triage import code
+from tools.triage.legal_rule_triage.code import (
+    EngineeringRuleProposalInput,
+    LegalChunkAnalysisInput,
+    PersistLegalRuleTriageResultInput,
+)
 from tools.triage.legal_rule_triage.service import LegalRuleTriageService
 from tools.triage.legal_rule_triage.singleton import TriageSingletonCoordinator
 
@@ -108,7 +120,8 @@ def _rule_service() -> MagicMock:
         rule_id = str(legal_rule["legalRuleId"])
         chunk_id = str(legal_rule["citationLocatorRefs"][0]["chunkId"])
         return (
-            [{"id": chunk_id}],
+            [chunk for chunk in _api_client().get_legal_corpus_chunks.return_value["chunks"]
+             if chunk["id"] == chunk_id],
             f"sha256:{legal_corpus_version_id}:{rule_id}",
         )
 
@@ -181,6 +194,76 @@ def test_work_items_can_be_bounded_to_affected_rule_ids() -> None:
 
     assert [item["legalRuleId"] for item in result["workItems"]] == ["RULE-2"]
     assert result["workItems"][0]["sourceChunkIds"] == ["LAW:A2"]
+
+
+@pytest.mark.parametrize("omit_parent", [False, True])
+def test_work_item_context_matches_persistence_gate_including_structural_context(
+    omit_parent: bool,
+) -> None:
+    api = _api_client()
+    primary_id = "134-2025-QH15::art-10::cl-5::pt-a"
+    parent_id = "134-2025-QH15::art-10::cl-5"
+    referenced_id = "134-2025-QH15::art-2::cl-1"
+    api.get_active_legal_rule_catalog.return_value["rules"] = [{
+        "legalRuleId": "RULE-1",
+        "status": "APPROVED",
+        "citationLocatorRefs": [{"chunkId": primary_id}],
+    }]
+    context = [
+        {"id": chunk_id, "role": role, "content": "Definition of terminology.",
+         "contentSha256": f"hash:{chunk_id}", "legalStatus": "ACTIVE"}
+        for chunk_id, role in [
+            (primary_id, "PRIMARY_MATCH"),
+            (parent_id, "PARENT_CONTEXT"),
+            (referenced_id, "REFERENCED_CONTEXT"),
+        ]
+    ]
+    api.get_legal_corpus_chunks.return_value = {"chunks": context}
+    retriever = MagicMock()
+    retriever.retrieve_exact_context.return_value = context
+    cache = MagicMock()
+    registry = MagicMock(contract_version="test-v1")
+    rules = EngineeringRuleService(
+        retriever=retriever, cache=cache, precompiled_registry=registry,
+    )
+    rules._store_triage_artifact = MagicMock()
+    coordinator = FakeCoordinator()
+    service = _service(
+        api_client=api, retriever=retriever, rule_service=rules,
+        coordinator=coordinator, triage_completion_lookup=lambda _: False,
+    )
+    page = service.get_work_items()
+    item = page["workItems"][0]
+    assert item["legalContext"] == context
+    assert item["sourceChunkIds"] == [primary_id]
+    analyses = [
+        {"chunkId": chunk["id"], "verdict": "CONTEXT_ONLY",
+         "reason": "Terminology context without an operative obligation.",
+         "engineeringObligation": "", "verificationTargets": []}
+        for chunk in item["legalContext"]
+        if not (omit_parent and chunk["id"] == parent_id)
+    ]
+    payload = dict(
+        triage_execution_id=page["triageExecutionId"], legal_rule_id="RULE-1",
+        legal_rule_catalog_version_id=page["legalRuleCatalogVersionId"],
+        legal_corpus_version_id=page["legalCorpusVersionId"],
+        chunk_analyses=analyses, engineering_rules=[], workflow_run_id="triage-test",
+    )
+    if omit_parent:
+        with pytest.raises(ValueError, match="omitted chunks"):
+            service.persist_result(**payload)
+        cache.mark_no_engineering_rules.assert_not_called()
+        rules._store_triage_artifact.assert_not_called()
+        assert coordinator.completed_rule_ids == []
+    else:
+        result = service.persist_result(**payload)
+        assert result["status"] == "READY"
+        assert result["triageDecisionCount"] == len(context)
+        cache.mark_no_engineering_rules.assert_called_once_with(
+            item["sourceFingerprint"], legal_rule_id="RULE-1",
+        )
+        assert coordinator.completed_rule_ids == ["RULE-1"]
+    cache.put.assert_not_called()
 
 
 def test_explicit_reprocessing_advances_past_rules_completed_this_execution() -> None:
@@ -451,3 +534,138 @@ def test_persist_routes_agent_decisions_through_preparation_gate() -> None:
     assert call["engineering_rule_rows"] == proposals
     assert result["engineeringRuleIds"] == ["RULE-1::ENG::1"]
     assert coordinator.completed_rule_ids == ["RULE-1"]
+
+
+def test_persist_tool_schema_only_accepts_canonical_chunk_triage_verdicts() -> None:
+    schema = PersistLegalRuleTriageResultInput.model_json_schema()
+    analysis_ref = schema["properties"]["chunk_analyses"]["items"]["$ref"]
+    analysis_name = analysis_ref.rsplit("/", 1)[-1]
+    assert schema["$defs"][analysis_name]["properties"]["verdict"]["enum"] == [
+        "ENGINEERING_RULE_CANDIDATE",
+        "CONTEXT_ONLY",
+        "REJECT",
+    ]
+
+    with pytest.raises(ValidationError):
+        PersistLegalRuleTriageResultInput(
+            triage_execution_id="triage:test",
+            legal_rule_id="RULE-1",
+            legal_rule_catalog_version_id="catalog-v1",
+            legal_corpus_version_id="corpus-v1",
+            chunk_analyses=[
+                {
+                    "chunkId": "LAW:A1",
+                    "verdict": "CANDIDATE",
+                    "reason": "Not a canonical verdict.",
+                }
+            ],
+            engineering_rules=[],
+            workflow_run_id="triage-run-1",
+        )
+
+
+def test_persist_tool_schema_exposes_engineering_rule_contract_and_candidate_consistency() -> None:
+    schema = PersistLegalRuleTriageResultInput.model_json_schema()
+    proposal_ref = schema["properties"]["engineering_rules"]["items"]["$ref"]
+    proposal_name = proposal_ref.rsplit("/", 1)[-1]
+    proposal_schema = schema["$defs"][proposal_name]
+    assert {"concept", "investigationGoals", "requiredEvidence"} <= set(
+        proposal_schema["required"]
+    )
+
+    candidate = {
+        "chunkId": "LAW:A1",
+        "verdict": "ENGINEERING_RULE_CANDIDATE",
+        "reason": "Concrete human-review obligation.",
+        "engineeringObligation": "Maintain human review.",
+        "verificationTargets": ["human review"],
+    }
+    with pytest.raises(ValidationError, match="require at least one EngineeringRule"):
+        PersistLegalRuleTriageResultInput(
+            triage_execution_id="triage:test",
+            legal_rule_id="RULE-1",
+            legal_rule_catalog_version_id="catalog-v1",
+            legal_corpus_version_id="corpus-v1",
+            chunk_analyses=[candidate],
+            engineering_rules=[],
+            workflow_run_id="triage-run-1",
+        )
+
+    context_only = {
+        "chunkId": "LAW:A1",
+        "verdict": "CONTEXT_ONLY",
+        "reason": "Definition only.",
+    }
+    proposal = {
+        "concept": "HUMAN_OVERSIGHT",
+        "investigationGoals": ["Find human-review controls."],
+        "requiredEvidence": ["HUMAN_REVIEW_CONTROL"],
+    }
+    with pytest.raises(ValidationError, match="require at least one candidate"):
+        PersistLegalRuleTriageResultInput(
+            triage_execution_id="triage:test",
+            legal_rule_id="RULE-1",
+            legal_rule_catalog_version_id="catalog-v1",
+            legal_corpus_version_id="corpus-v1",
+            chunk_analyses=[context_only],
+            engineering_rules=[proposal],
+            workflow_run_id="triage-run-1",
+        )
+
+
+def test_persist_tool_hands_the_gate_plain_chunk_analysis_mappings(monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+
+    class RecordingService:
+        def persist_result(self, **kwargs):
+            captured.update(kwargs)
+            return {"status": "READY"}
+
+    monkeypatch.setattr(code, "LegalRuleTriageService", RecordingService)
+    analysis = {
+        "chunkId": "LAW:A1",
+        "verdict": "ENGINEERING_RULE_CANDIDATE",
+        "reason": "Concrete human-review obligation.",
+        "engineeringObligation": "Maintain human review.",
+        "verificationTargets": ["human review"],
+    }
+
+    proposal = {
+        "concept": "HUMAN_OVERSIGHT",
+        "investigationGoals": ["Find human-review controls."],
+        "requiredEvidence": ["HUMAN_REVIEW_CONTROL"],
+    }
+
+    code.persist_legal_rule_triage_result.invoke(
+        {
+            "triage_execution_id": "triage:test",
+            "legal_rule_id": "RULE-1",
+            "legal_rule_catalog_version_id": "catalog-v1",
+            "legal_corpus_version_id": "corpus-v1",
+            "chunk_analyses": [analysis],
+            "engineering_rules": [proposal],
+            "workflow_run_id": "triage-run-1",
+        }
+    )
+
+    assert captured["chunk_analyses"] == [analysis]
+    assert all(isinstance(row, dict) for row in captured["chunk_analyses"])
+    assert all(isinstance(row, dict) for row in captured["engineering_rules"])
+    persisted = captured["engineering_rules"][0]
+    assert {key: persisted[key] for key in proposal} == proposal
+    assert "engineeringRuleId" not in persisted
+
+
+def test_chunk_triage_parser_rejects_non_mapping_analysis_rows() -> None:
+    context = [{"id": "LAW:A1"}]
+    row = LegalChunkAnalysisInput(
+        chunkId="LAW:A1",
+        verdict="CONTEXT_ONLY",
+        reason="Definition only.",
+    )
+
+    with pytest.raises(ValueError, match="must be an object"):
+        LegalChunkEngineeringRuleTriage._parse_decisions(
+            {"chunkAnalyses": [row]},
+            context,
+        )

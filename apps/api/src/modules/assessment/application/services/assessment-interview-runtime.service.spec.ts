@@ -288,6 +288,8 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
     store.revisions[0].answer = {
       questionId: "q-1",
       selectedChoiceIds: ["internal"],
+      comment:
+        'A mix of internal advice and external sharing.\napi_key="sensitive"',
     };
     findHistoricalQuestion.mockResolvedValue({
       payload: {
@@ -304,9 +306,26 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
     const selection = (await service.getState("assessment-1", actor))
       .answerHistory?.[0];
     expect(selection?.selectedChoiceIds).toEqual(["internal"]);
+    expect(selection?.comment).toContain(
+      "A mix of internal advice and external sharing.",
+    );
+    expect(selection?.comment).not.toContain("sensitive");
+    store.revisions[0].answer = {
+      questionId: "q-1",
+      selectedChoiceIds: ["internal"],
+      otherText: "Previously saved supplementary text.",
+    };
+    expect(
+      (await service.getState("assessment-1", actor)).answerHistory?.[0]
+        .comment,
+    ).toBe("Previously saved supplementary text.");
     expect(selection?.question?.choices).toHaveLength(2);
     expect(selection?.question).not.toHaveProperty("whyEvidenceRefs");
     store.revisions[0].actorId = "another-user";
+    expect(
+      (await service.getState("assessment-1", actor)).answerHistory?.[0]
+        .comment,
+    ).toBeUndefined();
     expect(
       (await service.getState("assessment-1", actor)).answerHistory?.[0]
         .selectedChoiceIds,
@@ -1355,6 +1374,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         expect.objectContaining({
           update: expect.objectContaining({
             privateContextJson: expect.objectContaining({
+              workflowRunId: "10000000-0000-4000-8000-000000000001",
               targetedNeed: expect.objectContaining({
                 needId: "need-data-residency",
                 businessContextNeed: "Clarify cloud provider region",
@@ -1773,66 +1793,83 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       });
     });
 
-    it("accepts targeted resolution criteria from confirmed structured context topics", async () => {
-      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
-        targetedResolutionThreadFixture(),
-      );
+    it.each([true, false])(
+      "accepts targeted resolution topics with candidate-only provenance: %s",
+      async (candidateOnly) => {
+        mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+          targetedResolutionThreadFixture(),
+        );
 
-      const result = await service.recordAgentDecision({
-        assessmentId: "assessment-1",
-        correlationId: "corr-target-structured-resolved",
-        decision: {
-          expectedContextRevision: 2,
-          mode: "INVESTIGATOR_RESOLUTION",
+        const result = await service.recordAgentDecision({
+          assessmentId: "assessment-1",
+          correlationId: "corr-target-structured-resolved",
+          decision: {
+            expectedContextRevision: 2,
+            mode: "INVESTIGATOR_RESOLUTION",
+            outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
+            contextAuthority:
+              ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+            confirmedContext: candidateOnly
+              ? {
+                  statements: [
+                    {
+                      statementId: "statement-direct-answer",
+                      topic: "decision_authority",
+                      statement:
+                        "The organization denies using external national databases.",
+                      normalizedValue: false,
+                      evidenceRefs: [],
+                    },
+                  ],
+                }
+              : confirmedStructuredContext({}),
+          },
+        });
+
+        expect(result).toMatchObject({
           outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
-          contextAuthority:
-            ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
-          confirmedContext: confirmedStructuredContext({}),
-        },
-      });
-
-      expect(result).toMatchObject({
-        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
-        continuation: expect.objectContaining({
-          investigatorExecutionId: "exec-1",
-          checkpointId: "cp-1",
-        }),
-      });
-      expect(mockRuntimeEvents.recordToolCompleted).toHaveBeenCalledWith(
-        expect.objectContaining({
-          runId: "10000000-0000-4000-8000-000000000001",
-          outputSummary: expect.objectContaining({
-            interviewWorkflowEvent:
-              ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.investigationResumed,
-            interviewWorkflowEvents: [
-              ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewContextResolved,
-              ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.investigationResumed,
-            ],
-            orchestratorAction:
-              ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.resumeExactInvestigator,
-            interviewMode: "INVESTIGATOR_RESOLUTION",
+          continuation: expect.objectContaining({
+            investigatorExecutionId: "exec-1",
+            checkpointId: "cp-1",
           }),
-        }),
-      );
-      const updateCalls =
-        mockTx.assessmentInterviewThread.updateMany.mock.calls;
-      const updateInput = updateCalls[0]?.[0] as {
-        data?: { stateJson?: unknown };
-      };
-      expect(updateInput.data?.stateJson).toMatchObject({
-        confirmedContext: {
-          authority:
-            CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES.customerConfirmedConfirmedOnly,
-          statements: [
-            expect.objectContaining({
-              topic: "decision_authority",
-              source: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
-              resolutionState: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+        });
+        expect(mockRuntimeEvents.recordToolCompleted).toHaveBeenCalledWith(
+          expect.objectContaining({
+            runId: "10000000-0000-4000-8000-000000000001",
+            outputSummary: expect.objectContaining({
+              interviewWorkflowEvent:
+                ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.investigationResumed,
+              interviewWorkflowEvents: [
+                ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewContextResolved,
+                ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.investigationResumed,
+              ],
+              orchestratorAction:
+                ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.resumeExactInvestigator,
+              interviewMode: "INVESTIGATOR_RESOLUTION",
             }),
-          ],
-        },
-      });
-    });
+          }),
+        );
+        const updateCalls =
+          mockTx.assessmentInterviewThread.updateMany.mock.calls;
+        const updateInput = updateCalls[0]?.[0] as {
+          data?: { stateJson?: unknown };
+        };
+        expect(updateInput.data?.stateJson).toMatchObject({
+          confirmedContext: {
+            authority:
+              CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES.customerConfirmedConfirmedOnly,
+            statements: [
+              expect.objectContaining({
+                topic: "decision_authority",
+                source: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+                resolutionState:
+                  ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+              }),
+            ],
+          },
+        });
+      },
+    );
 
     it("routes targeted downstream impact to selective rerun instead of exact resume", async () => {
       mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
@@ -1965,33 +2002,37 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       );
     });
 
-    it("rejects structured targeted resolution criteria from non-confirmed statements", async () => {
-      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
-        targetedResolutionThreadFixture(),
-      );
+    it.each([
+      { resolutionState: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.uncertain },
+      { resolutionState: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.conflicted },
+    ])(
+      "rejects contradictory targeted statement provenance: %j",
+      async (provenance) => {
+        mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+          targetedResolutionThreadFixture(),
+        );
 
-      await expect(
-        service.recordAgentDecision({
-          assessmentId: "assessment-1",
-          correlationId: "corr-target-structured-unconfirmed",
-          decision: {
-            expectedContextRevision: 2,
-            mode: "INVESTIGATOR_RESOLUTION",
-            outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
-            contextAuthority:
-              ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
-            confirmedContext: confirmedStructuredContext({
-              resolutionState: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.uncertain,
-            }),
+        await expect(
+          service.recordAgentDecision({
+            assessmentId: "assessment-1",
+            correlationId: "corr-target-structured-unconfirmed",
+            decision: {
+              expectedContextRevision: 2,
+              mode: "INVESTIGATOR_RESOLUTION",
+              outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
+              contextAuthority:
+                ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+              confirmedContext: confirmedStructuredContext(provenance),
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: {
+            ok: false,
+            problem: { code: "INTERVIEW_RESOLUTION_CRITERIA_UNSATISFIED" },
           },
-        }),
-      ).rejects.toMatchObject({
-        response: {
-          ok: false,
-          problem: { code: "INTERVIEW_RESOLUTION_CRITERIA_UNSATISFIED" },
-        },
-      });
-    });
+        });
+      },
+    );
   });
 
   describe("seedInitialQuestionForWorker", () => {
@@ -2390,6 +2431,38 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
   });
 
   describe("legacy guidance pinning", () => {
+    it.each([2, 1])(
+      "keeps confirmed context worker-only and pinned to requested revision %s",
+      async (requestedRevision) => {
+        const confirmedContext = confirmedStructuredContext({});
+        mockTx.assessmentInterviewThread.findUnique.mockResolvedValueOnce({
+          assessmentId: "assessment-1",
+          contextRevision: 2,
+          processedRevision: 2,
+          activeQuestionId: null,
+          stateJson: {
+            outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
+            contextRevision: 2,
+            confirmedContext,
+          },
+          privateContextJson: { revisions: [] },
+          sourceVersion: "snap-1:sha-123456",
+          pgeVersion: "report-1:v1",
+          guidanceVersion: TEST_GUIDANCE_VERSION,
+        });
+        const context = await service.getPrivateContextForWorker({
+          assessmentId: "assessment-1",
+          contextRevision: requestedRevision,
+          sourceVersion: "snap-1:sha-123456",
+          pgeVersion: "report-1:v1",
+        });
+        expect(context.publicState).not.toHaveProperty("confirmedContext");
+        expect(context.confirmedContext).toEqual(
+          requestedRevision === 2 ? confirmedContext : undefined,
+        );
+      },
+    );
+
     it("pins a materialized legacy thread once and keeps the pin after active guidance changes", async () => {
       mockInterviewGuidanceResolver.resolveActiveGuidanceVersion.mockReturnValue(
         "guidance-v3",

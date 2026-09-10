@@ -146,3 +146,34 @@ def test_harness_registers_each_active_provider_without_cross_provider_kwargs(
         profile is harness.LCSP_HARNESS_PROFILE
         for _, profile in harness_registrations
     )
+
+
+def test_every_provider_seeds_one_key_from_a_rotated_credential_list(monkeypatch) -> None:
+    # A comma-separated list is the rotation pool for TokenFallbackMiddleware. Handing it
+    # to an SDK verbatim authenticates with a single nonsense key, so each registered
+    # profile must carry exactly one token while keeping its provider-specific kwargs.
+    mixed_specs = ("openai:gpt-5-mini", "google_genai:gemini-3.1-pro-preview")
+    registrations: list[tuple[str, object]] = []
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-first, sk-second ,sk-third,")
+    monkeypatch.setenv("GOOGLE_API_KEY", "goog-first,goog-second")
+    monkeypatch.setattr(harness, "ALL_LCSP_MODEL_SPECS", mixed_specs)
+    monkeypatch.setattr(
+        harness,
+        "register_provider_profile",
+        lambda key, profile: registrations.append((key, profile)),
+    )
+    monkeypatch.setattr(harness, "register_harness_profile", lambda *_: None)
+
+    harness.configure_lcsp_harness()
+
+    profiles = {key: dict(profile.init_kwargs) for key, profile in registrations}
+    assert profiles["openai"]["api_key"] == "sk-first"
+    assert profiles["openai:gpt-5-mini"]["api_key"] == "sk-first"
+    assert profiles["google_genai"]["api_key"] == "goog-first"
+    assert profiles["google_genai:gemini-3.1-pro-preview"]["api_key"] == "goog-first"
+    assert all("," not in profile["api_key"] for profile in profiles.values())
+    # Rotation owns the retry budget, so the SDK must not silently retry a dead key.
+    assert {profile["max_retries"] for profile in profiles.values()} == {0, 1}
+    assert profiles["openai:gpt-5-mini"]["use_responses_api"] is True
+    assert profiles["openai:gpt-5-mini"]["reasoning"] == {"effort": REASONING_EFFORT}

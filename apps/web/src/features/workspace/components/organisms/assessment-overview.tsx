@@ -489,6 +489,8 @@ function AssessmentInterviewFlow({
                     onSelectedChoiceIdsChange={handleSelectedChoicesChange}
                     isAdjusting={activeDraft.isAdjusting}
                     onAdjust={handleAdjust}
+                    canSubmitSelection={isSubmitReady}
+                    onSubmitSelection={handleSubmit}
                     blockedActions={interview.questionTurnProps.blockedActions}
                     disabled={
                       !customerActions.canAnswerQuestion ||

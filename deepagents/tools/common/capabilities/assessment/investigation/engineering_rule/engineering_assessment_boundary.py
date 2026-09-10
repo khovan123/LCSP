@@ -528,4 +528,4 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
     @staticmethod
     def _is_terminal_callback_client_error(error: WorkerCallbackError) -> bool:
         """Return whether WorkerApiClient reported a non-idempotent HTTP 4xx."""
-        return "callback failed with client error 4" in str(error).lower()
+        return bool(getattr(error, "callback_client_error", False))

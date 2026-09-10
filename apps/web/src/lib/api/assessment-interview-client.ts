@@ -209,6 +209,9 @@ export function sanitizeAssessmentInterviewState(
             : {}),
           answeredAt: item.answeredAt,
           summary: item.summary,
+          ...(typeof item.comment === "string" && item.comment.trim()
+            ? { comment: item.comment }
+            : {}),
           ...(sanitizeQuestion(item.question)
             ? { question: sanitizeQuestion(item.question)! }
             : {}),

@@ -495,6 +495,8 @@ export type AssessmentInterviewAnswerHistoryItem = {
   /** Returned only for the authenticated respondent's own answer. */
   selectedChoiceIds?: string[];
   answeredAt: string;
+  /** Sanitized supplementary text, returned only to the authenticated respondent. */
+  comment?: string;
   /** Internal history stores actorId; Customer projections omit it. */
   actorId?: string;
   summary: string;

@@ -207,13 +207,44 @@ def test_engineering_rules_are_pinned_inputs_not_subagent_discovery() -> None:
     assert "Do not add, remove, reinterpret or re-rank EngineeringRules" in planner_prompt
 
 
+def test_interview_prompt_states_every_enforced_control_shape_rule() -> None:
+    # A rejected handoff is discarded by the delivery boundary, so an Interview question
+    # the contract forbids stalls the assessment with no retry. Every rule the validator
+    # enforces has to be stated where the model can read it.
+    from contracts.handoffs import InterviewQuestionResult
+
+    interview_prompt = str(
+        next(item for item in FLOW_SUBAGENTS if item["name"] == "interview")["system_prompt"]
+    )
+
+    def rejects(**overrides) -> bool:
+        question = {
+            "id": "q-1",
+            "intent": "ASK",
+            "control": "BOOLEAN",
+            "prompt": "Does this system ingest external data?",
+            **overrides,
+        }
+        try:
+            InterviewQuestionResult.model_validate(question)
+        except ValueError:
+            return True
+        return False
+
+    assert rejects(choices=[{"id": "YES", "label": "Yes"}])
+    assert rejects(control="SINGLE_SELECT", choices=[])
+    assert "BOOLEAN and FREE_TEXT must leave `choices` empty" in interview_prompt
+    assert "SINGLE_SELECT and\n  MULTI_SELECT require at least one choice" in interview_prompt
+    assert "exactly CONFIRM and ADJUST stable choice IDs" in interview_prompt
+
+
 def test_default_role_models_match_lcsp_cost_and_reasoning_policy() -> None:
-    assert DEFAULT_ROOT_MODEL_SPEC == "openai:gpt-5-mini"
-    assert DEFAULT_TRIAGE_MODEL_SPEC == "openai:gpt-5-mini"
-    assert DEFAULT_PLANNER_MODEL_SPEC == "openai:gpt-5-mini"
-    assert DEFAULT_INTERVIEW_MODEL_SPEC == "openai:gpt-5-mini"
-    assert DEFAULT_INVESTIGATOR_MODEL_SPEC == "openai:gpt-5-mini"
-    assert DEFAULT_NARRATOR_MODEL_SPEC == "openai:gpt-4o-mini"
+    assert DEFAULT_ROOT_MODEL_SPEC == "openai:gpt-5-nano"
+    assert DEFAULT_TRIAGE_MODEL_SPEC == "openai:gpt-5-nano"
+    assert DEFAULT_PLANNER_MODEL_SPEC == "openai:gpt-5-nano"
+    assert DEFAULT_INTERVIEW_MODEL_SPEC == "openai:gpt-5-nano"
+    assert DEFAULT_INVESTIGATOR_MODEL_SPEC == "openai:gpt-5-nano"
+    assert DEFAULT_NARRATOR_MODEL_SPEC == "openai:gpt-4.1-nano"
     assert DEFAULT_REASONING_EFFORT == "low"
     assert RESPONSES_OUTPUT_VERSION == "responses/v1"
 
@@ -248,6 +279,11 @@ def test_openai_model_policy_gates_reasoning_by_model_capability() -> None:
     assert supports_openai_reasoning("openai:gpt-5") is True
     assert supports_openai_reasoning("openai:gpt-5-chat-latest") is False
     assert supports_openai_reasoning("openai:gpt-4o-mini") is False
+    assert supports_openai_reasoning("openai:gpt-4.1-nano") is False
+    assert openai_responses_init_kwargs("openai:gpt-4.1-nano") == {
+        "use_responses_api": True,
+        "output_version": "responses/v1",
+    }
     assert supports_openai_reasoning("anthropic:claude-sonnet-4-6") is False
 
 
@@ -340,12 +376,12 @@ def test_effective_model_config_logs_responses_api_defaults() -> None:
     )
     assert all(config.provider == "openai" for config in configs)
     assert tuple(config.model for config in configs) == (
-        "gpt-5-mini",
-        "gpt-5-mini",
-        "gpt-5-mini",
-        "gpt-5-mini",
-        "gpt-5-mini",
-        "gpt-4o-mini",
+        "gpt-5-nano",
+        "gpt-5-nano",
+        "gpt-5-nano",
+        "gpt-5-nano",
+        "gpt-5-nano",
+        "gpt-4.1-nano",
     )
     assert all(config.source in {"default", "env"} for config in configs)
     assert all(config.client == "responses_api" for config in configs)

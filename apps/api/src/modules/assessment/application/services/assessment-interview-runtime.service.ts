@@ -188,6 +188,7 @@ type WorkerPrivateContext = {
   assessmentId: string;
   threadId: string;
   workflowRunId?: string;
+  rootWorkflowRunId?: string;
   authenticatedActorId?: string;
   requestedRevision: number;
   currentRevision: number;
@@ -198,6 +199,7 @@ type WorkerPrivateContext = {
   coverageLimitations?: string[];
   partialCoveragePolicyDecision?: PartialCoveragePolicyDecision;
   publicState: AssessmentInterviewRuntimeState;
+  confirmedContext?: AssessmentInterviewRuntimeState["confirmedContext"];
   privateRevision?: PrivateInterviewAnswerRevision;
   targetedNeed?: TargetedInterviewNeed;
   guidanceVersion: string;
@@ -304,6 +306,9 @@ export class AssessmentInterviewRuntimeService {
         return {
           ...item,
           selectedChoiceIds: revision?.answer.selectedChoiceIds,
+          comment: sanitizePublicText(
+            revision?.answer.comment?.trim() || revision?.answer.otherText,
+          ),
           summary: text
             ? (sanitizePublicText(text) ?? item.summary)
             : item.summary,
@@ -964,6 +969,7 @@ export class AssessmentInterviewRuntimeService {
       workflowRunId,
       authenticatedActorId,
       requestedRevision: input.contextRevision,
+      rootWorkflowRunId: thread.privateStore.workflowRunId,
       currentRevision: thread.contextRevision,
       processedRevision: thread.processedRevision,
       sourceVersion: authoritative.sourceVersion,
@@ -974,6 +980,12 @@ export class AssessmentInterviewRuntimeService {
         authoritative.partialCoveragePolicyDecision ??
         thread.privateStore.partialCoveragePolicyDecision,
       publicState: publicState(thread.state),
+      // Worker-only recovery input; never add this to the customer projection.
+      confirmedContext:
+        status === "DUPLICATE" &&
+        input.contextRevision === thread.contextRevision
+          ? thread.state.confirmedContext
+          : undefined,
       privateRevision,
       targetedNeed: target,
       guidanceVersion: thread.guidanceVersion ?? this.resolveGuidanceVersion(),
@@ -1058,7 +1070,6 @@ export class AssessmentInterviewRuntimeService {
       };
       const privateStore: PrivateInterviewStore = {
         ...thread.privateStore,
-        workflowRunId: target.workflowRunId,
         targetedNeed,
         targetedContinuation,
         partialCoveragePolicyDecision: provenance.partialCoveragePolicyDecision,
@@ -3003,8 +3014,9 @@ function confirmedStructuredContextTopics(
     return null;
   }
   if (
-    context.authority !==
-      CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES.customerConfirmedConfirmedOnly ||
+    (context.authority !== undefined &&
+      context.authority !==
+        CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES.customerConfirmedConfirmedOnly) ||
     !Array.isArray(context.statements)
   ) {
     return new Set();
@@ -3014,8 +3026,11 @@ function confirmedStructuredContextTopics(
     const statement = objectRecord(value);
     if (
       statement &&
-      statement.resolutionState !==
-        ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.uncertain &&
+      // This guard runs before API-owned provenance is materialized. Model
+      // candidates may omit it, but explicit unresolved states fail closed.
+      (statement.resolutionState === undefined ||
+        statement.resolutionState ===
+          ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed) &&
       nonEmptyString(statement.topic)
     ) {
       topics.add(statement.topic);

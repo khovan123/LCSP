@@ -115,7 +115,9 @@ def _report():
 def test_stale_accepted_evidence_event_is_terminal_before_interview_dispatch() -> None:
     api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
     api.get_accepted_technical_evidence_report = lambda _report_id: (_ for _ in ()).throw(
-        WorkerCallbackError("VALIDATION_FAILED: Callback failed with client error 404.")
+        WorkerCallbackError(
+            "VALIDATION_FAILED: Callback failed with client error 404.", status_code=404
+        )
     )
     dispatcher = FakeDispatcher()
     boundary = _boundary(api, dispatcher)

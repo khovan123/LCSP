@@ -45,6 +45,11 @@ export function InterviewAnswerHistory({
           </AgentTurn>
         </>
       )}
+      {answer.comment?.trim() ? (
+        <AgentTurn role={ASSESSMENT_CHAT_ROLES.user}>
+          <InterviewAnswerMessage text={answer.comment} />
+        </AgentTurn>
+      ) : null}
     </div>
   );
 }

@@ -97,8 +97,10 @@ class LegalChunkEngineeringRuleTriage:
         known = {str(chunk.get("id")): chunk for chunk in legal_context if chunk.get("id")}
         decisions: dict[str, LegalChunkTriageDecision] = {}
         for raw in raw_rows:
+            # Skipping a malformed row here would resurface downstream as a bogus
+            # "omitted chunks" error that blames the model for a transport defect.
             if not isinstance(raw, dict):
-                continue
+                raise ValueError("legal chunk triage analysis must be an object")
             chunk_id = str(raw.get("chunkId") or "")
             if chunk_id not in known:
                 raise ValueError("legal chunk triage returned unknown chunkId")

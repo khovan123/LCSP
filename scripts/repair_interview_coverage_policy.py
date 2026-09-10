@@ -3,12 +3,16 @@
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 import psycopg
 from psycopg.types.json import Jsonb
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "deepagents"))
 
 from orchestration.technical_coverage_policy import attach_partial_coverage_policy
 
@@ -22,7 +26,7 @@ def main():
     if args.replay and not args.apply:
         parser.error("--replay requires --apply")
     event = None
-    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+    load_dotenv(REPO_ROOT / ".env")
     url = urlsplit(os.environ["DATABASE_URL"])
     query = urlencode([(key, value) for key, value in parse_qsl(url.query) if key != "schema"])
     with psycopg.connect(urlunsplit(url._replace(query=query))) as conn:

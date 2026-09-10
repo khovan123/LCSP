@@ -118,7 +118,9 @@ class LegalRuleTriageService:
             source_fingerprint: str | None = None
             triage_completed = False
             if ready_for_triage:
-                _, source_fingerprint = self.rule_service.resolve_source_identity(
+                # Persistence validates the expanded context (including parents and
+                # references), so the agent must receive that same complete input.
+                legal_context, source_fingerprint = self.rule_service.resolve_source_identity(
                     legal_rule=rule,
                     legal_corpus_version_id=corpus_version_id,
                 )
