@@ -2,33 +2,80 @@ import type { ProgramEvidenceGraphDetail } from "@/lib/api/evidence-graph-detail
 
 type Node = ProgramEvidenceGraphDetail["paths"]["nodes"][number];
 type Edge = ProgramEvidenceGraphDetail["paths"]["edges"][number];
-export type EvidencePathGroup = { nodes: Node[]; edges: Edge[] };
-const PRIORITY_KINDS = ["HTTP_ROUTE", "FUNCTION", "METHOD", "CALL_SITE", "BUSINESS_ACTION", "AI_MODEL_INVOCATION", "AI_INPUT", "AI_OUTPUT", "AI_PROVIDER", "AGENT_BOUNDARY_SOURCE", "EXTERNAL_SERVICE"];
-const MAX_PATHS = 3;
-const MAX_NODES_PER_PATH = 5;
+export type EvidenceTopology = {
+  nodes: Node[];
+  edges: Edge[];
+  positions: Map<string, { x: number; y: number }>;
+};
 
-export function selectEvidencePaths(nodes: Node[], edges: Edge[], maxPaths = MAX_PATHS, maxNodesPerPath = MAX_NODES_PER_PATH): EvidencePathGroup[] {
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-  const validEdges = edges.filter((edge) => byId.has(edge.source) && byId.has(edge.target));
-  const ranked = [...nodes].sort((a, b) => priority(a.kind) - priority(b.kind) || a.id.localeCompare(b.id));
-  const groups: EvidencePathGroup[] = [];
-  const used = new Set<string>();
-  for (const seed of ranked) {
-    if (groups.length >= maxPaths || used.has(seed.id)) continue;
-    const pathNodes = [seed]; const pathEdges: Edge[] = []; let current = seed.id;
-    while (pathNodes.length < maxNodesPerPath) {
-      const next = validEdges.filter((edge) => edge.source === current || edge.target === current).map((edge) => ({ edge, id: edge.source === current ? edge.target : edge.source })).filter(({ id }) => !pathNodes.some((node) => node.id === id)).sort((a, b) => priority(byId.get(a.id)?.kind ?? "") - priority(byId.get(b.id)?.kind ?? "") || a.id.localeCompare(b.id))[0];
-      if (!next) break;
-      pathEdges.push(next.edge); pathNodes.push(byId.get(next.id)!); current = next.id;
-    }
-    if (pathEdges.length > 0) { pathNodes.forEach((node) => used.add(node.id)); groups.push({ nodes: pathNodes, edges: pathEdges }); }
-  }
-  return groups;
+export type ViewportState = { zoom: number; pan: { x: number; y: number } };
+
+export function zoomAtPoint(
+  state: ViewportState,
+  point: { x: number; y: number },
+  requestedZoom: number,
+  bounds = { min: 0.45, max: 3.5 },
+): ViewportState {
+  const nextZoom = Math.min(bounds.max, Math.max(bounds.min, requestedZoom));
+  const sceneX = (point.x - state.pan.x) / state.zoom;
+  const sceneY = (point.y - state.pan.y) / state.zoom;
+  return {
+    zoom: nextZoom,
+    pan: {
+      x: point.x - sceneX * nextZoom,
+      y: point.y - sceneY * nextZoom,
+    },
+  };
+}
+const PRIORITY_KINDS = [
+  "HTTP_ROUTE",
+  "ENTRYPOINT",
+  "FUNCTION",
+  "METHOD",
+  "CALL_SITE",
+  "BUSINESS_ACTION",
+  "AI_MODEL_INVOCATION",
+  "AI_INPUT",
+  "AI_OUTPUT",
+  "AI_PROVIDER",
+  "AGENT_BOUNDARY_SOURCE",
+  "EXTERNAL_SERVICE",
+];
+
+export function selectEvidenceTopology(
+  nodes: Node[],
+  edges: Edge[],
+): EvidenceTopology {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const validEdges = edges.filter(
+    (edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target),
+  );
+  // The API already provides the bounded, customer-safe projection. Preserve
+  // that topology intact; viewport navigation handles dense graphs.
+  const projectedNodes = [...nodes].sort(compareNodes);
+  const ids = new Set(projectedNodes.map((node) => node.id));
+  const projectedEdges = validEdges
+    .filter((edge) => ids.has(edge.source) && ids.has(edge.target))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  // Pack the bounded scene into a stable 2D grid. This avoids a narrow
+  // rank tower while leaving the canonical directed edges untouched.
+  const columns = Math.max(
+    4,
+    Math.ceil(Math.sqrt(projectedNodes.length / 1.5)),
+  );
+  const positions = new Map<string, { x: number; y: number }>();
+  projectedNodes.forEach((node, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    positions.set(node.id, { x: 90 + column * 230, y: 70 + row * 105 });
+  });
+  return { nodes: projectedNodes, edges: projectedEdges, positions };
 }
 
-export function selectEvidencePathNodes(nodes: Node[], edges: Edge[], limit = 12): Node[] {
-  const selected = selectEvidencePaths(nodes, edges, MAX_PATHS, limit).flatMap((group) => group.nodes).slice(0, limit);
-  return selected.length > 0 ? selected : [...nodes].sort((a, b) => priority(a.kind) - priority(b.kind) || a.id.localeCompare(b.id)).slice(0, limit);
+function priority(kind: string) {
+  const index = PRIORITY_KINDS.indexOf(kind.toUpperCase());
+  return index === -1 ? PRIORITY_KINDS.length : index;
 }
-
-function priority(kind: string) { const index = PRIORITY_KINDS.indexOf(kind.toUpperCase()); return index === -1 ? PRIORITY_KINDS.length : index; }
+function compareNodes(a: Node, b: Node) {
+  return priority(a.kind) - priority(b.kind) || a.id.localeCompare(b.id);
+}
