@@ -11,13 +11,19 @@ GEMINI_MODULE_PREFIX = "langchain_google_genai."
 
 
 def relax_array_upper_bounds(schema: Any) -> Any:
-    """Drop every `maxItems` from a response schema handed to Gemini.
+    """Drop every expansion-costly `maxItems` from a response schema handed to Gemini.
 
     Gemini materialises a bounded array by expanding its item schema up to `maxItems`
     times, and rejects the whole request with an opaque 400 INVALID_ARGUMENT once the
     expanded schema exceeds an internal budget. `InvestigatorResult` crosses it: 200
     claims each carrying three 100-element reference arrays. No single bound is at fault,
     so only removing all of them makes the request valid.
+
+    `maxItems: 0` is kept. It costs Gemini nothing to expand (zero items, zero budget),
+    and on the per-claim_type variant models it is not a size tuning bound at all — it is
+    the structural "this claim shape must not carry this ref list" contract (e.g.
+    RULE_SCOPE_NOT_APPLICABLE's evidence/graph/source refs). Stripping it here would
+    silently reopen exactly the class of gap this module exists to close.
 
     Only the provider-facing copy is relaxed. The Pydantic contract still validates the
     real bounds when the handoff is parsed, so nothing downstream becomes more permissive.
@@ -26,7 +32,7 @@ def relax_array_upper_bounds(schema: Any) -> Any:
         return {
             key: relax_array_upper_bounds(value)
             for key, value in schema.items()
-            if key != "maxItems"
+            if not (key == "maxItems" and value != 0)
         }
     if isinstance(schema, list):
         return [relax_array_upper_bounds(value) for value in schema]

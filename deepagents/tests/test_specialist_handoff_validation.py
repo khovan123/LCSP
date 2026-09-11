@@ -552,16 +552,32 @@ def _all_enums(schema: dict, *, path: str = "") -> dict[str, list]:
     return enums
 
 
+_INVESTIGATOR_CLAIM_VARIANT_DEFS = (
+    "InvestigatorRequirementMetClaim",
+    "InvestigatorRequirementNotMetClaim",
+    "InvestigatorUnresolvedClaim",
+    "InvestigatorScopeNotApplicableClaim",
+)
+
+
 def test_gemini_relaxation_is_lossless_for_required_fields_and_enums() -> None:
     schema = InvestigatorResult.model_json_schema()
     relaxed = relax_array_upper_bounds(schema)
 
     assert _all_required_lists(relaxed) == _all_required_lists(schema)
     assert _all_enums(relaxed) == _all_enums(schema)
-    # claim_type must still be a closed set after relaxation, or Gemini could legally
-    # emit a claim_type outside ENGINEERING_EVIDENCE_CLAIM_TYPES.
-    claim_type_enum = relaxed["$defs"]["InvestigatorClaim"]["properties"]["claim_type"]["enum"]
-    assert set(claim_type_enum) == {
+    # `claims.items` must still be exactly the 4 per-claim_type variants (anyOf) after
+    # relaxation, or Gemini could legally emit a shape outside the closed set.
+    claims_items = relaxed["properties"]["claims"]["items"]
+    refs = {entry["$ref"].rsplit("/", 1)[-1] for entry in claims_items["anyOf"]}
+    assert refs == set(_INVESTIGATOR_CLAIM_VARIANT_DEFS)
+    # Each variant's own claim_type is a single-value `const` (not a multi-value enum) —
+    # together the 4 variants' consts must still be exactly ENGINEERING_EVIDENCE_CLAIM_TYPES.
+    consts = {
+        relaxed["$defs"][name]["properties"]["claim_type"]["const"]
+        for name in _INVESTIGATOR_CLAIM_VARIANT_DEFS
+    }
+    assert consts == {
         "RULE_REQUIREMENT_MET",
         "RULE_REQUIREMENT_NOT_MET",
         "UNRESOLVED_ENGINEERING_FACT",
@@ -587,12 +603,9 @@ def test_gemini_relaxation_is_lossless_for_required_fields_and_enums() -> None:
 
 
 def test_investigator_claim_limitations_field_exposes_a_closed_enum() -> None:
-    """The model-facing schema must expose the valid limitation codes, not just accept any string."""
+    """Every claim_type variant's schema must expose the valid limitation codes."""
     schema = InvestigatorResult.model_json_schema()
-    limitations_schema = schema["$defs"]["InvestigatorClaim"]["properties"]["limitations"]
-
-    enum = limitations_schema["items"]["enum"]
-    assert set(enum) == {
+    expected = {
         "ENGINEERING_EVIDENCE_INSUFFICIENT",
         "DYNAMIC_PATH_UNRESOLVED",
         "EXTERNAL_BOUNDARY_UNRESOLVED",
@@ -600,6 +613,40 @@ def test_investigator_claim_limitations_field_exposes_a_closed_enum() -> None:
         "SEARCH_COVERAGE_INCOMPLETE",
         "ENGINEERING_INVESTIGATION_FAILED",
     }
+    for name in _INVESTIGATOR_CLAIM_VARIANT_DEFS:
+        limitations_schema = schema["$defs"][name]["properties"]["limitations"]
+        assert set(limitations_schema["items"]["enum"]) == expected, name
+
+
+def test_unresolved_claim_variant_requires_a_non_empty_limitations_list_structurally() -> None:
+    """The exact real-run gap: `limitations` must have min_length=1, not just be a plain list."""
+    schema = InvestigatorResult.model_json_schema()
+    limitations_schema = schema["$defs"]["InvestigatorUnresolvedClaim"]["properties"][
+        "limitations"
+    ]
+    assert limitations_schema.get("minItems") == 1
+    assert "limitations" in schema["$defs"]["InvestigatorUnresolvedClaim"]["required"]
+
+
+def test_scope_not_applicable_variant_structurally_forbids_graph_and_source_refs() -> None:
+    """max_length=0, not a runtime check: the model cannot populate these fields at all."""
+    schema = InvestigatorResult.model_json_schema()
+    scope_properties = schema["$defs"]["InvestigatorScopeNotApplicableClaim"]["properties"]
+    for field in ("evidence_refs", "graph_path_refs", "source_anchor_refs"):
+        assert scope_properties[field].get("maxItems") == 0, field
+    assert scope_properties["customer_context_refs"].get("minItems") == 1
+
+
+def test_relaxation_preserves_maxitems_zero_but_strips_larger_bounds() -> None:
+    """relax_array_upper_bounds must keep maxItems:0 (a shape contract) while still
+    stripping the large expansion-cost bounds it exists for."""
+    schema = InvestigatorResult.model_json_schema()
+    relaxed = relax_array_upper_bounds(schema)
+    scope_properties = relaxed["$defs"]["InvestigatorScopeNotApplicableClaim"]["properties"]
+
+    assert scope_properties["evidence_refs"].get("maxItems") == 0
+    assert scope_properties["customer_context_refs"].get("maxItems") is None
+    assert relaxed["properties"]["claims"].get("maxItems") is None
 
 
 def test_unresolved_claim_with_invalid_limitation_code_fails_at_the_schema_layer() -> None:
@@ -630,7 +677,12 @@ def test_requirement_not_met_claim_rejected_without_any_ref() -> None:
 
 
 def test_scope_not_applicable_claim_rejected_when_carrying_graph_refs() -> None:
-    """RULE_SCOPE_NOT_APPLICABLE must not carry graph/source refs, even alongside customer_context_refs."""
+    """RULE_SCOPE_NOT_APPLICABLE must not carry graph/source refs, even alongside customer_context_refs.
+
+    Structurally enforced now (max_length=0 on the field), not a post-hoc check — and the
+    _filter_union_variant_noise cleanup means the message names the exact field/reason
+    instead of the smart-union's per-variant noise from the other 3 claim shapes.
+    """
     payload = _investigator_payload()
     payload["claims"] = [
         {
@@ -651,7 +703,12 @@ def test_scope_not_applicable_claim_rejected_when_carrying_graph_refs() -> None:
     with pytest.raises(SpecialistHandoffValidationError, match="schema validation") as exc_info:
         validate_specialist_handoff("investigator", payload)
 
-    assert "must not carry graph/source refs" in str(exc_info.value)
+    message = str(exc_info.value)
+    assert "claims.0.graph_path_refs" in message
+    assert "at most 0 items" in message
+    # No noise from the other 3 non-matching variants.
+    assert "InvestigatorRequirementMetClaim" not in message
+    assert message.count(";") == 0
 
 
 def test_system_authored_failure_claim_keeps_its_reserved_limitation_code() -> None:
@@ -698,3 +755,65 @@ def test_model_authored_claim_cannot_use_the_system_reserved_limitation_code() -
 
     with pytest.raises(SpecialistHandoffValidationError, match="unsupported codes"):
         validate_specialist_handoff("investigator", payload)
+
+
+# ============================================================================
+# Root-cause regression #3: cc3125d0's enum fix was necessary but insufficient — an empty
+# `limitations: []` still satisfied the JSON schema (no min_length), so the model still emitted
+# it and still died in the post-hoc validator at 18:18:07,
+# engineering_rule_id=AUTO-VN-LEGAL-2026-08-134-2025-QH15::art-10::cl-1::ENG::1.
+#
+# Root architectural cause: InvestigatorClaim was one flat, uniformly-permissive model with a
+# claim_type discriminator dispatched to _INVESTIGATOR_CLAIM_VALIDATORS in Python the model never
+# sees. Every per-claim_type obligation (min_length on limitations, required criterion, the
+# scope_not_applicable "no graph/source refs" rule) lived only in that Python dispatch. These
+# tests pin the union-of-variants replacement that makes those obligations part of the schema
+# itself, and the specific wire-format choice (anyOf, not oneOf+discriminator) that was verified
+# against the installed langchain_google_genai library before committing to it.
+# ============================================================================
+
+
+def test_investigator_claim_union_uses_anyof_not_oneof_discriminator() -> None:
+    """The load-bearing wire-format choice: verified empirically, not assumed.
+
+    langchain_google_genai's schema converter (_function_utils.py) has explicit, tested handling
+    for `anyOf` but zero handling anywhere for `oneOf`/`discriminator` — neither key is in its
+    `_ALLOWED_SCHEMA_FIELDS`, so either would be silently dropped with a warning log for the
+    tool/function-declaration path. A `Field(discriminator=...)` union renders `oneOf` +
+    `discriminator`; a plain `Union` (what contracts/handoffs.py actually uses) renders `anyOf`.
+    If this ever flips back to a discriminated union, it reaches Gemini's tool-declaration path
+    as an empty/broken schema — this test exists to catch that regression before a live run does.
+    """
+    schema = InvestigatorResult.model_json_schema()
+    claims_items = schema["properties"]["claims"]["items"]
+    assert "anyOf" in claims_items
+    assert "oneOf" not in claims_items
+    assert "discriminator" not in claims_items
+
+
+def test_recorded_unresolved_empty_limitations_failure_is_now_structurally_unrepresentable() -> None:
+    # 2026-09-11 18:18:07, engineering_rule_id=
+    # AUTO-VN-LEGAL-2026-08-134-2025-QH15::art-10::cl-1::ENG::1: the enum-only fix (cc3125d0)
+    # left `limitations: []` schema-valid for UNRESOLVED_ENGINEERING_FACT, so the model kept
+    # emitting it. Confirms the exact recorded shape is now rejected before any deterministic
+    # gate runs, with a clean single-cause message (not smart-union noise).
+    payload = _investigator_payload()
+    payload["claims"] = [
+        {
+            "claim_id": "claim-art10-cl1",
+            "engineering_rule_id": "eng-1",
+            "claim_type": "UNRESOLVED_ENGINEERING_FACT",
+            "value": None,
+            "confidence": 0.0,
+            "limitations": [],
+        }
+    ]
+
+    with pytest.raises(SpecialistHandoffValidationError, match="schema validation") as exc_info:
+        validate_specialist_handoff("investigator", payload)
+
+    message = str(exc_info.value)
+    assert "claims.0.limitations" in message
+    assert "at least 1 item" in message
+    assert "InvestigatorRequirementMetClaim" not in message
+    assert message.count(";") == 0
