@@ -1922,6 +1922,8 @@ export type PagesMessages = {
       cancel: string;
       confirmDiscard: string;
       discarding: string;
+      discardFailedTitle: string;
+      discardFailedDetail: string;
       note: string;
       statuses: {
         DRAFT: string;

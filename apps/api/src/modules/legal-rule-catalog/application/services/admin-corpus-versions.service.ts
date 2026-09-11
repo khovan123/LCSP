@@ -1,5 +1,4 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
-import { LegalRetrievalIndexStatus } from "@prisma/client";
 import {
   CORPUS_VERSION_READINESS_CHECKS,
   CORPUS_VERSION_READINESS_STATES,
@@ -70,15 +69,9 @@ export class AdminCorpusVersionsService {
       ? version.sourceManifest
       : {};
     const changeSet = isRecord(manifest.changeSet) ? manifest.changeSet : null;
-    const hasSources =
-      version.documents.length > 0 &&
-      version.documents.every((document) => document.chunks.length > 0);
-    const hasValidatedIndex = version.retrievalIndexes.some(
-      (index) =>
-        index.status === LegalRetrievalIndexStatus.VALID &&
-        Boolean(index.validatedAt) &&
-        Boolean(index.validationManifestRef),
-    );
+    // Publication readiness is authoritative only when reported by the
+    // canonical validation/activation pipeline. Persistence shape alone must
+    // never be promoted to READY in this read model.
     const readiness = CORPUS_VERSION_READINESS_STATES.unavailable;
     return {
       ...this.summary({
@@ -97,15 +90,11 @@ export class AdminCorpusVersionsService {
       readinessItems: [
         {
           check: CORPUS_VERSION_READINESS_CHECKS.sourceParsing,
-          state: hasSources
-            ? CORPUS_VERSION_READINESS_STATES.ready
-            : CORPUS_VERSION_READINESS_STATES.failed,
+          state: CORPUS_VERSION_READINESS_STATES.unavailable,
         },
         {
           check: CORPUS_VERSION_READINESS_CHECKS.retrievalValidation,
-          state: hasValidatedIndex
-            ? CORPUS_VERSION_READINESS_STATES.ready
-            : CORPUS_VERSION_READINESS_STATES.pending,
+          state: CORPUS_VERSION_READINESS_STATES.unavailable,
         },
         {
           check: CORPUS_VERSION_READINESS_CHECKS.integrityManifest,
@@ -117,9 +106,7 @@ export class AdminCorpusVersionsService {
         },
         {
           check: CORPUS_VERSION_READINESS_CHECKS.diffReview,
-          state: changeSet
-            ? CORPUS_VERSION_READINESS_STATES.ready
-            : CORPUS_VERSION_READINESS_STATES.unavailable,
+          state: CORPUS_VERSION_READINESS_STATES.unavailable,
         },
       ],
       snapshot: [
@@ -132,9 +119,7 @@ export class AdminCorpusVersionsService {
             "removedDocumentIds",
             "changedDocumentIds",
           ),
-          validation: hasSources
-            ? CORPUS_VERSION_READINESS_STATES.ready
-            : CORPUS_VERSION_READINESS_STATES.failed,
+          validation: CORPUS_VERSION_READINESS_STATES.unavailable,
         },
         {
           category: CORPUS_VERSION_SNAPSHOT_CATEGORIES.corpusChunks,
@@ -143,9 +128,7 @@ export class AdminCorpusVersionsService {
             0,
           ),
           change: null,
-          validation: hasSources
-            ? CORPUS_VERSION_READINESS_STATES.ready
-            : CORPUS_VERSION_READINESS_STATES.failed,
+          validation: CORPUS_VERSION_READINESS_STATES.unavailable,
         },
         {
           category: CORPUS_VERSION_SNAPSHOT_CATEGORIES.legalRules,

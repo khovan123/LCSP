@@ -2204,6 +2204,9 @@ export const enPages = {
       cancel: "Cancel",
       confirmDiscard: "Discard draft",
       discarding: "Discarding...",
+      discardFailedTitle: "Unable to discard draft",
+      discardFailedDetail:
+        "The draft was not discarded. Review its current lifecycle state and try again.",
       note: "Published versions are immutable. Historical versions remain traceable.",
       statuses: {
         DRAFT: "Draft",

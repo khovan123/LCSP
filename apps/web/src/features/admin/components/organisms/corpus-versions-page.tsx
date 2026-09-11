@@ -7,6 +7,7 @@ import type {
   AdminCorpusVersionDetail,
   AdminCorpusVersionSummary,
 } from "@lcsp/contracts/legal-rule-catalog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -190,11 +191,13 @@ export function CorpusVersionDetailPage({
   onBack,
   onDiscard,
   isDiscarding,
+  discardFailed,
 }: {
   detail: AdminCorpusVersionDetail;
   onBack: () => void;
   onDiscard: () => void;
   isDiscarding: boolean;
+  discardFailed: boolean;
 }) {
   const [discardOpen, setDiscardOpen] = useState(false);
   const metadata: Array<[string, string | number | null]> = [
@@ -294,6 +297,14 @@ export function CorpusVersionDetailPage({
           </DialogHeader>
           <DialogBody>
             <DialogDescription>{text("discardDescription")}</DialogDescription>
+            {discardFailed ? (
+              <Alert className="mt-4" variant="destructive">
+                <AlertTitle>{text("discardFailedTitle")}</AlertTitle>
+                <AlertDescription>
+                  {text("discardFailedDetail")}
+                </AlertDescription>
+              </Alert>
+            ) : null}
           </DialogBody>
           <DialogFooter className="flex-row justify-end">
             <Button

@@ -2209,6 +2209,9 @@ export const viPages = {
       cancel: "Huỷ",
       confirmDiscard: "Huỷ bản nháp",
       discarding: "Đang huỷ...",
+      discardFailedTitle: "Không thể huỷ bản nháp",
+      discardFailedDetail:
+        "Bản nháp chưa bị huỷ. Hãy kiểm tra trạng thái vòng đời hiện tại rồi thử lại.",
       note: "Phiên bản đã công bố là bất biến. Phiên bản lịch sử vẫn có thể truy vết.",
       statuses: {
         DRAFT: "Bản nháp",

@@ -41,8 +41,13 @@ export default function AdminCorpusVersionDetailRoute({
     <CorpusVersionDetailPage
       detail={query.data}
       onBack={() => router.push("/admin/corpus-versions")}
-      onDiscard={() => discard.mutate()}
+      onDiscard={() =>
+        discard.mutate(undefined, {
+          onSuccess: () => router.replace("/admin/corpus-versions"),
+        })
+      }
       isDiscarding={discard.isPending}
+      discardFailed={discard.isError}
     />
   );
 }
