@@ -5,9 +5,12 @@ import types
 from types import SimpleNamespace
 from typing import Any
 
+from langchain.agents.structured_output import StructuredOutputError
+
 from orchestration.context import LCSPRunContext
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_LIMITATION_CODES,
+    InvestigationPacket,
 )
 from tools.common.capabilities.assessment.investigation.engineering_rule import (
     managed_targeted_investigator as managed,
@@ -18,7 +21,6 @@ from tools.common.capabilities.assessment.investigation.engineering_rule.managed
 from tools.common.capabilities.workflow.recovery.interview_boundary import (
     AssessmentInterviewResumeBoundary,
 )
-
 
 ARTIFACT_PINS = {
     "technicalEvidenceReportId": "ter-recovery-1",
@@ -176,6 +178,27 @@ class _AlwaysBrokenAgent(_RetryAgent):
         raise AssertionError("threshold recovery must not invoke the model again")
 
 
+class _InvalidThenValidAgent(_RetryAgent):
+    def __init__(self, first_response: Any) -> None:
+        super().__init__()
+        self._first_response = first_response
+        self._checkpoint_id = "checkpoint-initial"
+
+    def invoke(self, payload, config=None, context=None):
+        self.invoke_calls.append((payload, config or {}))
+        assert context is not None
+        if len(self.invoke_calls) == 1:
+            if isinstance(self._first_response, BaseException):
+                self._checkpoint_id = "checkpoint-invalid-json"
+                raise self._first_response
+            self._checkpoint_id = "checkpoint-invalid-shape"
+            self._structured_response = self._first_response
+            return {"structured_response": self._structured_response}
+        self._checkpoint_id = "checkpoint-repaired"
+        self._structured_response = _valid_handoff()
+        return {"structured_response": self._structured_response}
+
+
 def _seed_store(*, status: str, attempt_count: int) -> None:
     _FakeStore.records = {
         "exec-recovery-1": SimpleNamespace(
@@ -287,3 +310,126 @@ def test_rejected_resume_threshold_fails_registry_and_passes_limitation_to_compl
     assert completion_calls[0]["resumed_handoff"]["claims"][0]["limitations"] == [
         ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
     ]
+
+
+def test_initial_invalid_handoff_is_recorded_and_retried_with_actionable_feedback(
+    monkeypatch,
+) -> None:
+    _install_fake_postgres_saver(monkeypatch)
+    _FakeStore.records = {}
+    _FakeStore.saves = []
+    invalid = _valid_handoff()
+    invalid["claims"][0] = {
+        "claim_id": "claim-live-shape",
+        "engineering_rule_id": "ENG-RECOVERY-1",
+        "claim_type": "RULE_REQUIREMENT_MET",
+        "value": None,
+        "evidence_refs": ["EV-RECOVERY-1"],
+        "graph_path_refs": [],
+        "source_anchor_refs": [],
+        "customer_context_refs": ["statement:wrong-place"],
+        "confidence": 0.8,
+    }
+    agent = _InvalidThenValidAgent(invalid)
+    monkeypatch.setattr(managed, "ManagedInvestigatorExecutionStore", _FakeStore)
+    monkeypatch.setattr(managed, "_durable_investigator_agent", lambda _checkpointer: agent)
+
+    handoff, checkpoint_id = managed._invoke_managed_investigator(
+        checkpoint_url="postgresql://recovery-test",
+        thread_id="investigator:exec-recovery-1",
+        checkpoint_id=None,
+        context=_context(),
+        instruction="Initial selected-rule investigation.",
+        graph=_program_graph(),
+        execution_id="exec-recovery-1",
+        correlation_id="corr-recovery-3",
+    )
+
+    assert checkpoint_id == "checkpoint-repaired"
+    assert handoff["status"] == "READY"
+    assert len(agent.invoke_calls) == 2
+    retry_prompt = agent.invoke_calls[1][0]["messages"][0]["content"]
+    assert "failed schema validation" in retry_prompt
+    assert "customer_context_refs" in retry_prompt
+    assert [save["status"] for save in _FakeStore.saves] == [
+        MANAGED_INVESTIGATOR_EXECUTION_STATUSES["rejected"],
+        MANAGED_INVESTIGATOR_EXECUTION_STATUSES["ready"],
+    ]
+    assert _FakeStore.saves[0]["checkpoint_id"] == "checkpoint-invalid-shape"
+
+
+def test_initial_malformed_native_json_is_retried_without_accepting_bad_output(
+    monkeypatch,
+) -> None:
+    _install_fake_postgres_saver(monkeypatch)
+    _FakeStore.records = {}
+    _FakeStore.saves = []
+    error = StructuredOutputError(
+        "Native structured output expected valid JSON for response_format, parsing "
+        "failed Unterminated string starting at line 16 column 202736"
+    )
+    agent = _InvalidThenValidAgent(error)
+    monkeypatch.setattr(managed, "ManagedInvestigatorExecutionStore", _FakeStore)
+    monkeypatch.setattr(managed, "_durable_investigator_agent", lambda _checkpointer: agent)
+
+    handoff, checkpoint_id = managed._invoke_managed_investigator(
+        checkpoint_url="postgresql://recovery-test",
+        thread_id="investigator:exec-recovery-1",
+        checkpoint_id=None,
+        context=_context(),
+        instruction="Initial selected-rule investigation.",
+        graph=_program_graph(),
+        execution_id="exec-recovery-1",
+        correlation_id="corr-recovery-4",
+    )
+
+    assert checkpoint_id == "checkpoint-repaired"
+    assert handoff["status"] == "READY"
+    assert len(agent.invoke_calls) == 2
+    assert "Unterminated string" in _FakeStore.saves[0]["last_error"]
+    assert "Return only compact valid JSON" in agent.invoke_calls[1][0]["messages"][0]["content"]
+
+
+def test_initial_instruction_uses_bounded_packet_index_not_raw_graph_dump() -> None:
+    huge_source = "x" * 80_000
+    packet = InvestigationPacket(
+        engineering_rule_id="ENG-RECOVERY-1",
+        concept="AI evidence",
+        investigation_goals=("Find bounded graph proof",),
+        initial_results=(
+            {
+                "query": "ai_output_path",
+                "phase": "DETERMINISTIC_SELECTED_RULE_TRACE",
+                "nodes": [
+                    {
+                        "node_id": "node:ai",
+                        "node_type": "AI_MODEL_INVOCATION",
+                        "label": "responses.create",
+                        "resolution_state": "CORROBORATED",
+                        "attributes": {"source": huge_source},
+                        "evidence_refs": ["EV-RECOVERY-1"],
+                    }
+                ],
+                "edges": [
+                    {
+                        "edge_id": "edge:ai-output",
+                        "edge_type": "RECEIVES_FROM_AI",
+                        "source_node_id": "node:ai",
+                        "target_node_id": "node:output",
+                        "attributes": {"source": huge_source},
+                        "evidence_refs": ["EV-RECOVERY-1"],
+                    }
+                ],
+                "evidenceRefs": ["EV-RECOVERY-1"],
+            },
+        ),
+        evidence_refs=("EV-RECOVERY-1",),
+        required_evidence=("AI output path",),
+    )
+
+    instruction = managed._initial_instruction(packet, dict(ARTIFACT_PINS))
+
+    assert len(instruction) < 20_000
+    assert huge_source not in instruction
+    assert "edge:ai-output" in instruction
+    assert "Return only compact valid JSON" in instruction
