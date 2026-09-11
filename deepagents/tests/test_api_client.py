@@ -159,6 +159,46 @@ def test_scan_runtime_event_posts_best_effort_metadata(client):
         assert kwargs["json"]["input_summary"]["api_key"] == ""
 
 
+def test_scan_runtime_event_preserves_safe_runtime_message_metadata(client):
+    """Runtime activity keeps contract message keys/params while redacting secrets."""
+    with patch("tools.common.capabilities.platform.api_client.httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 202
+        mock_post.return_value = mock_resp
+
+        client.post_scan_runtime_event(
+            "job123",
+            {
+                "event_type": "TOOL_COMPLETED",
+                "run_status": "WAITING",
+                "stage": "TECHNICAL_EVIDENCE",
+                "tool_name": "engineering_rule_plan:eng-1",
+                "summary": "ENGINEERING_RULE_PLANNER_DECISION",
+                "output_summary": {
+                    "messageKey": "ENGINEERING_RULE_PLANNER_DECISION",
+                    "reasonCode": "SOURCE_SCOPE_MATCH",
+                    "messageParams": {
+                        "decision": "SELECT",
+                        "engineeringRuleId": "eng-1",
+                        "reasonCode": "SOURCE_SCOPE_MATCH",
+                    },
+                    "api_key": "secret-token",
+                },
+            },
+        )
+
+        _, kwargs = mock_post.call_args
+        summary = kwargs["json"]["output_summary"]
+        assert summary["messageKey"] == "ENGINEERING_RULE_PLANNER_DECISION"
+        assert summary["reasonCode"] == "SOURCE_SCOPE_MATCH"
+        assert summary["messageParams"] == {
+            "decision": "SELECT",
+            "engineeringRuleId": "eng-1",
+            "reasonCode": "SOURCE_SCOPE_MATCH",
+        }
+        assert summary["api_key"] == ""
+
+
 def test_scan_runtime_event_failure_does_not_fail_scan(client):
     """Runtime progress is best-effort and never raises into scan execution."""
     with patch("tools.common.capabilities.platform.api_client.httpx.post") as mock_post:

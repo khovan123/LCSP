@@ -9,6 +9,8 @@ SENSITIVE_KEY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+SAFE_METADATA_KEY_NAMES = frozenset({"messageKey", "reasonCode"})
+
 GITHUB_TOKEN_PATTERN = re.compile(r"ghp_[A-Za-z0-9]{36}")
 BEARER_TOKEN_PATTERN = re.compile(r"\bBearer\s+[A-Za-z0-9._-]+")
 GENERIC_ASSIGNMENT_PATTERN = re.compile(
@@ -88,7 +90,9 @@ def _redact_mapping(obj: Mapping[Any, Any], depth: int, seen: set[int]) -> Any:
         for key, value in obj.items():
             key_text = str(key)
             copied[key] = (
-                ""
+                _redact_value(value, depth - 1, seen)
+                if key_text in SAFE_METADATA_KEY_NAMES
+                else ""
                 if SENSITIVE_KEY_PATTERN.search(key_text)
                 else _redact_value(value, depth - 1, seen)
             )

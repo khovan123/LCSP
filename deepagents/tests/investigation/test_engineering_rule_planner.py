@@ -580,14 +580,34 @@ def test_planned_pipeline_streams_planner_and_investigator_activity_when_scan_jo
 
     selected = by_tool_name["engineering_rule_plan:eng-1"]
     assert selected["event_type"] == "TOOL_COMPLETED"
+    assert selected["summary"] == "ENGINEERING_RULE_PLANNER_DECISION"
+    assert selected["output_summary"]["messageKey"] == "ENGINEERING_RULE_PLANNER_DECISION"
+    assert selected["output_summary"]["messageParams"] == {
+        "decision": "SELECT",
+        "engineeringRuleId": "eng-1",
+        "reasonCode": "SOURCE_SCOPE_MATCH",
+    }
     assert selected["output_summary"]["finalDecision"] == "SELECT"
 
     skipped = by_tool_name["engineering_rule_plan:eng-2"]
     assert skipped["event_type"] == "TOOL_SKIPPED"
+    assert skipped["summary"] == "ENGINEERING_RULE_PLANNER_DECISION"
+    assert skipped["output_summary"]["messageKey"] == "ENGINEERING_RULE_PLANNER_DECISION"
+    assert skipped["output_summary"]["messageParams"] == {
+        "decision": "SKIP",
+        "engineeringRuleId": "eng-2",
+        "reasonCode": "NO_CUSTOMER_CONTEXT_OR_SOURCE_SCOPE_SIGNAL",
+    }
     assert skipped["output_summary"]["finalDecision"] == "SKIP"
 
     investigated = by_tool_name["engineering_rule_investigation:eng-1"]
     assert investigated["event_type"] == "TOOL_COMPLETED"
+    assert investigated["summary"] == "ENGINEERING_RULE_INVESTIGATED"
+    assert investigated["output_summary"]["messageKey"] == "ENGINEERING_RULE_INVESTIGATED"
+    assert investigated["output_summary"]["messageParams"] == {
+        "engineeringRuleId": "eng-1",
+        "evaluationStatus": "COMPLIANT",
+    }
     assert investigated["output_summary"]["evaluationStatus"] == "COMPLIANT"
 
 
@@ -670,6 +690,11 @@ def test_planned_pipeline_streams_investigation_failure_as_runtime_activity(
     failed = by_tool_name["engineering_rule_investigation:eng-1"]
     assert failed["event_type"] == "TOOL_FAILED"
     assert failed["run_status"] == "RUNNING"
+    assert failed["summary"] == "ENGINEERING_RULE_INVESTIGATION_FAILED"
+    assert failed["output_summary"] == {
+        "messageKey": "ENGINEERING_RULE_INVESTIGATION_FAILED",
+        "messageParams": {"engineeringRuleId": "eng-1"},
+    }
     assert failed["error_summary"] == "RuntimeError"
     # A failed investigation still reaches deterministic evaluation, but only one
     # runtime activity row (the failure) is emitted for that EngineeringRule.

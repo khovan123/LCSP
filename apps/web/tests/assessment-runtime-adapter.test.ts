@@ -9,8 +9,10 @@ import {
   ASSESSMENT_INTERVIEW_FLAGS,
   ASSESSMENT_INTERVIEW_OUTCOMES,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
+  ASSESSMENT_RUNTIME_EVENT_TYPES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   ASSESSMENT_RUNTIME_STAGE_CODES,
+  ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS,
   ASSESSMENT_TECHNICAL_COVERAGE_STATES,
   type AssessmentInterviewAuditRef,
   type AssessmentInterviewRuntimeState,
@@ -35,6 +37,7 @@ import {
   selectInterviewHandoffPresentation,
   selectInterviewPresentation,
   selectRightSidebarPresentation,
+  selectRuntimeThinkingActivities,
   selectWorkflowPresentation,
 } from "../src/features/workspace/utils/assessment-runtime-selectors.ts";
 import {
@@ -167,6 +170,121 @@ test("production sidebar normalization preserves repository metadata and canonic
   assert.equal(
     normalized.workflow.steps[1]?.status,
     NORMALIZED_WORKFLOW_STEP_STATUSES.queued,
+  );
+});
+
+test("runtime projection maps technical evidence planner and investigator events onto visible workflow stages", () => {
+  const normalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-runtime-technical-evidence",
+    timeline: {
+      currentRun: null,
+      recentActivity: [
+        runtimeActivity(
+          "asm-runtime-technical-evidence",
+          4,
+          ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRuleInvestigationFailed,
+          {
+            eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolFailed,
+            runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+            stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+            toolName: "engineering_rule_investigation:eng-1",
+            outputSummary: {
+              messageKey:
+                ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRuleInvestigationFailed,
+              messageParams: { engineeringRuleId: "eng-1" },
+            },
+            errorSummary: "StructuredOutputValidationError",
+          },
+        ),
+        runtimeActivity(
+          "asm-runtime-technical-evidence",
+          3,
+          ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRulePlannerDecision,
+          {
+            eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped,
+            runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
+            stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+            toolName: "engineering_rule_plan:eng-2",
+            outputSummary: {
+              messageKey:
+                ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRulePlannerDecision,
+              messageParams: {
+                decision: "SKIP",
+                engineeringRuleId: "eng-2",
+                reasonCode: "SOURCE_SIGNAL_NOT_MATERIAL",
+              },
+            },
+          },
+        ),
+        runtimeActivity(
+          "asm-runtime-technical-evidence",
+          2,
+          ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRulePlannerDecision,
+          {
+            eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+            runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
+            stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+            toolName: "engineering_rule_plan:eng-1",
+            outputSummary: {
+              messageKey:
+                ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRulePlannerDecision,
+              messageParams: {
+                decision: "SELECT",
+                engineeringRuleId: "eng-1",
+                reasonCode: "SOURCE_SCOPE_MATCH",
+              },
+            },
+          },
+        ),
+        runtimeActivity(
+          "asm-runtime-technical-evidence",
+          1,
+          "Initial Interview context is ready for engineering rule evaluation.",
+          {
+            eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+            runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
+            stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+            toolName: "assessment_interview",
+          },
+        ),
+      ],
+      latestRunId: "asm-runtime-technical-evidence-scan",
+      connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+      lastEmittedAt: "2026-09-05T08:04:00.000Z",
+      postFinding: null,
+    },
+  });
+
+  const steps = new Map(normalized.workflow.steps.map((step) => [step.id, step]));
+  assert.equal(
+    steps.get(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.rules)?.status,
+    NORMALIZED_WORKFLOW_STEP_STATUSES.completed,
+  );
+  assert.equal(
+    steps.get(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.planner)?.status,
+    NORMALIZED_WORKFLOW_STEP_STATUSES.completed,
+  );
+  assert.equal(
+    steps.get(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.planner)?.detail,
+    "Planner ghi nhận SKIP cho EngineeringRule eng-2 (SOURCE_SIGNAL_NOT_MATERIAL)",
+  );
+  assert.equal(
+    steps.get(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.investigate)?.status,
+    NORMALIZED_WORKFLOW_STEP_STATUSES.failed,
+  );
+  assert.equal(
+    steps.get(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.investigate)?.detail,
+    "Điều tra EngineeringRule eng-1 không thành công",
+  );
+
+  const thinking = selectRuntimeThinkingActivities(normalized);
+  assert.deepEqual(
+    thinking.map((activity) => activity.eventId),
+    [
+      "asm-runtime-technical-evidence-event-2",
+      "asm-runtime-technical-evidence-event-3",
+      "asm-runtime-technical-evidence-event-4",
+    ],
   );
 });
 
@@ -1379,6 +1497,7 @@ function runtimeActivity(
   assessmentId: string,
   sequence: number,
   summary: string,
+  overrides: Partial<WorkspaceRuntimeActivityItem> = {},
 ): WorkspaceRuntimeActivityItem {
   return {
     eventId: `${assessmentId}-event-${sequence}`,
@@ -1387,7 +1506,7 @@ function runtimeActivity(
     assessmentId,
     runId: `${assessmentId}-scan`,
     correlationId: `${assessmentId}-correlation`,
-    eventType: "WORKFLOW_ACTIVITY",
+    eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runCompleted,
     runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
     stage: ASSESSMENT_RUNTIME_STAGE_CODES.scan,
     toolName: null,
@@ -1400,5 +1519,6 @@ function runtimeActivity(
     durationMs: null,
     attempt: null,
     waitingReason: null,
+    ...overrides,
   };
 }

@@ -40,6 +40,13 @@ from .selected_rule_orchestration import augment_selected_rule_packet
 
 logger = get_logger(__name__)
 
+ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS = {
+    "engineering_rule_planner_decision": "ENGINEERING_RULE_PLANNER_DECISION",
+    "engineering_rule_investigation_failed": "ENGINEERING_RULE_INVESTIGATION_FAILED",
+    "engineering_rule_investigated": "ENGINEERING_RULE_INVESTIGATED",
+}
+
+
 LEGAL_RULE_ONLY_RECOVERY_REASONS = frozenset(
     {
         "LEGAL_RULE_SOURCE_LOAD_FAILED",
@@ -610,11 +617,18 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 ),
                 run_status="WAITING",
                 tool_name=f"engineering_rule_plan:{audit.engineering_rule_id}",
-                summary=(
-                    f"Planner {audit.final_decision} EngineeringRule "
-                    f"{audit.engineering_rule_id} ({audit.reason_code})"
-                ),
+                summary=ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS[
+                    "engineering_rule_planner_decision"
+                ],
                 output_summary={
+                    "messageKey": ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS[
+                        "engineering_rule_planner_decision"
+                    ],
+                    "messageParams": {
+                        "decision": audit.final_decision,
+                        "engineeringRuleId": audit.engineering_rule_id,
+                        "reasonCode": audit.reason_code,
+                    },
                     "requestedDecision": audit.requested_decision,
                     "finalDecision": audit.final_decision,
                     "reasonCode": audit.reason_code,
@@ -682,10 +696,17 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                         f"engineering_rule_investigation:"
                         f"{engineering_rule.engineering_rule_id}"
                     ),
-                    summary=(
-                        "Investigation failed for EngineeringRule "
-                        f"{engineering_rule.engineering_rule_id}"
-                    ),
+                    summary=ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS[
+                        "engineering_rule_investigation_failed"
+                    ],
+                    output_summary={
+                        "messageKey": ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS[
+                            "engineering_rule_investigation_failed"
+                        ],
+                        "messageParams": {
+                            "engineeringRuleId": engineering_rule.engineering_rule_id,
+                        },
+                    },
                     error_summary=type(error).__name__,
                 )
                 rule_claims = [
@@ -726,11 +747,17 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                         f"engineering_rule_investigation:"
                         f"{engineering_rule.engineering_rule_id}"
                     ),
-                    summary=(
-                        f"Investigated EngineeringRule "
-                        f"{engineering_rule.engineering_rule_id}: {evaluation.status}"
-                    ),
+                    summary=ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS[
+                        "engineering_rule_investigated"
+                    ],
                     output_summary={
+                        "messageKey": ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS[
+                            "engineering_rule_investigated"
+                        ],
+                        "messageParams": {
+                            "engineeringRuleId": engineering_rule.engineering_rule_id,
+                            "evaluationStatus": evaluation.status,
+                        },
                         "evaluationStatus": evaluation.status,
                         "claimCount": len(validated_rule_claims),
                     },

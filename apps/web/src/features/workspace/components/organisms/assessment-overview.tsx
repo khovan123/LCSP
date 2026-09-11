@@ -42,6 +42,7 @@ import {
   selectInterviewHandoffPresentation,
   selectInterviewPresentation,
   selectPostFindingPresentation,
+  selectRuntimeThinkingActivities,
   selectWorkflowPresentation,
 } from "../../utils/assessment-runtime-selectors";
 import {
@@ -55,6 +56,7 @@ import {
   type AssessmentQuestionAnswerInput,
 } from "../molecules/assessment-question-turn";
 import { PostFindingFlowSteps } from "../molecules/post-finding-flow-steps";
+import { RuntimeThinkingActivity } from "../molecules/runtime-thinking-activity";
 import { AssessmentComposer } from "./assessment-composer";
 import { InterviewAnswerHistory } from "../molecules/interview-answer-history";
 import { AssessmentTranscript } from "./assessment-transcript";
@@ -196,6 +198,7 @@ function AssessmentInterviewFlow({
   const composerAvailability = selectComposerAvailability(normalized);
   const interviewHandoff = selectInterviewHandoffPresentation(normalized);
   const postFinding = selectPostFindingPresentation(normalized);
+  const runtimeThinkingActivities = selectRuntimeThinkingActivities(normalized);
   const runtimeInterviewState = interviewQuery.data;
   const submitAnswer = useSubmitAssessmentInterviewAnswerMutation(assessmentId);
   const recordBlockedAction =
@@ -310,6 +313,7 @@ function AssessmentInterviewFlow({
     workflow.currentRunId,
     workflow.status,
     normalized.workflow.latestRun?.updatedAt ?? workflow.lastEmittedAt,
+    runtimeThinkingActivities.at(-1)?.eventId,
     interviewQuery.dataUpdatedAt,
     activeQuestionId,
     answerHistory.length,
@@ -503,6 +507,13 @@ function AssessmentInterviewFlow({
               <InterviewAnswerHistory
                 key={`${answer.questionId}:${answer.answeredAt}`}
                 answer={answer}
+              />
+            ))}
+
+            {runtimeThinkingActivities.map((activity) => (
+              <RuntimeThinkingActivity
+                key={activity.eventId}
+                activity={activity}
               />
             ))}
 

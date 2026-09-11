@@ -1464,6 +1464,17 @@ export type PagesMessages = {
       pendingPlaceholder: string;
       placeholder: string;
     };
+    technicalEvidence: {
+      progress: string;
+      plannerProgress: string;
+      plannerFailed: string;
+      investigatorProgress: string;
+      investigatorFailed: string;
+      plannerDecision: string;
+      investigationFailed: string;
+      investigated: string;
+      readinessWaiting: string;
+    };
     postFinding: {
       thought: string;
       description: string;

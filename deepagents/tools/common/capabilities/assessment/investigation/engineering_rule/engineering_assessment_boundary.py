@@ -29,6 +29,9 @@ from .planned_pipeline import PlannedEngineeringInvestigationPipeline
 
 logger = get_logger(__name__)
 WAITING_ENGINEERING_INVESTIGATION_STATUSES = {"WAITING"}
+ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS = {
+    "engineering_rule_readiness_waiting": "ENGINEERING_RULE_READINESS_WAITING",
+}
 
 
 class _AssessmentLegalPreparationDeferredDriver:
@@ -360,12 +363,17 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
                 "run_status": "WAITING",
                 "stage": "LEGAL_RETRIEVAL",
                 "tool_name": "engineering_rule_readiness",
-                "summary": (
-                    "Assessment is waiting for READY EngineeringRules; automatic "
-                    "Legal Rule Triage was requested."
-                ),
+                "summary": ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS[
+                    "engineering_rule_readiness_waiting"
+                ],
                 "waiting_reason": trigger["reason"],
-                "output_summary": output_summary,
+                "output_summary": {
+                    **output_summary,
+                    "messageKey": ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS[
+                        "engineering_rule_readiness_waiting"
+                    ],
+                    "messageParams": {},
+                },
             },
         )
 

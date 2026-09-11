@@ -1516,6 +1516,21 @@ export const enPages = {
         "Your answer has been saved. Waiting for the evaluation result or the next question.",
       placeholder: "Describe the project or system...",
     },
+    technicalEvidence: {
+      progress: "Assessment progress",
+      plannerProgress: "Planner progress",
+      plannerFailed: "Planner limitation",
+      investigatorProgress: "Investigator progress",
+      investigatorFailed: "Investigator limitation",
+      plannerDecision:
+        "Planner {decision} EngineeringRule {engineeringRuleId} ({reasonCode})",
+      investigationFailed:
+        "Investigation failed for EngineeringRule {engineeringRuleId}",
+      investigated:
+        "Investigated EngineeringRule {engineeringRuleId}: {evaluationStatus}",
+      readinessWaiting:
+        "Assessment is waiting for READY EngineeringRules; automatic Legal Rule Triage was requested.",
+    },
     postFinding: {
       thought: "Thought for 2s",
       description:

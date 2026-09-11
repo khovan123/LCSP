@@ -1519,6 +1519,21 @@ export const viPages = {
         "Câu trả lời đã được lưu. Đang chờ kết quả đánh giá hoặc câu hỏi tiếp theo.",
       placeholder: "Mô tả project hoặc system...",
     },
+    technicalEvidence: {
+      progress: "Tiến độ assessment",
+      plannerProgress: "Tiến độ Planner",
+      plannerFailed: "Giới hạn Planner",
+      investigatorProgress: "Tiến độ Investigator",
+      investigatorFailed: "Giới hạn Investigator",
+      plannerDecision:
+        "Planner ghi nhận {decision} cho EngineeringRule {engineeringRuleId} ({reasonCode})",
+      investigationFailed:
+        "Điều tra EngineeringRule {engineeringRuleId} không thành công",
+      investigated:
+        "Đã điều tra EngineeringRule {engineeringRuleId}: {evaluationStatus}",
+      readinessWaiting:
+        "Assessment đang chờ EngineeringRules trạng thái READY; Legal Rule Triage tự động đã được yêu cầu.",
+    },
     postFinding: {
       thought: "Đã suy nghĩ trong 2 giây",
       description:

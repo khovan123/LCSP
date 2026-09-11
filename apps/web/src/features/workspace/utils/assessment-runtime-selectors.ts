@@ -27,7 +27,15 @@ import {
   type NormalizedAssessmentSidebarWorkflowItem,
   type NormalizedAssessmentRuntime,
 } from "../types/assessment-runtime-adapter.types";
-import type { WorkspaceRuntimeRepositorySnapshot } from "../types/workspace-runtime.types";
+import {
+  ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES,
+  PRESENTABLE_RUNTIME_ACTIVITY_EVENTS,
+  TECHNICAL_EVIDENCE_THINKING_LIMIT,
+} from "../config/runtime-activity";
+import type {
+  WorkspaceRuntimeActivityItem,
+  WorkspaceRuntimeRepositorySnapshot,
+} from "../types/workspace-runtime.types";
 
 export function selectInterviewPresentation(
   normalized: NormalizedAssessmentRuntime,
@@ -103,6 +111,29 @@ export function selectWorkflowPresentation(
     hasActiveRun,
     lastEmittedAt: workflow.lastEmittedAt,
   };
+}
+
+export function selectRuntimeThinkingActivities(
+  normalized: NormalizedAssessmentRuntime,
+): WorkspaceRuntimeActivityItem[] {
+  return normalized.workflow.recentActivity
+    .filter(isPresentableTechnicalEvidenceActivity)
+    .slice(0, TECHNICAL_EVIDENCE_THINKING_LIMIT)
+    .reverse();
+}
+
+function isPresentableTechnicalEvidenceActivity(
+  item: WorkspaceRuntimeActivityItem,
+): boolean {
+  return (
+    item.stage === ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence &&
+    Boolean(item.summary.trim()) &&
+    PRESENTABLE_RUNTIME_ACTIVITY_EVENTS.has(item.eventType) &&
+    (item.toolName?.startsWith(ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES.planner) === true ||
+      item.toolName?.startsWith(
+        ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES.investigator,
+      ) === true)
+  );
 }
 
 export function selectRightSidebarPresentation(

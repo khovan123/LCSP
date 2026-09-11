@@ -174,8 +174,11 @@ def test_waiting_legal_source_emits_and_dispatches_automatic_full_backlog_triage
     runtime_payload = api_client.post_scan_runtime_event.call_args.args[1]
     assert runtime_payload["stage"] == "LEGAL_RETRIEVAL"
     assert runtime_payload["tool_name"] == "engineering_rule_readiness"
+    assert runtime_payload["summary"] == "ENGINEERING_RULE_READINESS_WAITING"
     assert runtime_payload["waiting_reason"] == "NO_ENGINEERING_RULE_SOURCE_RULES"
     summary = runtime_payload["output_summary"]
+    assert summary["messageKey"] == "ENGINEERING_RULE_READINESS_WAITING"
+    assert summary["messageParams"] == {}
     assert summary["kind"] == "LEGAL_PREPARATION_REQUEST"
     assert summary["scope"] == "LEGAL_MAINTENANCE"
     assert summary["requestedBy"] == "ASSESSMENT_READINESS_GATE"
