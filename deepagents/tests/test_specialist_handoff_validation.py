@@ -9,6 +9,11 @@ from orchestration.result_validation import (
     SpecialistHandoffValidationError,
     validate_specialist_handoff,
 )
+from contracts.handoffs import InvestigatorResult
+from middleware.provider_schema import relax_array_upper_bounds
+from tools.common.capabilities.agentic_evidence.entrypoints.program_graph_tool_entrypoints import (
+    _project_safe_edge,
+)
 
 
 def _investigator_payload() -> dict:
@@ -350,3 +355,215 @@ def test_rule_scope_not_applicable_allows_confirmed_statement_refs_without_graph
     )
 
     assert handoff.claims[0].customer_context_refs == ["stmt-good"]
+
+
+# ============================================================================
+# Root-cause regression: real run correlationId=73b30588-e615-4514-a8d0-db1e3a40b9de
+#
+# Every failing claim in that run needed a topology-gated criterion (an AI-output/
+# downstream-action/human-control/sensitive-data-lineage path) and had evidence_ref_count=20
+# while carrying no valid graph-edge ref. The Investigator's traversal tools never returned
+# `edge_id` on edge objects (`_project_safe_edge` omitted it), so the model had no way to
+# supply a real edge ref in `graph_path_refs` — every such claim was structurally unable to
+# close. `_project_safe_edge` now exposes `edge_id`; these tests pin that gate's real
+# behavior at both ends: rejected without an edge ref, accepted with one.
+# ============================================================================
+
+
+def _ai_output_path_graph() -> dict:
+    """AI_MODEL_INVOCATION -[RECEIVES_FROM_AI]-> AI_OUTPUT with production-rooted source paths.
+
+    `_graph()` above leaves `source` empty, which is fine for the UNRESOLVED claims it backs but
+    means neither node carries a production `source_role` — so a closed (MET/NOT_MET) claim can
+    never pass `EvidenceClaimValidator`'s materiality check regardless of topology. This fixture
+    exists to isolate the topology/edge-ref behavior under test from that separate materiality gate.
+    """
+    graph = _graph()
+    for node in graph["nodes"]:
+        node["source"] = {"file_path": "src/services/ai_gateway.ts"}
+    return graph
+
+
+def _ai_output_path_claim(**overrides) -> dict:
+    claim = {
+        "claim_id": "claim-ai-output",
+        "engineering_rule_id": "eng-1",
+        "claim_type": "RULE_REQUIREMENT_MET",
+        "value": True,
+        "evidence_refs": [],
+        "graph_path_refs": [],
+        "source_anchor_refs": [],
+        "confidence": 0.9,
+        "limitations": [],
+        "criterion": "AI output path",
+    }
+    claim.update(overrides)
+    return claim
+
+
+def _handoff_with_claim(claim: dict) -> dict:
+    payload = _investigator_payload()
+    payload["claims"] = [claim]
+    return payload
+
+
+def test_ai_output_path_claim_rejected_without_edge_ref() -> None:
+    """Node ids alone can never prove a topology-gated claim (the pre-fix model behavior)."""
+    payload = _handoff_with_claim(
+        _ai_output_path_claim(graph_path_refs=["node:ai", "node:output"])
+    )
+
+    with pytest.raises(SpecialistHandoffValidationError, match="evidence-claim") as exc_info:
+        validate_specialist_handoff(
+            "investigator",
+            payload,
+            graph=_ai_output_path_graph(),
+            pinned_rule_ids=("eng-1",),
+            pinned_versions={"technicalEvidenceReportId": "ter-1"},
+        )
+
+    message = str(exc_info.value)
+    assert "claim-ai-output" in message
+    assert "requires graph edge provenance" in message
+
+
+def test_ai_output_path_claim_closes_when_graph_path_refs_include_the_proving_edge() -> None:
+    """Once `graph_path_refs` includes the real `edge_id`, the same claim closes cleanly."""
+    payload = _handoff_with_claim(
+        _ai_output_path_claim(graph_path_refs=["node:ai", "edge:receives", "node:output"])
+    )
+
+    handoff = validate_specialist_handoff(
+        "investigator",
+        payload,
+        graph=_ai_output_path_graph(),
+        pinned_rule_ids=("eng-1",),
+        pinned_versions={"technicalEvidenceReportId": "ter-1"},
+    )
+
+    assert handoff.status == "READY"
+
+
+def test_recorded_ai_output_path_investigation_failure_matches_real_run_shape() -> None:
+    # 2026-09-11, correlationId=73b30588-e615-4514-a8d0-db1e3a40b9de, workflow
+    # interview:23be9a31-dfec-49f7-8c0f-749ab8e19a99, model gemini-3.5-flash-lite: three
+    # art-11 claims each failed with evidence_ref_count=20 and no valid graph-edge ref.
+    twenty_node_refs = ["node:ai", "node:output"] * 10
+    payload = _handoff_with_claim(
+        _ai_output_path_claim(evidence_refs=twenty_node_refs, graph_path_refs=[])
+    )
+
+    with pytest.raises(SpecialistHandoffValidationError, match="evidence-claim"):
+        validate_specialist_handoff(
+            "investigator",
+            payload,
+            graph=_ai_output_path_graph(),
+            pinned_rule_ids=("eng-1",),
+            pinned_versions={"technicalEvidenceReportId": "ter-1"},
+        )
+
+
+def test_schema_validation_error_surfaces_the_underlying_field_and_reason() -> None:
+    """The generic 'failed schema validation' message alone gives the model nothing to fix."""
+    payload = _handoff_with_claim(
+        _ai_output_path_claim(
+            claim_type="RULE_REQUIREMENT_NOT_MET",
+            value=False,
+            evidence_refs=[],
+            graph_path_refs=[],
+            source_anchor_refs=[],
+        )
+    )
+
+    with pytest.raises(SpecialistHandoffValidationError, match="schema validation") as exc_info:
+        validate_specialist_handoff("investigator", payload)
+
+    assert "at least one evidence, graph-path, or source-anchor ref" in str(exc_info.value)
+
+
+def test_evidence_claim_validation_error_surfaces_the_unresolved_ref() -> None:
+    payload = _investigator_payload()
+    payload["claims"][0]["graph_path_refs"] = ["node:missing"]
+
+    with pytest.raises(SpecialistHandoffValidationError, match="evidence-claim") as exc_info:
+        validate_specialist_handoff(
+            "investigator",
+            payload,
+            graph=_graph(),
+            pinned_rule_ids=("eng-1",),
+            pinned_versions={"technicalEvidenceReportId": "ter-1"},
+        )
+
+    message = str(exc_info.value)
+    assert "claim-1" in message
+    assert "node:missing" in message
+
+
+def test_project_safe_edge_exposes_edge_id_for_topology_proof() -> None:
+    """The Investigator's tool projection must give the model what the topology gate requires."""
+    projected = _project_safe_edge(
+        {
+            "edge_id": "edge:receives",
+            "source_node_id": "node:ai",
+            "target_node_id": "node:output",
+            "edge_type": "RECEIVES_FROM_AI",
+            "resolution_state": "CORROBORATED",
+            "evidence_refs": [],
+        }
+    )
+
+    assert projected["edge_id"] == "edge:receives"
+
+
+# ============================================================================
+# Gemini structured-output relaxation audit (middleware/provider_schema.py).
+#
+# `relax_array_upper_bounds` must only ever remove `maxItems`. If it ever started
+# widening `required` or `enum` too, the provider could legally emit payloads that
+# satisfy Gemini but were never valid `InvestigatorResult`/`InvestigatorClaim` shapes,
+# reintroducing exactly the failure class this suite guards against.
+# ============================================================================
+
+
+def _all_required_lists(schema: dict) -> dict[str, list[str]]:
+    required: dict[str, list[str]] = {}
+    if "required" in schema:
+        required[schema.get("title", "<root>")] = list(schema["required"])
+    for name, definition in (schema.get("$defs") or {}).items():
+        if "required" in definition:
+            required[name] = list(definition["required"])
+    return required
+
+
+def _all_enums(schema: dict, *, path: str = "") -> dict[str, list]:
+    enums: dict[str, list] = {}
+
+    def walk(node, node_path: str) -> None:
+        if isinstance(node, dict):
+            if "enum" in node:
+                enums[node_path] = list(node["enum"])
+            for key, value in node.items():
+                walk(value, f"{node_path}.{key}")
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, f"{node_path}[{index}]")
+
+    walk(schema, path)
+    return enums
+
+
+def test_gemini_relaxation_is_lossless_for_required_fields_and_enums() -> None:
+    schema = InvestigatorResult.model_json_schema()
+    relaxed = relax_array_upper_bounds(schema)
+
+    assert _all_required_lists(relaxed) == _all_required_lists(schema)
+    assert _all_enums(relaxed) == _all_enums(schema)
+    # claim_type must still be a closed set after relaxation, or Gemini could legally
+    # emit a claim_type outside ENGINEERING_EVIDENCE_CLAIM_TYPES.
+    claim_type_enum = relaxed["$defs"]["InvestigatorClaim"]["properties"]["claim_type"]["enum"]
+    assert set(claim_type_enum) == {
+        "RULE_REQUIREMENT_MET",
+        "RULE_REQUIREMENT_NOT_MET",
+        "UNRESOLVED_ENGINEERING_FACT",
+        "RULE_SCOPE_NOT_APPLICABLE",
+    }

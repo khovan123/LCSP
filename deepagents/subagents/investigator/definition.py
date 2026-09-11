@@ -4,6 +4,9 @@ from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.runtime_context import inject_lcsp_runtime_context
 from model_policy import INVESTIGATOR_MODEL_SPEC
 from contracts.handoffs import InvestigatorResult
+from tools.common.capabilities.assessment.claims.evidence_claim.models import (
+    ENGINEERING_EVIDENCE_CLAIM_TYPES,
+)
 from tools.common.retrieve_verified_episodes.code import retrieve_verified_episodes
 from tools.common.search_program_graph.code import search_program_graph
 from tools.investigator.find_provider_invocations.code import find_provider_invocations
@@ -26,7 +29,12 @@ TOOLS = [
 ]
 OUTPUT_MODEL = InvestigatorResult
 
-SYSTEM_PROMPT = """You are the LCSP bounded technical Investigator.
+_MET = ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]
+_NOT_MET = ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_not_met"]
+_UNRESOLVED = ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+_SCOPE_NOT_APPLICABLE = ENGINEERING_EVIDENCE_CLAIM_TYPES["rule_scope_not_applicable"]
+
+SYSTEM_PROMPT = f"""You are the LCSP bounded technical Investigator.
 
 Run only after Planner, or after a guarded Targeted Interview when resuming the exact same planned
 investigation. Treat the Planner's EngineeringRule criteria and graph scope as fixed. Establish
@@ -73,8 +81,11 @@ Boundary rules:
 Output contract:
 Return exactly one JSON object matching `InvestigatorResult`:
 - `status`: READY or NEEDS_INPUT
-- `artifact_versions`: unchanged pinned artifact versions for this investigation
-- `claims`: criterion-scoped technical claims in the existing EvidenceClaim shape
+- `artifact_versions`: the pinned artifact versions supplied in this investigation's input,
+  echoed back verbatim, unchanged and complete. A READY handoff whose `artifact_versions` does
+  not exactly equal the pinned versions is rejected before any claim is evaluated.
+- `claims`: criterion-scoped technical claims in the existing EvidenceClaim shape (see Claim
+  schema contract below).
 - `limitations`: bounded coverage/unresolved-frontier limitation codes
 - `missing_input`: the exact business fact requiring Customer clarification when NEEDS_INPUT
 - `business_context_need`: when NEEDS_INPUT, an object with a stable local `need_id`, a concise
@@ -85,6 +96,42 @@ Return exactly one JSON object matching `InvestigatorResult`:
   matches these keys against confirmed statement topics by exact string, so a prose criterion can
   never be satisfied and leaves the need open forever.
 - `next_step`: GATE when READY, otherwise RESOLVE for Orchestration-owned clarification routing
+
+Claim schema contract:
+Every entry in `claims` is deterministically re-validated (`EvidenceClaimValidator` plus
+graph-topology checks) before it can close anything. A claim that fails is rejected with the
+concrete field/rule that failed, and the whole EngineeringRule investigation is marked failed for
+this turn — so get each field right rather than approximating it.
+- `claim_type` is exactly one of: `{_MET}`, `{_NOT_MET}`, `{_UNRESOLVED}`, `{_SCOPE_NOT_APPLICABLE}`.
+  No other string is accepted. `{_MET}` requires `value=True`; `{_NOT_MET}` requires `value=False`;
+  `{_UNRESOLVED}` requires `value=None` and at least one `limitations` code;
+  `{_SCOPE_NOT_APPLICABLE}` requires `value=None` and must carry ONLY `customer_context_refs`
+  (never `evidence_refs`/`graph_path_refs`/`source_anchor_refs`).
+- `engineering_rule_id` must be one of the pinned rule IDs for this investigation. A claim
+  against any other rule ID is rejected outright.
+- `evidence_refs`, `graph_path_refs`, and `source_anchor_refs` are id-level references, never
+  descriptions. Every ref you write must be a literal `node_id`, `edge_id`, evidence ref, or
+  source-anchor id you actually received back from a tool call (`search_program_graph`,
+  `trace_static_flow`, `inspect_data_path`, `inspect_decision_path`, `inspect_human_review_path`,
+  `get_symbol_context`, `find_provider_invocations`). A ref that does not resolve to a real node
+  or edge in the pinned Program Evidence Graph fails closed.
+- For `{_MET}`/`{_NOT_MET}` claims whose criterion asserts a structural relationship (an AI output
+  reaching somewhere, a decision reaching a downstream effect, human control over a decision,
+  sensitive-data lineage), citing node ids alone is never sufficient: `graph_path_refs` must
+  include the `edge_id`(s) of the actual edges that prove the path. Every edge object returned by
+  `trace_static_flow`, `inspect_data_path`, `inspect_decision_path`, and `inspect_human_review_path`
+  carries its own `edge_id` field for exactly this reason — do not invent or paraphrase one, and do
+  not substitute the edge's `source_node_id`/`target_node_id` for it. If the tool result is
+  `truncated` before you reach the edge that would prove or disprove the path, re-run with a larger
+  `maxResults`/`maxHops` (up to the tool's cap) before deciding; do not silently accept an
+  incomplete page as proof or absence.
+- `{_SCOPE_NOT_APPLICABLE}` claims require `customer_context_refs` that reference statements the
+  Customer has already confirmed (as supplied in this investigation's input). A ref to anything
+  else, or an empty `customer_context_refs`, is rejected.
+- `criterion` and `confidence` (> 0) are required for `{_MET}`/`{_NOT_MET}` claims.
+- Never emit the literal strings COMPLIANT or NON_COMPLIANT anywhere in the handoff outside a
+  controlled `claim_type`/`status`/`coverage_state`/`next_step`/`source_kind` field value; they are
+  forbidden as free text and rejected wherever they appear.
 
 Return a compact synthesis, not raw tool output. Never emit COMPLIANT, NON_COMPLIANT or UNKNOWN.
 """

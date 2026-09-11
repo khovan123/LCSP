@@ -170,9 +170,18 @@ def _project_safe_node(node: dict[str, Any]) -> dict[str, Any]:
 
 
 def _project_safe_edge(edge: Mapping[str, Any]) -> dict[str, Any]:
-    """Strict DTO projection for edges returning to the agent: no attributes, source code, debug info, or secrets."""
+    """Strict DTO projection for edges returning to the agent: no attributes, source code, debug info, or secrets.
+
+    ``edge_id`` must be included: closed topology-gated claims (``validate_claim_topology``)
+    require ``graph_path_refs`` to resolve to a real edge, and node ids alone can never
+    satisfy that. Omitting it here made every AI_OUTPUT_PATH/DOWNSTREAM_ACTION_PATH/
+    HUMAN_CONTROL_STATE/SENSITIVE_DATA_LINEAGE claim structurally impossible to close,
+    since the model was never told a valid edge ref existed to cite. ``node_id`` is already
+    exposed on ``_project_safe_node`` above; this keeps edges at parity.
+    """
     from subagents.interview.customer_safe_projection import normalize_resolution_state
     return {
+        "edge_id": str(edge.get("edge_id") or edge.get("id") or ""),
         "source_node_id": str(edge.get("source_node_id") or edge.get("source_id") or edge.get("source") or ""),
         "target_node_id": str(edge.get("target_node_id") or edge.get("target_id") or edge.get("target") or ""),
         "edge_type": str(edge.get("edge_type") or edge.get("type") or "EDGE"),
