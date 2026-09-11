@@ -50,9 +50,9 @@ export interface ProgramEvidenceGraphFindingDto {
 export interface ProgramEvidenceGraphDetailDto {
   repository: ProgramEvidenceGraphRepositoryDto;
   overview: {
-    services_scanned: ProgramEvidenceGraphMetric;
+    modules_analyzed: ProgramEvidenceGraphMetric;
     code_symbols_indexed: ProgramEvidenceGraphMetric;
-    ai_provider_call_paths: ProgramEvidenceGraphMetric;
+    ai_model_invocations: ProgramEvidenceGraphMetric;
     evidence_mapped_scope: ProgramEvidenceGraphMetric;
   };
   paths: {

@@ -41,9 +41,9 @@ const detail = {
     status: "READY",
   },
   overview: {
-    services_scanned: null,
+    modules_analyzed: null,
     code_symbols_indexed: null,
-    ai_provider_call_paths: null,
+    ai_model_invocations: null,
     evidence_mapped_scope: null,
   },
   paths: {
@@ -214,23 +214,23 @@ test("renders the workspace overview before a node is selected", async () => {
   assert.doesNotMatch(container.textContent ?? "", /Unavailable/);
   assert.match(
     container.textContent ?? "",
-    /Services|Dịch vụ/,
+    /Modules analyzed|Mô-đun đã phân tích/,
   );
   assert.match(
     container.textContent ?? "",
-    /Code symbols|Thành phần mã/,
+    /Code symbols|Thành phần mã đã lập chỉ mục/,
   );
   assert.match(
     container.textContent ?? "",
-    /AI paths|Luồng AI/,
+    /AI model invocations|Lượt gọi mô hình AI/,
   );
   assert.match(
     container.textContent ?? "",
-    /Evidence-mapped scope|Phạm vi bằng chứng/,
+    /Evidence-mapped scope|Độ phủ bằng chứng kỹ thuật/,
   );
-  assert.match(container.textContent ?? "", /Open Artifacts|Mở Artifacts/);
+  assert.match(container.textContent ?? "", /Open Artifacts|Mở danh sách Artifacts/);
   assert.match(
     container.textContent ?? "",
-    /Evidence graph is pinned|Sơ đồ bằng chứng được gắn/,
+    /Evidence graph is pinned|Sơ đồ này được tạo từ snapshot/,
   );
 });

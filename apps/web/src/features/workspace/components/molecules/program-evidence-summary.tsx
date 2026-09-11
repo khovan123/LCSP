@@ -148,11 +148,11 @@ export function ProgramEvidenceSummary({
       <div className="border-t border-border/60 pt-3">
         <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
           <MetricItem
-            label={t("pages.assessmentFlow.graph.servicesScanned")}
+            label={t("pages.assessmentFlow.graph.modulesAnalyzed")}
             description={t(
-              "pages.assessmentFlow.graph.servicesScannedDescription",
+              "pages.assessmentFlow.graph.modulesAnalyzedDescription",
             )}
-            metric={canonicalSummary.servicesScanned}
+            metric={canonicalSummary.modulesAnalyzed}
           />
           <MetricItem
             label={t("pages.assessmentFlow.graph.codeSymbolsIndexed")}
@@ -162,11 +162,11 @@ export function ProgramEvidenceSummary({
             metric={canonicalSummary.codeSymbolsIndexed}
           />
           <MetricItem
-            label={t("pages.assessmentFlow.graph.aiProviderCallPaths")}
+            label={t("pages.assessmentFlow.graph.aiModelInvocations")}
             description={t(
-              "pages.assessmentFlow.graph.aiProviderCallPathsDescription",
+              "pages.assessmentFlow.graph.aiModelInvocationsDescription",
             )}
-            metric={canonicalSummary.aiProviderCallPaths}
+            metric={canonicalSummary.aiModelInvocations}
           />
           <MetricItem
             label={t("pages.assessmentFlow.graph.evidenceMappedScope")}

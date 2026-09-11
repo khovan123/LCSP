@@ -231,8 +231,8 @@ test("program evidence graph metrics ignore runtime summaries and use canonical 
   });
 
   assert.equal(summary.codeSymbolsIndexed.value, null);
-  assert.equal(summary.aiProviderCallPaths.value, null);
-  assert.equal(summary.servicesScanned.value, null);
+  assert.equal(summary.aiModelInvocations.value, null);
+  assert.equal(summary.modulesAnalyzed.value, null);
   assert.equal(summary.evidenceMappedScope.value, null);
 
   const canonical = deriveProgramEvidenceSummary({
@@ -244,15 +244,15 @@ test("program evidence graph metrics ignore runtime summaries and use canonical 
       }),
     ],
     canonicalOverview: {
-      services_scanned: 0,
+      modules_analyzed: 0,
       code_symbols_indexed: 12,
-      ai_provider_call_paths: 4,
+      ai_model_invocations: 4,
       evidence_mapped_scope: 0,
     },
   });
-  assert.equal(canonical.servicesScanned.value, 0);
+  assert.equal(canonical.modulesAnalyzed.value, 0);
   assert.equal(canonical.codeSymbolsIndexed.value, 12);
-  assert.equal(canonical.aiProviderCallPaths.value, 4);
+  assert.equal(canonical.aiModelInvocations.value, 4);
   assert.equal(canonical.evidenceMappedScope.value, 0);
 });
 

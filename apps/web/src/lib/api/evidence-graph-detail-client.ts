@@ -1,9 +1,9 @@
 import { apiRequest } from "./api-request.ts";
 
 export type ProgramEvidenceGraphOverview = {
-  services_scanned: number | null;
+  modules_analyzed: number | null;
   code_symbols_indexed: number | null;
-  ai_provider_call_paths: number | null;
+  ai_model_invocations: number | null;
   evidence_mapped_scope: number | null;
 };
 

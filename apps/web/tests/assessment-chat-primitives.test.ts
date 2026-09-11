@@ -274,14 +274,14 @@ test("scanner renders the dedicated Program Evidence Graph artifact only after e
   );
   assert.doesNotMatch(scannerSource, /pages\.assessmentFlow\.graph\.commit/);
   assert.match(artifactSource, /ChatResultContainer/);
-  assert.match(artifactSource, /pages\.assessmentFlow\.graph\.servicesScanned/);
+  assert.match(artifactSource, /pages\.assessmentFlow\.graph\.modulesAnalyzed/);
   assert.match(
     artifactSource,
     /pages\.assessmentFlow\.graph\.codeSymbolsIndexed/,
   );
   assert.match(
     artifactSource,
-    /pages\.assessmentFlow\.graph\.aiProviderCallPaths/,
+    /pages\.assessmentFlow\.graph\.aiModelInvocations/,
   );
   assert.match(
     artifactSource,

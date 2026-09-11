@@ -296,9 +296,9 @@ export function GraphFirstDetail({
         <dl className="mt-3 grid grid-cols-2 overflow-hidden rounded-lg border border-border/60 bg-card lg:grid-cols-4 lg:divide-x lg:divide-border/60">
           {(
             [
-              ["servicesScanned", detail.overview.services_scanned],
+              ["modulesAnalyzed", detail.overview.modules_analyzed],
               ["codeSymbolsIndexed", detail.overview.code_symbols_indexed],
-              ["aiProviderCallPaths", detail.overview.ai_provider_call_paths],
+              ["aiModelInvocations", detail.overview.ai_model_invocations],
               ["evidenceMappedScope", detail.overview.evidence_mapped_scope],
             ] as const
           ).map(([key, value]) => (
@@ -563,15 +563,14 @@ export function GraphFirstDetail({
                     <g key={edge.id}>
                       <path
                         d={path}
-                        fill="none"
                         className={
-                          selected &&
+                          `fill-none ${selected &&
                           (edge.source === selected.id ||
                             edge.target === selected.id)
                             ? "stroke-brand"
                             : selected
                               ? "stroke-muted-foreground/15"
-                              : "stroke-muted-foreground/25"
+                              : "stroke-muted-foreground/25"}`
                         }
                         strokeWidth={
                           selected &&
@@ -905,9 +904,9 @@ export function GraphDetail({
         </h3>
         <dl className="mt-3 grid grid-cols-2 gap-3">
           {[
-            ["servicesScanned", detail.overview.services_scanned],
+            ["modulesAnalyzed", detail.overview.modules_analyzed],
             ["codeSymbolsIndexed", detail.overview.code_symbols_indexed],
-            ["aiProviderCallPaths", detail.overview.ai_provider_call_paths],
+            ["aiModelInvocations", detail.overview.ai_model_invocations],
             ["evidenceMappedScope", detail.overview.evidence_mapped_scope],
           ].map(([key, value]) => (
             <div className="rounded-lg border border-border/60 p-3" key={key}>

@@ -1398,12 +1398,12 @@ export type PagesMessages = {
       title: string;
       subtitle: string;
       ready: string;
-      servicesScanned: string;
-      servicesScannedDescription: string;
+      modulesAnalyzed: string;
+      modulesAnalyzedDescription: string;
       codeSymbolsIndexed: string;
       codeSymbolsIndexedDescription: string;
-      aiProviderCallPaths: string;
-      aiProviderCallPathsDescription: string;
+      aiModelInvocations: string;
+      aiModelInvocationsDescription: string;
       evidenceMappedScope: string;
       evidenceMappedScopeDescription: string;
       unavailableValue: string;

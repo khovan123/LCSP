@@ -13,7 +13,7 @@ describe("ProgramEvidenceGraphDetailService", () => {
         snapshotId: "snapshot-1",
         createdAt: new Date("2026-01-01T00:00:00.000Z"),
         evidencePayload: {
-          servicesScanned: 0,
+          modulesAnalyzed: 0,
           evidence_graph: {
             nodes: [
               {
@@ -60,7 +60,7 @@ describe("ProgramEvidenceGraphDetailService", () => {
       },
     });
 
-    expect(result.overview.services_scanned).toBe(0);
+    expect(result.overview.modules_analyzed).toBe(0);
     expect(result.paths.nodes).toHaveLength(2);
     expect(result.paths.edges).toEqual([
       {

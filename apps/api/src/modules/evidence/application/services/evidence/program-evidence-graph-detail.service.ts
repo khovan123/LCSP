@@ -63,23 +63,17 @@ export class ProgramEvidenceGraphDetailService {
         status: input.snapshot?.status ?? null,
       },
       overview: {
-        services_scanned: metric(payload, [
-          "servicesScanned",
-          "serviceCount",
-          "services_scanned",
-          "service_count",
+        modules_analyzed: metric(payload, [
+          "modulesAnalyzed",
+          "modules_analyzed",
         ]),
         code_symbols_indexed: metric(payload, [
           "codeSymbolsIndexed",
-          "structuralFacts",
           "code_symbols_indexed",
-          "structural_facts",
         ]),
-        ai_provider_call_paths: metric(payload, [
-          "aiProviderCallPaths",
-          "aiCallPaths",
-          "ai_provider_call_paths",
-          "ai_call_paths",
+        ai_model_invocations: metric(payload, [
+          "aiModelInvocations",
+          "ai_model_invocations",
         ]),
         evidence_mapped_scope: metric(payload, [
           "evidenceMappedScope",

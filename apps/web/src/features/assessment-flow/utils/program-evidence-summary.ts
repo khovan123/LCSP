@@ -17,16 +17,16 @@ export function deriveProgramEvidenceSummary(input: {
   void input.recentActivity;
   const overview = input.canonicalOverview ?? null;
   return {
-    servicesScanned: metricFromCanonical(
-      overview?.services_scanned ?? null,
+    modulesAnalyzed: metricFromCanonical(
+      overview?.modules_analyzed ?? null,
       PROGRAM_EVIDENCE_METRIC_FORMATS.count,
     ),
     codeSymbolsIndexed: metricFromCanonical(
       overview?.code_symbols_indexed ?? null,
       PROGRAM_EVIDENCE_METRIC_FORMATS.count,
     ),
-    aiProviderCallPaths: metricFromCanonical(
-      overview?.ai_provider_call_paths ?? null,
+    aiModelInvocations: metricFromCanonical(
+      overview?.ai_model_invocations ?? null,
       PROGRAM_EVIDENCE_METRIC_FORMATS.count,
     ),
     evidenceMappedScope: metricFromCanonical(

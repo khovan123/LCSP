@@ -1437,18 +1437,18 @@ export const enPages = {
       title: "Program Evidence Graph",
       subtitle: "Repository evidence snapshot · pinned commit",
       ready: "Ready",
-      servicesScanned: "Services",
-      servicesScannedDescription:
-        "Service/module boundaries included in the repository analysis.",
-      codeSymbolsIndexed: "Code symbols",
+      modulesAnalyzed: "Modules analyzed",
+      modulesAnalyzedDescription:
+        "Unique canonical modules included in the repository analysis.",
+      codeSymbolsIndexed: "Code symbols indexed",
       codeSymbolsIndexedDescription:
-        "Functions, classes and handlers available for evidence tracing.",
-      aiProviderCallPaths: "AI paths",
-      aiProviderCallPathsDescription:
-        "Reachable execution paths crossing an AI/model/provider boundary.",
+        "Canonical code symbols available for evidence tracing.",
+      aiModelInvocations: "AI model invocations",
+      aiModelInvocationsDescription:
+        "Unique canonical AI model invocation nodes after graph deduplication.",
       evidenceMappedScope: "Mapped scope",
       evidenceMappedScopeDescription:
-        "In-scope graph nodes linked to at least one evidence claim.",
+        "In-scope graph nodes linked to technical evidence.",
       unavailableValue: "--",
       viewEvidenceGraph: "View evidence graph",
       drawerDescription:
