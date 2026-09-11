@@ -28,8 +28,10 @@ Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
   writable: true,
 });
 const { createRoot } = await import("react-dom/client");
-const { GraphFirstDetail } =
+const { GraphFirstDetail, GraphDetail } =
   await import("../src/features/assessment-runtime/components/organisms/program-evidence-graph-drawer");
+const { normalizeProgramEvidenceGraphDetail } =
+  await import("../src/lib/api/evidence-graph-detail-client");
 const roots: ReturnType<typeof createRoot>[] = [];
 
 const detail = {
@@ -104,6 +106,44 @@ const detail = {
     },
   },
 };
+
+test("normalizes missing canonical overview metrics to null", () => {
+  const normalized = normalizeProgramEvidenceGraphDetail({
+    ...detail,
+    overview: {
+      modules_analyzed: undefined,
+      code_symbols_indexed: null,
+      ai_model_invocations: undefined,
+      evidence_mapped_scope: null,
+    },
+  } as unknown as typeof detail);
+
+  assert.deepEqual(normalized.overview, {
+    modules_analyzed: null,
+    code_symbols_indexed: null,
+    ai_model_invocations: null,
+    evidence_mapped_scope: null,
+  });
+});
+
+test("preserves canonical zero overview metrics", () => {
+  const normalized = normalizeProgramEvidenceGraphDetail({
+    ...detail,
+    overview: {
+      modules_analyzed: 0,
+      code_symbols_indexed: 0,
+      ai_model_invocations: 0,
+      evidence_mapped_scope: 0,
+    },
+  });
+
+  assert.deepEqual(normalized.overview, {
+    modules_analyzed: 0,
+    code_symbols_indexed: 0,
+    ai_model_invocations: 0,
+    evidence_mapped_scope: 0,
+  });
+});
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -233,4 +273,39 @@ test("renders the workspace overview before a node is selected", async () => {
     container.textContent ?? "",
     /Evidence graph is pinned|Sơ đồ này được tạo từ snapshot/,
   );
+});
+
+test("formats evidence scope as a percentage in both graph detail renderers", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const percentageDetail = {
+    ...detail,
+    overview: {
+      ...detail.overview,
+      evidence_mapped_scope: 84,
+    },
+  };
+
+  await act(async () =>
+    root.render(
+      React.createElement(GraphFirstDetail, {
+        assessmentId: "assessment-1",
+        detail: percentageDetail,
+      }),
+    ),
+  );
+  assert.match(container.textContent ?? "", /84%/);
+  assert.doesNotMatch(container.textContent ?? "", />84<|>84<\/dd>/);
+
+  await act(async () =>
+    root.render(
+      React.createElement(GraphDetail, {
+        assessmentId: "assessment-1",
+        detail: percentageDetail,
+      }),
+    ),
+  );
+  assert.match(container.textContent ?? "", /84%/);
 });

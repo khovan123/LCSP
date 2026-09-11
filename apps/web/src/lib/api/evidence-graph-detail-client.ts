@@ -66,6 +66,26 @@ export type ProgramEvidenceGraphDetail = {
   };
 };
 
+/** Normalize optional upstream metric properties to the contract's null sentinel. */
+export function normalizeProgramEvidenceGraphDetail(
+  detail: ProgramEvidenceGraphDetail,
+): ProgramEvidenceGraphDetail {
+  const overview = detail.overview ?? {};
+  return {
+    ...detail,
+    overview: {
+      modules_analyzed: normalizeMetric(overview.modules_analyzed),
+      code_symbols_indexed: normalizeMetric(overview.code_symbols_indexed),
+      ai_model_invocations: normalizeMetric(overview.ai_model_invocations),
+      evidence_mapped_scope: normalizeMetric(overview.evidence_mapped_scope),
+    },
+  };
+}
+
+function normalizeMetric(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 export async function getProgramEvidenceGraphDetail(
   assessmentId: string,
 ): Promise<ProgramEvidenceGraphDetail | null> {
@@ -73,5 +93,7 @@ export async function getProgramEvidenceGraphDetail(
     `/api/assessments/${encodeURIComponent(assessmentId)}/evidence-graph`,
     { cache: "no-store" },
   );
-  return ok ? (payload as ProgramEvidenceGraphDetail) : null;
+  return ok
+    ? normalizeProgramEvidenceGraphDetail(payload as ProgramEvidenceGraphDetail)
+    : null;
 }

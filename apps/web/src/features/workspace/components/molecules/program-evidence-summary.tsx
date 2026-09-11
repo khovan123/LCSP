@@ -15,7 +15,10 @@ import {
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 import { useProgramEvidenceGraphDrawer } from "@/features/assessment-runtime";
-import { deriveProgramEvidenceSummary } from "@/features/assessment-flow/utils/program-evidence-summary";
+import {
+  deriveProgramEvidenceSummary,
+  formatProgramEvidenceMetric,
+} from "@/features/assessment-flow/utils/program-evidence-summary";
 import type { ProgramEvidenceGraphOverview } from "@/lib/api/evidence-graph-detail-client";
 
 import type {
@@ -194,7 +197,7 @@ function MetricItem({
     <div className="min-w-0">
       <dt className="flex min-w-0 items-baseline gap-2">
         <span className="shrink-0 text-lg font-semibold leading-6 text-foreground">
-          {formatMetric(metric)}
+          {formatProgramEvidenceMetric(metric)}
         </span>
         <span className="min-w-0 truncate text-xs font-medium leading-5 text-foreground">
           {label}
@@ -205,16 +208,6 @@ function MetricItem({
       </dd>
     </div>
   );
-}
-
-function formatMetric(metric: ProgramEvidenceMetric) {
-  if (metric.value === null) {
-    return t("pages.assessmentFlow.graph.unavailableValue");
-  }
-
-  const rounded =
-    metric.format === "percent" ? Math.round(metric.value) : metric.value;
-  return metric.format === "percent" ? `${rounded}%` : rounded.toLocaleString();
 }
 
 function t(key: string) {

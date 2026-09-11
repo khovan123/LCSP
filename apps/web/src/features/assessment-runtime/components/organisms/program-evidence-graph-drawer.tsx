@@ -36,6 +36,10 @@ import {
   buildArtifactOpenTarget,
 } from "@/features/artifacts/utils/artifact-routes";
 import {
+  formatProgramEvidenceMetric,
+  PROGRAM_EVIDENCE_OVERVIEW_FORMATS,
+} from "@/features/assessment-flow/utils/program-evidence-summary";
+import {
   buildEvidenceGraphOverview,
   fitGraphToViewport,
   GRAPH_NODE_HEIGHT,
@@ -307,11 +311,14 @@ export function GraphFirstDetail({
               key={key}
             >
               <dd className="text-base font-semibold leading-none">
-                {value === null
+                {value == null
                   ? resolveAppMessage(
                       "pages.assessmentFlow.graph.unavailableValue" as never,
                     )
-                  : value}
+                  : formatProgramEvidenceMetric({
+                      value,
+                      format: PROGRAM_EVIDENCE_OVERVIEW_FORMATS[key],
+                    })}
               </dd>
               <dt className="min-w-0 text-[0.6875rem] leading-tight text-muted-foreground">
                 {resolveAppMessage(`pages.assessmentFlow.graph.${key}` as never)}
@@ -903,12 +910,14 @@ export function GraphDetail({
           {resolveAppMessage("pages.assessmentFlow.graph.overview" as never)}
         </h3>
         <dl className="mt-3 grid grid-cols-2 gap-3">
-          {[
-            ["modulesAnalyzed", detail.overview.modules_analyzed],
-            ["codeSymbolsIndexed", detail.overview.code_symbols_indexed],
-            ["aiModelInvocations", detail.overview.ai_model_invocations],
-            ["evidenceMappedScope", detail.overview.evidence_mapped_scope],
-          ].map(([key, value]) => (
+          {(
+            [
+              ["modulesAnalyzed", detail.overview.modules_analyzed],
+              ["codeSymbolsIndexed", detail.overview.code_symbols_indexed],
+              ["aiModelInvocations", detail.overview.ai_model_invocations],
+              ["evidenceMappedScope", detail.overview.evidence_mapped_scope],
+            ] as const
+          ).map(([key, value]) => (
             <div className="rounded-lg border border-border/60 p-3" key={key}>
               <dt className="text-xs text-muted-foreground">
                 {resolveAppMessage(
@@ -916,7 +925,14 @@ export function GraphDetail({
                 )}
               </dt>
               <dd className="mt-1 text-lg font-semibold">
-                {value === null ? "—" : value}
+                {value == null
+                  ? resolveAppMessage(
+                      "pages.assessmentFlow.graph.unavailableValue" as never,
+                    )
+                  : formatProgramEvidenceMetric({
+                      value,
+                      format: PROGRAM_EVIDENCE_OVERVIEW_FORMATS[key],
+                    })}
               </dd>
             </div>
           ))}
