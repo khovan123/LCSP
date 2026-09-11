@@ -1333,6 +1333,8 @@ export const viPages = {
     adjustPlaceholder: "Nhập nội dung điều chỉnh hoặc bổ sung...",
     composerChooseConfirmAdjust: "Chọn Xác nhận hoặc Điều chỉnh ở trên...",
     submitAnswer: "Gửi câu trả lời",
+    resumePipeline: "Tiếp tục",
+    resumeQueued: "Đã đưa assessment vào hàng đợi tiếp tục.",
     answerSavedForRuntime:
       "Câu trả lời đã được ghi cho thread runtime. Interview Agent sẽ đánh giá đủ bối cảnh trước khi resume downstream.",
     draftSavedForResume:

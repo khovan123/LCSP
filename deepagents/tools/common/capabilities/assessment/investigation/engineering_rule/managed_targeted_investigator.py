@@ -15,13 +15,20 @@ from dataclasses import asdict
 from threading import Lock
 from typing import Any, Iterable
 
+from langchain.agents.structured_output import StructuredOutputError
+
 from contracts.handoffs import InvestigatorResult
 from middleware.specialist_handoff_validation import _persist_targeted_interview_need
 from model_policy import create_lcsp_agent as create_agent
 from orchestration.context import LCSPRunContext
-from orchestration.result_validation import validate_specialist_handoff
+from orchestration.result_validation import (
+    SpecialistHandoffValidationError,
+    validate_specialist_handoff,
+)
 from subagents.investigator.definition import SUBAGENT as INVESTIGATOR_SUBAGENT
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
+    ENGINEERING_EVIDENCE_CLAIM_TYPES,
+    ENGINEERING_LIMITATION_CODES,
     EvidenceClaim,
     InvestigationPacket,
 )
@@ -34,8 +41,21 @@ from tools.common.capabilities.assessment.planning.engineering_rule.confirmed_bu
     coerce_confirmed_structured_business_context,
 )
 from tools.common.capabilities.platform.graph_runtime import checkpoint_database_url
+from tools.common.capabilities.platform.logging import get_logger
 
-from .managed_investigator_execution_store import ManagedInvestigatorExecutionStore
+from .managed_investigator_execution_store import (
+    MANAGED_INVESTIGATOR_EXECUTION_STATUSES,
+    ManagedInvestigatorExecutionStore,
+)
+
+
+logger = get_logger(__name__)
+MAX_MANAGED_INVESTIGATOR_REJECTED_ATTEMPTS = 2
+MAX_MANAGED_INVESTIGATOR_PROMPT_CHARS = 60_000
+MAX_MANAGED_INVESTIGATOR_RESULT_ROWS = 12
+MAX_MANAGED_INVESTIGATOR_RESULT_REFS = 200
+MAX_MANAGED_INVESTIGATOR_EDGE_ROWS = 40
+MAX_MANAGED_INVESTIGATOR_NODE_ROWS = 40
 
 
 class TargetedInterviewPending(BaseException):
@@ -513,8 +533,11 @@ def resume_managed_investigator(
         graph=graph,
         execution_id=execution_id,
         correlation_id=correlation_id,
+        confirmed_statement_refs=typed_confirmed_context.confirmed_statement_refs,
     )
-    if resumed_checkpoint_id == checkpoint_id:
+    if resumed_checkpoint_id == checkpoint_id and not _is_failed_investigator_handoff(
+        handoff
+    ):
         raise RuntimeError("exact Investigator resume did not advance its child checkpoint")
     result = InvestigatorResult.model_validate(handoff)
     return {
@@ -578,6 +601,7 @@ def _invoke_managed_investigator(
     graph: Any,
     execution_id: str,
     correlation_id: str | None,
+    confirmed_statement_refs: tuple[str, ...] = (),
 ) -> tuple[dict[str, Any], str]:
     from langgraph.checkpoint.postgres import PostgresSaver
 
@@ -607,67 +631,205 @@ def _invoke_managed_investigator(
             if latest_checkpoint and latest_checkpoint != checkpoint_id:
                 structured = _snapshot_structured_response(latest)
                 if structured is not None:
-                    validated = validate_specialist_handoff(
-                        "investigator",
-                        structured,
-                        graph=graph,
-                        pinned_rule_ids=context.engineering_rule_ids,
-                        pinned_versions=dict(context.artifact_versions),
-                    )
-                    recovered = InvestigatorResult.model_validate(validated)
-                    if recovered.status == "READY":
+                    try:
+                        validated = validate_specialist_handoff(
+                            "investigator",
+                            structured,
+                            graph=graph,
+                            pinned_rule_ids=context.engineering_rule_ids,
+                            pinned_versions=dict(context.artifact_versions),
+                            confirmed_statement_refs=confirmed_statement_refs,
+                        )
+                    except SpecialistHandoffValidationError as error:
+                        record = registry.get(execution_id)
+                        rejected_attempts = (record.attempt_count if record else 0) + 1
+                        error_message = str(error)[:2_000]
+                        logger.warning(
+                            "MANAGED_INVESTIGATOR_STORED_HANDOFF_REJECTED",
+                            execution_id=execution_id,
+                            assessment_id=context.assessment_id,
+                            thread_id=thread_id,
+                            original_checkpoint_id=checkpoint_id,
+                            rejected_checkpoint_id=latest_checkpoint,
+                            rejected_attempts=rejected_attempts,
+                            error_type=type(error).__name__,
+                            error_message=error_message,
+                            correlationId=correlation_id,
+                        )
+                        if (
+                            rejected_attempts
+                            >= MAX_MANAGED_INVESTIGATOR_REJECTED_ATTEMPTS
+                        ):
+                            registry.save(
+                                execution_id=execution_id,
+                                assessment_id=context.assessment_id,
+                                thread_id=thread_id,
+                                checkpoint_id=checkpoint_id,
+                                affected_rule_ids=context.engineering_rule_ids,
+                                artifact_versions=dict(context.artifact_versions),
+                                status=MANAGED_INVESTIGATOR_EXECUTION_STATUSES["failed"],
+                                attempt_count=rejected_attempts,
+                                last_error=error_message,
+                            )
+                            return (
+                                _failed_investigator_handoff(
+                                    context=context,
+                                    last_error=error_message,
+                                ),
+                                checkpoint_id,
+                            )
                         registry.save(
                             execution_id=execution_id,
                             assessment_id=context.assessment_id,
                             thread_id=thread_id,
-                            checkpoint_id=latest_checkpoint,
+                            checkpoint_id=checkpoint_id,
                             affected_rule_ids=context.engineering_rule_ids,
                             artifact_versions=dict(context.artifact_versions),
-                            status="READY",
+                            status=MANAGED_INVESTIGATOR_EXECUTION_STATUSES["rejected"],
+                            attempt_count=rejected_attempts,
+                            last_error=error_message,
                         )
-                        return recovered.model_dump(mode="json"), latest_checkpoint
+                        instruction = _recovery_instruction(
+                            instruction=instruction,
+                            validation_error=error_message,
+                        )
+                    else:
+                        recovered = InvestigatorResult.model_validate(validated)
+                        if recovered.status == "READY":
+                            registry.save(
+                                execution_id=execution_id,
+                                assessment_id=context.assessment_id,
+                                thread_id=thread_id,
+                                checkpoint_id=latest_checkpoint,
+                                affected_rule_ids=context.engineering_rule_ids,
+                                artifact_versions=dict(context.artifact_versions),
+                                status=MANAGED_INVESTIGATOR_EXECUTION_STATUSES["ready"],
+                                attempt_count=0,
+                                last_error=None,
+                            )
+                            return recovered.model_dump(mode="json"), latest_checkpoint
 
         configurable: dict[str, str] = {"thread_id": thread_id}
         if checkpoint_id:
             configurable["checkpoint_id"] = checkpoint_id
-        invocation = agent.invoke(
-            {"messages": [{"role": "user", "content": instruction}]},
-            config={
-                "configurable": configurable,
-                "metadata": {
-                    "lcsp_thread_id": thread_id,
-                    "assessment_id": context.assessment_id,
-                    "user_id": context.user_id,
-                    "investigator_execution_id": execution_id,
-                    "artifact_versions": dict(context.artifact_versions),
-                    "affected_rule_ids": list(context.engineering_rule_ids),
-                    "correlationId": correlation_id,
-                },
-            },
-            context=context,
-        )
-        if not isinstance(invocation, dict) or "structured_response" not in invocation:
-            raise RuntimeError("managed Investigator did not return structured_response")
-        validated = validate_specialist_handoff(
-            "investigator",
-            invocation["structured_response"],
-            graph=graph,
-            pinned_rule_ids=context.engineering_rule_ids,
-            pinned_versions=dict(context.artifact_versions),
-        )
-        result = InvestigatorResult.model_validate(validated)
-        snapshot = agent.get_state({"configurable": {"thread_id": thread_id}})
-        checkpoint_text = _snapshot_checkpoint_id(snapshot)
-        registry.save(
-            execution_id=execution_id,
-            assessment_id=context.assessment_id,
-            thread_id=thread_id,
-            checkpoint_id=checkpoint_text,
-            affected_rule_ids=context.engineering_rule_ids,
-            artifact_versions=dict(context.artifact_versions),
-            status="READY" if result.status == "READY" else "WAITING",
-        )
-        return result.model_dump(mode="json"), checkpoint_text
+        current_instruction = instruction
+        for _attempt in range(MAX_MANAGED_INVESTIGATOR_REJECTED_ATTEMPTS):
+            response_shape: dict[str, Any] | None = None
+            try:
+                invocation = agent.invoke(
+                    {"messages": [{"role": "user", "content": current_instruction}]},
+                    config={
+                        "configurable": configurable,
+                        "metadata": {
+                            "lcsp_thread_id": thread_id,
+                            "assessment_id": context.assessment_id,
+                            "user_id": context.user_id,
+                            "investigator_execution_id": execution_id,
+                            "artifact_versions": dict(context.artifact_versions),
+                            "affected_rule_ids": list(context.engineering_rule_ids),
+                            "correlationId": correlation_id,
+                        },
+                    },
+                    context=context,
+                )
+                if not isinstance(invocation, dict) or "structured_response" not in invocation:
+                    raise SpecialistHandoffValidationError(
+                        "managed Investigator did not return structured_response"
+                    )
+                response_shape = _structured_handoff_shape(
+                    invocation["structured_response"]
+                )
+                validated = validate_specialist_handoff(
+                    "investigator",
+                    invocation["structured_response"],
+                    graph=graph,
+                    pinned_rule_ids=context.engineering_rule_ids,
+                    pinned_versions=dict(context.artifact_versions),
+                    confirmed_statement_refs=confirmed_statement_refs,
+                )
+            except (SpecialistHandoffValidationError, StructuredOutputError) as error:
+                record = registry.get(execution_id)
+                rejected_attempts = (record.attempt_count if record else 0) + 1
+                error_message = _managed_validation_error_message(error)
+                checkpoint_text = _safe_current_checkpoint_id(
+                    agent=agent,
+                    thread_id=thread_id,
+                    fallback=checkpoint_id,
+                )
+                logger.warning(
+                    "MANAGED_INVESTIGATOR_HANDOFF_REJECTED",
+                    execution_id=execution_id,
+                    assessment_id=context.assessment_id,
+                    thread_id=thread_id,
+                    checkpoint_id=checkpoint_text,
+                    rejected_attempts=rejected_attempts,
+                    error_type=type(error).__name__,
+                    error_message=error_message,
+                    error_metadata=_structured_error_metadata(error),
+                    response_shape=response_shape,
+                    prompt_chars=len(current_instruction),
+                    correlationId=correlation_id,
+                )
+                if (
+                    rejected_attempts
+                    >= MAX_MANAGED_INVESTIGATOR_REJECTED_ATTEMPTS
+                ):
+                    registry.save(
+                        execution_id=execution_id,
+                        assessment_id=context.assessment_id,
+                        thread_id=thread_id,
+                        checkpoint_id=checkpoint_text,
+                        affected_rule_ids=context.engineering_rule_ids,
+                        artifact_versions=dict(context.artifact_versions),
+                        status=MANAGED_INVESTIGATOR_EXECUTION_STATUSES["failed"],
+                        attempt_count=rejected_attempts,
+                        last_error=error_message,
+                    )
+                    return (
+                        _failed_investigator_handoff(
+                            context=context,
+                            last_error=error_message,
+                        ),
+                        checkpoint_text,
+                    )
+                registry.save(
+                    execution_id=execution_id,
+                    assessment_id=context.assessment_id,
+                    thread_id=thread_id,
+                    checkpoint_id=checkpoint_text,
+                    affected_rule_ids=context.engineering_rule_ids,
+                    artifact_versions=dict(context.artifact_versions),
+                    status=MANAGED_INVESTIGATOR_EXECUTION_STATUSES["rejected"],
+                    attempt_count=rejected_attempts,
+                    last_error=error_message,
+                )
+                current_instruction = _recovery_instruction(
+                    instruction=instruction,
+                    validation_error=error_message,
+                )
+                continue
+
+            result = InvestigatorResult.model_validate(validated)
+            snapshot = agent.get_state({"configurable": {"thread_id": thread_id}})
+            checkpoint_text = _snapshot_checkpoint_id(snapshot)
+            registry.save(
+                execution_id=execution_id,
+                assessment_id=context.assessment_id,
+                thread_id=thread_id,
+                checkpoint_id=checkpoint_text,
+                affected_rule_ids=context.engineering_rule_ids,
+                artifact_versions=dict(context.artifact_versions),
+                status=(
+                    MANAGED_INVESTIGATOR_EXECUTION_STATUSES["ready"]
+                    if result.status == "READY"
+                    else MANAGED_INVESTIGATOR_EXECUTION_STATUSES["waiting"]
+                ),
+                attempt_count=0,
+                last_error=None,
+            )
+            return result.model_dump(mode="json"), checkpoint_text
+
+        raise RuntimeError("managed Investigator retry loop exited unexpectedly")
 
 
 def _assert_execution_registry_matches_continuation(
@@ -693,8 +855,143 @@ def _assert_execution_registry_matches_continuation(
     if record.artifact_versions != artifact_versions:
         raise RuntimeError("managed Investigator execution artifact pins drifted")
     if record.checkpoint_id != checkpoint_id:
-        if not (allow_ready_advanced and record.status == "READY"):
+        if not (
+            allow_ready_advanced
+            and record.status == MANAGED_INVESTIGATOR_EXECUTION_STATUSES["ready"]
+        ):
             raise RuntimeError("managed Investigator execution checkpoint identity drifted")
+
+
+def _recovery_instruction(*, instruction: str, validation_error: str) -> str:
+    return (
+        instruction
+        + "\n\nPrevious structured Investigator response was rejected before deterministic "
+        "gate completion. Retry from the original checkpoint and correct this validation "
+        "error explicitly. Return only compact valid JSON for the InvestigatorResult schema; "
+        "do not copy raw tool output, graph rows, prompts, or long explanations into any field: "
+        + validation_error
+    )
+
+
+def _managed_validation_error_message(error: BaseException) -> str:
+    text = str(error).strip()
+    if len(text) > 2_000:
+        text = text[:2_000].rstrip() + "..."
+    return text or type(error).__name__
+
+
+def _structured_handoff_shape(value: Any) -> dict[str, Any]:
+    if hasattr(value, "model_dump"):
+        value = value.model_dump(mode="json")
+    if not isinstance(value, dict):
+        return {"type": type(value).__name__}
+    claims = value.get("claims")
+    claim_shapes: list[dict[str, Any]] = []
+    if isinstance(claims, list):
+        for item in claims[:5]:
+            if isinstance(item, dict):
+                claim_shapes.append(
+                    {
+                        "claim_type": item.get("claim_type"),
+                        "value_type": type(item.get("value")).__name__,
+                        "keys": sorted(str(key) for key in item.keys())[:20],
+                    }
+                )
+            else:
+                claim_shapes.append({"type": type(item).__name__})
+    return {
+        "keys": sorted(str(key) for key in value.keys())[:30],
+        "status": value.get("status"),
+        "next_step": value.get("next_step"),
+        "claim_count": len(claims) if isinstance(claims, list) else None,
+        "claim_shapes": claim_shapes,
+    }
+
+
+def _structured_error_metadata(error: BaseException) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        for attr in ("finish_reason", "usage_metadata", "response_metadata"):
+            value = getattr(current, attr, None)
+            if value is not None and attr not in metadata:
+                metadata[attr] = _safe_metadata_value(value)
+        current = current.__cause__ or current.__context__
+    return metadata
+
+
+def _safe_metadata_value(value: Any) -> Any:
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, dict):
+        safe: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            if any(marker in key_text.lower() for marker in ("content", "text", "message")):
+                continue
+            if isinstance(item, (str, int, float, bool)) or item is None:
+                safe[key_text] = item
+        return safe
+    return type(value).__name__
+
+
+def _safe_current_checkpoint_id(
+    *,
+    agent: Any,
+    thread_id: str,
+    fallback: str | None,
+) -> str:
+    try:
+        snapshot = agent.get_state({"configurable": {"thread_id": thread_id}})
+        checkpoint = _snapshot_checkpoint_id(snapshot, required=False)
+    except Exception:
+        checkpoint = ""
+    return checkpoint or str(fallback or "")
+
+
+def _failed_investigator_handoff(
+    *,
+    context: LCSPRunContext,
+    last_error: str,
+) -> dict[str, Any]:
+    rule_id = context.engineering_rule_ids[0]
+    return {
+        "status": MANAGED_INVESTIGATOR_EXECUTION_STATUSES["ready"],
+        "artifact_versions": dict(context.artifact_versions),
+        "claims": [
+            {
+                "claim_id": f"claim:failed:{rule_id}",
+                "engineering_rule_id": rule_id,
+                "claim_type": ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"],
+                "value": None,
+                "evidence_refs": [],
+                "graph_path_refs": [],
+                "source_anchor_refs": [],
+                "confidence": 0.0,
+                "limitations": [
+                    ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
+                ],
+                "criterion": last_error[:500] or None,
+            }
+        ],
+        "limitations": [
+            ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
+        ],
+        "missing_input": None,
+        "business_context_need": None,
+        "next_step": "GATE",
+    }
+
+
+def _is_failed_investigator_handoff(handoff: dict[str, Any]) -> bool:
+    limitations = handoff.get("limitations")
+    return (
+        isinstance(limitations, list)
+        and ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
+        in limitations
+    )
 
 
 def _durable_investigator_agent(checkpointer: Any):
@@ -714,12 +1011,17 @@ def _initial_instruction(
     packet: InvestigationPacket,
     artifact_versions: dict[str, str],
 ) -> str:
-    bounded_packet = asdict(packet)
-    bounded_packet.pop("customer_context", None)
-    return (
+    bounded_packet = _bounded_investigation_packet(packet)
+    instruction = (
         "Execute this already-selected EngineeringRule investigation. Preserve the fixed artifact "
         "pins exactly. If a material Customer-owned business fact is required, return one bounded "
-        "NEEDS_INPUT/business_context_need; otherwise return READY claims.\n"
+        "NEEDS_INPUT/business_context_need; otherwise return READY claims. The packet below is a "
+        "bounded index, not raw evidence. Use the Investigator tools to inspect any cited graph "
+        "node/edge/source ref before closing a claim. Return only compact valid JSON matching the "
+        "InvestigatorResult schema; do not echo raw packet/tool JSON or long graph rows in any "
+        "string field. For RULE_REQUIREMENT_MET and RULE_REQUIREMENT_NOT_MET, omit "
+        "customer_context_refs entirely. Include customer_context_refs only on "
+        "RULE_SCOPE_NOT_APPLICABLE claims.\n"
         + json.dumps(
             {
                 "artifactVersions": artifact_versions,
@@ -730,6 +1032,103 @@ def _initial_instruction(
             default=str,
         )
     )
+    if len(instruction) > MAX_MANAGED_INVESTIGATOR_PROMPT_CHARS:
+        raise RuntimeError("managed Investigator bounded instruction exceeded prompt budget")
+    return instruction
+
+
+def _bounded_investigation_packet(packet: InvestigationPacket) -> dict[str, Any]:
+    raw = asdict(packet)
+    raw.pop("customer_context", None)
+    initial_results = [
+        _compact_initial_result(item)
+        for item in raw.get("initial_results", ())[:MAX_MANAGED_INVESTIGATOR_RESULT_ROWS]
+        if isinstance(item, dict)
+    ]
+    omitted = max(0, len(raw.get("initial_results", ())) - len(initial_results))
+    raw["initial_results"] = initial_results
+    raw["initialResultSummary"] = {
+        "total": len(packet.initial_results),
+        "included": len(initial_results),
+        "omitted": omitted,
+        "evidenceRefCount": len(packet.evidence_refs),
+        "unresolvedFrontierCount": len(packet.unresolved_frontiers),
+    }
+    raw["evidence_refs"] = list(packet.evidence_refs)[
+        :MAX_MANAGED_INVESTIGATOR_RESULT_REFS
+    ]
+    raw["unresolved_frontiers"] = list(packet.unresolved_frontiers)[
+        :MAX_MANAGED_INVESTIGATOR_RESULT_REFS
+    ]
+    return raw
+
+
+def _compact_initial_result(item: dict[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {
+        key: item.get(key)
+        for key in (
+            "query",
+            "phase",
+            "startRef",
+            "truncated",
+            "matchMode",
+        )
+        if key in item
+    }
+    nodes = item.get("nodes")
+    edges = item.get("edges")
+    paths = item.get("paths")
+    if isinstance(nodes, list):
+        compact["nodes"] = [
+            _compact_graph_node(node)
+            for node in nodes[:MAX_MANAGED_INVESTIGATOR_NODE_ROWS]
+            if isinstance(node, dict)
+        ]
+        compact["nodeCount"] = len(nodes)
+    if isinstance(edges, list):
+        compact["edges"] = [
+            _compact_graph_edge(edge)
+            for edge in edges[:MAX_MANAGED_INVESTIGATOR_EDGE_ROWS]
+            if isinstance(edge, dict)
+        ]
+        compact["edgeCount"] = len(edges)
+    if isinstance(paths, list):
+        compact["paths"] = paths[:MAX_MANAGED_INVESTIGATOR_RESULT_ROWS]
+        compact["pathCount"] = len(paths)
+    for key in ("evidenceRefs", "unresolvedFrontiers", "continuationFrontiers"):
+        value = item.get(key)
+        if isinstance(value, list):
+            compact[key] = value[:MAX_MANAGED_INVESTIGATOR_RESULT_REFS]
+            compact[f"{key}Count"] = len(value)
+    return compact
+
+
+def _compact_graph_node(node: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: node.get(key)
+        for key in (
+            "node_id",
+            "node_type",
+            "label",
+            "resolution_state",
+            "evidence_refs",
+        )
+        if key in node
+    }
+
+
+def _compact_graph_edge(edge: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: edge.get(key)
+        for key in (
+            "edge_id",
+            "edge_type",
+            "source_node_id",
+            "target_node_id",
+            "evidence_refs",
+        )
+        if key in edge
+    }
 
 
 def _artifact_versions(evidence_report: dict[str, Any]) -> dict[str, str]:
