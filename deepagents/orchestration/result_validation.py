@@ -8,7 +8,11 @@ from pydantic import BaseModel, ValidationError
 
 from contracts.handoffs import (
     InvestigatorClaim,
+    InvestigatorRequirementMetClaim,
+    InvestigatorRequirementNotMetClaim,
     InvestigatorResult,
+    InvestigatorScopeNotApplicableClaim,
+    InvestigatorUnresolvedClaim,
     ResolverResult,
     SPECIALIST_RESPONSE_FORMATS,
 )
@@ -27,6 +31,57 @@ class SpecialistHandoffValidationError(RuntimeError):
 
 _CAUSE_DETAIL_LIMIT = 500
 
+# `InvestigatorClaim` is a plain `Union` (anyOf, not a discriminated oneOf — see
+# contracts/handoffs.py for why). Pydantic's "smart union" validates a claim against every
+# variant and reports every variant's failures, so a real error (e.g. the UNRESOLVED
+# variant's empty `limitations`) arrives buried under 3 irrelevant "this isn't a MET claim"
+# reports. _filter_union_variant_noise below narrows to the one variant whose claim_type
+# actually matched before rendering.
+_INVESTIGATOR_CLAIM_VARIANT_NAMES = tuple(
+    cls.__name__
+    for cls in (
+        InvestigatorRequirementMetClaim,
+        InvestigatorRequirementNotMetClaim,
+        InvestigatorUnresolvedClaim,
+        InvestigatorScopeNotApplicableClaim,
+    )
+)
+
+
+def _union_variant_in_segment(segment: Any) -> str | None:
+    text = str(segment)
+    for name in _INVESTIGATOR_CLAIM_VARIANT_NAMES:
+        if name in text:
+            return name
+    return None
+
+
+def _filter_union_variant_noise(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    generic: list[dict[str, Any]] = []
+    variant_groups: dict[str, list[dict[str, Any]]] = {}
+    for error in errors:
+        variant = next(
+            (v for v in map(_union_variant_in_segment, error.get("loc", ())) if v),
+            None,
+        )
+        (generic if variant is None else variant_groups.setdefault(variant, [])).append(
+            error
+        )
+    if not variant_groups:
+        return errors
+    # A variant whose own errors include a `claim_type` mismatch never matched the input at
+    # all; its other field errors ("criterion required", etc.) are artifacts of the smart
+    # union trying every shape, not real problems with the claim the caller sent.
+    matched = {
+        variant: group
+        for variant, group in variant_groups.items()
+        if not any(error.get("loc", ())[-1:] == ("claim_type",) for error in group)
+    }
+    if len(matched) == 1:
+        (group,) = matched.values()
+        return [*generic, *group]
+    return errors
+
 
 def _bounded_cause(exc: Exception) -> str:
     """Render a bounded, PII-safe summary of the underlying validation failure.
@@ -37,9 +92,15 @@ def _bounded_cause(exc: Exception) -> str:
     it surfaces ``loc``/``msg`` only, never the model's raw field values.
     """
     if isinstance(exc, ValidationError):
+        errors = exc.errors(include_url=False, include_context=False, include_input=False)
+        errors = _filter_union_variant_noise(errors)
         parts = []
-        for error in exc.errors(include_url=False, include_context=False, include_input=False):
-            loc = ".".join(str(segment) for segment in error.get("loc", ()))
+        for error in errors:
+            loc = ".".join(
+                str(segment)
+                for segment in error.get("loc", ())
+                if _union_variant_in_segment(segment) is None
+            )
             msg = str(error.get("msg") or "")
             parts.append(f"{loc}: {msg}" if loc else msg)
         text = "; ".join(parts)

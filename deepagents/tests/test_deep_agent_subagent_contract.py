@@ -40,7 +40,7 @@ from model_policy import (
 from subagents import FLOW_SUBAGENTS
 from contracts.handoffs import (
     InterviewResult,
-    InvestigatorClaim,
+    InvestigatorRequirementMetClaim,
     InvestigatorResult,
     PlannerResult,
     ProvenanceRef,
@@ -178,7 +178,7 @@ def test_structured_handoffs_match_deep_research_report_fields() -> None:
         status="READY",
         artifact_versions={"technicalEvidenceReportId": "ter-1"},
         claims=[
-            InvestigatorClaim(
+            InvestigatorRequirementMetClaim(
                 claim_id="claim-1",
                 engineering_rule_id="ENG-1",
                 claim_type="RULE_REQUIREMENT_MET",

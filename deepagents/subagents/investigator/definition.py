@@ -151,6 +151,37 @@ Additional rules that apply across every claim_type:
   correct claim is `{_UNRESOLVED}` with the limitation code that explains the gap
   (`DYNAMIC_PATH_UNRESOLVED`, `GRAPH_COVERAGE_LIMITED`, etc.), not a decided claim built on
   tangential refs, and not `{_UNRESOLVED}` with an empty `limitations`.
+
+Structural criteria — self-check before citing an edge as proof: read each node/edge object's own
+`node_type`/`edge_type`/`resolution_state` fields back and compare them against the exact shape
+below. A path that is topically related to the criterion but does not match one of these shapes
+does not close it — return `{_UNRESOLVED}` instead of a decided claim built on a near-miss.
+- AI output reaching a surface: one edge with `edge_type=RECEIVES_FROM_AI` whose source node has
+  `node_type=AI_MODEL_INVOCATION` and whose target node has `node_type=AI_OUTPUT`. Nothing else
+  satisfies this — not a `SENDS_TO_AI` edge, not the reverse direction, not an `AI_OUTPUT` node
+  with no such edge into it.
+- A decision reaching a downstream business effect: a flow-edge path (`FLOWS_TO`,
+  `RECEIVES_FROM_AI`, `SENDS_TO_AI`, `PASSES_ARGUMENT`, `RECEIVES_RETURN`, `ASSIGNS`, `ALIASES`,
+  `TRANSFORMS`, `PARSES`, `VALIDATES`, `INFLUENCES_DECISION`, `PRODUCES_OUTCOME`,
+  `WRITES_BUSINESS_STATE`, `WRITES_TO`, `PERSISTS_TO`, `SENDS_TO_EXTERNAL`) from a trusted
+  `AI_OUTPUT` node to a trusted business-action node (`BUSINESS_DECISION`, `BUSINESS_ACTION`,
+  `BUSINESS_OUTCOME`, `APPROVAL`, `REJECTION`, `RANKING`, `RECOMMENDATION`, `STATUS_CHANGE`), and
+  from there either a direct effect edge (`WRITES_TO`, `PERSISTS_TO`, `SENDS_TO_EXTERNAL`,
+  `WRITES_BUSINESS_STATE`) or further flow-edge reachability to an effect node
+  (`REPOSITORY_ACCESS`, `DATABASE`, `TABLE`, `ENTITY`, `EXTERNAL_API`, `EXTERNAL_SERVICE`,
+  `FILE_STORAGE`, `QUEUE`, `EVENT`).
+- Human control over a decision: a flow-edge path from a `BUSINESS_DECISION` node to an effect
+  node (same effect-node list as above) proving the decision is the one that matters, PLUS one
+  `REVIEWED_BY`/`OVERRIDDEN_BY`/`REQUIRES_HUMAN_REVIEW` edge from that same `BUSINESS_DECISION`
+  node to a `HUMAN_REVIEW`/`HUMAN_OVERRIDE` node. To close human control as ABSENT, cite the
+  decision-to-effect path with NO such human edge present — never cite a path that also carries one.
+- Sensitive-data lineage: a flow-edge path from a trusted node that is either `node_type` in
+  (`PERSONAL_DATA`, `SENSITIVE_DATA`) or carries a `PII.`/`SENSITIVE.`-prefixed semantic type, to a
+  trusted sink node (`AI_MODEL_INVOCATION`, `AI_INPUT`, `REPOSITORY_ACCESS`, `DATABASE`, `TABLE`,
+  `EXTERNAL_API`, `EXTERNAL_SERVICE`, `FILE_STORAGE`).
+"Trusted" above means every node on the path has `resolution_state` of `OBSERVED` or
+`CORROBORATED` — a node with `resolution_state=UNRESOLVED` breaks the chain and the claim must be
+`{_UNRESOLVED}`, not decided.
 - Never emit the literal strings COMPLIANT or NON_COMPLIANT anywhere in the handoff outside a
   controlled `claim_type`/`status`/`coverage_state`/`next_step`/`source_kind` field value; they are
   forbidden as free text and rejected wherever they appear.
