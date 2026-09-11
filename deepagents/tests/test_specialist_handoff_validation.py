@@ -567,3 +567,134 @@ def test_gemini_relaxation_is_lossless_for_required_fields_and_enums() -> None:
         "UNRESOLVED_ENGINEERING_FACT",
         "RULE_SCOPE_NOT_APPLICABLE",
     }
+
+
+# ============================================================================
+# Root-cause regression #2: real run, engineering_rule_id=
+# AUTO-VN-LEGAL-2026-08-134-2025-QH15::art-10::cl-1::ENG::1, evidence_ref_count=99.
+#
+# "investigator handoff failed schema validation: claims.0: Value error,
+#  UNRESOLVED_ENGINEERING_FACT claims require at least one limitation code"
+#
+# The compliance gate itself was always correct here (see
+# test_investigator_claim_schema_rejects_unresolved_without_limitation above, which already
+# predates this incident). The actual gap was structural-output-first, same class as the
+# edge_id bug: `limitations` was a bare `list[str]` with no enum in the JSON schema handed to
+# the model, so nothing told the model which codes exist, let alone that UNRESOLVED requires
+# one. These tests pin the schema fix and the claim_type branches that still lacked direct
+# validator-shape coverage.
+# ============================================================================
+
+
+def test_investigator_claim_limitations_field_exposes_a_closed_enum() -> None:
+    """The model-facing schema must expose the valid limitation codes, not just accept any string."""
+    schema = InvestigatorResult.model_json_schema()
+    limitations_schema = schema["$defs"]["InvestigatorClaim"]["properties"]["limitations"]
+
+    enum = limitations_schema["items"]["enum"]
+    assert set(enum) == {
+        "ENGINEERING_EVIDENCE_INSUFFICIENT",
+        "DYNAMIC_PATH_UNRESOLVED",
+        "EXTERNAL_BOUNDARY_UNRESOLVED",
+        "GRAPH_COVERAGE_LIMITED",
+        "SEARCH_COVERAGE_INCOMPLETE",
+        "ENGINEERING_INVESTIGATION_FAILED",
+    }
+
+
+def test_unresolved_claim_with_invalid_limitation_code_fails_at_the_schema_layer() -> None:
+    """An out-of-enum code is now rejected by the type itself, not only the custom validator."""
+    payload = _investigator_payload()
+    payload["claims"][0]["limitations"] = ["NOT_A_REAL_CODE"]
+
+    with pytest.raises(SpecialistHandoffValidationError, match="schema validation"):
+        validate_specialist_handoff("investigator", payload)
+
+
+def test_requirement_not_met_claim_rejected_without_any_ref() -> None:
+    """RULE_REQUIREMENT_NOT_MET has the same ref requirement as MET, not just NOT_MET's value."""
+    payload = _handoff_with_claim(
+        _ai_output_path_claim(
+            claim_type="RULE_REQUIREMENT_NOT_MET",
+            value=False,
+            evidence_refs=[],
+            graph_path_refs=[],
+            source_anchor_refs=[],
+        )
+    )
+
+    with pytest.raises(SpecialistHandoffValidationError, match="schema validation") as exc_info:
+        validate_specialist_handoff("investigator", payload)
+
+    assert "at least one evidence, graph-path, or source-anchor ref" in str(exc_info.value)
+
+
+def test_scope_not_applicable_claim_rejected_when_carrying_graph_refs() -> None:
+    """RULE_SCOPE_NOT_APPLICABLE must not carry graph/source refs, even alongside customer_context_refs."""
+    payload = _investigator_payload()
+    payload["claims"] = [
+        {
+            "claim_id": "claim-scope-1",
+            "engineering_rule_id": "eng-1",
+            "claim_type": "RULE_SCOPE_NOT_APPLICABLE",
+            "value": None,
+            "evidence_refs": [],
+            "graph_path_refs": ["node:ai"],
+            "source_anchor_refs": [],
+            "customer_context_refs": ["stmt-good"],
+            "confidence": 0.0,
+            "limitations": [],
+            "criterion": "TARGETED_SCOPE_EXCLUDED",
+        }
+    ]
+
+    with pytest.raises(SpecialistHandoffValidationError, match="schema validation") as exc_info:
+        validate_specialist_handoff("investigator", payload)
+
+    assert "must not carry graph/source refs" in str(exc_info.value)
+
+
+def test_system_authored_failure_claim_keeps_its_reserved_limitation_code() -> None:
+    """_failed_investigator_handoff's synthetic claim must still parse after the enum tightening.
+
+    Mirrors managed_targeted_investigator._failed_investigator_handoff exactly: a
+    "claim:failed:"-prefixed claim_id carrying ENGINEERING_INVESTIGATION_FAILED, the one code
+    reserved for system-authored claims and excluded from what a model may select.
+    """
+    handoff = InvestigatorResult.model_validate(
+        {
+            "status": "READY",
+            "artifact_versions": {"technicalEvidenceReportId": "ter-1"},
+            "claims": [
+                {
+                    "claim_id": "claim:failed:eng-1",
+                    "engineering_rule_id": "eng-1",
+                    "claim_type": "UNRESOLVED_ENGINEERING_FACT",
+                    "value": None,
+                    "evidence_refs": [],
+                    "graph_path_refs": [],
+                    "source_anchor_refs": [],
+                    "confidence": 0.0,
+                    "limitations": ["ENGINEERING_INVESTIGATION_FAILED"],
+                    "criterion": "handoff rejected twice",
+                }
+            ],
+            "limitations": ["ENGINEERING_INVESTIGATION_FAILED"],
+            "missing_input": None,
+            "business_context_need": None,
+            "next_step": "GATE",
+        }
+    )
+
+    assert handoff.claims[0].limitations == ["ENGINEERING_INVESTIGATION_FAILED"]
+
+
+def test_model_authored_claim_cannot_use_the_system_reserved_limitation_code() -> None:
+    """The Literal type is a superset (system + model codes); the runtime validator still narrows
+    it per claim_id origin, so a model-authored claim_id must not get away with the reserved code."""
+    payload = _investigator_payload()
+    payload["claims"][0]["claim_type"] = "UNRESOLVED_ENGINEERING_FACT"
+    payload["claims"][0]["limitations"] = ["ENGINEERING_INVESTIGATION_FAILED"]
+
+    with pytest.raises(SpecialistHandoffValidationError, match="unsupported codes"):
+        validate_specialist_handoff("investigator", payload)

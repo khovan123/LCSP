@@ -40,11 +40,12 @@ INVESTIGATOR_CLAIM_TYPES = {
 MODEL_AUTHORED_INVESTIGATOR_LIMITATION_CODES = frozenset(
     MODEL_SELECTABLE_LIMITATION_CODES
 )
+_INVESTIGATOR_LIMITATION_CODE_VALUES = (
+    *MODEL_SELECTABLE_LIMITATION_CODES,
+    ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"],
+)
 SYSTEM_AUTHORED_INVESTIGATOR_LIMITATION_CODES = frozenset(
-    (
-        *MODEL_SELECTABLE_LIMITATION_CODES,
-        ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"],
-    )
+    _INVESTIGATOR_LIMITATION_CODE_VALUES
 )
 SYSTEM_FAILED_INVESTIGATOR_CLAIM_PREFIX = "claim:failed:"
 
@@ -268,7 +269,16 @@ class InvestigatorClaim(BaseModel):
     source_anchor_refs: list[str] = Field(default_factory=list, max_length=100)
     customer_context_refs: list[str] = Field(default_factory=list, max_length=100)
     confidence: float = Field(ge=0, le=1)
-    limitations: list[str] = Field(default_factory=list, max_length=50)
+    # A plain `list[str]` here exposes no enum to the model's structured-output schema —
+    # any string satisfies it, so the model has no structural signal for which codes are
+    # real. Literal[*_INVESTIGATOR_LIMITATION_CODE_VALUES] surfaces the closed set (the
+    # system-authored ENGINEERING_INVESTIGATION_FAILED code included, since this same type
+    # also validates the synthetic "claim:failed:" fallback handoff parsed through this
+    # model). _validate_investigator_limitation_codes below still enforces the tighter
+    # model-vs-system subset per claim_id origin; this only bounds the structural surface.
+    limitations: list[Literal[*_INVESTIGATOR_LIMITATION_CODE_VALUES]] = Field(
+        default_factory=list, max_length=50
+    )
     criterion: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
