@@ -79,7 +79,14 @@ export function AdminInviteUserDialog({
             {t("pages.accountLifecycle.inviteDescription")}
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={form.handleSubmit(submit)} noValidate>
+        <form
+          onSubmit={(event) => {
+            // Construct the submit handler only when the event occurs. The
+            // retry ref is event-owned state, never an input to rendering.
+            void form.handleSubmit(submit)(event);
+          }}
+          noValidate
+        >
           <DialogBody className="space-y-4">
             {sent ? (
               <p role="status">{t("pages.accountLifecycle.inviteSuccess")}</p>
