@@ -1329,6 +1329,8 @@ export const enPages = {
     adjustPlaceholder: "Enter your adjustment or correction...",
     composerChooseConfirmAdjust: "Choose Confirm or Adjust above...",
     submitAnswer: "Send answer",
+    resumePipeline: "Resume",
+    resumeQueued: "Resume queued for this assessment.",
     answerSavedForRuntime:
       "Answer captured for the runtime thread. The Interview Agent will evaluate sufficiency before downstream resume.",
     draftSavedForResume:

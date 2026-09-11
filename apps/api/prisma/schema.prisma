@@ -1015,6 +1015,10 @@ enum AssessmentRuntimeStage {
   CONFLICTS
   DOCUMENTS
   LEGAL_RETRIEVAL
+  CODE_REVIEW
+  REMEDIATION
+  VERIFICATION
+  FINAL_ASSESSMENT
 }
 
 enum EvidenceAcceptanceStatus {
