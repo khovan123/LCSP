@@ -108,6 +108,7 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
         workflow_run_id = self._workflow_run_id(
             message, evidence_report, evidence_report_id
         )
+        scan_job_id = self._scan_job_id(evidence_report)
         workspace_job_id = f"investigation-{correlationId}"
         workspace_path = self._materialize_code_workspace(
             evidence_report=evidence_report,
@@ -124,6 +125,7 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
                 recovery_source_crawl_requests=self._source_crawl_requests(message),
                 assessment_id=assessment_id,
                 user_id=user_id or None,
+                scan_job_id=scan_job_id,
             )
         finally:
             if workspace_path is not None:
@@ -132,12 +134,7 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
         result = self._as_waiting_for_triage(result)
         if result.status in WAITING_ENGINEERING_INVESTIGATION_STATUSES:
             self._emit_investigation_waiting_runtime_event(
-                scan_job_id=str(
-                    evidence_report.get("scan_job_id")
-                    or evidence_report.get("scanJobId")
-                    or ""
-                )
-                or None,
+                scan_job_id=scan_job_id,
                 evidence_report_id=evidence_report_id,
                 workflow_run_id=workflow_run_id,
                 result=result,
@@ -498,6 +495,15 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
             if self._is_terminal_callback_client_error(error):
                 raise NonRetryableAgentBoundaryError(str(error)) from error
             raise
+
+    @staticmethod
+    def _scan_job_id(evidence_report: dict[str, Any]) -> str | None:
+        value = str(
+            evidence_report.get("scan_job_id")
+            or evidence_report.get("scanJobId")
+            or ""
+        ).strip()
+        return value or None
 
     @staticmethod
     def _evidence_report_id(message: dict[str, Any]) -> str:

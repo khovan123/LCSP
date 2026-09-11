@@ -186,7 +186,9 @@ class EngineeringInvestigationPipeline:
         workspace_path: str | Path | None = None,
         assessment_id: str | None = None,
         user_id: str | None = None,
+        scan_job_id: str | None = None,
     ) -> EngineeringInvestigationResult:
+        _ = scan_job_id
         graph = self._graph(evidence_report)
         code_context = CodeContextSession(graph, workspace_path=workspace_path)
         catalog = self._api_client.get_active_legal_rule_catalog()
