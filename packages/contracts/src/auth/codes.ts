@@ -1,4 +1,5 @@
 export const AUTH_ERROR_CODES = {
+  accountSuspended: "ACCOUNT_SUSPENDED",
   authRequired: "AUTH_REQUIRED",
   invalidCredentials: "INVALID_CREDENTIALS",
   invalidInviteState: "INVALID_INVITE_STATE",
@@ -43,4 +44,3 @@ export const ADMIN_ERROR_CODES = {
   userNotSuspended: "USER_NOT_SUSPENDED",
   cannotSuspendSelf: "CANNOT_SUSPEND_SELF",
 } as const;
-

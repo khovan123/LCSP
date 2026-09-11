@@ -24,6 +24,8 @@ export function AdminAdministrativeActionsCard({
   onRoleSave,
   onOpenSuspendModal,
   isSavingRole = false,
+  onRestore,
+  isRestoring = false,
 }: AdminAdministrativeActionsCardProps) {
   const [selectedRole, setSelectedRole] = useState<AuthUserRole>(user.role);
 
@@ -54,6 +56,8 @@ export function AdminAdministrativeActionsCard({
 
   const isRoleChanged = selectedRole !== user.role;
   const isSuspended = user.status === AUTH_ACCOUNT_STATUSES.suspended;
+  const isInvited = user.status === AUTH_ACCOUNT_STATUSES.invited;
+  const cannotManage = isInvited || user.version === undefined;
 
   const handleSaveRole = async () => {
     if (!isRoleChanged || isSavingRole) return;
@@ -61,29 +65,36 @@ export function AdminAdministrativeActionsCard({
   };
 
   return (
-    <div className="flex h-[252px] w-full max-w-[556px] flex-col justify-between rounded-xl border border-border bg-card p-6 shadow-xs">
+    <div className="flex h-63 w-full max-w-139 flex-col justify-between rounded-xl border border-border bg-card p-6 shadow-xs">
       <h2 className="text-[15px] font-semibold text-foreground">{cardTitle}</h2>
 
       {/* Role Management Row */}
       <div className="flex flex-col space-y-2 pt-1">
         <div className="flex items-center justify-between gap-3">
-          <span className="w-[100px] shrink-0 text-[11.5px] font-medium text-muted-foreground">
+          <span className="w-25 shrink-0 text-[11.5px] font-medium text-muted-foreground">
             {roleLabel}
           </span>
 
-          <div className="w-[180px]">
+          <div className="w-45">
             <Select
+              disabled={
+                cannotManage || isSuspended || isSavingRole || isRestoring
+              }
               value={selectedRole}
               onValueChange={(val) => setSelectedRole(val as AuthUserRole)}
             >
               <SelectTrigger
-                className="!h-[38px] data-[size=default]:!h-[38px] w-full rounded-[9px] border-border bg-background text-[12.5px] text-foreground focus:ring-1 focus:ring-primary shadow-xs"
+                className="!h-9.5 data-[size=default]:!h-9.5 w-full rounded-[9px] border-border bg-background text-[12.5px] text-foreground focus:ring-1 focus:ring-primary shadow-xs"
                 aria-label={roleLabel}
               >
                 <SelectValue>
                   {selectedRole === AUTH_USER_ROLES.admin
-                    ? resolveAppMessage("pages.admin.usersList.roles.ADMIN" as MessageKey)
-                    : resolveAppMessage("pages.admin.usersList.roles.CUSTOMER" as MessageKey)}
+                    ? resolveAppMessage(
+                        "pages.admin.usersList.roles.ADMIN" as MessageKey,
+                      )
+                    : resolveAppMessage(
+                        "pages.admin.usersList.roles.CUSTOMER" as MessageKey,
+                      )}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent className="border-border bg-card text-foreground">
@@ -91,13 +102,17 @@ export function AdminAdministrativeActionsCard({
                   value={AUTH_USER_ROLES.admin}
                   className="text-[12.5px]"
                 >
-                  {resolveAppMessage("pages.admin.usersList.roles.ADMIN" as MessageKey)}
+                  {resolveAppMessage(
+                    "pages.admin.usersList.roles.ADMIN" as MessageKey,
+                  )}
                 </SelectItem>
                 <SelectItem
                   value={AUTH_USER_ROLES.customer}
                   className="text-[12.5px]"
                 >
-                  {resolveAppMessage("pages.admin.usersList.roles.CUSTOMER" as MessageKey)}
+                  {resolveAppMessage(
+                    "pages.admin.usersList.roles.CUSTOMER" as MessageKey,
+                  )}
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -106,8 +121,14 @@ export function AdminAdministrativeActionsCard({
           <Button
             type="button"
             onClick={handleSaveRole}
-            disabled={!isRoleChanged || isSavingRole}
-            className="h-[38px] w-[150px] rounded-[10px] bg-primary text-[12.5px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+            disabled={
+              !isRoleChanged ||
+              isSavingRole ||
+              isSuspended ||
+              isRestoring ||
+              cannotManage
+            }
+            className="h-9.5 w-37.5 rounded-lg bg-primary text-[12.5px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
           >
             {isSavingRole ? savingRoleLabel : saveRoleLabel}
           </Button>
@@ -122,22 +143,42 @@ export function AdminAdministrativeActionsCard({
           <span className="text-[11.5px] font-semibold text-foreground">
             {accountAccessLabel}
           </span>
-          <span className="text-[11.5px] text-muted-foreground leading-tight max-w-[280px]">
-            {isSuspended ? suspendedAccessCopy : activeAccessCopy}
+          <span className="text-[11.5px] text-muted-foreground leading-tight max-w-70">
+            {isInvited
+              ? resolveAppMessage("pages.accountLifecycle.invitePending")
+              : isSuspended
+                ? suspendedAccessCopy
+                : activeAccessCopy}
           </span>
         </div>
 
         <Button
           type="button"
           variant="outline"
-          onClick={onOpenSuspendModal}
-          disabled={isSuspended}
-          className="h-[38px] w-[180px] rounded-[10px] border-admin-danger-border bg-admin-danger-surface text-[12.5px] font-semibold text-admin-danger-foreground hover:bg-admin-danger-surface-hover disabled:opacity-40"
+          onClick={
+            isSuspended
+              ? () => {
+                  void onRestore?.();
+                }
+              : onOpenSuspendModal
+          }
+          disabled={
+            cannotManage ||
+            isSavingRole ||
+            isRestoring ||
+            (isSuspended && !onRestore)
+          }
+          className="h-9.5 w-45 rounded-lg border-admin-danger-border bg-admin-danger-surface text-[12.5px] font-semibold text-admin-danger-foreground hover:bg-admin-danger-surface-hover disabled:opacity-40"
         >
-          {suspendAccountLabel}
+          {isSuspended
+            ? resolveAppMessage(
+                isRestoring
+                  ? "pages.accountLifecycle.restoring"
+                  : "pages.accountLifecycle.restore",
+              )
+            : suspendAccountLabel}
         </Button>
       </div>
     </div>
   );
-
 }

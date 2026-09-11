@@ -1,5 +1,8 @@
 import {
   ADMIN_ERROR_CODES,
+  ADMIN_ACCOUNT_ERRORS,
+  USER_ACCESS_STATUSES,
+  AUTH_AUDIT_EVENT_TYPES,
   AUTH_ACCOUNT_STATUSES,
   AUTH_ERROR_CODES,
   AUTH_USER_ROLES,
@@ -16,7 +19,13 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
 
-import { AppModule } from "../src/app.module.js";
+import { ConfigModule } from "@nestjs/config";
+import { AuthWorkspaceModule } from "../src/modules/auth-workspace/auth-workspace.module.js";
+import { RbacModule } from "../src/platform/rbac/rbac.module.js";
+import { MailModule } from "../src/platform/mail/mail.module.js";
+import { ProblemExceptionFilter } from "../src/platform/problems/problem-exception.filter.js";
+import { ProblemStatusInterceptor } from "../src/platform/problems/problem-status.interceptor.js";
+import { APP_FILTER, APP_INTERCEPTOR } from "@nestjs/core";
 import {
   TEST_DATABASE_URL,
   ensureTestMfaEncryptionKey,
@@ -47,7 +56,17 @@ describe("Admin User Management API (e2e)", () => {
     });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
+      // Test the actual auth module and guard without unrelated repository CLI providers.
+      imports: [
+        ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
+        MailModule,
+        AuthWorkspaceModule,
+        RbacModule,
+      ],
+      providers: [
+        { provide: APP_FILTER, useClass: ProblemExceptionFilter },
+        { provide: APP_INTERCEPTOR, useClass: ProblemStatusInterceptor },
+      ],
     }).compile();
 
     app = moduleFixture.createNestApplication();
@@ -162,7 +181,8 @@ describe("Admin User Management API (e2e)", () => {
       const res = await httpRequest(app)
         .post(`/admin/users/${targetCustomer.id}/role`)
         .set("Authorization", `Bearer ${customerSessionToken}`)
-        .send({ role: AUTH_USER_ROLES.admin })
+        .set("Idempotency-Key", crypto.randomUUID())
+        .send({ role: AUTH_USER_ROLES.admin, expectedVersion: 0 })
         .set("Accept", "application/json");
 
       assert.equal(res.status, 403);
@@ -258,10 +278,11 @@ describe("Admin User Management API (e2e)", () => {
       const res = await httpRequest(app)
         .post(`/admin/users/${targetCustomer.id}/role`)
         .set("Authorization", `Bearer ${adminSessionToken}`)
-        .send({ role: AUTH_USER_ROLES.admin })
+        .set("Idempotency-Key", crypto.randomUUID())
+        .send({ role: AUTH_USER_ROLES.admin, expectedVersion: 0 })
         .set("Accept", "application/json");
 
-      assert.equal(res.status, 201);
+      assert.equal(res.status, 200);
       const data = successBody<AdminUserDetail>(res);
       assert.equal(data.role, AUTH_USER_ROLES.admin);
 
@@ -269,45 +290,51 @@ describe("Admin User Management API (e2e)", () => {
       const dbUser = await prisma.user.findUnique({
         where: { id: targetCustomer.id },
       });
-      assert.equal(dbUser?.role, "ADMIN");
+      assert.equal(dbUser?.role, AUTH_USER_ROLES.admin);
 
       // Verify audit log
       const audit = await prisma.auditEvent.findFirst({
         where: {
           resourceId: targetCustomer.id,
-          eventType: "AUTH_ADMIN_USER_ROLE_UPDATED",
+          eventType: AUTH_AUDIT_EVENT_TYPES.authAdminUserRoleUpdated,
         },
       });
       assert.ok(audit, "Audit event must be logged");
     });
 
-    it("prevents self-demotion by an Admin", async () => {
+    it("prevents self-demotion by the last usable Admin", async () => {
+      // The shared fixture includes Admins; establish the actual last-admin precondition.
+      await prisma.user.updateMany({
+        where: { id: { not: adminUser.id }, role: AUTH_USER_ROLES.admin },
+        data: { role: AUTH_USER_ROLES.customer },
+      });
       const res = await httpRequest(app)
         .post(`/admin/users/${adminUser.id}/role`)
         .set("Authorization", `Bearer ${adminSessionToken}`)
-        .send({ role: AUTH_USER_ROLES.customer })
+        .set("Idempotency-Key", crypto.randomUUID())
+        .send({ role: AUTH_USER_ROLES.customer, expectedVersion: 0 })
         .set("Accept", "application/json");
 
-      assert.equal(res.status, 400);
-      assert.equal(problemCode(res), AUTH_ERROR_CODES.validationFailed);
+      assert.equal(res.status, 409);
+      assert.equal(problemCode(res), ADMIN_ACCOUNT_ERRORS.lastUsableAdmin);
 
       // Admin role must remain unchanged
       const dbUser = await prisma.user.findUnique({
         where: { id: adminUser.id },
       });
-      assert.equal(dbUser?.role, "ADMIN");
+      assert.equal(dbUser?.role, AUTH_USER_ROLES.admin);
     });
 
     it("prevents demoting the last active Admin when demoting another admin", async () => {
       // Set all other users to CUSTOMER
       await prisma.user.updateMany({
         where: { NOT: { id: targetCustomer.id } },
-        data: { role: "CUSTOMER" },
+        data: { role: AUTH_USER_ROLES.customer },
       });
       // Promote targetCustomer to ADMIN as the single admin in system
       await prisma.user.update({
         where: { id: targetCustomer.id },
-        data: { role: "ADMIN" },
+        data: { role: AUTH_USER_ROLES.admin },
       });
 
       // Create a separate admin session for a second admin to execute the request
@@ -334,13 +361,39 @@ describe("Admin User Management API (e2e)", () => {
       const okRes = await httpRequest(app)
         .post(`/admin/users/${targetCustomer.id}/role`)
         .set("Authorization", `Bearer ${otherAdminToken}`)
-        .send({ role: AUTH_USER_ROLES.customer })
+        .set("Idempotency-Key", crypto.randomUUID())
+        .send({ role: AUTH_USER_ROLES.customer, expectedVersion: 0 })
         .set("Accept", "application/json");
-      assert.equal(okRes.status, 201);
+      assert.equal(okRes.status, 200);
     });
   });
 
   describe("Account Suspension & Session Invalidation", () => {
+    it("blocks new password sessions while suspended and permits new sign-in after restore", async () => {
+      const key = crypto.randomUUID();
+      const suspended = await httpRequest(app)
+        .post(`/admin/users/${targetCustomer.id}/suspend`)
+        .set("Authorization", `Bearer ${adminSessionToken}`)
+        .set("Idempotency-Key", key)
+        .send({ expectedVersion: 0 });
+      assert.equal(suspended.status, 200);
+      const denied = await httpRequest(app)
+        .post("/auth/sign-in")
+        .send({ email: targetCustomer.email, password: "Password123!" });
+      assert.equal(denied.status, 403);
+      assert.equal(problemCode(denied), AUTH_ERROR_CODES.accountSuspended);
+      const restored = await httpRequest(app)
+        .post(`/admin/users/${targetCustomer.id}/restore`)
+        .set("Authorization", `Bearer ${adminSessionToken}`)
+        .set("Idempotency-Key", crypto.randomUUID())
+        .send({ expectedVersion: 1 });
+      assert.equal(restored.status, 200);
+      const signedIn = await httpRequest(app)
+        .post("/auth/sign-in")
+        .send({ email: targetCustomer.email, password: "Password123!" });
+      assert.equal(signedIn.status, 200);
+    });
+
     it("allows Admin to suspend a user, immediately invalidating active sessions", async () => {
       // 1. Create active session for target customer
       const targetSessionToken = `target-active-sess-${Date.now()}`;
@@ -362,10 +415,11 @@ describe("Admin User Management API (e2e)", () => {
       const suspendRes = await httpRequest(app)
         .post(`/admin/users/${targetCustomer.id}/suspend`)
         .set("Authorization", `Bearer ${adminSessionToken}`)
-        .send({ reason: "Security violation" })
+        .set("Idempotency-Key", crypto.randomUUID())
+        .send({ reason: "Security violation", expectedVersion: 0 })
         .set("Accept", "application/json");
 
-      assert.equal(suspendRes.status, 201);
+      assert.equal(suspendRes.status, 200);
       const data = successBody<AdminUserDetail>(suspendRes);
       assert.equal(data.status, AUTH_ACCOUNT_STATUSES.suspended);
 
@@ -381,17 +435,18 @@ describe("Admin User Management API (e2e)", () => {
         AUTH_ERROR_CODES.sessionInvalid,
       );
 
-      // 5. Verify user in database is locked
+      // 5. Product suspension is durable and does not repurpose failed-login lockout
       const dbUser = await prisma.user.findUnique({
         where: { id: targetCustomer.id },
       });
-      assert.ok(dbUser?.lockUntil && dbUser.lockUntil.getTime() > Date.now());
+      assert.equal(dbUser?.accessStatus, USER_ACCESS_STATUSES.suspended);
+      assert.equal(dbUser?.lockUntil, null);
 
       // 6. Verify audit event
       const audit = await prisma.auditEvent.findFirst({
         where: {
           resourceId: targetCustomer.id,
-          eventType: "AUTH_ADMIN_USER_SUSPENDED",
+          eventType: AUTH_AUDIT_EVENT_TYPES.authAdminUserSuspended,
         },
       });
       assert.ok(audit, "Suspension audit event must be logged");
@@ -401,11 +456,12 @@ describe("Admin User Management API (e2e)", () => {
       const res = await httpRequest(app)
         .post(`/admin/users/${adminUser.id}/suspend`)
         .set("Authorization", `Bearer ${adminSessionToken}`)
-        .send({ reason: "Accidental self-suspend" })
+        .set("Idempotency-Key", crypto.randomUUID())
+        .send({ reason: "Accidental self-suspend", expectedVersion: 0 })
         .set("Accept", "application/json");
 
-      assert.equal(res.status, 400);
-      assert.equal(problemCode(res), AUTH_ERROR_CODES.validationFailed);
+      assert.equal(res.status, 409);
+      assert.equal(problemCode(res), ADMIN_ACCOUNT_ERRORS.selfSuspend);
     });
   });
 });
