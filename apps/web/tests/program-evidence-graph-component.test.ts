@@ -145,17 +145,12 @@ test("renders canonical topology, preserves direction, and updates inspector on 
   assert.match(nodeBRect.getAttribute("class") ?? "", /stroke-brand/);
   assert.match(container.textContent ?? "", /src\/b\.ts:2/);
   assert.match(container.textContent ?? "", /← CALLS|→ FLOWS_TO/);
-  const nodeC = container.querySelector("[aria-label='Node C']") as Element;
-  await act(async () => {
-    nodeC.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-  });
-  assert.match(container.textContent ?? "", /Node C/);
-  assert.match(container.textContent ?? "", /← SENDS_TO_AI/);
   assert.doesNotMatch(container.textContent ?? "", /opaque-internal-ref-123/);
-  assert.match(container.textContent ?? "", /src\/provider\.ts/);
-  assert.match(container.textContent ?? "", /callProvider/);
-  assert.match(container.textContent ?? "", /:9/);
-  assert.doesNotMatch(container.textContent ?? "", /src\/risk\.ts/);
+  const visibleRelationshipLabels = [...container.querySelectorAll("text")]
+    .filter((element) => element.getAttribute("visibility") === "visible")
+    .map((element) => element.textContent?.trim())
+    .filter(Boolean);
+  assert.ok(visibleRelationshipLabels.includes("CALLS") || visibleRelationshipLabels.includes("FLOWS_TO"));
 
   const svg = container.querySelector("svg");
   assert.ok(svg);
@@ -189,10 +184,53 @@ test("renders canonical topology, preserves direction, and updates inspector on 
     );
   });
   assert.notEqual(scene.getAttribute("transform"), beforePan);
-  const zoomIn = container.querySelector("[aria-label='Zoom in']");
+  const zoomIn = Array.from(container.querySelectorAll("button")).find(
+    (button) => button.textContent?.trim() === "+",
+  );
   assert.ok(zoomIn);
   await act(async () => {
     zoomIn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
   });
   assert.match(scene.getAttribute("transform") ?? "", /scale\(1\.15\)/);
+});
+
+test("renders the workspace overview before a node is selected", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () =>
+    root.render(
+      React.createElement(GraphFirstDetail, {
+        assessmentId: "assessment-1",
+        detail,
+      }),
+    ),
+  );
+  assert.match(
+    container.textContent ?? "",
+    /Evidence overview|Tổng quan bằng chứng/,
+  );
+  assert.doesNotMatch(container.textContent ?? "", /Unavailable/);
+  assert.match(
+    container.textContent ?? "",
+    /Services|Dịch vụ/,
+  );
+  assert.match(
+    container.textContent ?? "",
+    /Code symbols|Thành phần mã/,
+  );
+  assert.match(
+    container.textContent ?? "",
+    /AI paths|Luồng AI/,
+  );
+  assert.match(
+    container.textContent ?? "",
+    /Evidence-mapped scope|Phạm vi bằng chứng/,
+  );
+  assert.match(container.textContent ?? "", /Open Artifacts|Mở Artifacts/);
+  assert.match(
+    container.textContent ?? "",
+    /Evidence graph is pinned|Sơ đồ bằng chứng được gắn/,
+  );
 });

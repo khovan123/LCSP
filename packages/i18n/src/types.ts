@@ -1425,6 +1425,27 @@ export type PagesMessages = {
       openArtifacts: string;
       noClaims: string;
       unavailable: string;
+      evidenceOverview: string;
+      noSelection: string;
+      incoming: string;
+      outgoing: string;
+      zoomOut: string;
+      fitGraph: string;
+      zoomIn: string;
+      nodes: string;
+      edges: string;
+      pinnedNote: string;
+      noGovernedClaims: string;
+        noOverviewProvenance: string;
+        topologyTitle: string;
+        topologyDescription: string;
+        legendNode: string;
+        legendRelationship: string;
+        legendInspected: string;
+        repositoryEvidence: string;
+        legendLabel: string;
+        selectedNode: string;
+        relationships: string;
     };
     interview: {
       thought: string;
