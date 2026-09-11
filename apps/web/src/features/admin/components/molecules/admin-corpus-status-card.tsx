@@ -5,7 +5,7 @@ import { resolveAppMessage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type AdminCorpusStatusCardProps = {
-  corpusStatus?: AdminCorpusStatusSummary;
+  corpusStatus?: AdminCorpusStatusSummary | null;
   isLoading?: boolean;
   className?: string;
 };
@@ -44,7 +44,7 @@ export function AdminCorpusStatusCard({
     return (
       <div
         className={cn(
-          "flex h-[292px] w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
+          "flex min-h-72 w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
           className,
         )}
       >
@@ -71,22 +71,32 @@ export function AdminCorpusStatusCard({
   const current = corpusStatus?.current;
   const draft = corpusStatus?.draft;
 
+  const currentRuleCount =
+    current?.ruleCount === null || current?.ruleCount === undefined
+      ? "—"
+      : String(current.ruleCount);
+
+  const draftRuleCount =
+    draft?.ruleCount === null || draft?.ruleCount === undefined
+      ? "—"
+      : String(draft.ruleCount);
+
   const currentDetails = current
     ? subtitleTemplate
         .replace("{sources}", String(current.sourceCount))
-        .replace("{rules}", String(current.ruleCount ?? 0))
+        .replace("{rules}", currentRuleCount)
     : noPublishedText;
 
   const draftDetails = draft
     ? `${subtitleTemplate
         .replace("{sources}", String(draft.sourceCount))
-        .replace("{rules}", String(draft.ruleCount ?? 0))} · ${diffPendingText}`
+        .replace("{rules}", draftRuleCount)} · ${diffPendingText}`
     : noDraftText;
 
   return (
     <div
       className={cn(
-        "flex h-[292px] w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
+        "flex min-h-72 w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
         className,
       )}
     >

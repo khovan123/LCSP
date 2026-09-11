@@ -59,26 +59,43 @@ export function AdminOverviewPage() {
     "pages.admin.overview.metrics.noCorpus" as MessageKey,
   );
 
-  const periodDays = data?.periodDays ?? (selectedPeriod === "7D" ? 7 : selectedPeriod === "90D" ? 90 : 30);
+  const periodDays =
+    data?.periodDays ??
+    (selectedPeriod === ADMIN_OVERVIEW_PERIODS.p7d
+      ? 7
+      : selectedPeriod === ADMIN_OVERVIEW_PERIODS.p90d
+        ? 90
+        : 30);
 
-  const totalUsersSubtitle = totalUsersSubtitleTemplate
-    .replace("{change}", String(data?.summary.totalUsers.periodChange ?? 0))
-    .replace("{days}", String(periodDays));
+  const totalUsersSubtitle = data
+    ? totalUsersSubtitleTemplate
+        .replace("{change}", String(data.summary.totalUsers.periodChange))
+        .replace("{days}", String(periodDays))
+    : "—";
 
-  const activeUsersSubtitle = activeUsersSubtitleTemplate.replace(
-    "{percentage}",
-    String(data?.summary.activeUsers.percentageOfTotal ?? 0),
-  );
+  const activeUsersSubtitle = data
+    ? activeUsersSubtitleTemplate.replace(
+        "{percentage}",
+        String(data.summary.activeUsers.percentageOfTotal),
+      )
+    : "—";
 
-  const assessmentsSubtitle = assessmentsSubtitleTemplate.replace(
-    "{completed}",
-    String(data?.summary.assessments.periodCompletedCount ?? 0),
-  );
+  const assessmentsSubtitle = data
+    ? assessmentsSubtitleTemplate.replace(
+        "{completed}",
+        String(data.summary.assessments.periodCompletedCount),
+      )
+    : "—";
 
   const currentCorpusSubtitle = data?.summary.currentCorpus.version
     ? corpusSubtitleTemplate
         .replace("{sources}", String(data.summary.currentCorpus.sourceCount))
-        .replace("{rules}", String(data.summary.currentCorpus.ruleCount ?? 0))
+        .replace(
+          "{rules}",
+          data.summary.currentCorpus.ruleCount === null
+            ? "—"
+            : String(data.summary.currentCorpus.ruleCount),
+        )
     : noCorpusLabel;
 
   return (
@@ -103,7 +120,11 @@ export function AdminOverviewPage() {
             {resolveAppMessage("pages.admin.overview.error" as MessageKey)}
           </AlertTitle>
           <AlertDescription className="flex items-center justify-between">
-            <span>{error instanceof Error ? error.message : "Failed to load overview data."}</span>
+            <span>
+              {error instanceof Error
+                ? error.message
+                : resolveAppMessage("pages.admin.overview.error" as MessageKey)}
+            </span>
             <Button
               variant="outline"
               size="sm"
@@ -120,25 +141,25 @@ export function AdminOverviewPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <AdminOverviewMetricCard
           label={totalUsersLabel}
-          value={data?.summary.totalUsers.count ?? 0}
+          value={data ? data.summary.totalUsers.count : undefined}
           subtitle={totalUsersSubtitle}
           isLoading={isLoading}
         />
         <AdminOverviewMetricCard
           label={activeUsersLabel}
-          value={data?.summary.activeUsers.count ?? 0}
+          value={data ? data.summary.activeUsers.count : undefined}
           subtitle={activeUsersSubtitle}
           isLoading={isLoading}
         />
         <AdminOverviewMetricCard
           label={assessmentsLabel}
-          value={data?.summary.assessments.totalCount ?? 0}
+          value={data ? data.summary.assessments.totalCount : undefined}
           subtitle={assessmentsSubtitle}
           isLoading={isLoading}
         />
         <AdminOverviewMetricCard
           label={currentCorpusLabel}
-          value={data?.summary.currentCorpus.version ?? "—"}
+          value={data ? (data.summary.currentCorpus.version ?? "—") : undefined}
           subtitle={currentCorpusSubtitle}
           isLoading={isLoading}
         />
@@ -151,8 +172,8 @@ export function AdminOverviewPage() {
             points={data?.assessmentActivity.points}
             totalCompleted={data?.assessmentActivity.totalCompleted}
             periodDays={periodDays}
-            startDateLabel={data?.assessmentActivity.startDateLabel}
-            endDateLabel={data?.assessmentActivity.endDateLabel}
+            startDate={data?.assessmentActivity.startDate}
+            endDate={data?.assessmentActivity.endDate}
             isLoading={isLoading}
             isError={isError}
             onRetry={() => void refetch()}

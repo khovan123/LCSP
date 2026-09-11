@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 type AdminOverviewMetricCardProps = {
   label: string;
-  value: string | number;
+  value: string | number | null | undefined;
   subtitle: string;
   isLoading?: boolean;
   className?: string;
@@ -20,7 +20,7 @@ export function AdminOverviewMetricCard({
     return (
       <div
         className={cn(
-          "flex h-[118px] w-full flex-col justify-between rounded-xl border border-border bg-card p-4 shadow-xs",
+          "flex min-h-28 w-full flex-col justify-between rounded-xl border border-border bg-card p-4 shadow-xs",
           className,
         )}
       >
@@ -31,10 +31,17 @@ export function AdminOverviewMetricCard({
     );
   }
 
+  const displayValue =
+    value === null || value === undefined
+      ? "—"
+      : typeof value === "number"
+        ? value.toLocaleString()
+        : value;
+
   return (
     <div
       className={cn(
-        "flex h-[118px] w-full flex-col justify-between rounded-xl border border-border bg-card p-4 shadow-xs",
+        "flex min-h-28 w-full flex-col justify-between rounded-xl border border-border bg-card p-4 shadow-xs",
         className,
       )}
     >
@@ -42,7 +49,7 @@ export function AdminOverviewMetricCard({
         {label}
       </span>
       <span className="text-2xl font-semibold tracking-tight text-foreground truncate">
-        {typeof value === "number" ? value.toLocaleString() : value}
+        {displayValue}
       </span>
       <span className="text-xs text-muted-foreground truncate">
         {subtitle}

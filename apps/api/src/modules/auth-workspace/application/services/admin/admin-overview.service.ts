@@ -1,11 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import {
   ACCOUNT_INVITATION_STATUSES,
-  ADMIN_ACCOUNT_OPERATIONS,
+  ADMIN_OVERVIEW_ACTION_KEYS,
   ADMIN_OVERVIEW_PERIODS,
+  AUTH_AUDIT_EVENT_TYPES,
   USER_ACCESS_STATUSES,
   type AdminCorpusStatusSummary,
   type AdminOverviewAccountDistribution,
+  type AdminOverviewActionKey,
   type AdminOverviewActivityPoint,
   type AdminOverviewPeriod,
   type AdminOverviewStats,
@@ -20,19 +22,15 @@ import {
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { toPrismaLegalRuleLifecycleStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 
-const MONTH_NAMES = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
+const ADMIN_AUDIT_EVENT_TYPES_LIST = [
+  AUTH_AUDIT_EVENT_TYPES.authAdminUserSuspended,
+  AUTH_AUDIT_EVENT_TYPES.authAdminUserRestored,
+  AUTH_AUDIT_EVENT_TYPES.authAdminInvitationCreated,
+  LEGAL_RULE_EVENT_TYPES.corpusVersionDiscarded,
+  LEGAL_RULE_EVENT_TYPES.corpusVersionActivated,
+  LEGAL_RULE_EVENT_TYPES.catalogVersionApproved,
+  LEGAL_RULE_EVENT_TYPES.corpusVersionApproved,
+  LEGAL_RULE_EVENT_TYPES.drafted,
 ];
 
 @Injectable()
@@ -60,7 +58,6 @@ export class AdminOverviewService {
       suspendedUsersCount,
       pendingInvitationsCount,
       periodNewUsersCount,
-      periodNewInvitationsCount,
       totalAssessmentsCount,
       periodCompletedAssessmentsCount,
       publishedCorpus,
@@ -81,16 +78,13 @@ export class AdminOverviewService {
         },
       }),
       this.prisma.user.count({
-        where: { createdAt: { gte: windowStart } },
-      }),
-      this.prisma.accountInvitation.count({
-        where: { createdAt: { gte: windowStart } },
+        where: { createdAt: { gte: windowStart, lte: now } },
       }),
       this.prisma.assessment.count(),
       this.prisma.assessment.count({
         where: {
           status: ASSESSMENT_STATUS_CODES.readyForReview,
-          updatedAt: { gte: windowStart },
+          updatedAt: { gte: windowStart, lte: now },
         },
       }),
       this.prisma.legalCorpusVersion.findFirst({
@@ -112,7 +106,15 @@ export class AdminOverviewService {
         orderBy: { createdAt: "desc" },
       }),
       this.prisma.assessment.findMany({
-        where: { createdAt: { gte: windowStart } },
+        where: {
+          OR: [
+            { createdAt: { gte: windowStart, lte: now } },
+            {
+              status: ASSESSMENT_STATUS_CODES.readyForReview,
+              updatedAt: { gte: windowStart, lte: now },
+            },
+          ],
+        },
         select: {
           createdAt: true,
           status: true,
@@ -121,20 +123,22 @@ export class AdminOverviewService {
         orderBy: { createdAt: "asc" },
       }),
       this.prisma.auditEvent.findMany({
+        where: {
+          eventType: { in: ADMIN_AUDIT_EVENT_TYPES_LIST },
+        },
         orderBy: { createdAt: "desc" },
         take: 10,
       }),
     ]);
 
-    const totalAccountsCount =
-      activeUsersCount + suspendedUsersCount + pendingInvitationsCount;
-    const periodChange = periodNewUsersCount + periodNewInvitationsCount;
+    // Authoritative total users (strictly User records: active + suspended)
+    const totalUsersCount = activeUsersCount + suspendedUsersCount;
     const activePercentage =
-      totalAccountsCount > 0
-        ? Math.round((activeUsersCount / totalAccountsCount) * 1000) / 10
+      totalUsersCount > 0
+        ? Math.round((activeUsersCount / totalUsersCount) * 1000) / 10
         : 0;
 
-    // Build daily activity points
+    // Build assessment activity data
     const activityData = this.buildActivityData(
       periodDays,
       windowStart,
@@ -143,18 +147,15 @@ export class AdminOverviewService {
     );
 
     // Build sanitized recent admin activity
-    const recentActivity = await this.sanitizeRecentActivity(
-      recentAuditEvents,
-      now,
-    );
+    const recentActivity = await this.sanitizeRecentActivity(recentAuditEvents);
 
-    // Build corpus status summary
+    // Build canonical corpus status summary (ruleCount is null per AdminCorpusVersionsService read model)
     const corpusStatus: AdminCorpusStatusSummary = {
       current: publishedCorpus
         ? {
             version: publishedCorpus.version,
             sourceCount: publishedCorpus._count.documents,
-            ruleCount: this.extractRuleCount(publishedCorpus.sourceManifest),
+            ruleCount: null,
             publishedAt: publishedCorpus.approvedAt?.toISOString() ?? null,
           }
         : null,
@@ -162,18 +163,19 @@ export class AdminOverviewService {
         ? {
             version: draftCorpus.version,
             sourceCount: draftCorpus._count.documents,
-            ruleCount: this.extractRuleCount(draftCorpus.sourceManifest),
-            statusText: "diff review pending",
+            ruleCount: null,
+            createdAt: draftCorpus.createdAt.toISOString(),
           }
         : null,
     };
 
+    // Account distribution intentionally keeps invited accounts distinct from user records
     const accountDistribution: AdminOverviewAccountDistribution = {
       activeCount: activeUsersCount,
       invitedCount: pendingInvitationsCount,
       suspendedCount: suspendedUsersCount,
       deactivatedCount: 0,
-      totalCount: totalAccountsCount,
+      totalCount: totalUsersCount + pendingInvitationsCount,
     };
 
     return {
@@ -181,8 +183,8 @@ export class AdminOverviewService {
       periodDays,
       summary: {
         totalUsers: {
-          count: totalAccountsCount,
-          periodChange,
+          count: totalUsersCount,
+          periodChange: periodNewUsersCount,
         },
         activeUsers: {
           count: activeUsersCount,
@@ -195,7 +197,7 @@ export class AdminOverviewService {
         currentCorpus: {
           version: publishedCorpus?.version ?? null,
           sourceCount: publishedCorpus?._count.documents ?? 0,
-          ruleCount: this.extractRuleCount(publishedCorpus?.sourceManifest),
+          ruleCount: null,
         },
       },
       assessmentActivity: activityData,
@@ -217,7 +219,6 @@ export class AdminOverviewService {
     now: Date,
     assessments: Array<{ createdAt: Date; status: string; updatedAt: Date }>,
   ) {
-    // Determine number of displayed bars (e.g. 14 bars for 30D/7D or up to periodDays)
     const barCount = periodDays <= 14 ? periodDays : 14;
     const intervalMs = (now.getTime() - windowStart.getTime()) / barCount;
 
@@ -227,7 +228,6 @@ export class AdminOverviewService {
       const bucketStart = new Date(windowStart.getTime() + i * intervalMs);
       const bucketEnd = new Date(windowStart.getTime() + (i + 1) * intervalMs);
       const dateKey = bucketStart.toISOString().slice(0, 10);
-      const label = this.formatShortDate(bucketStart);
 
       let startedCount = 0;
       let completedCount = 0;
@@ -247,26 +247,29 @@ export class AdminOverviewService {
 
       points.push({
         date: dateKey,
-        label,
+        timestamp: bucketStart.toISOString(),
         startedCount,
         completedCount,
       });
     }
 
-    const totalStarted = assessments.length;
-    const totalCompleted = assessments.filter(
-      (a) => a.status === ASSESSMENT_STATUS_CODES.readyForReview,
+    const totalStarted = assessments.filter(
+      (a) => a.createdAt >= windowStart && a.createdAt <= now,
     ).length;
 
-    const startDateLabel = this.formatShortDate(windowStart);
-    const endDateLabel = this.formatShortDate(now);
+    const totalCompleted = assessments.filter(
+      (a) =>
+        a.status === ASSESSMENT_STATUS_CODES.readyForReview &&
+        a.updatedAt >= windowStart &&
+        a.updatedAt <= now,
+    ).length;
 
     return {
       points,
       totalStarted,
       totalCompleted,
-      startDateLabel,
-      endDateLabel,
+      startDate: windowStart.toISOString(),
+      endDate: now.toISOString(),
     };
   }
 
@@ -278,7 +281,6 @@ export class AdminOverviewService {
       createdAt: Date;
       payload: unknown;
     }>,
-    now: Date,
   ): Promise<AdminRecentActivityItem[]> {
     if (events.length === 0) return [];
 
@@ -303,19 +305,18 @@ export class AdminOverviewService {
       const adminName = user?.displayName ?? null;
       const payload = isRecord(event.payload) ? event.payload : {};
 
-      const { action, actionKey, target } = this.resolveActionAndTarget(
+      const { actionKey, target } = this.resolveActionAndTarget(
         event.eventType,
         payload,
       );
 
       return {
         id: event.id,
-        timestamp: event.createdAt.toISOString(),
-        formattedTime: this.formatRelativeTime(event.createdAt, now),
+        eventType: event.eventType,
+        actionKey,
+        occurredAt: event.createdAt.toISOString(),
         adminEmail,
         adminName,
-        action,
-        actionKey,
         target,
       };
     });
@@ -324,8 +325,7 @@ export class AdminOverviewService {
   private resolveActionAndTarget(
     eventType: string,
     payload: Record<string, unknown>,
-  ): { action: string; actionKey?: string; target: string } {
-    const rawAction = typeof payload.action === "string" ? payload.action : "";
+  ): { actionKey: AdminOverviewActionKey; target: string } {
     const targetUserId =
       typeof payload.targetUserId === "string" ? payload.targetUserId : "";
     const email = typeof payload.email === "string" ? payload.email : "";
@@ -334,105 +334,45 @@ export class AdminOverviewService {
         ? payload.corpusVersionRef
         : "";
 
-    if (
-      eventType === "ADMIN_USER_MODIFICATION" ||
-      rawAction === ADMIN_ACCOUNT_OPERATIONS.suspend
-    ) {
+    if (eventType === AUTH_AUDIT_EVENT_TYPES.authAdminUserSuspended) {
       return {
-        action: "Suspended account",
-        actionKey: "suspendedAccount",
+        actionKey: ADMIN_OVERVIEW_ACTION_KEYS.suspendedAccount,
         target: email || targetUserId || "User account",
       };
     }
-    if (rawAction === ADMIN_ACCOUNT_OPERATIONS.restore) {
+    if (eventType === AUTH_AUDIT_EVENT_TYPES.authAdminUserRestored) {
       return {
-        action: "Restored access",
-        actionKey: "restoredAccount",
+        actionKey: ADMIN_OVERVIEW_ACTION_KEYS.restoredAccount,
         target: email || targetUserId || "User account",
       };
     }
-    if (
-      eventType === "ACCOUNT_INVITATION_CREATED" ||
-      rawAction === ADMIN_ACCOUNT_OPERATIONS.invite
-    ) {
+    if (eventType === AUTH_AUDIT_EVENT_TYPES.authAdminInvitationCreated) {
       return {
-        action: "Invited user",
-        actionKey: "invitedUser",
+        actionKey: ADMIN_OVERVIEW_ACTION_KEYS.invitedUser,
         target: email || "New user",
       };
     }
     if (eventType === LEGAL_RULE_EVENT_TYPES.corpusVersionDiscarded) {
       return {
-        action: "Discarded draft",
-        actionKey: "discardedDraft",
+        actionKey: ADMIN_OVERVIEW_ACTION_KEYS.discardedDraft,
         target: corpusVersionRef || "Corpus draft",
       };
     }
     if (
       eventType === LEGAL_RULE_EVENT_TYPES.corpusVersionApproved ||
-      eventType === "CORPUS_VERSION_PUBLISHED"
+      eventType === LEGAL_RULE_EVENT_TYPES.corpusVersionActivated ||
+      eventType === LEGAL_RULE_EVENT_TYPES.catalogVersionApproved
     ) {
       return {
-        action: "Published corpus",
-        actionKey: "publishedCorpus",
+        actionKey: ADMIN_OVERVIEW_ACTION_KEYS.publishedCorpus,
         target: corpusVersionRef || "Corpus version",
       };
     }
 
-    // Default sanitized presentation
     return {
-      action: this.humanizeEventType(eventType),
+      actionKey: ADMIN_OVERVIEW_ACTION_KEYS.generalAction,
       target: email || corpusVersionRef || targetUserId || "System",
     };
-  }
-
-  private humanizeEventType(eventType: string): string {
-    return eventType
-      .replace(/_/g, " ")
-      .toLowerCase()
-      .replace(/\b\w/g, (c) => c.toUpperCase());
-  }
-
-  private formatRelativeTime(date: Date, now: Date): string {
-    const isSameDay =
-      date.getFullYear() === now.getFullYear() &&
-      date.getMonth() === now.getMonth() &&
-      date.getDate() === now.getDate();
-
-    const hours = String(date.getHours()).padStart(2, "0");
-    const minutes = String(date.getMinutes()).padStart(2, "0");
-    const timeStr = `${hours}:${minutes}`;
-
-    if (isSameDay) {
-      return `Today ${timeStr}`;
-    }
-
-    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const isYesterday =
-      date.getFullYear() === yesterday.getFullYear() &&
-      date.getMonth() === yesterday.getMonth() &&
-      date.getDate() === yesterday.getDate();
-
-    if (isYesterday) {
-      return `Yesterday ${timeStr}`;
-    }
-
-    return `${MONTH_NAMES[date.getMonth()]} ${date.getDate()} ${timeStr}`;
-  }
-
-  private formatShortDate(date: Date): string {
-    return `${MONTH_NAMES[date.getMonth()]} ${date.getDate()}`;
-  }
-
-  private extractRuleCount(sourceManifest: unknown): number | null {
-    if (!isRecord(sourceManifest)) return null;
-    if (typeof sourceManifest.ruleCount === "number") {
-      return sourceManifest.ruleCount;
-    }
-    if (Array.isArray(sourceManifest.rules)) {
-      return sourceManifest.rules.length;
-    }
-    return null;
   }
 }
 

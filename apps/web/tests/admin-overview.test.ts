@@ -4,6 +4,7 @@ import { JSDOM } from "jsdom";
 import { act, createElement, StrictMode } from "react";
 import type { MessageKey } from "@lcsp/i18n";
 import {
+  ADMIN_OVERVIEW_ACTION_KEYS,
   ADMIN_OVERVIEW_PERIODS,
   type AdminOverviewPeriod,
   type AdminOverviewStats,
@@ -77,50 +78,48 @@ const { AdminCorpusStatusCard } = await import(
 );
 
 const fixtureData: AdminOverviewStats = {
-  period: "30D",
+  period: ADMIN_OVERVIEW_PERIODS.p30d,
   periodDays: 30,
   summary: {
-    totalUsers: { count: 1284, periodChange: 38 },
-    activeUsers: { count: 842, percentageOfTotal: 65.6 },
+    totalUsers: { count: 876, periodChange: 38 },
+    activeUsers: { count: 842, percentageOfTotal: 96.1 },
     assessments: { totalCount: 2417, periodCompletedCount: 312 },
-    currentCorpus: { version: "v2026.08.31", sourceCount: 184, ruleCount: 73 },
+    currentCorpus: { version: "v2026.08.31", sourceCount: 184, ruleCount: null },
   },
   assessmentActivity: {
     points: [
-      { date: "2026-08-20", label: "Aug 20", startedCount: 12, completedCount: 10 },
-      { date: "2026-09-02", label: "Sep 2", startedCount: 24, completedCount: 18 },
+      { date: "2026-08-20", timestamp: "2026-08-20T00:00:00.000Z", startedCount: 12, completedCount: 10 },
+      { date: "2026-09-02", timestamp: "2026-09-02T00:00:00.000Z", startedCount: 24, completedCount: 18 },
     ],
     totalStarted: 36,
     totalCompleted: 312,
-    startDateLabel: "Aug 20",
-    endDateLabel: "Sep 2",
+    startDate: "2026-08-20T00:00:00.000Z",
+    endDate: "2026-09-02T00:00:00.000Z",
   },
   accountDistribution: {
-    activeCount: 1186,
+    activeCount: 842,
     invitedCount: 64,
     suspendedCount: 34,
     deactivatedCount: 0,
-    totalCount: 1284,
+    totalCount: 940,
   },
   recentActivity: [
     {
       id: "evt-1",
-      timestamp: "2026-09-11T10:24:00.000Z",
-      formattedTime: "Today 10:24",
+      eventType: "AUTH_ADMIN_USER_SUSPENDED",
+      actionKey: ADMIN_OVERVIEW_ACTION_KEYS.suspendedAccount,
+      occurredAt: "2026-09-11T10:24:00.000Z",
       adminEmail: "admin@example.com",
       adminName: "Admin",
-      action: "Suspended account",
-      actionKey: "suspendedAccount",
       target: "linh@example.com",
     },
     {
       id: "evt-2",
-      timestamp: "2026-09-11T09:05:00.000Z",
-      formattedTime: "Today 09:05",
+      eventType: "CORPUS_VERSION_ACTIVATED",
+      actionKey: ADMIN_OVERVIEW_ACTION_KEYS.publishedCorpus,
+      occurredAt: "2026-09-11T09:05:00.000Z",
       adminEmail: "admin@example.com",
       adminName: "Admin",
-      action: "Published corpus",
-      actionKey: "publishedCorpus",
       target: "v2026.08.31",
     },
   ],
@@ -128,14 +127,14 @@ const fixtureData: AdminOverviewStats = {
     current: {
       version: "v2026.08.31",
       sourceCount: 184,
-      ruleCount: 73,
+      ruleCount: null,
       publishedAt: "2026-08-31T00:00:00.000Z",
     },
     draft: {
       version: "v2026.09.02-draft",
       sourceCount: 188,
-      ruleCount: 75,
-      statusText: "diff review pending",
+      ruleCount: null,
+      createdAt: "2026-09-02T00:00:00.000Z",
     },
   },
 };
@@ -193,19 +192,73 @@ test("AdminPeriodSelector renders selected period and opens dropdown menu on cli
   cleanup();
 });
 
-test("AdminOverviewMetricCard renders label, value and subtitle correctly", () => {
+test("AdminPeriodSelector supports full keyboard navigation (ArrowDown, ArrowUp, Enter, Escape)", () => {
+  let selected: AdminOverviewPeriod = ADMIN_OVERVIEW_PERIODS.p30d;
+  const { container, cleanup } = renderComponent(
+    createElement(AdminPeriodSelector, {
+      selectedPeriod: selected,
+      onSelectPeriod: (p) => {
+        selected = p;
+      },
+    }),
+  );
+
+  const trigger = container.querySelector("button");
+  assert.ok(trigger);
+
+  // Open with ArrowDown
+  act(() => {
+    trigger.dispatchEvent(
+      new testWindow.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+    );
+  });
+
+  const listbox = container.querySelector("[role='listbox']");
+  assert.ok(listbox);
+
+  // Navigate with ArrowDown
+  act(() => {
+    listbox.dispatchEvent(
+      new testWindow.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+    );
+  });
+
+  // Select with Enter
+  act(() => {
+    listbox.dispatchEvent(
+      new testWindow.KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+  });
+
+  assert.equal(selected, ADMIN_OVERVIEW_PERIODS.p90d);
+  cleanup();
+});
+
+test("AdminOverviewMetricCard renders label, value, subtitle and handles unavailable state gracefully", () => {
   const { container, cleanup } = renderComponent(
     createElement(AdminOverviewMetricCard, {
       label: "Total users",
-      value: 1284,
+      value: 876,
       subtitle: "+38 in the last 30 days",
     }),
   );
 
   assert.match(container.textContent ?? "", /Total users/);
-  assert.match(container.textContent ?? "", /1,284/);
+  assert.match(container.textContent ?? "", /876/);
   assert.match(container.textContent ?? "", /\+38 in the last 30 days/);
   cleanup();
+
+  // Test null / unavailable value rendering dash
+  const { container: containerNull, cleanup: cleanupNull } = renderComponent(
+    createElement(AdminOverviewMetricCard, {
+      label: "Total users",
+      value: null,
+      subtitle: "—",
+    }),
+  );
+
+  assert.match(containerNull.textContent ?? "", /—/);
+  cleanupNull();
 });
 
 test("AdminAssessmentActivityCard renders points, completion count and labels", () => {
@@ -214,8 +267,8 @@ test("AdminAssessmentActivityCard renders points, completion count and labels", 
       points: fixtureData.assessmentActivity.points,
       totalCompleted: fixtureData.assessmentActivity.totalCompleted,
       periodDays: 30,
-      startDateLabel: fixtureData.assessmentActivity.startDateLabel,
-      endDateLabel: fixtureData.assessmentActivity.endDateLabel,
+      startDate: fixtureData.assessmentActivity.startDate,
+      endDate: fixtureData.assessmentActivity.endDate,
     }),
   );
 
@@ -229,8 +282,8 @@ test("AdminAssessmentActivityCard renders points, completion count and labels", 
   assert.match(container.textContent ?? "", new RegExp(title, "i"));
   assert.match(container.textContent ?? "", /312/);
   assert.match(container.textContent ?? "", new RegExp(completedLabel, "i"));
-  assert.match(container.textContent ?? "", /Aug 20/);
-  assert.match(container.textContent ?? "", /Sep 2/);
+  assert.match(container.textContent ?? "", /08\/20/);
+  assert.match(container.textContent ?? "", /09\/02/);
   cleanup();
 });
 
@@ -256,16 +309,16 @@ test("AdminUserStatusCard renders status rows and total count accurately", () =>
 
   assert.match(container.textContent ?? "", new RegExp(title, "i"));
   assert.match(container.textContent ?? "", new RegExp(activeLabel, "i"));
-  assert.match(container.textContent ?? "", /1,186/);
+  assert.match(container.textContent ?? "", /842/);
   assert.match(container.textContent ?? "", new RegExp(invitedLabel, "i"));
   assert.match(container.textContent ?? "", /64/);
   assert.match(container.textContent ?? "", new RegExp(suspendedLabel, "i"));
   assert.match(container.textContent ?? "", /34/);
-  assert.match(container.textContent ?? "", /1,284/);
+  assert.match(container.textContent ?? "", /940/);
   cleanup();
 });
 
-test("AdminRecentActivityCard renders audit-safe table rows", () => {
+test("AdminRecentActivityCard renders audit-safe table rows with localized actions", () => {
   const { container, cleanup } = renderComponent(
     createElement(AdminRecentActivityCard, {
       items: fixtureData.recentActivity,
@@ -275,16 +328,19 @@ test("AdminRecentActivityCard renders audit-safe table rows", () => {
   const title = resolveAppMessage(
     "pages.admin.overview.recentActivity.title" as MessageKey,
   );
+  const suspendedAction = resolveAppMessage(
+    "pages.admin.overview.recentActivity.actions.suspendedAccount" as MessageKey,
+  );
 
   assert.match(container.textContent ?? "", new RegExp(title, "i"));
-  assert.match(container.textContent ?? "", /Today 10:24/);
+  assert.match(container.textContent ?? "", new RegExp(suspendedAction, "i"));
   assert.match(container.textContent ?? "", /admin@example\.com/);
   assert.match(container.textContent ?? "", /linh@example\.com/);
   assert.match(container.textContent ?? "", /v2026\.08\.31/);
   cleanup();
 });
 
-test("AdminCorpusStatusCard renders CURRENT and DRAFT corpus boxes", () => {
+test("AdminCorpusStatusCard renders CURRENT and DRAFT corpus boxes with null rule counts preserved as dash", () => {
   const { container, cleanup } = renderComponent(
     createElement(AdminCorpusStatusCard, {
       corpusStatus: fixtureData.corpusStatus,
@@ -305,7 +361,7 @@ test("AdminCorpusStatusCard renders CURRENT and DRAFT corpus boxes", () => {
   assert.match(container.textContent ?? "", new RegExp(currentBadge, "i"));
   assert.match(container.textContent ?? "", /v2026\.08\.31/);
   assert.match(container.textContent ?? "", /184/);
-  assert.match(container.textContent ?? "", /73/);
+  assert.match(container.textContent ?? "", /—/); // Rule count is null -> renders as —
   assert.match(container.textContent ?? "", new RegExp(draftBadge, "i"));
   assert.match(container.textContent ?? "", /v2026\.09\.02-draft/);
   cleanup();

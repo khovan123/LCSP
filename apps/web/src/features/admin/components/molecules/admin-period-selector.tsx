@@ -14,18 +14,22 @@ import { cn } from "@/lib/utils";
 const PERIOD_OPTIONS: Array<{
   value: AdminOverviewPeriod;
   labelKey: MessageKey;
+  id: string;
 }> = [
   {
     value: ADMIN_OVERVIEW_PERIODS.p7d,
     labelKey: "pages.admin.overview.periods.p7d" as MessageKey,
+    id: "admin-period-option-7d",
   },
   {
     value: ADMIN_OVERVIEW_PERIODS.p30d,
     labelKey: "pages.admin.overview.periods.p30d" as MessageKey,
+    id: "admin-period-option-30d",
   },
   {
     value: ADMIN_OVERVIEW_PERIODS.p90d,
     labelKey: "pages.admin.overview.periods.p90d" as MessageKey,
+    id: "admin-period-option-90d",
   },
 ];
 
@@ -41,13 +45,43 @@ export function AdminPeriodSelector({
   disabled = false,
 }: AdminPeriodSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(1);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
+  const selectedIndex = PERIOD_OPTIONS.findIndex(
+    (opt) => opt.value === selectedPeriod,
+  );
   const selectedOption =
-    PERIOD_OPTIONS.find((opt) => opt.value === selectedPeriod) ??
-    PERIOD_OPTIONS[1];
+    selectedIndex >= 0 ? PERIOD_OPTIONS[selectedIndex] : PERIOD_OPTIONS[1];
 
   const selectedLabel = resolveAppMessage(selectedOption.labelKey);
+
+  function openDropdown(initialIndex?: number) {
+    const idx =
+      initialIndex !== undefined
+        ? initialIndex
+        : selectedIndex >= 0
+          ? selectedIndex
+          : 1;
+    setFocusedIndex(idx);
+    setIsOpen(true);
+  }
+
+  function closeDropdown(focusTrigger = true) {
+    setIsOpen(false);
+    if (focusTrigger) {
+      triggerRef.current?.focus();
+    }
+  }
+
+  // Focus the option element when isOpen changes
+  useEffect(() => {
+    if (isOpen) {
+      optionRefs.current[focusedIndex]?.focus();
+    }
+  }, [isOpen, focusedIndex]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -58,29 +92,101 @@ export function AdminPeriodSelector({
         setIsOpen(false);
       }
     }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setIsOpen(false);
-      }
-    }
     if (isOpen) {
       document.addEventListener("mousedown", handleClickOutside);
-      document.addEventListener("keydown", handleKeyDown);
     }
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen]);
+
+  function handleTriggerKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+    if (disabled) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      openDropdown(selectedIndex >= 0 ? selectedIndex : 0);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      openDropdown(
+        selectedIndex >= 0 ? selectedIndex : PERIOD_OPTIONS.length - 1,
+      );
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openDropdown();
+    }
+  }
+
+  function handleListboxKeyDown(event: React.KeyboardEvent) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeDropdown(true);
+      return;
+    }
+
+    if (event.key === "Tab") {
+      closeDropdown(false);
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      const nextIndex = (focusedIndex + 1) % PERIOD_OPTIONS.length;
+      setFocusedIndex(nextIndex);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      const prevIndex =
+        (focusedIndex - 1 + PERIOD_OPTIONS.length) % PERIOD_OPTIONS.length;
+      setFocusedIndex(prevIndex);
+      return;
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault();
+      setFocusedIndex(0);
+      return;
+    }
+
+    if (event.key === "End") {
+      event.preventDefault();
+      setFocusedIndex(PERIOD_OPTIONS.length - 1);
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      const selected = PERIOD_OPTIONS[focusedIndex];
+      if (selected) {
+        onSelectPeriod(selected.value);
+        closeDropdown(true);
+      }
+    }
+  }
 
   return (
     <div ref={containerRef} className="relative inline-block text-left">
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => !disabled && setIsOpen((prev) => !prev)}
+        onClick={() => {
+          if (disabled) return;
+          if (isOpen) {
+            closeDropdown(false);
+          } else {
+            openDropdown();
+          }
+        }}
+        onKeyDown={handleTriggerKeyDown}
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
+        aria-controls="admin-period-listbox"
         aria-label={resolveAppMessage(
           "pages.admin.overview.periodSelectorAria" as MessageKey,
         )}
@@ -101,31 +207,42 @@ export function AdminPeriodSelector({
 
       {isOpen ? (
         <div
+          id="admin-period-listbox"
           role="listbox"
+          tabIndex={-1}
+          onKeyDown={handleListboxKeyDown}
           aria-label={resolveAppMessage(
             "pages.admin.overview.periodLabel" as MessageKey,
           )}
+          aria-activedescendant={PERIOD_OPTIONS[focusedIndex]?.id}
           className="absolute right-0 z-50 mt-1 flex w-48 flex-col gap-1 rounded-lg border border-border bg-card p-1.5 shadow-lg focus:outline-hidden"
         >
-          {PERIOD_OPTIONS.map((option) => {
+          {PERIOD_OPTIONS.map((option, index) => {
             const isSelected = option.value === selectedPeriod;
+            const isFocused = index === focusedIndex;
             const label = resolveAppMessage(option.labelKey);
 
             return (
               <button
                 key={option.value}
+                id={option.id}
+                ref={(el) => {
+                  optionRefs.current[index] = el;
+                }}
                 type="button"
                 role="option"
+                tabIndex={isFocused ? 0 : -1}
                 aria-selected={isSelected}
                 onClick={() => {
                   onSelectPeriod(option.value);
-                  setIsOpen(false);
+                  closeDropdown(true);
                 }}
                 className={cn(
-                  "flex h-9 w-full items-center rounded-md px-2.5 text-xs font-medium transition-colors text-left",
+                  "flex h-9 w-full items-center rounded-md px-2.5 text-xs font-medium transition-colors text-left focus:outline-hidden focus:ring-1 focus:ring-ring",
                   isSelected
                     ? "bg-muted font-semibold text-foreground"
                     : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                  isFocused && !isSelected && "bg-muted/40 text-foreground",
                 )}
               >
                 {label}

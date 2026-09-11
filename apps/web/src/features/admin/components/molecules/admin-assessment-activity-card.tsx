@@ -10,20 +10,29 @@ type AdminAssessmentActivityCardProps = {
   points?: AdminOverviewActivityPoint[];
   totalCompleted?: number;
   periodDays?: number;
-  startDateLabel?: string;
-  endDateLabel?: string;
+  startDate?: string;
+  endDate?: string;
   isLoading?: boolean;
   isError?: boolean;
   onRetry?: () => void;
   className?: string;
 };
 
+function formatShortDate(isoString?: string): string {
+  if (!isoString) return "";
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return isoString;
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${month}/${day}`;
+}
+
 export function AdminAssessmentActivityCard({
   points = [],
   totalCompleted = 0,
   periodDays = 30,
-  startDateLabel,
-  endDateLabel,
+  startDate,
+  endDate,
   isLoading = false,
   isError = false,
   onRetry,
@@ -44,7 +53,7 @@ export function AdminAssessmentActivityCard({
     return (
       <div
         className={cn(
-          "flex h-[276px] w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
+          "flex min-h-72 w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
           className,
         )}
       >
@@ -75,7 +84,7 @@ export function AdminAssessmentActivityCard({
     return (
       <div
         className={cn(
-          "flex h-[276px] w-full flex-col items-center justify-center rounded-xl border border-border bg-card p-5 text-center shadow-xs",
+          "flex min-h-72 w-full flex-col items-center justify-center rounded-xl border border-border bg-card p-5 text-center shadow-xs",
           className,
         )}
       >
@@ -108,10 +117,13 @@ export function AdminAssessmentActivityCard({
     ...points.map((p) => Math.max(p.startedCount, p.completedCount)),
   );
 
+  const startLabel = startDate ? formatShortDate(startDate) : (points[0] ? formatShortDate(points[0].timestamp) : "");
+  const endLabel = endDate ? formatShortDate(endDate) : (points[points.length - 1] ? formatShortDate(points[points.length - 1].timestamp) : "");
+
   return (
     <div
       className={cn(
-        "flex h-[276px] w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
+        "flex min-h-72 w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
         className,
       )}
     >
@@ -160,12 +172,20 @@ export function AdminAssessmentActivityCard({
                 6,
                 Math.round((point.startedCount / maxCount) * 100),
               );
+              const pointDateLabel = formatShortDate(point.timestamp);
+              const tooltipTemplate = resolveAppMessage(
+                "pages.admin.overview.assessmentActivity.barTooltip" as MessageKey,
+              );
+              const tooltipText = tooltipTemplate
+                .replace("{date}", pointDateLabel)
+                .replace("{started}", String(point.startedCount))
+                .replace("{completed}", String(point.completedCount));
 
               return (
                 <Tooltip key={index}>
                   <TooltipTrigger
                     className="group flex flex-1 flex-col items-center justify-end h-full cursor-default focus:outline-hidden"
-                    aria-label={`${point.label}: ${point.startedCount} started, ${point.completedCount} completed`}
+                    aria-label={tooltipText}
                   >
                     <div
                       style={{ height: `${heightPercent}%` }}
@@ -173,9 +193,9 @@ export function AdminAssessmentActivityCard({
                     />
                   </TooltipTrigger>
                   <TooltipContent side="top" className="text-xs">
-                    <p className="font-medium">{point.label}</p>
+                    <p className="font-medium">{pointDateLabel}</p>
                     <p className="text-muted-foreground text-xs">
-                      {point.startedCount} started · {point.completedCount} completed
+                      {point.startedCount} {resolveAppMessage("pages.admin.overview.accountStatus.active" as MessageKey)} · {point.completedCount} {completedLabel}
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -187,8 +207,8 @@ export function AdminAssessmentActivityCard({
 
       {/* Footer date labels */}
       <div className="flex justify-between text-xs text-muted-foreground pt-1 border-t border-border/20">
-        <span>{startDateLabel ?? points[0]?.label ?? ""}</span>
-        <span>{endDateLabel ?? points[points.length - 1]?.label ?? ""}</span>
+        <span>{startLabel}</span>
+        <span>{endLabel}</span>
       </div>
     </div>
   );

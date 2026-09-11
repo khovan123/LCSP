@@ -5,7 +5,7 @@ import { resolveAppMessage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type AdminUserStatusCardProps = {
-  distribution?: AdminOverviewAccountDistribution;
+  distribution?: AdminOverviewAccountDistribution | null;
   isLoading?: boolean;
   className?: string;
 };
@@ -38,7 +38,7 @@ export function AdminUserStatusCard({
     return (
       <div
         className={cn(
-          "flex h-[276px] w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
+          "flex min-h-72 w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
           className,
         )}
       >
@@ -86,7 +86,9 @@ export function AdminUserStatusCard({
   const suspendedPercent =
     totalCount > 0 ? Math.min(100, (suspendedCount / totalCount) * 100) : 0;
 
-  const totalText = totalTemplate.replace("{count}", totalCount.toLocaleString());
+  const totalText = distribution
+    ? totalTemplate.replace("{count}", totalCount.toLocaleString())
+    : "—";
 
   const rows = [
     { label: activeLabel, count: activeCount, percent: activePercent },
@@ -97,7 +99,7 @@ export function AdminUserStatusCard({
   return (
     <div
       className={cn(
-        "flex h-[276px] w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
+        "flex min-h-72 w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
         className,
       )}
     >
@@ -114,7 +116,7 @@ export function AdminUserStatusCard({
             <div className="flex items-center justify-between text-xs">
               <span className="font-medium text-foreground">{row.label}</span>
               <span className="font-semibold text-foreground">
-                {row.count.toLocaleString()}
+                {distribution ? row.count.toLocaleString() : "—"}
               </span>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-sm bg-muted">

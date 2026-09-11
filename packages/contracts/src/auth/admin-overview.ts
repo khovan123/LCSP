@@ -7,9 +7,22 @@ export const ADMIN_OVERVIEW_PERIODS = {
 export type AdminOverviewPeriod =
   (typeof ADMIN_OVERVIEW_PERIODS)[keyof typeof ADMIN_OVERVIEW_PERIODS];
 
+export const ADMIN_OVERVIEW_ACTION_KEYS = {
+  suspendedAccount: "SUSPENDED_ACCOUNT",
+  restoredAccount: "RESTORED_ACCOUNT",
+  invitedUser: "INVITED_USER",
+  publishedCorpus: "PUBLISHED_CORPUS",
+  discardedDraft: "DISCARDED_DRAFT",
+  changedRole: "CHANGED_ROLE",
+  generalAction: "GENERAL_ACTION",
+} as const;
+
+export type AdminOverviewActionKey =
+  (typeof ADMIN_OVERVIEW_ACTION_KEYS)[keyof typeof ADMIN_OVERVIEW_ACTION_KEYS];
+
 export interface AdminOverviewActivityPoint {
   date: string;
-  label: string;
+  timestamp: string;
   startedCount: number;
   completedCount: number;
 }
@@ -24,12 +37,11 @@ export interface AdminOverviewAccountDistribution {
 
 export interface AdminRecentActivityItem {
   id: string;
-  timestamp: string;
-  formattedTime: string;
+  eventType: string;
+  actionKey: AdminOverviewActionKey;
+  occurredAt: string;
   adminEmail: string;
   adminName: string | null;
-  action: string;
-  actionKey?: string;
   target: string;
 }
 
@@ -44,7 +56,7 @@ export interface AdminCorpusStatusSummary {
     version: string;
     sourceCount: number;
     ruleCount: number | null;
-    statusText?: string;
+    createdAt: string | null;
   } | null;
 }
 
@@ -74,8 +86,8 @@ export interface AdminOverviewStats {
     points: AdminOverviewActivityPoint[];
     totalStarted: number;
     totalCompleted: number;
-    startDateLabel: string;
-    endDateLabel: string;
+    startDate: string;
+    endDate: string;
   };
   accountDistribution: AdminOverviewAccountDistribution;
   recentActivity: AdminRecentActivityItem[];

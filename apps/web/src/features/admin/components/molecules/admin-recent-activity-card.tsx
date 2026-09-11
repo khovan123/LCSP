@@ -1,5 +1,8 @@
 import type { MessageKey } from "@lcsp/i18n";
-import type { AdminRecentActivityItem } from "@lcsp/contracts/auth";
+import {
+  ADMIN_OVERVIEW_ACTION_KEYS,
+  type AdminRecentActivityItem,
+} from "@lcsp/contracts/auth";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -20,6 +23,21 @@ type AdminRecentActivityCardProps = {
   onRetry?: () => void;
   className?: string;
 };
+
+function formatOccurredTime(occurredAt: string): string {
+  if (!occurredAt) return "—";
+  const date = new Date(occurredAt);
+  if (Number.isNaN(date.getTime())) return occurredAt;
+
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const timeStr = `${hours}:${minutes}`;
+
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${month}/${day} ${timeStr}`;
+}
 
 export function AdminRecentActivityCard({
   items = [],
@@ -50,23 +68,42 @@ export function AdminRecentActivityCard({
     "pages.admin.overview.recentActivity.columns.target" as MessageKey,
   );
 
-  const resolveActionLabel = (item: AdminRecentActivityItem) => {
-    if (item.actionKey) {
-      const i18nKey =
-        `pages.admin.overview.recentActivity.actions.${item.actionKey}` as MessageKey;
-      const translated = resolveAppMessage(i18nKey);
-      if (translated && !translated.startsWith("pages.admin.")) {
-        return translated;
-      }
+  const resolveActionLabel = (item: AdminRecentActivityItem): string => {
+    switch (item.actionKey) {
+      case ADMIN_OVERVIEW_ACTION_KEYS.suspendedAccount:
+        return resolveAppMessage(
+          "pages.admin.overview.recentActivity.actions.suspendedAccount" as MessageKey,
+        );
+      case ADMIN_OVERVIEW_ACTION_KEYS.restoredAccount:
+        return resolveAppMessage(
+          "pages.admin.overview.recentActivity.actions.restoredAccount" as MessageKey,
+        );
+      case ADMIN_OVERVIEW_ACTION_KEYS.invitedUser:
+        return resolveAppMessage(
+          "pages.admin.overview.recentActivity.actions.invitedUser" as MessageKey,
+        );
+      case ADMIN_OVERVIEW_ACTION_KEYS.publishedCorpus:
+        return resolveAppMessage(
+          "pages.admin.overview.recentActivity.actions.publishedCorpus" as MessageKey,
+        );
+      case ADMIN_OVERVIEW_ACTION_KEYS.discardedDraft:
+        return resolveAppMessage(
+          "pages.admin.overview.recentActivity.actions.discardedDraft" as MessageKey,
+        );
+      case ADMIN_OVERVIEW_ACTION_KEYS.changedRole:
+        return resolveAppMessage(
+          "pages.admin.overview.recentActivity.actions.changedRole" as MessageKey,
+        );
+      default:
+        return actionHeader;
     }
-    return item.action;
   };
 
   if (isLoading) {
     return (
       <div
         className={cn(
-          "flex h-[292px] w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
+          "flex min-h-72 w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
           className,
         )}
       >
@@ -88,7 +125,7 @@ export function AdminRecentActivityCard({
     return (
       <div
         className={cn(
-          "flex h-[292px] w-full flex-col items-center justify-center rounded-xl border border-border bg-card p-5 text-center shadow-xs",
+          "flex min-h-72 w-full flex-col items-center justify-center rounded-xl border border-border bg-card p-5 text-center shadow-xs",
           className,
         )}
       >
@@ -119,7 +156,7 @@ export function AdminRecentActivityCard({
   return (
     <div
       className={cn(
-        "flex h-[292px] w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
+        "flex min-h-72 w-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-xs",
         className,
       )}
     >
@@ -145,7 +182,7 @@ export function AdminRecentActivityCard({
             </p>
           </div>
         ) : (
-          <div className="max-h-[196px] overflow-y-auto">
+          <div className="max-h-48 overflow-y-auto">
             <Table aria-label={tableAria}>
               <TableHeader className="bg-muted/40 sticky top-0">
                 <TableRow className="border-border hover:bg-transparent">
@@ -170,7 +207,7 @@ export function AdminRecentActivityCard({
                     className="border-border/60 hover:bg-muted/30 text-xs"
                   >
                     <TableCell className="px-3 py-2.5 font-medium text-foreground whitespace-nowrap">
-                      {item.formattedTime}
+                      {formatOccurredTime(item.occurredAt)}
                     </TableCell>
                     <TableCell className="px-3 py-2.5 text-muted-foreground truncate max-w-40">
                       {item.adminEmail}
