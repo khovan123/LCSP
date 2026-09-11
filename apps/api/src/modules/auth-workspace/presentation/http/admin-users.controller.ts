@@ -53,21 +53,6 @@ export class AdminUsersController {
     return resultEnvelope(await this.reads.detail(id, request.correlationId!));
   }
 
-  @Post(":id/role")
-  @HttpCode(HttpStatus.OK)
-  @UseGuards(RbacGuard)
-  @RequireRoles(AUTH_USER_ROLES.admin)
-  async updateRole(
-    @Param("id") id: string,
-    @Body() body: unknown,
-    @Headers("idempotency-key") key: unknown,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return resultEnvelope(
-      await this.commands.mutate(id, O.role, body, this.actor(request, key)),
-    );
-  }
-
   @Post(":id/suspend")
   @HttpCode(HttpStatus.OK)
   @UseGuards(RbacGuard)

@@ -20,7 +20,6 @@ export const AUTH_AUDIT_EVENT_TYPES = {
   authMfaRecoveryCodeCopied: "AUTH_MFA_RECOVERY_CODE_COPIED",
   authMfaRecoveryCodeUsed: "AUTH_MFA_RECOVERY_CODE_USED",
   authProfileUpdated: "AUTH_PROFILE_UPDATED",
-  authAdminUserRoleUpdated: "AUTH_ADMIN_USER_ROLE_UPDATED",
   authAdminUserRestored: "AUTH_ADMIN_USER_RESTORED",
   authAdminInvitationCreated: "AUTH_ADMIN_INVITATION_CREATED",
   authInvitationAccepted: "AUTH_INVITATION_ACCEPTED",

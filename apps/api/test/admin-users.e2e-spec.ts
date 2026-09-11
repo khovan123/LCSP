@@ -177,16 +177,21 @@ describe("Admin User Management API (e2e)", () => {
       assert.equal(problemCode(res), RBAC_REASON_CODES.denied);
     });
 
-    it("rejects non-admin role update requests with 403 RBAC_DENIED", async () => {
-      const res = await httpRequest(app)
-        .post(`/admin/users/${targetCustomer.id}/role`)
-        .set("Authorization", `Bearer ${customerSessionToken}`)
-        .set("Idempotency-Key", crypto.randomUUID())
-        .send({ role: AUTH_USER_ROLES.admin, expectedVersion: 0 })
-        .set("Accept", "application/json");
-
-      assert.equal(res.status, 403);
-      assert.equal(problemCode(res), RBAC_REASON_CODES.denied);
+    it("does not expose an existing-user role endpoint, even to Admin", async () => {
+      for (const token of [adminSessionToken, customerSessionToken]) {
+        const res = await httpRequest(app)
+          .post(`/admin/users/${targetCustomer.id}/role`)
+          .set("Authorization", `Bearer ${token}`)
+          .set("Idempotency-Key", crypto.randomUUID())
+          .send({ role: AUTH_USER_ROLES.admin, expectedVersion: 0 });
+        assert.equal(res.status, 404);
+      }
+      const current = await prisma.user.findUniqueOrThrow({
+        where: { id: targetCustomer.id },
+      });
+      assert.equal(current.role, AUTH_USER_ROLES.customer);
+      assert.equal(current.accessVersion, 0);
+      assert.equal(await prisma.adminAccountCommandReceipt.count(), 0);
     });
 
     it("rejects non-admin suspend requests with 403 RBAC_DENIED", async () => {
@@ -270,101 +275,6 @@ describe("Admin User Management API (e2e)", () => {
 
       assert.equal(res.status, 404);
       assert.equal(problemCode(res), ADMIN_ERROR_CODES.userNotFound);
-    });
-  });
-
-  describe("Role Mutations & Last-Admin Safeguards", () => {
-    it("allows Admin to promote Customer to Admin and persists in database", async () => {
-      const res = await httpRequest(app)
-        .post(`/admin/users/${targetCustomer.id}/role`)
-        .set("Authorization", `Bearer ${adminSessionToken}`)
-        .set("Idempotency-Key", crypto.randomUUID())
-        .send({ role: AUTH_USER_ROLES.admin, expectedVersion: 0 })
-        .set("Accept", "application/json");
-
-      assert.equal(res.status, 200);
-      const data = successBody<AdminUserDetail>(res);
-      assert.equal(data.role, AUTH_USER_ROLES.admin);
-
-      // Verify in database
-      const dbUser = await prisma.user.findUnique({
-        where: { id: targetCustomer.id },
-      });
-      assert.equal(dbUser?.role, AUTH_USER_ROLES.admin);
-
-      // Verify audit log
-      const audit = await prisma.auditEvent.findFirst({
-        where: {
-          resourceId: targetCustomer.id,
-          eventType: AUTH_AUDIT_EVENT_TYPES.authAdminUserRoleUpdated,
-        },
-      });
-      assert.ok(audit, "Audit event must be logged");
-    });
-
-    it("prevents self-demotion by the last usable Admin", async () => {
-      // The shared fixture includes Admins; establish the actual last-admin precondition.
-      await prisma.user.updateMany({
-        where: { id: { not: adminUser.id }, role: AUTH_USER_ROLES.admin },
-        data: { role: AUTH_USER_ROLES.customer },
-      });
-      const res = await httpRequest(app)
-        .post(`/admin/users/${adminUser.id}/role`)
-        .set("Authorization", `Bearer ${adminSessionToken}`)
-        .set("Idempotency-Key", crypto.randomUUID())
-        .send({ role: AUTH_USER_ROLES.customer, expectedVersion: 0 })
-        .set("Accept", "application/json");
-
-      assert.equal(res.status, 409);
-      assert.equal(problemCode(res), ADMIN_ACCOUNT_ERRORS.lastUsableAdmin);
-
-      // Admin role must remain unchanged
-      const dbUser = await prisma.user.findUnique({
-        where: { id: adminUser.id },
-      });
-      assert.equal(dbUser?.role, AUTH_USER_ROLES.admin);
-    });
-
-    it("prevents demoting the last active Admin when demoting another admin", async () => {
-      // Set all other users to CUSTOMER
-      await prisma.user.updateMany({
-        where: { NOT: { id: targetCustomer.id } },
-        data: { role: AUTH_USER_ROLES.customer },
-      });
-      // Promote targetCustomer to ADMIN as the single admin in system
-      await prisma.user.update({
-        where: { id: targetCustomer.id },
-        data: { role: AUTH_USER_ROLES.admin },
-      });
-
-      // Create a separate admin session for a second admin to execute the request
-      const otherAdminId = crypto.randomUUID();
-      await prisma.user.create({
-        data: {
-          id: otherAdminId,
-          email: "superadmin@example.com",
-          passwordHash: hashSecret("Password123!"),
-          emailVerified: true,
-          failedLoginCount: 0,
-          role: AUTH_USER_ROLES.admin,
-        },
-      });
-      const otherAdminToken = `superadm-token-${Date.now()}`;
-      await createAuthSessionRecord(prisma, {
-        id: crypto.randomUUID(),
-        userId: otherAdminId,
-        token: otherAdminToken,
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
-      });
-
-      // Now demote targetCustomer -> OK because otherAdminId exists
-      const okRes = await httpRequest(app)
-        .post(`/admin/users/${targetCustomer.id}/role`)
-        .set("Authorization", `Bearer ${otherAdminToken}`)
-        .set("Idempotency-Key", crypto.randomUUID())
-        .send({ role: AUTH_USER_ROLES.customer, expectedVersion: 0 })
-        .set("Accept", "application/json");
-      assert.equal(okRes.status, 200);
     });
   });
 

@@ -96,11 +96,6 @@ export interface AdminUserListResponse {
   totalPages: number;
 }
 
-export interface AdminUpdateRoleInput {
-  expectedVersion: number;
-  role: AuthUserRole;
-}
-
 export interface AdminSuspendUserInput {
   expectedVersion: number;
   reason?: string;

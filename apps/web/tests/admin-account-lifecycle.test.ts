@@ -11,11 +11,11 @@ import {
 } from "@lcsp/contracts/auth";
 import {
   fetchAdminUsersList,
-  updateAdminUserRole,
   suspendAdminUser,
   restoreAdminUser,
   createAdminUserInvitation,
 } from "../src/lib/api/admin-users-client.ts";
+import { AdminAccountDetailsCard } from "../src/features/admin/components/organisms/admin-account-details-card.tsx";
 import { AdminAdministrativeActionsCard } from "../src/features/admin/components/organisms/admin-administrative-actions-card.tsx";
 import { adminInviteUserSchema } from "../src/features/admin/schemas/admin-invite-user.schema.ts";
 import { invitationAcceptSchema } from "../src/features/auth/schemas/invitation-accept.schema.ts";
@@ -43,20 +43,15 @@ test("LCSP-299 clients preserve expectedVersion and idempotency through all life
     calls.push({ url: String(url), init });
     return Response.json({ ok: true, data: user });
   };
-  await updateAdminUserRole(
+  await suspendAdminUser(
     user.id,
-    { role: AUTH_USER_ROLES.admin, expectedVersion: user.version! },
-    "same-role-key",
-  );
-  await updateAdminUserRole(
-    user.id,
-    { role: AUTH_USER_ROLES.admin, expectedVersion: user.version! },
-    "same-role-key",
+    { expectedVersion: user.version! },
+    "same-suspend-key",
   );
   await suspendAdminUser(
     user.id,
     { expectedVersion: user.version! },
-    "suspend-key",
+    "same-suspend-key",
   );
   await restoreAdminUser(
     user.id,
@@ -71,20 +66,20 @@ test("LCSP-299 clients preserve expectedVersion and idempotency through all life
     );
   assert.equal(
     new Headers(calls[0].init?.headers).get("idempotency-key"),
-    "same-role-key",
+    "same-suspend-key",
   );
   assert.equal(
     new Headers(calls[1].init?.headers).get("idempotency-key"),
-    "same-role-key",
+    "same-suspend-key",
   );
-  assert.equal(calls[3].url, `/api/admin/users/${user.id}/restore`);
+  assert.equal(calls[2].url, `/api/admin/users/${user.id}/restore`);
   await createAdminUserInvitation(
     { email: user.email, displayName: user.fullName, role: user.role },
     "invite-key",
   );
-  assert.equal(calls[4].url, "/api/admin/users");
+  assert.equal(calls[3].url, "/api/admin/users");
   assert.equal(
-    new Headers(calls[4].init?.headers).get("idempotency-key"),
+    new Headers(calls[3].init?.headers).get("idempotency-key"),
     "invite-key",
   );
 });
@@ -132,7 +127,6 @@ test("LCSP-299 actual action card renders Restore for authoritative Suspended st
   const html = renderToStaticMarkup(
     createElement(AdminAdministrativeActionsCard, {
       user: { ...user, status: AUTH_ACCOUNT_STATUSES.suspended },
-      onRoleSave: () => Promise.resolve(),
       onOpenSuspendModal: () => {},
       onRestore: () => Promise.resolve(),
     }),
@@ -151,7 +145,6 @@ test("LCSP-299 active card retains Suspend and invited records do not offer acco
   const active = renderToStaticMarkup(
     createElement(AdminAdministrativeActionsCard, {
       user,
-      onRoleSave: () => Promise.resolve(),
       onOpenSuspendModal: () => {},
     }),
   );
@@ -165,7 +158,6 @@ test("LCSP-299 active card retains Suspend and invited records do not offer acco
   const invited = renderToStaticMarkup(
     createElement(AdminAdministrativeActionsCard, {
       user: { ...user, status: AUTH_ACCOUNT_STATUSES.invited },
-      onRoleSave: () => Promise.resolve(),
       onOpenSuspendModal: () => {},
     }),
   );
@@ -211,5 +203,54 @@ test("LCSP-299 form schemas reject spoofed roles, invalid identity and weak/mism
       confirmPassword: "a-strong-test-password",
     }).success,
     true,
+  );
+});
+
+test("LCSP-299 role is read-only account metadata; actions contain no role editor", async () => {
+  const user = await fixture();
+  for (const role of Object.values(AUTH_USER_ROLES)) {
+    const account = { ...user, role };
+    const details = renderToStaticMarkup(
+      createElement(AdminAccountDetailsCard, { user: account }),
+    );
+    assert.ok(
+      details.includes(
+        resolveAppMessage("pages.admin.userDetail.accountDetailsCard.role"),
+      ),
+    );
+    assert.ok(
+      details.includes(
+        resolveAppMessage(
+          role === AUTH_USER_ROLES.admin
+            ? "pages.admin.usersList.roles.ADMIN"
+            : "pages.admin.usersList.roles.CUSTOMER",
+        ),
+      ),
+    );
+    const actions = renderToStaticMarkup(
+      createElement(AdminAdministrativeActionsCard, {
+        user: account,
+        onOpenSuspendModal() {},
+        onRestore: () => Promise.resolve(),
+      }),
+    );
+    for (const html of [details, actions])
+      assert.doesNotMatch(
+        html,
+        /<select|role="combobox"|Save role|Saving role/i,
+      );
+  }
+});
+
+test("LCSP-299 existing-user role mutation has no exported client, hook or BFF route", async () => {
+  const client = await import("../src/lib/api/admin-users-client.ts");
+  const queries = await import("../src/lib/api/admin-users-queries.ts");
+  assert.equal("updateAdminUserRole" in client, false);
+  assert.equal("useAdminUpdateRoleMutation" in queries, false);
+  await assert.rejects(
+    readFile(
+      new URL("../src/app/api/admin/users/[id]/role/route.ts", import.meta.url),
+    ),
+    { code: "ENOENT" },
   );
 });

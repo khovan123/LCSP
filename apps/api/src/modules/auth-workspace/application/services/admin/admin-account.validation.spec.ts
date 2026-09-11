@@ -1,5 +1,8 @@
 import { describe, expect, it } from "@jest/globals";
-import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import {
+  ADMIN_ACCOUNT_OPERATIONS,
+  AUTH_USER_ROLES,
+} from "@lcsp/contracts/auth";
 import {
   idempotency,
   parseInvitation,
@@ -9,7 +12,24 @@ import {
 } from "./admin-account.validation.js";
 
 describe("LCSP-299 bounded Admin account input", () => {
-  it("normalizes identity and accepts only canonical roles", () => {
+  it("keeps canonical RBAC/provisioning roles without an existing-user role command", () => {
+    expect(Object.values(AUTH_USER_ROLES).sort()).toEqual([
+      "ADMIN",
+      "CUSTOMER",
+    ]);
+    expect(Object.values(ADMIN_ACCOUNT_OPERATIONS).sort()).toEqual([
+      "INVITE",
+      "RESTORE",
+      "SUSPEND",
+    ]);
+    expect(() =>
+      record({ expectedVersion: 0, role: AUTH_USER_ROLES.admin }, "test", [
+        "expectedVersion",
+        "reason",
+      ]),
+    ).toThrow();
+  });
+  it("normalizes provisioning identity and accepts only canonical roles", () => {
     expect(
       parseInvitation(
         {

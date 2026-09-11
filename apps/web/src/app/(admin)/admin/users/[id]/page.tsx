@@ -7,7 +7,6 @@ import type { MessageKey } from "@lcsp/i18n";
 import {
   ADMIN_ACCOUNT_ERRORS,
   ADMIN_ACCOUNT_OPERATIONS,
-  type AuthUserRole,
 } from "@lcsp/contracts/auth";
 import { accountMutationErrorKey } from "@/features/admin/config/account-mutation-error";
 
@@ -22,7 +21,6 @@ import { AdminSuspendModal } from "@/features/admin/components/organisms/admin-s
 import {
   useAdminSuspendUserMutation,
   useAdminRestoreUserMutation,
-  useAdminUpdateRoleMutation,
   useAdminUserDetailQuery,
 } from "@/lib/api/admin-users-queries";
 import { resolveAppMessage } from "@/lib/i18n";
@@ -49,7 +47,6 @@ export default function AdminUserDetailPage({
   }
 
   const { data: user, isLoading, error } = useAdminUserDetailQuery(id);
-  const updateRoleMutation = useAdminUpdateRoleMutation(id);
   const suspendUserMutation = useAdminSuspendUserMutation(id);
   const restoreUserMutation = useAdminRestoreUserMutation(id);
 
@@ -65,25 +62,6 @@ export default function AdminUserDetailPage({
   const defaultSuspendReason = resolveAppMessage(
     "pages.admin.suspendModal.defaultReason" as MessageKey,
   );
-
-  const handleRoleSave = async (newRole: AuthUserRole) => {
-    setActionError(null);
-    try {
-      if (user?.version === undefined)
-        throw new Error(ADMIN_ACCOUNT_ERRORS.staleVersion);
-      const input = { role: newRole, expectedVersion: user.version };
-      await updateRoleMutation.mutateAsync({
-        ...input,
-        idempotencyKey: requestKey({
-          operation: ADMIN_ACCOUNT_OPERATIONS.role,
-          ...input,
-        }),
-      });
-      attempts.current.clear();
-    } catch (error) {
-      setActionError(accountMutationErrorKey(error));
-    }
-  };
 
   const handleConfirmSuspend = async () => {
     setActionError(null);
@@ -204,9 +182,7 @@ export default function AdminUserDetailPage({
           user={user}
           onRestore={handleRestore}
           isRestoring={restoreUserMutation.isPending}
-          onRoleSave={handleRoleSave}
           onOpenSuspendModal={() => setIsSuspendModalOpen(true)}
-          isSavingRole={updateRoleMutation.isPending}
         />
       </div>
 

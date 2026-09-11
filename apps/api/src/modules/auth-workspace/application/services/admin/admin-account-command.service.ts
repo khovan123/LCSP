@@ -28,7 +28,6 @@ import {
   invalid,
   record,
   reason,
-  role,
   version,
 } from "./admin-account.validation.js";
 
@@ -46,26 +45,17 @@ export class AdminAccountCommandService {
     raw: unknown,
     actor: AdminActor,
   ): Promise<AdminUserDetail> {
-    if (![O.role, O.suspend, O.restore].some((value) => value === operation))
+    if (![O.suspend, O.restore].some((value) => value === operation))
       return invalid(actor.correlationId);
-    const input = record(
-      raw,
-      actor.correlationId,
-      operation === O.role
-        ? ["role", "expectedVersion"]
-        : ["expectedVersion", "reason"],
-    );
+    const input = record(raw, actor.correlationId, [
+      "expectedVersion",
+      "reason",
+    ]);
     const expectedVersion = version(input.expectedVersion, actor.correlationId);
-    const newRole =
-      operation === O.role ? role(input.role, actor.correlationId) : undefined;
-    const safeReason =
-      operation === O.role
-        ? undefined
-        : reason(input.reason, actor.correlationId);
+    const safeReason = reason(input.reason, actor.correlationId);
     const hash = requestHash(operation, {
       id,
       expectedVersion,
-      role: newRole,
       reason: safeReason,
     });
     return accountTransaction(this.prisma, actor.correlationId, async (tx) => {
@@ -109,17 +99,13 @@ export class AdminAccountCommandService {
         });
       if (
         (operation === O.suspend && target.accessStatus !== S.active) ||
-        (operation === O.restore && target.accessStatus !== S.suspended) ||
-        (operation === O.role && target.accessStatus !== S.active)
+        (operation === O.restore && target.accessStatus !== S.suspended)
       ) {
         throw problemException(E.invalidState, actor.correlationId, {
           status: HttpStatus.CONFLICT,
         });
       }
-      if (
-        target.role === AUTH_USER_ROLES.admin &&
-        (operation === O.suspend || newRole === AUTH_USER_ROLES.customer)
-      ) {
+      if (target.role === AUTH_USER_ROLES.admin && operation === O.suspend) {
         const now = new Date();
         const remaining = await tx.user.count({
           where: {
@@ -143,50 +129,38 @@ export class AdminAccountCommandService {
             status: HttpStatus.CONFLICT,
           });
       }
-      const changed = operation !== O.role || newRole !== target.role;
-      const newStatus =
-        operation === O.suspend
-          ? S.suspended
-          : operation === O.restore
-            ? S.active
-            : target.accessStatus;
-      if (changed) {
-        const result = await tx.user.updateMany({
-          where: {
-            id,
-            accessVersion: expectedVersion,
-            accessStatus: target.accessStatus,
-            role: target.role,
-          },
-          data: {
-            accessVersion: { increment: 1 },
-            accessStatus: newStatus,
-            ...(newRole ? { role: newRole } : {}),
-          },
+      const newStatus = operation === O.suspend ? S.suspended : S.active;
+      const result = await tx.user.updateMany({
+        where: {
+          id,
+          accessVersion: expectedVersion,
+          accessStatus: target.accessStatus,
+        },
+        data: {
+          accessVersion: { increment: 1 },
+          accessStatus: newStatus,
+        },
+      });
+      if (result.count !== 1)
+        throw problemException(E.staleVersion, actor.correlationId, {
+          status: HttpStatus.CONFLICT,
         });
-        if (result.count !== 1)
-          throw problemException(E.staleVersion, actor.correlationId, {
-            status: HttpStatus.CONFLICT,
-          });
-        // Role changes invalidate old privilege-bearing sessions as well.
-        if (operation !== O.restore)
-          await tx.authRecord.updateMany({
-            where: {
-              userId: id,
-              type: AUTH_RECORD_TYPES.session,
-              revokedAt: null,
-            },
-            data: { revokedAt: new Date() },
-          });
-      }
+      // Suspension revokes sessions. Restore never revives an old session.
+      if (operation === O.suspend)
+        await tx.authRecord.updateMany({
+          where: {
+            userId: id,
+            type: AUTH_RECORD_TYPES.session,
+            revokedAt: null,
+          },
+          data: { revokedAt: new Date() },
+        });
       await this.audit.writeInTx(
         {
           eventType:
-            operation === O.role
-              ? AUTH_AUDIT_EVENT_TYPES.authAdminUserRoleUpdated
-              : operation === O.suspend
-                ? AUTH_AUDIT_EVENT_TYPES.authAdminUserSuspended
-                : AUTH_AUDIT_EVENT_TYPES.authAdminUserRestored,
+            operation === O.suspend
+              ? AUTH_AUDIT_EVENT_TYPES.authAdminUserSuspended
+              : AUTH_AUDIT_EVENT_TYPES.authAdminUserRestored,
           actorId: actor.userId,
           sessionId: actor.sessionId,
           correlationId: actor.correlationId,
@@ -195,14 +169,12 @@ export class AdminAccountCommandService {
           decision: AUDIT_DECISIONS.allow,
           payload: {
             targetUserId: id,
-            previousRole: target.role,
-            newRole: newRole ?? target.role,
             previousStatus: target.accessStatus,
             newStatus,
             previousVersion: expectedVersion,
-            newVersion: expectedVersion + (changed ? 1 : 0),
+            newVersion: expectedVersion + 1,
             reason: safeReason,
-            changed,
+            changed: true,
             timestamp: new Date().toISOString(),
           },
         },

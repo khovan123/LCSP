@@ -22,7 +22,6 @@ export const INVITATION_DELIVERY_STATUSES = {
   failed: "FAILED",
 } as const;
 export const ADMIN_ACCOUNT_OPERATIONS = {
-  role: "ROLE_CHANGE",
   suspend: "SUSPEND",
   restore: "RESTORE",
   invite: "INVITE",

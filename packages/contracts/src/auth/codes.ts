@@ -38,7 +38,6 @@ export const WORKSPACE_ERROR_CODES = {
 } as const;
 
 export const ADMIN_ERROR_CODES = {
-  lastAdminDemotionForbidden: "LAST_ADMIN_DEMOTION_FORBIDDEN",
   userNotFound: "USER_NOT_FOUND",
   userAlreadySuspended: "USER_ALREADY_SUSPENDED",
   userNotSuspended: "USER_NOT_SUSPENDED",

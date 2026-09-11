@@ -125,7 +125,6 @@ test("Ensures production BFF admin user routes forward upstream directly without
   const routes = [
     "src/app/api/admin/users/route.ts",
     "src/app/api/admin/users/[id]/route.ts",
-    "src/app/api/admin/users/[id]/role/route.ts",
     "src/app/api/admin/users/[id]/suspend/route.ts",
     "src/app/api/admin/users/[id]/restore/route.ts",
     "src/lib/server/admin-account-mutations.ts",

@@ -1998,9 +1998,6 @@ export type PagesMessages = {
       };
       administrativeActionsCard: {
         title: string;
-        roleLabel: string;
-        saveRole: string;
-        savingRole: string;
         accountAccessLabel: string;
         activeAccessCopy: string;
         suspendedAccessCopy: string;

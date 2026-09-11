@@ -1,6 +1,5 @@
 import type {
   AdminSuspendUserInput,
-  AdminUpdateRoleInput,
   AdminRestoreUserInput,
   AdminInviteUserInput,
   AdminInvitationResult,
@@ -54,17 +53,6 @@ async function accountWrite<T>(
   if (!result.ok)
     throw new Error(result.problemCode ?? ADMIN_ACCOUNT_ERRORS.invalidInput);
   return result.payload as T;
-}
-export function updateAdminUserRole(
-  id: string,
-  input: AdminUpdateRoleInput,
-  key: string = crypto.randomUUID(),
-): Promise<AdminUserDetail> {
-  return accountWrite(
-    `/api/admin/users/${encodeURIComponent(id)}/role`,
-    input,
-    key,
-  );
 }
 export function suspendAdminUser(
   id: string,

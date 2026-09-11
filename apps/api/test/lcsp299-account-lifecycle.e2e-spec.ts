@@ -59,6 +59,7 @@ import {
 import { Session } from "../src/modules/auth-workspace/domain/entities/session.entity.js";
 import type {
   AdminUserDetail,
+  AdminAccountOperation,
   AdminUserListResponse,
 } from "@lcsp/contracts/auth";
 import { httpRequest, successBody } from "./support/http.js";
@@ -261,12 +262,11 @@ integration(
       expect((await httpRequest(app).get("/admin/users")).status).toBe(401);
       for (const path of ["/admin/users", `/admin/users/${admin.id}`])
         expect((await get(path, target)).status).toBe(403);
-      for (const operation of ["role", "suspend", "restore"]) {
+      for (const operation of ["suspend", "restore"]) {
         expect(
           (
             await mutate(target, admin.id, operation, {
               expectedVersion: 0,
-              role: AUTH_USER_ROLES.customer,
             })
           ).status,
         ).toBe(403);
@@ -319,6 +319,7 @@ integration(
       expect(suspended.status).toBe(200);
       expect(successBody<AdminUserDetail>(suspended)).toMatchObject({
         status: AUTH_ACCOUNT_STATUSES.suspended,
+        role: AUTH_USER_ROLES.customer,
         version: 1,
       });
       const user = await prisma.user.findUniqueOrThrow({
@@ -337,7 +338,11 @@ integration(
         successBody<AdminUserDetail>(
           await mutate(admin, target.id, "restore", { expectedVersion: 1 }),
         ),
-      ).toMatchObject({ status: AUTH_ACCOUNT_STATUSES.active, version: 2 });
+      ).toMatchObject({
+        status: AUTH_ACCOUNT_STATUSES.active,
+        version: 2,
+        role: AUTH_USER_ROLES.customer,
+      });
       expect((await get("/lcsp299-test/protected", target)).status).toBe(401);
       const records = await prisma.authRecord.findMany({
         where: { userId: target.id, type: AUTH_RECORD_TYPES.session },
@@ -358,7 +363,32 @@ integration(
           .status,
       ).toBe(200);
     });
-    it("prevents stale login/MFA entities from restoring privileges or sessions", async () => {
+    it.each(Object.values(AUTH_USER_ROLES))(
+      "preserves the existing %s role across suspend and restore",
+      async (role) => {
+        const account = await actor(role, "Immutable role account");
+        const suspended = await mutate(admin, account.id, "suspend", {
+          expectedVersion: 0,
+        });
+        expect(suspended.status).toBe(200);
+        expect(successBody<AdminUserDetail>(suspended).role).toBe(role);
+        const restored = await mutate(admin, account.id, "restore", {
+          expectedVersion: 1,
+        });
+        expect(restored.status).toBe(200);
+        expect(successBody<AdminUserDetail>(restored).role).toBe(role);
+        const stored = await prisma.user.findUniqueOrThrow({
+          where: { id: account.id },
+        });
+        expect(stored.role).toBe(role);
+        expect(stored.accessStatus).toBe(USER_ACCESS_STATUSES.active);
+        expect((await get("/lcsp299-test/protected", account)).status).toBe(
+          401,
+        );
+      },
+    );
+
+    it("prevents stale login/MFA entities from undoing suspension or reviving sessions", async () => {
       const second = await actor(AUTH_USER_ROLES.admin, "Second Admin");
       const users = app.get(PrismaUserRepository);
       const sessions = app.get(PrismaSessionRepository);
@@ -367,18 +397,18 @@ integration(
         fingerprintToken(second.token),
       ))!;
       expect(
-        (
-          await mutate(admin, second.id, "role", {
-            expectedVersion: 0,
-            role: AUTH_USER_ROLES.customer,
-          })
-        ).status,
+        (await mutate(admin, second.id, "suspend", { expectedVersion: 0 }))
+          .status,
       ).toBe(200);
       await users.save(staleUser);
       expect(
         (await prisma.user.findUniqueOrThrow({ where: { id: second.id } }))
           .role,
-      ).toBe(AUTH_USER_ROLES.customer);
+      ).toBe(AUTH_USER_ROLES.admin);
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: second.id } }))
+          .accessStatus,
+      ).toBe(USER_ACCESS_STATUSES.suspended);
       staleSession.markMfaVerified(Date.now());
       await expect(sessions.save(staleSession)).rejects.toThrow();
       await expect(
@@ -422,57 +452,90 @@ integration(
       ).toBe(USER_ACCESS_STATUSES.active);
     });
 
-    it("rejects self-suspend and last-admin self-demotion", async () => {
+    it("rejects self-suspend regardless of other usable Admins", async () => {
       expect(
         code(
           (await mutate(admin, admin.id, "suspend", { expectedVersion: 0 }))
             .body,
         ),
       ).toBe(E.selfSuspend);
+      await actor(AUTH_USER_ROLES.admin, "Second Admin");
       expect(
         code(
-          (
-            await mutate(admin, admin.id, "role", {
-              expectedVersion: 0,
-              role: AUTH_USER_ROLES.customer,
-            })
-          ).body,
+          (await mutate(admin, admin.id, "suspend", { expectedVersion: 0 }))
+            .body,
         ),
-      ).toBe(E.lastUsableAdmin);
+      ).toBe(E.selfSuspend);
     });
-    it("does not count suspended, unverified or temporarily locked Admins as usable", async () => {
-      const second = await actor(AUTH_USER_ROLES.admin, "Unavailable Admin");
+    it("does not count suspended, unverified, login-locked or MFA-locked Admins as usable replacements", async () => {
+      const lastUsable = await actor(
+        AUTH_USER_ROLES.admin,
+        "Last usable Admin",
+      );
+      const unavailable = await actor(
+        AUTH_USER_ROLES.admin,
+        "Unavailable Admin",
+      );
+      // Login lockout does not revoke an authenticated session, but the actor
+      // cannot count as a usable replacement for the target in this state.
+      await prisma.user.update({
+        where: { id: admin.id },
+        data: { lockUntil: new Date(Date.now() + 60000) },
+      });
       for (const data of [
-        { accessStatus: USER_ACCESS_STATUSES.suspended },
-        { accessStatus: USER_ACCESS_STATUSES.active, emailVerified: false },
-        { emailVerified: true, lockUntil: new Date(Date.now() + 60000) },
+        {
+          accessStatus: USER_ACCESS_STATUSES.suspended,
+          emailVerified: true,
+          lockUntil: null,
+          mfaLockedUntil: null,
+        },
+        {
+          accessStatus: USER_ACCESS_STATUSES.active,
+          emailVerified: false,
+          lockUntil: null,
+          mfaLockedUntil: null,
+        },
+        {
+          accessStatus: USER_ACCESS_STATUSES.active,
+          emailVerified: true,
+          lockUntil: new Date(Date.now() + 60000),
+          mfaLockedUntil: null,
+        },
+        {
+          accessStatus: USER_ACCESS_STATUSES.active,
+          emailVerified: true,
+          lockUntil: null,
+          mfaLockedUntil: new Date(Date.now() + 60000),
+        },
       ]) {
-        await prisma.user.update({ where: { id: second.id }, data });
+        await prisma.user.update({ where: { id: unavailable.id }, data });
         expect(
           code(
             (
-              await mutate(admin, admin.id, "role", {
+              await mutate(admin, lastUsable.id, "suspend", {
                 expectedVersion: 0,
-                role: AUTH_USER_ROLES.customer,
               })
             ).body,
           ),
         ).toBe(E.lastUsableAdmin);
       }
+      const current = await prisma.user.findUniqueOrThrow({
+        where: { id: lastUsable.id },
+      });
+      expect(current.accessStatus).toBe(USER_ACCESS_STATUSES.active);
+      expect(current.role).toBe(AUTH_USER_ROLES.admin);
+      expect(await prisma.adminAccountCommandReceipt.count()).toBe(0);
     });
-    it("serializes concurrent self-demotions so one usable Admin survives", async () => {
+    it("serializes concurrent cross-suspensions so one usable Admin survives", async () => {
       const second = await actor(AUTH_USER_ROLES.admin, "Second Admin");
       const results = await Promise.all([
-        mutate(admin, admin.id, "role", {
-          expectedVersion: 0,
-          role: AUTH_USER_ROLES.customer,
-        }),
-        mutate(second, second.id, "role", {
-          expectedVersion: 0,
-          role: AUTH_USER_ROLES.customer,
-        }),
+        mutate(admin, second.id, "suspend", { expectedVersion: 0 }),
+        mutate(second, admin.id, "suspend", { expectedVersion: 0 }),
       ]);
-      expect(results.map((result) => result.status).sort()).toEqual([200, 409]);
+      expect(results.filter((result) => result.status === 200)).toHaveLength(1);
+      expect(
+        results.filter((result) => [401, 403, 409].includes(result.status)),
+      ).toHaveLength(1);
       expect(
         await prisma.user.count({
           where: {
@@ -481,12 +544,71 @@ integration(
           },
         }),
       ).toBe(1);
+      expect(
+        await prisma.user.count({ where: { role: AUTH_USER_ROLES.admin } }),
+      ).toBe(2);
     });
-    it("replays role/suspend/restore once and rejects stale versions or changed payloads", async () => {
+    it("has no existing-user role route for Admin, Customer or anonymous callers", async () => {
+      for (const token of [admin.token, target.token, null]) {
+        let request = httpRequest(app).post(`/admin/users/${target.id}/role`);
+        if (token) request = request.set("Authorization", `Bearer ${token}`);
+        expect(
+          (
+            await request
+              .set("Idempotency-Key", randomUUID())
+              .send({ role: AUTH_USER_ROLES.admin, expectedVersion: 0 })
+          ).status,
+        ).toBe(404);
+      }
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: target.id } }))
+          .role,
+      ).toBe(AUTH_USER_ROLES.customer);
+      expect(await prisma.adminAccountCommandReceipt.count()).toBe(0);
+      expect((await get("/lcsp299-test/protected", target)).status).toBe(200);
+    });
+    it("rejects retired commands and role fields before changing state, audit or receipts", async () => {
+      const record = await prisma.authRecord.findFirstOrThrow({
+        where: { userId: admin.id, type: AUTH_RECORD_TYPES.session },
+      });
+      const auditCount = await prisma.auditEvent.count();
+      await expect(
+        app.get(AdminAccountCommandService).mutate(
+          target.id,
+          "ROLE_CHANGE" as AdminAccountOperation,
+          { role: AUTH_USER_ROLES.admin, expectedVersion: 0 },
+          {
+            userId: admin.id,
+            sessionId: record.id,
+            role: AUTH_USER_ROLES.admin,
+            scope: target.id,
+            correlationId: randomUUID(),
+            idempotencyKey: randomUUID(),
+          },
+        ),
+      ).rejects.toThrow();
+      expect(await prisma.auditEvent.count()).toBe(auditCount);
+      for (const operation of ["suspend", "restore"])
+        expect(
+          (
+            await mutate(admin, target.id, operation, {
+              expectedVersion: 0,
+              role: AUTH_USER_ROLES.admin,
+            })
+          ).status,
+        ).toBe(400);
+      expect(await prisma.adminAccountCommandReceipt.count()).toBe(0);
+      const current = await prisma.user.findUniqueOrThrow({
+        where: { id: target.id },
+      });
+      expect(current.role).toBe(AUTH_USER_ROLES.customer);
+      expect(current.accessStatus).toBe(USER_ACCESS_STATUSES.active);
+      expect(current.accessVersion).toBe(0);
+    });
+    it("replays suspend/restore once and rejects stale versions or changed payloads", async () => {
       for (const [operation, body] of [
-        ["role", { expectedVersion: 0, role: AUTH_USER_ROLES.admin }],
-        ["suspend", { expectedVersion: 1, reason: "One action" }],
-        ["restore", { expectedVersion: 2 }],
+        ["suspend", { expectedVersion: 0, reason: "One action" }],
+        ["restore", { expectedVersion: 1 }],
       ] as const) {
         const key = randomUUID();
         const results = await Promise.all([
@@ -519,14 +641,13 @@ integration(
             resourceId: target.id,
             eventType: {
               in: [
-                AUTH_AUDIT_EVENT_TYPES.authAdminUserRoleUpdated,
                 AUTH_AUDIT_EVENT_TYPES.authAdminUserSuspended,
                 AUTH_AUDIT_EVENT_TYPES.authAdminUserRestored,
               ],
             },
           },
         }),
-      ).toBe(3);
+      ).toBe(2);
       expect(
         code(
           (await mutate(admin, target.id, "suspend", { expectedVersion: 0 }))
@@ -554,7 +675,7 @@ integration(
           .status,
       ).toBe(200);
     });
-    it("requires idempotency, canonical role, expectedVersion and restorable state", async () => {
+    it("requires idempotency, expectedVersion and restorable state", async () => {
       expect(
         (
           await httpRequest(app)
@@ -565,8 +686,8 @@ integration(
       ).toBe(400);
       expect(
         (
-          await mutate(admin, target.id, "role", {
-            role: "SUPERADMIN",
+          await mutate(admin, target.id, "suspend", {
+            role: AUTH_USER_ROLES.admin,
             expectedVersion: 0,
           })
         ).status,

@@ -2291,9 +2291,6 @@ export const enPages = {
       },
       administrativeActionsCard: {
         title: "Administrative actions",
-        roleLabel: "Role",
-        saveRole: "Save role",
-        savingRole: "Saving role...",
         accountAccessLabel: "Account access",
         activeAccessCopy: "Active account can sign in and run assessments.",
         suspendedAccessCopy:

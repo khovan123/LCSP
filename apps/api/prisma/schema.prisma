@@ -1098,7 +1098,6 @@ enum InvitationDeliveryStatus {
   FAILED
 }
 enum AdminAccountOperation {
-  ROLE_CHANGE
   SUSPEND
   RESTORE
   INVITE

@@ -38,11 +38,9 @@ export type AdminAccountDetailsCardProps = {
 
 export type AdminAdministrativeActionsCardProps = {
   user: AdminUserDetail;
-  onRoleSave: (newRole: AuthUserRole) => Promise<void>;
   onOpenSuspendModal: () => void;
   onRestore?: () => Promise<void>;
   isRestoring?: boolean;
-  isSavingRole?: boolean;
 };
 
 export type AdminUsageSummaryProps = {

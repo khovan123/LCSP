@@ -2295,9 +2295,6 @@ export const viPages = {
       },
       administrativeActionsCard: {
         title: "Thao tác quản trị",
-        roleLabel: "Vai trò",
-        saveRole: "Lưu vai trò",
-        savingRole: "Đang lưu vai trò...",
         accountAccessLabel: "Quyền truy cập tài khoản",
         activeAccessCopy:
           "Tài khoản đang hoạt động có thể đăng nhập và chạy assessment.",

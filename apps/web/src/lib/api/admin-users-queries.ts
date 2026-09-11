@@ -2,7 +2,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AdminSuspendUserInput,
-  AdminUpdateRoleInput,
   AdminRestoreUserInput,
   AdminInviteUserInput,
   AdminUserListQuery,
@@ -12,7 +11,6 @@ import {
   fetchAdminUsersList,
   suspendAdminUser,
   restoreAdminUser,
-  updateAdminUserRole,
   createAdminUserInvitation,
 } from "./admin-users-client";
 import { apiQueryKeys } from "./query-keys";
@@ -46,9 +44,6 @@ function useAccountMutation<T>(
       });
     },
   });
-}
-export function useAdminUpdateRoleMutation(id: string) {
-  return useAccountMutation<AdminUpdateRoleInput>(id, updateAdminUserRole);
 }
 export function useAdminSuspendUserMutation(id: string) {
   return useAccountMutation<AdminSuspendUserInput>(id, suspendAdminUser);

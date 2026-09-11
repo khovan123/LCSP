@@ -3,14 +3,13 @@ import { requireSessionToken } from "./session-token";
 import { upstreamJson, upstreamRequest } from "./upstream-request";
 
 export const ADMIN_ACCOUNT_MUTATION_PATHS = {
-  role: "role",
   suspend: "suspend",
   restore: "restore",
 } as const;
 type MutationPath =
   (typeof ADMIN_ACCOUNT_MUTATION_PATHS)[keyof typeof ADMIN_ACCOUNT_MUTATION_PATHS];
 
-/** Proxy only: the API owns role, lifecycle, version and idempotency validation. */
+/** Proxy only: the API owns lifecycle, version and idempotency validation. */
 export async function proxyAdminAccountMutation(
   request: NextRequest,
   id: string,
