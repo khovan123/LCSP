@@ -290,9 +290,7 @@ export class AdminOverviewService {
 
     const actorIds = [
       ...new Set(
-        events
-          .map((e) => e.actorId)
-          .filter((id): id is string => Boolean(id)),
+        events.map((e) => e.actorId).filter((id): id is string => Boolean(id)),
       ),
     ];
 

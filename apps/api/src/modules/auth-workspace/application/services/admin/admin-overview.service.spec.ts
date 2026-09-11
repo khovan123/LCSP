@@ -9,14 +9,24 @@ describe("AdminOverviewService", () => {
   const mockPrisma = {
     user: {
       count: jest.fn<() => Promise<number>>(),
-      findMany: jest.fn<() => Promise<Array<{ id: string; email: string; displayName: string | null }>>>(),
+      findMany:
+        jest.fn<
+          () => Promise<
+            Array<{ id: string; email: string; displayName: string | null }>
+          >
+        >(),
     },
     accountInvitation: {
       count: jest.fn<() => Promise<number>>(),
     },
     assessment: {
       count: jest.fn<() => Promise<number>>(),
-      findMany: jest.fn<() => Promise<Array<{ createdAt: Date; status: string; updatedAt: Date }>>>(),
+      findMany:
+        jest.fn<
+          () => Promise<
+            Array<{ createdAt: Date; status: string; updatedAt: Date }>
+          >
+        >(),
     },
     legalCorpusVersion: {
       findFirst: jest.fn<() => Promise<any>>(),
