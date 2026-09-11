@@ -79,10 +79,23 @@ export function selectWorkflowPresentation(
   const hasActiveRun =
     workflow.status === ASSESSMENT_RUNTIME_RUN_STATUSES.running ||
     workflow.status === ASSESSMENT_RUNTIME_RUN_STATUSES.waiting;
+  const activeRun = hasActiveRun ? workflow.latestRun : null;
+  const activeActivity =
+    workflow.recentActivity.find(
+      (item) =>
+        item.runStatus === ASSESSMENT_RUNTIME_RUN_STATUSES.running ||
+        item.runStatus === ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
+    ) ?? null;
+  const activeStage =
+    activeRun?.stage ?? activeActivity?.stage ?? workflow.stage;
+  const activeStatus =
+    activeRun?.status ?? activeActivity?.runStatus ?? workflow.status;
 
   return {
     stage: workflow.stage,
     status: workflow.status,
+    activeStage,
+    activeStatus,
     currentRunId: workflow.currentRunId,
     activeTools: workflow.activeTools,
     recentActivity: workflow.recentActivity,
@@ -95,24 +108,15 @@ export function selectWorkflowPresentation(
 export function selectRightSidebarPresentation(
   normalized: NormalizedAssessmentRuntime,
 ) {
+  const presentation = selectWorkflowPresentation(normalized);
   const workflow = normalized.workflow;
-  const activeRun =
-    workflow.status === ASSESSMENT_RUNTIME_RUN_STATUSES.running ||
-    workflow.status === ASSESSMENT_RUNTIME_RUN_STATUSES.waiting
-      ? workflow.latestRun
-      : null;
-
+  const activeRun = presentation.hasActiveRun ? workflow.latestRun : null;
   const activeActivity =
     workflow.recentActivity.find(
       (item) =>
         item.runStatus === ASSESSMENT_RUNTIME_RUN_STATUSES.running ||
         item.runStatus === ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
     ) ?? null;
-
-  const activeStage =
-    activeRun?.stage ?? activeActivity?.stage ?? workflow.stage;
-  const activeStatus =
-    activeRun?.status ?? activeActivity?.runStatus ?? workflow.status;
   const activeSummary = activeActivity?.summary ?? null;
   const activeUpdatedAt =
     activeActivity?.emittedAt ?? activeRun?.updatedAt ?? workflow.lastEmittedAt;
@@ -121,8 +125,8 @@ export function selectRightSidebarPresentation(
     connectionState: normalized.connectionState,
     activeRun,
     activeActivity,
-    activeStage,
-    activeStatus,
+    activeStage: presentation.activeStage,
+    activeStatus: presentation.activeStatus,
     activeSummary,
     activeUpdatedAt,
     artifacts: normalized.artifacts.items,

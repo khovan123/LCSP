@@ -1342,6 +1342,8 @@ export type PagesMessages = {
     adjustPlaceholder: string;
     composerChooseConfirmAdjust: string;
     submitAnswer: string;
+    resumePipeline: string;
+    resumeQueued: string;
     answerSavedForRuntime: string;
     draftSavedForResume: string;
     blockedActionRecorded: string;

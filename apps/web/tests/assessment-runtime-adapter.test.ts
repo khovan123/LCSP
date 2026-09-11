@@ -821,6 +821,57 @@ test("21. STALE CONTEXT: superseded authority marks interview as stale", () => {
   assert.equal(normalized.interview.stale, true);
 });
 
+test("workflow presentation uses waiting Legal Retrieval activity as active state", () => {
+  const normalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-legal-resume",
+    interviewState: {
+      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
+    },
+    timeline: {
+      currentRun: null,
+      recentActivity: [
+        {
+          assessmentId: "asm-legal-resume",
+          eventId: "evt-legal-wait",
+          sequence: 56,
+          runId: "run-legal-wait",
+          correlationId: "corr-legal-wait",
+          eventType: "TOOL_WAITING_INPUT",
+          runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
+          stage: ASSESSMENT_RUNTIME_STAGE_CODES.legalRetrieval,
+          toolName: "engineering_rule_readiness",
+          summary:
+            "Assessment is waiting for READY EngineeringRules; automatic Legal Rule Triage was requested.",
+          inputSummary: null,
+          outputSummary: null,
+          errorSummary: null,
+          emittedAt: "2026-09-09T00:41:27.331Z",
+          startedAt: "2026-09-09T00:41:27.331Z",
+          completedAt: null,
+          durationMs: null,
+          attempt: 1,
+          waitingReason: "ENGINEERING_RULE_NOT_READY",
+        },
+      ],
+      latestRunId: "run-legal-wait",
+      connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+      lastEmittedAt: "2026-09-09T00:41:27.331Z",
+      postFinding: null,
+    },
+  });
+
+  const workflow = selectWorkflowPresentation(normalized);
+  assert.equal(workflow.activeStatus, ASSESSMENT_RUNTIME_RUN_STATUSES.waiting);
+  assert.equal(
+    workflow.activeStage,
+    ASSESSMENT_RUNTIME_STAGE_CODES.legalRetrieval,
+  );
+
+  const sidebar = selectRightSidebarPresentation(normalized);
+  assert.equal(sidebar.activeStatus, workflow.activeStatus);
+  assert.equal(sidebar.activeStage, workflow.activeStage);
+});
+
 test("22. MISSING INTEGRATION DATA: missing LCSP-292 policy documented in missingFields", () => {
   const normalized = normalizeAssessmentRuntime({
     assessmentId: "asm-22",

@@ -4,6 +4,8 @@ import { afterEach, test } from "node:test";
 import { JSDOM } from "jsdom";
 import React, { useState } from "react";
 import { act } from "react";
+import { ASSESSMENT_REPOSITORY_PROVIDERS } from "@lcsp/contracts/assessment";
+import { deriveRepositorySetupAnswer } from "../src/features/assessment-flow/utils/repository-setup-history";
 import type { Root } from "react-dom/client";
 import {
   ASSESSMENT_INTERVIEW_CONTROLS,
@@ -80,6 +82,12 @@ Object.defineProperty(testWindow.HTMLElement.prototype, "scrollTo", {
   configurable: true,
   value: () => undefined,
 });
+Object.defineProperty(testWindow.HTMLTextAreaElement.prototype, "scrollHeight", {
+  configurable: true,
+  get() {
+    return Math.max(1, this.value.split("\n").length) * 20;
+  },
+});
 
 const actEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -100,6 +108,8 @@ const { InterviewAnswerMessage } =
   await import("../src/features/workspace/components/molecules/interview-answer-message");
 const { AssessmentTranscript } =
   await import("../src/features/workspace/components/organisms/assessment-transcript");
+const { RepositorySetupConversation } =
+  await import("../src/features/assessment-flow/components/organisms/repository-setup-conversation");
 
 const mountedRoots: Root[] = [];
 
@@ -110,6 +120,84 @@ afterEach(() => {
     });
   }
   testWindow.document.body.replaceChildren();
+});
+
+test("repository setup remains a read-only conversation after submission and remount", async () => {
+  const provider = ASSESSMENT_REPOSITORY_PROVIDERS.gitlab;
+  let selectedProvider: string | undefined;
+  const { container, rerender } = await renderElement(
+    React.createElement(RepositorySetupConversation, {
+      onProviderChange: (value) => {
+        selectedProvider = value;
+      },
+    }),
+  );
+  const prompt = container.querySelector(
+    '[data-slot="agent-message"]',
+  )?.textContent;
+  await click(
+    container.querySelector<HTMLButtonElement>(
+      `[data-option-id="${provider}"]`,
+    )!,
+  );
+  assert.equal(selectedProvider, provider);
+
+  const persistedAnswer = deriveRepositorySetupAnswer({
+    provider,
+    repositoryFullName: "organization/subgroup/software",
+  });
+  assert.ok(persistedAnswer);
+  assert.equal(
+    persistedAnswer.repositoryUrl,
+    "https://gitlab.com/organization/subgroup/software",
+  );
+  const history = React.createElement(RepositorySetupConversation, {
+    ...persistedAnswer,
+    disabled: true,
+  });
+  await rerender(history);
+
+  for (const target of [container, (await renderElement(history)).container]) {
+    assert.equal(
+      target.querySelector('[data-slot="agent-message"]')?.textContent,
+      prompt,
+    );
+    assert.equal(
+      target.querySelector('[data-role="user"]')?.textContent,
+      persistedAnswer.repositoryUrl,
+    );
+    const choices = [
+      ...target.querySelectorAll<HTMLButtonElement>('[role="radio"]'),
+    ];
+    assert.equal(choices.length, 4);
+    assert.ok(choices.every((choice) => choice.disabled));
+    assert.equal(
+      target
+        .querySelector(`[data-option-id="${provider}"]`)
+        ?.getAttribute("aria-checked"),
+      "true",
+    );
+    await click(choices[0]);
+    assert.equal(choices[0].getAttribute("aria-checked"), "false");
+  }
+});
+
+test("repository history requires persisted identity and never guesses a provider", () => {
+  assert.equal(deriveRepositorySetupAnswer(null), null);
+  assert.equal(
+    deriveRepositorySetupAnswer({
+      provider: null,
+      repositoryFullName: "acme/app",
+    }),
+    null,
+  );
+  assert.equal(
+    deriveRepositorySetupAnswer({
+      provider: ASSESSMENT_REPOSITORY_PROVIDERS.github,
+      repositoryFullName: null,
+    }),
+    null,
+  );
 });
 
 test("assessment composer submits through Send click and Enter key", async () => {
@@ -175,6 +263,80 @@ test("assessment composer blocks empty disabled submitting and multiline submits
   await keyDown(getTextarea(container), { key: "Enter", shiftKey: true });
   await keyDown(getTextarea(container), { isComposing: true, key: "Enter" });
   assert.equal(submitCount, 0);
+});
+
+test("assessment composer swaps Resume back to Send after typing", async () => {
+  let resumeCount = 0;
+  let submitCount = 0;
+
+  function ControlledComposer() {
+    const [value, setValue] = useState("");
+    return React.createElement(AssessmentComposer, {
+      onResume: () => {
+        resumeCount += 1;
+      },
+      onSubmit: () => {
+        submitCount += 1;
+      },
+      onValueChange: setValue,
+      placeholder: "Message",
+      resumeAvailable: true,
+      resumeLabel: "Resume",
+      sendLabel: "Send",
+      submitReady: value.trim().length > 0,
+      value,
+    });
+  }
+
+  const { container } = await renderElement(
+    React.createElement(ControlledComposer),
+  );
+
+  const resumeButton = container.querySelector<HTMLButtonElement>(
+    'button[type="button"][aria-label="Resume"]',
+  );
+  assert.ok(resumeButton);
+  assert.equal(container.querySelector('button[type="submit"]'), null);
+
+  await click(resumeButton);
+  assert.equal(resumeCount, 1);
+  assert.equal(submitCount, 0);
+
+  await setTextareaValue(getTextarea(container), "More context");
+  assert.equal(
+    container.querySelector('button[type="button"][aria-label="Resume"]'),
+    null,
+  );
+  const sendButton = getButton(container);
+  assert.equal(sendButton.getAttribute("aria-label"), "Send");
+  assert.equal(sendButton.disabled, false);
+});
+
+test("assessment composer keeps five visible rows before showing resize", async () => {
+  const { container, rerender } = await renderElement(
+    React.createElement(AssessmentComposer, {
+      value: "https://github.com/khovan123/LCSP",
+      onValueChange: () => undefined,
+      onSubmit: () => undefined,
+    }),
+  );
+  const textarea = getTextarea(container);
+
+  assert.equal(textarea.getAttribute("rows"), "5");
+  const collapsedHeight = textarea.style.height;
+  assert.ok(Number.parseInt(collapsedHeight, 10) >= 100);
+  assert.equal(container.querySelector("button[aria-expanded]"), null);
+
+  await rerender(
+    React.createElement(AssessmentComposer, {
+      value: "Line\n".repeat(6),
+      onValueChange: () => undefined,
+      onSubmit: () => undefined,
+    }),
+  );
+
+  assert.equal(getTextarea(container).style.height, collapsedHeight);
+  assert.ok(container.querySelector("button[aria-expanded]"));
 });
 
 test("composer expands and collapses without changing the draft or submitting", async () => {
@@ -368,6 +530,18 @@ async function keyDown(
         ...init,
       }),
     );
+  });
+}
+
+async function setTextareaValue(element: HTMLTextAreaElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(
+    testWindow.HTMLTextAreaElement.prototype,
+    "value",
+  )?.set;
+  assert.ok(setter);
+  await act(async () => {
+    setter.call(element, value);
+    element.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
 
