@@ -3,8 +3,6 @@ import test from "node:test";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import {
-  ADMIN_ROOT_PATH,
-  ADMIN_USERS_PATH,
   getAdminRouteRedirectPath,
   isAdminPath,
 } from "../src/admin-route-middleware.ts";

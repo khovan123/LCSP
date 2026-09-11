@@ -5,6 +5,7 @@ import { act, createElement, StrictMode } from "react";
 import type { MessageKey } from "@lcsp/i18n";
 import {
   ADMIN_OVERVIEW_PERIODS,
+  type AdminOverviewPeriod,
   type AdminOverviewStats,
 } from "@lcsp/contracts/auth";
 
@@ -158,7 +159,7 @@ function renderComponent(element: React.ReactElement) {
 }
 
 test("AdminPeriodSelector renders selected period and opens dropdown menu on click", () => {
-  let selected = "30D" as any;
+  let selected: AdminOverviewPeriod = ADMIN_OVERVIEW_PERIODS.p30d;
   const { container, cleanup } = renderComponent(
     createElement(AdminPeriodSelector, {
       selectedPeriod: selected,

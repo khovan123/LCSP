@@ -3,7 +3,6 @@ import {
   ACCOUNT_INVITATION_STATUSES,
   ADMIN_ACCOUNT_OPERATIONS,
   ADMIN_OVERVIEW_PERIODS,
-  AUTH_ACCOUNT_STATUSES,
   USER_ACCESS_STATUSES,
   type AdminCorpusStatusSummary,
   type AdminOverviewAccountDistribution,
@@ -218,11 +217,6 @@ export class AdminOverviewService {
     now: Date,
     assessments: Array<{ createdAt: Date; status: string; updatedAt: Date }>,
   ) {
-    const dailyMap = new Map<
-      string,
-      { startedCount: number; completedCount: number }
-    >();
-
     // Determine number of displayed bars (e.g. 14 bars for 30D/7D or up to periodDays)
     const barCount = periodDays <= 14 ? periodDays : 14;
     const intervalMs = (now.getTime() - windowStart.getTime()) / barCount;

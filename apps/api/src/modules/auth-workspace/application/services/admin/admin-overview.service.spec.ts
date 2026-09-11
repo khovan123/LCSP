@@ -1,6 +1,7 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { ADMIN_OVERVIEW_PERIODS } from "@lcsp/contracts/auth";
 
+import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AdminOverviewService } from "./admin-overview.service.js";
 
 describe("AdminOverviewService", () => {
@@ -36,7 +37,9 @@ describe("AdminOverviewService", () => {
     },
   };
 
-  const service = new AdminOverviewService(mockPrisma as any);
+  const service = new AdminOverviewService(
+    mockPrisma as unknown as PrismaService,
+  );
 
   it("calculates metrics for 30D period with accurate percentages and audit-safe events", async () => {
     mockPrisma.user.count
@@ -130,7 +133,10 @@ describe("AdminOverviewService", () => {
     expect(result.recentActivity[0].adminEmail).toBe("admin@example.com");
     expect(result.recentActivity[0].action).toBe("Suspended account");
     expect(result.recentActivity[0].target).toBe("linh@example.com");
-    expect((result.recentActivity[0] as any).passwordHash).toBeUndefined();
+    expect(
+      (result.recentActivity[0] as unknown as Record<string, unknown>)
+        .passwordHash,
+    ).toBeUndefined();
   });
 
   it("handles 7D and 90D periods and empty state safely", async () => {
