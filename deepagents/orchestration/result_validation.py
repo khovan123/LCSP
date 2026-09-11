@@ -25,6 +25,32 @@ class SpecialistHandoffValidationError(RuntimeError):
     """Raised when a specialist returns an unsafe or invalid handoff."""
 
 
+_CAUSE_DETAIL_LIMIT = 500
+
+
+def _bounded_cause(exc: Exception) -> str:
+    """Render a bounded, PII-safe summary of the underlying validation failure.
+
+    Callers (structured logs, ``_recovery_instruction``) need the actual field/rule that
+    failed, not just the generic outer message, or the model has nothing concrete to
+    self-correct against. ``ValidationError.errors(include_input=False)`` keeps this safe:
+    it surfaces ``loc``/``msg`` only, never the model's raw field values.
+    """
+    if isinstance(exc, ValidationError):
+        parts = []
+        for error in exc.errors(include_url=False, include_context=False, include_input=False):
+            loc = ".".join(str(segment) for segment in error.get("loc", ()))
+            msg = str(error.get("msg") or "")
+            parts.append(f"{loc}: {msg}" if loc else msg)
+        text = "; ".join(parts)
+    else:
+        text = str(exc)
+    text = text.strip()
+    if len(text) > _CAUSE_DETAIL_LIMIT:
+        text = text[:_CAUSE_DETAIL_LIMIT].rstrip() + "..."
+    return text
+
+
 FORBIDDEN_FINAL_VERDICTS = frozenset({"COMPLIANT", "NON_COMPLIANT"})
 CONTROLLED_NON_VERDICT_PATHS = frozenset(
     {
@@ -116,7 +142,7 @@ def validate_specialist_handoff(
         handoff = payload if isinstance(payload, model) else model.model_validate(payload)
     except ValidationError as exc:
         raise SpecialistHandoffValidationError(
-            f"{subagent_type} handoff failed schema validation"
+            f"{subagent_type} handoff failed schema validation: {_bounded_cause(exc)}"
         ) from exc
 
     _assert_no_final_verdict(handoff.model_dump(mode="json"))
@@ -195,7 +221,9 @@ def validate_investigator_handoff(
             validated_claims.append(validator.validate(claim.to_evidence_claim(), program_graph))
     except EvidenceClaimValidationError as exc:
         raise SpecialistHandoffValidationError(
-            "investigator handoff failed evidence-claim validation"
+            "investigator handoff failed evidence-claim validation "
+            f"(claim_id={claim.claim_id!r}, criterion={claim.criterion!r}): "
+            f"{_bounded_cause(exc)}"
         ) from exc
 
     if not validated_claims:

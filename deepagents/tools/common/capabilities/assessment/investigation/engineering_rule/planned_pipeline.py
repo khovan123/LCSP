@@ -639,7 +639,10 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                     error_type=type(error).__name__,
                     # The type alone cannot separate a provider rejection from a schema
                     # or verdict violation, and every rule failing looks identical.
-                    error_message=str(error)[:500],
+                    # SpecialistHandoffValidationError now embeds the bounded underlying
+                    # cause in its own message (see result_validation._bounded_cause), so
+                    # this must stay wide enough to carry it instead of re-truncating it away.
+                    error_message=str(error)[:1_000],
                     workflow_run_id=workflow_run_id,
                     correlationId=correlation_id,
                 )
