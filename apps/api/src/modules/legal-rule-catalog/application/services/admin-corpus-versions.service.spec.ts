@@ -162,8 +162,10 @@ describe("AdminCorpusVersionsService", () => {
         create: jest
           .fn<() => Promise<unknown>>()
           .mockResolvedValue({ id: "target-1" }),
+        findFirst: jest.fn<() => Promise<unknown>>().mockResolvedValue(null),
       },
       corpusPreparation: {
+        findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue(null),
         create: jest.fn<() => Promise<unknown>>().mockResolvedValue({
           id: "prep-1",
           targetCorpusId: "target-1",
@@ -212,5 +214,167 @@ describe("AdminCorpusVersionsService", () => {
       }),
       tx,
     );
+  });
+
+  it("replays a publish by idempotency key after activation", async () => {
+    const version = {
+      id: "corpus-published",
+      version: "v-published",
+      status: "APPROVED",
+      sourceManifest: { validation: {} },
+      integrityManifestRef: "integrity:manifest-1",
+      createdAt: new Date(),
+      approvedAt: new Date(),
+      documents: [{ chunks: [{ id: "chunk-1" }] }],
+      retrievalIndexes: [],
+      preparation: null,
+    };
+    const prisma = {
+      corpusApprovalRecord: {
+        findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue({
+          legalCorpusVersionId: "corpus-published",
+        }),
+      },
+      legalCorpusVersion: {
+        findUnique: jest
+          .fn<() => Promise<unknown>>()
+          .mockResolvedValue(version),
+        findFirst: jest.fn<() => Promise<unknown>>().mockResolvedValue(null),
+      },
+    };
+    const service = new AdminCorpusVersionsService(
+      prisma as never,
+      {} as never,
+      { activateValidatedCorpusVersion: jest.fn() } as never,
+    );
+
+    const result = await service.publish({
+      versionId: "corpus-published",
+      actorId: "admin-1",
+      idempotencyKey: "publish-replay",
+      correlationId: "corr-replay",
+    });
+
+    expect(result.status).toBe("APPROVED");
+  });
+
+  it("rejects a publish key replayed against another version", async () => {
+    const prisma = {
+      corpusApprovalRecord: {
+        findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue({
+          legalCorpusVersionId: "other-version",
+        }),
+      },
+      legalCorpusVersion: {
+        findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue({
+          id: "corpus-2",
+          status: "DRAFT",
+          retrievalIndexes: [],
+        }),
+      },
+    };
+    const service = new AdminCorpusVersionsService(
+      prisma as never,
+      {} as never,
+      { activateValidatedCorpusVersion: jest.fn() } as never,
+    );
+
+    await expect(
+      service.publish({
+        versionId: "corpus-2",
+        actorId: "admin-1",
+        idempotencyKey: "publish-replay",
+        correlationId: "corr-replay-conflict",
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("replays a discard receipt without requiring DRAFT state", async () => {
+    const version = {
+      id: "corpus-discarded",
+      version: "v-discarded",
+      status: "REJECTED",
+      sourceManifest: {},
+      createdAt: new Date(),
+      approvedAt: null,
+      documents: [],
+      retrievalIndexes: [],
+      preparation: null,
+    };
+    const prisma = {
+      corpusDiscardReceipt: {
+        findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue({
+          corpusVersionId: "corpus-discarded",
+        }),
+      },
+      legalCorpusVersion: {
+        findUnique: jest
+          .fn<() => Promise<unknown>>()
+          .mockResolvedValue(version),
+        findFirst: jest.fn<() => Promise<unknown>>().mockResolvedValue(null),
+      },
+    };
+    const service = new AdminCorpusVersionsService(
+      prisma as never,
+      {} as never,
+    );
+
+    const result = await service.discardDraft({
+      versionId: "corpus-discarded",
+      actorId: "admin-1",
+      idempotencyKey: "discard-replay",
+      correlationId: "corr-discard-replay",
+    });
+
+    expect(result.status).toBe("REJECTED");
+  });
+
+  it("does not allow a terminal preparation callback to change state", async () => {
+    const preparation = {
+      id: "prep-1",
+      targetCorpusId: "corpus-1",
+      status: "COMPLETED",
+    };
+    const tx = {
+      corpusPreparation: {
+        updateMany: jest
+          .fn<() => Promise<unknown>>()
+          .mockResolvedValue({ count: 0 }),
+        findUnique: jest
+          .fn<() => Promise<unknown>>()
+          .mockResolvedValue(preparation),
+      },
+    };
+    const prisma = {
+      corpusPreparation: {
+        findUnique: jest
+          .fn<() => Promise<unknown>>()
+          .mockResolvedValue(preparation),
+      },
+      $transaction: jest.fn(
+        async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+      ),
+    };
+    const service = new AdminCorpusVersionsService(
+      prisma as never,
+      {} as never,
+    );
+
+    await expect(
+      service.completePreparation({
+        preparationId: "prep-1",
+        corpusVersionId: "corpus-1",
+        status: "COMPLETED",
+        correlationId: "corr-terminal-replay",
+      }),
+    ).resolves.toMatchObject({ status: "COMPLETED" });
+    await expect(
+      service.completePreparation({
+        preparationId: "prep-1",
+        corpusVersionId: "corpus-1",
+        status: "FAILED",
+        correlationId: "corr-terminal-conflict",
+      }),
+    ).rejects.toMatchObject({ status: 409 });
   });
 });

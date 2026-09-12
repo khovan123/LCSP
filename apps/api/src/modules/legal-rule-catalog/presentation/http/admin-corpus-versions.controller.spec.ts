@@ -43,13 +43,14 @@ describe("AdminCorpusVersionsController", () => {
     };
     const controller = new AdminCorpusVersionsController(service as never);
 
-    await controller.discard("corpus-1", {
+    await controller.discard("corpus-1", undefined, undefined, {
       correlationId: "corr-1",
       rbacContext: { userId: "admin-1" },
     } as never);
     expect(service.discardDraft).toHaveBeenCalledWith({
       versionId: "corpus-1",
       actorId: "admin-1",
+      idempotencyKey: "",
       correlationId: "corr-1",
     });
   });

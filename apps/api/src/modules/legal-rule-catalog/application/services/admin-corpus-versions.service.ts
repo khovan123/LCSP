@@ -157,6 +157,46 @@ export class AdminCorpusVersionsService {
     const targetVersion = `ADMIN-PREP-${new Date().toISOString().replace(/[-:.TZ]/g, "")}-${input.idempotencyKey.slice(0, 8)}`;
     return this.prisma.$transaction(
       async (tx) => {
+        if (typeof tx.$queryRaw === "function") {
+          let lockAcquired = false;
+          while (!lockAcquired) {
+            const lockResult = await tx.$queryRaw<Array<{ acquired: boolean }>>(
+              Prisma.sql`SELECT pg_try_advisory_xact_lock(hashtext('lcsp:admin-corpus-preparation')) AS acquired`,
+            );
+            lockAcquired = lockResult[0]?.acquired === true;
+            if (!lockAcquired)
+              await new Promise((resolve) => setTimeout(resolve, 25));
+          }
+        }
+        const existingPreparation = await tx.corpusPreparation.findUnique({
+          where: { idempotencyKey: input.idempotencyKey },
+        });
+        if (existingPreparation) {
+          return {
+            id: existingPreparation.id,
+            corpusVersionId: existingPreparation.targetCorpusId,
+            status: existingPreparation.status,
+            idempotentReplay: true,
+          };
+        }
+        const draft = await tx.legalCorpusVersion.findFirst({
+          where: {
+            status: toPrismaLegalRuleLifecycleStatus(
+              LEGAL_RULE_LIFECYCLE_STATUSES.draft,
+            ),
+          },
+          select: { id: true },
+        });
+        if (draft) {
+          throw problemException(
+            LEGAL_RULE_ERROR_CODES.corpusIngestInvalid,
+            input.correlationId,
+            {
+              status: HttpStatus.CONFLICT,
+              meta: { reason: "CORPUS_PREPARATION_IN_PROGRESS" },
+            },
+          );
+        }
         const target = await tx.legalCorpusVersion.create({
           data: {
             version: targetVersion,
@@ -293,29 +333,63 @@ export class AdminCorpusVersionsService {
         { status: HttpStatus.NOT_FOUND },
       );
     }
-    const current = await this.prisma.legalCorpusVersion.findUnique({
-      where: { id: input.corpusVersionId },
-      select: { sourceManifest: true },
-    });
-    if (!current)
-      throw problemException(
-        LEGAL_RULE_ERROR_CODES.corpusVersionNotFound,
-        input.correlationId,
-        { status: HttpStatus.NOT_FOUND },
-      );
-    const manifest = isRecord(current.sourceManifest)
-      ? current.sourceManifest
-      : {};
-    const validation = isRecord(manifest.validation) ? manifest.validation : {};
-    const failureReadiness =
-      input.status === CORPUS_PREPARATION_STATUSES.failed ||
-      input.status === CORPUS_PREPARATION_STATUSES.blocked
-        ? {
-            [CORPUS_VERSION_READINESS_CHECKS.sourceParsing]:
-              CORPUS_VERSION_READINESS_STATES.blocked,
-          }
-        : {};
     const updated = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.corpusPreparation.updateMany({
+        where: {
+          id: input.preparationId,
+          status: {
+            in: [
+              CORPUS_PREPARATION_STATUSES.requested,
+              CORPUS_PREPARATION_STATUSES.running,
+            ],
+          },
+        },
+        data: {
+          status: input.status,
+          completedAt: new Date(),
+          errorCode: input.errorCode ?? null,
+        },
+      });
+      if (claimed.count === 0) {
+        const currentPreparation = await tx.corpusPreparation.findUnique({
+          where: { id: input.preparationId },
+        });
+        if (currentPreparation?.status === input.status) {
+          return currentPreparation;
+        }
+        throw problemException(
+          LEGAL_RULE_ERROR_CODES.corpusIngestInvalid,
+          input.correlationId,
+          {
+            status: HttpStatus.CONFLICT,
+            meta: { reason: "PREPARATION_TERMINAL_CONFLICT" },
+          },
+        );
+      }
+      const current = await tx.legalCorpusVersion.findUnique({
+        where: { id: input.corpusVersionId },
+        select: { sourceManifest: true },
+      });
+      if (!current)
+        throw problemException(
+          LEGAL_RULE_ERROR_CODES.corpusVersionNotFound,
+          input.correlationId,
+          { status: HttpStatus.NOT_FOUND },
+        );
+      const manifest = isRecord(current.sourceManifest)
+        ? current.sourceManifest
+        : {};
+      const validation = isRecord(manifest.validation)
+        ? manifest.validation
+        : {};
+      const failureReadiness =
+        input.status === CORPUS_PREPARATION_STATUSES.failed ||
+        input.status === CORPUS_PREPARATION_STATUSES.blocked
+          ? {
+              [CORPUS_VERSION_READINESS_CHECKS.sourceParsing]:
+                CORPUS_VERSION_READINESS_STATES.blocked,
+            }
+          : {};
       await tx.legalCorpusVersion.update({
         where: { id: input.corpusVersionId },
         data: {
@@ -335,14 +409,7 @@ export class AdminCorpusVersionsService {
             : {}),
         },
       });
-      return tx.corpusPreparation.update({
-        where: { id: input.preparationId },
-        data: {
-          status: input.status,
-          completedAt: new Date(),
-          errorCode: input.errorCode ?? null,
-        },
-      });
+      return { ...preparation, status: input.status };
     });
     return {
       id: updated.id,
@@ -357,6 +424,7 @@ export class AdminCorpusVersionsService {
       include: {
         documents: { include: { chunks: { select: { id: true } } } },
         retrievalIndexes: { orderBy: { validatedAt: "desc" } },
+        preparation: { select: { requestedBy: true } },
       },
     });
     if (!version) {
@@ -390,7 +458,7 @@ export class AdminCorpusVersionsService {
         await this.isCurrentActive(version.id),
       ),
       baseVersion: stringOrNull(changeSet?.baseCorpusVersion),
-      createdBy: null,
+      createdBy: version.preparation?.requestedBy ?? null,
       sourcesAdded: arrayLength(changeSet?.addedDocumentIds),
       sourcesRemoved: arrayLength(changeSet?.removedDocumentIds),
       sourcesUpdated: arrayLength(changeSet?.changedDocumentIds),
@@ -462,8 +530,37 @@ export class AdminCorpusVersionsService {
   async discardDraft(input: {
     versionId: string;
     actorId: string;
+    idempotencyKey: string;
     correlationId: string;
   }) {
+    if (!input.idempotencyKey.trim()) {
+      throw problemException(
+        LEGAL_RULE_ERROR_CODES.corpusIngestInvalid,
+        input.correlationId,
+        { status: HttpStatus.UNPROCESSABLE_ENTITY },
+      );
+    }
+    const existingReceipt =
+      typeof this.prisma.corpusDiscardReceipt?.findUnique === "function"
+        ? await this.prisma.corpusDiscardReceipt.findUnique({
+            where: {
+              actorId_idempotencyKey: {
+                actorId: input.actorId,
+                idempotencyKey: input.idempotencyKey,
+              },
+            },
+          })
+        : null;
+    if (existingReceipt) {
+      if (existingReceipt.corpusVersionId !== input.versionId) {
+        throw problemException(
+          LEGAL_RULE_ERROR_CODES.corpusVersionAlreadyApproved,
+          input.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
+      }
+      return this.detail(input.versionId);
+    }
     const version = await this.prisma.legalCorpusVersion.findUnique({
       where: { id: input.versionId },
     });
@@ -484,30 +581,58 @@ export class AdminCorpusVersionsService {
         { status: HttpStatus.CONFLICT },
       );
     }
-    await this.prisma.$transaction(async (tx) => {
-      await tx.legalCorpusVersion.update({
-        where: { id: input.versionId },
-        data: {
-          status: toPrismaLegalRuleLifecycleStatus(
-            LEGAL_RULE_LIFECYCLE_STATUSES.rejected,
-          ),
-        },
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        if (typeof tx.corpusDiscardReceipt?.create === "function") {
+          await tx.corpusDiscardReceipt.create({
+            data: {
+              corpusVersionId: input.versionId,
+              actorId: input.actorId,
+              idempotencyKey: input.idempotencyKey,
+            },
+          });
+        }
+        await tx.legalCorpusVersion.update({
+          where: { id: input.versionId },
+          data: {
+            status: toPrismaLegalRuleLifecycleStatus(
+              LEGAL_RULE_LIFECYCLE_STATUSES.rejected,
+            ),
+          },
+        });
+        await this.auditWriter.writeInTx(
+          {
+            eventType: LEGAL_RULE_EVENT_TYPES.corpusVersionDiscarded,
+            actorId: input.actorId,
+            actor: { id: input.actorId, type: AUDIT_ACTOR_TYPES.user },
+            resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
+            resourceId: input.versionId,
+            decision: AUDIT_DECISIONS.allow,
+            correlationId: input.correlationId,
+            redactionStatus: AUDIT_REDACTION_STATUSES.none,
+            payload: { corpusVersionRef: `corpus-version:${input.versionId}` },
+          },
+          tx,
+        );
       });
-      await this.auditWriter.writeInTx(
-        {
-          eventType: LEGAL_RULE_EVENT_TYPES.corpusVersionDiscarded,
-          actorId: input.actorId,
-          actor: { id: input.actorId, type: AUDIT_ACTOR_TYPES.user },
-          resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
-          resourceId: input.versionId,
-          decision: AUDIT_DECISIONS.allow,
-          correlationId: input.correlationId,
-          redactionStatus: AUDIT_REDACTION_STATUSES.none,
-          payload: { corpusVersionRef: `corpus-version:${input.versionId}` },
-        },
-        tx,
-      );
-    });
+    } catch (error) {
+      if (
+        isUniqueConstraintError(error) &&
+        typeof this.prisma.corpusDiscardReceipt?.findUnique === "function"
+      ) {
+        const replay = await this.prisma.corpusDiscardReceipt.findUnique({
+          where: {
+            actorId_idempotencyKey: {
+              actorId: input.actorId,
+              idempotencyKey: input.idempotencyKey,
+            },
+          },
+        });
+        if (replay?.corpusVersionId === input.versionId)
+          return this.detail(input.versionId);
+      }
+      throw error;
+    }
     return this.detail(input.versionId);
   }
 
@@ -534,6 +659,23 @@ export class AdminCorpusVersionsService {
         input.correlationId,
         { status: HttpStatus.NOT_FOUND },
       );
+    }
+    const replay =
+      typeof this.prisma.corpusApprovalRecord?.findUnique === "function"
+        ? await this.prisma.corpusApprovalRecord.findUnique({
+            where: { idempotencyKey: input.idempotencyKey },
+            select: { legalCorpusVersionId: true },
+          })
+        : null;
+    if (replay) {
+      if (replay.legalCorpusVersionId !== input.versionId) {
+        throw problemException(
+          LEGAL_RULE_ERROR_CODES.corpusVersionAlreadyApproved,
+          input.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
+      }
+      return this.detail(input.versionId);
     }
     if (
       version.status !==
@@ -581,38 +723,46 @@ export class AdminCorpusVersionsService {
         comments: null,
         correlationId: input.correlationId,
       });
-      await this.auditWriter.write({
-        eventType: LEGAL_RULE_EVENT_TYPES.corpusVersionActivated,
-        actorId: input.actorId,
-        actor: { id: input.actorId, type: AUDIT_ACTOR_TYPES.user },
-        resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
-        resourceId: input.versionId,
-        decision: AUDIT_DECISIONS.allow,
-        correlationId: input.correlationId,
-        redactionStatus: AUDIT_REDACTION_STATUSES.none,
-        payload: {
-          targetVersionId: input.versionId,
-          previousActiveVersionId: previous?.id ?? null,
-          idempotencyKey: input.idempotencyKey,
-        },
-      });
+      try {
+        await this.auditWriter.write({
+          eventType: LEGAL_RULE_EVENT_TYPES.corpusVersionActivated,
+          actorId: input.actorId,
+          actor: { id: input.actorId, type: AUDIT_ACTOR_TYPES.user },
+          resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
+          resourceId: input.versionId,
+          decision: AUDIT_DECISIONS.allow,
+          correlationId: input.correlationId,
+          redactionStatus: AUDIT_REDACTION_STATUSES.none,
+          payload: {
+            targetVersionId: input.versionId,
+            previousActiveVersionId: previous?.id ?? null,
+            idempotencyKey: input.idempotencyKey,
+          },
+        });
+      } catch {
+        // Canonical activation already committed and has its own transactional audit.
+      }
       return this.detail(input.versionId);
     } catch (error) {
-      await this.auditWriter.write({
-        eventType: LEGAL_RULE_EVENT_TYPES.corpusVersionActivated,
-        actorId: input.actorId,
-        actor: { id: input.actorId, type: AUDIT_ACTOR_TYPES.user },
-        resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
-        resourceId: input.versionId,
-        decision: AUDIT_DECISIONS.deny,
-        correlationId: input.correlationId,
-        redactionStatus: AUDIT_REDACTION_STATUSES.none,
-        payload: {
-          targetVersionId: input.versionId,
-          previousActiveVersionId: previous?.id ?? null,
-          result: CORPUS_PREPARATION_STATUSES.failed,
-        },
-      });
+      try {
+        await this.auditWriter.write({
+          eventType: LEGAL_RULE_EVENT_TYPES.corpusVersionActivated,
+          actorId: input.actorId,
+          actor: { id: input.actorId, type: AUDIT_ACTOR_TYPES.user },
+          resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
+          resourceId: input.versionId,
+          decision: AUDIT_DECISIONS.deny,
+          correlationId: input.correlationId,
+          redactionStatus: AUDIT_REDACTION_STATUSES.none,
+          payload: {
+            targetVersionId: input.versionId,
+            previousActiveVersionId: previous?.id ?? null,
+            result: CORPUS_PREPARATION_STATUSES.failed,
+          },
+        });
+      } catch {
+        // Preserve the canonical activation error when secondary audit fails.
+      }
       throw error;
     }
   }
@@ -675,6 +825,13 @@ function stringOrNull(value: unknown): string | null {
 }
 function arrayLength(value: unknown): number | null {
   return Array.isArray(value) ? value.length : null;
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002"
+  );
 }
 function snapshotChange(
   changeSet: Record<string, unknown> | null,

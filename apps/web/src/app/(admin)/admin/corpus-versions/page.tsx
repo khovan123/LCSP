@@ -1,4 +1,5 @@
 "use client";
+import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +14,7 @@ export default function AdminCorpusVersionsRoute() {
   const router = useRouter();
   const query = useAdminCorpusVersionsQuery();
   const prepare = usePrepareAdminCorpusVersionMutation();
+  const prepareKey = useRef<string | null>(null);
   if (query.isLoading) return <CorpusVersionsLoading />;
   if (query.error || !query.data)
     return (
@@ -32,9 +34,17 @@ export default function AdminCorpusVersionsRoute() {
   return (
     <CorpusVersionsPage
       {...query.data}
-      onCreate={() => prepare.mutate(globalThis.crypto.randomUUID(), {
-        onSuccess: (result) => router.push(`/admin/corpus-versions/${result.corpusVersionId}`),
-      })}
+      onCreate={() => {
+        const key =
+          prepareKey.current ??
+          (prepareKey.current = globalThis.crypto.randomUUID());
+        prepare.mutate(key, {
+          onSuccess: (result) => {
+            prepareKey.current = null;
+            router.push(`/admin/corpus-versions/${result.corpusVersionId}`);
+          },
+        });
+      }}
       isCreating={prepare.isPending}
       onView={(id) => router.push(`/admin/corpus-versions/${id}`)}
     />

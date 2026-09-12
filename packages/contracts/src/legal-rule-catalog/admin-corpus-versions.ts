@@ -134,3 +134,7 @@ export type AdminCorpusVersionsListResponse = {
 export type AdminPublishCorpusVersionInput = {
   idempotencyKey: string;
 };
+
+export type AdminDiscardCorpusVersionInput = {
+  idempotencyKey: string;
+};

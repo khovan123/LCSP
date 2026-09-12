@@ -768,6 +768,8 @@ model LegalCorpusVersion {
   approvals            CorpusApprovalRecord[]
   legalRuleMatches     LegalRuleMatch[]
   retrievalIndexes     LegalRetrievalIndex[]
+  discardReceipts      CorpusDiscardReceipt[]
+  preparation          CorpusPreparation?        @relation("CorpusPreparationTarget")
 
   @@index([status, createdAt])
 }
@@ -783,8 +785,21 @@ model CorpusPreparation {
   createdAt      DateTime                @default(now())
   completedAt    DateTime?
   errorCode      String?
+  targetCorpus   LegalCorpusVersion      @relation("CorpusPreparationTarget", fields: [targetCorpusId], references: [id], onDelete: Restrict)
 
   @@index([status, createdAt])
+}
+
+model CorpusDiscardReceipt {
+  id              String             @id @default(uuid())
+  corpusVersionId String
+  actorId         String
+  idempotencyKey  String
+  createdAt       DateTime           @default(now())
+  corpusVersion   LegalCorpusVersion @relation(fields: [corpusVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([actorId, idempotencyKey])
+  @@index([corpusVersionId])
 }
 
 model LegalRetrievalIndex {
