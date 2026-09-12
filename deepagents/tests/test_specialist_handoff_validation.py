@@ -217,6 +217,86 @@ def test_investigator_claim_schema_rejects_met_without_refs() -> None:
         validate_specialist_handoff("investigator", payload)
 
 
+def test_fail_closed_recovery_converts_decided_claim_without_refs_to_unresolved() -> None:
+    payload = _investigator_payload()
+    payload["claims"][0].update(
+        {
+            "claim_type": "RULE_REQUIREMENT_MET",
+            "value": True,
+            "evidence_refs": [],
+            "graph_path_refs": [],
+            "source_anchor_refs": [],
+            "limitations": [],
+        }
+    )
+
+    handoff = validate_specialist_handoff(
+        "investigator",
+        payload,
+        graph=_graph(),
+        pinned_rule_ids=("eng-1",),
+        pinned_versions={"technicalEvidenceReportId": "ter-1"},
+        allow_fail_closed_recovery=True,
+    )
+
+    claim = handoff.model_dump(mode="json")["claims"][0]
+    assert claim["claim_type"] == "UNRESOLVED_ENGINEERING_FACT"
+    assert claim["value"] is None
+    assert claim["confidence"] == 0.0
+    assert claim["limitations"] == [
+        ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]
+    ]
+    assert claim["evidence_refs"] == []
+    assert claim["graph_path_refs"] == []
+    assert claim["source_anchor_refs"] == []
+
+
+def test_fail_closed_recovery_fills_unresolved_limitation_without_refs() -> None:
+    payload = _investigator_payload()
+    payload["claims"][0].update(
+        {
+            "claim_type": "UNRESOLVED_ENGINEERING_FACT",
+            "value": True,
+            "evidence_refs": [],
+            "graph_path_refs": [],
+            "source_anchor_refs": [],
+            "limitations": [],
+        }
+    )
+
+    handoff = validate_specialist_handoff(
+        "investigator",
+        payload,
+        graph=_graph(),
+        pinned_rule_ids=("eng-1",),
+        pinned_versions={"technicalEvidenceReportId": "ter-1"},
+        allow_fail_closed_recovery=True,
+    )
+
+    claim = handoff.model_dump(mode="json")["claims"][0]
+    assert claim["claim_type"] == "UNRESOLVED_ENGINEERING_FACT"
+    assert claim["value"] is None
+    assert claim["confidence"] == 0.0
+    assert claim["limitations"] == [
+        ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]
+    ]
+
+
+def test_fail_closed_recovery_keeps_decided_claim_with_refs_under_evidence_gate() -> None:
+    payload = _handoff_with_claim(
+        _ai_output_path_claim(evidence_refs=["EV-MISSING"], graph_path_refs=[])
+    )
+
+    with pytest.raises(SpecialistHandoffValidationError, match="evidence-claim"):
+        validate_specialist_handoff(
+            "investigator",
+            payload,
+            graph=_ai_output_path_graph(),
+            pinned_rule_ids=("eng-1",),
+            pinned_versions={"technicalEvidenceReportId": "ter-1"},
+        )
+
+
 def test_investigator_validation_strips_customer_context_refs_from_non_scope_claims() -> None:
     payload = _investigator_payload()
     payload["claims"][0]["customer_context_refs"] = ["statement:model-noise"]

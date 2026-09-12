@@ -22,6 +22,7 @@ from tools.common.capabilities.assessment.claims.evidence_claim.evidence_claim_v
 )
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_EVIDENCE_CLAIM_TYPES,
+    ENGINEERING_LIMITATION_CODES,
 )
 
 
@@ -143,7 +144,11 @@ def _validate_customer_context_claim_refs(
             )
 
 
-def _normalize_investigator_payload(payload: Any) -> Any:
+def _normalize_investigator_payload(
+    payload: Any,
+    *,
+    allow_fail_closed_recovery: bool = False,
+) -> Any:
     """Remove provider-added customer refs from non-customer-context claim variants.
 
     Gemini's native responseSchema currently does not reliably enforce
@@ -164,6 +169,8 @@ def _normalize_investigator_payload(payload: Any) -> Any:
         if not isinstance(claim, dict):
             normalized_claims.append(claim)
             continue
+        if allow_fail_closed_recovery:
+            claim = _fail_closed_investigator_claim(claim)
         if (
             claim.get("claim_type")
             != ENGINEERING_EVIDENCE_CLAIM_TYPES["rule_scope_not_applicable"]
@@ -174,6 +181,73 @@ def _normalize_investigator_payload(payload: Any) -> Any:
         normalized_claims.append(claim)
     normalized["claims"] = normalized_claims
     return normalized
+
+
+def _fail_closed_investigator_claim(claim: dict[str, Any]) -> dict[str, Any]:
+    """Canonicalize unsafe Gemini claim shapes to unresolved, never to decided.
+
+    Gemini may ignore per-variant ``required``/``const`` constraints inside the
+    Investigator ``anyOf``. Filling a missing decided value/ref would fabricate a closed
+    compliance-relevant claim. Downgrading an unprovable decided claim to
+    UNRESOLVED_ENGINEERING_FACT preserves the strict evidence guard: downstream receives a
+    non-decision with an explicit limitation instead of an unsupported MET/NOT_MET.
+    """
+    claim_type = claim.get("claim_type")
+    unresolved_type = ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+    if claim_type == unresolved_type:
+        normalized = dict(claim)
+        normalized["value"] = None
+        refs = _investigator_claim_refs(normalized)
+        if not refs:
+            normalized["confidence"] = 0.0
+        limitations = normalized.get("limitations")
+        if not isinstance(limitations, list) or not limitations:
+            normalized["limitations"] = [
+                ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]
+            ]
+        return normalized
+
+    if claim_type not in {
+        ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"],
+        ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_not_met"],
+    }:
+        return claim
+
+    refs = _investigator_claim_refs(claim)
+    if refs and isinstance(claim.get("value"), bool) and claim.get("criterion"):
+        return claim
+
+    normalized = dict(claim)
+    normalized["claim_type"] = unresolved_type
+    normalized["value"] = None
+    normalized["limitations"] = [
+        ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]
+    ]
+    normalized.setdefault("evidence_refs", [])
+    normalized.setdefault("graph_path_refs", [])
+    normalized.setdefault("source_anchor_refs", [])
+    normalized["confidence"] = 0.0
+    return normalized
+
+
+def _investigator_claim_refs(claim: dict[str, Any]) -> list[str]:
+    refs: list[str] = []
+    for key in ("evidence_refs", "graph_path_refs", "source_anchor_refs"):
+        value = claim.get(key)
+        if isinstance(value, list):
+            refs.extend(str(item).strip() for item in value if str(item).strip())
+    return refs
+
+
+def _is_fail_closed_unresolved_without_refs(claim: InvestigatorClaim) -> bool:
+    return (
+        claim.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+        and claim.confidence == 0.0
+        and not (claim.evidence_refs or claim.graph_path_refs or claim.source_anchor_refs)
+        and ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]
+        in claim.limitations
+    )
+
 
 def _response_model(subagent_type: str) -> type[BaseModel]:
     if subagent_type == "resolver":
@@ -229,11 +303,15 @@ def validate_specialist_handoff(
     pinned_rule_ids: tuple[str, ...] | list[str] | None = None,
     pinned_versions: dict[str, str] | None = None,
     confirmed_statement_refs: tuple[str, ...] | list[str] | None = None,
+    allow_fail_closed_recovery: bool = False,
 ) -> BaseModel:
     """Validate a specialist handoff before root or deterministic gates consume it."""
     model = _response_model(subagent_type)
     if subagent_type == "investigator":
-        payload = _normalize_investigator_payload(payload)
+        payload = _normalize_investigator_payload(
+            payload,
+            allow_fail_closed_recovery=allow_fail_closed_recovery,
+        )
     try:
         handoff = payload if isinstance(payload, model) else model.model_validate(payload)
     except ValidationError as exc:
@@ -256,6 +334,7 @@ def validate_specialist_handoff(
                 pinned_versions=pinned_versions,
                 program_graph=graph,
                 confirmed_statement_refs=confirmed_statement_refs,
+                allow_fail_closed_recovery=allow_fail_closed_recovery,
             )
         elif investigator.status == "READY":
             raise SpecialistHandoffValidationError(
@@ -272,6 +351,7 @@ def validate_investigator_handoff(
     pinned_versions: dict[str, str],
     program_graph: Any,
     confirmed_statement_refs: tuple[str, ...] | list[str] | None = None,
+    allow_fail_closed_recovery: bool = False,
 ) -> tuple[Any, ...]:
     """Validate an Investigator handoff against immutable run pins."""
     handoff = (
@@ -312,6 +392,9 @@ def validate_investigator_handoff(
                 claim.claim_type
                 == ENGINEERING_EVIDENCE_CLAIM_TYPES["rule_scope_not_applicable"]
             ):
+                validated_claims.append(claim.to_evidence_claim())
+                continue
+            if allow_fail_closed_recovery and _is_fail_closed_unresolved_without_refs(claim):
                 validated_claims.append(claim.to_evidence_claim())
                 continue
             validated_claims.append(validator.validate(claim.to_evidence_claim(), program_graph))

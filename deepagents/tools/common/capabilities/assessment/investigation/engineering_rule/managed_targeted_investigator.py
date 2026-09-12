@@ -18,6 +18,7 @@ from typing import Any, Iterable
 from langchain.agents.structured_output import StructuredOutputError
 
 from contracts.handoffs import InvestigatorResult
+from middleware.failure_policy import TerminalSchemaError
 from middleware.specialist_handoff_validation import _persist_targeted_interview_need
 from model_policy import create_lcsp_agent as create_agent
 from orchestration.context import LCSPRunContext
@@ -729,6 +730,7 @@ def _invoke_managed_investigator(
         current_instruction = instruction
         for _attempt in range(MAX_MANAGED_INVESTIGATOR_REJECTED_ATTEMPTS):
             response_shape: dict[str, Any] | None = None
+            candidate_handoff: Any | None = None
             try:
                 invocation = agent.invoke(
                     {"messages": [{"role": "user", "content": current_instruction}]},
@@ -750,18 +752,21 @@ def _invoke_managed_investigator(
                     raise SpecialistHandoffValidationError(
                         "managed Investigator did not return structured_response"
                     )
-                response_shape = _structured_handoff_shape(
-                    invocation["structured_response"]
-                )
+                candidate_handoff = invocation["structured_response"]
+                response_shape = _structured_handoff_shape(candidate_handoff)
                 validated = validate_specialist_handoff(
                     "investigator",
-                    invocation["structured_response"],
+                    candidate_handoff,
                     graph=graph,
                     pinned_rule_ids=context.engineering_rule_ids,
                     pinned_versions=dict(context.artifact_versions),
                     confirmed_statement_refs=confirmed_statement_refs,
                 )
-            except (SpecialistHandoffValidationError, StructuredOutputError) as error:
+            except (
+                SpecialistHandoffValidationError,
+                StructuredOutputError,
+                TerminalSchemaError,
+            ) as error:
                 record = registry.get(execution_id)
                 rejected_attempts = (record.attempt_count if record else 0) + 1
                 error_message = _managed_validation_error_message(error)
@@ -788,6 +793,36 @@ def _invoke_managed_investigator(
                     rejected_attempts
                     >= MAX_MANAGED_INVESTIGATOR_REJECTED_ATTEMPTS
                 ):
+                    recovered = _try_fail_closed_recovery(
+                        candidate_handoff,
+                        graph=graph,
+                        context=context,
+                        confirmed_statement_refs=confirmed_statement_refs,
+                    )
+                    if recovered is not None:
+                        registry.save(
+                            execution_id=execution_id,
+                            assessment_id=context.assessment_id,
+                            thread_id=thread_id,
+                            checkpoint_id=checkpoint_text,
+                            affected_rule_ids=context.engineering_rule_ids,
+                            artifact_versions=dict(context.artifact_versions),
+                            status=MANAGED_INVESTIGATOR_EXECUTION_STATUSES["ready"],
+                            attempt_count=rejected_attempts,
+                            last_error=error_message,
+                        )
+                        logger.warning(
+                            "MANAGED_INVESTIGATOR_FAIL_CLOSED_RECOVERY_ACCEPTED",
+                            execution_id=execution_id,
+                            assessment_id=context.assessment_id,
+                            thread_id=thread_id,
+                            checkpoint_id=checkpoint_text,
+                            rejected_attempts=rejected_attempts,
+                            error_type=type(error).__name__,
+                            response_shape=response_shape,
+                            correlationId=correlation_id,
+                        )
+                        return recovered.model_dump(mode="json"), checkpoint_text
                     registry.save(
                         execution_id=execution_id,
                         assessment_id=context.assessment_id,
@@ -874,6 +909,30 @@ def _assert_execution_registry_matches_continuation(
             and record.status == MANAGED_INVESTIGATOR_EXECUTION_STATUSES["ready"]
         ):
             raise RuntimeError("managed Investigator execution checkpoint identity drifted")
+
+
+def _try_fail_closed_recovery(
+    candidate_handoff: Any | None,
+    *,
+    graph: Any,
+    context: LCSPRunContext,
+    confirmed_statement_refs: tuple[str, ...],
+) -> InvestigatorResult | None:
+    if candidate_handoff is None:
+        return None
+    try:
+        validated = validate_specialist_handoff(
+            "investigator",
+            candidate_handoff,
+            graph=graph,
+            pinned_rule_ids=context.engineering_rule_ids,
+            pinned_versions=dict(context.artifact_versions),
+            confirmed_statement_refs=confirmed_statement_refs,
+            allow_fail_closed_recovery=True,
+        )
+    except SpecialistHandoffValidationError:
+        return None
+    return InvestigatorResult.model_validate(validated)
 
 
 def _recovery_instruction(*, instruction: str, validation_error: str) -> str:

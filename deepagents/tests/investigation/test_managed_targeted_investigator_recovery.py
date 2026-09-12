@@ -7,6 +7,8 @@ from typing import Any
 
 from langchain.agents.structured_output import StructuredOutputError
 
+from middleware.failure_policy import TerminalSchemaError
+
 from orchestration.context import LCSPRunContext
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_LIMITATION_CODES,
@@ -170,6 +172,20 @@ class _RetryAgent:
         assert context is not None
         self._checkpoint_id = "checkpoint-repaired"
         self._structured_response = _valid_handoff()
+        return {"structured_response": self._structured_response}
+
+
+class _AlwaysInvalidShapeAgent(_RetryAgent):
+    def __init__(self, response: dict[str, Any]) -> None:
+        super().__init__()
+        self._response = response
+        self._checkpoint_id = "checkpoint-invalid-0"
+
+    def invoke(self, payload, config=None, context=None):
+        self.invoke_calls.append((payload, config or {}))
+        assert context is not None
+        self._checkpoint_id = f"checkpoint-invalid-{len(self.invoke_calls)}"
+        self._structured_response = self._response
         return {"structured_response": self._structured_response}
 
 
@@ -388,6 +404,87 @@ def test_initial_malformed_native_json_is_retried_without_accepting_bad_output(
     assert len(agent.invoke_calls) == 2
     assert "Unterminated string" in _FakeStore.saves[0]["last_error"]
     assert "Return only compact valid JSON" in agent.invoke_calls[1][0]["messages"][0]["content"]
+
+
+def test_initial_terminal_tool_argument_error_is_recorded_and_retried(monkeypatch) -> None:
+    _install_fake_postgres_saver(monkeypatch)
+    _FakeStore.records = {}
+    _FakeStore.saves = []
+    error = TerminalSchemaError(
+        "Tool argument schema validation failed; automatic repair disabled"
+    )
+    agent = _InvalidThenValidAgent(error)
+    monkeypatch.setattr(managed, "ManagedInvestigatorExecutionStore", _FakeStore)
+    monkeypatch.setattr(managed, "_durable_investigator_agent", lambda _checkpointer: agent)
+
+    handoff, checkpoint_id = managed._invoke_managed_investigator(
+        checkpoint_url="postgresql://recovery-test",
+        thread_id="investigator:exec-recovery-1",
+        checkpoint_id=None,
+        context=_context(),
+        instruction="Initial selected-rule investigation.",
+        graph=_program_graph(),
+        execution_id="exec-recovery-1",
+        correlation_id="corr-recovery-terminal",
+    )
+
+    assert checkpoint_id == "checkpoint-repaired"
+    assert handoff["status"] == "READY"
+    assert len(agent.invoke_calls) == 2
+    assert "Tool argument schema validation failed" in _FakeStore.saves[0]["last_error"]
+    assert _FakeStore.saves[0]["status"] == MANAGED_INVESTIGATOR_EXECUTION_STATUSES[
+        "rejected"
+    ]
+    assert "Tool argument schema validation failed" in agent.invoke_calls[1][0]["messages"][0][
+        "content"
+    ]
+
+
+def test_rejected_threshold_canonicalizes_unprovable_shape_to_unresolved(monkeypatch) -> None:
+    _install_fake_postgres_saver(monkeypatch)
+    _FakeStore.records = {}
+    _FakeStore.saves = []
+    invalid = _valid_handoff()
+    invalid["claims"][0] = {
+        "claim_id": "claim-live-no-refs",
+        "engineering_rule_id": "ENG-RECOVERY-1",
+        "claim_type": "RULE_REQUIREMENT_MET",
+        "value": True,
+        "evidence_refs": [],
+        "graph_path_refs": [],
+        "source_anchor_refs": [],
+        "confidence": 0.8,
+        "limitations": [],
+        "criterion": "AI invocation evidence exists",
+    }
+    agent = _AlwaysInvalidShapeAgent(invalid)
+    monkeypatch.setattr(managed, "ManagedInvestigatorExecutionStore", _FakeStore)
+    monkeypatch.setattr(managed, "_durable_investigator_agent", lambda _checkpointer: agent)
+
+    handoff, checkpoint_id = managed._invoke_managed_investigator(
+        checkpoint_url="postgresql://recovery-test",
+        thread_id="investigator:exec-recovery-1",
+        checkpoint_id=None,
+        context=_context(),
+        instruction="Initial selected-rule investigation.",
+        graph=_program_graph(),
+        execution_id="exec-recovery-1",
+        correlation_id="corr-recovery-fail-closed",
+    )
+
+    assert checkpoint_id == "checkpoint-invalid-2"
+    assert len(agent.invoke_calls) == 2
+    claim = handoff["claims"][0]
+    assert claim["claim_type"] == "UNRESOLVED_ENGINEERING_FACT"
+    assert claim["value"] is None
+    assert claim["confidence"] == 0.0
+    assert claim["limitations"] == [
+        ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]
+    ]
+    assert [save["status"] for save in _FakeStore.saves] == [
+        MANAGED_INVESTIGATOR_EXECUTION_STATUSES["rejected"],
+        MANAGED_INVESTIGATOR_EXECUTION_STATUSES["ready"],
+    ]
 
 
 def test_initial_instruction_uses_bounded_packet_index_not_raw_graph_dump() -> None:
