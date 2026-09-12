@@ -101,6 +101,38 @@ describe("LCSP-310 payment reconciliation", () => {
     ).toBe(500n);
   });
 
+  it("derives order idempotency from immutable request fields", async () => {
+    const a = user("idempotency");
+    await prisma.user.create({ data: a });
+    const base = {
+      userId: a.id,
+      paymentCode: "PAY-IDEMPOTENT",
+      idempotencyKey: "KEY-IDEMPOTENT",
+      amountMinorUnits: 100000n,
+      creditUnits: 500n,
+    };
+    const first = await payments.createOrder(base);
+    expect((await payments.createOrder(base)).id).toBe(first.id);
+    await expect(
+      payments.createOrder({ ...base, amountMinorUnits: 200000n }),
+    ).rejects.toThrow();
+    await expect(
+      payments.createOrder({ ...base, creditUnits: 1000n }),
+    ).rejects.toThrow();
+    await expect(
+      payments.createOrder({ ...base, paymentCode: "PAY-IDEMPOTENT-2" }),
+    ).rejects.toThrow();
+    const other = user("idempotency-other");
+    await prisma.user.create({ data: other });
+    await expect(
+      payments.createOrder({
+        ...base,
+        userId: other.id,
+        paymentCode: "PAY-IDEMPOTENT-OTHER",
+      }),
+    ).resolves.toMatchObject({ userId: other.id });
+  });
+
   it("serializes duplicate deliveries of one provider transaction", async () => {
     const { a, order } = await setupOrder();
     await Promise.allSettled(
@@ -164,6 +196,41 @@ describe("LCSP-310 payment reconciliation", () => {
         where: { billingOrderId: order.id },
       }),
     ).toBe(1);
+  });
+
+  it("prevents a match-vs-mismatch race from creating orphan credit", async () => {
+    const { a, order } = await setupOrder();
+    await Promise.allSettled([
+      payments.reconcilePayment({
+        provider: "SEPAY",
+        providerTransactionId: "TX-MATCH-RACE",
+        paymentCode: order.paymentCode,
+        amountMinorUnits: 100000n,
+      }),
+      payments.reconcilePayment({
+        provider: "SEPAY",
+        providerTransactionId: "TX-MISMATCH-RACE",
+        paymentCode: order.paymentCode,
+        amountMinorUnits: 90000n,
+      }),
+    ]);
+    const persisted = await prisma.billingOrder.findUniqueOrThrow({
+      where: { id: order.id },
+    });
+    const credits = await prisma.creditLedgerEntry.count({
+      where: { billingOrderId: order.id },
+    });
+    expect(credits === 0 || credits === 1).toBe(true);
+    if (persisted.status === "CREDITED") expect(credits).toBe(1);
+    else expect(credits).toBe(0);
+    if (persisted.status === "CREDITED")
+      expect(
+        (
+          await prisma.billingWallet.findUniqueOrThrow({
+            where: { userId: a.id },
+          })
+        ).availableCredits,
+      ).toBe(500n);
   });
 
   it("does not credit late payments for expired or cancelled orders", async () => {

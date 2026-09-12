@@ -175,6 +175,56 @@ describe("LCSP-310 usage and pricing foundation", () => {
     ).rejects.toThrow("No applicable pricing snapshot");
   });
 
+  it("rejects replay of an invocation against a different reservation", async () => {
+    const f = await fixture();
+    const second = await accounting.reserveCredits({
+      userId: f.user.id,
+      amountCredits: 10n,
+      idempotencyKey: "SECOND-RESERVATION",
+    });
+    const base = {
+      userId: f.user.id,
+      reservationId: f.reservation.id,
+      invocationId: "INV-RESERVATION-LINK",
+      provider: "OPENAI",
+      model: "MODEL_A",
+      inputTokens: 1n,
+      outputTokens: 0n,
+    };
+    const event = await usage.recordAndSettleUsage(base);
+    await expect(
+      usage.recordAndSettleUsage({ ...base, reservationId: second.id }),
+    ).rejects.toThrow();
+    expect(
+      (
+        await prisma.billingReservation.findUniqueOrThrow({
+          where: { id: f.reservation.id },
+        })
+      ).status,
+    ).toBe("SETTLED");
+    expect(
+      (
+        await prisma.billingReservation.findUniqueOrThrow({
+          where: { id: second.id },
+        })
+      ).status,
+    ).toBe("RESERVED");
+    expect(event.reservationId).toBe(f.reservation.id);
+    expect(
+      await prisma.llmUsageEvent.count({
+        where: { invocationId: base.invocationId },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.creditLedgerEntry.count({
+        where: {
+          referenceId: f.reservation.id,
+          source: "RESERVATION_SETTLEMENT",
+        },
+      }),
+    ).toBe(1);
+  });
+
   it("deduplicates non-null provider responses while allowing null response IDs", async () => {
     const f = await fixture();
     const common = {
