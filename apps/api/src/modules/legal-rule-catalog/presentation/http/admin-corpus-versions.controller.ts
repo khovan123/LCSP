@@ -25,11 +25,16 @@ export class AdminCorpusVersionsController {
   constructor(private readonly corpusVersions: AdminCorpusVersionsService) {}
 
   @Get()
-  async list(@Query("page") page?: string, @Query("pageSize") pageSize?: string) {
-    return resultEnvelope(await this.corpusVersions.list({
-      page: page ? Number(page) : undefined,
-      pageSize: pageSize ? Number(pageSize) : undefined,
-    }));
+  async list(
+    @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string,
+  ) {
+    return resultEnvelope(
+      await this.corpusVersions.list({
+        page: page ? Number(page) : undefined,
+        pageSize: pageSize ? Number(pageSize) : undefined,
+      }),
+    );
   }
 
   @Post("prepare")
@@ -39,11 +44,13 @@ export class AdminCorpusVersionsController {
     @Headers("x-idempotency-key") headerKey: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
-    return resultEnvelope(await this.corpusVersions.prepare({
-      actorId: request.rbacContext.userId,
-      idempotencyKey: (body?.idempotencyKey ?? headerKey)?.trim() ?? "",
-      correlationId: request.correlationId || randomUUID(),
-    }));
+    return resultEnvelope(
+      await this.corpusVersions.prepare({
+        actorId: request.rbacContext.userId,
+        idempotencyKey: (body?.idempotencyKey ?? headerKey)?.trim() ?? "",
+        correlationId: request.correlationId || randomUUID(),
+      }),
+    );
   }
 
   @Get(":versionId")
@@ -74,11 +81,13 @@ export class AdminCorpusVersionsController {
     @Headers("x-idempotency-key") headerKey: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
-    return resultEnvelope(await this.corpusVersions.publish({
-      versionId,
-      actorId: request.rbacContext.userId,
-      idempotencyKey: (body?.idempotencyKey ?? headerKey)?.trim() ?? "",
-      correlationId: request.correlationId || randomUUID(),
-    }));
+    return resultEnvelope(
+      await this.corpusVersions.publish({
+        versionId,
+        actorId: request.rbacContext.userId,
+        idempotencyKey: (body?.idempotencyKey ?? headerKey)?.trim() ?? "",
+        correlationId: request.correlationId || randomUUID(),
+      }),
+    );
   }
 }

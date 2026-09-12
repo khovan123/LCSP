@@ -145,9 +145,16 @@ export class LegalCorpusService {
 
     const existing = await this.prisma.legalCorpusVersion.findUnique({
       where: { version: selectedInput.version },
-      select: { id: true, status: true, _count: { select: { documents: true } } },
+      select: {
+        id: true,
+        status: true,
+        _count: { select: { documents: true } },
+      },
     });
-    const canHydratePreparation = existing?.status === toPrismaLegalRuleLifecycleStatus(LEGAL_RULE_LIFECYCLE_STATUSES.draft) && existing._count.documents === 0;
+    const canHydratePreparation =
+      existing?.status ===
+        toPrismaLegalRuleLifecycleStatus(LEGAL_RULE_LIFECYCLE_STATUSES.draft) &&
+      existing._count.documents === 0;
     if (existing && !canHydratePreparation) {
       throw problemException(
         LEGAL_RULE_ERROR_CODES.corpusIngestInvalid,
@@ -176,12 +183,17 @@ export class LegalCorpusService {
 
     return this.prisma.$transaction(async (tx) => {
       const corpus = canHydratePreparation
-        ? await tx.legalCorpusVersion.update({ where: { id: existing!.id }, data: { sourceManifest: enrichedManifest } })
+        ? await tx.legalCorpusVersion.update({
+            where: { id: existing.id },
+            data: { sourceManifest: enrichedManifest },
+          })
         : await tx.legalCorpusVersion.create({
             data: {
               version: selectedInput.version,
               sourceManifest: enrichedManifest,
-              status: toPrismaLegalRuleLifecycleStatus(LEGAL_RULE_LIFECYCLE_STATUSES.draft),
+              status: toPrismaLegalRuleLifecycleStatus(
+                LEGAL_RULE_LIFECYCLE_STATUSES.draft,
+              ),
             },
           });
 
@@ -318,108 +330,111 @@ export class LegalCorpusService {
     const approvedAt = new Date();
     let approvalRecordId = "";
     let outboxEventId = "";
-    await this.prisma.$transaction(async (tx) => {
-      const superseded = await tx.legalCorpusVersion.updateMany({
-        where: {
-          id: { not: corpus.id },
-          status: toPrismaLegalRuleLifecycleStatus(
-            LEGAL_RULE_LIFECYCLE_STATUSES.approved,
-          ),
-        },
-        data: {
-          status: toPrismaLegalRuleLifecycleStatus(
-            LEGAL_RULE_LIFECYCLE_STATUSES.superseded,
-          ),
-        },
-      });
+    await this.prisma.$transaction(
+      async (tx) => {
+        const superseded = await tx.legalCorpusVersion.updateMany({
+          where: {
+            id: { not: corpus.id },
+            status: toPrismaLegalRuleLifecycleStatus(
+              LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+            ),
+          },
+          data: {
+            status: toPrismaLegalRuleLifecycleStatus(
+              LEGAL_RULE_LIFECYCLE_STATUSES.superseded,
+            ),
+          },
+        });
 
-      await tx.legalCorpusVersion.update({
-        where: { id: corpus.id },
-        data: {
-          status: toPrismaLegalRuleLifecycleStatus(
-            LEGAL_RULE_LIFECYCLE_STATUSES.approved,
-          ),
-          approvedAt,
-          integrityManifestRef: input.integrityManifestRef,
-        },
-      });
-      const approval = await tx.corpusApprovalRecord.create({
-        data: {
-          legalCorpusVersionId: corpus.id,
-          approvedBy: LEGAL_CORPUS_ACTIVATION_SERVICE,
-          status: toPrismaLegalRuleLifecycleStatus(
-            LEGAL_RULE_LIFECYCLE_STATUSES.approved,
-          ),
-          idempotencyKey: input.idempotencyKey,
-          integrityManifestRef: input.integrityManifestRef,
-          retrievalValidationRef: input.retrievalValidationRef,
-          scopeDescription: input.scopeDescription,
-          comments: input.comments,
-          approvalDate: approvedAt,
-        },
-      });
-      approvalRecordId = approval.id;
+        await tx.legalCorpusVersion.update({
+          where: { id: corpus.id },
+          data: {
+            status: toPrismaLegalRuleLifecycleStatus(
+              LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+            ),
+            approvedAt,
+            integrityManifestRef: input.integrityManifestRef,
+          },
+        });
+        const approval = await tx.corpusApprovalRecord.create({
+          data: {
+            legalCorpusVersionId: corpus.id,
+            approvedBy: LEGAL_CORPUS_ACTIVATION_SERVICE,
+            status: toPrismaLegalRuleLifecycleStatus(
+              LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+            ),
+            idempotencyKey: input.idempotencyKey,
+            integrityManifestRef: input.integrityManifestRef,
+            retrievalValidationRef: input.retrievalValidationRef,
+            scopeDescription: input.scopeDescription,
+            comments: input.comments,
+            approvalDate: approvedAt,
+          },
+        });
+        approvalRecordId = approval.id;
 
-      const outboxEvent = buildOutboxMessageInput({
-        aggregateType: OUTBOX_AGGREGATE_TYPES.legalCorpusVersion,
-        aggregateId: corpus.id,
-        eventType: LEGAL_RULE_EVENT_TYPES.corpusVersionActivated,
-        correlationId: input.correlationId,
-        causationId: approval.id,
-        actor: {
-          id: LEGAL_CORPUS_ACTIVATION_SERVICE,
-          type: AUDIT_ACTOR_TYPES.system,
-        },
-        result: AGENTIC_TOOL_STATUSES.ready,
-        redactionStatus: AUDIT_REDACTION_STATUSES.none,
-        idempotencyKey: `${corpus.id}:${input.idempotencyKey}:activation`,
-        payload: {
-          corpusVersionRef: `corpus-version:${corpus.id}`,
-          activationRecordRef: `corpus-approval:${approval.id}`,
-          integrityManifestRef: input.integrityManifestRef,
-          retrievalValidationRef: input.retrievalValidationRef,
-          supersededApprovedCount: superseded.count,
-        },
-      });
-      outboxEventId = await this.outboxRepository.enqueue(outboxEvent, tx);
-      await tx.corpusApprovalRecord.update({
-        where: { id: approval.id },
-        data: { outboxEventId },
-      });
-
-      await this.auditWriter.writeInTx(
-        {
+        const outboxEvent = buildOutboxMessageInput({
+          aggregateType: OUTBOX_AGGREGATE_TYPES.legalCorpusVersion,
+          aggregateId: corpus.id,
           eventType: LEGAL_RULE_EVENT_TYPES.corpusVersionActivated,
-          actorId: LEGAL_CORPUS_ACTIVATION_SERVICE,
+          correlationId: input.correlationId,
+          causationId: approval.id,
           actor: {
             id: LEGAL_CORPUS_ACTIVATION_SERVICE,
             type: AUDIT_ACTOR_TYPES.system,
           },
-          resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
-          resourceId: corpus.id,
-          decision: AUDIT_DECISIONS.allow,
-          correlationId: input.correlationId,
+          result: AGENTIC_TOOL_STATUSES.ready,
           redactionStatus: AUDIT_REDACTION_STATUSES.none,
+          idempotencyKey: `${corpus.id}:${input.idempotencyKey}:activation`,
           payload: {
-            toolName: ACTIVATE_VALIDATED_CORPUS_VERSION_TOOL.name,
             corpusVersionRef: `corpus-version:${corpus.id}`,
             activationRecordRef: `corpus-approval:${approval.id}`,
-            outboxEventRef: `outbox:${outboxEventId}`,
             integrityManifestRef: input.integrityManifestRef,
             retrievalValidationRef: input.retrievalValidationRef,
-            manualApprovalRequired: false,
-            idempotencyKey: input.idempotencyKey,
+            supersededApprovedCount: superseded.count,
           },
-        },
-        tx,
-      );
+        });
+        outboxEventId = await this.outboxRepository.enqueue(outboxEvent, tx);
+        await tx.corpusApprovalRecord.update({
+          where: { id: approval.id },
+          data: { outboxEventId },
+        });
 
-      await this.enqueueWaitingLegalMatchingRunsAfterActivation(tx, {
-        corpusVersionId: corpus.id,
-        correlationId: input.correlationId,
-        activationIdempotencyKey: input.idempotencyKey,
-      });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        await this.auditWriter.writeInTx(
+          {
+            eventType: LEGAL_RULE_EVENT_TYPES.corpusVersionActivated,
+            actorId: LEGAL_CORPUS_ACTIVATION_SERVICE,
+            actor: {
+              id: LEGAL_CORPUS_ACTIVATION_SERVICE,
+              type: AUDIT_ACTOR_TYPES.system,
+            },
+            resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
+            resourceId: corpus.id,
+            decision: AUDIT_DECISIONS.allow,
+            correlationId: input.correlationId,
+            redactionStatus: AUDIT_REDACTION_STATUSES.none,
+            payload: {
+              toolName: ACTIVATE_VALIDATED_CORPUS_VERSION_TOOL.name,
+              corpusVersionRef: `corpus-version:${corpus.id}`,
+              activationRecordRef: `corpus-approval:${approval.id}`,
+              outboxEventRef: `outbox:${outboxEventId}`,
+              integrityManifestRef: input.integrityManifestRef,
+              retrievalValidationRef: input.retrievalValidationRef,
+              manualApprovalRequired: false,
+              idempotencyKey: input.idempotencyKey,
+            },
+          },
+          tx,
+        );
+
+        await this.enqueueWaitingLegalMatchingRunsAfterActivation(tx, {
+          corpusVersionId: corpus.id,
+          correlationId: input.correlationId,
+          activationIdempotencyKey: input.idempotencyKey,
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
 
     return this.toActivationResponse(
       corpus.id,

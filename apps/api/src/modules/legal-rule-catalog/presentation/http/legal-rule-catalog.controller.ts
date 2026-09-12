@@ -49,7 +49,8 @@ export class LegalRuleCatalogController {
     private readonly legalCorpus: LegalCorpusService,
     private readonly officialSourceSnapshots: OfficialSourceSnapshotService,
     private readonly catalogVersions: RuleCatalogVersionService,
-    @Optional() private readonly adminCorpusVersions?: AdminCorpusVersionsService,
+    @Optional()
+    private readonly adminCorpusVersions?: AdminCorpusVersionsService,
   ) {}
 
   @Post("versions")
@@ -141,20 +142,31 @@ export class LegalRuleCatalogController {
   @UseGuards(WorkerApiKeyGuard)
   async preparationCallback(
     @Param("versionId") versionId: string,
-    @Body() body: { preparationId: string; status: "COMPLETED" | "FAILED" | "BLOCKED"; readiness?: Record<string, string>; integrityManifestRef?: string | null; retrievalValidationRef?: string | null; errorCode?: string | null },
+    @Body()
+    body: {
+      preparationId: string;
+      status: "COMPLETED" | "FAILED" | "BLOCKED";
+      readiness?: Record<string, string>;
+      integrityManifestRef?: string | null;
+      retrievalValidationRef?: string | null;
+      errorCode?: string | null;
+    },
     @Req() req: AuthenticatedRequest,
   ) {
-    if (!this.adminCorpusVersions) throw new Error("Admin corpus preparation service unavailable");
-    return resultEnvelope(await this.adminCorpusVersions.completePreparation({
-      preparationId: body.preparationId,
-      corpusVersionId: versionId,
-      status: body.status,
-      readiness: body.readiness,
-      integrityManifestRef: body.integrityManifestRef,
-      retrievalValidationRef: body.retrievalValidationRef,
-      errorCode: body.errorCode,
-      correlationId: req.correlationId || randomUUID(),
-    }));
+    if (!this.adminCorpusVersions)
+      throw new Error("Admin corpus preparation service unavailable");
+    return resultEnvelope(
+      await this.adminCorpusVersions.completePreparation({
+        preparationId: body.preparationId,
+        corpusVersionId: versionId,
+        status: body.status,
+        readiness: body.readiness,
+        integrityManifestRef: body.integrityManifestRef,
+        retrievalValidationRef: body.retrievalValidationRef,
+        errorCode: body.errorCode,
+        correlationId: req.correlationId || randomUUID(),
+      }),
+    );
   }
 
   @Post("corpus/:versionId/resume-waiting-runs")

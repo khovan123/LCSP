@@ -59,7 +59,9 @@ describe("AdminCorpusVersionsController", () => {
       list: jest.fn<() => Promise<unknown>>(),
       detail: jest.fn<() => Promise<unknown>>(),
       discardDraft: jest.fn<(input: unknown) => Promise<unknown>>(),
-      prepare: jest.fn<(input: unknown) => Promise<unknown>>().mockResolvedValue({ id: "prep-1" }),
+      prepare: jest
+        .fn<(input: unknown) => Promise<unknown>>()
+        .mockResolvedValue({ id: "prep-1" }),
     };
     const controller = new AdminCorpusVersionsController(service as never);
 
