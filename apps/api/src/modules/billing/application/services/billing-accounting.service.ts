@@ -252,7 +252,14 @@ export class BillingAccountingService {
       throw new OwnershipMismatchError("Wallet does not belong to user");
     const old = await r.ledger.findByIdempotencyKey(i.idempotencyKey);
     if (old) {
-      if (old.deltaCredits !== i.deltaCredits)
+      if (
+        old.userId !== i.userId ||
+        old.walletId !== i.walletId ||
+        old.deltaCredits !== i.deltaCredits ||
+        old.source !== i.source ||
+        old.referenceId !== (i.referenceId ?? null) ||
+        old.billingOrderId !== (i.billingOrderId ?? null)
+      )
         throw new BillingIdempotencyConflictError("Ledger replay differs");
       return old;
     }

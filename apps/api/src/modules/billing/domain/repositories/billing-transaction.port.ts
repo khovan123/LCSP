@@ -4,6 +4,10 @@ export type LedgerRecord = {
   walletId: string;
   userId: string;
   deltaCredits: bigint;
+  idempotencyKey: string;
+  source: string;
+  referenceId: string | null;
+  billingOrderId: string | null;
 };
 export type ReservationRecord = {
   id: string;

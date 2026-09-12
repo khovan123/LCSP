@@ -320,6 +320,63 @@ describe("LCSP-310 usage and pricing foundation", () => {
     ).toBe(f.pricing.id);
   });
 
+  it("anchors invocation replay to its persisted pricing snapshot", async () => {
+    const f = await fixture();
+    const t3 = new Date();
+    const first = await usage.recordAndSettleUsage({
+      userId: f.user.id,
+      reservationId: f.reservation.id,
+      invocationId: "INV-HISTORICAL-REPLAY",
+      provider: "OPENAI",
+      model: "MODEL_A",
+      inputTokens: 1_000_000n,
+      occurredAt: t3,
+    });
+    const p2 = await prisma.modelPricingSnapshot.create({
+      data: {
+        provider: "OPENAI",
+        model: "MODEL_A",
+        version: Math.floor(Math.random() * 1_000_000_000),
+        inputPricePerMillion: "9.00000000",
+        outputPricePerMillion: "9.00000000",
+        effectiveAt: new Date(t3.getTime() - 100),
+      },
+    });
+    const replay = await usage.recordAndSettleUsage({
+      userId: f.user.id,
+      reservationId: f.reservation.id,
+      invocationId: "INV-HISTORICAL-REPLAY",
+      provider: "OPENAI",
+      model: "MODEL_A",
+      inputTokens: 1_000_000n,
+      occurredAt: t3,
+    });
+    expect(replay.id).toBe(first.id);
+    expect(replay.pricingSnapshotId).toBe(f.pricing.id);
+    expect(replay.chargedCredits).toBe(1n);
+    expect(p2.id).not.toBe(f.pricing.id);
+    const second = await accounting.reserveCredits({
+      userId: f.user.id,
+      amountCredits: 10n,
+      idempotencyKey: "HIST-SECOND-RESERVATION",
+    });
+    const fresh = await usage.recordAndSettleUsage({
+      userId: f.user.id,
+      reservationId: second.id,
+      invocationId: "INV-HISTORICAL-NEW",
+      provider: "OPENAI",
+      model: "MODEL_A",
+      inputTokens: 1_000_000n,
+      occurredAt: t3,
+    });
+    expect(fresh.pricingSnapshotId).toBe(p2.id);
+    expect(
+      await prisma.llmUsageEvent.count({
+        where: { invocationId: "INV-HISTORICAL-REPLAY" },
+      }),
+    ).toBe(1);
+  });
+
   it("rejects direct pricing snapshot mutation while allowing new versions", async () => {
     const f = await fixture();
     const event = await usage.recordAndSettleUsage({

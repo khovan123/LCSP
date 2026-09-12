@@ -43,15 +43,6 @@ export class BillingUsageService {
       if (i.totalTokens !== undefined && i.totalTokens < input + output)
         throw new BillingDomainError("Total tokens are inconsistent");
       const existing = await usage.findByInvocation(i.userId, i.invocationId);
-      const occurredAt = i.occurredAt ?? existing?.occurredAt ?? new Date();
-      const snapshot = await pricing.findApplicable(
-        i.provider,
-        i.model,
-        occurredAt,
-      );
-      if (!snapshot)
-        throw new BillingDomainError("No applicable pricing snapshot");
-      const charge = calculateUsageChargeCredits(input, output, snapshot);
       if (existing) {
         if (
           existing.provider !== i.provider ||
@@ -61,14 +52,21 @@ export class BillingUsageService {
           existing.totalTokens !== (i.totalTokens ?? input + output) ||
           existing.providerResponseId !== (i.providerResponseId ?? null) ||
           existing.reservationId !== i.reservationId ||
-          existing.pricingSnapshotId !== snapshot.id ||
-          existing.chargedCredits !== charge ||
           (i.occurredAt !== undefined &&
-            existing.occurredAt.getTime() !== occurredAt.getTime())
+            existing.occurredAt.getTime() !== i.occurredAt.getTime())
         )
           throw new BillingIdempotencyConflictError("Usage replay differs");
         return existing;
       }
+      const occurredAt = i.occurredAt ?? new Date();
+      const snapshot = await pricing.findApplicable(
+        i.provider,
+        i.model,
+        occurredAt,
+      );
+      if (!snapshot)
+        throw new BillingDomainError("No applicable pricing snapshot");
+      const charge = calculateUsageChargeCredits(input, output, snapshot);
       if (i.providerResponseId) {
         const response = await usage.findByProviderResponse(
           i.provider,

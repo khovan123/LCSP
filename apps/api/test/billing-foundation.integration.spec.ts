@@ -144,6 +144,61 @@ describe("LCSP-310 billing persistence constraints", () => {
     ).rejects.toMatchObject({ code: "P2002" });
   });
 
+  it("binds ledger idempotency replay to the full semantic request", async () => {
+    const a = user("ledger-a");
+    const b = user("ledger-b");
+    await prisma.user.createMany({ data: [a, b] });
+    const wa = await accounting.getOrCreateWallet(a.id);
+    const wb = await accounting.getOrCreateWallet(b.id);
+    const base = {
+      idempotencyKey: "LEDGER-SEMANTIC",
+      deltaCredits: 500n,
+      source: "TEST_SOURCE",
+      referenceId: "REF-1",
+    };
+    const first = await accounting.appendLedger({
+      ...base,
+      userId: a.id,
+      walletId: wa.id,
+    });
+    await expect(
+      accounting.appendLedger({ ...base, userId: b.id, walletId: wb.id }),
+    ).rejects.toThrow();
+    await expect(
+      accounting.appendLedger({
+        ...base,
+        userId: a.id,
+        walletId: wa.id,
+        source: "OTHER_SOURCE",
+        idempotencyKey: "LEDGER-SEMANTIC",
+      }),
+    ).rejects.toThrow();
+    await expect(
+      accounting.appendLedger({
+        ...base,
+        userId: a.id,
+        walletId: wa.id,
+        referenceId: "REF-2",
+      }),
+    ).rejects.toThrow();
+    expect(
+      await accounting.appendLedger({
+        ...base,
+        userId: a.id,
+        walletId: wa.id,
+      }),
+    ).toMatchObject({ id: first.id });
+    expect(
+      await prisma.creditLedgerEntry.count({
+        where: { idempotencyKey: base.idempotencyKey },
+      }),
+    ).toBe(1);
+    expect(
+      (await prisma.billingWallet.findUniqueOrThrow({ where: { id: wb.id } }))
+        .availableCredits,
+    ).toBe(0n);
+  });
+
   it("allows unmatched payments and nullable response IDs, while preserving pricing references", async () => {
     const a = user("a");
     await prisma.user.create({ data: a });
