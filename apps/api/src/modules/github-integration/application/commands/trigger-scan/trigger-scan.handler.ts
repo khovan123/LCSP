@@ -146,6 +146,15 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
       return this.resolveExisting(command, existing);
     }
 
+    const activeExisting =
+      await this.scanJobRepository.findActiveByAssessmentAndSnapshot({
+        assessmentId: command.assessmentId,
+        snapshotId: snapshot.id,
+      });
+    if (activeExisting) {
+      return this.resolveActiveDuplicate(command, activeExisting);
+    }
+
     if (
       fromPrismaAssessmentStatus(assessment.status) !==
       ASSESSMENT_STATUS_CODES.wizardSubmitted
@@ -297,6 +306,41 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
         assessmentId: existing.assessmentId,
         snapshotId: existing.snapshotId,
         idempotencyKey: existing.idempotencyKey,
+        correlationId: command.correlationId,
+      },
+    });
+    return this.toDto(existing, false, command.correlationId);
+  }
+
+  /**
+   * Returns an already-active scan job for the same assessment snapshot without enqueuing
+   * a second worker run. Unlike idempotency-key duplicate handling, this intentionally
+   * tolerates different trigger sources/keys so the snapshot-created auto-chain and an
+   * explicit client POST converge on one running job.
+   *
+   * @param command - Incoming scan-trigger command.
+   * @param existing - Active scan job for the same assessment/snapshot pair.
+   * @returns Existing scan job projected as a non-new response.
+   */
+  private async resolveActiveDuplicate(
+    command: TriggerScanCommand,
+    existing: RepositoryScanJob,
+  ): Promise<TriggerScanDto> {
+    await this.auditWriter.write({
+      eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanTriggerDuplicateAudit,
+      actorId: command.actorId,
+      resourceType: AUDIT_RESOURCE_TYPES.repositoryScanJob,
+      resourceId: existing.id,
+      correlationId: command.correlationId,
+      decision: AUDIT_DECISIONS.allow,
+      payload: {
+        scanJobId: existing.id,
+        assessmentId: existing.assessmentId,
+        snapshotId: existing.snapshotId,
+        idempotencyKey: existing.idempotencyKey,
+        triggerSource: existing.triggerSource,
+        requestedIdempotencyKey: clean(command.idempotencyKey),
+        requestedTriggerSource: command.triggerSource,
         correlationId: command.correlationId,
       },
     });
