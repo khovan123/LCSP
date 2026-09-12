@@ -113,6 +113,55 @@ describe("AdminCorpusVersionsService", () => {
     );
   });
 
+  it("treats explicitly non-applicable preparation checks as ready without fabricating PASSED", async () => {
+    const findUnique = jest.fn<() => Promise<unknown>>().mockResolvedValue({
+      id: "corpus-prepared",
+      version: "v-prepared",
+      status: "DRAFT",
+      sourceManifest: {
+        validation: {
+          SOURCE_PARSING: "PASSED",
+          RETRIEVAL_VALIDATION: "PASSED",
+          INTEGRITY_MANIFEST: "PASSED",
+          RULE_SNAPSHOT: "UNAVAILABLE",
+          DIFF_REVIEW: "UNAVAILABLE",
+          applicable: { RULE_SNAPSHOT: false, DIFF_REVIEW: false },
+          integrityManifestRef: "integrity:manifest-prepared",
+        },
+      },
+      integrityManifestRef: "integrity:manifest-prepared",
+      createdAt: new Date(),
+      approvedAt: null,
+      documents: [{ chunks: [{ id: "chunk-1" }] }],
+      retrievalIndexes: [
+        {
+          status: "VALID",
+          validatedAt: new Date(),
+          validationManifestRef: "retrieval:index-prepared",
+        },
+      ],
+      preparation: { requestedBy: "admin-1" },
+    });
+    const service = new AdminCorpusVersionsService(
+      {
+        legalCorpusVersion: {
+          findUnique,
+          findFirst: jest.fn<() => Promise<unknown>>().mockResolvedValue(null),
+        },
+      } as never,
+      {} as never,
+    );
+
+    const detail = await service.detail("corpus-prepared");
+
+    expect(detail.readiness).toBe(CORPUS_VERSION_READINESS_STATES.ready);
+    expect(detail.actions.canPublish).toBe(true);
+    expect(
+      detail.readinessItems.find((item) => item.check === "RULE_SNAPSHOT")
+        ?.state,
+    ).toBe(CORPUS_VERSION_READINESS_STATES.unavailable);
+  });
+
   it("blocks publish when canonical readiness is incomplete", async () => {
     const findUnique = jest.fn<() => Promise<unknown>>().mockResolvedValue({
       id: "corpus-pending",

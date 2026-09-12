@@ -743,25 +743,6 @@ export class AdminCorpusVersionsService {
         correlationId: input.correlationId,
         initiatingAdminActorId: input.actorId,
       });
-      try {
-        await this.auditWriter.write({
-          eventType: LEGAL_RULE_EVENT_TYPES.corpusVersionActivated,
-          actorId: input.actorId,
-          actor: { id: input.actorId, type: AUDIT_ACTOR_TYPES.user },
-          resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
-          resourceId: input.versionId,
-          decision: AUDIT_DECISIONS.allow,
-          correlationId: input.correlationId,
-          redactionStatus: AUDIT_REDACTION_STATUSES.none,
-          payload: {
-            targetVersionId: input.versionId,
-            previousActiveVersionId: previous?.id ?? null,
-            idempotencyKey: input.idempotencyKey,
-          },
-        });
-      } catch {
-        // Canonical activation already committed and has its own transactional audit.
-      }
       return this.detail(input.versionId);
     } catch (error) {
       try {
@@ -866,6 +847,7 @@ function snapshotChange(
 
 function readReadinessProjection(manifest: Record<string, unknown>) {
   const raw = isRecord(manifest.validation) ? manifest.validation : null;
+  const applicable = isRecord(raw?.applicable) ? raw.applicable : null;
   const state = (value: unknown): CorpusVersionReadinessState => {
     if (value === CORPUS_VERSION_READINESS_STATES.pending)
       return CORPUS_VERSION_READINESS_STATES.pending;
@@ -883,7 +865,9 @@ function readReadinessProjection(manifest: Record<string, unknown>) {
     check,
     state: state(raw?.[check] ?? raw?.[check.toLowerCase()]),
   }));
-  const states = items.map((item) => item.state);
+  const states = items
+    .filter((item) => applicable?.[item.check] !== false)
+    .map((item) => item.state);
   const aggregate = states.includes(CORPUS_VERSION_READINESS_STATES.failed)
     ? CORPUS_VERSION_READINESS_STATES.failed
     : states.includes(CORPUS_VERSION_READINESS_STATES.blocked)

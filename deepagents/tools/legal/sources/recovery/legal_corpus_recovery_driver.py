@@ -105,21 +105,39 @@ class LegalCorpusRecoveryDriver:
             preparation_id = message.get("preparationId")
             corpus_version_id = message.get("targetCorpusVersionId")
             if isinstance(preparation_id, str) and isinstance(corpus_version_id, str):
+                failure_payload = {
+                    "preparationId": preparation_id,
+                    "status": "FAILED",
+                    "errorCode": _safe_failure_code(exc),
+                }
+                failure_result = {
+                    "status": "FAILED",
+                    "corpusVersionId": corpus_version_id,
+                    "correlationId": correlationId,
+                }
+                self._store_pending_preparation_callback(
+                    message,
+                    storage_root=storage_root,
+                    corpus_version_id=corpus_version_id,
+                    payload=failure_payload,
+                    result=failure_result,
+                )
                 try:
                     self._api_client.complete_legal_corpus_preparation(
-                        corpus_version_id,
-                        {
-                            "preparationId": preparation_id,
-                            "status": "FAILED",
-                            "errorCode": _safe_failure_code(exc),
-                        },
+                        corpus_version_id, failure_payload
                     )
-                except Exception:
+                except Exception as callback_exc:
                     logger.warning(
                         "LEGAL_CORPUS_PREPARATION_FAILURE_CALLBACK_FAILED",
                         preparation_id=preparation_id,
                         correlationId=correlationId,
                     )
+                    raise PreparationCallbackDeliveryError(
+                        "preparation failure callback delivery failed"
+                    ) from callback_exc
+                self._clear_pending_preparation_callback(
+                    message, storage_root=storage_root
+                )
                 # Admin preparation is an audited, user-visible command. Once
                 # its terminal failure is persisted, requeuing the same input
                 # cannot make it valid and only creates a poison-message loop.
@@ -237,6 +255,15 @@ class LegalCorpusRecoveryDriver:
             storage_root=storage_root,
         )
         if bool(message.get("deferActivation")):
+            # Rule-source recovery is part of governed preparation.  Activation
+            # remains deferred, but the authoritative catalog snapshot must be
+            # available before the API is told that preparation is complete.
+            catalog = self._recover_legal_rule_catalog(
+                idempotency_key=idempotency_key,
+                version=version,
+                correlationId=correlationId,
+                storage_root=storage_root,
+            )
             preparation_id = message.get("preparationId")
             if isinstance(preparation_id, str) and preparation_id.strip():
                 completion_payload = {
@@ -245,10 +272,14 @@ class LegalCorpusRecoveryDriver:
                     "readiness": {
                         "SOURCE_PARSING": "PASSED",
                         "RETRIEVAL_VALIDATION": "PASSED",
-                        "INTEGRITY_MANIFEST": "PASSED",
-                        "RULE_SNAPSHOT": "UNAVAILABLE",
-                        "DIFF_REVIEW": "UNAVAILABLE",
+                    "INTEGRITY_MANIFEST": "PASSED",
+                    "RULE_SNAPSHOT": "UNAVAILABLE",
+                    "DIFF_REVIEW": "UNAVAILABLE",
+                    "applicable": {
+                        "RULE_SNAPSHOT": False,
+                        "DIFF_REVIEW": False,
                     },
+                },
                     "integrityManifestRef": f"integrity-manifest:{_safe_ref(version)}",
                     "retrievalValidationRef": validation_ref,
                 }
@@ -258,6 +289,8 @@ class LegalCorpusRecoveryDriver:
                     "retrievalIndexId": index.get("id"),
                     "resumedRunCount": 0,
                     "correlationId": correlationId,
+                    "legalRuleCatalogVersionId": catalog.get("id"),
+                    "legalRuleCount": catalog.get("ruleCount"),
                 }
                 self._store_pending_preparation_callback(
                     message,
@@ -288,6 +321,8 @@ class LegalCorpusRecoveryDriver:
                 "retrievalIndexId": index.get("id"),
                 "resumedRunCount": 0,
                 "correlationId": correlationId,
+                "legalRuleCatalogVersionId": catalog.get("id"),
+                "legalRuleCount": catalog.get("ruleCount"),
             }
 
         approved = self._legal_dispatcher.dispatch(
