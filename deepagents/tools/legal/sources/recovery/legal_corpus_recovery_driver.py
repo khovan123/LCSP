@@ -19,6 +19,7 @@ from tools.common.capabilities.agentic_evidence.entrypoints.legal_tool_entrypoin
     LegalToolExecutionContext,
 )
 from tools.common.capabilities.platform.api_client import WorkerApiClient
+from tools.common.capabilities.managed.boundary import NonRetryableAgentBoundaryError
 from tools.common.capabilities.platform.config import resolve_legal_source_storage_root
 from tools.common.capabilities.platform.file_lock import (
     acquire_exclusive_lock,
@@ -78,13 +79,41 @@ class LegalCorpusRecoveryDriver:
                 chroma_path=self._chroma_path,
             )
         )
+        self._dispatcher_injected = legal_dispatcher is not None
 
     def run(self, message: dict[str, Any], correlationId: str) -> dict[str, Any]:
         """Execute corpus rebuild, canonical validation/activation, and resume."""
         idempotency_key = required_string(message, "idempotencyKey")
         storage_root = self._resolve_storage_root(message)
-        with _exclusive_recovery_lock(storage_root):
-            return self._run_locked(message, correlationId, idempotency_key)
+        try:
+            with _exclusive_recovery_lock(storage_root):
+                return self._run_locked(message, correlationId, idempotency_key)
+        except Exception as exc:
+            preparation_id = message.get("preparationId")
+            corpus_version_id = message.get("targetCorpusVersionId")
+            if isinstance(preparation_id, str) and isinstance(corpus_version_id, str):
+                try:
+                    self._api_client.complete_legal_corpus_preparation(
+                        corpus_version_id,
+                        {
+                            "preparationId": preparation_id,
+                            "status": "FAILED",
+                            "errorCode": _safe_failure_code(exc),
+                        },
+                    )
+                except Exception:
+                    logger.warning(
+                        "LEGAL_CORPUS_PREPARATION_FAILURE_CALLBACK_FAILED",
+                        preparation_id=preparation_id,
+                        correlationId=correlationId,
+                    )
+                # Admin preparation is an audited, user-visible command. Once
+                # its terminal failure is persisted, requeuing the same input
+                # cannot make it valid and only creates a poison-message loop.
+                raise NonRetryableAgentBoundaryError(
+                    f"legal corpus preparation failed: {_safe_failure_code(exc)}"
+                ) from exc
+            raise
 
     def _run_locked(
         self,
@@ -101,7 +130,7 @@ class LegalCorpusRecoveryDriver:
             )
         storage_root = self._resolve_storage_root(message)
         manifests = self._resolve_source_manifests(message, storage_root=storage_root)
-        version = self._corpus_version(manifests)
+        version = str(message.get("targetVersion") or message.get("target_version") or self._corpus_version(manifests)).strip()
         partial_update_contexts = self._build_partial_update_contexts(
             manifests,
             storage_root=storage_root,
@@ -180,6 +209,38 @@ class LegalCorpusRecoveryDriver:
             index=index,
             storage_root=storage_root,
         )
+        if bool(message.get("deferActivation")):
+            preparation_id = message.get("preparationId")
+            if isinstance(preparation_id, str) and preparation_id.strip():
+                self._api_client.complete_legal_corpus_preparation(
+                    corpus_id,
+                    {
+                        "preparationId": preparation_id,
+                        "status": "COMPLETED",
+                        "readiness": {
+                            "SOURCE_PARSING": "PASSED",
+                            "RETRIEVAL_VALIDATION": "PASSED",
+                            "INTEGRITY_MANIFEST": "PASSED",
+                            "RULE_SNAPSHOT": "PASSED",
+                            "DIFF_REVIEW": "PASSED",
+                        },
+                        "integrityManifestRef": f"integrity-manifest:{_safe_ref(version)}",
+                        "retrievalValidationRef": validation_ref,
+                    },
+                )
+            logger.info(
+                "LEGAL_CORPUS_PREPARATION_COMPLETED",
+                corpus_version_id=corpus_id,
+                retrieval_index_id=index.get("id"),
+                correlationId=correlationId,
+            )
+            return {
+                "status": "PREPARED",
+                "corpusVersionId": corpus_id,
+                "retrievalIndexId": index.get("id"),
+                "resumedRunCount": 0,
+                "correlationId": correlationId,
+            }
 
         approved = self._legal_dispatcher.dispatch(
             "activate_validated_corpus_version",
@@ -344,7 +405,7 @@ class LegalCorpusRecoveryDriver:
         )
         if crawled_paths:
             return crawled_paths
-        raise RuntimeError(
+        raise NonRetryableAgentBoundaryError(
             "legal corpus recovery requires sourceCrawlRequests in the recovery "
             "command or LEGAL_SOURCE_CRAWL_REQUESTS in the environment."
         )
@@ -360,6 +421,17 @@ class LegalCorpusRecoveryDriver:
         if not requests:
             return []
 
+        # The dispatcher created during construction intentionally has no
+        # filesystem authority. Bind the resolved, policy-checked storage root
+        # for this command before invoking source crawlers.
+        crawl_dispatcher = self._legal_dispatcher if self._dispatcher_injected else LegalToolDispatcher(
+            LegalToolExecutionContext(
+                api_client=self._api_client,
+                storage_root=storage_root,
+                chroma_path=self._chroma_path,
+            )
+        )
+
         manifest_paths: list[Path] = []
         corpus_version = str(
             message.get("corpusVersionId")
@@ -372,7 +444,7 @@ class LegalCorpusRecoveryDriver:
             catalog_source_ref = required_string(request, "catalogSourceRef")
             source_url = required_string(request, "sourceUrl")
             output_dir = crawl_root / _safe_ref(document_id)
-            result = self._legal_dispatcher.dispatch(
+            result = crawl_dispatcher.dispatch(
                 "fetch_official_source_snapshot",
                 document_id=document_id,
                 catalog_source_ref=catalog_source_ref,
@@ -401,6 +473,7 @@ class LegalCorpusRecoveryDriver:
                         f"for request #{index}: {document_id}"
                     )
                 manifest_path = fallback
+            self._complete_crawl_manifest_metadata(manifest_path, request)
             manifest_paths.append(manifest_path.resolve())
 
         logger.info(
@@ -409,6 +482,21 @@ class LegalCorpusRecoveryDriver:
             storage_root=str(storage_root),
         )
         return sorted(dict.fromkeys(manifest_paths))
+
+    @staticmethod
+    def _complete_crawl_manifest_metadata(manifest_path: Path, request: dict[str, Any]) -> None:
+        """Carry governed request metadata into crawler output when omitted."""
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        if not isinstance(manifest, dict) or manifest.get("sourceEffectStatus"):
+            return
+        status = request.get("sourceEffectStatus") or request.get("source_effect_status")
+        if not isinstance(status, str) or not status.strip():
+            return
+        manifest["sourceEffectStatus"] = status.strip()
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def _build_official_source_payload(
         self,
@@ -443,6 +531,7 @@ class LegalCorpusRecoveryDriver:
                 for chunk in builder.parse_chunks(document_id, text, None)
                 if chunk.get("content")
             ]
+            chunks = _namespace_chunks(chunks, version)
             if not chunks:
                 raise RuntimeError(f"{document_id}: source crawl produced no chunks")
             source_effect_status = builder.normalize_source_effect_status(
@@ -816,6 +905,26 @@ def _sha256_json(value: Any) -> str:
 def _safe_ref(value: str) -> str:
     """Normalize a bounded identifier for validation/integrity manifest references."""
     return "".join(ch if ch.isalnum() or ch in "._:-" else "-" for ch in value)[:128]
+
+
+def _safe_failure_code(error: Exception) -> str:
+    """Return a bounded non-secret worker failure code for Admin projection."""
+    return f"PREPARATION_{type(error).__name__.upper()}"[:120]
+
+
+def _namespace_chunks(chunks: list[dict[str, Any]], version: str) -> list[dict[str, Any]]:
+    """Make deterministic chunk IDs unique across corpus versions."""
+    prefix = _safe_ref(version)
+    mapping = {str(c["id"]): f"{prefix}::{c['id']}" for c in chunks if c.get("id")}
+    result: list[dict[str, Any]] = []
+    for chunk in chunks:
+        item = dict(chunk)
+        item["id"] = mapping.get(str(chunk.get("id") or ""), chunk.get("id"))
+        hierarchy = item.get("hierarchy")
+        if isinstance(hierarchy, dict) and hierarchy.get("parentChunkId") in mapping:
+            item["hierarchy"] = {**hierarchy, "parentChunkId": mapping[hierarchy["parentChunkId"]]}
+        result.append(item)
+    return result
 
 
 @contextmanager

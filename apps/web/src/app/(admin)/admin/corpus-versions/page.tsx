@@ -6,11 +6,13 @@ import {
   CorpusVersionsPage,
 } from "@/features/admin/components/organisms/corpus-versions-page";
 import { useAdminCorpusVersionsQuery } from "@/lib/api/admin-corpus-versions-queries";
+import { usePrepareAdminCorpusVersionMutation } from "@/lib/api/admin-corpus-versions-queries";
 import { resolveAppMessage } from "@/lib/i18n";
 import type { MessageKey } from "@lcsp/i18n";
 export default function AdminCorpusVersionsRoute() {
   const router = useRouter();
   const query = useAdminCorpusVersionsQuery();
+  const prepare = usePrepareAdminCorpusVersionMutation();
   if (query.isLoading) return <CorpusVersionsLoading />;
   if (query.error || !query.data)
     return (
@@ -30,6 +32,10 @@ export default function AdminCorpusVersionsRoute() {
   return (
     <CorpusVersionsPage
       {...query.data}
+      onCreate={() => prepare.mutate(globalThis.crypto.randomUUID(), {
+        onSuccess: (result) => router.push(`/admin/corpus-versions/${result.corpusVersionId}`),
+      })}
+      isCreating={prepare.isPending}
       onView={(id) => router.push(`/admin/corpus-versions/${id}`)}
     />
   );

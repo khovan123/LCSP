@@ -772,6 +772,21 @@ model LegalCorpusVersion {
   @@index([status, createdAt])
 }
 
+model CorpusPreparation {
+  id             String                  @id @default(uuid())
+  idempotencyKey String                  @unique
+  targetCorpusId String                  @unique
+  baseCorpusId   String?
+  status         CorpusPreparationStatus @default(REQUESTED)
+  requestedBy    String
+  correlationId  String
+  createdAt      DateTime                @default(now())
+  completedAt    DateTime?
+  errorCode      String?
+
+  @@index([status, createdAt])
+}
+
 model LegalRetrievalIndex {
   id                    String                    @id @default(uuid())
   legalCorpusVersionId  String
@@ -1323,4 +1338,12 @@ model LlmUsageEvent {
   @@unique([reservationId])
   @@index([userId, createdAt])
   @@index([provider, model, createdAt])
+}
+
+enum CorpusPreparationStatus {
+  REQUESTED
+  RUNNING
+  COMPLETED
+  FAILED
+  BLOCKED
 }

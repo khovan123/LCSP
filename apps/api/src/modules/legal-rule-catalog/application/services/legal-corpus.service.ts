@@ -145,9 +145,10 @@ export class LegalCorpusService {
 
     const existing = await this.prisma.legalCorpusVersion.findUnique({
       where: { version: selectedInput.version },
-      select: { id: true },
+      select: { id: true, status: true, _count: { select: { documents: true } } },
     });
-    if (existing) {
+    const canHydratePreparation = existing?.status === toPrismaLegalRuleLifecycleStatus(LEGAL_RULE_LIFECYCLE_STATUSES.draft) && existing._count.documents === 0;
+    if (existing && !canHydratePreparation) {
       throw problemException(
         LEGAL_RULE_ERROR_CODES.corpusIngestInvalid,
         "legal-corpus-ingest",
@@ -174,15 +175,15 @@ export class LegalCorpusService {
     };
 
     return this.prisma.$transaction(async (tx) => {
-      const corpus = await tx.legalCorpusVersion.create({
-        data: {
-          version: selectedInput.version,
-          sourceManifest: enrichedManifest,
-          status: toPrismaLegalRuleLifecycleStatus(
-            LEGAL_RULE_LIFECYCLE_STATUSES.draft,
-          ),
-        },
-      });
+      const corpus = canHydratePreparation
+        ? await tx.legalCorpusVersion.update({ where: { id: existing!.id }, data: { sourceManifest: enrichedManifest } })
+        : await tx.legalCorpusVersion.create({
+            data: {
+              version: selectedInput.version,
+              sourceManifest: enrichedManifest,
+              status: toPrismaLegalRuleLifecycleStatus(LEGAL_RULE_LIFECYCLE_STATUSES.draft),
+            },
+          });
 
       for (const document of selectedInput.documents) {
         await this.createDocument(tx, corpus.id, document);
@@ -418,7 +419,7 @@ export class LegalCorpusService {
         correlationId: input.correlationId,
         activationIdempotencyKey: input.idempotencyKey,
       });
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     return this.toActivationResponse(
       corpus.id,

@@ -46,4 +46,89 @@ describe("AdminCorpusVersionsService", () => {
     expect(detail.actions.canPublish).toBe(false);
     expect(detail.actions.canDiscard).toBe(true);
   });
+
+  it("enables publish only for a canonically ready draft and keeps refs server-side", async () => {
+    const version = {
+      id: "corpus-ready",
+      version: "v-ready",
+      status: "DRAFT",
+      sourceManifest: {
+        validation: {
+          SOURCE_PARSING: "PASSED",
+          RETRIEVAL_VALIDATION: "PASSED",
+          INTEGRITY_MANIFEST: "PASSED",
+          RULE_SNAPSHOT: "PASSED",
+          DIFF_REVIEW: "PASSED",
+          integrityManifestRef: "integrity:manifest-1",
+        },
+      },
+      integrityManifestRef: null,
+      createdAt: new Date("2026-09-02T00:00:00.000Z"),
+      approvedAt: null,
+      documents: [{ chunks: [{ id: "chunk-1" }] }],
+      retrievalIndexes: [{ status: "VALID", validatedAt: new Date(), validationManifestRef: "retrieval:index-1" }],
+    };
+    const prisma = {
+      legalCorpusVersion: {
+        findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue(version),
+        findFirst: jest.fn<() => Promise<unknown>>().mockResolvedValue(null),
+      },
+    };
+    const activateValidatedCorpusVersion = jest.fn<(input: unknown) => Promise<unknown>>().mockResolvedValue({});
+    const auditWriter = { write: jest.fn<(input: unknown) => Promise<void>>().mockResolvedValue(undefined) };
+    const service = new AdminCorpusVersionsService(
+      prisma as never,
+      auditWriter as never,
+      { activateValidatedCorpusVersion } as never,
+    );
+
+    const detail = await service.detail("corpus-ready");
+    expect(detail.actions.canPublish).toBe(true);
+    await service.publish({ versionId: "corpus-ready", actorId: "admin-1", idempotencyKey: "publish-1", correlationId: "corr-1" });
+    expect(activateValidatedCorpusVersion).toHaveBeenCalledWith(expect.objectContaining({
+      integrityManifestRef: "integrity:manifest-1",
+      retrievalValidationRef: "retrieval:index-1",
+      idempotencyKey: "publish-1",
+    }));
+  });
+
+  it("blocks publish when canonical readiness is incomplete", async () => {
+    const findUnique = jest.fn<() => Promise<unknown>>().mockResolvedValue({
+      id: "corpus-pending", version: "v-pending", status: "DRAFT",
+      sourceManifest: { validation: { SOURCE_PARSING: "PASSED" } },
+      integrityManifestRef: "integrity:manifest-1", createdAt: new Date(), approvedAt: null,
+      documents: [{ chunks: [{ id: "chunk-1" }] }],
+      retrievalIndexes: [{ status: "VALID", validatedAt: new Date(), validationManifestRef: "retrieval:index-1" }],
+    });
+    const activateValidatedCorpusVersion = jest.fn<(input: unknown) => Promise<unknown>>();
+    const service = new AdminCorpusVersionsService(
+      { legalCorpusVersion: { findUnique, findFirst: jest.fn<() => Promise<unknown>>().mockResolvedValue(null) } } as never,
+      { write: jest.fn<() => Promise<void>>().mockResolvedValue(undefined) } as never,
+      { activateValidatedCorpusVersion } as never,
+    );
+    await expect(service.publish({ versionId: "corpus-pending", actorId: "admin-1", idempotencyKey: "publish-2", correlationId: "corr-2" })).rejects.toMatchObject({ status: 409 });
+    expect(activateValidatedCorpusVersion).not.toHaveBeenCalled();
+  });
+
+  it("creates one canonical draft and enqueues preparation idempotently", async () => {
+    const tx = {
+      legalCorpusVersion: { create: jest.fn<() => Promise<unknown>>().mockResolvedValue({ id: "target-1" }) },
+      corpusPreparation: { create: jest.fn<() => Promise<unknown>>().mockResolvedValue({ id: "prep-1", targetCorpusId: "target-1", status: "REQUESTED" }) },
+    };
+    const prisma = {
+      corpusPreparation: { findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue(null) },
+      legalCorpusVersion: { findFirst: jest.fn<() => Promise<unknown>>().mockResolvedValue({ id: "base-1", version: "v-base", status: "APPROVED" }) },
+      $transaction: jest.fn(async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx)),
+    };
+    const enqueue = jest.fn<(event: unknown, client: unknown) => Promise<string>>().mockResolvedValue("outbox-1");
+    const service = new AdminCorpusVersionsService(
+      prisma as never,
+      { writeInTx: jest.fn<() => Promise<void>>().mockResolvedValue(undefined) } as never,
+      undefined,
+      { enqueue } as never,
+    );
+    const result = await service.prepare({ actorId: "admin-1", idempotencyKey: "prep-key", correlationId: "corr-1" });
+    expect(result).toMatchObject({ corpusVersionId: "target-1", status: "REQUESTED" });
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ eventType: "command.legal-corpus.recovery.requested.v1" }), tx);
+  });
 });

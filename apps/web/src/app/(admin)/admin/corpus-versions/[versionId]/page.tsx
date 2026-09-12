@@ -9,6 +9,7 @@ import {
 import {
   useAdminCorpusVersionQuery,
   useDiscardAdminCorpusVersionMutation,
+  usePublishAdminCorpusVersionMutation,
 } from "@/lib/api/admin-corpus-versions-queries";
 import { resolveAppMessage } from "@/lib/i18n";
 import type { MessageKey } from "@lcsp/i18n";
@@ -21,6 +22,7 @@ export default function AdminCorpusVersionDetailRoute({
   const router = useRouter();
   const query = useAdminCorpusVersionQuery(versionId);
   const discard = useDiscardAdminCorpusVersionMutation(versionId);
+  const publish = usePublishAdminCorpusVersionMutation(versionId);
   if (query.isLoading) return <CorpusVersionsLoading />;
   if (query.error || !query.data)
     return (
@@ -41,6 +43,7 @@ export default function AdminCorpusVersionDetailRoute({
     <CorpusVersionDetailPage
       detail={query.data}
       onBack={() => router.push("/admin/corpus-versions")}
+      onPublish={() => publish.mutate(globalThis.crypto.randomUUID())}
       onDiscard={() =>
         discard.mutate(undefined, {
           onSuccess: () => router.replace("/admin/corpus-versions"),
@@ -48,6 +51,8 @@ export default function AdminCorpusVersionDetailRoute({
       }
       isDiscarding={discard.isPending}
       discardFailed={discard.isError}
+      isPublishing={publish.isPending}
+      publishFailed={publish.isError}
     />
   );
 }

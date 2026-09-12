@@ -843,6 +843,7 @@ function dockerWorkerEnv() {
     "OPENWIKI_RUNTIME_COMMAND",
     "OPENWIKI_RUNTIME_TIMEOUT_SECONDS",
     "LEGAL_CHROMA_PATH",
+    "LEGAL_SOURCE_STORAGE_ROOT",
   ];
   const env = Object.fromEntries(
     selectedKeys
