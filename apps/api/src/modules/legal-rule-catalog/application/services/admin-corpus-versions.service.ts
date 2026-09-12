@@ -34,7 +34,10 @@ import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.
 import { AuditWriterService } from "../../../../platform/audit/audit-writer.service.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { OutboxRepository } from "../../../../platform/outbox/outbox.repository.js";
-import { LegalCorpusService } from "./legal-corpus.service.js";
+import {
+  acquireLegalCorpusLifecycleLock,
+  LegalCorpusService,
+} from "./legal-corpus.service.js";
 
 @Injectable()
 export class AdminCorpusVersionsService {
@@ -583,6 +586,7 @@ export class AdminCorpusVersionsService {
     }
     try {
       await this.prisma.$transaction(async (tx) => {
+        await acquireLegalCorpusLifecycleLock(tx);
         if (typeof tx.corpusDiscardReceipt?.create === "function") {
           await tx.corpusDiscardReceipt.create({
             data: {
@@ -592,14 +596,29 @@ export class AdminCorpusVersionsService {
             },
           });
         }
-        await tx.legalCorpusVersion.update({
-          where: { id: input.versionId },
+        const discarded = await tx.legalCorpusVersion.updateMany({
+          where: {
+            id: input.versionId,
+            status: toPrismaLegalRuleLifecycleStatus(
+              LEGAL_RULE_LIFECYCLE_STATUSES.draft,
+            ),
+          },
           data: {
             status: toPrismaLegalRuleLifecycleStatus(
               LEGAL_RULE_LIFECYCLE_STATUSES.rejected,
             ),
           },
         });
+        if (discarded.count !== 1) {
+          throw problemException(
+            LEGAL_RULE_ERROR_CODES.corpusIngestInvalid,
+            input.correlationId,
+            {
+              status: HttpStatus.CONFLICT,
+              meta: { reason: "CORPUS_NOT_DRAFT" },
+            },
+          );
+        }
         await this.auditWriter.writeInTx(
           {
             eventType: LEGAL_RULE_EVENT_TYPES.corpusVersionDiscarded,
@@ -722,6 +741,7 @@ export class AdminCorpusVersionsService {
         scopeDescription: "Activated by Admin",
         comments: null,
         correlationId: input.correlationId,
+        initiatingAdminActorId: input.actorId,
       });
       try {
         await this.auditWriter.write({

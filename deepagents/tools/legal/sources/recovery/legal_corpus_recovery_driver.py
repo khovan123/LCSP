@@ -43,6 +43,10 @@ DEFAULT_SOURCE_CRAWL_MAX_BYTES = 20 * 1024 * 1024
 OFFICIAL_SOURCE_AUTO_TRUSTED_POLICY = "OFFICIAL_SOURCE_AUTO_TRUSTED"
 
 
+class PreparationCallbackDeliveryError(RuntimeError):
+    """The preparation completed, but its terminal callback was not confirmed."""
+
+
 @dataclass(frozen=True)
 class LegalCorpusRecoveryResult:
     """Terminal corpus recovery identifiers and resumed workflow count."""
@@ -88,6 +92,15 @@ class LegalCorpusRecoveryDriver:
         try:
             with _exclusive_recovery_lock(storage_root):
                 return self._run_locked(message, correlationId, idempotency_key)
+        except PreparationCallbackDeliveryError:
+            logger.warning(
+                "LEGAL_CORPUS_PREPARATION_COMPLETION_CALLBACK_FAILED",
+                preparation_id=message.get("preparationId"),
+                correlationId=correlationId,
+            )
+            # Let the broker retry the idempotent completion callback; do not
+            # rewrite a successful preparation as FAILED.
+            raise
         except Exception as exc:
             preparation_id = message.get("preparationId")
             corpus_version_id = message.get("targetCorpusVersionId")
@@ -129,6 +142,20 @@ class LegalCorpusRecoveryDriver:
                 idempotency_key=idempotency_key,
             )
         storage_root = self._resolve_storage_root(message)
+        pending_callback = self._load_pending_preparation_callback(
+            message, storage_root=storage_root
+        )
+        if pending_callback is not None:
+            try:
+                self._api_client.complete_legal_corpus_preparation(
+                    pending_callback["corpusVersionId"], pending_callback["payload"]
+                )
+            except Exception as exc:
+                raise PreparationCallbackDeliveryError(
+                    "preparation completion callback delivery failed"
+                ) from exc
+            self._clear_pending_preparation_callback(message, storage_root=storage_root)
+            return pending_callback["result"]
         manifests = self._resolve_source_manifests(message, storage_root=storage_root)
         version = str(message.get("targetVersion") or message.get("target_version") or self._corpus_version(manifests)).strip()
         partial_update_contexts = self._build_partial_update_contexts(
@@ -212,22 +239,43 @@ class LegalCorpusRecoveryDriver:
         if bool(message.get("deferActivation")):
             preparation_id = message.get("preparationId")
             if isinstance(preparation_id, str) and preparation_id.strip():
-                self._api_client.complete_legal_corpus_preparation(
-                    corpus_id,
-                    {
-                        "preparationId": preparation_id,
-                        "status": "COMPLETED",
-                        "readiness": {
-                            "SOURCE_PARSING": "PASSED",
-                            "RETRIEVAL_VALIDATION": "PASSED",
-                            "INTEGRITY_MANIFEST": "PASSED",
-                            "RULE_SNAPSHOT": "PASSED",
-                            "DIFF_REVIEW": "PASSED",
-                        },
-                        "integrityManifestRef": f"integrity-manifest:{_safe_ref(version)}",
-                        "retrievalValidationRef": validation_ref,
+                completion_payload = {
+                    "preparationId": preparation_id,
+                    "status": "COMPLETED",
+                    "readiness": {
+                        "SOURCE_PARSING": "PASSED",
+                        "RETRIEVAL_VALIDATION": "PASSED",
+                        "INTEGRITY_MANIFEST": "PASSED",
+                        "RULE_SNAPSHOT": "UNAVAILABLE",
+                        "DIFF_REVIEW": "UNAVAILABLE",
                     },
+                    "integrityManifestRef": f"integrity-manifest:{_safe_ref(version)}",
+                    "retrievalValidationRef": validation_ref,
+                }
+                completion_result = {
+                    "status": "PREPARED",
+                    "corpusVersionId": corpus_id,
+                    "retrievalIndexId": index.get("id"),
+                    "resumedRunCount": 0,
+                    "correlationId": correlationId,
+                }
+                self._store_pending_preparation_callback(
+                    message,
+                    storage_root=storage_root,
+                    corpus_version_id=corpus_id,
+                    payload=completion_payload,
+                    result=completion_result,
                 )
+                try:
+                    self._api_client.complete_legal_corpus_preparation(
+                        corpus_id,
+                        completion_payload,
+                    )
+                except Exception as exc:
+                    raise PreparationCallbackDeliveryError(
+                        "preparation completion callback delivery failed"
+                    ) from exc
+                self._clear_pending_preparation_callback(message, storage_root=storage_root)
             logger.info(
                 "LEGAL_CORPUS_PREPARATION_COMPLETED",
                 corpus_version_id=corpus_id,
@@ -632,6 +680,30 @@ class LegalCorpusRecoveryDriver:
                 continue
             contexts.append(json.loads(context.to_json()))
         return contexts
+
+    def _preparation_callback_path(self, message: dict[str, Any], storage_root: Path) -> Path | None:
+        preparation_id = message.get("preparationId")
+        if not isinstance(preparation_id, str) or not preparation_id.strip():
+            return None
+        return storage_root / "recovery-artifacts" / "preparation-callbacks" / f"{_safe_ref(preparation_id)}.json"
+
+    def _store_pending_preparation_callback(self, message: dict[str, Any], *, storage_root: Path, corpus_version_id: str, payload: dict[str, Any], result: dict[str, Any]) -> None:
+        path = self._preparation_callback_path(message, storage_root)
+        if path is None:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"corpusVersionId": corpus_version_id, "payload": payload, "result": result}), encoding="utf-8")
+
+    def _load_pending_preparation_callback(self, message: dict[str, Any], *, storage_root: Path) -> dict[str, Any] | None:
+        path = self._preparation_callback_path(message, storage_root)
+        if path is None or not path.is_file():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def _clear_pending_preparation_callback(self, message: dict[str, Any], *, storage_root: Path) -> None:
+        path = self._preparation_callback_path(message, storage_root)
+        if path is not None:
+            path.unlink(missing_ok=True)
 
     def _store_corpus_recovery_artifact(
         self,
