@@ -1,4 +1,5 @@
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import type { CorpusPreparationTerminalStatus } from "@lcsp/contracts/legal-rule-catalog";
 import {
   Body,
   Controller,
@@ -145,7 +146,7 @@ export class LegalRuleCatalogController {
     @Body()
     body: {
       preparationId: string;
-      status: "COMPLETED" | "FAILED" | "BLOCKED";
+      status: CorpusPreparationTerminalStatus;
       readiness?: Record<string, string>;
       integrityManifestRef?: string | null;
       retrievalValidationRef?: string | null;

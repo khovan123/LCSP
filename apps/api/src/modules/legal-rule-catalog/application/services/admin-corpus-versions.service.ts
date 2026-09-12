@@ -2,6 +2,7 @@ import { HttpStatus, Injectable, Optional } from "@nestjs/common";
 import {
   CORPUS_VERSION_READINESS_CHECKS,
   CORPUS_VERSION_READINESS_STATES,
+  CORPUS_PREPARATION_STATUSES,
   CORPUS_VERSION_SNAPSHOT_CATEGORIES,
   CORPUS_VERSION_PRESENTATION_STATUSES,
   CORPUS_VERSION_PUBLICATION_STATES,
@@ -11,6 +12,7 @@ import {
   type AdminCorpusVersionDetail,
   type AdminCorpusVersionSummary,
   type CorpusVersionReadinessState,
+  type CorpusPreparationTerminalStatus,
 } from "@lcsp/contracts/legal-rule-catalog";
 import {
   AUDIT_ACTOR_TYPES,
@@ -274,7 +276,7 @@ export class AdminCorpusVersionsService {
   async completePreparation(input: {
     preparationId: string;
     corpusVersionId: string;
-    status: "COMPLETED" | "FAILED" | "BLOCKED";
+    status: CorpusPreparationTerminalStatus;
     readiness?: Record<string, string>;
     integrityManifestRef?: string | null;
     retrievalValidationRef?: string | null;
@@ -306,8 +308,12 @@ export class AdminCorpusVersionsService {
       : {};
     const validation = isRecord(manifest.validation) ? manifest.validation : {};
     const failureReadiness =
-      input.status === "FAILED" || input.status === "BLOCKED"
-        ? { SOURCE_PARSING: "BLOCKED" }
+      input.status === CORPUS_PREPARATION_STATUSES.failed ||
+      input.status === CORPUS_PREPARATION_STATUSES.blocked
+        ? {
+            [CORPUS_VERSION_READINESS_CHECKS.sourceParsing]:
+              CORPUS_VERSION_READINESS_STATES.blocked,
+          }
         : {};
     const updated = await this.prisma.$transaction(async (tx) => {
       await tx.legalCorpusVersion.update({
@@ -566,7 +572,7 @@ export class AdminCorpusVersionsService {
       select: { id: true },
     });
     try {
-      const result = await this.legalCorpus.activateValidatedCorpusVersion({
+      await this.legalCorpus.activateValidatedCorpusVersion({
         corpusVersionId: input.versionId,
         integrityManifestRef,
         retrievalValidationRef: index.validationManifestRef!,
@@ -604,7 +610,7 @@ export class AdminCorpusVersionsService {
         payload: {
           targetVersionId: input.versionId,
           previousActiveVersionId: previous?.id ?? null,
-          result: "FAILED",
+          result: CORPUS_PREPARATION_STATUSES.failed,
         },
       });
       throw error;
@@ -684,11 +690,15 @@ function snapshotChange(
 function readReadinessProjection(manifest: Record<string, unknown>) {
   const raw = isRecord(manifest.validation) ? manifest.validation : null;
   const state = (value: unknown): CorpusVersionReadinessState => {
-    if (value === "PENDING") return CORPUS_VERSION_READINESS_STATES.pending;
-    if (value === "PASSED") return CORPUS_VERSION_READINESS_STATES.passed;
-    if (value === "FAILED") return CORPUS_VERSION_READINESS_STATES.failed;
-    if (value === "BLOCKED") return CORPUS_VERSION_READINESS_STATES.blocked;
-    if (value === "UNAVAILABLE")
+    if (value === CORPUS_VERSION_READINESS_STATES.pending)
+      return CORPUS_VERSION_READINESS_STATES.pending;
+    if (value === CORPUS_VERSION_READINESS_STATES.passed)
+      return CORPUS_VERSION_READINESS_STATES.passed;
+    if (value === CORPUS_VERSION_READINESS_STATES.failed)
+      return CORPUS_VERSION_READINESS_STATES.failed;
+    if (value === CORPUS_VERSION_READINESS_STATES.blocked)
+      return CORPUS_VERSION_READINESS_STATES.blocked;
+    if (value === CORPUS_VERSION_READINESS_STATES.unavailable)
       return CORPUS_VERSION_READINESS_STATES.unavailable;
     return CORPUS_VERSION_READINESS_STATES.unavailable;
   };

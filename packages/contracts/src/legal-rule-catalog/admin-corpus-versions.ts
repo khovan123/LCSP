@@ -9,6 +9,24 @@ export const CORPUS_VERSION_READINESS_STATES = {
   unavailable: "UNAVAILABLE",
 } as const;
 
+export const CORPUS_PREPARATION_STATUSES = {
+  requested: "REQUESTED",
+  running: "RUNNING",
+  completed: "COMPLETED",
+  failed: "FAILED",
+  blocked: "BLOCKED",
+} as const;
+export type CorpusPreparationStatus =
+  (typeof CORPUS_PREPARATION_STATUSES)[keyof typeof CORPUS_PREPARATION_STATUSES];
+
+export const CORPUS_PREPARATION_TERMINAL_STATUSES = {
+  completed: CORPUS_PREPARATION_STATUSES.completed,
+  failed: CORPUS_PREPARATION_STATUSES.failed,
+  blocked: CORPUS_PREPARATION_STATUSES.blocked,
+} as const;
+export type CorpusPreparationTerminalStatus =
+  (typeof CORPUS_PREPARATION_TERMINAL_STATUSES)[keyof typeof CORPUS_PREPARATION_TERMINAL_STATUSES];
+
 export const CORPUS_VERSION_PRESENTATION_STATUSES = {
   draft: "DRAFT",
   published: "PUBLISHED",
@@ -102,9 +120,15 @@ export type AdminCorpusVersionDetail = AdminCorpusVersionSummary & {
 export type AdminCorpusVersionsListResponse = {
   currentActive: AdminCorpusVersionSummary | null;
   items: AdminCorpusVersionSummary[];
-  pagination: { page: number; pageSize: number; total: number; hasNext: boolean };
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    hasNext: boolean;
+  };
   canCreate: boolean;
-  createUnavailableReason?: "CORPUS_PREPARATION_IN_PROGRESS" | "PREPARATION_WORKFLOW_UNAVAILABLE";
+  createUnavailableReason?:
+    "CORPUS_PREPARATION_IN_PROGRESS" | "PREPARATION_WORKFLOW_UNAVAILABLE";
 };
 
 export type AdminPublishCorpusVersionInput = {
