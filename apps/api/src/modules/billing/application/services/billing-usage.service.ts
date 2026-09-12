@@ -43,12 +43,28 @@ export class BillingUsageService {
       if (i.totalTokens !== undefined && i.totalTokens < input + output)
         throw new BillingDomainError("Total tokens are inconsistent");
       const existing = await usage.findByInvocation(i.userId, i.invocationId);
+      const occurredAt = i.occurredAt ?? existing?.occurredAt ?? new Date();
+      const snapshot = await pricing.findApplicable(
+        i.provider,
+        i.model,
+        occurredAt,
+      );
+      if (!snapshot)
+        throw new BillingDomainError("No applicable pricing snapshot");
+      const charge = calculateUsageChargeCredits(input, output, snapshot);
       if (existing) {
         if (
           existing.provider !== i.provider ||
           existing.model !== i.model ||
           existing.inputTokens !== input ||
-          existing.outputTokens !== output
+          existing.outputTokens !== output ||
+          existing.totalTokens !== (i.totalTokens ?? input + output) ||
+          existing.providerResponseId !== (i.providerResponseId ?? null) ||
+          existing.reservationId !== i.reservationId ||
+          existing.pricingSnapshotId !== snapshot.id ||
+          existing.chargedCredits !== charge ||
+          (i.occurredAt !== undefined &&
+            existing.occurredAt.getTime() !== occurredAt.getTime())
         )
           throw new BillingIdempotencyConflictError("Usage replay differs");
         return existing;
@@ -66,14 +82,6 @@ export class BillingUsageService {
       const r = await reservation.findForUser(i.userId, i.reservationId);
       if (!r)
         throw new OwnershipMismatchError("Reservation does not belong to user");
-      const snapshot = await pricing.findApplicable(
-        i.provider,
-        i.model,
-        i.occurredAt ?? new Date(),
-      );
-      if (!snapshot)
-        throw new BillingDomainError("No applicable pricing snapshot");
-      const charge = calculateUsageChargeCredits(input, output, snapshot);
       const event = await usage.create({
         userId: i.userId,
         provider: i.provider,
@@ -84,7 +92,9 @@ export class BillingUsageService {
         outputTokens: output,
         totalTokens: i.totalTokens ?? input + output,
         pricingSnapshotId: snapshot.id,
-        occurredAt: i.occurredAt,
+        reservationId: i.reservationId,
+        chargedCredits: charge,
+        occurredAt,
       });
       await this.accounting.settleWithinTransaction(repos, {
         userId: i.userId,

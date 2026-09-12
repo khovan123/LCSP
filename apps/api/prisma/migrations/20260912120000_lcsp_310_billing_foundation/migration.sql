@@ -101,6 +101,8 @@ CREATE TABLE "LlmUsageEvent" (
   "reasoningTokens" BIGINT,
   "totalTokens" BIGINT,
   "pricingSnapshotId" TEXT,
+  "reservationId" TEXT,
+  "chargedCredits" BIGINT,
   "occurredAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "LlmUsageEvent_pkey" PRIMARY KEY ("id")
@@ -117,6 +119,7 @@ CREATE UNIQUE INDEX "BillingReservation_userId_idempotencyKey_key" ON "BillingRe
 CREATE UNIQUE INDEX "ModelPricingSnapshot_provider_model_version_key" ON "ModelPricingSnapshot"("provider", "model", "version");
 CREATE UNIQUE INDEX "LlmUsageEvent_userId_invocationId_key" ON "LlmUsageEvent"("userId", "invocationId");
 CREATE UNIQUE INDEX "LlmUsageEvent_provider_providerResponseId_key" ON "LlmUsageEvent"("provider", "providerResponseId");
+CREATE UNIQUE INDEX "LlmUsageEvent_reservationId_key" ON "LlmUsageEvent"("reservationId");
 CREATE INDEX "BillingOrder_userId_status_createdAt_idx" ON "BillingOrder"("userId", "status", "createdAt");
 CREATE INDEX "SePayWebhookEvent_receivedAt_idx" ON "SePayWebhookEvent"("receivedAt");
 CREATE INDEX "PaymentTransaction_userId_createdAt_idx" ON "PaymentTransaction"("userId", "createdAt");
@@ -142,3 +145,17 @@ ALTER TABLE "BillingReservation" ADD CONSTRAINT "BillingReservation_userId_fkey"
 ALTER TABLE "BillingReservation" ADD CONSTRAINT "BillingReservation_walletId_fkey" FOREIGN KEY ("walletId") REFERENCES "BillingWallet"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "LlmUsageEvent" ADD CONSTRAINT "LlmUsageEvent_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "LlmUsageEvent" ADD CONSTRAINT "LlmUsageEvent_pricingSnapshotId_fkey" FOREIGN KEY ("pricingSnapshotId") REFERENCES "ModelPricingSnapshot"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "LlmUsageEvent" ADD CONSTRAINT "LlmUsageEvent_reservationId_fkey" FOREIGN KEY ("reservationId") REFERENCES "BillingReservation"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+CREATE OR REPLACE FUNCTION "prevent_model_pricing_snapshot_mutation"()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'ModelPricingSnapshot rows are append-only';
+END;
+$$;
+
+CREATE TRIGGER "ModelPricingSnapshot_immutable"
+BEFORE UPDATE OR DELETE ON "ModelPricingSnapshot"
+FOR EACH ROW EXECUTE FUNCTION "prevent_model_pricing_snapshot_mutation"();

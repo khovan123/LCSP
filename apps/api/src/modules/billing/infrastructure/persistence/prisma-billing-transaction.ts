@@ -189,7 +189,10 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
                 provider_providerResponseId: { provider, providerResponseId },
               },
             }),
-          create: (i) => tx.llmUsageEvent.create({ data: i }),
+          create: async (i) => {
+            const x = await tx.llmUsageEvent.create({ data: i });
+            return x;
+          },
         },
         pricing: {
           findById: async (id) => {

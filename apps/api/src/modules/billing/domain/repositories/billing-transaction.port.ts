@@ -42,6 +42,8 @@ export type UsageRecord = {
   outputTokens: bigint | null;
   totalTokens: bigint | null;
   pricingSnapshotId: string | null;
+  reservationId: string | null;
+  chargedCredits: bigint | null;
   occurredAt: Date;
 };
 export type PricingRecord = {
@@ -163,6 +165,8 @@ export interface LlmUsagePort {
     outputTokens?: bigint;
     totalTokens?: bigint;
     pricingSnapshotId?: string;
+    reservationId: string;
+    chargedCredits: bigint;
     occurredAt?: Date;
   }): Promise<UsageRecord>;
 }

@@ -1275,6 +1275,7 @@ model BillingReservation {
   updatedAt      DateTime                 @updatedAt
   user           User                     @relation(fields: [userId], references: [id], onDelete: Restrict)
   wallet         BillingWallet            @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  usageEvent     LlmUsageEvent?
 
   @@unique([userId, idempotencyKey])
   @@index([userId, status, createdAt])
@@ -1309,13 +1310,17 @@ model LlmUsageEvent {
   reasoningTokens    BigInt?
   totalTokens        BigInt?
   pricingSnapshotId  String?
+  reservationId      String?
+  chargedCredits     BigInt?
   occurredAt         DateTime              @default(now())
   createdAt          DateTime              @default(now())
   user               User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
   pricingSnapshot    ModelPricingSnapshot? @relation(fields: [pricingSnapshotId], references: [id], onDelete: Restrict)
+  reservation        BillingReservation?   @relation(fields: [reservationId], references: [id], onDelete: Restrict)
 
   @@unique([userId, invocationId])
   @@unique([provider, providerResponseId])
+  @@unique([reservationId])
   @@index([userId, createdAt])
   @@index([provider, model, createdAt])
 }
