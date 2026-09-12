@@ -34,11 +34,24 @@ describe("LCSP-310 usage and pricing foundation", () => {
     pushPrismaSchema();
     prisma = new PrismaClient({ adapter: new PrismaPg(TEST_DATABASE_URL) });
     await prisma.$connect();
+    await prisma.$executeRawUnsafe(`
+      CREATE OR REPLACE FUNCTION "prevent_model_pricing_snapshot_mutation"()
+      RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'ModelPricingSnapshot rows are append-only'; END;
+      $$;
+      DROP TRIGGER IF EXISTS "ModelPricingSnapshot_immutable" ON "ModelPricingSnapshot";
+      CREATE TRIGGER "ModelPricingSnapshot_immutable"
+      BEFORE UPDATE OR DELETE ON "ModelPricingSnapshot"
+      FOR EACH ROW EXECUTE FUNCTION "prevent_model_pricing_snapshot_mutation"();
+    `);
     const tx = new PrismaBillingTransaction(new PrismaService());
     accounting = new BillingAccountingService(tx);
     usage = new BillingUsageService(tx, accounting);
   });
   beforeEach(async () => {
+    await prisma.$executeRawUnsafe(
+      'DROP TRIGGER IF EXISTS "ModelPricingSnapshot_immutable" ON "ModelPricingSnapshot"',
+    );
     await prisma.llmUsageEvent.deleteMany();
     await prisma.billingReservation.deleteMany();
     await prisma.creditLedgerEntry.deleteMany();
@@ -47,6 +60,11 @@ describe("LCSP-310 usage and pricing foundation", () => {
     await prisma.user.deleteMany({
       where: { email: { endsWith: "@usage.test" } },
     });
+    await prisma.$executeRawUnsafe(`
+      CREATE TRIGGER "ModelPricingSnapshot_immutable"
+      BEFORE UPDATE OR DELETE ON "ModelPricingSnapshot"
+      FOR EACH ROW EXECUTE FUNCTION "prevent_model_pricing_snapshot_mutation"();
+    `);
   });
   afterAll(async () => prisma?.$disconnect());
 
@@ -300,6 +318,55 @@ describe("LCSP-310 usage and pricing foundation", () => {
         })
       ).pricingSnapshotId,
     ).toBe(f.pricing.id);
+  });
+
+  it("rejects direct pricing snapshot mutation while allowing new versions", async () => {
+    const f = await fixture();
+    const event = await usage.recordAndSettleUsage({
+      userId: f.user.id,
+      reservationId: f.reservation.id,
+      invocationId: "INV-IMMUTABLE",
+      provider: "OPENAI",
+      model: "MODEL_A",
+      inputTokens: 1n,
+    });
+    const p2 = await prisma.modelPricingSnapshot.create({
+      data: {
+        provider: "OPENAI",
+        model: "MODEL_A",
+        version: Math.floor(Math.random() * 1_000_000_000),
+        inputPricePerMillion: "3.00000000",
+        outputPricePerMillion: "4.00000000",
+        effectiveAt: new Date(),
+      },
+    });
+    await expect(
+      prisma.modelPricingSnapshot.update({
+        where: { id: f.pricing.id },
+        data: { inputPricePerMillion: "9.00000000" },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.modelPricingSnapshot.update({
+        where: { id: p2.id },
+        data: { inputPricePerMillion: "8.00000000" },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.modelPricingSnapshot.delete({ where: { id: p2.id } }),
+    ).rejects.toThrow();
+    const p1 = await prisma.modelPricingSnapshot.findUniqueOrThrow({
+      where: { id: f.pricing.id },
+    });
+    const persisted = await prisma.llmUsageEvent.findUniqueOrThrow({
+      where: { id: event.id },
+    });
+    expect(p1.inputPricePerMillion.toString()).toBe("1");
+    expect(persisted.pricingSnapshotId).toBe(f.pricing.id);
+    expect(persisted.chargedCredits).toBe(1n);
+    await expect(
+      prisma.modelPricingSnapshot.findUnique({ where: { id: p2.id } }),
+    ).resolves.toBeTruthy();
   });
 
   it("rejects a calculated charge larger than the prepaid reservation", async () => {
