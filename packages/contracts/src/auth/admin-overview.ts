@@ -13,7 +13,6 @@ export const ADMIN_OVERVIEW_ACTION_KEYS = {
   invitedUser: "INVITED_USER",
   publishedCorpus: "PUBLISHED_CORPUS",
   discardedDraft: "DISCARDED_DRAFT",
-  changedRole: "CHANGED_ROLE",
   generalAction: "GENERAL_ACTION",
 } as const;
 
@@ -40,7 +39,7 @@ export interface AdminRecentActivityItem {
   eventType: string;
   actionKey: AdminOverviewActionKey;
   occurredAt: string;
-  adminEmail: string;
+  adminEmail: string | null;
   adminName: string | null;
   target: string;
 }

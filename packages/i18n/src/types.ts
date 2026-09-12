@@ -1956,7 +1956,6 @@ export type PagesMessages = {
           invitedUser: string;
           publishedCorpus: string;
           discardedDraft: string;
-          changedRole: string;
         };
         emptyTitle: string;
         emptyDescription: string;
@@ -1970,7 +1969,6 @@ export type PagesMessages = {
         draftLabel: string;
         noPublished: string;
         noDraft: string;
-        diffReviewPending: string;
       };
       loading: string;
       error: string;

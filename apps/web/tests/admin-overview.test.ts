@@ -213,19 +213,36 @@ test("AdminPeriodSelector supports full keyboard navigation (ArrowDown, ArrowUp,
     );
   });
 
-  const listbox = container.querySelector("[role='listbox']");
+  let listbox = container.querySelector("[role='listbox']");
+  assert.ok(listbox);
+
+  // Test Escape closes listbox
+  act(() => {
+    listbox?.dispatchEvent(
+      new testWindow.KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+  });
+  assert.equal(container.querySelector("[role='listbox']"), null);
+
+  // Re-open with ArrowUp
+  act(() => {
+    trigger.dispatchEvent(
+      new testWindow.KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
+    );
+  });
+  listbox = container.querySelector("[role='listbox']");
   assert.ok(listbox);
 
   // Navigate with ArrowDown
   act(() => {
-    listbox.dispatchEvent(
+    listbox?.dispatchEvent(
       new testWindow.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
     );
   });
 
   // Select with Enter
   act(() => {
-    listbox.dispatchEvent(
+    listbox?.dispatchEvent(
       new testWindow.KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
     );
   });

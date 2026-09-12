@@ -33,9 +33,6 @@ export function AdminCorpusStatusCard({
   const noDraftText = resolveAppMessage(
     "pages.admin.overview.corpusStatus.noDraft" as MessageKey,
   );
-  const diffPendingText = resolveAppMessage(
-    "pages.admin.overview.corpusStatus.diffReviewPending" as MessageKey,
-  );
   const subtitleTemplate = resolveAppMessage(
     "pages.admin.overview.metrics.corpusSubtitle" as MessageKey,
   );
@@ -88,9 +85,9 @@ export function AdminCorpusStatusCard({
     : noPublishedText;
 
   const draftDetails = draft
-    ? `${subtitleTemplate
+    ? subtitleTemplate
         .replace("{sources}", String(draft.sourceCount))
-        .replace("{rules}", draftRuleCount)} · ${diffPendingText}`
+        .replace("{rules}", draftRuleCount)
     : noDraftText;
 
   return (

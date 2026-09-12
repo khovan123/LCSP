@@ -90,10 +90,6 @@ export function AdminRecentActivityCard({
         return resolveAppMessage(
           "pages.admin.overview.recentActivity.actions.discardedDraft" as MessageKey,
         );
-      case ADMIN_OVERVIEW_ACTION_KEYS.changedRole:
-        return resolveAppMessage(
-          "pages.admin.overview.recentActivity.actions.changedRole" as MessageKey,
-        );
       default:
         return actionHeader;
     }
@@ -210,7 +206,7 @@ export function AdminRecentActivityCard({
                       {formatOccurredTime(item.occurredAt)}
                     </TableCell>
                     <TableCell className="px-3 py-2.5 text-muted-foreground truncate max-w-40">
-                      {item.adminEmail}
+                      {item.adminEmail ?? item.adminName ?? "System"}
                     </TableCell>
                     <TableCell className="px-3 py-2.5 text-muted-foreground truncate max-w-40">
                       {resolveActionLabel(item)}

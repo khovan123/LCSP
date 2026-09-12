@@ -301,7 +301,7 @@ export class AdminOverviewService {
 
     return events.map((event) => {
       const user = event.actorId ? userMap.get(event.actorId) : undefined;
-      const adminEmail = user?.email ?? "system@lcsp.internal";
+      const adminEmail = user?.email ?? null;
       const adminName = user?.displayName ?? null;
       const payload = isRecord(event.payload) ? event.payload : {};
 
