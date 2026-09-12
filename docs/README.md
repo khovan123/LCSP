@@ -19,6 +19,7 @@ CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
 POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 STORY_TRACEABILITY_PENDING
 IMPLEMENTATION_NOT_AUTHORIZED
+CANONICAL_CANDIDATE
 ```
 
 ## Required Reading Order
@@ -98,6 +99,14 @@ Node.js downstream domain workers are `SUPERSEDED_FOR_ACTIVE_MVP`. Node.js remai
 - `FR-050` no longer means Local/CI scanner report upload. It is redefined as `AUTOMATIC_TRUSTED_SCAN_INITIATION`.
 - All asynchronous domain workloads belong to the Python Worker Platform.
 - Scanner toolchain includes Syft, Knip, deptry, Semgrep custom rules, tree-sitter/custom parser, Python `ast` + `libcst`, and bounded `ts-morph`.
+- Repository integration is read-only by default. Write capability is requested/validated only for the Customer-approved remediation PR action.
+- Business Context is snapshot-isolated for active runs; edits during `RUNNING` are blocked or queued for subsequent reassessment/new run.
+- Legal-corpus content changes create new immutable `LegalCorpusVersion` records; historical evaluations and reports retain the exact pinned version used.
+- Application message references in canonical docs should map to existing `@lcsp/i18n` keys rather than invented copy.
+
+## Canonical Candidate Freeze Gate
+
+The canonical set remains `Canonical Candidate`, not Frozen. It may be marked Frozen only after cross-document review has no BLOCKER/ERROR and open PR effects are reconciled: PR #310 for M11 Admin User Accounts, PR #312 for Investigator/evaluation runtime, PR #309 for Program Evidence Graph UX/navigation, and draft PR #268 only if accepted into scope.
 
 ## Scanner Ownership
 

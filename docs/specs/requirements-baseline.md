@@ -16,6 +16,8 @@ This document defines the active requirements baseline from existing active docu
 - `NFR-031` and `NFR-032` are legacy identifiers only, not active NFR catalog rows.
 - `PLATFORM_BASELINE` means the active normalized requirement belongs to the platform baseline even when no one-to-one PRD source alias exists.
 - Historical requirement catalogs remain non-authoritative and are not active source-of-truth documents.
+- Freeze status is `Canonical Candidate`. The baseline is not Frozen until cross-document review has no BLOCKER/ERROR and open PR effects are reconciled.
+- Canonical remediation behavior is required but must not be marked implemented beyond evidenced Customer decision persistence and UI/i18n intent.
 
 ## Active Canonical Sources
 
@@ -78,6 +80,20 @@ The following `FR-E*` identifiers are retained only as PRD/source aliases. Activ
 | FR-E3-3   | FR-051                       | REMOVED_FROM_PRODUCT      | Manual technical evidence JSON upload is removed from active scope, roadmap, future scope, UX, APIs, entities, stories and delivery plans. |
 
 The active controlled MVP technical-evidence path is GitHub App repository connection, snapshot creation and Repository Scan.
+
+Repository connection, discovery, snapshot, scan, and re-run are read-only by default. Write permission is requested/validated only after an authorized Customer approves remediation PR creation.
+
+### Canonical Freeze Synchronization Notes
+
+| Area                            | Baseline decision                                                                                                                                                                                                         | Implementation evidence status                                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Remediation approval/write-back | Required flow is proposal -> Customer review -> approve -> write-capability check -> credential/PAT update if needed -> patch/PR creation -> commit/PR refs -> patched re-scan -> re-evaluation -> audit/history linkage. | Customer decision persistence and i18n intent are evidenced; full backend write-back chain is missing/partial. |
+| Repository access               | Read-only by default for connect/read/scan. Write capability is approved-action-only for remediation PR creation.                                                                                                         | GitHub integration evidence centers on credential/discovery/connect/snapshot/scan.                             |
+| Business Context concurrency    | Running assessment uses immutable context snapshot; edits during `RUNNING` are blocked or queued and cannot mutate current run.                                                                                           | Runtime context revisions exist; queued-edit behavior must be evidenced separately.                            |
+| LegalCorpusVersion              | Every corpus content change creates a new version; approved versions are immutable; evaluations/reports persist exact `legalCorpusVersionId/version`.                                                                     | Domain/state docs define immutability; freeze review must confirm implementation/test coverage.                |
+| M11 Admin User Account          | Align with PR #310 evidenced states/fields: `ACTIVE/SUSPENDED/INVITED`, `ADMIN/CUSTOMER`, provider metadata, list/detail/search/filter/pagination/role/suspension, EN/VI i18n.                                            | Open PR #310 is strongest current source; roles remain subject labels, not authorization authority.            |
+| Messages                        | Requirements trace only existing `@lcsp/i18n` keys; copy is not invented in requirements docs.                                                                                                                            | MSG appendix maps current locale keys to FR/AC/UX triggers.                                                    |
+| UX mapping                      | Business Context Edit, Evaluation, AI Risk, Gap, Report, History/Reassess, Program Evidence Graph, and Code Remediation controls require explicit traceability.                                                           | PR #309 and #312 must be reconciled before freeze; remediation controls are partial.                           |
 
 ## PRD NFR Source Alias Inventory
 
@@ -308,6 +324,19 @@ These identifiers are retained only for traceability drift cleanup. They are not
 | Platform-baseline FR IDs without one-to-one PRD source alias                  | RESOLVED_PLATFORM_BASELINE | FR-001, FR-002, FR-003, FR-004, FR-005, FR-006, FR-007, FR-008, FR-009      |
 | Platform-baseline NFR IDs without one-to-one PRD source alias                 | RESOLVED_PLATFORM_BASELINE | NFR-001, NFR-002, NFR-003, NFR-004, NFR-005, NFR-006, NFR-027, NFR-033      |
 
+## Freeze Verification
+
+| Check                                           | Result  | Evidence                                                                               |
+| ----------------------------------------------- | ------- | -------------------------------------------------------------------------------------- |
+| Stable IDs preserved                            | PASS    | No UC/FR/AC identifiers renumbered.                                                    |
+| Remediation E2E covered without overclaiming    | PARTIAL | Requirements and RTM describe required chain; missing backend steps remain gaps.       |
+| Business Context concurrency added              | PASS    | FR/AC/domain/state docs now pin immutable running context revision semantics.          |
+| LegalCorpusVersion provenance extended          | PASS    | Domain/state/FR/AC docs require new version per content change and historical pinning. |
+| M11 Admin User Account reconciled               | PENDING | Open PR #310 must be merged/reviewed before Frozen.                                    |
+| Investigator/evaluation runtime reconciled      | PENDING | Open PR #312 must be merged/reviewed before Frozen.                                    |
+| Program Evidence Graph UX reconciled            | PENDING | Open PR #309 must be merged/reviewed before Frozen.                                    |
+| Multi-repository draft treated as non-canonical | PASS    | Draft PR #268 is excluded unless accepted into scope.                                  |
+
 ## Canonical Count Assertions
 
 | Assertion                   | Value            |
@@ -319,3 +348,5 @@ These identifiers are retained only for traceability drift cleanup. They are not
 | Legacy-only NFR identifiers | NFR-031, NFR-032 |
 
 `FR-E*` values are source aliases only. `NFR-031` and `NFR-032` may appear only as legacy aliases/mappings and must not be counted as active NFR inventory.
+
+Baseline status: `Canonical Candidate`.
