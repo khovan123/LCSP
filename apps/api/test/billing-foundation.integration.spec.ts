@@ -56,7 +56,7 @@ describe("LCSP-310 billing persistence constraints", () => {
       where: { email: { endsWith: "@test.invalid" } },
     });
   });
-  afterAll(async () => prisma.$disconnect());
+  afterAll(async () => prisma?.$disconnect());
 
   it("enforces wallet ownership and one wallet per user", async () => {
     const a = user("a");

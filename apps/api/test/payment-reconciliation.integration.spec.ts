@@ -55,7 +55,7 @@ describe("LCSP-310 payment reconciliation", () => {
       where: { email: { endsWith: "@test.invalid" } },
     });
   });
-  afterAll(async () => prisma.$disconnect());
+  afterAll(async () => prisma?.$disconnect());
 
   async function setupOrder(
     status: "PENDING_PAYMENT" | "EXPIRED" | "CANCELLED" = "PENDING_PAYMENT",

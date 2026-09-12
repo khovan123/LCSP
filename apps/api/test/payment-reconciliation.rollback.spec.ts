@@ -71,7 +71,7 @@ describe("LCSP-310 matched payment rollback", () => {
     await prisma.user.deleteMany({ where: { id: user.id } });
     await prisma.user.create({ data: user });
   });
-  afterAll(async () => prisma.$disconnect());
+  afterAll(async () => prisma?.$disconnect());
 
   it("rolls back matched payment financial effects when a transaction-bound operation fails", async () => {
     const wallet = await prisma.billingWallet.create({

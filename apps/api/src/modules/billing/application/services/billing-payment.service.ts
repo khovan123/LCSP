@@ -1,11 +1,15 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { BillingAccountingService } from "./billing-accounting.service.js";
 import { BillingIdempotencyConflictError } from "../../domain/billing.errors.js";
-import type { BillingTransactionPort } from "../../domain/repositories/billing-transaction.port.js";
+import {
+  BILLING_TRANSACTION_PORT,
+  type BillingTransactionPort,
+} from "../../domain/repositories/billing-transaction.port.js";
 
 @Injectable()
 export class BillingPaymentService {
   constructor(
+    @Inject(BILLING_TRANSACTION_PORT)
     private readonly transactions: BillingTransactionPort,
     private readonly accounting: BillingAccountingService,
   ) {}

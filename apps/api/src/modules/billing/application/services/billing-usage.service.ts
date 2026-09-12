@@ -1,16 +1,20 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import {
   BillingDomainError,
   BillingIdempotencyConflictError,
   OwnershipMismatchError,
 } from "../../domain/billing.errors.js";
 import { calculateUsageChargeCredits } from "../../domain/usage-pricing.js";
-import type { BillingTransactionPort } from "../../domain/repositories/billing-transaction.port.js";
+import {
+  BILLING_TRANSACTION_PORT,
+  type BillingTransactionPort,
+} from "../../domain/repositories/billing-transaction.port.js";
 import { BillingAccountingService } from "./billing-accounting.service.js";
 
 @Injectable()
 export class BillingUsageService {
   constructor(
+    @Inject(BILLING_TRANSACTION_PORT)
     private readonly transactions: BillingTransactionPort,
     private readonly accounting: BillingAccountingService,
   ) {}

@@ -48,7 +48,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
       where: { email: { endsWith: "@usage.test" } },
     });
   });
-  afterAll(async () => prisma.$disconnect());
+  afterAll(async () => prisma?.$disconnect());
 
   async function fixture() {
     const user = {

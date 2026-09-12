@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import {
   BillingDomainError,
   BillingIdempotencyConflictError,
@@ -12,10 +12,14 @@ import type {
   BillingTransactionPort,
   BillingTransactionRepositories,
 } from "../../domain/repositories/billing-transaction.port.js";
+import { BILLING_TRANSACTION_PORT } from "../../domain/repositories/billing-transaction.port.js";
 
 @Injectable()
 export class BillingAccountingService {
-  constructor(private readonly transactions: BillingTransactionPort) {}
+  constructor(
+    @Inject(BILLING_TRANSACTION_PORT)
+    private readonly transactions: BillingTransactionPort,
+  ) {}
   getOrCreateWallet(userId: string) {
     return this.transactions.runForUser(userId, ({ wallet }) =>
       wallet.getOrCreateForUser(userId),

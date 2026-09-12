@@ -191,3 +191,5 @@ export interface BillingTransactionPort {
     operation: (repositories: BillingTransactionRepositories) => Promise<T>,
   ): Promise<T>;
 }
+
+export const BILLING_TRANSACTION_PORT = Symbol("BILLING_TRANSACTION_PORT");
