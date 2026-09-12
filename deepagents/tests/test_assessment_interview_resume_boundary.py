@@ -14,7 +14,9 @@ from tools.common.capabilities.assessment.claims.evidence_claim.models import (
 )
 from tools.common.capabilities.managed.invocation import invocation_boundary_manifest
 from tools.common.capabilities.platform.api_client import (
-    InterviewResolutionCallbackError, WorkerCallbackError,
+    InterviewContextReadyAuthorityCallbackError,
+    InterviewResolutionCallbackError,
+    WorkerCallbackError,
 )
 from tools.common.capabilities.workflow.recovery.interview_boundary import (
     AssessmentInterviewResumeBoundary,
@@ -216,16 +218,17 @@ def test_resolution_rejection_gets_one_private_correction_before_continuation(co
     assert all(call.args[-1] != "FAILED" for call in api.post_interview_progress.call_args_list)
 
 
-@pytest.mark.parametrize("error,attempts", [
-    (InterviewResolutionCallbackError("criteria missing"), 2),
-    (WorkerCallbackError("stale revision", status_code=409), 1),
-    (WorkerCallbackError("forbidden", status_code=403), 1),
+@pytest.mark.parametrize("error,attempts,outcome", [
+    (InterviewResolutionCallbackError("criteria missing"), 2, "CONTEXT_RESOLVED"),
+    (InterviewContextReadyAuthorityCallbackError("requires authority"), 2, "CONTEXT_READY"),
+    (WorkerCallbackError("stale revision", status_code=409), 1, "CONTEXT_RESOLVED"),
+    (WorkerCallbackError("forbidden", status_code=403), 1, "CONTEXT_RESOLVED"),
 ])
-def test_rejected_correction_is_bounded_and_unrelated_errors_are_not_repaired(error, attempts):
+def test_rejected_correction_is_bounded_and_unrelated_errors_are_not_repaired(error, attempts, outcome):
     api = RecordingApi()
     api.post_interview_progress = Mock()
     api.post_interview_agent_decision = Mock(side_effect=error)
-    handoff = {**deepcopy(WAITING_HANDOFF), "outcome": "CONTEXT_RESOLVED", "activeQuestion": None}
+    handoff = {**deepcopy(WAITING_HANDOFF), "outcome": outcome, "activeQuestion": None}
     dispatcher = RecordingDispatcher(handoff)
     boundary = AssessmentInterviewResumeBoundary(SimpleNamespace(), api_client=api, dispatcher=dispatcher)
     boundary._run_guarded_continuation = Mock()
@@ -238,6 +241,41 @@ def test_rejected_correction_is_bounded_and_unrelated_errors_are_not_repaired(er
     assert api.post_interview_agent_decision.call_count == attempts
     boundary._run_guarded_continuation.assert_not_called()
     assert api.post_interview_progress.call_args.args[-1] == "FAILED"
+
+
+def test_context_ready_authority_rejection_gets_one_private_correction_before_continuation():
+    api = RecordingApi()
+    api.post_interview_progress = Mock()
+    rejected = {
+        **deepcopy(WAITING_HANDOFF),
+        "mode": "INITIAL_INTERVIEW",
+        "outcome": "CONTEXT_READY",
+        "contextAuthority": "CUSTOMER_STATED",
+        "activeQuestion": None,
+    }
+    corrected = {**deepcopy(WAITING_HANDOFF), "mode": "INITIAL_INTERVIEW"}
+    dispatcher = RecordingDispatcher()
+    dispatcher.dispatch = Mock(side_effect=[{"handoff": rejected}, {"handoff": corrected}])
+    accepted = {"outcome": "WAITING_FOR_CUSTOMER"}
+    api.post_interview_agent_decision = Mock(side_effect=[
+        InterviewContextReadyAuthorityCallbackError("requires authority"), accepted,
+    ])
+    boundary = AssessmentInterviewResumeBoundary(SimpleNamespace(), api_client=api, dispatcher=dispatcher)
+    boundary._run_guarded_continuation = Mock()
+
+    boundary.handle(_message(), "corr-1")
+
+    first, repair = [call.kwargs for call in dispatcher.dispatch.call_args_list]
+    payload = json.loads(repair["instruction"].split("\n\n", 1)[1])
+    assert payload["decisionValidationFeedback"]["code"] == "INTERVIEW_CONTEXT_READY_REQUIRES_AUTHORITY"
+    assert payload["decisionValidationFeedback"]["rejectedDecision"]["outcome"] == "CONTEXT_READY"
+    assert "decisionValidationFeedback" not in first["instruction"].split("\n\n", 1)[1]
+    assert first["thread_id"] == repair["thread_id"]
+    assert first["idempotency_key"] != repair["idempotency_key"]
+    assert repair["context"].idempotency_key == repair["idempotency_key"]
+    boundary._run_guarded_continuation.assert_called_once()
+    assert boundary._run_guarded_continuation.call_args.kwargs["guarded_state"] is accepted
+    assert all(call.args[-1] != "FAILED" for call in api.post_interview_progress.call_args_list)
 
 
 def test_interview_resume_command_is_managed_boundary() -> None:

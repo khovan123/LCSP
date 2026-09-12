@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Callable
 
 from tools.common.capabilities.managed.boundary import AgentBoundaryBase
-from tools.common.capabilities.platform.api_client import InterviewResolutionCallbackError
+from tools.common.capabilities.platform.api_client import (
+    InterviewContextReadyAuthorityCallbackError,
+    InterviewResolutionCallbackError,
+)
 from tools.common.capabilities.workflow.recovery.post_guard_continuation import (
     PostGuardContinuationStore,
 )
@@ -24,6 +28,9 @@ from tools.legal.retrieval.legal_basis.rule_applicability_evaluator import (
     RuleApplicabilityEvaluator,
     RULE_APPLICABILITY_STATUSES,
 )
+
+_LOGGER = logging.getLogger(__name__)
+_INTERVIEW_CONTEXT_READY_AUTHORITY_REPAIRED = "INTERVIEW_CONTEXT_READY_AUTHORITY_REPAIRED"
 
 INTERVIEW_RESUME_COMMAND = "command.assessment-interview.resume-agent.v1"
 CURRENT_CONTEXT = "CURRENT"
@@ -224,6 +231,40 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 "decisionValidationFeedback": {
                     "code": "INTERVIEW_RESOLUTION_CRITERIA_UNSATISFIED",
                     "missingCriteria": exc.missing,
+                    "rejectedDecision": decision,
+                },
+            }
+            corrected = self._run_interview(
+                assessment_id=assessment_id,
+                thread_id=thread_id,
+                question_id=question_id,
+                context_revision=context_revision,
+                resume_reason=resume_reason,
+                context=repair_context,
+                correlationId=correlationId,
+            )
+            # A second rejection propagates to terminal delivery settlement.
+            guarded_state = api_client.post_interview_agent_decision(
+                assessment_id, corrected,
+            )
+        except InterviewContextReadyAuthorityCallbackError:
+            # The specialist asserted CONTEXT_READY without CUSTOMER_CONFIRMED
+            # authority. The API guard is correct and must never be relaxed; give
+            # the specialist one bounded chance to ask a confirming question
+            # instead of inferring authority it was never given.
+            if decision.get("outcome") != "CONTEXT_READY":
+                raise
+            _LOGGER.warning(
+                "%s assessment_id=%s question_id=%s context_revision=%s",
+                _INTERVIEW_CONTEXT_READY_AUTHORITY_REPAIRED,
+                assessment_id,
+                question_id,
+                context_revision,
+            )
+            repair_context = {
+                **context,
+                "decisionValidationFeedback": {
+                    "code": "INTERVIEW_CONTEXT_READY_REQUIRES_AUTHORITY",
                     "rejectedDecision": decision,
                 },
             }
@@ -1171,10 +1212,20 @@ def _interview_instruction(
         "return only the typed InterviewResult candidate. HTTP persistence is not proof "
         "of sufficiency. PROVIDE_MORE_CONTEXT means author the next bounded question from "
         "the existing thread; do not restart a targeted Interview. "
-        "If decisionValidationFeedback is present, the prior candidate was rejected and "
-        "did not resolve the need. Re-evaluate it against the private customer revision. "
-        "For supported criteria, use the exact resolutionCriteria text as statement.topic. "
-        "Do not invent confirmation or treat validation feedback as customer evidence. "
+        "Never return outcome=CONTEXT_READY while publicThreadState.contextAuthority is "
+        "CUSTOMER_STATED; the platform requires CUSTOMER_CONFIRMED authority for "
+        "CONTEXT_READY and rejects an unauthoritative CONTEXT_READY with no automatic "
+        "recovery beyond one bounded correction. Ask a bounded confirming question "
+        "(WAITING_FOR_CUSTOMER) instead of concluding CONTEXT_READY on stated-only context. "
+        "If decisionValidationFeedback is present, the prior candidate was rejected by the "
+        "platform guard; re-evaluate rather than resubmit it unchanged. When its code is "
+        "INTERVIEW_RESOLUTION_CRITERIA_UNSATISFIED, the candidate did not resolve the "
+        "targeted need: re-evaluate against the private customer revision and use the exact "
+        "resolutionCriteria text as statement.topic. When its code is "
+        "INTERVIEW_CONTEXT_READY_REQUIRES_AUTHORITY, the candidate asserted CONTEXT_READY "
+        "without CUSTOMER_CONFIRMED authority: return WAITING_FOR_CUSTOMER with a bounded "
+        "confirming question instead. Do not invent confirmation or treat validation "
+        "feedback as customer evidence. "
         "If evidence is missing, return WAITING_FOR_CUSTOMER with a bounded clarification, "
         "or BLOCKED_OR_UNRESOLVED when the customer cannot supply it. Because provider "
         "schemas cannot enforce conditional fields, every WAITING_FOR_CUSTOMER "

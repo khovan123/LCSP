@@ -4,7 +4,10 @@ from unittest.mock import patch, MagicMock
 from pydantic import ValidationError
 
 from tools.common.capabilities.platform.api_client import (
-    InterviewResolutionCallbackError, WorkerApiClient, WorkerCallbackError,
+    InterviewContextReadyAuthorityCallbackError,
+    InterviewResolutionCallbackError,
+    WorkerApiClient,
+    WorkerCallbackError,
 )
 from tools.common.capabilities.platform.callback_schemas import (
     ScanCallbackPayload,
@@ -49,6 +52,19 @@ def test_resolution_rejection_preserves_only_typed_private_feedback(client, meta
     assert caught.value.status_code == 409
     assert caught.value.callback_client_error is True
     assert "Explicit confirmation" not in str(caught.value)
+    post.assert_called_once()
+
+
+def test_context_ready_without_authority_raises_typed_error(client):
+    response = httpx.Response(409, json={
+        "ok": False,
+        "problem": {"code": "INTERVIEW_CONTEXT_READY_REQUIRES_AUTHORITY"},
+    })
+    with patch("tools.common.capabilities.platform.api_client.httpx.post", return_value=response) as post:
+        with pytest.raises(InterviewContextReadyAuthorityCallbackError) as caught:
+            client.post_interview_agent_decision("assessment-1", {})
+    assert caught.value.status_code == 409
+    assert caught.value.callback_client_error is True
     post.assert_called_once()
 
 

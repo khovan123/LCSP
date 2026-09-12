@@ -69,6 +69,18 @@ class InterviewResolutionCallbackError(WorkerCallbackError):
         self.missing = missing
 
 
+class InterviewContextReadyAuthorityCallbackError(WorkerCallbackError):
+    """The specialist asserted CONTEXT_READY without CUSTOMER_CONFIRMED authority.
+
+    The API guard is correct and must never be relaxed. This carries the rejection
+    so the boundary can give the specialist exactly one bounded chance to ask for
+    confirmation instead of inferring authority it was never given.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=409)
+
+
 class WorkerApiClient:
     """Internal API adapter used by workers for canonical reads and callbacks.
 
@@ -151,6 +163,11 @@ class WorkerApiClient:
                             message,
                             missing=missing if isinstance(missing, str) else None,
                         )
+                    if (
+                        resp.status_code == 409
+                        and error_code == "INTERVIEW_CONTEXT_READY_REQUIRES_AUTHORITY"
+                    ):
+                        raise InterviewContextReadyAuthorityCallbackError(message)
                     raise WorkerCallbackError(message, status_code=resp.status_code)
 
                 if resp.status_code >= 500:
