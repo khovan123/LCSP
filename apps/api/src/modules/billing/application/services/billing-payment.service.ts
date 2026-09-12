@@ -125,7 +125,9 @@ export class BillingPaymentService {
             webhookEventId: webhook.id,
           });
         }
-        const wallet = await repos.wallet.getOrCreateForUser(lockedOrder.userId);
+        const wallet = await repos.wallet.getOrCreateForUser(
+          lockedOrder.userId,
+        );
         await this.accounting.creditOrderInTransaction(repos, {
           userId: lockedOrder.userId,
           walletId: wallet.id,
