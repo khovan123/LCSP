@@ -1,4 +1,5 @@
 from middleware.redaction import (
+    is_sensitive_key_name,
     redact_dict,
     redact_source_code,
     redact_string,
@@ -158,3 +159,12 @@ def test_t10_code_fields_are_not_secret_key_names() -> None:
     }
 
     assert redact_dict(payload) == payload
+
+def test_t11_public_sensitive_key_name_api_uses_segment_matching() -> None:
+    assert is_sensitive_key_name("authToken") is True
+    assert is_sensitive_key_name("x-api-key") is True
+    assert is_sensitive_key_name("dbPassword") is True
+    assert is_sensitive_key_name("author") is False
+    assert is_sensitive_key_name("statusCode") is False
+    assert is_sensitive_key_name("reasonCode") is False
+

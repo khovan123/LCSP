@@ -86,6 +86,15 @@ def redact_dict(obj: dict, depth: int = 10) -> dict:
     return copied
 
 
+def is_sensitive_key_name(key_text: str) -> bool:
+    """Return whether a structured field name has a secret-denoting segment.
+
+    The check is segment-based: authToken, auth_token, and x-api-key are
+    sensitive, while author and statusCode are not substring-matched.
+    """
+    return _is_sensitive_key(key_text, None)
+
+
 def redact_string(text: str) -> str:
     """Strip known credential values in free-form text.
 
@@ -153,14 +162,15 @@ def _redact_mapping(
     return copied
 
 
-def _is_sensitive_key(key_text: str, redacted_keys: set[str]) -> bool:
+def _is_sensitive_key(key_text: str, redacted_keys: set[str] | None) -> bool:
     """Return whether a structured field name has a secret-denoting segment."""
     if key_text in SAFE_METADATA_KEY_NAMES:
         return False
     segments = _field_name_segments(key_text)
     if not any(segment in SENSITIVE_KEY_SEGMENTS for segment in segments):
         return False
-    redacted_keys.add(key_text)
+    if redacted_keys is not None:
+        redacted_keys.add(key_text)
     return True
 
 
