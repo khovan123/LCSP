@@ -142,6 +142,39 @@ def _validate_customer_context_claim_refs(
                 "RULE_SCOPE_NOT_APPLICABLE customer_context_refs must reference confirmed statements"
             )
 
+
+def _normalize_investigator_payload(payload: Any) -> Any:
+    """Remove provider-added customer refs from non-customer-context claim variants.
+
+    Gemini's native responseSchema currently does not reliably enforce
+    ``additionalProperties: false`` inside the Investigator claim ``anyOf``. The field is
+    meaningful only for RULE_SCOPE_NOT_APPLICABLE, where it remains required and fully
+    validated against confirmed customer statements. On MET/NOT_MET/UNRESOLVED variants it
+    is an inert extra key that would otherwise mask the actual evidence/value guard being
+    evaluated by Pydantic and EvidenceClaimValidator.
+    """
+    if not isinstance(payload, dict):
+        return payload
+    claims = payload.get("claims")
+    if not isinstance(claims, list):
+        return payload
+    normalized = dict(payload)
+    normalized_claims: list[Any] = []
+    for claim in claims:
+        if not isinstance(claim, dict):
+            normalized_claims.append(claim)
+            continue
+        if (
+            claim.get("claim_type")
+            != ENGINEERING_EVIDENCE_CLAIM_TYPES["rule_scope_not_applicable"]
+            and "customer_context_refs" in claim
+        ):
+            claim = dict(claim)
+            claim.pop("customer_context_refs", None)
+        normalized_claims.append(claim)
+    normalized["claims"] = normalized_claims
+    return normalized
+
 def _response_model(subagent_type: str) -> type[BaseModel]:
     if subagent_type == "resolver":
         return ResolverResult
@@ -199,6 +232,8 @@ def validate_specialist_handoff(
 ) -> BaseModel:
     """Validate a specialist handoff before root or deterministic gates consume it."""
     model = _response_model(subagent_type)
+    if subagent_type == "investigator":
+        payload = _normalize_investigator_payload(payload)
     try:
         handoff = payload if isinstance(payload, model) else model.model_validate(payload)
     except ValidationError as exc:

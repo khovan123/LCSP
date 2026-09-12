@@ -217,6 +217,41 @@ def test_investigator_claim_schema_rejects_met_without_refs() -> None:
         validate_specialist_handoff("investigator", payload)
 
 
+def test_investigator_validation_strips_customer_context_refs_from_non_scope_claims() -> None:
+    payload = _investigator_payload()
+    payload["claims"][0]["customer_context_refs"] = ["statement:model-noise"]
+
+    handoff = validate_specialist_handoff(
+        "investigator",
+        payload,
+        graph=_graph(),
+        pinned_rule_ids=("eng-1",),
+        pinned_versions={"technicalEvidenceReportId": "ter-1"},
+    )
+
+    claim = handoff.model_dump(mode="json")["claims"][0]
+    assert claim["claim_type"] == "UNRESOLVED_ENGINEERING_FACT"
+    assert "customer_context_refs" not in claim
+
+
+def test_stripping_customer_context_refs_does_not_accept_decided_claim_without_refs() -> None:
+    payload = _investigator_payload()
+    payload["claims"][0].update(
+        {
+            "claim_type": "RULE_REQUIREMENT_MET",
+            "value": True,
+            "evidence_refs": [],
+            "graph_path_refs": [],
+            "source_anchor_refs": [],
+            "limitations": [],
+            "customer_context_refs": ["statement:model-noise"],
+        }
+    )
+
+    with pytest.raises(SpecialistHandoffValidationError, match="at least one evidence"):
+        validate_specialist_handoff("investigator", payload)
+
+
 def test_investigator_claim_schema_rejects_met_with_false_value() -> None:
     payload = _investigator_payload()
     payload["claims"][0].update(

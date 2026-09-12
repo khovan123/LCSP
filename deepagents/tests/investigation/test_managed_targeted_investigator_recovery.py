@@ -350,7 +350,7 @@ def test_initial_invalid_handoff_is_recorded_and_retried_with_actionable_feedbac
     assert len(agent.invoke_calls) == 2
     retry_prompt = agent.invoke_calls[1][0]["messages"][0]["content"]
     assert "failed schema validation" in retry_prompt
-    assert "customer_context_refs" in retry_prompt
+    assert "value" in retry_prompt
     assert [save["status"] for save in _FakeStore.saves] == [
         MANAGED_INVESTIGATOR_EXECUTION_STATUSES["rejected"],
         MANAGED_INVESTIGATOR_EXECUTION_STATUSES["ready"],
@@ -433,3 +433,63 @@ def test_initial_instruction_uses_bounded_packet_index_not_raw_graph_dump() -> N
     assert huge_source not in instruction
     assert "edge:ai-output" in instruction
     assert "Return only compact valid JSON" in instruction
+
+
+def test_managed_investigator_returns_unresolved_without_model_when_packet_has_no_citable_refs(
+    monkeypatch,
+) -> None:
+    packet = InvestigationPacket(
+        engineering_rule_id="ENG-RECOVERY-NO-REFS",
+        concept="No citable proof",
+        investigation_goals=("Do not guess",),
+        initial_results=(
+            {
+                "query": "material source hits",
+                "phase": "DETERMINISTIC_SELECTED_RULE_TRACE",
+                "materialSourceRefs": [],
+                "evidenceRefs": [],
+                "nodes": [],
+                "edges": [],
+            },
+        ),
+        evidence_refs=(),
+        supporting_evidence=("Customer data exports are retained",),
+    )
+    adapter = managed._ManagedInvestigatorAdapter(
+        config=SimpleNamespace(),
+        api_client=SimpleNamespace(),
+    )
+    adapter._run = {
+        "workflow_run_id": "workflow-no-refs",
+        "assessment_id": "assessment-recovery-1",
+        "user_id": "customer-recovery-1",
+        "correlation_id": "corr-no-refs",
+        "checkpoint_url": "postgresql://must-not-be-used",
+        "artifact_versions": dict(ARTIFACT_PINS),
+    }
+    monkeypatch.setattr(
+        managed,
+        "_invoke_managed_investigator",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("model must not run")),
+    )
+
+    claims = adapter.investigate(
+        packet=packet,
+        graph=_program_graph(),
+        workflow_run_id="workflow-no-refs",
+        correlation_id="corr-no-refs",
+    )
+
+    assert len(claims) == 1
+    assert claims[0].claim_type == "UNRESOLVED_ENGINEERING_FACT"
+    assert claims[0].value is None
+    assert claims[0].evidence_refs == ()
+    assert claims[0].limitations == (
+        ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"],
+    )
+
+
+def test_structured_error_metadata_is_never_empty_for_schema_rejections() -> None:
+    error = StructuredOutputError("Tool argument schema validation failed")
+
+    assert managed._structured_error_metadata(error)["exception_type"] == "StructuredOutputError"

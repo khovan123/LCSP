@@ -8,6 +8,7 @@ from langchain.agents.middleware import AgentMiddleware
 from pydantic import BaseModel
 
 GEMINI_MODULE_PREFIX = "langchain_google_genai."
+GEMINI_DISABLE_AUTOMATIC_FUNCTION_CALLING = {"disable": True}
 
 
 def relax_array_upper_bounds(schema: Any) -> Any:
@@ -71,21 +72,53 @@ def gemini_compatible_response_format(model: Any, output_format: Any) -> Any | N
     return _rebuild_response_format(output_format, relaxed)
 
 
+def gemini_structured_model_settings(model: Any, output_format: Any, current: Any) -> dict[str, Any] | None:
+    """Return call-time settings that keep Gemini native JSON output text-only.
+
+    Google GenAI enables Automatic Function Calling by default. Native structured output
+    in LangChain still binds application tools, so Gemini can emit a function_call part
+    instead of pure JSON. The SDK then concatenates only text parts, which corrupts the
+    JSON response before Pydantic sees it. Disabling AFC is a request setting, not a
+    constructor field on ChatGoogleGenerativeAI, so it must be applied through
+    ModelRequest.model_settings.
+    """
+    if not type(model).__module__.startswith(GEMINI_MODULE_PREFIX):
+        return None
+    if output_format is None:
+        return None
+    settings = dict(current) if isinstance(current, dict) else {}
+    settings.setdefault(
+        "automatic_function_calling",
+        dict(GEMINI_DISABLE_AUTOMATIC_FUNCTION_CALLING),
+    )
+    return settings
+
+
 class ProviderSchemaCompatibilityMiddleware(AgentMiddleware):
     """Relax the provider-facing response schema where the provider cannot accept it."""
+
+    @staticmethod
+    def _override_request(request, replacement):
+        overrides: dict[str, Any] = {}
+        if replacement is not None:
+            overrides["response_format"] = replacement
+        settings = gemini_structured_model_settings(
+            request.model,
+            replacement if replacement is not None else request.response_format,
+            getattr(request, "model_settings", None),
+        )
+        if settings is not None:
+            overrides["model_settings"] = settings
+        return request.override(**overrides) if overrides else request
 
     def wrap_model_call(self, request, handler):
         replacement = gemini_compatible_response_format(
             request.model, request.response_format
         )
-        if replacement is None:
-            return handler(request)
-        return handler(request.override(response_format=replacement))
+        return handler(self._override_request(request, replacement))
 
     async def awrap_model_call(self, request, handler):
         replacement = gemini_compatible_response_format(
             request.model, request.response_format
         )
-        if replacement is None:
-            return await handler(request)
-        return await handler(request.override(response_format=replacement))
+        return await handler(self._override_request(request, replacement))

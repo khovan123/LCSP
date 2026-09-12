@@ -207,6 +207,20 @@ class _ManagedInvestigatorAdapter:
 
         artifact_versions = dict(self._run["artifact_versions"])
         _require_complete_artifact_pins(artifact_versions)
+        if not _packet_has_citable_refs(packet):
+            logger.warning(
+                "MANAGED_INVESTIGATOR_NO_CITABLE_EVIDENCE",
+                execution_id=_execution_id(
+                    assessment_id=self._run["assessment_id"],
+                    workflow_run_id=workflow_run_id,
+                    engineering_rule_id=packet.engineering_rule_id,
+                    artifact_versions=artifact_versions,
+                ),
+                assessment_id=self._run["assessment_id"],
+                engineering_rule_id=packet.engineering_rule_id,
+                correlationId=correlation_id or self._run["correlation_id"],
+            )
+            return [_insufficient_evidence_claim(packet)]
         execution_id = _execution_id(
             assessment_id=self._run["assessment_id"],
             workflow_run_id=workflow_run_id,
@@ -909,11 +923,13 @@ def _structured_handoff_shape(value: Any) -> dict[str, Any]:
 
 
 def _structured_error_metadata(error: BaseException) -> dict[str, Any]:
-    metadata: dict[str, Any] = {}
+    metadata: dict[str, Any] = {"exception_type": type(error).__name__}
     seen: set[int] = set()
     current: BaseException | None = error
     while current is not None and id(current) not in seen:
         seen.add(id(current))
+        if current is not error:
+            metadata.setdefault("cause_type", type(current).__name__)
         for attr in ("finish_reason", "usage_metadata", "response_metadata"):
             value = getattr(current, attr, None)
             if value is not None and attr not in metadata:
@@ -1021,7 +1037,10 @@ def _initial_instruction(
         "InvestigatorResult schema; do not echo raw packet/tool JSON or long graph rows in any "
         "string field. For RULE_REQUIREMENT_MET and RULE_REQUIREMENT_NOT_MET, omit "
         "customer_context_refs entirely. Include customer_context_refs only on "
-        "RULE_SCOPE_NOT_APPLICABLE claims.\n"
+        "RULE_SCOPE_NOT_APPLICABLE claims. If the packet contains no citable "
+        "evidence_refs, graph_path_refs, or source_anchor_refs for a decided claim, do not "
+        "guess a MET/NOT_MET value; return UNRESOLVED_ENGINEERING_FACT with "
+        "ENGINEERING_EVIDENCE_INSUFFICIENT instead.\n"
         + json.dumps(
             {
                 "artifactVersions": artifact_versions,
@@ -1035,6 +1054,67 @@ def _initial_instruction(
     if len(instruction) > MAX_MANAGED_INVESTIGATOR_PROMPT_CHARS:
         raise RuntimeError("managed Investigator bounded instruction exceeded prompt budget")
     return instruction
+
+
+def _packet_has_citable_refs(packet: InvestigationPacket) -> bool:
+    return bool(_packet_citable_refs(packet))
+
+
+def _packet_citable_refs(packet: InvestigationPacket) -> tuple[str, ...]:
+    refs: list[str] = []
+    refs.extend(str(item).strip() for item in packet.evidence_refs if str(item).strip())
+    for item in packet.initial_results:
+        refs.extend(_nested_citable_refs(item))
+    return tuple(dict.fromkeys(refs))
+
+
+_CITABLE_REF_KEYS = frozenset(
+    {
+        "evidenceRefs",
+        "evidence_refs",
+        "governed_evidence_refs",
+        "graphPathRefs",
+        "graph_path_refs",
+        "materialSourceRefs",
+        "sourceAnchorRefs",
+        "source_anchor_refs",
+    }
+)
+
+
+def _nested_citable_refs(value: Any) -> tuple[str, ...]:
+    refs: list[str] = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in _CITABLE_REF_KEYS and isinstance(child, (list, tuple)):
+                refs.extend(str(item).strip() for item in child if str(item).strip())
+                continue
+            refs.extend(_nested_citable_refs(child))
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            refs.extend(_nested_citable_refs(item))
+    return tuple(refs)
+
+
+def _insufficient_evidence_claim(packet: InvestigationPacket) -> EvidenceClaim:
+    digest = hashlib.sha256(packet.engineering_rule_id.encode("utf-8")).hexdigest()[:16]
+    return EvidenceClaim(
+        claim_id=f"claim:insufficient:{digest}",
+        engineering_rule_id=packet.engineering_rule_id,
+        claim_type=ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"],
+        value=None,
+        evidence_refs=(),
+        graph_path_refs=(),
+        source_anchor_refs=(),
+        confidence=0.0,
+        limitations=(
+            ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"],
+        ),
+        criterion=(
+            "Selected EngineeringRule could not be decided because the investigation "
+            "packet contained no citable evidence refs."
+        ),
+    )
 
 
 def _bounded_investigation_packet(packet: InvestigationPacket) -> dict[str, Any]:

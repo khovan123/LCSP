@@ -17,7 +17,14 @@ def _request(model, response_format):
     request = MagicMock()
     request.model = model
     request.response_format = response_format
-    request.override = MagicMock(side_effect=lambda **kwargs: _request(model, kwargs["response_format"]))
+    request.model_settings = {}
+
+    def _override(**kwargs):
+        forwarded = _request(model, kwargs.get("response_format", response_format))
+        forwarded.model_settings = kwargs.get("model_settings", request.model_settings)
+        return forwarded
+
+    request.override = MagicMock(side_effect=_override)
     return request
 
 
@@ -100,6 +107,9 @@ async def test_gemini_receives_a_relaxed_schema_in_the_same_strategy(asynchronou
     forwarded = handler.call_args.args[0].response_format
     assert isinstance(forwarded, ProviderStrategy)
     assert forwarded.schema == relax_array_upper_bounds(InvestigatorResult.model_json_schema())
+    assert handler.call_args.args[0].model_settings["automatic_function_calling"] == {
+        "disable": True
+    }
 
 
 def test_a_tool_strategy_keeps_its_own_strategy_type() -> None:
@@ -124,12 +134,14 @@ def test_openai_requests_are_forwarded_untouched() -> None:
     assert request.override.call_count == 0
 
 
-def test_a_schema_without_array_upper_bounds_is_forwarded_untouched() -> None:
+def test_a_schema_without_array_upper_bounds_still_disables_gemini_afc() -> None:
     middleware = ProviderSchemaCompatibilityMiddleware()
     request = _request(_gemini(), {"type": "object", "properties": {"status": {"type": "string"}}})
     handler = MagicMock()
 
     middleware.wrap_model_call(request, handler)
 
-    assert handler.call_args.args[0] is request
-    assert request.override.call_count == 0
+    assert handler.call_args.args[0].response_format is request.response_format
+    assert handler.call_args.args[0].model_settings["automatic_function_calling"] == {
+        "disable": True
+    }
