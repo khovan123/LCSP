@@ -325,37 +325,45 @@ export class AdminOverviewService {
   private resolveActionAndTarget(
     eventType: string,
     payload: Record<string, unknown>,
-  ): { actionKey: AdminOverviewActionKey; target: string } {
+  ): { actionKey: AdminOverviewActionKey; target: string | null } {
     const targetUserId =
-      typeof payload.targetUserId === "string" ? payload.targetUserId : "";
-    const email = typeof payload.email === "string" ? payload.email : "";
+      typeof payload.targetUserId === "string" && payload.targetUserId.trim()
+        ? payload.targetUserId.trim()
+        : null;
+    const email =
+      typeof payload.email === "string" && payload.email.trim()
+        ? payload.email.trim()
+        : null;
     const corpusVersionRef =
-      typeof payload.corpusVersionRef === "string"
-        ? payload.corpusVersionRef
-        : "";
+      typeof payload.corpusVersionRef === "string" &&
+      payload.corpusVersionRef.trim()
+        ? payload.corpusVersionRef.trim()
+        : null;
+
+    const actualTarget = email || corpusVersionRef || targetUserId;
 
     if (eventType === AUTH_AUDIT_EVENT_TYPES.authAdminUserSuspended) {
       return {
         actionKey: ADMIN_OVERVIEW_ACTION_KEYS.suspendedAccount,
-        target: email || targetUserId || "User account",
+        target: actualTarget,
       };
     }
     if (eventType === AUTH_AUDIT_EVENT_TYPES.authAdminUserRestored) {
       return {
         actionKey: ADMIN_OVERVIEW_ACTION_KEYS.restoredAccount,
-        target: email || targetUserId || "User account",
+        target: actualTarget,
       };
     }
     if (eventType === AUTH_AUDIT_EVENT_TYPES.authAdminInvitationCreated) {
       return {
         actionKey: ADMIN_OVERVIEW_ACTION_KEYS.invitedUser,
-        target: email || "New user",
+        target: actualTarget,
       };
     }
     if (eventType === LEGAL_RULE_EVENT_TYPES.corpusVersionDiscarded) {
       return {
         actionKey: ADMIN_OVERVIEW_ACTION_KEYS.discardedDraft,
-        target: corpusVersionRef || "Corpus draft",
+        target: actualTarget,
       };
     }
     if (
@@ -365,13 +373,13 @@ export class AdminOverviewService {
     ) {
       return {
         actionKey: ADMIN_OVERVIEW_ACTION_KEYS.publishedCorpus,
-        target: corpusVersionRef || "Corpus version",
+        target: actualTarget,
       };
     }
 
     return {
       actionKey: ADMIN_OVERVIEW_ACTION_KEYS.generalAction,
-      target: email || corpusVersionRef || targetUserId || "System",
+      target: actualTarget,
     };
   }
 }

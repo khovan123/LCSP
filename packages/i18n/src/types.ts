@@ -1957,6 +1957,14 @@ export type PagesMessages = {
           publishedCorpus: string;
           discardedDraft: string;
         };
+        systemActor: string;
+        targets: {
+          userAccount: string;
+          newUser: string;
+          corpusDraft: string;
+          corpusVersion: string;
+          system: string;
+        };
         emptyTitle: string;
         emptyDescription: string;
         errorTitle: string;

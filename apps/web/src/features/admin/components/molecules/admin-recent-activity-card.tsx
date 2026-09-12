@@ -68,6 +68,10 @@ export function AdminRecentActivityCard({
     "pages.admin.overview.recentActivity.columns.target" as MessageKey,
   );
 
+  const systemActorText = resolveAppMessage(
+    "pages.admin.overview.recentActivity.systemActor" as MessageKey,
+  );
+
   const resolveActionLabel = (item: AdminRecentActivityItem): string => {
     switch (item.actionKey) {
       case ADMIN_OVERVIEW_ACTION_KEYS.suspendedAccount:
@@ -92,6 +96,32 @@ export function AdminRecentActivityCard({
         );
       default:
         return actionHeader;
+    }
+  };
+
+  const resolveTargetLabel = (item: AdminRecentActivityItem): string => {
+    if (item.target) return item.target;
+
+    switch (item.actionKey) {
+      case ADMIN_OVERVIEW_ACTION_KEYS.suspendedAccount:
+      case ADMIN_OVERVIEW_ACTION_KEYS.restoredAccount:
+        return resolveAppMessage(
+          "pages.admin.overview.recentActivity.targets.userAccount" as MessageKey,
+        );
+      case ADMIN_OVERVIEW_ACTION_KEYS.invitedUser:
+        return resolveAppMessage(
+          "pages.admin.overview.recentActivity.targets.newUser" as MessageKey,
+        );
+      case ADMIN_OVERVIEW_ACTION_KEYS.discardedDraft:
+        return resolveAppMessage(
+          "pages.admin.overview.recentActivity.targets.corpusDraft" as MessageKey,
+        );
+      case ADMIN_OVERVIEW_ACTION_KEYS.publishedCorpus:
+        return resolveAppMessage(
+          "pages.admin.overview.recentActivity.targets.corpusVersion" as MessageKey,
+        );
+      default:
+        return "—";
     }
   };
 
@@ -206,13 +236,13 @@ export function AdminRecentActivityCard({
                       {formatOccurredTime(item.occurredAt)}
                     </TableCell>
                     <TableCell className="px-3 py-2.5 text-muted-foreground truncate max-w-40">
-                      {item.adminEmail ?? item.adminName ?? "System"}
+                      {item.adminEmail ?? item.adminName ?? systemActorText}
                     </TableCell>
                     <TableCell className="px-3 py-2.5 text-muted-foreground truncate max-w-40">
                       {resolveActionLabel(item)}
                     </TableCell>
                     <TableCell className="px-3 py-2.5 text-muted-foreground truncate max-w-44">
-                      {item.target}
+                      {resolveTargetLabel(item)}
                     </TableCell>
                   </TableRow>
                 ))}

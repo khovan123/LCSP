@@ -41,7 +41,7 @@ export interface AdminRecentActivityItem {
   occurredAt: string;
   adminEmail: string | null;
   adminName: string | null;
-  target: string;
+  target: string | null;
 }
 
 export interface AdminCorpusStatusSummary {

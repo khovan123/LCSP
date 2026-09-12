@@ -355,6 +355,32 @@ test("AdminRecentActivityCard renders audit-safe table rows with localized actio
   assert.match(container.textContent ?? "", /linh@example\.com/);
   assert.match(container.textContent ?? "", /v2026\.08\.31/);
   cleanup();
+
+  // Test fallback localized target and system actor when email/target are null
+  const systemActorLabel = resolveAppMessage(
+    "pages.admin.overview.recentActivity.systemActor" as MessageKey,
+  );
+  const fallbackTargetLabel = resolveAppMessage(
+    "pages.admin.overview.recentActivity.targets.userAccount" as MessageKey,
+  );
+  const { container: fallbackContainer, cleanup: fallbackCleanup } = renderComponent(
+    createElement(AdminRecentActivityCard, {
+      items: [
+        {
+          id: "evt-null",
+          eventType: "AUTH_ADMIN_USER_SUSPENDED",
+          actionKey: ADMIN_OVERVIEW_ACTION_KEYS.suspendedAccount,
+          occurredAt: "2026-09-11T10:24:00.000Z",
+          adminEmail: null,
+          adminName: null,
+          target: null,
+        },
+      ],
+    }),
+  );
+  assert.match(fallbackContainer.textContent ?? "", new RegExp(systemActorLabel, "i"));
+  assert.match(fallbackContainer.textContent ?? "", new RegExp(fallbackTargetLabel, "i"));
+  fallbackCleanup();
 });
 
 test("AdminCorpusStatusCard renders CURRENT and DRAFT corpus boxes with null rule counts preserved as dash", () => {
@@ -382,4 +408,17 @@ test("AdminCorpusStatusCard renders CURRENT and DRAFT corpus boxes with null rul
   assert.match(container.textContent ?? "", new RegExp(draftBadge, "i"));
   assert.match(container.textContent ?? "", /v2026\.09\.02-draft/);
   cleanup();
+
+  // Test missing / error corpusStatus renders dash instead of claiming authoritative absence
+  const noPublishedLabel = resolveAppMessage(
+    "pages.admin.overview.corpusStatus.noPublished" as MessageKey,
+  );
+  const { container: missingContainer, cleanup: missingCleanup } = renderComponent(
+    createElement(AdminCorpusStatusCard, {
+      corpusStatus: undefined,
+    }),
+  );
+  assert.doesNotMatch(missingContainer.textContent ?? "", new RegExp(noPublishedLabel, "i"));
+  assert.match(missingContainer.textContent ?? "", /—/);
+  missingCleanup();
 });

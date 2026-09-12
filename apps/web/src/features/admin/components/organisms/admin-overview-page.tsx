@@ -87,16 +87,18 @@ export function AdminOverviewPage() {
       )
     : "—";
 
-  const currentCorpusSubtitle = data?.summary.currentCorpus.version
-    ? corpusSubtitleTemplate
-        .replace("{sources}", String(data.summary.currentCorpus.sourceCount))
-        .replace(
-          "{rules}",
-          data.summary.currentCorpus.ruleCount === null
-            ? "—"
-            : String(data.summary.currentCorpus.ruleCount),
-        )
-    : noCorpusLabel;
+  const currentCorpusSubtitle = data
+    ? data.summary.currentCorpus.version
+      ? corpusSubtitleTemplate
+          .replace("{sources}", String(data.summary.currentCorpus.sourceCount))
+          .replace(
+            "{rules}",
+            data.summary.currentCorpus.ruleCount === null
+              ? "—"
+              : String(data.summary.currentCorpus.ruleCount),
+          )
+      : noCorpusLabel
+    : "—";
 
   return (
     <div className="space-y-6">

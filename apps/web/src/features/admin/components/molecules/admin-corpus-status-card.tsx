@@ -78,17 +78,21 @@ export function AdminCorpusStatusCard({
       ? "—"
       : String(draft.ruleCount);
 
+  const hasCorpusStatus = corpusStatus !== undefined && corpusStatus !== null;
+
   const currentDetails = current
     ? subtitleTemplate
         .replace("{sources}", String(current.sourceCount))
         .replace("{rules}", currentRuleCount)
-    : noPublishedText;
+    : hasCorpusStatus
+      ? noPublishedText
+      : "—";
 
   const draftDetails = draft
     ? subtitleTemplate
         .replace("{sources}", String(draft.sourceCount))
         .replace("{rules}", draftRuleCount)
-    : noDraftText;
+    : "—";
 
   return (
     <div
@@ -124,10 +128,10 @@ export function AdminCorpusStatusCard({
             {draftLabel}
           </span>
           <p className="mt-0.5 text-sm font-semibold text-foreground truncate">
-            {draft?.version ?? noDraftText}
+            {draft?.version ?? (hasCorpusStatus ? noDraftText : "—")}
           </p>
           <p className="text-[10.5px] text-muted-foreground truncate">
-            {draft ? draftDetails : "—"}
+            {draftDetails}
           </p>
         </div>
       </div>
