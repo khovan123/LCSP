@@ -79,9 +79,11 @@ def redact_dict(obj: dict, depth: int = 10) -> dict:
     redacted_keys: set[str] = set()
     copied = _redact_mapping(obj, max(depth, 0), set(), redacted_keys)
     if redacted_keys:
+        redacted_key_names = sorted(redacted_keys)
         LOGGER.info(
-            "REDACTION_KEYS_STRIPPED",
-            extra={"redacted_keys": sorted(redacted_keys)},
+            "REDACTION_KEYS_STRIPPED redacted_keys=%s",
+            ",".join(redacted_key_names),
+            extra={"redacted_keys": redacted_key_names},
         )
     return copied
 

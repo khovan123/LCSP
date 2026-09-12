@@ -96,6 +96,7 @@ def test_t08_safe_metadata_field_names_survive_key_redaction() -> None:
 
 
 def test_t09_secret_field_names_are_redacted_and_logged(caplog) -> None:
+    caplog.set_level("INFO")
     secret_field_names = (
         "api_key",
         "apiKey",
@@ -141,13 +142,19 @@ def test_t09_secret_field_names_are_redacted_and_logged(caplog) -> None:
         "nested": {"session_token": ""},
     }
     redaction_records = [
-        record for record in caplog.records if record.message == "REDACTION_KEYS_STRIPPED"
+        record
+        for record in caplog.records
+        if record.message.startswith("REDACTION_KEYS_STRIPPED redacted_keys=")
     ]
     assert len(redaction_records) == 1
     assert set(redaction_records[0].redacted_keys) == {
         *secret_field_names,
         "session_token",
     }
+    assert "redacted_keys=" in caplog.text
+    for field_name in (*secret_field_names, "session_token"):
+        assert field_name in caplog.text
+    assert "secret-" not in caplog.text
 
 
 def test_t10_code_fields_are_not_secret_key_names() -> None:
@@ -167,4 +174,3 @@ def test_t11_public_sensitive_key_name_api_uses_segment_matching() -> None:
     assert is_sensitive_key_name("author") is False
     assert is_sensitive_key_name("statusCode") is False
     assert is_sensitive_key_name("reasonCode") is False
-
