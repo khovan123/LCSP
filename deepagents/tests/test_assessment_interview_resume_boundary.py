@@ -5,6 +5,10 @@ from unittest.mock import Mock
 
 import pytest
 
+from contracts.handoffs import InterviewResult
+from orchestration.context import LCSPRunContext
+from orchestration.dispatcher import RootSubagentDispatcher
+from orchestration.result_validation import SpecialistHandoffValidationError
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_LIMITATION_CODES,
 )
@@ -271,6 +275,8 @@ def test_interview_resume_boundary_passes_private_context_only_to_interview_and_
     assert '"workingStrategy"' in instruction
     assert '"human oversight": "manual review"' in instruction
     assert "use the session-local workingStrategy only to adapt terminology and phrasing" in instruction
+    assert "every WAITING_FOR_CUSTOMER activeQuestion MUST include frontier" in instruction
+    assert "never use sourceVersion, pgeVersion, raw artifact ids" in instruction
     assert root.calls == []
     assert len(api.decision_posts) == 1
     assessment_id, decision = api.decision_posts[0]
@@ -414,6 +420,181 @@ def test_provide_more_context_duplicate_after_question_materialized_is_noop() ->
 
     assert dispatcher.calls == []
     assert api.decision_posts == []
+
+
+def test_targeted_interview_missing_frontier_is_repaired_from_trusted_need(caplog) -> None:
+    specialist = Mock()
+    specialist.invoke.return_value = {
+        "structured_response": {
+            "expectedContextRevision": 2,
+            "mode": "INVESTIGATOR_RESOLUTION",
+            "outcome": "WAITING_FOR_CUSTOMER",
+            "activeQuestion": {
+                "id": "incident-follow-up",
+                "intent": "ASK",
+                "control": "FREE_TEXT",
+                "prompt": "Describe the serious-incident suspension process.",
+            },
+            "contextAuthority": "CUSTOMER_STATED",
+            "confirmedContext": {},
+            "flags": [],
+            "blockedActions": [],
+            "targetedResolution": {},
+        }
+    }
+    dispatcher = RootSubagentDispatcher(
+        agent_factory=Mock(return_value=specialist),
+        subagents={
+            "interview": {
+                "name": "interview",
+                "model": "fake-model",
+                "tools": [],
+                "system_prompt": "",
+                "middleware": [],
+                "response_format": InterviewResult,
+            }
+        },
+    )
+    targeted_need = {
+        "needId": "incident_containment_control_mechanism",
+        "businessContextNeed": (
+            "Confirm whether the system has operational procedures or automated "
+            "controls to suspend, withdraw, or disable the AI system upon a "
+            "serious incident."
+        ),
+        "governedEvidenceRefs": ["evidence:customer-authorized-1"],
+    }
+
+    with caplog.at_level("WARNING", logger="orchestration.result_validation"):
+        result = dispatcher.dispatch(
+            subagent_type="interview",
+            instruction="Ask a targeted follow-up.",
+            metadata={"targeted_need": targeted_need},
+            context=LCSPRunContext(
+                assessment_id="assessment-1",
+                user_id="actor-1",
+                workflow_run_id="workflow-1",
+            ),
+            reenter_root=False,
+        )
+
+    frontier = result["handoff"]["activeQuestion"]["frontier"]
+    assert frontier == {
+        "owner": "CUSTOMER",
+        "materiality": "MATERIAL",
+        "description": targeted_need["businessContextNeed"],
+        "evidenceRefs": targeted_need["governedEvidenceRefs"],
+    }
+    assert result["handoff"]["activeQuestion"]["needId"] == targeted_need["needId"]
+    assert set(frontier["evidenceRefs"]) <= set(targeted_need["governedEvidenceRefs"])
+    assert "INTERVIEW_TARGETED_FRONTIER_REPAIRED" in caplog.text
+    assert "targeted_need_id=incident_containment_control_mechanism" in caplog.text
+
+
+def test_targeted_interview_frontier_repair_reads_need_materiality(caplog) -> None:
+    specialist = Mock()
+    specialist.invoke.return_value = {
+        "structured_response": {
+            "expectedContextRevision": 2,
+            "mode": "INVESTIGATOR_RESOLUTION",
+            "outcome": "WAITING_FOR_CUSTOMER",
+            "activeQuestion": {
+                "id": "optional-follow-up",
+                "intent": "ASK",
+                "control": "FREE_TEXT",
+                "prompt": "Clarify the optional business context.",
+            },
+            "contextAuthority": "CUSTOMER_STATED",
+            "confirmedContext": {},
+            "flags": [],
+            "blockedActions": [],
+            "targetedResolution": {},
+        }
+    }
+    dispatcher = RootSubagentDispatcher(
+        agent_factory=Mock(return_value=specialist),
+        subagents={
+            "interview": {
+                "name": "interview",
+                "model": "fake-model",
+                "tools": [],
+                "system_prompt": "",
+                "middleware": [],
+                "response_format": InterviewResult,
+            }
+        },
+    )
+
+    with caplog.at_level("WARNING", logger="orchestration.result_validation"):
+        result = dispatcher.dispatch(
+            subagent_type="interview",
+            instruction="Ask a targeted follow-up.",
+            metadata={
+                "targeted_need": {
+                    "needId": "optional-need",
+                    "businessContextNeed": "Clarify optional deployment context.",
+                    "materiality": "material",
+                    "governedEvidenceRefs": [],
+                }
+            },
+            context=LCSPRunContext(
+                assessment_id="assessment-1",
+                user_id="actor-1",
+                workflow_run_id="workflow-1",
+            ),
+            reenter_root=False,
+        )
+
+    assert result["handoff"]["activeQuestion"]["frontier"]["materiality"] == "MATERIAL"
+    assert "materiality_source=targeted_need" in caplog.text
+
+
+def test_non_targeted_missing_frontier_still_fails_closed() -> None:
+    specialist = Mock()
+    specialist.invoke.return_value = {
+        "structured_response": {
+            "expectedContextRevision": 2,
+            "mode": "INITIAL_INTERVIEW",
+            "outcome": "WAITING_FOR_CUSTOMER",
+            "activeQuestion": {
+                "id": "missing-frontier",
+                "intent": "ASK",
+                "control": "FREE_TEXT",
+                "prompt": "Please clarify the business context.",
+            },
+            "contextAuthority": "CUSTOMER_STATED",
+            "confirmedContext": {},
+            "flags": [],
+            "blockedActions": [],
+            "targetedResolution": {},
+        }
+    }
+    dispatcher = RootSubagentDispatcher(
+        agent_factory=Mock(return_value=specialist),
+        subagents={
+            "interview": {
+                "name": "interview",
+                "model": "fake-model",
+                "tools": [],
+                "system_prompt": "",
+                "middleware": [],
+                "response_format": InterviewResult,
+            }
+        },
+    )
+
+    with pytest.raises(SpecialistHandoffValidationError, match="structured frontier"):
+        dispatcher.dispatch(
+            subagent_type="interview",
+            instruction="Ask a generic follow-up.",
+            metadata={},
+            context=LCSPRunContext(
+                assessment_id="assessment-1",
+                user_id="actor-1",
+                workflow_run_id="workflow-1",
+            ),
+            reenter_root=False,
+        )
 
 
 def test_targeted_duplicate_after_question_materialized_is_noop() -> None:

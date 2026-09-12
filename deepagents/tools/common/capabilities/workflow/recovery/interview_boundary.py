@@ -373,6 +373,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                     "guidance_version": context.get("guidanceVersion"),
                     "correlationId": correlationId,
                     "artifact_versions": run_context.artifact_versions,
+                    "targeted_need": targeted_need if isinstance(targeted_need, dict) else None,
                 },
                 thread_id=thread_id,
                 context=run_context,
@@ -1175,7 +1176,15 @@ def _interview_instruction(
         "For supported criteria, use the exact resolutionCriteria text as statement.topic. "
         "Do not invent confirmation or treat validation feedback as customer evidence. "
         "If evidence is missing, return WAITING_FOR_CUSTOMER with a bounded clarification, "
-        "or BLOCKED_OR_UNRESOLVED when the customer cannot supply it. Keep validation "
+        "or BLOCKED_OR_UNRESOLVED when the customer cannot supply it. Because provider "
+        "schemas cannot enforce conditional fields, every WAITING_FOR_CUSTOMER "
+        "activeQuestion MUST include frontier with owner=CUSTOMER, "
+        "materiality=MATERIAL, a non-empty description, and evidenceRefs containing "
+        "only governed evidence refs supplied in the private input; use [] when no "
+        "authorized governed refs support the customer question. confirmedContext "
+        "statement evidenceRefs may contain only authorized governed evidence refs; "
+        "never use sourceVersion, pgeVersion, raw artifact ids, or version strings as "
+        "statement evidenceRefs, and leave evidenceRefs empty when uncertain. Keep validation "
         "feedback private; never copy it into customer-facing text or downstream context.\n\n"
         + json.dumps(bounded_payload, ensure_ascii=False, sort_keys=True)
     )

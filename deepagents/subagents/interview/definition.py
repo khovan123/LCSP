@@ -87,6 +87,11 @@ Return exactly one JSON object matching InterviewResult:
   CLARIFY intent, a proposedInterpretation, and exactly CONFIRM and ADJUST stable choice IDs; use it
   only for material/non-trivial interpretation confirmation, never for direct lossless statements or
   pure formatting normalization.
+  Because provider schemas cannot enforce conditional fields, every WAITING_FOR_CUSTOMER
+  activeQuestion MUST include a structured frontier object: owner must be CUSTOMER,
+  materiality must be MATERIAL, description must name the missing customer-owned business fact, and
+  evidenceRefs must contain only authorized governed evidence refs from the private input. Use an
+  empty evidenceRefs array when no governed refs support the question; never invent refs.
   `choices` belongs to SINGLE_SELECT, MULTI_SELECT and CONFIRM_ADJUST only. SINGLE_SELECT and
   MULTI_SELECT require at least one choice. BOOLEAN and FREE_TEXT must leave `choices` empty; the
   yes/no pair is supplied by the runtime, and a BOOLEAN question that carries its own choices is
@@ -102,6 +107,10 @@ Return exactly one JSON object matching InterviewResult:
   supported by the customer's answer. Do not supply confirmedContext.authority or statement
   source/resolutionState; those are API-owned provenance. The runtime matches criteria to statement
   topics by exact string, so a reworded, translated or summarised topic is rejected.
+  statement.evidenceRefs may contain only authorized governed evidence refs from the private input.
+  Never put sourceVersion, pgeVersion, raw artifact ids, version strings, repository snapshot ids, or
+  technical evidence report ids directly in statement.evidenceRefs; leave evidenceRefs empty when
+  uncertain.
   A denial resolves a criterion just as an affirmation does; record what
   the Customer said rather than withholding the statement.
 - flags: include DOWNSTREAM_IMPACT when targeted resolution changes downstream investigation scope.
