@@ -99,7 +99,11 @@ export class BillingUsageService {
         throw new BillingDomainError("No applicable pricing snapshot");
       // At settlement time a non-zero markup must be anchored to a traceable
       // snapshot row.  Zero-markup rows need no authority anchor.
-      if (snapshot.markupBps && snapshot.markupBps > 0n && !snapshot.markupSnapshotId)
+      if (
+        snapshot.markupBps &&
+        snapshot.markupBps > 0n &&
+        !snapshot.markupSnapshotId
+      )
         throw new BillingDomainError(
           "Pricing snapshot has non-zero markupBps but markupSnapshotId is not linked",
         );
@@ -136,7 +140,8 @@ export class BillingUsageService {
           "Pricing snapshot has FX rate but fxSnapshotId is not linked",
         );
       const customerChargeVnd = hasFxNumerator
-        ? (charge * snapshot.fxRateVndNumerator!) / snapshot.fxRateVndDenominator!
+        ? (charge * snapshot.fxRateVndNumerator!) /
+          snapshot.fxRateVndDenominator!
         : undefined;
       if (i.providerResponseId) {
         const response = await usage.findByProviderResponse(
