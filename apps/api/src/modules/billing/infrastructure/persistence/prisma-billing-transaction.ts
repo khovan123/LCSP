@@ -219,10 +219,20 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
             );
           },
           findApplicable: async (provider, model, occurredAt) => {
-            const x = await tx.modelPricingSnapshot.findFirst({
+            const rows = await tx.modelPricingSnapshot.findMany({
               where: { provider, model, effectiveAt: { lte: occurredAt } },
-              orderBy: [{ effectiveAt: "desc" }, { version: "desc" }],
+              orderBy: { effectiveAt: "desc" },
+              take: 2,
             });
+            const x = rows[0] ?? null;
+            if (
+              x &&
+              rows[1] &&
+              rows[1].effectiveAt.getTime() === x.effectiveAt.getTime()
+            )
+              throw new Error(
+                "Ambiguous pricing snapshot: multiple rows share the same effective time for this provider/model",
+              );
             return (
               x && {
                 ...x,

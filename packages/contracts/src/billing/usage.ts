@@ -10,8 +10,11 @@ export type ProviderUsageDimensions = {
 
 /** Worker-to-API accounting payload. Estimates must never use this settled shape. */
 export type SettledUsageInput = ProviderUsageDimensions & {
+  userId: string;
+  reservationId: string;
   effectiveRuntimeModel: EffectiveRuntimeModel;
   invocationId: string;
   providerResponseId?: string;
+  totalTokens?: string;
   occurredAt: string;
 };

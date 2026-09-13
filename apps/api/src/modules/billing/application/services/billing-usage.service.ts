@@ -117,6 +117,24 @@ export class BillingUsageService {
         },
         snapshot,
       );
+      // FX snapshot must be fully present or fully absent — a half-configured
+      // row is a data error, not a valid "no VND conversion" state.
+      const hasFxNumerator = snapshot.fxRateVndNumerator !== undefined;
+      const hasFxDenominator = snapshot.fxRateVndDenominator !== undefined;
+      if (hasFxNumerator !== hasFxDenominator)
+        throw new BillingDomainError(
+          "Pricing snapshot has partial FX rate: both fxRateVndNumerator and fxRateVndDenominator must be present or both absent",
+        );
+      if ((hasFxNumerator || hasFxDenominator) && !snapshot.fxSnapshotId)
+        throw new BillingDomainError(
+          "Pricing snapshot has FX rate but fxSnapshotId is not linked",
+        );
+      if (!hasFxNumerator)
+        throw new BillingDomainError(
+          "Pricing snapshot is missing FX rate: customerChargeVnd cannot be computed",
+        );
+      const customerChargeVnd =
+        (charge * snapshot.fxRateVndNumerator!) / snapshot.fxRateVndDenominator!;
       if (i.providerResponseId) {
         const response = await usage.findByProviderResponse(
           provider,
@@ -146,11 +164,7 @@ export class BillingUsageService {
           input + cachedInput + cacheWrite + output + reasoning,
         pricingSnapshotId: snapshot.id,
         providerCostCredits: providerCost,
-        customerChargeVnd:
-          snapshot.fxRateVndNumerator && snapshot.fxRateVndDenominator
-            ? (charge * snapshot.fxRateVndNumerator) /
-              snapshot.fxRateVndDenominator
-            : undefined,
+        customerChargeVnd,
         markupSnapshotId: snapshot.markupSnapshotId,
         fxSnapshotId: snapshot.fxSnapshotId,
         reservationId: i.reservationId,

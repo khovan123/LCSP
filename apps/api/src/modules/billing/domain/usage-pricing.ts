@@ -11,6 +11,47 @@ export type UsageDimensions = {
 const SCALE = 100000000n;
 const DENOMINATOR = 1_000_000n * SCALE;
 
+/**
+ * Normalises raw provider-reported dimensions to the billing invariant:
+ *
+ * When `reasoningTokens` is a sub-dimension of `outputTokens` (Anthropic,
+ * OpenAI o-series), the caller MUST pass the raw provider values here.
+ * This function verifies the sub-dimension relationship and returns a
+ * billing-safe view in which:
+ *   - `outputTokens`    = raw outputTokens − reasoningTokens  (non-reasoning slice)
+ *   - `reasoningTokens` = raw reasoningTokens                 (unchanged)
+ *
+ * The pricing engine then prices each slice at its own rate, avoiding
+ * double-billing of the reasoning portion.
+ *
+ * If the pricing record does NOT have a `reasoningPricePerMillion` the
+ * dimensions are returned as-is (provider treats them as independent).
+ */
+export function normalizeUsageDimensions(
+  raw: UsageDimensions,
+  pricing: Pick<PricingRecord, "reasoningPricePerMillion" | "outputPricePerMillion">,
+): UsageDimensions {
+  const reasoning = raw.reasoningTokens ?? 0n;
+  const output = raw.outputTokens ?? 0n;
+
+  // Only apply sub-dimension split when the pricing record carries a
+  // distinct reasoning price.  Providers that bill reasoning separately
+  // (and therefore DO NOT include it in outputTokens) will NOT have this
+  // price configured, so the raw values are already correct.
+  if (!pricing.reasoningPricePerMillion || reasoning === 0n) return raw;
+
+  if (reasoning > output)
+    throw new BillingDomainError(
+      "reasoningTokens exceeds outputTokens: provider reported an inconsistent usage shape",
+    );
+
+  return {
+    ...raw,
+    outputTokens: output - reasoning,
+    reasoningTokens: reasoning,
+  };
+}
+
 export function calculateUsageChargeCredits(
   usage: UsageDimensions | bigint,
   outputOrPricing: bigint | PricingRecord,
@@ -25,7 +66,8 @@ export function calculateUsageChargeCredits(
       ? maybePricing
       : (outputOrPricing as PricingRecord);
   if (!pricing) throw new BillingDomainError("Pricing snapshot is required");
-  return (usageNumerator(dimensions, pricing) + DENOMINATOR - 1n) / DENOMINATOR;
+  const normalized = normalizeUsageDimensions(dimensions, pricing);
+  return (usageNumerator(normalized, pricing) + DENOMINATOR - 1n) / DENOMINATOR;
 }
 
 export function calculateCustomerChargeCredits(
@@ -34,8 +76,13 @@ export function calculateCustomerChargeCredits(
 ): bigint {
   if (pricing.markupBps === undefined)
     throw new BillingDomainError("Markup snapshot is required");
+  if (!pricing.markupSnapshotId)
+    throw new BillingDomainError(
+      "Markup snapshot authority (markupSnapshotId) must be linked when markupBps is applied",
+    );
+  const normalized = normalizeUsageDimensions(usage, pricing);
   const numerator =
-    usageNumerator(usage, pricing) * (10_000n + pricing.markupBps);
+    usageNumerator(normalized, pricing) * (10_000n + pricing.markupBps);
   return (numerator + DENOMINATOR * 10_000n - 1n) / (DENOMINATOR * 10_000n);
 }
 
