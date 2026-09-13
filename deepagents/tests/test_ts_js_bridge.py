@@ -454,4 +454,3 @@ def test_scan_boundary_import_smoke_catches_bridge_redaction_api_drift() -> None
         bridge.assert_subprocess_env_safe(
             {"PATH": "/usr/bin", "authToken": "prefixless-secret-value"}
         )
-
