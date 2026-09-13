@@ -477,7 +477,11 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
           },
         },
       });
-    assert.equal(seededQuestion.status, 201, JSON.stringify(seededQuestion.body));
+    assert.equal(
+      seededQuestion.status,
+      201,
+      JSON.stringify(seededQuestion.body),
+    );
 
     const answered = await httpRequest(app)
       .post("/assessments/assessment-1/interview/answers")
@@ -773,10 +777,9 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
 
     assert.equal(workerContext.priorAnswerHistory.length, 1);
     assert.equal(workerContext.priorAnswerHistoryOmittedCount, 0);
-    assert.deepEqual(
-      workerContext.priorAnswerHistory[0]?.selectedChoiceIds,
-      ["other"],
-    );
+    assert.deepEqual(workerContext.priorAnswerHistory[0]?.selectedChoiceIds, [
+      "other",
+    ]);
     assert.equal(workerContext.priorAnswerHistory[0]?.comment, otherComment);
 
     const publicAnswerHistory = workerContext.publicState.answerHistory;
@@ -908,7 +911,11 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
           },
         },
       });
-    assert.equal(seededQuestion.status, 201, JSON.stringify(seededQuestion.body));
+    assert.equal(
+      seededQuestion.status,
+      201,
+      JSON.stringify(seededQuestion.body),
+    );
 
     await httpRequest(app)
       .post("/assessments/assessment-1/interview/answers")

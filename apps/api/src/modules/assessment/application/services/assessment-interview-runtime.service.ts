@@ -999,11 +999,13 @@ export class AssessmentInterviewRuntimeService {
     const workflowRunId =
       thread.privateStore.targetedContinuation?.workflowRunId ??
       thread.privateStore.workflowRunId;
-    const { items: priorAnswerHistory, omittedCount: priorAnswerHistoryOmittedCount } =
-      buildWorkerPriorAnswerHistory(
-        thread.privateRevisions,
-        input.contextRevision,
-      );
+    const {
+      items: priorAnswerHistory,
+      omittedCount: priorAnswerHistoryOmittedCount,
+    } = buildWorkerPriorAnswerHistory(
+      thread.privateRevisions,
+      input.contextRevision,
+    );
     return {
       status,
       assessmentId: input.assessmentId,
@@ -3223,7 +3225,8 @@ function revisionRequiresAnswerInterpretation(
   }
   const answer = privateRevision.answer;
   return (
-    privateRevision.questionControl === ASSESSMENT_INTERVIEW_CONTROLS.freeText ||
+    privateRevision.questionControl ===
+      ASSESSMENT_INTERVIEW_CONTROLS.freeText ||
     Boolean(answer.freeText?.trim()) ||
     Boolean(answer.comment?.trim()) ||
     Boolean(answer.otherText?.trim())
@@ -3370,7 +3373,9 @@ function isAuthoritative(value: unknown): boolean {
   );
 }
 
-function truncateWorkerHistoryText(text: string | undefined): string | undefined {
+function truncateWorkerHistoryText(
+  text: string | undefined,
+): string | undefined {
   const trimmed = text?.trim();
   if (!trimmed) return undefined;
   if (trimmed.length <= WORKER_PRIOR_ANSWER_HISTORY_TEXT_LIMIT) return trimmed;
