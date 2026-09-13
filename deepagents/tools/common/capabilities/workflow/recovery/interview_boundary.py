@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
 from typing import Any, Callable
 
+from contracts.handoffs import InterviewResult
 from orchestration.result_validation import SpecialistHandoffValidationError
 from tools.common.capabilities.managed.boundary import AgentBoundaryBase
 from tools.common.capabilities.platform.api_client import (
@@ -33,6 +35,12 @@ from tools.legal.retrieval.legal_basis.rule_applicability_evaluator import (
 _LOGGER = logging.getLogger(__name__)
 _INTERVIEW_AGENT_DECISION_REJECTION_REPAIRED = "INTERVIEW_AGENT_DECISION_REJECTION_REPAIRED"
 _INTERVIEW_AUTHORITY_PROVENANCE_REPAIRED = "INTERVIEW_AUTHORITY_PROVENANCE_REPAIRED"
+_INTERVIEW_CONFIRMATION_QUESTION_SYNTHESIZED = (
+    "INTERVIEW_CONFIRMATION_QUESTION_SYNTHESIZED"
+)
+_INTERVIEW_CONFIRMATION_SYNTHESIS_REJECTED = (
+    "INTERVIEW_CONFIRMATION_SYNTHESIS_REJECTED"
+)
 _CONFIRMATION_PROVENANCE_INSTRUCTION_KEY = (
     "CONFIRMATION_PROVENANCE_REQUIRES_CONFIRM_ADJUST_OR_DIRECT_ASK"
 )
@@ -175,6 +183,92 @@ def _apply_authority_preflight(
     # authority claim candidate and must not be carried when provenance is invalid.
     downgraded["confirmedContext"] = {}
     return downgraded, None
+
+
+def _single_confirmation_statement(decision: dict[str, Any]) -> str | None:
+    confirmed_context = decision.get("confirmedContext")
+    if not isinstance(confirmed_context, dict):
+        return None
+    statements = confirmed_context.get("statements")
+    if not isinstance(statements, list) or len(statements) != 1:
+        return None
+    statement = statements[0]
+    if not isinstance(statement, dict):
+        return None
+    text = str(statement.get("statement") or "").strip()
+    return text or None
+
+
+def _confirmation_question_id(statement: str) -> str:
+    digest = hashlib.sha256(statement.encode("utf-8")).hexdigest()[:16]
+    return f"q-confirm-adjust-{digest}"
+
+
+def _synthesize_confirmation_question(
+    decision: dict[str, Any],
+    context: dict[str, Any],
+) -> dict[str, Any] | None:
+    statement = _single_confirmation_statement(decision)
+    if statement is None:
+        return None
+    question_id = _confirmation_question_id(statement)
+    private_revision = context.get("privateRevision")
+    if (
+        isinstance(private_revision, dict)
+        and str(private_revision.get("questionId") or "") == question_id
+        and str(private_revision.get("questionControl") or "").upper() == "CONFIRM_ADJUST"
+    ):
+        answer = private_revision.get("answer")
+        if isinstance(answer, dict) and answer.get("confirmed") is True:
+            _LOGGER.error(
+                "%s question_id=%s reason=confirmed_synthetic_question_rejected",
+                _INTERVIEW_CONFIRMATION_SYNTHESIS_REJECTED,
+                question_id,
+            )
+            raise RuntimeError(
+                "synthetic CONFIRM_ADJUST confirmation was rejected after customer confirmation"
+            )
+
+    synthesized = {
+        **decision,
+        "outcome": "WAITING_FOR_CUSTOMER",
+        "activeQuestion": {
+            "id": question_id,
+            "intent": "CLARIFY",
+            "control": "CONFIRM_ADJUST",
+            # Customer-visible copy must come from the rejected model candidate. Do
+            # not prepend static worker text here; web renders the button labels via i18n.
+            "prompt": statement,
+            "choices": [
+                {"id": "CONFIRM", "label": "CONFIRM", "requiresFreeText": False},
+                {"id": "ADJUST", "label": "ADJUST", "requiresFreeText": True},
+            ],
+            "proposedInterpretation": statement,
+            "frontier": {
+                "owner": "CUSTOMER",
+                "materiality": "MATERIAL",
+                "description": statement,
+                "evidenceRefs": [],
+            },
+        },
+        "contextAuthority": "CUSTOMER_STATED",
+        "confirmedContext": {},
+    }
+    validated = InterviewResult.model_validate(synthesized).model_dump(mode="json")
+    _LOGGER.warning(
+        "%s statement_count=1 question_id=%s",
+        _INTERVIEW_CONFIRMATION_QUESTION_SYNTHESIZED,
+        question_id,
+    )
+    return validated
+
+
+def _confirmation_or_original(decision: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    prepared, feedback = _apply_authority_preflight(decision, context)
+    if feedback is None:
+        return prepared
+    synthesized = _synthesize_confirmation_question(prepared, context)
+    return synthesized if synthesized is not None else prepared
 
 
 INTERVIEW_RESUME_COMMAND = "command.assessment-interview.resume-agent.v1"
@@ -419,7 +513,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 context=repair_context,
                 correlationId=correlationId,
             )
-            decision, _ = _apply_authority_preflight(decision, context)
+            decision = _confirmation_or_original(decision, context)
 
         try:
             guarded_state = api_client.post_interview_agent_decision(
@@ -458,6 +552,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 context=repair_context,
                 correlationId=correlationId,
             )
+            corrected = _confirmation_or_original(corrected, context)
             # A second rejection propagates to terminal delivery settlement.
             guarded_state = api_client.post_interview_agent_decision(
                 assessment_id, corrected,

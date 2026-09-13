@@ -24,6 +24,9 @@ from tools.common.capabilities.workflow.recovery.interview_boundary import (
     INTERVIEW_RESUME_COMMAND,
     _apply_authority_preflight,
     _authority_provenance,
+    _confirmation_or_original,
+    _confirmation_question_id,
+    _synthesize_confirmation_question,
 )
 
 
@@ -360,6 +363,133 @@ def test_allowlisted_api_rejection_gets_one_private_correction_with_safe_log(cap
 
 
 
+def _authority_candidate(statement: str = "Human review approves AI decisions") -> dict:
+    return {
+        **deepcopy(WAITING_HANDOFF),
+        "outcome": "CONTEXT_READY",
+        "activeQuestion": None,
+        "contextAuthority": "CUSTOMER_CONFIRMED",
+        "confirmedContext": {
+            "statements": [
+                {
+                    "statementId": "stmt-authority",
+                    "topic": "decision_authority",
+                    "statement": statement,
+                    "normalizedValue": statement,
+                    "evidenceRefs": [],
+                }
+            ]
+        },
+    }
+
+
+def test_confirmation_synthesis_produces_valid_confirm_adjust_without_static_copy(caplog):
+    statement = "Human review approves AI decisions"
+    decision = _authority_candidate(statement)
+    context = {
+        "privateRevision": {
+            "questionId": "previous-question",
+            "questionIntent": "CLARIFY",
+            "questionControl": "BOOLEAN",
+            "answer": {"selectedChoiceIds": ["yes"]},
+        }
+    }
+
+    with caplog.at_level(
+        "WARNING", logger="tools.common.capabilities.workflow.recovery.interview_boundary"
+    ):
+        synthesized = _confirmation_or_original(decision, context)
+
+    InterviewResult.model_validate(synthesized)
+    question = synthesized["activeQuestion"]
+    assert synthesized["outcome"] == "WAITING_FOR_CUSTOMER"
+    assert synthesized["contextAuthority"] == "CUSTOMER_STATED"
+    assert synthesized["confirmedContext"] == {"statements": []}
+    assert question["id"] == _confirmation_question_id(statement)
+    assert question["intent"] == "CLARIFY"
+    assert question["control"] == "CONFIRM_ADJUST"
+    assert question["prompt"] == statement
+    assert question["proposedInterpretation"] == statement
+    assert question["frontier"] == {
+        "owner": "CUSTOMER",
+        "materiality": "MATERIAL",
+        "description": statement,
+        "evidenceRefs": [],
+    }
+    choices = {choice["id"]: choice for choice in question["choices"]}
+    assert choices["CONFIRM"]["requiresFreeText"] is False
+    assert choices["ADJUST"]["requiresFreeText"] is True
+    assert "Please confirm" not in question["prompt"]
+    assert "INTERVIEW_CONFIRMATION_QUESTION_SYNTHESIZED" in caplog.text
+    assert statement not in caplog.text
+
+
+def test_synthetic_confirm_answer_satisfies_customer_confirmed_mirror():
+    statement = "Human review approves AI decisions"
+    question_id = _confirmation_question_id(statement)
+
+    assert _authority_provenance({
+        "questionId": question_id,
+        "questionIntent": "CLARIFY",
+        "questionControl": "CONFIRM_ADJUST",
+        "answer": {"confirmed": True},
+    }) == {"customer_confirmed": True, "confirmed": False}
+
+
+def test_synthetic_adjust_answer_does_not_confirm_authority():
+    statement = "Human review approves AI decisions"
+    question_id = _confirmation_question_id(statement)
+
+    assert _authority_provenance({
+        "questionId": question_id,
+        "questionIntent": "CLARIFY",
+        "questionControl": "CONFIRM_ADJUST",
+        "answer": {"adjusted": True, "freeText": "Only some decisions"},
+    }) == {"customer_confirmed": False, "confirmed": False}
+
+
+def test_confirmation_synthesis_requires_exactly_one_statement():
+    decision = _authority_candidate()
+    decision["confirmedContext"] = {
+        "statements": [
+            {"statement": "One", "statementId": "one", "topic": "a"},
+            {"statement": "Two", "statementId": "two", "topic": "b"},
+        ]
+    }
+
+    synthesized = _synthesize_confirmation_question(
+        decision,
+        {"privateRevision": {"questionControl": "BOOLEAN", "answer": {}}},
+    )
+
+    assert synthesized is None
+
+
+def test_confirmed_synthetic_question_rejected_fails_closed(caplog):
+    statement = "Human review approves AI decisions"
+    decision = {**_authority_candidate(statement), "contextAuthority": "CONFIRMED"}
+    question_id = _confirmation_question_id(statement)
+
+    with caplog.at_level(
+        "ERROR", logger="tools.common.capabilities.workflow.recovery.interview_boundary"
+    ), pytest.raises(RuntimeError, match="synthetic CONFIRM_ADJUST confirmation was rejected"):
+        _confirmation_or_original(
+            decision,
+            {
+                "privateRevision": {
+                    "questionId": question_id,
+                    "questionIntent": "CLARIFY",
+                    "questionControl": "CONFIRM_ADJUST",
+                    "answer": {"confirmed": True},
+                }
+            },
+        )
+
+    assert "INTERVIEW_CONFIRMATION_SYNTHESIS_REJECTED" in caplog.text
+    assert question_id in caplog.text
+    assert statement not in caplog.text
+
+
 def test_local_authority_preflight_gives_confirm_adjust_feedback_before_post(caplog):
     api = RecordingApi()
     context = api.get_interview_private_context("assessment-1", 2)
@@ -408,6 +538,47 @@ def test_local_authority_preflight_gives_confirm_adjust_feedback_before_post(cap
     assert "CLARIFY BOOLEAN or SINGLE_SELECT" in feedback["instruction"]
     assert "INTERVIEW_AUTHORITY_PROVENANCE_REPAIRED" in caplog.text
     assert "instruction_key=CONFIRMATION_PROVENANCE_REQUIRES_CONFIRM_ADJUST_OR_DIRECT_ASK" in caplog.text
+
+def test_invalid_authority_after_private_feedback_synthesizes_confirm_adjust_question():
+    api = RecordingApi()
+    context = api.get_interview_private_context("assessment-1", 2)
+    context["privateRevision"] = {
+        "actorId": "user-test-actor",
+        "questionId": "previous-question",
+        "questionIntent": "CLARIFY",
+        "questionControl": "BOOLEAN",
+        "answer": {"selectedChoiceIds": ["yes"]},
+    }
+    api.get_interview_private_context = Mock(return_value=context)
+    api.post_interview_progress = Mock()
+    rejected = {
+        **deepcopy(WAITING_HANDOFF),
+        "mode": "INITIAL_INTERVIEW",
+        "outcome": "CONTEXT_READY",
+        "activeQuestion": None,
+        "contextAuthority": "CUSTOMER_CONFIRMED",
+        "confirmedContext": {"statements": [{"statement": "Human review approves AI decisions", "statementId": "stmt", "topic": "decision_authority"}]},
+    }
+    corrected = deepcopy(rejected)
+    dispatcher = RecordingDispatcher()
+    dispatcher.dispatch = Mock(side_effect=[{"handoff": rejected}, {"handoff": corrected}])
+    boundary = AssessmentInterviewResumeBoundary(
+        SimpleNamespace(), api_client=api, dispatcher=dispatcher
+    )
+    boundary._run_guarded_continuation = Mock()
+
+    boundary.handle(_message(), "corr-1")
+
+    assert len(api.decision_posts) == 1
+    posted = api.decision_posts[0][1]
+    assert posted["outcome"] == "WAITING_FOR_CUSTOMER"
+    assert posted["contextAuthority"] == "CUSTOMER_STATED"
+    assert posted["confirmedContext"] == {"statements": []}
+    assert posted["activeQuestion"]["control"] == "CONFIRM_ADJUST"
+    assert posted["activeQuestion"]["prompt"] == "Human review approves AI decisions"
+    assert posted["activeQuestion"]["frontier"]["evidenceRefs"] == []
+    assert dispatcher.dispatch.call_count == 2
+
 
 def test_context_ready_authority_rejection_gets_one_private_correction_before_continuation():
     api = RecordingApi()
