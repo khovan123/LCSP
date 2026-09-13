@@ -2060,7 +2060,8 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           mode: "INITIAL_INTERVIEW",
           outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
           rationale: "Both volunteered facts are now customer-confirmed.",
-          contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+          contextAuthority:
+            ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
           confirmedContext: {
             assessmentId: "assessment-1",
             contextRevision: 1,
@@ -2188,7 +2189,8 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
               expectedContextRevision: 1,
               mode: "INITIAL_INTERVIEW",
               outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
-              contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+              contextAuthority:
+                ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
               confirmedContext: confirmedStructuredContext({
                 contextRevision: 1,
               }),
@@ -2807,7 +2809,8 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         questionIntent:
           overrides.questionIntent ?? ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
         questionControl:
-          overrides.questionControl ?? ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
+          overrides.questionControl ??
+          ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
         sourceVersion: "snap-1:sha-123456",
         pgeVersion: "report-1:v1",
         governedEvidenceRefs: [],
@@ -2832,14 +2835,17 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
               questionControl: ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
               answer: {
                 selectedChoiceIds: ["other"],
-                comment: "Hosted in a customer-managed region behind our own VPN.",
+                comment:
+                  "Hosted in a customer-managed region behind our own VPN.",
               },
             }),
             revisionFixture({
               questionId: "q-2",
               contextRevision: 2,
               questionControl: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
-              answer: { freeText: "Only the on-call engineer can override it." },
+              answer: {
+                freeText: "Only the on-call engineer can override it.",
+              },
             }),
             revisionFixture({
               questionId: "q-3",
@@ -2989,7 +2995,8 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
               contextRevision: 1,
               answer: {
                 selectedChoiceIds: ["other"],
-                comment: "Hosted in a customer-managed region behind our own VPN.",
+                comment:
+                  "Hosted in a customer-managed region behind our own VPN.",
               },
             }),
           ],
@@ -3011,7 +3018,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         "Hosted in a customer-managed region behind our own VPN.",
       );
       const publicHistory = (
-        workerContext.publicState as { answerHistory?: Record<string, unknown>[] }
+        workerContext.publicState as {
+          answerHistory?: Record<string, unknown>[];
+        }
       ).answerHistory;
       expect(publicHistory).toEqual([
         {
