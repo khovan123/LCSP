@@ -1,7 +1,6 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { BillingCustomerService } from "../src/modules/billing/application/services/billing-customer.service.js";
 import { BillingPaymentService } from "../src/modules/billing/application/services/billing-payment.service.js";
-import { BILLING_TRANSACTION_PORT } from "../src/modules/billing/domain/repositories/billing-transaction.port.js";
 import { PREPAID_BILLING_CONFIG } from "@lcsp/contracts/billing";
 
 const order = {

@@ -29,6 +29,7 @@ export class BillingPaymentService {
     const requestFingerprint = createHash("sha256")
       .update(
         JSON.stringify({
+          ...(i.paymentCode ? { paymentCode: i.paymentCode } : {}),
           amountMinorUnits: i.amountMinorUnits.toString(),
           creditUnits: i.creditUnits.toString(),
         }),
