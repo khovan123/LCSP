@@ -227,6 +227,129 @@ describe("TriggerScanHandler", () => {
     );
   });
 
+  it("returns existing manual snapshot-auto scan when the trusted auto trigger reuses the key", async () => {
+    const existing = RepositoryScanJob.rehydrate({
+      id: "scan-job-manual",
+      assessmentId: "assessment-1",
+      snapshotId: "snapshot-1",
+      idempotencyKey: "snapshot-auto:assessment-1:snapshot-1",
+      triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.manual,
+      status: REPOSITORY_SCAN_JOB_STATUSES.queued,
+      attemptCount: 0,
+      correlationId: "manual-corr",
+      blockedReason: null,
+      createdAt: new Date("2026-07-18T00:00:00.000Z"),
+      updatedAt: new Date("2026-07-18T00:01:00.000Z"),
+    });
+    const { handler, saveWithTriggeredEvent, write } = buildHandler({
+      existing,
+    });
+
+    const result = await handler.execute(
+      command({
+        idempotencyKey: "snapshot-auto:assessment-1:snapshot-1",
+        triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.trusted,
+        actorId: null,
+        subjectRole: null,
+        correlationId: "auto-corr",
+      }),
+    );
+
+    expect(result).toEqual({
+      scan_job_id: "scan-job-manual",
+      status: REPOSITORY_SCAN_JOB_STATUSES.queued,
+      is_new: false,
+      correlationId: "auto-corr",
+    });
+    expect(saveWithTriggeredEvent).not.toHaveBeenCalled();
+    expect(write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanTriggerDuplicateAudit,
+        resourceId: "scan-job-manual",
+        payload: expect.objectContaining({
+          idempotencyKey: "snapshot-auto:assessment-1:snapshot-1",
+          triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.manual,
+          requestedTriggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.trusted,
+        }),
+      }),
+    );
+  });
+
+  it("returns existing trusted snapshot-auto scan when the manual web trigger reuses the key", async () => {
+    const existing = RepositoryScanJob.rehydrate({
+      id: "scan-job-trusted",
+      assessmentId: "assessment-1",
+      snapshotId: "snapshot-1",
+      idempotencyKey: "snapshot-auto:assessment-1:snapshot-1",
+      triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.trusted,
+      status: REPOSITORY_SCAN_JOB_STATUSES.running,
+      attemptCount: 0,
+      correlationId: "auto-corr",
+      blockedReason: null,
+      createdAt: new Date("2026-07-18T00:00:00.000Z"),
+      updatedAt: new Date("2026-07-18T00:01:00.000Z"),
+    });
+    const { handler, saveWithTriggeredEvent } = buildHandler({ existing });
+
+    const result = await handler.execute(
+      command({ idempotencyKey: "snapshot-auto:assessment-1:snapshot-1" }),
+    );
+
+    expect(result).toEqual({
+      scan_job_id: "scan-job-trusted",
+      status: REPOSITORY_SCAN_JOB_STATUSES.running,
+      is_new: false,
+      correlationId: "corr-1",
+    });
+    expect(saveWithTriggeredEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects snapshot-auto key reuse when the snapshot differs", async () => {
+    const existing = RepositoryScanJob.rehydrate({
+      id: "scan-job-existing",
+      assessmentId: "assessment-1",
+      snapshotId: "snapshot-other",
+      idempotencyKey: "snapshot-auto:assessment-1:snapshot-1",
+      triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.trusted,
+      status: REPOSITORY_SCAN_JOB_STATUSES.queued,
+      attemptCount: 0,
+      correlationId: "original-corr",
+      blockedReason: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const { handler } = buildHandler({ existing });
+
+    await expect(
+      handler.execute(
+        command({ idempotencyKey: "snapshot-auto:assessment-1:snapshot-1" }),
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("rejects snapshot-auto key reuse when the assessment differs", async () => {
+    const existing = RepositoryScanJob.rehydrate({
+      id: "scan-job-existing",
+      assessmentId: "assessment-other",
+      snapshotId: "snapshot-1",
+      idempotencyKey: "snapshot-auto:assessment-1:snapshot-1",
+      triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.trusted,
+      status: REPOSITORY_SCAN_JOB_STATUSES.queued,
+      attemptCount: 0,
+      correlationId: "original-corr",
+      blockedReason: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const { handler } = buildHandler({ existing });
+
+    await expect(
+      handler.execute(
+        command({ idempotencyKey: "snapshot-auto:assessment-1:snapshot-1" }),
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
   it("rejects reuse of an idempotency key with different material input", async () => {
     const existing = RepositoryScanJob.rehydrate({
       id: "scan-job-existing",
