@@ -29,7 +29,10 @@ const DENOMINATOR = 1_000_000n * SCALE;
  */
 export function normalizeUsageDimensions(
   raw: UsageDimensions,
-  pricing: Pick<PricingRecord, "reasoningPricePerMillion" | "outputPricePerMillion">,
+  pricing: Pick<
+    PricingRecord,
+    "reasoningPricePerMillion" | "outputPricePerMillion"
+  >,
 ): UsageDimensions {
   const reasoning = raw.reasoningTokens ?? 0n;
   const output = raw.outputTokens ?? 0n;

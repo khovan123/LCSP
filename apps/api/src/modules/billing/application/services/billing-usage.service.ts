@@ -134,7 +134,8 @@ export class BillingUsageService {
           "Pricing snapshot is missing FX rate: customerChargeVnd cannot be computed",
         );
       const customerChargeVnd =
-        (charge * snapshot.fxRateVndNumerator!) / snapshot.fxRateVndDenominator!;
+        (charge * snapshot.fxRateVndNumerator!) /
+        snapshot.fxRateVndDenominator!;
       if (i.providerResponseId) {
         const response = await usage.findByProviderResponse(
           provider,
