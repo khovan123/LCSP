@@ -2005,6 +2005,113 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       );
     });
 
+    it("accepts CUSTOMER_CONFIRMED with multiple statements from one explicit CONFIRM_ADJUST answer", async () => {
+      // Worker-side synthesis may now merge several facts volunteered in one
+      // FREE_TEXT answer into a single CONFIRM_ADJUST turn (interview_boundary.py
+      // ::_confirmation_statement_text). Once the customer confirms that one turn,
+      // the API's explicit-confirm authority check must accept every statement the
+      // specialist resubmits, regardless of statement count.
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValueOnce({
+        id: "report-1",
+        schemaVersion: "v1",
+        evidencePayload: {
+          technicalCoverageState: INTERVIEW_TECHNICAL_COVERAGE_STATES.partial,
+          partialCoveragePolicyDecision: partialCoveragePolicyDecision(),
+        },
+      });
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
+        assessmentId: "assessment-1",
+        contextRevision: 1,
+        processedRevision: 0,
+        activeQuestionId: "q-confirm-adjust-1",
+        stateJson: {
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+          contextRevision: 1,
+        },
+        privateContextJson: {
+          revisions: [
+            {
+              questionId: "q-confirm-adjust-1",
+              answer: { questionId: "q-confirm-adjust-1", confirmed: true },
+              actorId: "user-1",
+              answeredAt: "2026-09-07T00:00:00.000Z",
+              contextRevision: 1,
+              priorRevision: 0,
+              authority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
+              questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
+              questionControl: ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust,
+              sourceVersion: "snap-1:sha-123456",
+              pgeVersion: "report-1:v1",
+              governedEvidenceRefs: [],
+            },
+          ],
+          workflowRunId: "10000000-0000-4000-8000-000000000002",
+          partialCoveragePolicyDecision: partialCoveragePolicyDecision(),
+        },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+      });
+
+      const result = await service.recordAgentDecision({
+        assessmentId: "assessment-1",
+        correlationId: "corr-multi-statement-confirm",
+        decision: {
+          expectedContextRevision: 1,
+          mode: "INITIAL_INTERVIEW",
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+          rationale: "Both volunteered facts are now customer-confirmed.",
+          contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+          confirmedContext: {
+            assessmentId: "assessment-1",
+            contextRevision: 1,
+            authority:
+              CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES.customerConfirmedConfirmedOnly,
+            statements: [
+              {
+                statementId: "stmt-decision-authority",
+                assessmentId: "assessment-1",
+                topic: "decision_authority",
+                statement: "A recruiter approves every rejection.",
+                normalizedValue: "recruiter_approval_required",
+                scope: { needId: "need-1" },
+                evidenceRefs: [],
+                respondentRef: "actor:authenticated:user-1",
+              },
+              {
+                statementId: "stmt-senior-approval",
+                assessmentId: "assessment-1",
+                topic: "senior_approval",
+                statement:
+                  "For senior positions, the hiring manager must also approve.",
+                normalizedValue: "hiring_manager_approval_required",
+                scope: { needId: "need-1" },
+                evidenceRefs: [],
+                respondentRef: "actor:authenticated:user-1",
+              },
+            ],
+            limitations: [],
+            sourceVersionRef: "snap-1:sha-123456",
+            pgeVersion: "report-1:v1",
+            guidanceVersion: "guidance-1",
+          },
+        },
+      });
+
+      expect(result.outcome).toBe(ASSESSMENT_INTERVIEW_OUTCOMES.contextReady);
+      const stateUpdate = mockTx.assessmentInterviewThread.updateMany.mock
+        .calls[0]?.[0] as {
+        data?: { stateJson?: unknown };
+      };
+      expect(stateUpdate.data?.stateJson).toMatchObject({
+        confirmedContext: {
+          statements: [
+            expect.objectContaining({ topic: "decision_authority" }),
+            expect.objectContaining({ topic: "senior_approval" }),
+          ],
+        },
+      });
+    });
+
     it.each([
       {
         name: "FREE_TEXT",

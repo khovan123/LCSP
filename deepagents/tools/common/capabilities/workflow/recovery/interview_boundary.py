@@ -213,18 +213,45 @@ def _apply_authority_preflight(
     return downgraded, None
 
 
-def _single_confirmation_statement(decision: dict[str, Any]) -> str | None:
+# A FREE_TEXT answer that volunteers several facts in one turn (e.g. "A recruiter
+# approves every rejection. For senior positions, the hiring manager must also
+# approve.") is now common after the FREE_TEXT/Other authority tightening, since a
+# raw ASK answer can no longer become CUSTOMER_CONFIRMED directly. Bound the merge
+# so a rejected multi-statement candidate still converges to one CONFIRM_ADJUST
+# turn instead of exhausting the one private correction and failing closed.
+_MAX_SYNTHESIZED_STATEMENTS = 5
+_MAX_SYNTHESIZED_STATEMENT_LENGTH = 1000
+
+
+def _confirmation_statement_text(decision: dict[str, Any]) -> str | None:
     confirmed_context = decision.get("confirmedContext")
     if not isinstance(confirmed_context, dict):
         return None
     statements = confirmed_context.get("statements")
-    if not isinstance(statements, list) or len(statements) != 1:
+    if (
+        not isinstance(statements, list)
+        or not statements
+        or len(statements) > _MAX_SYNTHESIZED_STATEMENTS
+    ):
         return None
-    statement = statements[0]
-    if not isinstance(statement, dict):
+    texts: list[str] = []
+    for statement in statements:
+        if not isinstance(statement, dict):
+            return None
+        text = str(statement.get("statement") or "").strip()
+        if not text:
+            # Fail closed on any ambiguous/empty statement rather than guess or
+            # drop it silently.
+            return None
+        texts.append(text)
+    # Single statement: keep the exact prior behavior (no added formatting).
+    # Multiple: concatenate the model's own statement text verbatim, separated by
+    # a neutral dash-bullet newline. Never add narration/connecting words — the
+    # Customer-visible copy must stay exactly what the model itself asserted.
+    merged = texts[0] if len(texts) == 1 else "\n".join(f"- {text}" for text in texts)
+    if len(merged) > _MAX_SYNTHESIZED_STATEMENT_LENGTH:
         return None
-    text = str(statement.get("statement") or "").strip()
-    return text or None
+    return merged
 
 
 def _confirmation_question_id(statement: str) -> str:
@@ -236,7 +263,7 @@ def _synthesize_confirmation_question(
     decision: dict[str, Any],
     context: dict[str, Any],
 ) -> dict[str, Any] | None:
-    statement = _single_confirmation_statement(decision)
+    statement = _confirmation_statement_text(decision)
     if statement is None:
         return None
     question_id = _confirmation_question_id(statement)
@@ -283,9 +310,13 @@ def _synthesize_confirmation_question(
         "confirmedContext": {},
     }
     validated = InterviewResult.model_validate(synthesized).model_dump(mode="json")
+    statement_count = len(
+        (decision.get("confirmedContext") or {}).get("statements") or []
+    )
     _LOGGER.warning(
-        "%s statement_count=1 question_id=%s",
+        "%s statement_count=%d question_id=%s",
         _INTERVIEW_CONFIRMATION_QUESTION_SYNTHESIZED,
+        statement_count,
         question_id,
     )
     return validated

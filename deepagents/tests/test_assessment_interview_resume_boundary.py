@@ -482,12 +482,83 @@ def test_synthetic_adjust_answer_does_not_confirm_authority():
     }) == {"customer_confirmed": False, "confirmed": False}
 
 
-def test_confirmation_synthesis_requires_exactly_one_statement():
+def test_confirmation_synthesis_merges_multiple_statements(caplog):
+    # A FREE_TEXT answer volunteering several facts in one turn is common after the
+    # FREE_TEXT/Other authority tightening (e.g. "A recruiter approves every
+    # rejection. For senior positions, the hiring manager must also approve.").
+    # Synthesis must cover all of them in one CONFIRM_ADJUST turn, not fail closed.
     decision = _authority_candidate()
     decision["confirmedContext"] = {
         "statements": [
-            {"statement": "One", "statementId": "one", "topic": "a"},
-            {"statement": "Two", "statementId": "two", "topic": "b"},
+            {"statement": "A recruiter approves every rejection.", "statementId": "one", "topic": "a"},
+            {"statement": "For senior positions, the hiring manager must also approve.", "statementId": "two", "topic": "b"},
+        ]
+    }
+    context = {"privateRevision": {"questionControl": "BOOLEAN", "answer": {}}}
+
+    with caplog.at_level(
+        "WARNING", logger="tools.common.capabilities.workflow.recovery.interview_boundary"
+    ):
+        synthesized = _synthesize_confirmation_question(decision, context)
+
+    InterviewResult.model_validate(synthesized)
+    question = synthesized["activeQuestion"]
+    merged = (
+        "- A recruiter approves every rejection.\n"
+        "- For senior positions, the hiring manager must also approve."
+    )
+    assert question["prompt"] == merged
+    assert question["proposedInterpretation"] == merged
+    assert question["frontier"]["description"] == merged
+    assert question["id"] == _confirmation_question_id(merged)
+    # No narration/connecting words were added — only the model's own statement
+    # text, verbatim, joined by a neutral dash-bullet newline.
+    assert "A recruiter approves every rejection." in merged
+    assert "For senior positions, the hiring manager must also approve." in merged
+    assert "statement_count=2" in caplog.text
+
+
+def test_confirmation_synthesis_rejects_too_many_statements():
+    decision = _authority_candidate()
+    decision["confirmedContext"] = {
+        "statements": [
+            {"statement": f"Fact {i}", "statementId": f"s{i}", "topic": f"t{i}"}
+            for i in range(6)
+        ]
+    }
+
+    synthesized = _synthesize_confirmation_question(
+        decision,
+        {"privateRevision": {"questionControl": "BOOLEAN", "answer": {}}},
+    )
+
+    assert synthesized is None
+
+
+def test_confirmation_synthesis_rejects_ambiguous_or_empty_statement_among_multiple():
+    decision = _authority_candidate()
+    decision["confirmedContext"] = {
+        "statements": [
+            {"statement": "A recruiter approves every rejection.", "statementId": "one", "topic": "a"},
+            {"statement": "   ", "statementId": "two", "topic": "b"},
+        ]
+    }
+
+    synthesized = _synthesize_confirmation_question(
+        decision,
+        {"privateRevision": {"questionControl": "BOOLEAN", "answer": {}}},
+    )
+
+    # Fail closed on the whole candidate rather than silently drop the empty one.
+    assert synthesized is None
+
+
+def test_confirmation_synthesis_rejects_merged_statement_over_length_limit():
+    decision = _authority_candidate()
+    decision["confirmedContext"] = {
+        "statements": [
+            {"statement": "x" * 250, "statementId": f"s{i}", "topic": f"t{i}"}
+            for i in range(5)
         ]
     }
 
@@ -673,6 +744,107 @@ def test_interpretive_other_answer_synthesizes_confirm_adjust_without_ever_posti
     # Exactly one post happened and it is WAITING_FOR_CUSTOMER: CONTEXT_READY never
     # reached the guard on either the first or the repaired attempt, and the real
     # (unmocked) guarded continuation correctly no-ops on a non-terminal outcome.
+
+
+def test_volunteered_multi_fact_free_text_converges_via_merged_confirm_adjust():
+    # Mirrors eval "volunteered-context": a FREE_TEXT answer volunteering two facts
+    # in one turn. Turn 1: the specialist wrongly claims CUSTOMER_CONFIRMED +
+    # CONTEXT_READY directly from the raw FREE_TEXT answer; the worker must converge
+    # locally to ONE CONFIRM_ADJUST covering both facts, never posting CONTEXT_READY.
+    # Turn 2: after the customer's real CONFIRM, the specialist resubmits both
+    # original facts and CONTEXT_READY is accepted — the mirror's explicit-confirm
+    # path does not care how many statements confirmedContext carries.
+    fact_one = "A recruiter approves every rejection."
+    fact_two = "For senior positions, the hiring manager must also approve."
+    merged = f"- {fact_one}\n- {fact_two}"
+
+    api_turn_1 = RecordingApi()
+    context = api_turn_1.get_interview_private_context("assessment-1", 2)
+    context["privateRevision"] = {
+        "actorId": "user-test-actor",
+        "questionId": "previous-question",
+        "questionIntent": "ASK",
+        "questionControl": "FREE_TEXT",
+        "answer": {"freeText": f"{fact_one} {fact_two}"},
+    }
+    api_turn_1.get_interview_private_context = Mock(return_value=context)
+    api_turn_1.post_interview_progress = Mock()
+    rejected = {
+        **deepcopy(WAITING_HANDOFF),
+        "mode": "INITIAL_INTERVIEW",
+        "outcome": "CONTEXT_READY",
+        "activeQuestion": None,
+        "contextAuthority": "CUSTOMER_CONFIRMED",
+        "confirmedContext": {
+            "statements": [
+                {"statement": fact_one, "statementId": "stmt-1", "topic": "decision_authority"},
+                {"statement": fact_two, "statementId": "stmt-2", "topic": "senior_approval"},
+            ]
+        },
+    }
+    # The repaired candidate is still wrong the second time: convergence must come
+    # from local synthesis, not a third model call.
+    corrected = deepcopy(rejected)
+    dispatcher_1 = RecordingDispatcher()
+    dispatcher_1.dispatch = Mock(side_effect=[{"handoff": rejected}, {"handoff": corrected}])
+    boundary_1 = AssessmentInterviewResumeBoundary(
+        SimpleNamespace(), api_client=api_turn_1, dispatcher=dispatcher_1
+    )
+
+    boundary_1.handle(_message(), "corr-1")
+
+    assert dispatcher_1.dispatch.call_count == 2
+    assert len(api_turn_1.decision_posts) == 1
+    posted_turn_1 = api_turn_1.decision_posts[0][1]
+    assert posted_turn_1["outcome"] == "WAITING_FOR_CUSTOMER"
+    assert posted_turn_1["contextAuthority"] == "CUSTOMER_STATED"
+    assert posted_turn_1["activeQuestion"]["control"] == "CONFIRM_ADJUST"
+    assert posted_turn_1["activeQuestion"]["prompt"] == merged
+    assert posted_turn_1["activeQuestion"]["proposedInterpretation"] == merged
+
+    # --- Turn 2: the customer selected CONFIRM on the merged question ---
+    api_turn_2 = RecordingApi()
+    context_2 = api_turn_2.get_interview_private_context("assessment-1", 3)
+    context_2["privateRevision"] = {
+        "actorId": "user-test-actor",
+        "questionId": posted_turn_1["activeQuestion"]["id"],
+        "questionIntent": "CLARIFY",
+        "questionControl": "CONFIRM_ADJUST",
+        "answer": {"confirmed": True},
+    }
+    api_turn_2.get_interview_private_context = Mock(return_value=context_2)
+    api_turn_2.post_interview_progress = Mock()
+    ready = {
+        **deepcopy(WAITING_HANDOFF),
+        "mode": "INITIAL_INTERVIEW",
+        "outcome": "CONTEXT_READY",
+        "activeQuestion": None,
+        "contextAuthority": "CUSTOMER_CONFIRMED",
+        "confirmedContext": deepcopy(rejected["confirmedContext"]),
+    }
+    dispatcher_2 = RecordingDispatcher(ready)
+    downstream_calls = []
+
+    def downstream(payload, correlation_id):
+        downstream_calls.append((payload, correlation_id))
+
+    boundary_2 = AssessmentInterviewResumeBoundary(
+        SimpleNamespace(),
+        api_client=api_turn_2,
+        dispatcher=dispatcher_2,
+        downstream_handler=downstream,
+    )
+
+    boundary_2.handle(_message(revision=3), "corr-2")
+
+    assert len(dispatcher_2.calls) == 1
+    assert len(api_turn_2.decision_posts) == 1
+    posted_turn_2 = api_turn_2.decision_posts[0][1]
+    assert posted_turn_2["outcome"] == "CONTEXT_READY"
+    assert posted_turn_2["contextAuthority"] == "CUSTOMER_CONFIRMED"
+    assert len(posted_turn_2["confirmedContext"]["statements"]) == 2
+    assert len(downstream_calls) == 1
+    assert downstream_calls[0][0]["outcome"] == "CONTEXT_READY"
 
 
 def test_context_ready_authority_rejection_gets_one_private_correction_before_continuation():
