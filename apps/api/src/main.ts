@@ -1,4 +1,4 @@
-import { json } from "express";
+import { json, raw } from "express";
 import type { Request, Response, NextFunction, RequestHandler } from "express";
 import { NestFactory } from "@nestjs/core";
 
@@ -11,7 +11,13 @@ async function bootstrap() {
     logger: new FilePartitionedLogger(),
   });
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path.match(/^\/internal\/scan-jobs\/[^/]+\/callback$/)) {
+    if (req.path === "/billing/sepay/webhook") {
+      (raw({ type: "application/json", limit: "256kb" }) as RequestHandler)(
+        req,
+        res,
+        next,
+      );
+    } else if (req.path.match(/^\/internal\/scan-jobs\/[^/]+\/callback$/)) {
       (json({ limit: "50mb" }) as RequestHandler)(req, res, next);
     } else {
       (json({ limit: "1mb" }) as RequestHandler)(req, res, next);

@@ -11,10 +11,19 @@ import { BillingEstimateService } from "./application/services/billing-estimate.
 import { BillingUsageController } from "./presentation/http/billing-usage.controller.js";
 import { BillingCustomerController } from "./presentation/http/billing-customer.controller.js";
 import { BillingCustomerService } from "./application/services/billing-customer.service.js";
+import { SePayWebhookIngressService } from "./application/services/sepay-webhook-ingress.service.js";
+import { SePayWebhookController } from "./presentation/http/sepay-webhook.controller.js";
+import { BillingAdminReconciliationController } from "./presentation/http/billing-admin-reconciliation.controller.js";
+import { BillingAdminReconciliationService } from "./application/services/billing-admin-reconciliation.service.js";
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true }), RbacModule],
-  controllers: [BillingUsageController, BillingCustomerController],
+  controllers: [
+    BillingUsageController,
+    BillingCustomerController,
+    SePayWebhookController,
+    BillingAdminReconciliationController,
+  ],
   providers: [
     PrismaService,
     PrismaBillingTransaction,
@@ -27,6 +36,8 @@ import { BillingCustomerService } from "./application/services/billing-customer.
     BillingUsageService,
     BillingEstimateService,
     BillingCustomerService,
+    SePayWebhookIngressService,
+    BillingAdminReconciliationService,
   ],
   exports: [
     BillingAccountingService,
