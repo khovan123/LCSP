@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from tools.common.capabilities.platform.api_client import (
     InterviewContextReadyAuthorityCallbackError,
+    InterviewDecisionRepairableCallbackError,
     InterviewResolutionCallbackError,
     WorkerApiClient,
     WorkerCallbackError,
@@ -54,6 +55,43 @@ def test_resolution_rejection_preserves_only_typed_private_feedback(client, meta
     assert "Explicit confirmation" not in str(caught.value)
     post.assert_called_once()
 
+
+
+def test_allowlisted_interview_decision_rejection_raises_repairable_error(client):
+    response = httpx.Response(409, json={
+        "ok": False,
+        "problem": {
+            "code": "INTERVIEW_CUSTOMER_CONFIRMED_REQUIRES_DIRECT_OR_EXPLICIT_CONFIRMATION",
+            "meta": {"violatingText": "do not log this"},
+        },
+    })
+    with patch("tools.common.capabilities.platform.api_client.httpx.post", return_value=response) as post:
+        with pytest.raises(InterviewDecisionRepairableCallbackError) as caught:
+            client.post_interview_agent_decision("assessment-1", {})
+
+    assert caught.value.error_code == (
+        "INTERVIEW_CUSTOMER_CONFIRMED_REQUIRES_DIRECT_OR_EXPLICIT_CONFIRMATION"
+    )
+    assert caught.value.meta == {"violatingText": "do not log this"}
+    assert caught.value.status_code == 409
+    assert caught.value.callback_client_error is True
+    assert "do not log this" not in str(caught.value)
+    post.assert_called_once()
+
+
+def test_non_allowlisted_interview_decision_conflict_is_not_repairable(client):
+    response = httpx.Response(409, json={
+        "ok": False,
+        "problem": {"code": "INTERVIEW_SESSION_MISMATCH"},
+    })
+    with patch("tools.common.capabilities.platform.api_client.httpx.post", return_value=response) as post:
+        with pytest.raises(WorkerCallbackError) as caught:
+            client.post_interview_agent_decision("assessment-1", {})
+
+    assert not isinstance(caught.value, InterviewDecisionRepairableCallbackError)
+    assert caught.value.status_code == 409
+    assert caught.value.callback_client_error is True
+    post.assert_called_once()
 
 def test_context_ready_without_authority_raises_typed_error(client):
     response = httpx.Response(409, json={

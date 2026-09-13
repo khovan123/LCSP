@@ -15,6 +15,7 @@ from tools.common.capabilities.assessment.claims.evidence_claim.models import (
 from tools.common.capabilities.managed.invocation import invocation_boundary_manifest
 from tools.common.capabilities.platform.api_client import (
     InterviewContextReadyAuthorityCallbackError,
+    InterviewDecisionRepairableCallbackError,
     InterviewResolutionCallbackError,
     WorkerCallbackError,
 )
@@ -221,7 +222,17 @@ def test_resolution_rejection_gets_one_private_correction_before_continuation(co
 @pytest.mark.parametrize("error,attempts,outcome", [
     (InterviewResolutionCallbackError("criteria missing"), 2, "CONTEXT_RESOLVED"),
     (InterviewContextReadyAuthorityCallbackError("requires authority"), 2, "CONTEXT_READY"),
-    (WorkerCallbackError("stale revision", status_code=409), 1, "CONTEXT_RESOLVED"),
+    (
+        InterviewDecisionRepairableCallbackError(
+            "direct confirmation required",
+            error_code="INTERVIEW_CUSTOMER_CONFIRMED_REQUIRES_DIRECT_OR_EXPLICIT_CONFIRMATION",
+        ),
+        2,
+        "CONTEXT_READY",
+    ),
+    (WorkerCallbackError("INTERVIEW_DECISION_STALE_REVISION: client error", status_code=409), 1, "CONTEXT_RESOLVED"),
+    (WorkerCallbackError("INTERVIEW_SESSION_MISMATCH: client error", status_code=409), 1, "CONTEXT_RESOLVED"),
+    (WorkerCallbackError("INTERVIEW_UNKNOWN_NEW_CODE: client error", status_code=409), 1, "CONTEXT_RESOLVED"),
     (WorkerCallbackError("forbidden", status_code=403), 1, "CONTEXT_RESOLVED"),
 ])
 def test_rejected_correction_is_bounded_and_unrelated_errors_are_not_repaired(error, attempts, outcome):
@@ -241,6 +252,51 @@ def test_rejected_correction_is_bounded_and_unrelated_errors_are_not_repaired(er
     assert api.post_interview_agent_decision.call_count == attempts
     boundary._run_guarded_continuation.assert_not_called()
     assert api.post_interview_progress.call_args.args[-1] == "FAILED"
+
+
+
+def test_allowlisted_api_rejection_gets_one_private_correction_with_safe_log(caplog):
+    api = RecordingApi()
+    api.post_interview_progress = Mock()
+    rejected = {
+        **deepcopy(WAITING_HANDOFF),
+        "mode": "INITIAL_INTERVIEW",
+        "outcome": "CONTEXT_READY",
+        "contextAuthority": "CUSTOMER_STATED",
+        "activeQuestion": None,
+    }
+    corrected = {**deepcopy(WAITING_HANDOFF), "mode": "INITIAL_INTERVIEW"}
+    dispatcher = RecordingDispatcher()
+    dispatcher.dispatch = Mock(side_effect=[{"handoff": rejected}, {"handoff": corrected}])
+    accepted = {"outcome": "WAITING_FOR_CUSTOMER"}
+    api.post_interview_agent_decision = Mock(side_effect=[
+        InterviewDecisionRepairableCallbackError(
+            "targeted need was non-neutral: leaked phrase",
+            error_code="INTERVIEW_TARGETED_NEED_NON_NEUTRAL",
+            meta={"text": "leaked phrase"},
+        ),
+        accepted,
+    ])
+    boundary = AssessmentInterviewResumeBoundary(SimpleNamespace(), api_client=api, dispatcher=dispatcher)
+    boundary._run_guarded_continuation = Mock()
+
+    with caplog.at_level(
+        "WARNING", logger="tools.common.capabilities.workflow.recovery.interview_boundary"
+    ):
+        boundary.handle(_message(), "corr-1")
+
+    first, repair = [call.kwargs for call in dispatcher.dispatch.call_args_list]
+    payload = json.loads(repair["instruction"].split("\n\n", 1)[1])
+    assert payload["decisionValidationFeedback"] == {
+        "code": "INTERVIEW_TARGETED_NEED_NON_NEUTRAL",
+        "rejectedDecision": rejected,
+    }
+    assert "decisionValidationFeedback" not in first["instruction"].split("\n\n", 1)[1]
+    assert "INTERVIEW_AGENT_DECISION_REJECTION_REPAIRED" in caplog.text
+    assert "error_code=INTERVIEW_TARGETED_NEED_NON_NEUTRAL" in caplog.text
+    assert "leaked phrase" not in caplog.text
+    assert api.post_interview_agent_decision.call_count == 2
+    boundary._run_guarded_continuation.assert_called_once()
 
 
 def test_context_ready_authority_rejection_gets_one_private_correction_before_continuation():

@@ -10,8 +10,7 @@ from typing import Any, Callable
 from orchestration.result_validation import SpecialistHandoffValidationError
 from tools.common.capabilities.managed.boundary import AgentBoundaryBase
 from tools.common.capabilities.platform.api_client import (
-    InterviewContextReadyAuthorityCallbackError,
-    InterviewResolutionCallbackError,
+    InterviewDecisionRepairableCallbackError,
 )
 from tools.common.capabilities.workflow.recovery.post_guard_continuation import (
     PostGuardContinuationStore,
@@ -32,7 +31,7 @@ from tools.legal.retrieval.legal_basis.rule_applicability_evaluator import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-_INTERVIEW_CONTEXT_READY_AUTHORITY_REPAIRED = "INTERVIEW_CONTEXT_READY_AUTHORITY_REPAIRED"
+_INTERVIEW_AGENT_DECISION_REJECTION_REPAIRED = "INTERVIEW_AGENT_DECISION_REJECTION_REPAIRED"
 _INTERVIEW_HANDOFF_VALIDATION_REPAIRED = "INTERVIEW_HANDOFF_VALIDATION_REPAIRED"
 # _bounded_cause (orchestration.result_validation) renders each pydantic error as
 # "<loc>: Value error, <rule message>", joined with "; " for multiple errors. Extracting
@@ -273,52 +272,30 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             guarded_state = api_client.post_interview_agent_decision(
                 assessment_id, decision,
             )
-        except InterviewResolutionCallbackError as exc:
-            # A rejected candidate has not advanced the persisted revision. Let the
-            # specialist correct it once; never infer authority or relax the API guard.
-            if decision.get("outcome") != "CONTEXT_RESOLVED":
-                raise
-            repair_context = {
-                **context,
-                "decisionValidationFeedback": {
-                    "code": "INTERVIEW_RESOLUTION_CRITERIA_UNSATISFIED",
-                    "missingCriteria": exc.missing,
-                    "rejectedDecision": decision,
-                },
-            }
-            corrected = self._run_interview(
-                assessment_id=assessment_id,
-                thread_id=thread_id,
-                question_id=question_id,
-                context_revision=context_revision,
-                resume_reason=resume_reason,
-                context=repair_context,
-                correlationId=correlationId,
-            )
-            # A second rejection propagates to terminal delivery settlement.
-            guarded_state = api_client.post_interview_agent_decision(
-                assessment_id, corrected,
-            )
-        except InterviewContextReadyAuthorityCallbackError:
-            # The specialist asserted CONTEXT_READY without CUSTOMER_CONFIRMED
-            # authority. The API guard is correct and must never be relaxed; give
-            # the specialist one bounded chance to ask a confirming question
-            # instead of inferring authority it was never given.
-            if decision.get("outcome") != "CONTEXT_READY":
-                raise
+        except InterviewDecisionRepairableCallbackError as exc:
+            # A rejected candidate has not advanced the persisted revision. The API
+            # guard remains authoritative; only codes in the explicit allowlist reach
+            # this path, and the specialist gets exactly one private correction. Do
+            # not log rejected text/meta here because some codes protect customer
+            # surfaces from leaked internal language.
             _LOGGER.warning(
-                "%s assessment_id=%s question_id=%s context_revision=%s",
-                _INTERVIEW_CONTEXT_READY_AUTHORITY_REPAIRED,
+                "%s assessment_id=%s question_id=%s context_revision=%s error_code=%s",
+                _INTERVIEW_AGENT_DECISION_REJECTION_REPAIRED,
                 assessment_id,
                 question_id,
                 context_revision,
+                exc.error_code,
             )
+            decision_feedback = {
+                "code": exc.error_code,
+                "rejectedDecision": decision,
+            }
+            missing = getattr(exc, "missing", None)
+            if isinstance(missing, str):
+                decision_feedback["missingCriteria"] = missing
             repair_context = {
                 **context,
-                "decisionValidationFeedback": {
-                    "code": "INTERVIEW_CONTEXT_READY_REQUIRES_AUTHORITY",
-                    "rejectedDecision": decision,
-                },
+                "decisionValidationFeedback": decision_feedback,
             }
             corrected = self._run_interview(
                 assessment_id=assessment_id,
