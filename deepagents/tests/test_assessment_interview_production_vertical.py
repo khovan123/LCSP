@@ -297,6 +297,21 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
                 "targetedResolution": {},
             },
             {
+                "expectedContextRevision": 1,
+                "mode": "INITIAL_INTERVIEW",
+                "outcome": "CONTEXT_READY",
+                "contextAuthority": "CUSTOMER_CONFIRMED",
+                "confirmedContext": _confirmed_context(
+                    ASSESSMENT_ID,
+                    "system_purpose",
+                    "AI-assisted recommendation",
+                    revision=1,
+                ),
+                "flags": [],
+                "blockedActions": [],
+                "targetedResolution": {},
+            },
+            {
                 "expectedContextRevision": 2,
                 "mode": "INITIAL_INTERVIEW",
                 "outcome": "CONTEXT_READY",
@@ -336,32 +351,29 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
             {
                 "expectedContextRevision": 3,
                 "mode": "INVESTIGATOR_RESOLUTION",
-                "outcome": "WAITING_FOR_CUSTOMER",
-                "contextAuthority": "CUSTOMER_STATED",
-                "activeQuestion": {
-                    "id": "question-lcsp-278-targeted-confirm",
-                    "intent": "CLARIFY",
-                    "control": "CONFIRM_ADJUST",
-                    "prompt": "Please confirm the approval authority before resume.",
-                    "priorAnswerSummary": "A human manager must approve before action.",
-                    "proposedInterpretation": "A human manager must approve before action.",
-                    "choices": [
-                        {"id": "CONFIRM", "label": "Confirm"},
-                        {
-                            "id": "ADJUST",
-                            "label": "Adjust",
-                            "requiresFreeText": True,
-                        },
-                    ],
-                    "needId": NEED_ID,
-                    "frontier": {
-                        "owner": "CUSTOMER",
-                        "materiality": "MATERIAL",
-                        "description": "Please confirm the approval authority before resume.",
-                        "evidenceRefs": [EVIDENCE_REF],
-                    },
-                },
-                "confirmedContext": {},
+                "outcome": "CONTEXT_RESOLVED",
+                "contextAuthority": "CUSTOMER_CONFIRMED",
+                "confirmedContext": _confirmed_context(
+                    ASSESSMENT_ID,
+                    "decision_authority",
+                    "A human manager must approve before action",
+                    revision=3,
+                ),
+                "flags": [],
+                "blockedActions": [],
+                "targetedResolution": {},
+            },
+            {
+                "expectedContextRevision": 3,
+                "mode": "INVESTIGATOR_RESOLUTION",
+                "outcome": "CONTEXT_RESOLVED",
+                "contextAuthority": "CUSTOMER_CONFIRMED",
+                "confirmedContext": _confirmed_context(
+                    ASSESSMENT_ID,
+                    "decision_authority",
+                    "A human manager must approve before action",
+                    revision=3,
+                ),
                 "flags": [],
                 "blockedActions": [],
                 "targetedResolution": {},
@@ -462,7 +474,7 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
         targeted_resume,
         "corr-lcsp-278-targeted-question-replay",
     )
-    assert interview_factory.invoke_count == 4
+    assert interview_factory.invoke_count == 5
 
     _submit_answer(
         "question-lcsp-278-targeted",
@@ -472,12 +484,14 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
         _latest_resume_payload(),
         "corr-lcsp-278-targeted-confirm",
     )
+    targeted_confirmation = _public_interview_state()["activeQuestion"]
+    assert targeted_confirmation["control"] == "CONFIRM_ADJUST"
     assert (
-        _public_interview_state()["activeQuestion"]["id"]
-        == "question-lcsp-278-targeted-confirm"
+        targeted_confirmation["proposedInterpretation"]
+        == "A human manager must approve before action"
     )
 
-    _submit_answer("question-lcsp-278-targeted-confirm", confirmed=True)
+    _submit_answer(targeted_confirmation["id"], confirmed=True)
     resolved_resume = _latest_resume_payload()
     targeted_resume_boundary.handle(
         resolved_resume,
@@ -524,7 +538,7 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
     )
     stale_resume.handle(initial_resume, "corr-lcsp-278-stale-replay")
     assert root.calls
-    assert interview_factory.invoke_count == 6
+    assert interview_factory.invoke_count == 8
     assert run_counter == [1, 1]
 
 
@@ -572,6 +586,21 @@ def test_release_gate_blocks_unresolved_targeted_context_without_resume(
                     },
                 },
                 "confirmedContext": {},
+                "flags": [],
+                "blockedActions": [],
+                "targetedResolution": {},
+            },
+            {
+                "expectedContextRevision": 1,
+                "mode": "INITIAL_INTERVIEW",
+                "outcome": "CONTEXT_READY",
+                "contextAuthority": "CUSTOMER_CONFIRMED",
+                "confirmedContext": _confirmed_context(
+                    BLOCKED_ASSESSMENT_ID,
+                    "system_purpose",
+                    "AI-assisted recommendation",
+                    revision=1,
+                ),
                 "flags": [],
                 "blockedActions": [],
                 "targetedResolution": {},
@@ -734,7 +763,7 @@ def test_release_gate_blocks_unresolved_targeted_context_without_resume(
     ]
     assert blocked_state.get("activeQuestion") is None
     assert run_counter == [1]
-    assert interview_factory.invoke_count == 5
+    assert interview_factory.invoke_count == 6
     assert _classification_count(BLOCKED_ASSESSMENT_ID) == 0
 
 
