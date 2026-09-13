@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Callable
 
+from orchestration.result_validation import SpecialistHandoffValidationError
 from tools.common.capabilities.managed.boundary import AgentBoundaryBase
 from tools.common.capabilities.platform.api_client import (
     InterviewContextReadyAuthorityCallbackError,
@@ -31,6 +33,23 @@ from tools.legal.retrieval.legal_basis.rule_applicability_evaluator import (
 
 _LOGGER = logging.getLogger(__name__)
 _INTERVIEW_CONTEXT_READY_AUTHORITY_REPAIRED = "INTERVIEW_CONTEXT_READY_AUTHORITY_REPAIRED"
+_INTERVIEW_HANDOFF_VALIDATION_REPAIRED = "INTERVIEW_HANDOFF_VALIDATION_REPAIRED"
+# _bounded_cause (orchestration.result_validation) renders each pydantic error as
+# "<loc>: Value error, <rule message>", joined with "; " for multiple errors. Extracting
+# the rule text lets repair telemetry name exactly which of the many conditional
+# InterviewResult/InterviewQuestionResult constraints a provider schema cannot express was
+# actually violated, instead of only knowing that some validator failed.
+_VIOLATED_RULE_PATTERN = re.compile(r"Value error, (.+)")
+
+
+def _violated_rule_names(error: BaseException) -> str:
+    names = [
+        match.group(1).strip()
+        for segment in str(error).split("; ")
+        if (match := _VIOLATED_RULE_PATTERN.search(segment))
+    ]
+    return "; ".join(names) if names else "unknown"
+
 
 INTERVIEW_RESUME_COMMAND = "command.assessment-interview.resume-agent.v1"
 CURRENT_CONTEXT = "CURRENT"
@@ -208,15 +227,48 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
     def _run_and_persist_decision(self, api_client, assessment_id, thread_id, question_id,
                                   context_revision, resume_reason, context, correlationId,
                                   source_version, pge_version):
-        decision = self._run_interview(
-            assessment_id=assessment_id,
-            thread_id=thread_id,
-            question_id=question_id,
-            context_revision=context_revision,
-            resume_reason=resume_reason,
-            context=context,
-            correlationId=correlationId,
-        )
+        try:
+            decision = self._run_interview(
+                assessment_id=assessment_id,
+                thread_id=thread_id,
+                question_id=question_id,
+                context_revision=context_revision,
+                resume_reason=resume_reason,
+                context=context,
+                correlationId=correlationId,
+            )
+        except SpecialistHandoffValidationError as exc:
+            # The specialist's candidate violated one of the conditional InterviewResult /
+            # InterviewQuestionResult constraints a provider schema cannot express (e.g. a
+            # malformed CONFIRM_ADJUST choice shape, a missing frontier). None of those
+            # validators are relaxed; give the specialist one bounded chance to see the
+            # exact rule it broke and self-correct instead of crashing the whole turn.
+            rule_names = _violated_rule_names(exc)
+            _LOGGER.warning(
+                "%s assessment_id=%s question_id=%s context_revision=%s rule=%s",
+                _INTERVIEW_HANDOFF_VALIDATION_REPAIRED,
+                assessment_id,
+                question_id,
+                context_revision,
+                rule_names,
+            )
+            repair_context = {
+                **context,
+                "decisionValidationFeedback": {
+                    "code": "INTERVIEW_HANDOFF_SCHEMA_VIOLATION",
+                    "rejectedReason": str(exc),
+                },
+            }
+            # A second violation propagates to terminal delivery settlement.
+            decision = self._run_interview(
+                assessment_id=assessment_id,
+                thread_id=thread_id,
+                question_id=question_id,
+                context_revision=context_revision,
+                resume_reason=resume_reason,
+                context=repair_context,
+                correlationId=correlationId,
+            )
         try:
             guarded_state = api_client.post_interview_agent_decision(
                 assessment_id, decision,
@@ -1224,8 +1276,11 @@ def _interview_instruction(
         "resolutionCriteria text as statement.topic. When its code is "
         "INTERVIEW_CONTEXT_READY_REQUIRES_AUTHORITY, the candidate asserted CONTEXT_READY "
         "without CUSTOMER_CONFIRMED authority: return WAITING_FOR_CUSTOMER with a bounded "
-        "confirming question instead. Do not invent confirmation or treat validation "
-        "feedback as customer evidence. "
+        "confirming question instead. When its code is INTERVIEW_HANDOFF_SCHEMA_VIOLATION, "
+        "rejectedReason names the exact structural rule the prior candidate broke (for "
+        "example a malformed CONFIRM_ADJUST choice shape or an invalid outcome/mode "
+        "combination): fix only that violation, changing nothing else about the candidate. "
+        "Do not invent confirmation or treat validation feedback as customer evidence. "
         "If evidence is missing, return WAITING_FOR_CUSTOMER with a bounded clarification, "
         "or BLOCKED_OR_UNRESOLVED when the customer cannot supply it. Because provider "
         "schemas cannot enforce conditional fields, every WAITING_FOR_CUSTOMER "

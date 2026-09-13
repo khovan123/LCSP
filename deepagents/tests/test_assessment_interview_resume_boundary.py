@@ -278,6 +278,80 @@ def test_context_ready_authority_rejection_gets_one_private_correction_before_co
     assert all(call.args[-1] != "FAILED" for call in api.post_interview_progress.call_args_list)
 
 
+def test_handoff_schema_violation_gets_one_correction_before_continuation(caplog):
+    api = RecordingApi()
+    api.post_interview_progress = Mock()
+    corrected = {**deepcopy(WAITING_HANDOFF), "mode": "INITIAL_INTERVIEW"}
+    dispatcher = RecordingDispatcher()
+    schema_error = SpecialistHandoffValidationError(
+        "interview handoff failed schema validation: "
+        "activeQuestion: Value error, ADJUST choice must require free text"
+    )
+    dispatcher.dispatch = Mock(side_effect=[schema_error, {"handoff": corrected}])
+    boundary = AssessmentInterviewResumeBoundary(SimpleNamespace(), api_client=api, dispatcher=dispatcher)
+    boundary._run_guarded_continuation = Mock()
+
+    with caplog.at_level(
+        "WARNING", logger="tools.common.capabilities.workflow.recovery.interview_boundary"
+    ):
+        boundary.handle(_message(), "corr-1")
+
+    first, repair = [call.kwargs for call in dispatcher.dispatch.call_args_list]
+    payload = json.loads(repair["instruction"].split("\n\n", 1)[1])
+    assert payload["decisionValidationFeedback"]["code"] == "INTERVIEW_HANDOFF_SCHEMA_VIOLATION"
+    assert "ADJUST choice must require free text" in payload["decisionValidationFeedback"]["rejectedReason"]
+    assert "decisionValidationFeedback" not in first["instruction"].split("\n\n", 1)[1]
+    assert first["thread_id"] == repair["thread_id"]
+    assert first["idempotency_key"] != repair["idempotency_key"]
+    assert repair["context"].idempotency_key == repair["idempotency_key"]
+    assert "INTERVIEW_HANDOFF_VALIDATION_REPAIRED" in caplog.text
+    assert "rule=ADJUST choice must require free text" in caplog.text
+    boundary._run_guarded_continuation.assert_called_once()
+    assert boundary._run_guarded_continuation.call_args.kwargs["guarded_state"]["outcome"] == corrected["outcome"]
+    assert all(call.args[-1] != "FAILED" for call in api.post_interview_progress.call_args_list)
+
+
+def test_handoff_schema_violation_repair_is_bounded():
+    api = RecordingApi()
+    api.post_interview_progress = Mock()
+    dispatcher = RecordingDispatcher()
+    error = SpecialistHandoffValidationError(
+        "interview handoff failed schema validation: "
+        "activeQuestion: Value error, ADJUST choice must require free text"
+    )
+    dispatcher.dispatch = Mock(side_effect=error)
+    boundary = AssessmentInterviewResumeBoundary(SimpleNamespace(), api_client=api, dispatcher=dispatcher)
+    boundary._run_guarded_continuation = Mock()
+
+    with pytest.raises(SpecialistHandoffValidationError) as caught:
+        boundary.handle(_message(), "corr-1")
+
+    assert caught.value is error
+    assert dispatcher.dispatch.call_count == 2
+    boundary._run_guarded_continuation.assert_not_called()
+    assert api.post_interview_progress.call_args.args[-1] == "FAILED"
+
+
+def test_unrelated_dispatch_error_is_not_repaired():
+    api = RecordingApi()
+    api.post_interview_progress = Mock()
+    dispatcher = RecordingDispatcher()
+    error = ValueError(
+        "Assessment Interview resume requires a trusted authenticated principal / actorId"
+    )
+    dispatcher.dispatch = Mock(side_effect=error)
+    boundary = AssessmentInterviewResumeBoundary(SimpleNamespace(), api_client=api, dispatcher=dispatcher)
+    boundary._run_guarded_continuation = Mock()
+
+    with pytest.raises(ValueError) as caught:
+        boundary.handle(_message(), "corr-1")
+
+    assert caught.value is error
+    assert dispatcher.dispatch.call_count == 1
+    boundary._run_guarded_continuation.assert_not_called()
+    assert api.post_interview_progress.call_args.args[-1] == "FAILED"
+
+
 def test_interview_resume_command_is_managed_boundary() -> None:
     manifest = invocation_boundary_manifest()
 
