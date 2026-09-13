@@ -97,6 +97,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
         version: Math.floor(Math.random() * 1_000_000_000),
         inputPricePerMillion: "1.00000000",
         outputPricePerMillion: "2.00000000",
+        markupBps: 0n,
         effectiveAt: new Date(Date.now() - 1000),
       },
     });
@@ -297,6 +298,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
         version: 2,
         inputPricePerMillion: "9.00000000",
         outputPricePerMillion: "9.00000000",
+        markupBps: 0n,
         effectiveAt: new Date(),
       },
     });
@@ -339,6 +341,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
         version: Math.floor(Math.random() * 1_000_000_000),
         inputPricePerMillion: "9.00000000",
         outputPricePerMillion: "9.00000000",
+        markupBps: 0n,
         effectiveAt: new Date(t3.getTime() - 100),
       },
     });
@@ -394,6 +397,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
         version: Math.floor(Math.random() * 1_000_000_000),
         inputPricePerMillion: "3.00000000",
         outputPricePerMillion: "4.00000000",
+        markupBps: 0n,
         effectiveAt: new Date(),
       },
     });
