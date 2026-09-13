@@ -37,11 +37,12 @@ export function normalizeUsageDimensions(
   const reasoning = raw.reasoningTokens ?? 0n;
   const output = raw.outputTokens ?? 0n;
 
-  // Only apply sub-dimension split when the pricing record carries a
-  // distinct reasoning price.  Providers that bill reasoning separately
-  // (and therefore DO NOT include it in outputTokens) will NOT have this
-  // price configured, so the raw values are already correct.
-  if (!pricing.reasoningPricePerMillion || reasoning === 0n) return raw;
+  // Only apply the sub-dimension split when BOTH output and reasoning are
+  // non-zero AND the pricing record carries a distinct reasoning price.
+  // When outputTokens is absent/zero the provider meters reasoning as a
+  // fully independent dimension — raw values are already correct.
+  if (!pricing.reasoningPricePerMillion || reasoning === 0n || output === 0n)
+    return raw;
 
   if (reasoning > output)
     throw new BillingDomainError(
@@ -79,7 +80,10 @@ export function calculateCustomerChargeCredits(
 ): bigint {
   if (pricing.markupBps === undefined)
     throw new BillingDomainError("Markup snapshot is required");
-  if (!pricing.markupSnapshotId)
+  // Zero-markup rows have no authority requirement — no markup is added
+  // to the charge.  Estimates also use this function without a linked
+  // snapshot; authority is enforced at the settlement boundary instead.
+  if (pricing.markupBps > 0n && !pricing.markupSnapshotId)
     throw new BillingDomainError(
       "Markup snapshot authority (markupSnapshotId) must be linked when markupBps is applied",
     );

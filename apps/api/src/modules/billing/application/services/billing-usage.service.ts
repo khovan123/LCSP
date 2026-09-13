@@ -97,6 +97,12 @@ export class BillingUsageService {
       );
       if (!snapshot)
         throw new BillingDomainError("No applicable pricing snapshot");
+      // At settlement time a non-zero markup must be anchored to a traceable
+      // snapshot row.  Zero-markup rows need no authority anchor.
+      if (snapshot.markupBps && snapshot.markupBps > 0n && !snapshot.markupSnapshotId)
+        throw new BillingDomainError(
+          "Pricing snapshot has non-zero markupBps but markupSnapshotId is not linked",
+        );
       const providerCost = calculateUsageChargeCredits(
         {
           inputTokens: input,
@@ -117,25 +123,21 @@ export class BillingUsageService {
         },
         snapshot,
       );
-      // FX snapshot must be fully present or fully absent — a half-configured
-      // row is a data error, not a valid "no VND conversion" state.
+      // FX integrity: partial configuration is a data error.
+      // Fully absent FX is valid — pricing row has no VND conversion configured.
       const hasFxNumerator = snapshot.fxRateVndNumerator !== undefined;
       const hasFxDenominator = snapshot.fxRateVndDenominator !== undefined;
       if (hasFxNumerator !== hasFxDenominator)
         throw new BillingDomainError(
           "Pricing snapshot has partial FX rate: both fxRateVndNumerator and fxRateVndDenominator must be present or both absent",
         );
-      if ((hasFxNumerator || hasFxDenominator) && !snapshot.fxSnapshotId)
+      if (hasFxNumerator && !snapshot.fxSnapshotId)
         throw new BillingDomainError(
           "Pricing snapshot has FX rate but fxSnapshotId is not linked",
         );
-      if (!hasFxNumerator)
-        throw new BillingDomainError(
-          "Pricing snapshot is missing FX rate: customerChargeVnd cannot be computed",
-        );
-      const customerChargeVnd =
-        (charge * snapshot.fxRateVndNumerator!) /
-        snapshot.fxRateVndDenominator!;
+      const customerChargeVnd = hasFxNumerator
+        ? (charge * snapshot.fxRateVndNumerator!) / snapshot.fxRateVndDenominator!
+        : undefined;
       if (i.providerResponseId) {
         const response = await usage.findByProviderResponse(
           provider,
