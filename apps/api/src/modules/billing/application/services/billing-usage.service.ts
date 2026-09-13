@@ -1,10 +1,14 @@
 import { Inject, Injectable } from "@nestjs/common";
+import type { EffectiveRuntimeModel } from "@lcsp/contracts/billing";
 import {
   BillingDomainError,
   BillingIdempotencyConflictError,
   OwnershipMismatchError,
 } from "../../domain/billing.errors.js";
-import { calculateUsageChargeCredits } from "../../domain/usage-pricing.js";
+import {
+  applyMarkup,
+  calculateUsageChargeCredits,
+} from "../../domain/usage-pricing.js";
 import {
   BILLING_TRANSACTION_PORT,
   type BillingTransactionPort,
@@ -22,34 +26,61 @@ export class BillingUsageService {
     userId: string;
     reservationId: string;
     invocationId: string;
-    provider: string;
-    model: string;
+    provider?: string;
+    model?: string;
+    effectiveRuntimeModel?: EffectiveRuntimeModel;
     providerResponseId?: string;
     inputTokens?: bigint;
+    cachedInputTokens?: bigint;
+    cacheWriteTokens?: bigint;
     outputTokens?: bigint;
+    reasoningTokens?: bigint;
     totalTokens?: bigint;
     occurredAt?: Date;
   }) {
     return this.transactions.runForUser(i.userId, async (repos) => {
       const { usage, pricing, reservation } = repos;
-      if (!i.invocationId || !i.provider || !i.model)
+      const provider = i.effectiveRuntimeModel?.provider ?? i.provider;
+      const model = i.effectiveRuntimeModel?.model ?? i.model;
+      if (!i.invocationId || !provider || !model)
         throw new BillingDomainError("Usage identity is required");
+      if (
+        i.effectiveRuntimeModel &&
+        ((i.provider && i.provider !== i.effectiveRuntimeModel.provider) ||
+          (i.model && i.model !== i.effectiveRuntimeModel.model))
+      )
+        throw new BillingDomainError(
+          "Usage provider/model differs from effective runtime policy",
+        );
       const input = i.inputTokens ?? 0n;
+      const cachedInput = i.cachedInputTokens ?? 0n;
+      const cacheWrite = i.cacheWriteTokens ?? 0n;
       const output = i.outputTokens ?? 0n;
-      if (input < 0n || output < 0n)
+      const reasoning = i.reasoningTokens ?? 0n;
+      if (
+        [input, cachedInput, cacheWrite, output, reasoning].some((x) => x < 0n)
+      )
         throw new BillingDomainError("Token counts cannot be negative");
       if (i.totalTokens !== undefined && i.totalTokens < 0n)
         throw new BillingDomainError("Token counts cannot be negative");
-      if (i.totalTokens !== undefined && i.totalTokens < input + output)
+      if (
+        i.totalTokens !== undefined &&
+        i.totalTokens < input + cachedInput + cacheWrite + output + reasoning
+      )
         throw new BillingDomainError("Total tokens are inconsistent");
       const existing = await usage.findByInvocation(i.userId, i.invocationId);
       if (existing) {
         if (
-          existing.provider !== i.provider ||
-          existing.model !== i.model ||
+          existing.provider !== provider ||
+          existing.model !== model ||
           existing.inputTokens !== input ||
+          existing.cachedInputTokens !== cachedInput ||
+          existing.cacheWriteTokens !== cacheWrite ||
           existing.outputTokens !== output ||
-          existing.totalTokens !== (i.totalTokens ?? input + output) ||
+          existing.reasoningTokens !== reasoning ||
+          existing.totalTokens !==
+            (i.totalTokens ??
+              input + cachedInput + cacheWrite + output + reasoning) ||
           existing.providerResponseId !== (i.providerResponseId ?? null) ||
           existing.reservationId !== i.reservationId ||
           (i.occurredAt !== undefined &&
@@ -60,16 +91,26 @@ export class BillingUsageService {
       }
       const occurredAt = i.occurredAt ?? new Date();
       const snapshot = await pricing.findApplicable(
-        i.provider,
-        i.model,
+        provider,
+        model,
         occurredAt,
       );
       if (!snapshot)
         throw new BillingDomainError("No applicable pricing snapshot");
-      const charge = calculateUsageChargeCredits(input, output, snapshot);
+      const providerCost = calculateUsageChargeCredits(
+        {
+          inputTokens: input,
+          cachedInputTokens: cachedInput,
+          cacheWriteTokens: cacheWrite,
+          outputTokens: output,
+          reasoningTokens: reasoning,
+        },
+        snapshot,
+      );
+      const charge = applyMarkup(providerCost, snapshot.markupBps);
       if (i.providerResponseId) {
         const response = await usage.findByProviderResponse(
-          i.provider,
+          provider,
           i.providerResponseId,
         );
         if (response)
@@ -82,14 +123,27 @@ export class BillingUsageService {
         throw new OwnershipMismatchError("Reservation does not belong to user");
       const event = await usage.create({
         userId: i.userId,
-        provider: i.provider,
-        model: i.model,
+        provider,
+        model,
         invocationId: i.invocationId,
         providerResponseId: i.providerResponseId,
         inputTokens: input,
+        cachedInputTokens: cachedInput,
+        cacheWriteTokens: cacheWrite,
         outputTokens: output,
-        totalTokens: i.totalTokens ?? input + output,
+        reasoningTokens: reasoning,
+        totalTokens:
+          i.totalTokens ??
+          input + cachedInput + cacheWrite + output + reasoning,
         pricingSnapshotId: snapshot.id,
+        providerCostCredits: providerCost,
+        customerChargeVnd:
+          snapshot.fxRateVndNumerator && snapshot.fxRateVndDenominator
+            ? (charge * snapshot.fxRateVndNumerator) /
+              snapshot.fxRateVndDenominator
+            : undefined,
+        markupSnapshotId: snapshot.markupSnapshotId,
+        fxSnapshotId: snapshot.fxSnapshotId,
         reservationId: i.reservationId,
         chargedCredits: charge,
         occurredAt,

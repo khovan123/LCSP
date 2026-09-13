@@ -203,7 +203,18 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
               x && {
                 ...x,
                 inputPricePerMillion: x.inputPricePerMillion.toString(),
+                cachedInputPricePerMillion:
+                  x.cachedInputPricePerMillion?.toString(),
+                cacheWritePricePerMillion:
+                  x.cacheWritePricePerMillion?.toString(),
                 outputPricePerMillion: x.outputPricePerMillion.toString(),
+                reasoningPricePerMillion:
+                  x.reasoningPricePerMillion?.toString(),
+                markupBps: x.markupBps ?? undefined,
+                fxRateVndNumerator: x.fxRateVndNumerator ?? undefined,
+                fxRateVndDenominator: x.fxRateVndDenominator ?? undefined,
+                markupSnapshotId: x.markupSnapshotId ?? undefined,
+                fxSnapshotId: x.fxSnapshotId ?? undefined,
               }
             );
           },
@@ -216,7 +227,18 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
               x && {
                 ...x,
                 inputPricePerMillion: x.inputPricePerMillion.toString(),
+                cachedInputPricePerMillion:
+                  x.cachedInputPricePerMillion?.toString(),
+                cacheWritePricePerMillion:
+                  x.cacheWritePricePerMillion?.toString(),
                 outputPricePerMillion: x.outputPricePerMillion.toString(),
+                reasoningPricePerMillion:
+                  x.reasoningPricePerMillion?.toString(),
+                markupBps: x.markupBps ?? undefined,
+                fxRateVndNumerator: x.fxRateVndNumerator ?? undefined,
+                fxRateVndDenominator: x.fxRateVndDenominator ?? undefined,
+                markupSnapshotId: x.markupSnapshotId ?? undefined,
+                fxSnapshotId: x.fxSnapshotId ?? undefined,
               }
             );
           },

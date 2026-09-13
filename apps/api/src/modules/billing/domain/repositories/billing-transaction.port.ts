@@ -43,11 +43,18 @@ export type UsageRecord = {
   invocationId: string;
   providerResponseId: string | null;
   inputTokens: bigint | null;
+  cachedInputTokens: bigint | null;
+  cacheWriteTokens: bigint | null;
   outputTokens: bigint | null;
   totalTokens: bigint | null;
+  reasoningTokens: bigint | null;
   pricingSnapshotId: string | null;
   reservationId: string | null;
   chargedCredits: bigint | null;
+  providerCostCredits: bigint | null;
+  customerChargeVnd: bigint | null;
+  markupSnapshotId: string | null;
+  fxSnapshotId: string | null;
   occurredAt: Date;
 };
 export type PricingRecord = {
@@ -55,9 +62,17 @@ export type PricingRecord = {
   provider: string;
   model: string;
   inputPricePerMillion: string;
+  cachedInputPricePerMillion?: string;
+  cacheWritePricePerMillion?: string;
   outputPricePerMillion: string;
+  reasoningPricePerMillion?: string;
   version: number;
   effectiveAt: Date;
+  markupBps?: bigint;
+  fxRateVndNumerator?: bigint;
+  fxRateVndDenominator?: bigint;
+  markupSnapshotId?: string;
+  fxSnapshotId?: string;
 };
 
 export interface BillingWalletPort {
@@ -166,11 +181,18 @@ export interface LlmUsagePort {
     invocationId: string;
     providerResponseId?: string;
     inputTokens?: bigint;
+    cachedInputTokens?: bigint;
+    cacheWriteTokens?: bigint;
     outputTokens?: bigint;
+    reasoningTokens?: bigint;
     totalTokens?: bigint;
     pricingSnapshotId?: string;
     reservationId: string;
     chargedCredits: bigint;
+    providerCostCredits?: bigint;
+    customerChargeVnd?: bigint;
+    markupSnapshotId?: string;
+    fxSnapshotId?: string;
     occurredAt?: Date;
   }): Promise<UsageRecord>;
 }

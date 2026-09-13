@@ -1,5 +1,8 @@
 import { describe, expect, it } from "@jest/globals";
-import { calculateUsageChargeCredits } from "../src/modules/billing/domain/usage-pricing.js";
+import {
+  applyMarkup,
+  calculateUsageChargeCredits,
+} from "../src/modules/billing/domain/usage-pricing.js";
 import type { PricingRecord } from "../src/modules/billing/domain/repositories/billing-transaction.port.js";
 
 const pricing = {
@@ -21,5 +24,35 @@ describe("usage pricing", () => {
 
   it("rejects negative usage", () => {
     expect(() => calculateUsageChargeCredits(-1n, 0n, pricing)).toThrow();
+  });
+
+  it("prices cached, cache-write and reasoning dimensions independently", () => {
+    const fullPricing = {
+      ...pricing,
+      cachedInputPricePerMillion: "0.50000000",
+      cacheWritePricePerMillion: "1.50000000",
+      reasoningPricePerMillion: "3.00000000",
+    };
+    expect(
+      calculateUsageChargeCredits(
+        {
+          cachedInputTokens: 1_000_000n,
+          cacheWriteTokens: 1_000_000n,
+          reasoningTokens: 1_000_000n,
+        },
+        fullPricing,
+      ),
+    ).toBe(5n);
+  });
+
+  it("fails closed when usage has no corresponding snapshot price", () => {
+    expect(() =>
+      calculateUsageChargeCredits({ cachedInputTokens: 1n }, pricing),
+    ).toThrow("required usage dimension price");
+  });
+
+  it("applies configured markup with final ceil rounding", () => {
+    expect(applyMarkup(100n, 1500n)).toBe(115n);
+    expect(applyMarkup(1n, 1n)).toBe(2n);
   });
 });
