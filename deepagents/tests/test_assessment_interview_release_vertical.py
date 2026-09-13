@@ -888,6 +888,6 @@ def test_release_gate_crosses_production_boundaries_and_exact_resume_is_replay_s
         resolved_message,
         'corr-release-targeted-replay',
     )
-    assert interview_factory.invoke_count == 6
+    assert interview_factory.invoke_count == 8
     assert run_counter == [1, 1]
     assert len(api.classification_callbacks) == 1
