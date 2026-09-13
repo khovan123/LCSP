@@ -125,6 +125,11 @@ export type PrivateInterviewAnswerRevision = {
   sourceVersion: string;
   pgeVersion: string;
   governedEvidenceRefs: string[];
+  /**
+   * True when customer text/comment or requires-free-text choices need model
+   * interpretation before authority can be claimed.
+   */
+  answerRequiresInterpretation?: boolean;
   processedAt?: string;
 };
 
@@ -490,6 +495,10 @@ export class AssessmentInterviewRuntimeService {
         sourceVersion: provenance.sourceVersion,
         pgeVersion: provenance.pgeVersion,
         governedEvidenceRefs: lineageEvidenceRefs,
+        answerRequiresInterpretation: requiresAnswerInterpretation(
+          answer,
+          thread.state.activeQuestion,
+        ),
       };
       const nextState: AssessmentInterviewRuntimeState = {
         ...thread.state,
@@ -3148,7 +3157,8 @@ function assertAuthorityProvenance(
       ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask &&
     privateRevision.questionControl !==
       ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust &&
-    privateRevision.answer.adjusted !== true;
+    privateRevision.answer.adjusted !== true &&
+    !revisionRequiresAnswerInterpretation(privateRevision);
 
   if (authority === ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed) {
     if (!explicitlyConfirmed && !directLosslessCustomerStatement) {
@@ -3168,6 +3178,39 @@ function assertAuthorityProvenance(
       { status: HttpStatus.CONFLICT },
     );
   }
+}
+
+function revisionRequiresAnswerInterpretation(
+  privateRevision: PrivateInterviewAnswerRevision,
+): boolean {
+  if (privateRevision.answerRequiresInterpretation === true) {
+    return true;
+  }
+  const answer = privateRevision.answer;
+  return (
+    privateRevision.questionControl === ASSESSMENT_INTERVIEW_CONTROLS.freeText ||
+    Boolean(answer.freeText?.trim()) ||
+    Boolean(answer.comment?.trim()) ||
+    Boolean(answer.otherText?.trim())
+  );
+}
+
+function requiresAnswerInterpretation(
+  answer: AssessmentInterviewAnswerInput,
+  question: NonNullable<AssessmentInterviewRuntimeState["activeQuestion"]>,
+): boolean {
+  if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
+    return true;
+  }
+  if (answer.comment?.trim() || answer.otherText?.trim()) {
+    return true;
+  }
+  const choiceById = new Map(
+    (question.choices ?? []).map((choice) => [choice.id, choice]),
+  );
+  return (answer.selectedChoiceIds ?? []).some(
+    (choiceId) => choiceById.get(choiceId)?.requiresFreeText === true,
+  );
 }
 
 function assertAnswerMatchesQuestion(

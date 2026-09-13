@@ -187,9 +187,28 @@ def _message(*, reason="INTERVIEW_AGENT_DECISION_REQUIRED", revision=2):
         ("CLARIFY", "SINGLE_SELECT", {"selectedChoiceIds": ["yes"]}, False, False),
         ("CLARIFY", "CONFIRM_ADJUST", {"confirmed": True}, True, False),
         ("CLARIFY", "CONFIRM_ADJUST", {"adjusted": True, "freeText": "change"}, False, False),
-        ("ASK", "FREE_TEXT", {"freeText": "yes"}, True, True),
+        # FREE_TEXT always needs interpretation, even on a direct ASK answer: tightened
+        # per docs/../lcsp-tighten-direct-lossless.md, no longer directly lossless.
+        ("ASK", "FREE_TEXT", {"freeText": "yes"}, False, False),
         ("ASK", "SINGLE_SELECT", {"selectedChoiceIds": ["yes"]}, True, True),
         ("ASK", "SINGLE_SELECT", {"selectedChoiceIds": ["yes"], "adjusted": True}, False, False),
+        # A non-empty comment always needs interpretation, regardless of control/choice.
+        (
+            "ASK",
+            "SINGLE_SELECT",
+            {"selectedChoiceIds": ["standard"], "comment": "Mostly standard, except admin approval."},
+            False,
+            False,
+        ),
+        # Selecting an Other-like choice always carries a comment (the API rejects an
+        # empty one for a requiresFreeText choice), so it is caught the same way.
+        (
+            "ASK",
+            "SINGLE_SELECT",
+            {"selectedChoiceIds": ["other"], "comment": "Hosted in a customer-managed region."},
+            False,
+            False,
+        ),
     ],
 )
 def test_authority_preflight_matches_api_provenance_matrix(
@@ -209,6 +228,21 @@ def test_authority_preflight_matches_api_provenance_matrix(
         "customer_confirmed": expected_customer_confirmed,
         "confirmed": expected_confirmed,
     }
+
+
+def test_authority_preflight_honors_persisted_interpretation_flag_without_comment():
+    # The API persists answerRequiresInterpretation for a requiresFreeText choice at
+    # answer-recording time. The mirror cannot re-derive choice.requiresFreeText from
+    # the private revision alone, so it must trust this authoritative flag directly
+    # rather than only falling back to raw comment/freeText detection.
+    provenance = _authority_provenance({
+        "questionIntent": "ASK",
+        "questionControl": "SINGLE_SELECT",
+        "answer": {"selectedChoiceIds": ["other"]},
+        "answerRequiresInterpretation": True,
+    })
+
+    assert provenance == {"customer_confirmed": False, "confirmed": False}
 
 
 def test_authority_preflight_downgrades_nonterminal_without_losing_private_revision():
@@ -580,6 +614,67 @@ def test_invalid_authority_after_private_feedback_synthesizes_confirm_adjust_que
     assert dispatcher.dispatch.call_count == 2
 
 
+def test_interpretive_other_answer_synthesizes_confirm_adjust_without_ever_posting_context_ready():
+    # Boundary from docs/../lcsp-tighten-direct-lossless.md: a direct ASK answer that
+    # selected an Other/requiresFreeText choice with a comment always needed
+    # interpretation, so it can never be directLosslessCustomerStatement even though
+    # questionIntent is ASK. If the specialist still claims CUSTOMER_CONFIRMED +
+    # CONTEXT_READY twice in a row, the worker must converge locally to a
+    # CONFIRM_ADJUST question and must never post CONTEXT_READY to the guard.
+    api = RecordingApi()
+    context = api.get_interview_private_context("assessment-1", 2)
+    context["privateRevision"] = {
+        "actorId": "user-test-actor",
+        "questionId": "previous-question",
+        "questionIntent": "ASK",
+        "questionControl": "SINGLE_SELECT",
+        "answer": {
+            "selectedChoiceIds": ["other"],
+            "comment": "Hosted in a customer-managed region.",
+        },
+        "answerRequiresInterpretation": True,
+    }
+    api.get_interview_private_context = Mock(return_value=context)
+    api.post_interview_progress = Mock()
+    rejected = {
+        **deepcopy(WAITING_HANDOFF),
+        "mode": "INITIAL_INTERVIEW",
+        "outcome": "CONTEXT_READY",
+        "activeQuestion": None,
+        "contextAuthority": "CUSTOMER_CONFIRMED",
+        "confirmedContext": {
+            "statements": [
+                {
+                    "statement": "Hosted in a customer-managed region.",
+                    "statementId": "stmt",
+                    "topic": "hosting_location",
+                }
+            ]
+        },
+    }
+    # The repaired candidate is still wrong the second time: no automatic third
+    # model call, so convergence must come from local synthesis, not another retry.
+    corrected = deepcopy(rejected)
+    dispatcher = RecordingDispatcher()
+    dispatcher.dispatch = Mock(side_effect=[{"handoff": rejected}, {"handoff": corrected}])
+    boundary = AssessmentInterviewResumeBoundary(
+        SimpleNamespace(), api_client=api, dispatcher=dispatcher
+    )
+
+    boundary.handle(_message(), "corr-1")
+
+    assert dispatcher.dispatch.call_count == 2
+    assert len(api.decision_posts) == 1
+    posted = api.decision_posts[0][1]
+    assert posted["outcome"] == "WAITING_FOR_CUSTOMER"
+    assert posted["contextAuthority"] == "CUSTOMER_STATED"
+    assert posted["activeQuestion"]["control"] == "CONFIRM_ADJUST"
+    assert posted["activeQuestion"]["prompt"] == "Hosted in a customer-managed region."
+    # Exactly one post happened and it is WAITING_FOR_CUSTOMER: CONTEXT_READY never
+    # reached the guard on either the first or the repaired attempt, and the real
+    # (unmocked) guarded continuation correctly no-ops on a non-terminal outcome.
+
+
 def test_context_ready_authority_rejection_gets_one_private_correction_before_continuation():
     api = RecordingApi()
     api.post_interview_progress = Mock()
@@ -765,6 +860,17 @@ def test_guard_persists_before_any_downstream_continuation() -> None:
         "targetedResolution": {},
     }
     api = RecordingApi(order=order)
+    # Non-interpretive direct-ASK answer: this test is about guard/downstream
+    # ordering, not authority-provenance tightening, so it must not trip the
+    # (now-tightened) local preflight into a repair round-trip.
+    context = api.get_interview_private_context("assessment-1", 2)
+    context["privateRevision"] = {
+        "actorId": "user-test-actor",
+        "questionIntent": "ASK",
+        "questionControl": "BOOLEAN",
+        "answer": {"selectedChoiceIds": ["yes"]},
+    }
+    api.get_interview_private_context = Mock(return_value=context)
     dispatcher = RecordingDispatcher(ready, order=order)
     downstream_calls = []
 
@@ -1106,6 +1212,15 @@ def test_context_resolved_resumes_exact_managed_investigator_without_root() -> N
                     "originatingInvestigationReference"
                 ],
             }
+            # Non-interpretive direct-ASK answer (predefined choice, no comment): this
+            # test is about exact-resume continuation identity, not authority-provenance
+            # tightening, so it must stay directly lossless and resolve in one turn.
+            result["privateRevision"] = {
+                "actorId": "user-test-actor",
+                "questionIntent": "ASK",
+                "questionControl": "SINGLE_SELECT",
+                "answer": {"selectedChoiceIds": ["human"]},
+            }
             return result
 
         def post_interview_agent_decision(self, assessment_id, payload):
@@ -1193,6 +1308,143 @@ def test_context_resolved_resumes_exact_managed_investigator_without_root() -> N
     }
 
 
+def test_targeted_free_text_answer_converges_via_synthesis_after_extra_confirm_turn() -> None:
+    # Brief requirement (lcsp-tighten-direct-lossless.md): targeted questions are
+    # usually FREE_TEXT. After tightening, a targeted FREE_TEXT answer needs one
+    # extra CONFIRM_ADJUST turn before CONTEXT_RESOLVED can become authoritative.
+    # Turn 1 must converge locally to a WAITING_FOR_CUSTOMER CONFIRM_ADJUST question
+    # (never propagate/raise on INTERVIEW_CONTEXT_RESOLVED_REQUIRES_AUTHORITY, never
+    # resume the Investigator early). Turn 2, after the customer's real CONFIRM,
+    # must resume the exact Investigator exactly as the direct-choice path does.
+    continuation = {
+        "originatingInvestigationReference": "investigator:investigator-exec-9:need-1",
+        "investigatorExecutionId": "investigator-exec-9",
+        "workflowRunId": "investigator:investigator-exec-9",
+        "checkpointId": "checkpoint-original",
+        "affectedRuleIds": ["ENG-1"],
+        "artifactVersions": {
+            "technicalEvidenceReportId": "ter-1",
+            "repositorySnapshotId": "snapshot-1",
+        },
+        "sourceVersion": "snapshot-1:abc",
+        "pgeVersion": "ter-1:v1",
+    }
+    targeted_handoff = {
+        "expectedContextRevision": 0,
+        "mode": "INVESTIGATOR_RESOLUTION",
+        "outcome": "CONTEXT_RESOLVED",
+        "contextAuthority": "CUSTOMER_CONFIRMED",
+        "confirmedContext": _confirmed_context(),
+        "flags": [],
+        "blockedActions": [],
+        "targetedResolution": {},
+    }
+    resume_calls: list[dict] = []
+    completion_calls: list[dict] = []
+
+    def exact_resumer(**kwargs):
+        resume_calls.append(kwargs)
+        return {
+            "executionId": "investigator-exec-9",
+            "threadId": "investigator:investigator-exec-9",
+            "fromCheckpointId": "checkpoint-original",
+            "checkpointId": "checkpoint-next",
+            "handoff": {
+                "status": "READY",
+                "artifact_versions": continuation["artifactVersions"],
+                "claims": [],
+                "limitations": [],
+                "next_step": "GATE",
+            },
+        }
+
+    def exact_completer(**kwargs):
+        completion_calls.append(kwargs)
+
+    def with_targeted_need(result: dict) -> dict:
+        result["targetedNeed"] = {
+            "needId": "need-1",
+            "businessContextNeed": "Who approves?",
+            "resolutionCriteria": ["decision_authority"],
+            "originatingInvestigationReference": continuation[
+                "originatingInvestigationReference"
+            ],
+        }
+        return result
+
+    # --- Turn 1: targeted FREE_TEXT answer; specialist wrongly claims CUSTOMER_CONFIRMED ---
+    class TurnOneApi(RecordingApi):
+        def get_interview_private_context(self, *args, **kwargs):
+            result = with_targeted_need(super().get_interview_private_context(*args, **kwargs))
+            result["privateRevision"] = {
+                "actorId": "user-test-actor",
+                "questionIntent": "ASK",
+                "questionControl": "FREE_TEXT",
+                "answer": {"freeText": "Only human reviewers approve AI decisions"},
+            }
+            return result
+
+    api_turn_1 = TurnOneApi()
+    boundary_turn_1 = AssessmentInterviewResumeBoundary(
+        SimpleNamespace(),
+        api_client=api_turn_1,
+        dispatcher=RecordingDispatcher(targeted_handoff),
+        investigator_resumer=exact_resumer,
+        investigation_completer=exact_completer,
+    )
+
+    boundary_turn_1.handle(
+        _message(reason="INVESTIGATOR_RESOLUTION_REQUIRED", revision=2), "corr-1"
+    )
+
+    assert resume_calls == []
+    assert completion_calls == []
+    assert len(api_turn_1.decision_posts) == 1
+    posted_turn_1 = api_turn_1.decision_posts[0][1]
+    assert posted_turn_1["outcome"] == "WAITING_FOR_CUSTOMER"
+    assert posted_turn_1["contextAuthority"] == "CUSTOMER_STATED"
+    assert posted_turn_1["activeQuestion"]["control"] == "CONFIRM_ADJUST"
+
+    # --- Turn 2: the customer selected CONFIRM on that synthesized question ---
+    class TurnTwoApi(RecordingApi):
+        def get_interview_private_context(self, *args, **kwargs):
+            result = with_targeted_need(super().get_interview_private_context(*args, **kwargs))
+            result["privateRevision"] = {
+                "actorId": "user-test-actor",
+                "questionId": posted_turn_1["activeQuestion"]["id"],
+                "questionIntent": "CLARIFY",
+                "questionControl": "CONFIRM_ADJUST",
+                "answer": {"confirmed": True},
+            }
+            return result
+
+        def post_interview_agent_decision(self, assessment_id, payload):
+            super().post_interview_agent_decision(assessment_id, payload)
+            return {
+                "outcome": "CONTEXT_RESOLVED",
+                "confirmedContext": _confirmed_context(),
+                "continuation": continuation,
+            }
+
+    api_turn_2 = TurnTwoApi()
+    boundary_turn_2 = AssessmentInterviewResumeBoundary(
+        SimpleNamespace(),
+        api_client=api_turn_2,
+        dispatcher=RecordingDispatcher(targeted_handoff),
+        investigator_resumer=exact_resumer,
+        investigation_completer=exact_completer,
+    )
+
+    boundary_turn_2.handle(
+        _message(reason="INVESTIGATOR_RESOLUTION_REQUIRED", revision=3), "corr-2"
+    )
+
+    assert len(resume_calls) == 1
+    assert resume_calls[0]["continuation"] is continuation
+    assert len(completion_calls) == 1
+    assert completion_calls[0]["resumed_handoff"]["status"] == "READY"
+
+
 def test_exact_resume_rejects_wrong_investigator_execution() -> None:
     continuation = {
         "investigatorExecutionId": "expected-exec",
@@ -1278,6 +1530,15 @@ def test_context_resolved_targeted_scope_exclusion_closes_without_investigator()
                 "originatingInvestigationReference": continuation[
                     "originatingInvestigationReference"
                 ],
+            }
+            # Non-interpretive direct-ASK answer (predefined choice, no comment): this
+            # test is about the deterministic scope-exclusion path, not authority-
+            # provenance tightening, so it must stay directly lossless.
+            result["privateRevision"] = {
+                "actorId": "user-test-actor",
+                "questionIntent": "ASK",
+                "questionControl": "BOOLEAN",
+                "answer": {"selectedChoiceIds": ["no"]},
             }
             return result
 

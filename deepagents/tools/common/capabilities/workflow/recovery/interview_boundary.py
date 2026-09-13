@@ -50,9 +50,13 @@ _AUTHORITY_REPAIR_GUIDANCE = {
         "instruction": (
             "CUSTOMER_CONFIRMED requires either a prior CONFIRM_ADJUST question "
             "where the customer selected CONFIRM, or a direct ASK answer that was "
-            "not adjusted. CLARIFY BOOLEAN or SINGLE_SELECT answers never grant "
-            "CUSTOMER_CONFIRMED. If confirmation is still needed, ask a "
-            "CONFIRM_ADJUST question with CONFIRM and ADJUST choices, ADJUST "
+            "not adjusted and needed no interpretation. A FREE_TEXT answer, a "
+            "selected choice that requiresFreeText (e.g. OTHER), or any answer "
+            "carrying a non-empty comment always needs interpretation and can "
+            "never grant CUSTOMER_CONFIRMED on its own, no matter how explicit "
+            "the customer's wording is. CLARIFY BOOLEAN or SINGLE_SELECT answers "
+            "never grant CUSTOMER_CONFIRMED. If confirmation is still needed, ask "
+            "a CONFIRM_ADJUST question with CONFIRM and ADJUST choices, ADJUST "
             "requiring free text, and proposedInterpretation set to the exact "
             "statement to confirm. Otherwise keep CUSTOMER_STATED."
         ),
@@ -61,9 +65,12 @@ _AUTHORITY_REPAIR_GUIDANCE = {
         "instructionKey": _CONFIRMATION_PROVENANCE_INSTRUCTION_KEY,
         "instruction": (
             "CONFIRMED authority requires a direct ASK answer that was not "
-            "adjusted. Do not use CONFIRMED for CLARIFY answers. If the prior "
-            "answer was not a direct ASK, keep CUSTOMER_STATED or ask the "
-            "customer a direct ASK question."
+            "adjusted and needed no interpretation. A FREE_TEXT answer, a "
+            "selected choice that requiresFreeText (e.g. OTHER), or any answer "
+            "carrying a non-empty comment always needs interpretation and cannot "
+            "earn CONFIRMED directly; ask CONFIRM_ADJUST first. Do not use "
+            "CONFIRMED for CLARIFY answers. If the prior answer was not a direct "
+            "ASK, keep CUSTOMER_STATED or ask the customer a direct ASK question."
         ),
     },
     "INTERVIEW_CONTEXT_READY_REQUIRES_AUTHORITY": {
@@ -123,6 +130,26 @@ def _decision_feedback(error_code: str, rejected_decision: dict[str, Any]) -> di
     return feedback
 
 
+def _revision_requires_answer_interpretation(private_revision: dict[str, Any]) -> bool:
+    # Keep this fallback in sync with apps/api assessment-interview-runtime.service.ts
+    # ::revisionRequiresAnswerInterpretation. The persisted answerRequiresInterpretation
+    # flag (set by the API at answer-recording time, including for choices that
+    # requiresFreeText such as OTHER) is authoritative when present; the raw-field
+    # fallback below only covers legacy/incomplete revisions that predate the flag.
+    if private_revision.get("answerRequiresInterpretation") is True:
+        return True
+    answer = private_revision.get("answer")
+    if not isinstance(answer, dict):
+        answer = {}
+    question_control = str(private_revision.get("questionControl") or "").upper()
+    return (
+        question_control == "FREE_TEXT"
+        or bool(str(answer.get("freeText") or "").strip())
+        or bool(str(answer.get("comment") or "").strip())
+        or bool(str(answer.get("otherText") or "").strip())
+    )
+
+
 def _authority_provenance(private_revision: dict[str, Any] | None) -> dict[str, bool]:
     if not isinstance(private_revision, dict):
         return {"customer_confirmed": False, "confirmed": False}
@@ -145,6 +172,7 @@ def _authority_provenance(private_revision: dict[str, Any] | None) -> dict[str, 
         question_intent == "ASK"
         and question_control != "CONFIRM_ADJUST"
         and not adjusted
+        and not _revision_requires_answer_interpretation(private_revision)
     )
     return {
         "customer_confirmed": (
@@ -1493,8 +1521,13 @@ def _interview_instruction(
         "CONTEXT_READY and rejects an unauthoritative CONTEXT_READY with no automatic "
         "recovery beyond one bounded correction. Provenance rule: CUSTOMER_CONFIRMED "
         "requires either a prior CONFIRM_ADJUST question where the customer selected "
-        "CONFIRM, or a direct ASK answer that was not adjusted. CLARIFY BOOLEAN or "
-        "SINGLE_SELECT answers never grant CUSTOMER_CONFIRMED. If confirmation is "
+        "CONFIRM, or a direct ASK answer that was not adjusted and needed no "
+        "interpretation. A FREE_TEXT answer, a selected choice that requiresFreeText "
+        "(e.g. OTHER), or any answer carrying a non-empty comment always needs "
+        "interpretation: it stays CUSTOMER_STATED until the customer confirms it "
+        "through a CONFIRM_ADJUST turn, no matter how explicit or unambiguous the "
+        "wording looks. CLARIFY BOOLEAN or SINGLE_SELECT answers never grant "
+        "CUSTOMER_CONFIRMED. If confirmation is "
         "needed, ask WAITING_FOR_CUSTOMER with control=CONFIRM_ADJUST, intent=CLARIFY, "
         "choices exactly CONFIRM and ADJUST, ADJUST.requiresFreeText=true, and "
         "proposedInterpretation set to the exact statement to confirm; otherwise keep "

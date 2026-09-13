@@ -454,7 +454,31 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
   });
 
   it("uses internal guarded decision write-back and blocks false ready", async () => {
-    await seedWaitingQuestion(prisma);
+    // A direct-ASK BOOLEAN answer (predefined choice, no comment) so the
+    // customerConfirmed sub-case below stays directLosslessCustomerStatement per
+    // the tightened FREE_TEXT/Other authority rule (docs/../lcsp-tighten-direct-lossless.md);
+    // this test is about guarded decision write-back plumbing, not authority tightening.
+    await seedUsableTechnicalCoverage(prisma);
+    const seededQuestion = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/initial-question")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        technicalEvidenceReportId: "report-interview-ready",
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        activeQuestion: {
+          id: QUESTION_ID,
+          intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+          control: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+          prompt: "Is human approval required?",
+          frontier: {
+            owner: INTERVIEW_FRONTIER_OWNERS.customer,
+            materiality: INTERVIEW_FRONTIER_MATERIALITIES.material,
+            description: "Is human approval required?",
+          },
+        },
+      });
+    assert.equal(seededQuestion.status, 201, JSON.stringify(seededQuestion.body));
+
     const answered = await httpRequest(app)
       .post("/assessments/assessment-1/interview/answers")
       .set("Authorization", `Bearer ${token}`)
@@ -464,8 +488,8 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
           expectedSessionRevision: 0,
           clientRequestId: "client-request-guarded-answer",
           answer: {
-            kind: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
-            text: "Human approval is required.",
+            kind: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+            value: true,
           },
         }),
       );
@@ -722,7 +746,31 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
   });
 
   it("uses server-owned targeted criteria and continuation before exact resume", async () => {
-    await seedWaitingQuestion(prisma);
+    // A direct-ASK BOOLEAN answer (predefined choice, no comment) so the CONFIRMED
+    // claim below stays directLosslessCustomerStatement per the tightened
+    // FREE_TEXT/Other authority rule; this test is about targeted-need/continuation
+    // plumbing after CONTEXT_READY, not authority tightening.
+    await seedUsableTechnicalCoverage(prisma);
+    const seededQuestion = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/initial-question")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        technicalEvidenceReportId: "report-interview-ready",
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        activeQuestion: {
+          id: QUESTION_ID,
+          intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+          control: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+          prompt: "Is there a baseline decision authority?",
+          frontier: {
+            owner: INTERVIEW_FRONTIER_OWNERS.customer,
+            materiality: INTERVIEW_FRONTIER_MATERIALITIES.material,
+            description: "Is there a baseline decision authority?",
+          },
+        },
+      });
+    assert.equal(seededQuestion.status, 201, JSON.stringify(seededQuestion.body));
+
     await httpRequest(app)
       .post("/assessments/assessment-1/interview/answers")
       .set("Authorization", `Bearer ${token}`)
@@ -732,8 +780,8 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
           expectedSessionRevision: 0,
           clientRequestId: "client-request-targeted-baseline",
           answer: {
-            kind: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
-            text: RAW_ANSWER,
+            kind: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+            value: true,
           },
         }),
       );

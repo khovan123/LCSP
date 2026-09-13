@@ -71,6 +71,12 @@ Boundary rules:
   unless the Customer directly and losslessly confirms the material fact.
 - Formatting-only normalization may be treated as CUSTOMER_CONFIRMED when the meaning is unchanged.
 - Material interpretation requires CLARIFY or a governed confirm/adjust answer action; do not silently convert it to ready.
+- A FREE_TEXT answer, a selected choice that requiresFreeText (e.g. OTHER), or any answer
+  carrying a non-empty comment always needed interpretation to normalize. Such an answer stays
+  CUSTOMER_STATED and can never become CUSTOMER_CONFIRMED/CONFIRMED directly, however explicit
+  or unambiguous the Customer's wording is; it must go through one CONFIRM_ADJUST turn first.
+  Only a predefined BOOLEAN/SINGLE_SELECT/MULTI_SELECT answer with no comment can be direct-ASK
+  lossless.
 - Contradictory Customer revisions must become CONFLICTED or ask a CLARIFY question; never last-write-
   wins.
 - For targeted clarification, use only needId, businessContextNeed, resolutionCriteria and

@@ -1701,14 +1701,17 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           revisions: [
             {
               questionId: "q-1",
-              answer: { questionId: "q-1", freeText: "ans" },
+              // Non-interpretive direct-ASK answer so assertAuthorityProvenance's
+              // (now-tightened) directLosslessCustomerStatement check passes and this
+              // test still exercises the confirmedContext structure guard, not authority.
+              answer: { questionId: "q-1", selectedChoiceIds: ["yes"] },
               actorId: "user-1",
               answeredAt: "2026-09-07T00:00:00.000Z",
               contextRevision: 1,
               priorRevision: 0,
               authority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
               questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
-              questionControl: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+              questionControl: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
               sourceVersion: "snap-1:sha-123456",
               pgeVersion: "report-1:v1",
               governedEvidenceRefs: [],
@@ -1934,14 +1937,14 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           revisions: [
             {
               questionId: "q-1",
-              answer: { questionId: "q-1", freeText: "Human approval" },
+              answer: { questionId: "q-1", selectedChoiceIds: ["yes"] },
               actorId: "user-1",
               answeredAt: "2026-09-07T00:00:00.000Z",
               contextRevision: 1,
               priorRevision: 0,
               authority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
               questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
-              questionControl: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+              questionControl: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
               sourceVersion: "snap-1:sha-123456",
               pgeVersion: "report-1:v1",
               governedEvidenceRefs: [],
@@ -2001,6 +2004,99 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         }),
       );
     });
+
+    it.each([
+      {
+        name: "FREE_TEXT",
+        revision: {
+          answer: { questionId: "q-1", freeText: "Human approval" },
+          questionControl: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+          answerRequiresInterpretation: true,
+        },
+      },
+      {
+        name: "Other comment",
+        revision: {
+          answer: {
+            questionId: "q-1",
+            selectedChoiceIds: ["other"],
+            comment: "Hosted in a customer-managed region.",
+          },
+          questionControl: ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
+          answerRequiresInterpretation: true,
+        },
+      },
+      {
+        name: "selected choice comment",
+        revision: {
+          answer: {
+            questionId: "q-1",
+            selectedChoiceIds: ["standard"],
+            comment: "Mostly standard, except admin approval.",
+          },
+          questionControl: ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
+          answerRequiresInterpretation: true,
+        },
+      },
+    ])(
+      "rejects initial CONTEXT_READY from interpretive $name answers before confirm-adjust",
+      async ({ revision }) => {
+        mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
+          assessmentId: "assessment-1",
+          contextRevision: 1,
+          processedRevision: 0,
+          activeQuestionId: "q-1",
+          stateJson: {
+            outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+            contextRevision: 1,
+          },
+          privateContextJson: {
+            revisions: [
+              {
+                questionId: "q-1",
+                ...revision,
+                actorId: "user-1",
+                answeredAt: "2026-09-07T00:00:00.000Z",
+                contextRevision: 1,
+                priorRevision: 0,
+                authority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
+                questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+                sourceVersion: "snap-1:sha-123456",
+                pgeVersion: "report-1:v1",
+                governedEvidenceRefs: [],
+              },
+            ],
+            workflowRunId: "10000000-0000-4000-8000-000000000002",
+            partialCoveragePolicyDecision: partialCoveragePolicyDecision(),
+          },
+          sourceVersion: "snap-1:sha-123456",
+          pgeVersion: "report-1:v1",
+        });
+
+        await expect(
+          service.recordAgentDecision({
+            assessmentId: "assessment-1",
+            correlationId: "corr-interpretive-context-ready",
+            decision: {
+              expectedContextRevision: 1,
+              mode: "INITIAL_INTERVIEW",
+              outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+              contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+              confirmedContext: confirmedStructuredContext({
+                contextRevision: 1,
+              }),
+            },
+          }),
+        ).rejects.toMatchObject({
+          response: {
+            ok: false,
+            problem: {
+              code: "INTERVIEW_CUSTOMER_CONFIRMED_REQUIRES_DIRECT_OR_EXPLICIT_CONFIRMATION",
+            },
+          },
+        });
+      },
+    );
 
     it.each([
       { resolutionState: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.uncertain },
