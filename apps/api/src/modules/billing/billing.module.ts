@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
 import { BillingAccountingService } from "./application/services/billing-accounting.service.js";
 import { PrismaBillingTransaction } from "./infrastructure/persistence/prisma-billing-transaction.js";
@@ -9,6 +10,7 @@ import { BillingEstimateService } from "./application/services/billing-estimate.
 import { BillingUsageController } from "./presentation/http/billing-usage.controller.js";
 
 @Module({
+  imports: [ConfigModule],
   controllers: [BillingUsageController],
   providers: [
     PrismaService,
