@@ -108,6 +108,20 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
             tx.billingOrder.findUnique({
               where: { userId_idempotencyKey: { userId, idempotencyKey: key } },
             }),
+          findForUser: (userId, id) =>
+            tx.billingOrder.findFirst({ where: { id, userId } }),
+          listForUser: async ({ userId, skip, take }) => {
+            const [orders, totalCount] = await Promise.all([
+              tx.billingOrder.findMany({
+                where: { userId },
+                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+                skip,
+                take,
+              }),
+              tx.billingOrder.count({ where: { userId } }),
+            ]);
+            return { orders, totalCount };
+          },
           createPending: (i) => tx.billingOrder.create({ data: i }),
           transition: async (id, from, to) =>
             (

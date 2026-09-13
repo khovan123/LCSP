@@ -2,9 +2,12 @@ import { Inject, Injectable } from "@nestjs/common";
 import { BillingAccountingService } from "./billing-accounting.service.js";
 import { BillingIdempotencyConflictError } from "../../domain/billing.errors.js";
 import { createHash } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import { PREPAID_BILLING_CONFIG } from "@lcsp/contracts/billing";
 import {
   BILLING_TRANSACTION_PORT,
   type BillingTransactionPort,
+  type OrderRecord,
 } from "../../domain/repositories/billing-transaction.port.js";
 
 @Injectable()
@@ -16,16 +19,16 @@ export class BillingPaymentService {
   ) {}
   async createOrder(i: {
     userId: string;
-    paymentCode: string;
+    /** Internal fixture compatibility only; customer HTTP never supplies this. */
+    paymentCode?: string;
     idempotencyKey: string;
     amountMinorUnits: bigint;
     creditUnits: bigint;
-    requestFingerprint?: string;
+    expiresAt?: Date;
   }) {
     const requestFingerprint = createHash("sha256")
       .update(
         JSON.stringify({
-          paymentCode: i.paymentCode,
           amountMinorUnits: i.amountMinorUnits.toString(),
           creditUnits: i.creditUnits.toString(),
         }),
@@ -38,8 +41,36 @@ export class BillingPaymentService {
           throw new BillingIdempotencyConflictError("Order replay differs");
         return old;
       }
-      return order.createPending({ ...i, requestFingerprint });
+      const paymentCode =
+        i.paymentCode ?? (await this.generatePaymentCode(order));
+      return order.createPending({
+        ...i,
+        paymentCode,
+        requestFingerprint,
+        expiresAt:
+          i.expiresAt ??
+          new Date(
+            Date.now() +
+              PREPAID_BILLING_CONFIG.orderExpiryHours * 60 * 60 * 1000,
+          ),
+      });
     });
+  }
+
+  private async generatePaymentCode(order: {
+    findByPaymentCode(paymentCode: string): Promise<OrderRecord | null>;
+  }): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const suffix = randomBytes(8)
+        .toString("base64url")
+        .replaceAll("-", "A")
+        .replaceAll("_", "B");
+      const code = `${PREPAID_BILLING_CONFIG.paymentCodePrefix}${suffix}`;
+      if (!(await order.findByPaymentCode(code))) return code;
+    }
+    throw new BillingIdempotencyConflictError(
+      "Unable to allocate payment code",
+    );
   }
   reconcilePayment(i: {
     provider: string;

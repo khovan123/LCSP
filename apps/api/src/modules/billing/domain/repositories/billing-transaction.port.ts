@@ -1,4 +1,10 @@
-export type WalletRecord = { id: string; userId: string; version: number };
+export type WalletRecord = {
+  id: string;
+  userId: string;
+  availableCredits: bigint;
+  reservedCredits: bigint;
+  version: number;
+};
 export type LedgerRecord = {
   id: string;
   walletId: string;
@@ -25,6 +31,10 @@ export type OrderRecord = {
   status: string;
   amountMinorUnits: bigint;
   creditUnits: bigint;
+  expiresAt: Date | null;
+  creditedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 };
 export type PaymentRecord = {
   id: string;
@@ -130,6 +140,12 @@ export interface BillingOrderPort {
     userId: string,
     key: string,
   ): Promise<OrderRecord | null>;
+  findForUser(userId: string, id: string): Promise<OrderRecord | null>;
+  listForUser(input: {
+    userId: string;
+    skip: number;
+    take: number;
+  }): Promise<{ orders: OrderRecord[]; totalCount: number }>;
   createPending(input: {
     userId: string;
     paymentCode: string;
@@ -137,6 +153,7 @@ export interface BillingOrderPort {
     requestFingerprint?: string;
     amountMinorUnits: bigint;
     creditUnits: bigint;
+    expiresAt?: Date;
   }): Promise<OrderRecord>;
   transition(
     orderId: string,
