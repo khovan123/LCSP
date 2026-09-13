@@ -6,7 +6,7 @@ import {
   OwnershipMismatchError,
 } from "../../domain/billing.errors.js";
 import {
-  applyMarkup,
+  calculateCustomerChargeCredits,
   calculateUsageChargeCredits,
 } from "../../domain/usage-pricing.js";
 import {
@@ -107,7 +107,16 @@ export class BillingUsageService {
         },
         snapshot,
       );
-      const charge = applyMarkup(providerCost, snapshot.markupBps);
+      const charge = calculateCustomerChargeCredits(
+        {
+          inputTokens: input,
+          cachedInputTokens: cachedInput,
+          cacheWriteTokens: cacheWrite,
+          outputTokens: output,
+          reasoningTokens: reasoning,
+        },
+        snapshot,
+      );
       if (i.providerResponseId) {
         const response = await usage.findByProviderResponse(
           provider,

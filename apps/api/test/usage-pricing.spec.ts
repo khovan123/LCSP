@@ -13,6 +13,7 @@ const pricing = {
   outputPricePerMillion: "2.00000000",
   version: 1,
   effectiveAt: new Date(),
+  markupBps: 0n,
 } satisfies PricingRecord;
 
 describe("usage pricing", () => {

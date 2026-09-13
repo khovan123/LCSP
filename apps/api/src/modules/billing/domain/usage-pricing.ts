@@ -8,19 +8,8 @@ export type UsageDimensions = {
   outputTokens?: bigint;
   reasoningTokens?: bigint;
 };
-
-export function applyMarkup(
-  providerCostCredits: bigint,
-  markupBps = 0n,
-): bigint {
-  if (providerCostCredits < 0n || markupBps < 0n)
-    throw new BillingDomainError("Markup inputs cannot be negative");
-  const denominator = 10_000n;
-  return (
-    (providerCostCredits * (denominator + markupBps) + denominator - 1n) /
-    denominator
-  );
-}
+const SCALE = 100000000n;
+const DENOMINATOR = 1_000_000n * SCALE;
 
 export function calculateUsageChargeCredits(
   usage: UsageDimensions | bigint,
@@ -36,17 +25,39 @@ export function calculateUsageChargeCredits(
       ? maybePricing
       : (outputOrPricing as PricingRecord);
   if (!pricing) throw new BillingDomainError("Pricing snapshot is required");
-  const scale = 100000000n;
-  const parse = (value: string) => {
-    const [whole, fraction = ""] = value.split(".");
-    return BigInt(whole) * scale + BigInt(fraction.padEnd(8, "0").slice(0, 8));
-  };
+  return (usageNumerator(dimensions, pricing) + DENOMINATOR - 1n) / DENOMINATOR;
+}
+
+export function calculateCustomerChargeCredits(
+  usage: UsageDimensions,
+  pricing: PricingRecord,
+): bigint {
+  if (pricing.markupBps === undefined)
+    throw new BillingDomainError("Markup snapshot is required");
+  const numerator =
+    usageNumerator(usage, pricing) * (10_000n + pricing.markupBps);
+  return (numerator + DENOMINATOR * 10_000n - 1n) / (DENOMINATOR * 10_000n);
+}
+
+export function applyMarkup(
+  providerCostCredits: bigint,
+  markupBps: bigint,
+): bigint {
+  if (providerCostCredits < 0n || markupBps < 0n)
+    throw new BillingDomainError("Markup inputs cannot be negative");
+  return (providerCostCredits * (10_000n + markupBps) + 9_999n) / 10_000n;
+}
+
+function usageNumerator(
+  usage: UsageDimensions,
+  pricing: PricingRecord,
+): bigint {
   const entries: Array<[bigint, string | undefined]> = [
-    [dimensions.inputTokens ?? 0n, pricing.inputPricePerMillion],
-    [dimensions.cachedInputTokens ?? 0n, pricing.cachedInputPricePerMillion],
-    [dimensions.cacheWriteTokens ?? 0n, pricing.cacheWritePricePerMillion],
-    [dimensions.outputTokens ?? 0n, pricing.outputPricePerMillion],
-    [dimensions.reasoningTokens ?? 0n, pricing.reasoningPricePerMillion],
+    [usage.inputTokens ?? 0n, pricing.inputPricePerMillion],
+    [usage.cachedInputTokens ?? 0n, pricing.cachedInputPricePerMillion],
+    [usage.cacheWriteTokens ?? 0n, pricing.cacheWritePricePerMillion],
+    [usage.outputTokens ?? 0n, pricing.outputPricePerMillion],
+    [usage.reasoningTokens ?? 0n, pricing.reasoningPricePerMillion],
   ];
   let numerator = 0n;
   for (const [tokens, price] of entries) {
@@ -56,8 +67,12 @@ export function calculateUsageChargeCredits(
       throw new BillingDomainError(
         "Pricing snapshot lacks a required usage dimension price",
       );
-    if (price) numerator += tokens * parse(price);
+    if (price) {
+      const [whole, fraction = ""] = price.split(".");
+      numerator +=
+        tokens *
+        (BigInt(whole) * SCALE + BigInt(fraction.padEnd(8, "0").slice(0, 8)));
+    }
   }
-  const denominator = 1_000_000n * scale;
-  return (numerator + denominator - 1n) / denominator;
+  return numerator;
 }

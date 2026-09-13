@@ -2,7 +2,8 @@ import { Injectable } from "@nestjs/common";
 import type { EffectiveRuntimeModel } from "@lcsp/contracts/billing";
 import {
   calculateUsageChargeCredits,
-  applyMarkup,
+  calculateCustomerChargeCredits,
+  type UsageDimensions,
 } from "../../domain/usage-pricing.js";
 import type { PricingRecord } from "../../domain/repositories/billing-transaction.port.js";
 
@@ -10,16 +11,16 @@ import type { PricingRecord } from "../../domain/repositories/billing-transactio
 export class BillingEstimateService {
   estimate(input: {
     runtimeModel: EffectiveRuntimeModel;
-    usage: Parameters<typeof calculateUsageChargeCredits>[0];
+    usage: UsageDimensions;
     pricing: PricingRecord;
   }) {
     const providerCostCredits = calculateUsageChargeCredits(
       input.usage,
       input.pricing,
     );
-    const customerChargeCredits = applyMarkup(
-      providerCostCredits,
-      input.pricing.markupBps,
+    const customerChargeCredits = calculateCustomerChargeCredits(
+      input.usage,
+      input.pricing,
     );
     return {
       isEstimate: true as const,
