@@ -1534,6 +1534,13 @@ def _interview_instruction(
         ),
         "publicThreadState": public_state,
         "privateCustomerRevision": private_revision,
+        # Worker-only, bounded/truncated verbatim history of prior turns' answers
+        # (never in publicThreadState, which stays the sanitized customer
+        # projection). See assessment-interview-runtime.service.ts
+        # ::buildWorkerPriorAnswerHistory for the exact entry-count/text-length
+        # limits and truncation marker.
+        "priorAnswerHistory": context.get("priorAnswerHistory") or [],
+        "priorAnswerHistoryOmittedCount": context.get("priorAnswerHistoryOmittedCount") or 0,
         "targetedNeed": targeted_need,
     }
     if context.get("decisionValidationFeedback"):
@@ -1544,6 +1551,14 @@ def _interview_instruction(
         "downstream prompts. Preserve hedging/contradictions, choose ASK vs CLARIFY, and "
         "use the session-local workingStrategy only to adapt terminology and phrasing; "
         "never treat it as authoritative context or change guidanceVersion. "
+        "priorAnswerHistory carries the Customer's own verbatim wording from earlier "
+        "turns in this thread (bounded to the most recent entries, each comment/free "
+        "text truncated at a fixed length with a marker) - use it to recall exactly "
+        "what the Customer said before, especially for a FREE_TEXT/Other/commented "
+        "answer that publicThreadState.answerHistory only summarizes generically. "
+        "priorAnswerHistoryOmittedCount, if non-zero, means older entries beyond that "
+        "bound were dropped; do not assume no earlier answer exists just because it is "
+        "not listed. "
         "return only the typed InterviewResult candidate. HTTP persistence is not proof "
         "of sufficiency. PROVIDE_MORE_CONTEXT means author the next bounded question from "
         "the existing thread; do not restart a targeted Interview. "
