@@ -32,6 +32,60 @@ from tools.legal.retrieval.legal_basis.rule_applicability_evaluator import (
 
 _LOGGER = logging.getLogger(__name__)
 _INTERVIEW_AGENT_DECISION_REJECTION_REPAIRED = "INTERVIEW_AGENT_DECISION_REJECTION_REPAIRED"
+_INTERVIEW_AUTHORITY_PROVENANCE_REPAIRED = "INTERVIEW_AUTHORITY_PROVENANCE_REPAIRED"
+_CONFIRMATION_PROVENANCE_INSTRUCTION_KEY = (
+    "CONFIRMATION_PROVENANCE_REQUIRES_CONFIRM_ADJUST_OR_DIRECT_ASK"
+)
+_AUTHORITY_REPAIR_GUIDANCE = {
+    "INTERVIEW_CUSTOMER_CONFIRMED_REQUIRES_DIRECT_OR_EXPLICIT_CONFIRMATION": {
+        "instructionKey": _CONFIRMATION_PROVENANCE_INSTRUCTION_KEY,
+        "instruction": (
+            "CUSTOMER_CONFIRMED requires either a prior CONFIRM_ADJUST question "
+            "where the customer selected CONFIRM, or a direct ASK answer that was "
+            "not adjusted. CLARIFY BOOLEAN or SINGLE_SELECT answers never grant "
+            "CUSTOMER_CONFIRMED. If confirmation is still needed, ask a "
+            "CONFIRM_ADJUST question with CONFIRM and ADJUST choices, ADJUST "
+            "requiring free text, and proposedInterpretation set to the exact "
+            "statement to confirm. Otherwise keep CUSTOMER_STATED."
+        ),
+    },
+    "INTERVIEW_CONFIRMED_REQUIRES_DIRECT_ASK": {
+        "instructionKey": _CONFIRMATION_PROVENANCE_INSTRUCTION_KEY,
+        "instruction": (
+            "CONFIRMED authority requires a direct ASK answer that was not "
+            "adjusted. Do not use CONFIRMED for CLARIFY answers. If the prior "
+            "answer was not a direct ASK, keep CUSTOMER_STATED or ask the "
+            "customer a direct ASK question."
+        ),
+    },
+    "INTERVIEW_CONTEXT_READY_REQUIRES_AUTHORITY": {
+        "instructionKey": _CONFIRMATION_PROVENANCE_INSTRUCTION_KEY,
+        "instruction": (
+            "CONTEXT_READY requires CUSTOMER_CONFIRMED authority. If current "
+            "provenance is only CUSTOMER_STATED, ask a bounded CONFIRM_ADJUST "
+            "confirmation question or a direct ASK question instead of returning "
+            "CONTEXT_READY."
+        ),
+    },
+    "INTERVIEW_CONTEXT_RESOLVED_REQUIRES_AUTHORITY": {
+        "instructionKey": _CONFIRMATION_PROVENANCE_INSTRUCTION_KEY,
+        "instruction": (
+            "CONTEXT_RESOLVED requires authoritative customer-confirmed context "
+            "for the targeted need. If the latest answer does not satisfy the "
+            "authority provenance rule, ask CONFIRM_ADJUST or direct ASK rather "
+            "than resolving."
+        ),
+    },
+    "INTERVIEW_CONFIRMED_CONTEXT_INVALID": {
+        "instructionKey": _CONFIRMATION_PROVENANCE_INSTRUCTION_KEY,
+        "instruction": (
+            "Authoritative context requires structured confirmedContext statements "
+            "that reflect the latest valid customer-confirmed/direct answer. Do not "
+            "invent statements; if confirmation is missing, ask CONFIRM_ADJUST or "
+            "direct ASK and keep CUSTOMER_STATED."
+        ),
+    },
+}
 _INTERVIEW_HANDOFF_VALIDATION_REPAIRED = "INTERVIEW_HANDOFF_VALIDATION_REPAIRED"
 # _bounded_cause (orchestration.result_validation) renders each pydantic error as
 # "<loc>: Value error, <rule message>", joined with "; " for multiple errors. Extracting
@@ -48,6 +102,79 @@ def _violated_rule_names(error: BaseException) -> str:
         if (match := _VIOLATED_RULE_PATTERN.search(segment))
     ]
     return "; ".join(names) if names else "unknown"
+
+
+def _decision_feedback(error_code: str, rejected_decision: dict[str, Any]) -> dict[str, Any]:
+    feedback = {
+        "code": error_code,
+        "rejectedDecision": rejected_decision,
+    }
+    guidance = _AUTHORITY_REPAIR_GUIDANCE.get(error_code)
+    if guidance is not None:
+        feedback.update(guidance)
+    return feedback
+
+
+def _authority_provenance(private_revision: dict[str, Any] | None) -> dict[str, bool]:
+    if not isinstance(private_revision, dict):
+        return {"customer_confirmed": False, "confirmed": False}
+    answer = private_revision.get("answer")
+    if not isinstance(answer, dict):
+        answer = {}
+    question_control = str(private_revision.get("questionControl") or "").upper()
+    question_intent = str(private_revision.get("questionIntent") or "").upper()
+    confirmed = answer.get("confirmed") is True
+    adjusted = answer.get("adjusted") is True
+
+    # Keep this worker preflight in sync with apps/api
+    # assessment-interview-runtime.service.ts::assertAuthorityProvenance. The API
+    # remains the final guard; this mirror only prevents known impossible candidates
+    # from consuming a guarded POST and gives the model one private correction.
+    explicitly_confirmed = (
+        question_control == "CONFIRM_ADJUST" and confirmed and not adjusted
+    )
+    direct_lossless_customer_statement = (
+        question_intent == "ASK"
+        and question_control != "CONFIRM_ADJUST"
+        and not adjusted
+    )
+    return {
+        "customer_confirmed": (
+            explicitly_confirmed or direct_lossless_customer_statement
+        ),
+        "confirmed": direct_lossless_customer_statement,
+    }
+
+
+def _authority_error_code(decision: dict[str, Any], context: dict[str, Any]) -> str | None:
+    authority = str(decision.get("contextAuthority") or "").upper()
+    provenance = _authority_provenance(context.get("privateRevision"))
+    if authority == "CUSTOMER_CONFIRMED" and not provenance["customer_confirmed"]:
+        return "INTERVIEW_CUSTOMER_CONFIRMED_REQUIRES_DIRECT_OR_EXPLICIT_CONFIRMATION"
+    if authority == "CONFIRMED" and not provenance["confirmed"]:
+        return "INTERVIEW_CONFIRMED_REQUIRES_DIRECT_ASK"
+    return None
+
+
+def _apply_authority_preflight(
+    decision: dict[str, Any],
+    context: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    error_code = _authority_error_code(decision, context)
+    if error_code is None:
+        return decision, None
+
+    outcome = str(decision.get("outcome") or "").upper()
+    if outcome in {"CONTEXT_READY", "CONTEXT_RESOLVED"}:
+        return decision, _decision_feedback(error_code, decision)
+
+    downgraded = dict(decision)
+    downgraded["contextAuthority"] = "CUSTOMER_STATED"
+    # This does not discard the customer's answer. The answer is already persisted
+    # as API-owned privateRevision; the model-authored confirmedContext is only an
+    # authority claim candidate and must not be carried when provenance is invalid.
+    downgraded["confirmedContext"] = {}
+    return downgraded, None
 
 
 INTERVIEW_RESUME_COMMAND = "command.assessment-interview.resume-agent.v1"
@@ -268,6 +395,32 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 context=repair_context,
                 correlationId=correlationId,
             )
+        decision, authority_feedback = _apply_authority_preflight(decision, context)
+        if authority_feedback is not None:
+            _LOGGER.warning(
+                "%s assessment_id=%s question_id=%s context_revision=%s "
+                "instruction_key=%s",
+                _INTERVIEW_AUTHORITY_PROVENANCE_REPAIRED,
+                assessment_id,
+                question_id,
+                context_revision,
+                authority_feedback.get("instructionKey"),
+            )
+            repair_context = {
+                **context,
+                "decisionValidationFeedback": authority_feedback,
+            }
+            decision = self._run_interview(
+                assessment_id=assessment_id,
+                thread_id=thread_id,
+                question_id=question_id,
+                context_revision=context_revision,
+                resume_reason=resume_reason,
+                context=repair_context,
+                correlationId=correlationId,
+            )
+            decision, _ = _apply_authority_preflight(decision, context)
+
         try:
             guarded_state = api_client.post_interview_agent_decision(
                 assessment_id, decision,
@@ -278,18 +431,17 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             # this path, and the specialist gets exactly one private correction. Do
             # not log rejected text/meta here because some codes protect customer
             # surfaces from leaked internal language.
+            decision_feedback = _decision_feedback(exc.error_code, decision)
             _LOGGER.warning(
-                "%s assessment_id=%s question_id=%s context_revision=%s error_code=%s",
+                "%s assessment_id=%s question_id=%s context_revision=%s "
+                "error_code=%s instruction_key=%s",
                 _INTERVIEW_AGENT_DECISION_REJECTION_REPAIRED,
                 assessment_id,
                 question_id,
                 context_revision,
                 exc.error_code,
+                decision_feedback.get("instructionKey"),
             )
-            decision_feedback = {
-                "code": exc.error_code,
-                "rejectedDecision": decision,
-            }
             missing = getattr(exc, "missing", None)
             if isinstance(missing, str):
                 decision_feedback["missingCriteria"] = missing
@@ -1244,8 +1396,14 @@ def _interview_instruction(
         "Never return outcome=CONTEXT_READY while publicThreadState.contextAuthority is "
         "CUSTOMER_STATED; the platform requires CUSTOMER_CONFIRMED authority for "
         "CONTEXT_READY and rejects an unauthoritative CONTEXT_READY with no automatic "
-        "recovery beyond one bounded correction. Ask a bounded confirming question "
-        "(WAITING_FOR_CUSTOMER) instead of concluding CONTEXT_READY on stated-only context. "
+        "recovery beyond one bounded correction. Provenance rule: CUSTOMER_CONFIRMED "
+        "requires either a prior CONFIRM_ADJUST question where the customer selected "
+        "CONFIRM, or a direct ASK answer that was not adjusted. CLARIFY BOOLEAN or "
+        "SINGLE_SELECT answers never grant CUSTOMER_CONFIRMED. If confirmation is "
+        "needed, ask WAITING_FOR_CUSTOMER with control=CONFIRM_ADJUST, intent=CLARIFY, "
+        "choices exactly CONFIRM and ADJUST, ADJUST.requiresFreeText=true, and "
+        "proposedInterpretation set to the exact statement to confirm; otherwise keep "
+        "CUSTOMER_STATED. "
         "If decisionValidationFeedback is present, the prior candidate was rejected by the "
         "platform guard; re-evaluate rather than resubmit it unchanged. When its code is "
         "INTERVIEW_RESOLUTION_CRITERIA_UNSATISFIED, the candidate did not resolve the "

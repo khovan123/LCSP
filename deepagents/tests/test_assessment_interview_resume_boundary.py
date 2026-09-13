@@ -22,6 +22,8 @@ from tools.common.capabilities.platform.api_client import (
 from tools.common.capabilities.workflow.recovery.interview_boundary import (
     AssessmentInterviewResumeBoundary,
     INTERVIEW_RESUME_COMMAND,
+    _apply_authority_preflight,
+    _authority_provenance,
 )
 
 
@@ -146,6 +148,8 @@ class RecordingApi:
             },
             "privateRevision": {
                 "actorId": "user-test-actor",
+                "questionIntent": "ASK",
+                "questionControl": "FREE_TEXT",
                 "answer": {"freeText": "raw"},
             },
         }
@@ -170,6 +174,61 @@ def _message(*, reason="INTERVIEW_AGENT_DECISION_REQUIRED", revision=2):
         "resumeReason": reason,
     }
 
+
+
+
+@pytest.mark.parametrize(
+    ("intent", "control", "answer", "expected_customer_confirmed", "expected_confirmed"),
+    [
+        ("CLARIFY", "BOOLEAN", {"selectedChoiceIds": ["yes"]}, False, False),
+        ("CLARIFY", "SINGLE_SELECT", {"selectedChoiceIds": ["yes"]}, False, False),
+        ("CLARIFY", "CONFIRM_ADJUST", {"confirmed": True}, True, False),
+        ("CLARIFY", "CONFIRM_ADJUST", {"adjusted": True, "freeText": "change"}, False, False),
+        ("ASK", "FREE_TEXT", {"freeText": "yes"}, True, True),
+        ("ASK", "SINGLE_SELECT", {"selectedChoiceIds": ["yes"]}, True, True),
+        ("ASK", "SINGLE_SELECT", {"selectedChoiceIds": ["yes"], "adjusted": True}, False, False),
+    ],
+)
+def test_authority_preflight_matches_api_provenance_matrix(
+    intent,
+    control,
+    answer,
+    expected_customer_confirmed,
+    expected_confirmed,
+):
+    provenance = _authority_provenance({
+        "questionIntent": intent,
+        "questionControl": control,
+        "answer": answer,
+    })
+
+    assert provenance == {
+        "customer_confirmed": expected_customer_confirmed,
+        "confirmed": expected_confirmed,
+    }
+
+
+def test_authority_preflight_downgrades_nonterminal_without_losing_private_revision():
+    private_revision = {
+        "questionIntent": "CLARIFY",
+        "questionControl": "BOOLEAN",
+        "answer": {"selectedChoiceIds": ["yes"]},
+    }
+    decision = {
+        **deepcopy(WAITING_HANDOFF),
+        "contextAuthority": "CUSTOMER_CONFIRMED",
+        "confirmedContext": {"statements": [{"topic": "authority"}]},
+    }
+
+    prepared, feedback = _apply_authority_preflight(
+        decision, {"privateRevision": private_revision}
+    )
+
+    assert feedback is None
+    assert prepared["contextAuthority"] == "CUSTOMER_STATED"
+    assert prepared["confirmedContext"] == {}
+    assert private_revision["answer"] == {"selectedChoiceIds": ["yes"]}
+    assert decision["confirmedContext"] == {"statements": [{"topic": "authority"}]}
 
 @pytest.mark.parametrize("corrected_outcome", ["WAITING_FOR_CUSTOMER", "CONTEXT_RESOLVED"])
 def test_resolution_rejection_gets_one_private_correction_before_continuation(corrected_outcome):
@@ -298,6 +357,57 @@ def test_allowlisted_api_rejection_gets_one_private_correction_with_safe_log(cap
     assert api.post_interview_agent_decision.call_count == 2
     boundary._run_guarded_continuation.assert_called_once()
 
+
+
+
+def test_local_authority_preflight_gives_confirm_adjust_feedback_before_post(caplog):
+    api = RecordingApi()
+    context = api.get_interview_private_context("assessment-1", 2)
+    context["privateRevision"] = {
+        "actorId": "user-test-actor",
+        "questionIntent": "CLARIFY",
+        "questionControl": "BOOLEAN",
+        "answer": {"selectedChoiceIds": ["yes"]},
+    }
+    api.get_interview_private_context = Mock(return_value=context)
+    api.post_interview_progress = Mock()
+    rejected = {
+        **deepcopy(WAITING_HANDOFF),
+        "mode": "INITIAL_INTERVIEW",
+        "outcome": "CONTEXT_READY",
+        "activeQuestion": None,
+        "contextAuthority": "CUSTOMER_CONFIRMED",
+        "confirmedContext": {"statements": [{"topic": "decision_authority"}]},
+    }
+    corrected = {**deepcopy(WAITING_HANDOFF), "mode": "INITIAL_INTERVIEW"}
+    dispatcher = RecordingDispatcher()
+    dispatcher.dispatch = Mock(side_effect=[{"handoff": rejected}, {"handoff": corrected}])
+    boundary = AssessmentInterviewResumeBoundary(
+        SimpleNamespace(), api_client=api, dispatcher=dispatcher
+    )
+    boundary._run_guarded_continuation = Mock()
+
+    with caplog.at_level(
+        "WARNING", logger="tools.common.capabilities.workflow.recovery.interview_boundary"
+    ):
+        boundary.handle(_message(), "corr-1")
+
+    assert len(api.decision_posts) == 1
+    assert api.decision_posts[0][1]["outcome"] == "WAITING_FOR_CUSTOMER"
+    repair_payload = json.loads(
+        dispatcher.dispatch.call_args_list[1].kwargs["instruction"].split("\n\n", 1)[1]
+    )
+    feedback = repair_payload["decisionValidationFeedback"]
+    assert feedback["code"] == (
+        "INTERVIEW_CUSTOMER_CONFIRMED_REQUIRES_DIRECT_OR_EXPLICIT_CONFIRMATION"
+    )
+    assert feedback["instructionKey"] == (
+        "CONFIRMATION_PROVENANCE_REQUIRES_CONFIRM_ADJUST_OR_DIRECT_ASK"
+    )
+    assert "CONFIRM_ADJUST" in feedback["instruction"]
+    assert "CLARIFY BOOLEAN or SINGLE_SELECT" in feedback["instruction"]
+    assert "INTERVIEW_AUTHORITY_PROVENANCE_REPAIRED" in caplog.text
+    assert "instruction_key=CONFIRMATION_PROVENANCE_REQUIRES_CONFIRM_ADJUST_OR_DIRECT_ASK" in caplog.text
 
 def test_context_ready_authority_rejection_gets_one_private_correction_before_continuation():
     api = RecordingApi()
@@ -444,6 +554,8 @@ def test_interview_resume_boundary_passes_private_context_only_to_interview_and_
     assert '"human oversight": "manual review"' in instruction
     assert "use the session-local workingStrategy only to adapt terminology and phrasing" in instruction
     assert "every WAITING_FOR_CUSTOMER activeQuestion MUST include frontier" in instruction
+    assert "CLARIFY BOOLEAN or SINGLE_SELECT answers never grant CUSTOMER_CONFIRMED" in instruction
+    assert "control=CONFIRM_ADJUST" in instruction
     assert "never use sourceVersion, pgeVersion, raw artifact ids" in instruction
     assert root.calls == []
     assert len(api.decision_posts) == 1
