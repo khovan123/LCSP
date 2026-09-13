@@ -100,9 +100,10 @@ describe("PrismaRepositoryScanJobRepository", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    const findFirst = jest.fn<
-      (args: Record<string, unknown>) => Promise<typeof record | null>
-    >();
+    const findFirst =
+      jest.fn<
+        (args: Record<string, unknown>) => Promise<typeof record | null>
+      >();
     findFirst.mockResolvedValue(record);
     const repository = new PrismaRepositoryScanJobRepository(
       {
