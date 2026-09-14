@@ -2224,7 +2224,8 @@ export class AssessmentInterviewRuntimeService {
         expiresAt: Date.now() + PROVENANCE_CACHE_TTL_MS,
       });
       while (this.provenanceCache.size > PROVENANCE_CACHE_MAX_ENTRIES) {
-        const oldestKey = this.provenanceCache.keys().next().value;
+        const oldestKey: string | undefined = this.provenanceCache.keys().next()
+          .value as string | undefined;
         if (oldestKey === undefined) {
           break;
         }

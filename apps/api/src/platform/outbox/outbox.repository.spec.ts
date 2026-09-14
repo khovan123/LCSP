@@ -294,6 +294,7 @@ describe("OutboxRepository", () => {
 
       expect(upsert).toHaveBeenCalledWith(
         expect.objectContaining({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           where: { id: expect.stringMatching(/^outbox:/u) },
           update: {},
         }),
