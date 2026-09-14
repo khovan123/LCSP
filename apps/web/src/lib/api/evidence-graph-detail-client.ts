@@ -1,4 +1,8 @@
-import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
+import {
+  ASSESSMENT_TECHNICAL_COVERAGE_STATES,
+  EVIDENCE_ERROR_CODES,
+} from "@lcsp/contracts/evidence";
+import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 
 import { apiRequest } from "./api-request.ts";
 
@@ -69,11 +73,12 @@ export type ProgramEvidenceGraphDetail = {
 };
 
 export const PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES = {
-  ready: "READY",
-  pending: "PENDING",
-  failed: "FAILED",
+  ready: ASSESSMENT_TECHNICAL_COVERAGE_STATES.ready,
+  // UI load state for EVIDENCE_NOT_READY: the graph is still being built.
+  pending: "BUILDING",
+  failed: REPOSITORY_SCAN_JOB_STATUSES.failed,
   notFound: "NOT_FOUND",
-  unavailable: "UNAVAILABLE",
+  unavailable: ASSESSMENT_TECHNICAL_COVERAGE_STATES.unavailable,
 } as const;
 
 export type ProgramEvidenceGraphDetailLoadState =
