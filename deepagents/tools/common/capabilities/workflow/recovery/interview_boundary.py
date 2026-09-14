@@ -672,7 +672,11 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             return
 
         server_workflow_run_id = _required_text(context, "workflowRunId")
-        if server_workflow_run_id != command_workflow_run_id:
+        root_workflow_run_id = context.get("rootWorkflowRunId")
+        if server_workflow_run_id != command_workflow_run_id and (
+            not isinstance(root_workflow_run_id, str)
+            or root_workflow_run_id != command_workflow_run_id
+        ):
             raise ValueError(
                 "assessment Interview resume command workflowRunId does not match "
                 "the server-owned Interview workflow run"
