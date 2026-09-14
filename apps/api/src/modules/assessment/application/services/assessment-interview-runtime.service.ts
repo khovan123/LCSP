@@ -1065,6 +1065,9 @@ export class AssessmentInterviewRuntimeService {
       thread.privateRevisions,
       input.contextRevision,
     );
+    this.logger.log(
+      `getPrivateContextForWorker assessment=${input.assessmentId} requested=${input.contextRevision} threadContext=${thread.contextRevision} processed=${thread.processedRevision} status=${status} hasStateConfirmed=${!!thread.state.confirmedContext} hasPrivateRevision=${!!privateRevision} sourceVersion=${authoritative.sourceVersion} threadSource=${thread.sourceVersion} hasTargetedNeed=${!!thread.privateStore.targetedNeed}`,
+    );
     return {
       status,
       assessmentId: input.assessmentId,
