@@ -2011,7 +2011,7 @@ export class AssessmentInterviewRuntimeService {
       actor: { id: input.actorId, type: AUDIT_ACTOR_TYPES.user },
       result: ASSESSMENT_EVENT_TYPES.interviewAnswerSubmitted,
       redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
-      idempotencyKey: `${input.assessmentId}:${input.contextRevision}:${input.resumeReason}:${input.questionId}:${ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox}`,
+      idempotencyKey: `${input.assessmentId}:${input.contextRevision}:${input.resumeReason}:${input.questionId}:${input.workflowRunId}:${ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox}`,
       payload: {
         assessmentId: input.assessmentId,
         threadId: this.threadId(input.assessmentId),
