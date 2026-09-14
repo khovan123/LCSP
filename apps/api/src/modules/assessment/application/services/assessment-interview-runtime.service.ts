@@ -1046,9 +1046,18 @@ export class AssessmentInterviewRuntimeService {
     });
     const authenticatedActorId =
       privateRevision?.actorId || assessment?.ownerId;
-    const workflowRunId =
-      thread.privateStore.targetedContinuation?.workflowRunId ??
-      thread.privateStore.workflowRunId;
+    const workflowRunId = (() => {
+      const currentWorkflowRunId =
+        thread.privateStore.targetedContinuation?.workflowRunId ??
+        thread.privateStore.workflowRunId;
+      if (
+        thread.privateStore.targetedNeed &&
+        input.contextRevision < thread.contextRevision
+      ) {
+        return thread.privateStore.workflowRunId ?? currentWorkflowRunId;
+      }
+      return currentWorkflowRunId;
+    })();
     const {
       items: priorAnswerHistory,
       omittedCount: priorAnswerHistoryOmittedCount,
