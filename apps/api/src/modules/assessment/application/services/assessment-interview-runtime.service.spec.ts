@@ -261,7 +261,33 @@ function readyTechnicalEvidenceReport(): Record<string, unknown> {
   };
 }
 
+function targetedNeedRegistrationPayload(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    actorId: "investigator-1",
+    needId: "need-data-residency",
+    businessContextNeed: "Clarify cloud provider region",
+    resolutionCriteria: ["Customer specifies AWS or GCP region"],
+    whyNeeded: "This determines the operational deployment location.",
+    governedEvidenceRefs: ["evidence:region-config"],
+    originatingInvestigationReference: "inv-ref-404",
+    investigatorExecutionId: "exec-1",
+    workflowRunId: "10000000-0000-4000-8000-000000000010",
+    checkpointId: "cp-1",
+    affectedRuleIds: ["rule-1"],
+    artifactVersions: {
+      technicalEvidenceReportId: "report-1",
+      repositorySnapshotId: "snap-1",
+      legalRuleCatalogVersionId: "catalog-1",
+      legalCorpusVersionId: "corpus-1",
+    },
+    ...overrides,
+  };
+}
+
 type MockPrismaDelegates = {
+  $queryRaw: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
   assessment: {
     findUnique: jest.Mock<() => Promise<{ id: string; ownerId: string }>>;
   };
@@ -434,6 +460,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
   beforeEach(() => {
     findHistoricalQuestion.mockReset().mockResolvedValue(null);
     mockTx = {
+      $queryRaw: jest
+        .fn<(...args: unknown[]) => Promise<unknown>>()
+        .mockResolvedValue([]),
       assessment: {
         findUnique: jest
           .fn<() => Promise<{ id: string; ownerId: string }>>()
@@ -1524,6 +1553,69 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       );
     });
 
+    it("treats retry of the same targeted need as an idempotent success", async () => {
+      const waitingState: AssessmentInterviewRuntimeState = {
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        contextRevision: 2,
+        orchestrationRequested: true,
+      };
+
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
+        assessmentId: "assessment-1",
+        contextRevision: 2,
+        processedRevision: 2,
+        activeQuestionId: null,
+        stateJson: waitingState,
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+          targetedNeed: {
+            needId: "need-data-residency",
+            businessContextNeed: "Clarify cloud provider region",
+            resolutionCriteria: ["Customer specifies AWS or GCP region"],
+            whyNeeded: "This determines the operational deployment location.",
+            governedEvidenceRefs: ["evidence:region-config"],
+            originatingInvestigationReference: "inv-ref-404",
+            sourceVersion: "snap-1:sha-123456",
+            pgeVersion: "report-1:v1",
+          },
+          targetedContinuation: {
+            originatingInvestigationReference: "inv-ref-404",
+            investigatorExecutionId: "exec-1",
+            workflowRunId: "10000000-0000-4000-8000-000000000010",
+            checkpointId: "cp-1",
+            affectedRuleIds: ["rule-1"],
+            artifactVersions: {
+              technicalEvidenceReportId: "report-1",
+              repositorySnapshotId: "snap-1",
+              legalRuleCatalogVersionId: "catalog-1",
+              legalCorpusVersionId: "corpus-1",
+            },
+            sourceVersion: "snap-1:sha-123456",
+            pgeVersion: "report-1:v1",
+          },
+        },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+      });
+
+      await expect(
+        service.registerTargetedNeedForWorker({
+          assessmentId: "assessment-1",
+          correlationId: "corr-target-retry",
+          target: targetedNeedRegistrationPayload() as never,
+        }),
+      ).resolves.toEqual(waitingState);
+
+      expect(mockTx.technicalEvidenceReport.findFirst).not.toHaveBeenCalled();
+      expect(mockTx.assessmentInterviewThread.upsert).not.toHaveBeenCalled();
+      expect(mockOutboxRepository.enqueue).not.toHaveBeenCalled();
+      expect(
+        mockInterviewAudit.recordTargetedClarification,
+      ).not.toHaveBeenCalled();
+      expect(mockRuntimeEvents.recordToolWaitingInput).not.toHaveBeenCalled();
+    });
+
     it("rejects incomplete targeted needs and missing immutable artifact pins", async () => {
       const readyState: AssessmentInterviewRuntimeState = {
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
@@ -1982,6 +2074,39 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       expect(result.outcome).toBe(ASSESSMENT_INTERVIEW_OUTCOMES.contextReady);
     });
 
+    it("does not expose internal orchestration tokens as public ready chat text", async () => {
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValue(
+        readyTechnicalEvidenceReport() as never,
+      );
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        initialInterviewThreadFixture(),
+      );
+
+      const state = await service.recordAgentDecision({
+        assessmentId: "assessment-1",
+        correlationId: "corr-internal-token-rationale",
+        decision: {
+          expectedContextRevision: 1,
+          mode: "INITIAL_INTERVIEW",
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+          contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+          rationale:
+            "CUSTOMER_CONFIRMED authority satisfied CONTEXT_READY resolutionCriteria.",
+          confirmedContext: confirmedStructuredContext({
+            contextRevision: 1,
+            statements: initialPlanningReadyStatements(),
+          }),
+        },
+      });
+
+      expect(state.assistantMessage).toBe(
+        "The baseline business context has been confirmed. The assessment can now continue to planning and investigation. Additional rule-specific questions may still be asked if needed.",
+      );
+      expect(state.assistantMessage).not.toContain("CUSTOMER_CONFIRMED");
+      expect(state.assistantMessage).not.toContain("CONTEXT_READY");
+      expect(state.assistantMessage).not.toContain("resolutionCriteria");
+    });
+
     it("treats explicit human-review and advisory-only statements as resolved but still asks for missing dimensions", async () => {
       mockTx.technicalEvidenceReport.findFirst.mockResolvedValueOnce(
         readyTechnicalEvidenceReport() as never,
@@ -2337,7 +2462,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
 
       expect(result.outcome).toBe(ASSESSMENT_INTERVIEW_OUTCOMES.contextReady);
       expect(result.assistantMessage).toBe(
-        "I have enough confirmed business context to continue the assessment.",
+        "The baseline business context has been confirmed. The assessment can now continue to planning and investigation. Additional rule-specific questions may still be asked if needed.",
       );
       const stateUpdate = mockTx.assessmentInterviewThread.updateMany.mock
         .calls[0]?.[0] as {
@@ -2345,7 +2470,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       };
       expect(stateUpdate.data?.stateJson).toMatchObject({
         assistantMessage:
-          "I have enough confirmed business context to continue the assessment.",
+          "The baseline business context has been confirmed. The assessment can now continue to planning and investigation. Additional rule-specific questions may still be asked if needed.",
       });
       expect(mockRuntimeEvents.recordToolCompleted).toHaveBeenCalledWith(
         expect.objectContaining({

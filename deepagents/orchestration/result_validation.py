@@ -183,6 +183,7 @@ def _normalize_investigator_payload(
         # Lossless provider-shape repair runs on every attempt so a safely repairable
         # response never costs another model call. Fail-closed downgrades stay gated.
         claim = _normalize_not_met_null_value_shape(claim)
+        claim = _normalize_unresolved_shape(claim)
         if allow_fail_closed_recovery:
             claim = _fail_closed_investigator_claim(claim)
         normalized_claims.append(claim)
@@ -221,6 +222,30 @@ def _normalize_not_met_null_value_shape(claim: dict[str, Any]) -> dict[str, Any]
         claim.get("claim_id"),
     )
     return candidate
+
+
+def _normalize_unresolved_shape(claim: dict[str, Any]) -> dict[str, Any]:
+    """Repair provider drift that is fixed by the UNRESOLVED variant itself."""
+    if claim.get("claim_type") != ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]:
+        return claim
+    normalized = dict(claim)
+    changed = False
+    if normalized.get("value") is not None:
+        normalized["value"] = None
+        changed = True
+    limitations = normalized.get("limitations")
+    if not isinstance(limitations, list) or not limitations:
+        normalized["limitations"] = [
+            ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]
+        ]
+        changed = True
+    if changed:
+        _LOGGER.warning(
+            "%s claim_id=%s reason=unresolved_value_or_limitations",
+            _INVESTIGATOR_CLAIM_VALUE_SHAPE_NORMALIZED,
+            claim.get("claim_id"),
+        )
+    return normalized
 
 
 def _fail_closed_investigator_claim(claim: dict[str, Any]) -> dict[str, Any]:

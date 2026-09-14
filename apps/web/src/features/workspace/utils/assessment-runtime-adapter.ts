@@ -78,18 +78,20 @@ const APPROVED_BLOCKED_ACTIONS = new Set<AssessmentInterviewBlockedAction>([
 export function normalizeAssessmentRuntime(
   params: NormalizeAssessmentRuntimeParams,
 ): NormalizedAssessmentRuntime {
-  const { assessmentId, interviewState: rawInterviewInput, timeline: rawTimeline, coverageOverride } = params;
+  const {
+    assessmentId,
+    interviewState: rawInterviewInput,
+    timeline: rawTimeline,
+    coverageOverride,
+  } = params;
 
   // 1. Unwrap interview query/data state
-  const {
-    interviewData,
-    isLoadingInterview,
-    isInterviewError,
-    dataUpdatedAt,
-  } = extractInterviewInput(rawInterviewInput);
+  const { interviewData, isLoadingInterview, isInterviewError, dataUpdatedAt } =
+    extractInterviewInput(rawInterviewInput);
 
   const connectionState: WorkspaceRuntimeConnectionState =
-    rawTimeline?.connectionState ?? WORKSPACE_RUNTIME_CONNECTION_STATES.connected;
+    rawTimeline?.connectionState ??
+    WORKSPACE_RUNTIME_CONNECTION_STATES.connected;
 
   const contractErrors: string[] = [];
   const missingFields: string[] = [];
@@ -105,7 +107,8 @@ export function normalizeAssessmentRuntime(
 
   // Check question-outcome invariant
   if (sanitizedInterview) {
-    const isValidInvariant = hasValidInterviewWaitingInvariant(sanitizedInterview);
+    const isValidInvariant =
+      hasValidInterviewWaitingInvariant(sanitizedInterview);
     if (!isValidInvariant) {
       contractErrors.push(
         `Invalid interview invariant: activeQuestion present but outcome is ${sanitizedInterview.outcome}`,
@@ -114,13 +117,15 @@ export function normalizeAssessmentRuntime(
   }
 
   // 3. Identity normalization
-  const audit: AssessmentInterviewAuditRef | null = sanitizedInterview?.audit ?? null;
+  const audit: AssessmentInterviewAuditRef | null =
+    sanitizedInterview?.audit ?? null;
   const identity: NormalizedAssessmentIdentity = {
     assessmentId,
     threadId: sanitizedInterview?.threadId ?? null,
     authenticatedActorId: audit?.authenticatedActorId ?? null,
     audit,
-    contextRevision: sanitizedInterview?.contextRevision ?? audit?.contextRevision ?? null,
+    contextRevision:
+      sanitizedInterview?.contextRevision ?? audit?.contextRevision ?? null,
     priorRevision: audit?.priorRevision ?? null,
     newRevision: audit?.newRevision ?? null,
   };
@@ -179,16 +184,21 @@ export function normalizeAssessmentRuntime(
   });
 
   // 9. Derive authoritative presentation availability
-  let availability: AssessmentRuntimeAvailability = ASSESSMENT_RUNTIME_AVAILABILITIES.ready;
+  let availability: AssessmentRuntimeAvailability =
+    ASSESSMENT_RUNTIME_AVAILABILITIES.ready;
   if (contractErrors.length > 0) {
     availability = ASSESSMENT_RUNTIME_AVAILABILITIES.invalid;
   } else if (isLoadingInterview) {
     availability = ASSESSMENT_RUNTIME_AVAILABILITIES.loading;
-  } else if (connectionState === WORKSPACE_RUNTIME_CONNECTION_STATES.disconnected) {
+  } else if (
+    connectionState === WORKSPACE_RUNTIME_CONNECTION_STATES.disconnected
+  ) {
     availability = ASSESSMENT_RUNTIME_AVAILABILITIES.disconnected;
   } else if (isInterviewError) {
     availability = ASSESSMENT_RUNTIME_AVAILABILITIES.unavailable;
-  } else if (coverage.state === ASSESSMENT_TECHNICAL_COVERAGE_STATES.unavailable) {
+  } else if (
+    coverage.state === ASSESSMENT_TECHNICAL_COVERAGE_STATES.unavailable
+  ) {
     availability = ASSESSMENT_RUNTIME_AVAILABILITIES.unavailable;
   }
 
@@ -260,7 +270,11 @@ function extractInterviewInput(input: unknown) {
   }
 
   const queryLike = input as AdapterInterviewStateInput;
-  if ("data" in queryLike || "isLoading" in queryLike || "isError" in queryLike) {
+  if (
+    "data" in queryLike ||
+    "isLoading" in queryLike ||
+    "isError" in queryLike
+  ) {
     return {
       interviewData: queryLike.data ?? null,
       isLoadingInterview: Boolean(queryLike.isLoading),
@@ -294,7 +308,9 @@ function normalizeCoverage({
       limitations: coverageOverride.limitations ?? [],
       policyDecision: coverageOverride.policyDecision ?? null,
       recovery: {
-        isUnavailable: coverageOverride.state === ASSESSMENT_TECHNICAL_COVERAGE_STATES.unavailable,
+        isUnavailable:
+          coverageOverride.state ===
+          ASSESSMENT_TECHNICAL_COVERAGE_STATES.unavailable,
         reason: coverageOverride.recoveryReason ?? null,
       },
     };
@@ -349,6 +365,10 @@ function normalizeWorkflow({
     timeline?.recentActivity ?? [],
     latestRunId,
   );
+  const engineeringProgress = scopeEngineeringProgress(
+    timeline?.engineeringProgress ?? [],
+    latestRunId,
+  );
 
   // Targeted clarification loop detection:
   // e.g. Investigator paused / waiting for business context + Interview active/clarifying
@@ -367,21 +387,29 @@ function normalizeWorkflow({
 
   const isTargetedClarificationLoop =
     (hasInvestigatorWaiting && isClarifyingQuestion) ||
-    (sanitizedInterview?.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved &&
-      Boolean(sanitizedInterview.flags?.includes(ASSESSMENT_INTERVIEW_FLAGS.downstreamImpact)));
+    (sanitizedInterview?.outcome ===
+      ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved &&
+      Boolean(
+        sanitizedInterview.flags?.includes(
+          ASSESSMENT_INTERVIEW_FLAGS.downstreamImpact,
+        ),
+      ));
 
   return {
-    stage: currentRun?.stage ?? (recentActivity[0]?.stage ?? null),
-    status: currentRun?.status ?? (recentActivity[0]?.runStatus ?? null),
+    stage: currentRun?.stage ?? recentActivity[0]?.stage ?? null,
+    status: currentRun?.status ?? recentActivity[0]?.runStatus ?? null,
     currentRunId: latestRunId,
     activeTools: currentRun?.activeTools ?? [],
     recentActivity,
-    lastEmittedAt: timeline?.lastEmittedAt ?? (recentActivity[0]?.emittedAt ?? null),
+    engineeringProgress,
+    lastEmittedAt:
+      timeline?.lastEmittedAt ?? recentActivity[0]?.emittedAt ?? null,
     isTargetedClarificationLoop,
     latestRun: currentRun,
     steps: normalizeWorkflowSteps({
       currentRun,
       recentActivity,
+      engineeringProgress,
       repositorySnapshot,
       sanitizedInterview,
     }),
@@ -397,6 +425,17 @@ function scopeRuntimeActivity(
   }
 
   return recentActivity.filter((item) => item.runId === latestRunId);
+}
+
+function scopeEngineeringProgress(
+  progress: NonNullable<AdapterTimelineInput["engineeringProgress"]>,
+  latestRunId: string | null,
+): NonNullable<AdapterTimelineInput["engineeringProgress"]> {
+  if (!latestRunId) {
+    return progress;
+  }
+
+  return progress.filter((item) => item.runId === latestRunId);
 }
 
 function normalizeRepository(
@@ -423,32 +462,63 @@ function normalizeRepository(
 function normalizeWorkflowSteps({
   currentRun,
   recentActivity,
+  engineeringProgress,
   repositorySnapshot,
   sanitizedInterview,
 }: {
   currentRun: WorkspaceRuntimeRun | null;
   recentActivity: WorkspaceRuntimeActivityItem[];
+  engineeringProgress: NonNullable<AdapterTimelineInput["engineeringProgress"]>;
   repositorySnapshot: AdapterTimelineInput["repositorySnapshot"];
   sanitizedInterview: AssessmentInterviewRuntimeState | null;
 }): NormalizedWorkflowStep[] {
   const defaultSteps = [
-    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.repository, "pages.appShell.runtimePanelRepository"],
-    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.scanner, "pages.appShell.assessmentSidebar.workflow.scanner"],
-    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.interview, "pages.appShell.assessmentSidebar.workflow.interview"],
-    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.rules, "pages.appShell.assessmentSidebar.workflow.rules"],
-    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.planner, "pages.appShell.assessmentSidebar.workflow.planner"],
-    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.investigate, "pages.appShell.assessmentSidebar.workflow.investigate"],
-    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.gate, "pages.appShell.assessmentSidebar.workflow.gate"],
+    [
+      ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.repository,
+      "pages.appShell.runtimePanelRepository",
+    ],
+    [
+      ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.scanner,
+      "pages.appShell.assessmentSidebar.workflow.scanner",
+    ],
+    [
+      ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.interview,
+      "pages.appShell.assessmentSidebar.workflow.interview",
+    ],
+    [
+      ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.rules,
+      "pages.appShell.assessmentSidebar.workflow.rules",
+    ],
+    [
+      ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.planner,
+      "pages.appShell.assessmentSidebar.workflow.planner",
+    ],
+    [
+      ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.investigate,
+      "pages.appShell.assessmentSidebar.workflow.investigate",
+    ],
+    [
+      ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.gate,
+      "pages.appShell.assessmentSidebar.workflow.gate",
+    ],
   ] as const;
   const steps = new Map<string, NormalizedWorkflowStep>([
-    ...defaultSteps.map(([id, labelKey]) => [id, {
-      id,
-      label: resolveMessage(appLocale, labelKey as MessageKey),
-      status: id === ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.repository && repositorySnapshot
-        ? NORMALIZED_WORKFLOW_STEP_STATUSES.completed
-        : NORMALIZED_WORKFLOW_STEP_STATUSES.queued,
-      detail: null,
-    } satisfies NormalizedWorkflowStep] as const),
+    ...defaultSteps.map(
+      ([id, labelKey]) =>
+        [
+          id,
+          {
+            id,
+            label: resolveMessage(appLocale, labelKey as MessageKey),
+            status:
+              id === ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.repository &&
+              repositorySnapshot
+                ? NORMALIZED_WORKFLOW_STEP_STATUSES.completed
+                : NORMALIZED_WORKFLOW_STEP_STATUSES.queued,
+            detail: null,
+          } satisfies NormalizedWorkflowStep,
+        ] as const,
+    ),
   ]);
   for (const activity of [...recentActivity].reverse()) {
     const id = workflowStepIdForRuntimeActivity(activity);
@@ -464,12 +534,14 @@ function normalizeWorkflowSteps({
           : null,
     });
   }
-  applyEngineeringRuleStepDetails(steps, recentActivity);
+  applyEngineeringRuleStepDetails(steps, recentActivity, engineeringProgress);
   if (currentRun) {
     const id = workflowStepIdForRun(currentRun);
     steps.set(id, {
       id,
-      label: steps.has(id) ? steps.get(id)!.label : stageLabel(currentRun.stage),
+      label: steps.has(id)
+        ? steps.get(id)!.label
+        : stageLabel(currentRun.stage),
       status: normalizeStepStatus(currentRun.status),
       detail: null,
     });
@@ -497,11 +569,18 @@ function normalizeWorkflowSteps({
 function applyEngineeringRuleStepDetails(
   steps: Map<string, NormalizedWorkflowStep>,
   recentActivity: WorkspaceRuntimeActivityItem[],
+  engineeringProgress: NonNullable<AdapterTimelineInput["engineeringProgress"]>,
 ): void {
-  const items = projectRuntimeThinking(recentActivity);
+  const items = projectRuntimeThinking(recentActivity, engineeringProgress);
   for (const [stepId, phase] of [
-    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.planner, RUNTIME_THINKING_PHASES.planner],
-    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.investigate, RUNTIME_THINKING_PHASES.investigator],
+    [
+      ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.planner,
+      RUNTIME_THINKING_PHASES.planner,
+    ],
+    [
+      ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.investigate,
+      RUNTIME_THINKING_PHASES.investigator,
+    ],
   ] as const) {
     const step = steps.get(stepId);
     const detail = items
@@ -514,7 +593,9 @@ function applyEngineeringRuleStepDetails(
   }
 }
 
-const TERMINAL_WORKFLOW_STEP_STATUSES = new Set<NormalizedWorkflowStep["status"]>([
+const TERMINAL_WORKFLOW_STEP_STATUSES = new Set<
+  NormalizedWorkflowStep["status"]
+>([
   NORMALIZED_WORKFLOW_STEP_STATUSES.completed,
   NORMALIZED_WORKFLOW_STEP_STATUSES.skipped,
   NORMALIZED_WORKFLOW_STEP_STATUSES.failed,
@@ -610,7 +691,9 @@ function normalizeInterviewStepStatus(
 function workflowStepIdForRun(run: WorkspaceRuntimeRun): string {
   const activeToolName =
     run.activeTools.find((tool) =>
-      tool.toolName.startsWith(ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES.investigator),
+      tool.toolName.startsWith(
+        ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES.investigator,
+      ),
     )?.toolName ??
     run.activeTools.find((tool) =>
       tool.toolName.startsWith(ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES.planner),
@@ -625,7 +708,10 @@ function workflowStepIdForRuntimeActivity(
   return workflowStepIdForStage(activity.stage, activity.toolName);
 }
 
-function workflowStepIdForStage(stage: string, toolName: string | null): string {
+function workflowStepIdForStage(
+  stage: string,
+  toolName: string | null,
+): string {
   if (toolName === ENGINEERING_RULE_GATE_TOOL_NAME) {
     return ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.gate;
   }
@@ -641,7 +727,9 @@ function workflowStepIdForStage(stage: string, toolName: string | null): string 
   if (stage !== ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence) {
     return stage;
   }
-  if (toolName?.startsWith(ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES.investigator)) {
+  if (
+    toolName?.startsWith(ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES.investigator)
+  ) {
     return ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.investigate;
   }
   if (toolName?.startsWith(ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES.planner)) {
@@ -758,7 +846,9 @@ function normalizeInterview({
   }
 
   const flags = sanitizedInterview.flags ?? [];
-  const hasDownstreamImpact = flags.includes(ASSESSMENT_INTERVIEW_FLAGS.downstreamImpact);
+  const hasDownstreamImpact = flags.includes(
+    ASSESSMENT_INTERVIEW_FLAGS.downstreamImpact,
+  );
 
   // Filter blockedActions to only approved semantic actions when outcome is BLOCKED_OR_UNRESOLVED
   let blockedActions: AssessmentInterviewBlockedAction[] = [];
@@ -779,7 +869,10 @@ function normalizeInterview({
 
   // Active question normalization
   let activeQuestion: AssessmentInterviewQuestion | null = null;
-  if (outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer && sanitizedInterview.activeQuestion) {
+  if (
+    outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
+    sanitizedInterview.activeQuestion
+  ) {
     activeQuestion = sanitizedInterview.activeQuestion;
   }
 
@@ -794,7 +887,9 @@ function normalizeInterview({
     answerHistory: sanitizedInterview.answerHistory ?? [],
     pendingDraft: sanitizedInterview.pendingDraft ?? null,
     orchestrationRequested: Boolean(sanitizedInterview.orchestrationRequested),
-    stale: sanitizedInterview.contextAuthority === ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.superseded,
+    stale:
+      sanitizedInterview.contextAuthority ===
+      ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.superseded,
     revalidating: false,
   };
 }
@@ -815,7 +910,11 @@ function normalizeProgramEvidenceAvailability({
   }
 
   const snapshotJobs = scanJobs
-    .filter((job) => job.assessmentId === repositorySnapshot.assessmentId && job.snapshotId === repositorySnapshot.id)
+    .filter(
+      (job) =>
+        job.assessmentId === repositorySnapshot.assessmentId &&
+        job.snapshotId === repositorySnapshot.id,
+    )
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const latestJob = snapshotJobs[0];
 
@@ -906,7 +1005,8 @@ function normalizeArtifacts({
   };
 
   // Business Context artifact
-  let businessContextAvailability: AssessmentArtifactAvailability = ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting;
+  let businessContextAvailability: AssessmentArtifactAvailability =
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting;
   if (
     interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextReady ||
     interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved
@@ -914,11 +1014,14 @@ function normalizeArtifacts({
     businessContextAvailability = ASSESSMENT_ARTIFACT_AVAILABILITIES.ready;
   } else if (
     interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
-    (interview.activeQuestion?.intent === ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify ||
+    (interview.activeQuestion?.intent ===
+      ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify ||
       workflow.isTargetedClarificationLoop)
   ) {
     businessContextAvailability = ASSESSMENT_ARTIFACT_AVAILABILITIES.updating;
-  } else if (interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved) {
+  } else if (
+    interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved
+  ) {
     businessContextAvailability = ASSESSMENT_ARTIFACT_AVAILABILITIES.paused;
   } else if (interview.stale) {
     businessContextAvailability = ASSESSMENT_ARTIFACT_AVAILABILITIES.updating;
@@ -940,7 +1043,8 @@ function normalizeArtifacts({
   };
 
   // Investigation Notes artifact
-  let notesAvailability: AssessmentArtifactAvailability = ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting;
+  let notesAvailability: AssessmentArtifactAvailability =
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting;
   if (workflow.isTargetedClarificationLoop) {
     notesAvailability = ASSESSMENT_ARTIFACT_AVAILABILITIES.paused;
   } else if (
@@ -993,7 +1097,8 @@ function normalizeArtifacts({
     businessContext,
     investigationNotes,
     ...[remediationPatch, verificationReport, finalReport].filter(
-      (artifact): artifact is NormalizedAssessmentArtifactItem => artifact !== null,
+      (artifact): artifact is NormalizedAssessmentArtifactItem =>
+        artifact !== null,
     ),
   ];
 
@@ -1094,13 +1199,16 @@ function normalizeCustomerActions({
     };
   }
 
-  const isWaiting = interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer;
+  const isWaiting =
+    interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer;
   const hasQuestion = Boolean(interview.activeQuestion);
-  const isBlocked = interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved;
+  const isBlocked =
+    interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved;
 
   const canAnswerQuestion = isWaiting && hasQuestion;
   const canSubmitDraft = canAnswerQuestion;
-  const canSubmitBlockedAction = isBlocked && interview.blockedActions.length > 0;
+  const canSubmitBlockedAction =
+    isBlocked && interview.blockedActions.length > 0;
   const canUseComposer = canAnswerQuestion;
   const canSelectRemediationDecision =
     postFinding !== null &&

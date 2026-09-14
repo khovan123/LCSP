@@ -567,9 +567,10 @@ def test_planned_pipeline_streams_planner_and_investigator_activity_when_scan_jo
     )
 
     calls = api_client.post_scan_runtime_event.call_args_list
-    assert len(calls) == 3
+    assert len(calls) == 4
     by_tool_name = {call.args[1]["tool_name"]: call.args[1] for call in calls}
     assert set(by_tool_name) == {
+        "engineering_rule_plan_summary",
         "engineering_rule_plan:eng-1",
         "engineering_rule_plan:eng-2",
         "engineering_rule_investigation:eng-1",
@@ -577,6 +578,16 @@ def test_planned_pipeline_streams_planner_and_investigator_activity_when_scan_jo
     for call in calls:
         assert call.args[0] == "scan-1"
         assert call.args[1]["stage"] == "TECHNICAL_EVIDENCE"
+
+    summary = by_tool_name["engineering_rule_plan_summary"]
+    assert summary["output_summary"] == {
+        "planningBatchId": "workflow-1:context:3",
+        "contextRevisionUsed": 3,
+        "candidateCount": 2,
+        "selectedCount": 1,
+        "skippedCount": 1,
+        "targeted": False,
+    }
 
     selected = by_tool_name["engineering_rule_plan:eng-1"]
     assert selected["event_type"] == "TOOL_COMPLETED"
@@ -691,10 +702,14 @@ def test_planned_pipeline_streams_investigation_failure_as_runtime_activity(
     assert failed["event_type"] == "TOOL_FAILED"
     assert failed["run_status"] == "RUNNING"
     assert failed["summary"] == "ENGINEERING_RULE_INVESTIGATION_FAILED"
-    assert failed["output_summary"] == {
-        "messageKey": "ENGINEERING_RULE_INVESTIGATION_FAILED",
-        "messageParams": {"engineeringRuleId": "eng-1"},
+    assert failed["output_summary"]["messageKey"] == (
+        "ENGINEERING_RULE_INVESTIGATION_FAILED"
+    )
+    assert failed["output_summary"]["messageParams"] == {
+        "engineeringRuleId": "eng-1"
     }
+    assert failed["output_summary"]["failureKind"] == "RUNTIME_ERROR"
+    assert failed["output_summary"]["executionFailure"] == "RuntimeError"
     assert failed["error_summary"] == "RuntimeError"
     # A failed investigation still reaches deterministic evaluation, but only one
     # runtime activity row (the failure) is emitted for that EngineeringRule.

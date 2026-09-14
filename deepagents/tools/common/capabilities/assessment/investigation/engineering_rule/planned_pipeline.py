@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from model_policy import INVESTIGATOR_MODEL_SPEC, PLANNER_MODEL_SPEC
+from tools.common.capabilities.platform.api_client import WorkerCallbackError
 from tools.common.capabilities.platform.logging import get_logger
 from tools.common.capabilities.evidence.graph.schema.source_roles import filter_program_evidence_graph
 
@@ -29,6 +30,7 @@ from tools.common.capabilities.assessment.claims.evidence_claim.models import (
 )
 from tools.common.capabilities.assessment.investigation.engineering_rule.openwiki_context import OpenWikiContextProvider, OpenWikiContextRequiredError
 from .pipeline import EngineeringInvestigationPipeline, EngineeringInvestigationResult
+from .managed_targeted_investigator import TargetedInterviewPending
 from tools.common.capabilities.assessment.planning.engineering_rule.plan_audit_result import PlannedEngineeringInvestigationResult
 from tools.common.capabilities.assessment.planning.engineering_rule.planning_business_scope import (
     BusinessAwareScopedEngineeringRulePlanningCandidate,
@@ -45,6 +47,8 @@ ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS = {
     "engineering_rule_investigation_failed": "ENGINEERING_RULE_INVESTIGATION_FAILED",
     "engineering_rule_investigated": "ENGINEERING_RULE_INVESTIGATED",
 }
+
+PLANNER_SUMMARY_TOOL_NAME = "engineering_rule_plan_summary"
 
 
 LEGAL_RULE_ONLY_RECOVERY_REASONS = frozenset(
@@ -507,6 +511,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             rules=rules,
             workflow_run_id=workflow_run_id,
             correlation_id=correlation_id,
+            confirmed_customer_context=confirmed_customer_context,
             observability=observability,
             evidence_report=evidence_report,
             assessment_id=assessment_id,
@@ -529,6 +534,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         rules: list[dict[str, Any]],
         workflow_run_id: str,
         correlation_id: str | None,
+        confirmed_customer_context: ConfirmedStructuredBusinessContext,
         observability: dict[str, Any],
         evidence_report: dict[str, Any],
         assessment_id: str | None,
@@ -565,6 +571,29 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             selected_rule_ids=sorted(selected_ids),
             workflow_run_id=workflow_run_id,
             correlationId=correlation_id,
+        )
+        planning_batch_id = (
+            f"{workflow_run_id}:context:{confirmed_customer_context.context_revision}"
+        )
+        self._emit_runtime_activity(
+            scan_job_id=scan_job_id,
+            event_type="TOOL_COMPLETED",
+            run_status="WAITING",
+            tool_name=PLANNER_SUMMARY_TOOL_NAME,
+            summary=ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS[
+                "engineering_rule_planner_decision"
+            ],
+            output_summary={
+                "planningBatchId": planning_batch_id,
+                "contextRevisionUsed": confirmed_customer_context.context_revision,
+                "candidateCount": len(candidates),
+                "selectedCount": len(selected_ids),
+                "skippedCount": len(plan.skipped_rule_ids),
+                "targeted": any(
+                    item.reason_code == "TARGETED_EXACT_RESUME_PIN"
+                    for item in plan.decision_audit
+                ),
+            },
         )
 
         # P0 observability: persist and log one decision row per EngineeringRule. This
@@ -690,6 +719,58 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                         workflow_run_id=workflow_run_id,
                         correlation_id=correlation_id,
                     )
+            except TargetedInterviewPending:
+                self._emit_runtime_activity(
+                    scan_job_id=scan_job_id,
+                    event_type="TOOL_WAITING_INPUT",
+                    run_status="WAITING",
+                    tool_name=(
+                        f"engineering_rule_investigation:"
+                        f"{engineering_rule.engineering_rule_id}"
+                    ),
+                    summary=ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS[
+                        "engineering_rule_investigated"
+                    ],
+                    output_summary={
+                        "outcome": "NEEDS_INPUT",
+                        "engineeringRuleId": engineering_rule.engineering_rule_id,
+                    },
+                    waiting_reason="TARGETED_INTERVIEW_REQUIRED",
+                )
+                raise
+            except WorkerCallbackError as error:
+                logger.warning(
+                    "ENGINEERING_INVESTIGATION_RUNTIME_ERROR",
+                    engineering_rule_id=engineering_rule.engineering_rule_id,
+                    error_type=type(error).__name__,
+                    error_message=str(error)[:1_000],
+                    workflow_run_id=workflow_run_id,
+                    correlationId=correlation_id,
+                )
+                self._emit_runtime_activity(
+                    scan_job_id=scan_job_id,
+                    event_type="TOOL_FAILED",
+                    run_status="RUNNING",
+                    tool_name=(
+                        f"engineering_rule_investigation:"
+                        f"{engineering_rule.engineering_rule_id}"
+                    ),
+                    summary=ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS[
+                        "engineering_rule_investigation_failed"
+                    ],
+                    output_summary={
+                        "messageKey": ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS[
+                            "engineering_rule_investigation_failed"
+                        ],
+                        "messageParams": {
+                            "engineeringRuleId": engineering_rule.engineering_rule_id,
+                        },
+                        "failureKind": "RUNTIME_ERROR",
+                        "executionFailure": "CALLBACK_ERROR",
+                    },
+                    error_summary=type(error).__name__,
+                )
+                raise
             except Exception as error:
                 investigation_failed = True
                 logger.warning(
@@ -723,6 +804,8 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                         "messageParams": {
                             "engineeringRuleId": engineering_rule.engineering_rule_id,
                         },
+                        "failureKind": "RUNTIME_ERROR",
+                        "executionFailure": type(error).__name__,
                     },
                     error_summary=type(error).__name__,
                 )
@@ -828,6 +911,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         summary: str,
         output_summary: dict[str, Any] | None = None,
         error_summary: str | None = None,
+        waiting_reason: str | None = None,
     ) -> None:
         """Best-effort stream one Planner/Investigator activity row to the live UI.
 
@@ -853,6 +937,8 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             payload["output_summary"] = output_summary
         if error_summary is not None:
             payload["error_summary"] = error_summary
+        if waiting_reason is not None:
+            payload["waiting_reason"] = waiting_reason
         post_runtime_event(scan_job_id, payload)
 
     def _load_legal_rule_sources(

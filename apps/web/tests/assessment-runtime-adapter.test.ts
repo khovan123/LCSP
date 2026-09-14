@@ -203,7 +203,9 @@ test("runtime workflow derives Interview running state from the active public qu
     },
   });
 
-  const steps = new Map(normalized.workflow.steps.map((step) => [step.id, step]));
+  const steps = new Map(
+    normalized.workflow.steps.map((step) => [step.id, step]),
+  );
   assert.equal(
     steps.get(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.interview)?.status,
     NORMALIZED_WORKFLOW_STEP_STATUSES.running,
@@ -292,7 +294,9 @@ test("runtime projection maps technical evidence planner and investigator events
     },
   });
 
-  const steps = new Map(normalized.workflow.steps.map((step) => [step.id, step]));
+  const steps = new Map(
+    normalized.workflow.steps.map((step) => [step.id, step]),
+  );
   assert.equal(
     steps.get(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.rules)?.status,
     NORMALIZED_WORKFLOW_STEP_STATUSES.completed,
@@ -318,7 +322,11 @@ test("runtime projection maps technical evidence planner and investigator events
   assert.deepEqual(
     thinking.map((item) => [item.phase, item.limited, item.params]),
     [
-      [RUNTIME_THINKING_PHASES.planner, false, { selected: "1", skipped: "1", total: "2" }],
+      [
+        RUNTIME_THINKING_PHASES.planner,
+        false,
+        { selected: "1", skipped: "1", total: "2" },
+      ],
       [RUNTIME_THINKING_PHASES.investigator, true, { failed: "1" }],
     ],
   );
@@ -332,19 +340,29 @@ test("legacy runs without an explicit Gate event project Gate SKIPPED once Class
     timeline: {
       currentRun: null,
       recentActivity: [
-        runtimeActivity("asm-runtime-classification", 4, "Classification completed", {
-          runId,
-          eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runCompleted,
-          runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
-          stage: ASSESSMENT_RUNTIME_STAGE_CODES.classification,
-        }),
-        runtimeActivity("asm-runtime-classification", 3, "Investigation completed", {
-          runId,
-          eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
-          runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
-          stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
-          toolName: "engineering_rule_investigation:eng-1",
-        }),
+        runtimeActivity(
+          "asm-runtime-classification",
+          4,
+          "Classification completed",
+          {
+            runId,
+            eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runCompleted,
+            runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+            stage: ASSESSMENT_RUNTIME_STAGE_CODES.classification,
+          },
+        ),
+        runtimeActivity(
+          "asm-runtime-classification",
+          3,
+          "Investigation completed",
+          {
+            runId,
+            eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+            runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+            stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+            toolName: "engineering_rule_investigation:eng-1",
+          },
+        ),
       ],
       latestRunId: runId,
       connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
@@ -353,7 +371,9 @@ test("legacy runs without an explicit Gate event project Gate SKIPPED once Class
     },
   });
 
-  const steps = new Map(normalized.workflow.steps.map((step) => [step.id, step]));
+  const steps = new Map(
+    normalized.workflow.steps.map((step) => [step.id, step]),
+  );
   assert.equal(
     steps.get(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.investigate)?.status,
     NORMALIZED_WORKFLOW_STEP_STATUSES.completed,
@@ -414,11 +434,14 @@ function gateStatusFor(
       postFinding: null,
     },
   });
-  const steps = new Map(normalized.workflow.steps.map((step) => [step.id, step]));
+  const steps = new Map(
+    normalized.workflow.steps.map((step) => [step.id, step]),
+  );
   return {
     gate: steps.get(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.gate)?.status,
     planner: steps.get(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.planner)?.status,
-    classification: steps.get(ASSESSMENT_RUNTIME_STAGE_CODES.classification)?.status,
+    classification: steps.get(ASSESSMENT_RUNTIME_STAGE_CODES.classification)
+      ?.status,
   };
 }
 
@@ -426,30 +449,55 @@ test("Gate required: explicit gate activity moves RUNNING then COMPLETED", () =>
   const runId = "run-gate-required";
   assert.equal(
     gateStatusFor("asm-gate-required", runId, [
-      gateActivity("asm-gate-required", 1, runId, ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted),
+      gateActivity(
+        "asm-gate-required",
+        1,
+        runId,
+        ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
+      ),
     ]).gate,
     NORMALIZED_WORKFLOW_STEP_STATUSES.running,
   );
 
   const completed = gateStatusFor("asm-gate-required", runId, [
     classificationCompleted("asm-gate-required", 3, runId),
-    gateActivity("asm-gate-required", 2, runId, ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted, {
-      gateStatus: ASSESSMENT_RUNTIME_GATE_STATUSES.completed,
-    }),
-    gateActivity("asm-gate-required", 1, runId, ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted),
+    gateActivity(
+      "asm-gate-required",
+      2,
+      runId,
+      ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+      {
+        gateStatus: ASSESSMENT_RUNTIME_GATE_STATUSES.completed,
+      },
+    ),
+    gateActivity(
+      "asm-gate-required",
+      1,
+      runId,
+      ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
+    ),
   ]);
   assert.equal(completed.gate, NORMALIZED_WORKFLOW_STEP_STATUSES.completed);
-  assert.equal(completed.classification, NORMALIZED_WORKFLOW_STEP_STATUSES.completed);
+  assert.equal(
+    completed.classification,
+    NORMALIZED_WORKFLOW_STEP_STATUSES.completed,
+  );
 });
 
 test("Gate not required: explicit TOOL_SKIPPED NOT_REQUIRED projects SKIPPED, planner SKIPs do not", () => {
   const runId = "run-gate-not-required";
   const statuses = gateStatusFor("asm-gate-skipped", runId, [
     classificationCompleted("asm-gate-skipped", 4, runId),
-    gateActivity("asm-gate-skipped", 3, runId, ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped, {
-      gateStatus: ASSESSMENT_RUNTIME_GATE_STATUSES.skipped,
-      reason: ASSESSMENT_RUNTIME_STEP_SKIP_REASONS.notRequired,
-    }),
+    gateActivity(
+      "asm-gate-skipped",
+      3,
+      runId,
+      ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped,
+      {
+        gateStatus: ASSESSMENT_RUNTIME_GATE_STATUSES.skipped,
+        reason: ASSESSMENT_RUNTIME_STEP_SKIP_REASONS.notRequired,
+      },
+    ),
     runtimeActivity("asm-gate-skipped", 2, "Planner skip", {
       runId,
       eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped,
@@ -468,13 +516,25 @@ test("targeted resume with no Gate keeps the explicit SKIPPED state of its own r
   const resumeRun = "investigator:exec-1:gate:4";
   const statuses = gateStatusFor("asm-targeted-no-gate", resumeRun, [
     classificationCompleted("asm-targeted-no-gate", 6, resumeRun),
-    gateActivity("asm-targeted-no-gate", 5, resumeRun, ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped, {
-      gateStatus: ASSESSMENT_RUNTIME_GATE_STATUSES.skipped,
-      reason: ASSESSMENT_RUNTIME_STEP_SKIP_REASONS.notRequired,
-    }),
-    gateActivity("asm-targeted-no-gate", 2, previousRun, ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted, {
-      gateStatus: ASSESSMENT_RUNTIME_GATE_STATUSES.completed,
-    }),
+    gateActivity(
+      "asm-targeted-no-gate",
+      5,
+      resumeRun,
+      ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped,
+      {
+        gateStatus: ASSESSMENT_RUNTIME_GATE_STATUSES.skipped,
+        reason: ASSESSMENT_RUNTIME_STEP_SKIP_REASONS.notRequired,
+      },
+    ),
+    gateActivity(
+      "asm-targeted-no-gate",
+      2,
+      previousRun,
+      ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+      {
+        gateStatus: ASSESSMENT_RUNTIME_GATE_STATUSES.completed,
+      },
+    ),
   ]);
 
   assert.equal(statuses.gate, NORMALIZED_WORKFLOW_STEP_STATUSES.skipped);
@@ -491,9 +551,15 @@ test("stale Gate events from a previous run never leak into the current run", ()
       stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
       toolName: "engineering_rule_investigation:eng-2",
     }),
-    gateActivity("asm-stale-gate", 3, previousRun, ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted, {
-      gateStatus: ASSESSMENT_RUNTIME_GATE_STATUSES.completed,
-    }),
+    gateActivity(
+      "asm-stale-gate",
+      3,
+      previousRun,
+      ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+      {
+        gateStatus: ASSESSMENT_RUNTIME_GATE_STATUSES.completed,
+      },
+    ),
     classificationCompleted("asm-stale-gate", 4, previousRun),
   ]);
 
@@ -505,9 +571,15 @@ test("explicit Gate COMPLETED wins over the legacy absence-based fallback", () =
   const runId = "run-explicit-wins";
   const statuses = gateStatusFor("asm-explicit-gate", runId, [
     classificationCompleted("asm-explicit-gate", 3, runId),
-    gateActivity("asm-explicit-gate", 2, runId, ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted, {
-      gateStatus: ASSESSMENT_RUNTIME_GATE_STATUSES.completed,
-    }),
+    gateActivity(
+      "asm-explicit-gate",
+      2,
+      runId,
+      ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+      {
+        gateStatus: ASSESSMENT_RUNTIME_GATE_STATUSES.completed,
+      },
+    ),
   ]);
 
   assert.equal(statuses.gate, NORMALIZED_WORKFLOW_STEP_STATUSES.completed);
@@ -517,10 +589,18 @@ test("a non-terminal Gate never coexists with a completed Classification in one 
   const runId = "run-invariant";
   const statuses = gateStatusFor("asm-gate-invariant", runId, [
     classificationCompleted("asm-gate-invariant", 3, runId),
-    gateActivity("asm-gate-invariant", 2, runId, ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted),
+    gateActivity(
+      "asm-gate-invariant",
+      2,
+      runId,
+      ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
+    ),
   ]);
 
-  assert.equal(statuses.classification, NORMALIZED_WORKFLOW_STEP_STATUSES.completed);
+  assert.equal(
+    statuses.classification,
+    NORMALIZED_WORKFLOW_STEP_STATUSES.completed,
+  );
   assert.notEqual(statuses.gate, NORMALIZED_WORKFLOW_STEP_STATUSES.queued);
   assert.notEqual(statuses.gate, NORMALIZED_WORKFLOW_STEP_STATUSES.running);
 });
@@ -538,18 +618,28 @@ test("runtime projection ignores stale previous-run activity during targeted res
         updatedAt: "2026-09-05T09:00:00.000Z",
       },
       recentActivity: [
-        runtimeActivity("asm-runtime-targeted-resume", 5, "Previous classification completed", {
-          runId: "run-previous",
-          eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runCompleted,
-          runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
-          stage: ASSESSMENT_RUNTIME_STAGE_CODES.classification,
-        }),
-        runtimeActivity("asm-runtime-targeted-resume", 4, "Targeted interview resumed", {
-          runId: "run-targeted-resume",
-          eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runStageChanged,
-          runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
-          stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
-        }),
+        runtimeActivity(
+          "asm-runtime-targeted-resume",
+          5,
+          "Previous classification completed",
+          {
+            runId: "run-previous",
+            eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runCompleted,
+            runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+            stage: ASSESSMENT_RUNTIME_STAGE_CODES.classification,
+          },
+        ),
+        runtimeActivity(
+          "asm-runtime-targeted-resume",
+          4,
+          "Targeted interview resumed",
+          {
+            runId: "run-targeted-resume",
+            eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runStageChanged,
+            runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+            stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+          },
+        ),
       ],
       latestRunId: "run-targeted-resume",
       connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
@@ -562,7 +652,9 @@ test("runtime projection ignores stale previous-run activity during targeted res
     normalized.workflow.recentActivity.map((activity) => activity.runId),
     ["run-targeted-resume"],
   );
-  const steps = new Map(normalized.workflow.steps.map((step) => [step.id, step]));
+  const steps = new Map(
+    normalized.workflow.steps.map((step) => [step.id, step]),
+  );
   assert.equal(
     steps.get(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.interview)?.status,
     NORMALIZED_WORKFLOW_STEP_STATUSES.running,
@@ -627,7 +719,10 @@ function assertNoInternalTelemetry(
     "SELECT",
     "SKIP",
   ]) {
-    assert.ok(!visibleText.includes(internal), `leaked ${internal}: ${visibleText}`);
+    assert.ok(
+      !visibleText.includes(internal),
+      `leaked ${internal}: ${visibleText}`,
+    );
   }
 }
 
@@ -654,7 +749,8 @@ function plannerDecision(
       stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
       toolName: `engineering_rule_plan:${ruleId}`,
       outputSummary: {
-        messageKey: ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRulePlannerDecision,
+        messageKey:
+          ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRulePlannerDecision,
         messageParams: { decision, engineeringRuleId: ruleId, reasonCode },
         finalDecision: decision,
         reasonCode,
@@ -681,8 +777,12 @@ function investigated(
       stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
       toolName: `engineering_rule_investigation:${ruleId}`,
       outputSummary: {
-        messageKey: ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRuleInvestigated,
-        messageParams: { engineeringRuleId: ruleId, evaluationStatus: "UNKNOWN" },
+        messageKey:
+          ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRuleInvestigated,
+        messageParams: {
+          engineeringRuleId: ruleId,
+          evaluationStatus: "UNKNOWN",
+        },
       },
     },
   );
@@ -694,7 +794,14 @@ test("targeted resume thinking aggregates one re-evaluated requirement and 40 sk
   const ruleIds = Array.from({ length: 41 }, (_, index) => `eng-${index + 1}`);
   let sequence = 0;
   const initialBatch = ruleIds.map((ruleId, index) =>
-    plannerDecision(assessmentId, ++sequence, runId, ruleId, index < 3 ? "SELECT" : "SKIP", "SOURCE_SCOPE_MATCH"),
+    plannerDecision(
+      assessmentId,
+      ++sequence,
+      runId,
+      ruleId,
+      index < 3 ? "SELECT" : "SKIP",
+      "SOURCE_SCOPE_MATCH",
+    ),
   );
   const initialInvestigations = ruleIds
     .slice(0, 3)
@@ -709,7 +816,12 @@ test("targeted resume thinking aggregates one re-evaluated requirement and 40 sk
       ASSESSMENT_RUNTIME_PLAN_REASON_CODES.targetedExactResumePin,
     ),
   );
-  const resumeInvestigation = investigated(assessmentId, ++sequence, runId, "eng-2");
+  const resumeInvestigation = investigated(
+    assessmentId,
+    ++sequence,
+    runId,
+    "eng-2",
+  );
   const recentActivity = [
     ...initialBatch,
     ...initialInvestigations,
@@ -734,9 +846,170 @@ test("targeted resume thinking aggregates one re-evaluated requirement and 40 sk
     const thinking = selectRuntimeThinkingItems(normalized);
     assert.deepEqual(thinking.map(formatRuntimeThinkingItem), [
       "Requirements re-evaluated for the new answer: 1. Unrelated requirements skipped: 40.",
-      "Requirements investigated: 1 of 1.",
+      "Requirements investigated: 1 of 1. Pending: 0.",
     ]);
     assertNoInternalTelemetry(normalized);
+  } finally {
+    setAppLocale("vi");
+  }
+});
+
+test("canonical engineering progress survives last-50 activity eviction", () => {
+  const assessmentId = "asm-runtime-progress-eviction";
+  const runId = "scan-job-observed-live-run";
+  const noisyRecentActivity = Array.from({ length: 55 }, (_, index) =>
+    investigated(assessmentId, index + 100, runId, `eng-noise-${index + 1}`),
+  );
+
+  setAppLocale("en");
+  try {
+    const normalized = normalizeAssessmentRuntime({
+      assessmentId,
+      timeline: {
+        currentRun: null,
+        recentActivity: noisyRecentActivity,
+        engineeringProgress: [
+          {
+            assessmentId,
+            runId,
+            planningBatchId: `${runId}:context:12`,
+            contextRevisionUsed: 12,
+            targeted: false,
+            approximate: false,
+            planner: {
+              candidateCount: 41,
+              selectedCount: 19,
+              skippedCount: 22,
+            },
+            investigator: {
+              selectedCount: 19,
+              completedCount: 13,
+              domainLimitedCount: 3,
+              limitedOrFailedCount: 3,
+              waitingForInputCount: 0,
+              runtimeFailedCount: 0,
+              pendingCount: 3,
+            },
+          },
+        ],
+        latestRunId: runId,
+        connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+        lastEmittedAt: "2026-09-05T08:10:00.000Z",
+        postFinding: null,
+      },
+    });
+
+    assert.deepEqual(
+      selectRuntimeThinkingItems(normalized).map(formatRuntimeThinkingItem),
+      [
+        "Requirements selected for investigation: 19 of 41. Out of scope for now: 22.",
+        "Requirements investigated: 13 of 19. Pending: 3.",
+        "Requirement investigations that hit a limitation and stay unresolved: 3.",
+      ],
+    );
+
+    const advanced = normalizeAssessmentRuntime({
+      assessmentId,
+      timeline: {
+        currentRun: null,
+        recentActivity: [
+          investigated(assessmentId, 200, runId, "eng-14"),
+          ...noisyRecentActivity,
+        ],
+        engineeringProgress: [
+          {
+            assessmentId,
+            runId,
+            planningBatchId: `${runId}:context:12`,
+            contextRevisionUsed: 12,
+            targeted: false,
+            approximate: false,
+            planner: {
+              candidateCount: 41,
+              selectedCount: 19,
+              skippedCount: 22,
+            },
+            investigator: {
+              selectedCount: 19,
+              completedCount: 14,
+              domainLimitedCount: 3,
+              limitedOrFailedCount: 3,
+              waitingForInputCount: 0,
+              runtimeFailedCount: 0,
+              pendingCount: 2,
+            },
+          },
+        ],
+        latestRunId: runId,
+        connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+        lastEmittedAt: "2026-09-05T08:11:00.000Z",
+        postFinding: null,
+      },
+    });
+
+    assert.deepEqual(
+      selectRuntimeThinkingItems(advanced).map(formatRuntimeThinkingItem),
+      [
+        "Requirements selected for investigation: 19 of 41. Out of scope for now: 22.",
+        "Requirements investigated: 14 of 19. Pending: 2.",
+        "Requirement investigations that hit a limitation and stay unresolved: 3.",
+      ],
+    );
+    assertNoInternalTelemetry(advanced);
+  } finally {
+    setAppLocale("vi");
+  }
+});
+
+test("runtime failures are not presented as investigator limitations", () => {
+  const assessmentId = "asm-runtime-failure-not-limitation";
+  const runId = "scan-job-runtime-failure";
+  const normalized = normalizeAssessmentRuntime({
+    assessmentId,
+    timeline: {
+      currentRun: null,
+      recentActivity: [],
+      engineeringProgress: [
+        {
+          assessmentId,
+          runId,
+          planningBatchId: `${runId}:context:12`,
+          contextRevisionUsed: 12,
+          targeted: false,
+          approximate: false,
+          planner: {
+            candidateCount: 2,
+            selectedCount: 2,
+            skippedCount: 0,
+          },
+          investigator: {
+            selectedCount: 2,
+            completedCount: 1,
+            domainLimitedCount: 0,
+            limitedOrFailedCount: 1,
+            waitingForInputCount: 0,
+            runtimeFailedCount: 1,
+            pendingCount: 0,
+          },
+        },
+      ],
+      latestRunId: runId,
+      connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+      lastEmittedAt: "2026-09-05T08:12:00.000Z",
+      postFinding: null,
+    },
+  });
+
+  setAppLocale("en");
+  try {
+    assert.deepEqual(
+      selectRuntimeThinkingItems(normalized).map(formatRuntimeThinkingItem),
+      [
+        "Requirements selected for investigation: 2 of 2. Out of scope for now: 0.",
+        "Requirements investigated: 1 of 2. Pending: 0.",
+        "Requirement investigations interrupted by a runtime error: 1.",
+      ],
+    );
   } finally {
     setAppLocale("vi");
   }
@@ -1651,11 +1924,19 @@ test("LCSP-272 HANDOFF: evidence ready without orchestration request stays truth
     ...normalized,
     interview: {
       ...normalized.interview,
-      answerHistory: [{ questionId: "answered-question", answeredAt: "2026-09-05T10:00:00.000Z", summary: "Saved answer" }],
+      answerHistory: [
+        {
+          questionId: "answered-question",
+          answeredAt: "2026-09-05T10:00:00.000Z",
+          summary: "Saved answer",
+        },
+      ],
     },
   };
-  assert.equal(selectInterviewHandoffPresentation(resumed).messageKey,
-    "pages.assessmentFlow.interview.continuingDescription");
+  assert.equal(
+    selectInterviewHandoffPresentation(resumed).messageKey,
+    "pages.assessmentFlow.interview.continuingDescription",
+  );
 });
 
 test("LCSP-272 HANDOFF: active runtime question produces the real F04 projection", () => {

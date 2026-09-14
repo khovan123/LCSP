@@ -86,6 +86,34 @@ export class WorkspaceRuntimeEventsController {
                 attempt: event.attempt,
                 waiting_reason: event.waitingReason,
               })),
+              engineering_progress: data.engineeringProgress.map(
+                (progress) => ({
+                  assessment_id: progress.assessmentId,
+                  run_id: progress.runId,
+                  planning_batch_id: progress.planningBatchId,
+                  context_revision_used: progress.contextRevisionUsed,
+                  targeted: progress.targeted,
+                  approximate: progress.approximate,
+                  planner: {
+                    candidate_count: progress.planner.candidateCount,
+                    selected_count: progress.planner.selectedCount,
+                    skipped_count: progress.planner.skippedCount,
+                  },
+                  investigator: {
+                    selected_count: progress.investigator.selectedCount,
+                    completed_count: progress.investigator.completedCount,
+                    domain_limited_count:
+                      progress.investigator.domainLimitedCount,
+                    limited_or_failed_count:
+                      progress.investigator.limitedOrFailedCount,
+                    waiting_for_input_count:
+                      progress.investigator.waitingForInputCount,
+                    runtime_failed_count:
+                      progress.investigator.runtimeFailedCount,
+                    pending_count: progress.investigator.pendingCount,
+                  },
+                }),
+              ),
               repository_snapshots: data.repositorySnapshots.map(
                 toLegacyRepositorySnapshotPayload,
               ),

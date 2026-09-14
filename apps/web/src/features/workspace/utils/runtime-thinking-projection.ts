@@ -2,6 +2,7 @@ import {
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   ASSESSMENT_RUNTIME_PLAN_REASON_CODES,
   ASSESSMENT_RUNTIME_STAGE_CODES,
+  type AssessmentRuntimeEngineeringProgress,
 } from "@lcsp/contracts/evidence";
 import { resolveMessage } from "@lcsp/i18n";
 
@@ -26,7 +27,12 @@ import { interpolateRuntimeSummary } from "./runtime-activity-summary";
  */
 export function projectRuntimeThinking(
   recentActivity: WorkspaceRuntimeActivityItem[],
+  engineeringProgress: AssessmentRuntimeEngineeringProgress[] = [],
 ): RuntimeThinkingItem[] {
+  const authoritativeProgress = latestEngineeringProgress(engineeringProgress);
+  if (authoritativeProgress) {
+    return projectAuthoritativeRuntimeThinking(authoritativeProgress);
+  }
   const engineeringActivity = recentActivity.filter(
     (item) =>
       item.stage === ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence &&
@@ -86,8 +92,9 @@ export function projectRuntimeThinking(
       messageKey: "pages.assessmentFlow.technicalEvidence.investigatorSummary",
       params: {
         investigated: String(investigated.length),
-        selected: String(
-          Math.max(selected, investigated.length + limited.length),
+        selected: String(selected),
+        pending: String(
+          Math.max(selected - investigated.length - limited.length, 0),
         ),
       },
     });
@@ -103,6 +110,73 @@ export function projectRuntimeThinking(
     });
   }
   return items;
+}
+
+function projectAuthoritativeRuntimeThinking(
+  progress: AssessmentRuntimeEngineeringProgress,
+): RuntimeThinkingItem[] {
+  const items: RuntimeThinkingItem[] = [];
+  items.push({
+    id: `planner:${progress.planningBatchId}`,
+    phase: RUNTIME_THINKING_PHASES.planner,
+    limited: false,
+    messageKey: progress.targeted
+      ? "pages.assessmentFlow.technicalEvidence.plannerTargetedSummary"
+      : "pages.assessmentFlow.technicalEvidence.plannerSummary",
+    params: {
+      selected: String(progress.planner.selectedCount),
+      skipped: String(progress.planner.skippedCount),
+      total: String(progress.planner.candidateCount),
+    },
+  });
+
+  if (
+    progress.investigator.completedCount > 0 ||
+    progress.investigator.pendingCount > 0 ||
+    progress.investigator.waitingForInputCount > 0
+  ) {
+    items.push({
+      id: `investigator:${progress.planningBatchId}`,
+      phase: RUNTIME_THINKING_PHASES.investigator,
+      limited: false,
+      messageKey: "pages.assessmentFlow.technicalEvidence.investigatorSummary",
+      params: {
+        investigated: String(progress.investigator.completedCount),
+        selected: String(progress.investigator.selectedCount),
+        pending: String(progress.investigator.pendingCount),
+      },
+    });
+  }
+
+  if (progress.investigator.domainLimitedCount > 0) {
+    items.push({
+      id: `investigator-limited:${progress.planningBatchId}`,
+      phase: RUNTIME_THINKING_PHASES.investigator,
+      limited: true,
+      messageKey:
+        "pages.assessmentFlow.technicalEvidence.investigatorLimitedSummary",
+      params: { failed: String(progress.investigator.domainLimitedCount) },
+    });
+  }
+
+  if (progress.investigator.runtimeFailedCount > 0) {
+    items.push({
+      id: `investigator-runtime-failed:${progress.planningBatchId}`,
+      phase: RUNTIME_THINKING_PHASES.investigator,
+      limited: true,
+      messageKey:
+        "pages.assessmentFlow.technicalEvidence.investigatorRuntimeFailedSummary",
+      params: { failed: String(progress.investigator.runtimeFailedCount) },
+    });
+  }
+
+  return items;
+}
+
+function latestEngineeringProgress(
+  progress: AssessmentRuntimeEngineeringProgress[],
+): AssessmentRuntimeEngineeringProgress | null {
+  return progress[0] ?? null;
 }
 
 export function formatRuntimeThinkingItem(item: RuntimeThinkingItem): string {
@@ -121,11 +195,17 @@ export function runtimeThinkingPhase(
 function activityPhase(
   activity: WorkspaceRuntimeActivityItem,
 ): RuntimeThinkingPhase | null {
-  if (activity.toolName?.startsWith(ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES.planner)) {
+  if (
+    activity.toolName?.startsWith(
+      ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES.planner,
+    )
+  ) {
     return RUNTIME_THINKING_PHASES.planner;
   }
   if (
-    activity.toolName?.startsWith(ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES.investigator)
+    activity.toolName?.startsWith(
+      ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES.investigator,
+    )
   ) {
     return RUNTIME_THINKING_PHASES.investigator;
   }
@@ -158,8 +238,10 @@ function isTargetedExactResumeDecision(
   const summary = summaryRecord(activity.outputSummary);
   const params = summaryRecord(summary?.messageParams ?? null);
   return (
-    summary?.reasonCode === ASSESSMENT_RUNTIME_PLAN_REASON_CODES.targetedExactResumePin ||
-    params?.reasonCode === ASSESSMENT_RUNTIME_PLAN_REASON_CODES.targetedExactResumePin
+    summary?.reasonCode ===
+      ASSESSMENT_RUNTIME_PLAN_REASON_CODES.targetedExactResumePin ||
+    params?.reasonCode ===
+      ASSESSMENT_RUNTIME_PLAN_REASON_CODES.targetedExactResumePin
   );
 }
 

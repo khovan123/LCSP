@@ -1,5 +1,8 @@
 import type { MessageKey } from "@lcsp/i18n";
-import type { AssessmentPostFindingRuntimeState } from "@lcsp/contracts/evidence";
+import type {
+  AssessmentPostFindingRuntimeState,
+  AssessmentRuntimeEngineeringProgress,
+} from "@lcsp/contracts/evidence";
 
 export const WORKSPACE_RUNTIME_CONNECTION_STATES = {
   connecting: "CONNECTING",
@@ -90,6 +93,7 @@ export type WorkspaceRuntimeActivityItem = {
 export type WorkspaceRuntimeAssessmentTimeline = {
   currentRun: WorkspaceRuntimeRun | null;
   recentActivity: WorkspaceRuntimeActivityItem[];
+  engineeringProgress?: AssessmentRuntimeEngineeringProgress[];
   latestRunId: string | null;
   connectionState: WorkspaceRuntimeConnectionState;
   lastEmittedAt: string | null;
@@ -100,6 +104,7 @@ export type WorkspaceRuntimeSnapshot = {
   emittedAt: string | null;
   runs: WorkspaceRuntimeRun[];
   recentActivity: WorkspaceRuntimeActivityItem[];
+  engineeringProgress: AssessmentRuntimeEngineeringProgress[];
   repositorySnapshots: WorkspaceRuntimeRepositorySnapshot[];
   scanJobs: WorkspaceRuntimeScanJob[];
   evidenceReports: WorkspaceRuntimeEvidenceReport[];
@@ -110,6 +115,10 @@ export type WorkspaceRuntimeContextValue = WorkspaceRuntimeSnapshot & {
   connectionState: WorkspaceRuntimeConnectionState;
   runsByAssessmentId: Record<string, WorkspaceRuntimeRun[]>;
   recentActivityByAssessmentId: Record<string, WorkspaceRuntimeActivityItem[]>;
+  engineeringProgressByAssessmentId: Record<
+    string,
+    AssessmentRuntimeEngineeringProgress[]
+  >;
   latestRunIdByAssessmentId: Record<string, string>;
   postFindingByAssessmentId: Record<string, AssessmentPostFindingRuntimeState>;
   getAssessmentRuntime: (

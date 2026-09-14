@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import {
   TARGETED_REANALYSIS_CAPACITY_POLICY,
   TARGETED_REANALYSIS_CHECKPOINT_STATES,
@@ -62,18 +62,25 @@ export class OutboxRepository {
     const client = tx ?? this.prisma;
     const message = OutboxMessageEntity.create(input);
 
-    await client.outboxMessage.create({
-      data: {
-        id: message.id,
-        aggregateType: toPrismaOutboxAggregateType(message.aggregateType),
-        aggregateId: message.aggregateId,
-        eventType: message.eventType,
-        payload: message.payload as Prisma.InputJsonValue,
-        status: toPrismaOutboxStatus(message.status),
-        attempts: message.attempts,
-        createdAt: message.createdAt,
-      },
-    });
+    try {
+      await client.outboxMessage.create({
+        data: {
+          id: message.id,
+          aggregateType: toPrismaOutboxAggregateType(message.aggregateType),
+          aggregateId: message.aggregateId,
+          eventType: message.eventType,
+          payload: message.payload as Prisma.InputJsonValue,
+          status: toPrismaOutboxStatus(message.status),
+          attempts: message.attempts,
+          createdAt: message.createdAt,
+        },
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error) && input.idempotencyKey) {
+        return message.id;
+      }
+      throw error;
+    }
 
     return message.id;
   }
@@ -360,4 +367,11 @@ export class OutboxRepository {
       where: { id },
     });
   }
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002"
+  );
 }

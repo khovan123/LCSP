@@ -1462,8 +1462,7 @@ export const enPages = {
         "The evidence graph is still being built. It will appear here automatically.",
       buildFailed:
         "The evidence scan did not finish, so no evidence graph is available for this run.",
-      notFound:
-        "No evidence graph exists for this assessment yet.",
+      notFound: "No evidence graph exists for this assessment yet.",
       loadError: "Unable to load the evidence graph. Try again later.",
       repositorySnapshot: "Repository snapshot",
       overview: "Graph overview",
@@ -1540,9 +1539,11 @@ export const enPages = {
       plannerSummary:
         "Requirements selected for investigation: {selected} of {total}. Out of scope for now: {skipped}.",
       investigatorSummary:
-        "Requirements investigated: {investigated} of {selected}.",
+        "Requirements investigated: {investigated} of {selected}. Pending: {pending}.",
       investigatorLimitedSummary:
         "Requirement investigations that hit a limitation and stay unresolved: {failed}.",
+      investigatorRuntimeFailedSummary:
+        "Requirement investigations interrupted by a runtime error: {failed}.",
       readinessWaiting:
         "Assessment is waiting for READY EngineeringRules; automatic Legal Rule Triage was requested.",
     },

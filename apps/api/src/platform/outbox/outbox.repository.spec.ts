@@ -6,7 +6,7 @@ import {
 import { TARGETED_REANALYSIS_REQUEST_STATES } from "@lcsp/contracts/scan";
 import { TARGETED_REANALYSIS_CAPACITY_POLICY } from "@lcsp/contracts/scan";
 import { jest } from "@jest/globals";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import { OutboxRepository } from "./outbox.repository.js";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
@@ -266,6 +266,38 @@ describe("OutboxRepository", () => {
         },
         tx,
       );
+
+      expect(create).toHaveBeenCalledTimes(1);
+    });
+
+    it("treats duplicate idempotent outbox inserts as successful replays", async () => {
+      const create = jest.fn<CreateFn>().mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError(
+          "Unique constraint failed on the fields: (`id`)",
+          {
+            code: "P2002",
+            clientVersion: "test",
+            meta: { target: ["id"] },
+          },
+        ),
+      );
+      const tx = {
+        outboxMessage: { create },
+      } as unknown as Prisma.TransactionClient;
+      const repository = new OutboxRepository({} as PrismaService);
+
+      await expect(
+        repository.enqueue(
+          {
+            aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
+            aggregateId: "assessment-1",
+            eventType: ASSESSMENT_EVENT_TYPES.createdOutbox,
+            idempotencyKey: "assessment-1:created",
+            payload: { assessmentId: "assessment-1" },
+          },
+          tx,
+        ),
+      ).resolves.toMatch(/^outbox:/);
 
       expect(create).toHaveBeenCalledTimes(1);
     });
