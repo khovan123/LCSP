@@ -1016,9 +1016,6 @@ export class AssessmentInterviewRuntimeService {
           ? { ...thread, guidanceVersion }
           : await this.readThread(input.assessmentId);
     }
-    // See comment in getPrivateContextForWorker: bypass cache for worker
-    // private-context fetches so that a _mutate_snapshot_provenance() or a
-    // newly accepted report is not masked for the 15s TTL window.
     this.provenanceCache.delete(`${input.assessmentId}:latest`);
     const authoritative = await this.assessmentProvenance(input.assessmentId);
     const privateRevision = thread.privateRevisions.find(
@@ -1068,9 +1065,6 @@ export class AssessmentInterviewRuntimeService {
     } = buildWorkerPriorAnswerHistory(
       thread.privateRevisions,
       input.contextRevision,
-    );
-    this.logger.warn(
-      `getPrivateContextForWorker assessment=${input.assessmentId} requested=${input.contextRevision} threadContext=${thread.contextRevision} processed=${thread.processedRevision} status=${status} hasStateConfirmed=${!!thread.state.confirmedContext} hasPrivateRevision=${!!privateRevision} sourceVersion=${authoritative.sourceVersion} threadSource=${thread.sourceVersion} hasTargetedNeed=${!!thread.privateStore.targetedNeed}`,
     );
     return {
       status,
