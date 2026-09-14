@@ -706,13 +706,15 @@ describe("AssessmentRuntimeEventService", () => {
     ) => {
       const findMany = jest
         .fn<(args: Record<string, unknown>) => Promise<unknown[]>>()
-        .mockImplementation(async (args) => {
+        .mockImplementation((args) => {
           const where = (args.where ?? {}) as Record<string, unknown>;
           if (Object.keys(where).length === 0) {
-            return [...windowRows].sort(
-              (left, right) =>
-                right.createdAt.getTime() - left.createdAt.getTime() ||
-                right.sequence - left.sequence,
+            return Promise.resolve(
+              [...windowRows].sort(
+                (left, right) =>
+                  right.createdAt.getTime() - left.createdAt.getTime() ||
+                  right.sequence - left.sequence,
+              ),
             );
           }
           let rows = allEvents;
@@ -743,10 +745,12 @@ describe("AssessmentRuntimeEventService", () => {
               (row) => row.assessmentId === where.assessmentId,
             );
           }
-          return [...rows].sort(
-            (left, right) =>
-              right.createdAt.getTime() - left.createdAt.getTime() ||
-              right.sequence - left.sequence,
+          return Promise.resolve(
+            [...rows].sort(
+              (left, right) =>
+                right.createdAt.getTime() - left.createdAt.getTime() ||
+                right.sequence - left.sequence,
+            ),
           );
         });
       return {

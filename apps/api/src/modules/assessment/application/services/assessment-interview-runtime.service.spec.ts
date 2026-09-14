@@ -520,6 +520,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
     mockTransaction = jest.fn(
       async <T>(
         cb: (tx: MockPrismaDelegates) => Promise<T>,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         _options?: unknown,
       ): Promise<T> => cb(mockTx),
     );
