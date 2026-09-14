@@ -677,7 +677,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             not isinstance(root_workflow_run_id, str)
             or root_workflow_run_id != command_workflow_run_id
         ):
-            logger.warning(
+            _LOGGER.warning(
                 "INTERVIEW_WORKFLOW_RUN_ID_MISMATCH",
                 server_workflow_run_id=server_workflow_run_id,
                 root_workflow_run_id=root_workflow_run_id,
@@ -1250,7 +1250,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         )
         confirmed_context = guarded_state.get("confirmedContext")
         if not isinstance(confirmed_context, dict):
-            logger.warning(
+            _LOGGER.warning(
                 "GUARDED_STATE_MISSING_CONFIRMED_CONTEXT",
                 guarded_state_keys=list(guarded_state.keys()),
                 status=guarded_state.get("status"),
