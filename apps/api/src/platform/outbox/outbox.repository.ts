@@ -51,6 +51,11 @@ export class OutboxRepository {
   /**
    * Inserts a new pending outbox message; the publisher poller delivers it separately.
    *
+   * The insert is an upsert on the deterministic id derived from the idempotency key:
+   * a unique-violation catch would leave the surrounding interactive transaction
+   * aborted (PostgreSQL keeps the transaction in failed state after a constraint
+   * error), so replaying a duplicate enqueue must not raise at all.
+   *
    * @param input - Aggregate and event payload to enqueue.
    * @param tx - Optional existing Prisma transaction in which the enqueue must participate.
    * @returns Identifier of the newly created outbox message.
@@ -62,25 +67,20 @@ export class OutboxRepository {
     const client = tx ?? this.prisma;
     const message = OutboxMessageEntity.create(input);
 
-    try {
-      await client.outboxMessage.create({
-        data: {
-          id: message.id,
-          aggregateType: toPrismaOutboxAggregateType(message.aggregateType),
-          aggregateId: message.aggregateId,
-          eventType: message.eventType,
-          payload: message.payload as Prisma.InputJsonValue,
-          status: toPrismaOutboxStatus(message.status),
-          attempts: message.attempts,
-          createdAt: message.createdAt,
-        },
-      });
-    } catch (error) {
-      if (isUniqueConstraintError(error) && input.idempotencyKey) {
-        return message.id;
-      }
-      throw error;
-    }
+    await client.outboxMessage.upsert({
+      where: { id: message.id },
+      update: {},
+      create: {
+        id: message.id,
+        aggregateType: toPrismaOutboxAggregateType(message.aggregateType),
+        aggregateId: message.aggregateId,
+        eventType: message.eventType,
+        payload: message.payload as Prisma.InputJsonValue,
+        status: toPrismaOutboxStatus(message.status),
+        attempts: message.attempts,
+        createdAt: message.createdAt,
+      },
+    });
 
     return message.id;
   }
@@ -367,11 +367,4 @@ export class OutboxRepository {
       where: { id },
     });
   }
-}
-
-function isUniqueConstraintError(error: unknown): boolean {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2002"
-  );
 }

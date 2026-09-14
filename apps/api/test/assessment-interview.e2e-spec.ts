@@ -1220,6 +1220,177 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
     );
   });
 
+  it("targeted need registration is transactional, idempotent, and outbox-persisted without a full replan", async () => {
+    await seedUsableTechnicalCoverage(prisma);
+    const seededQuestion = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/initial-question")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        technicalEvidenceReportId: "report-interview-ready",
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        activeQuestion: {
+          id: QUESTION_ID,
+          intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+          control: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+          prompt: "Is there a baseline decision authority?",
+          frontier: {
+            owner: INTERVIEW_FRONTIER_OWNERS.customer,
+            materiality: INTERVIEW_FRONTIER_MATERIALITIES.material,
+            description: "Is there a baseline decision authority?",
+          },
+        },
+      });
+    assert.equal(
+      seededQuestion.status,
+      201,
+      JSON.stringify(seededQuestion.body),
+    );
+
+    await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        submitAnswerCommand({
+          questionRef: QUESTION_ID,
+          expectedSessionRevision: 0,
+          clientRequestId: "client-request-targeted-tx-baseline",
+          answer: {
+            kind: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+            value: true,
+          },
+        }),
+      );
+
+    const ready = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/agent-decisions")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        expectedContextRevision: 1,
+        mode: ASSESSMENT_INTERVIEW_MODES.initialInterview,
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+        contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+        confirmedContext: confirmedStructuredContext({
+          assessmentId: "assessment-1",
+          contextRevision: 1,
+          topic: "initial_planning_context",
+          statement: RICH_INITIAL_PLANNING_STATEMENT,
+        }),
+      });
+    assert.equal(ready.status, 201, JSON.stringify(ready.body));
+
+    const resumeEventsBefore = async () =>
+      prisma.outboxMessage.count({
+        where: {
+          aggregateId: "assessment-1",
+          eventType: ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox,
+        },
+      });
+    const outboxBeforeRegistration = await resumeEventsBefore();
+
+    const targetedNeedPayload = {
+      actorId: "user-1",
+      needId: "need-targeted-tx",
+      businessContextNeed: "Who owns the deployment approval?",
+      resolutionCriteria: ["deployment_approval_owner"],
+      whyNeeded: "This determines the operational approval path.",
+      originatingInvestigationReference:
+        "investigator:investigator-tx-run-1:need-targeted-tx",
+      investigatorExecutionId: "investigator-tx-run-1",
+      workflowRunId: "workflow-run-tx-1",
+      checkpointId: "checkpoint-tx-1",
+      affectedRuleIds: ["ENG-42"],
+      artifactVersions: {
+        technicalEvidenceReportId: "ter-original",
+        repositorySnapshotId: "snap-original",
+        legalRuleCatalogVersionId: "catalog-original",
+        legalCorpusVersionId: "corpus-original",
+      },
+    };
+
+    const registered = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/targeted-needs")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send(targetedNeedPayload);
+    assert.equal(registered.status, 201, JSON.stringify(registered.body));
+    const registeredState = successBody<{
+      outcome: string;
+      orchestrationRequested?: boolean;
+    }>(registered);
+    assert.equal(
+      registeredState.outcome,
+      ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+    );
+
+    const threadAfterRegistration = await prisma.assessmentInterviewThread.findUnique(
+      { where: { assessmentId: "assessment-1" } },
+    );
+    const privateAfterRegistration = jsonRecord(
+      threadAfterRegistration?.privateContextJson,
+    );
+    assert.equal(
+      jsonRecord(privateAfterRegistration.targetedNeed).needId,
+      "need-targeted-tx",
+    );
+    assert.equal(
+      jsonRecord(privateAfterRegistration.targetedContinuation)
+        .investigatorExecutionId,
+      "investigator-tx-run-1",
+    );
+
+    const targetedResumeEvents = await prisma.outboxMessage.findMany({
+      where: {
+        aggregateId: "assessment-1",
+        eventType: ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    assert.equal(
+      targetedResumeEvents.length,
+      outboxBeforeRegistration + 1,
+      "registration must enqueue exactly one resume command",
+    );
+    const registrationEvent = jsonRecord(
+      JSON.parse(
+        JSON.stringify(targetedResumeEvents[targetedResumeEvents.length - 1]),
+      ),
+    );
+    const registrationPayload = jsonRecord(registrationEvent.payload);
+    assert.equal(registrationPayload.questionId, "need-targeted-tx");
+    assert.equal(
+      registrationPayload.resumeReason,
+      "INVESTIGATOR_RESOLUTION_REQUIRED",
+    );
+
+    const retried = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/targeted-needs")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send(targetedNeedPayload);
+    assert.equal(retried.status, 201, JSON.stringify(retried.body));
+    assert.equal(
+      await resumeEventsBefore(),
+      outboxBeforeRegistration + 1,
+      "a retried registration must not enqueue a second outbox message",
+    );
+
+    const threadAfterRetry = await prisma.assessmentInterviewThread.findUnique(
+      { where: { assessmentId: "assessment-1" } },
+    );
+    assert.equal(
+      threadAfterRetry?.contextRevision,
+      threadAfterRegistration?.contextRevision,
+      "a retried registration must not advance the context revision",
+    );
+
+    const privateTarget = await httpRequest(app)
+      .get("/internal/assessment-interviews/assessment-1/private-context/1")
+      .set("x-worker-api-key", WORKER_KEY);
+    assert.equal(privateTarget.status, 200, JSON.stringify(privateTarget.body));
+    assert.equal(
+      successBody<{ status: string }>(privateTarget).status,
+      "DUPLICATE",
+    );
+  });
+
   it("keeps raw saved draft out of Agent-decision runtime events", async () => {
     await seedWaitingQuestion(prisma);
     const saved = await httpRequest(app)

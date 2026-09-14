@@ -1465,6 +1465,8 @@ export type PagesMessages = {
       progressTool: string;
       progressCompleted: string;
       progressFailed: string;
+      contextReadyHandoff: string;
+      contextResolvedHandoff: string;
       pendingPlaceholder: string;
       placeholder: string;
     };

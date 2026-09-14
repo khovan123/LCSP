@@ -1518,6 +1518,10 @@ export const enPages = {
         "Interview evaluation completed. The result has been saved.",
       progressFailed:
         "This evaluation attempt failed. Your answer remains saved.",
+      contextReadyHandoff:
+        "The baseline business context has been confirmed. The assessment can now continue to planning and investigation. Additional rule-specific questions may still be asked if needed.",
+      contextResolvedHandoff:
+        "The rule-specific business context has been confirmed. The affected investigation can now resume.",
       continuingDescription:
         "Your answer has been saved. Waiting for the evaluation result or the next question.",
       placeholder: "Describe the project or system...",

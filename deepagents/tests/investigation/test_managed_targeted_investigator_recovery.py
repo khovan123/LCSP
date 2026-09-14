@@ -291,7 +291,7 @@ def test_rejected_resume_threshold_fails_registry_and_passes_limitation_to_compl
     assert checkpoint_id == "checkpoint-original"
     assert handoff["claims"][0]["claim_id"] == "claim:failed:ENG-RECOVERY-1"
     assert handoff["claims"][0]["limitations"] == [
-        ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
+        ENGINEERING_LIMITATION_CODES["engineering_investigation_runtime_error"]
     ]
     assert _FakeStore.saves[-1]["status"] == MANAGED_INVESTIGATOR_EXECUTION_STATUSES[
         "failed"
@@ -324,7 +324,7 @@ def test_rejected_resume_threshold_fails_registry_and_passes_limitation_to_compl
     )
 
     assert completion_calls[0]["resumed_handoff"]["claims"][0]["limitations"] == [
-        ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
+        ENGINEERING_LIMITATION_CODES["engineering_investigation_runtime_error"]
     ]
 
 

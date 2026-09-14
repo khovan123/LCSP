@@ -42,6 +42,9 @@ import {
 
 const RUNTIME_EVENT_SEQUENCE_RETRY_ATTEMPTS = 8;
 const RUNTIME_EVENT_SEQUENCE_RETRY_DELAY_MS = 5;
+const ENGINEERING_PROGRESS_DURABLE_MAX_RUNS = 10;
+const ENGINEERING_PROGRESS_SUMMARY_SCAN_LIMIT = 40;
+const ENGINEERING_PROGRESS_INVESTIGATION_SCAN_LIMIT = 1_000;
 
 type RecordRuntimeEventInput = {
   assessmentId: string;
@@ -420,7 +423,9 @@ export class AssessmentRuntimeEventService {
     const persistedActivity = events.map((event) =>
       this.toActivityEvent(event),
     );
-    const engineeringProgress = deriveEngineeringProgress(persistedActivity);
+    const engineeringProgress = await this.deriveDurableEngineeringProgress(
+      persistedActivity,
+    );
     const syntheticActivity = buildSyntheticRuntimeActivity(
       scanJobs,
       evidenceReports,
@@ -632,6 +637,88 @@ export class AssessmentRuntimeEventService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Derives authoritative Planner/Investigator progress per run from durable
+   * planner-summary and investigator runtime events, never from the bounded
+   * recent-activity window. Window-derived approximations remain only as a
+   * compatibility fallback for runs that have not persisted a planner summary.
+   *
+   * @param persistedActivity - Window activity used only for the legacy fallback.
+   * @returns Authoritative progress per run, newest planning batch first.
+   */
+  private async deriveDurableEngineeringProgress(
+    persistedActivity: AssessmentRuntimeActivityEvent[],
+  ): Promise<AssessmentRuntimeEngineeringProgress[]> {
+    const windowProgress = deriveEngineeringProgress(persistedActivity);
+    const durableProgress =
+      await this.deriveExplicitEngineeringProgressFromDurableState();
+    const progressByRun = new Map<string, AssessmentRuntimeEngineeringProgress>();
+    for (const progress of windowProgress) {
+      progressByRun.set(`${progress.assessmentId}:${progress.runId}`, progress);
+    }
+    for (const progress of durableProgress) {
+      progressByRun.set(`${progress.assessmentId}:${progress.runId}`, progress);
+    }
+    return [...progressByRun.values()].sort((left, right) =>
+      right.planningBatchId.localeCompare(left.planningBatchId),
+    );
+  }
+
+  /**
+   * Projects canonical Planner/Investigator counts from persisted
+   * `engineering_rule_plan_summary` events and the investigator events that
+   * follow each run's latest summary. These queries read the full durable
+   * event history for the affected runs, so eviction from the rolling
+   * recent-activity window can never change canonical totals.
+   *
+   * @returns Explicit (non-approximate) progress for the most recent runs.
+   */
+  private async deriveExplicitEngineeringProgressFromDurableState(): Promise<
+    AssessmentRuntimeEngineeringProgress[]
+  > {
+    const summaryRows = await this.safeFindMany({
+      where: {
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+        toolName:
+          ASSESSMENT_RUNTIME_ENGINEERING_PROGRESS_TOOL_NAMES.plannerSummary,
+      },
+      orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
+      take: ENGINEERING_PROGRESS_SUMMARY_SCAN_LIMIT,
+    });
+    const latestSummaryByRun = new Map<string, PersistedAssessmentRuntimeEvent>();
+    for (const row of summaryRows) {
+      const key = `${row.assessmentId}:${row.runId}`;
+      if (!latestSummaryByRun.has(key)) {
+        latestSummaryByRun.set(key, row);
+      }
+    }
+    const recentRuns = [...latestSummaryByRun.entries()].slice(
+      0,
+      ENGINEERING_PROGRESS_DURABLE_MAX_RUNS,
+    );
+    const progressList: AssessmentRuntimeEngineeringProgress[] = [];
+    for (const [, summary] of recentRuns) {
+      const investigationRows = await this.safeFindMany({
+        where: {
+          runId: summary.runId,
+          sequence: { gt: summary.sequence },
+          toolName: {
+            startsWith:
+              ASSESSMENT_RUNTIME_ENGINEERING_RULE_TOOL_PREFIXES.investigator,
+          },
+        },
+        orderBy: [{ sequence: "asc" }],
+        take: ENGINEERING_PROGRESS_INVESTIGATION_SCAN_LIMIT,
+      });
+      const plannerEvent = this.toActivityEvent(summary);
+      const ordered = [plannerEvent, ...investigationRows.map((row) => this.toActivityEvent(row))].sort(
+        (left, right) => left.sequence - right.sequence,
+      );
+      progressList.push(deriveExplicitEngineeringProgress(ordered, plannerEvent));
+    }
+    return progressList;
   }
 
   /**
