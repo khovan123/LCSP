@@ -1282,7 +1282,7 @@ function deriveApproximateEngineeringProgress(
   const skippedCount = plannerDecisions.filter(
     (event) => event.eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped,
   ).length;
-  const newestPlanner = newest(plannerDecisions) ?? plannerDecisions[0]!;
+  const newestPlanner = newest(plannerDecisions) ?? plannerDecisions[0];
   const scopedInvestigations = latestByToolName(
     ordered.filter(
       (event) =>
