@@ -677,6 +677,16 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             not isinstance(root_workflow_run_id, str)
             or root_workflow_run_id != command_workflow_run_id
         ):
+            logger.warning(
+                "INTERVIEW_WORKFLOW_RUN_ID_MISMATCH",
+                server_workflow_run_id=server_workflow_run_id,
+                root_workflow_run_id=root_workflow_run_id,
+                command_workflow_run_id=command_workflow_run_id,
+                context_revision=context_revision,
+                status=status,
+                thread_id=thread_id,
+                assessment_id=assessment_id,
+            )
             raise ValueError(
                 "assessment Interview resume command workflowRunId does not match "
                 "the server-owned Interview workflow run"
