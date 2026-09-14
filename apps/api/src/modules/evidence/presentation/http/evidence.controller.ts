@@ -151,7 +151,9 @@ export class EvidenceController {
     if (!report) {
       throw new NotFoundException("Technical evidence not found");
     }
-    return resultEnvelope(this.graphDetail.projectOverview(report.evidencePayload));
+    return resultEnvelope(
+      this.graphDetail.projectOverview(report.evidencePayload),
+    );
   }
 }
 
