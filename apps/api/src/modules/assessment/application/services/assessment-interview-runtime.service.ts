@@ -1016,6 +1016,10 @@ export class AssessmentInterviewRuntimeService {
           ? { ...thread, guidanceVersion }
           : await this.readThread(input.assessmentId);
     }
+    // See comment in getPrivateContextForWorker: bypass cache for worker
+    // private-context fetches so that a _mutate_snapshot_provenance() or a
+    // newly accepted report is not masked for the 15s TTL window.
+    this.provenanceCache.delete(`${input.assessmentId}:latest`);
     const authoritative = await this.assessmentProvenance(input.assessmentId);
     const privateRevision = thread.privateRevisions.find(
       (revision) => revision.contextRevision === input.contextRevision,
