@@ -9,8 +9,7 @@ export async function getProgramEvidenceGraphOverview(
     { cache: "no-store" },
   );
   if (!ok || typeof payload !== "object" || payload === null) return null;
-  const overview = (payload as { overview?: Record<string, unknown> }).overview;
-  if (!overview) return null;
+  const overview = payload as Record<string, unknown>;
   return {
     modules_analyzed: normalizeMetric(overview.modules_analyzed),
     code_symbols_indexed: normalizeMetric(overview.code_symbols_indexed),
