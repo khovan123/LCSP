@@ -34,6 +34,7 @@ class SpecialistHandoffValidationError(RuntimeError):
 _CAUSE_DETAIL_LIMIT = 500
 _LOGGER = logging.getLogger(__name__)
 _INTERVIEW_TARGETED_FRONTIER_REPAIRED = "INTERVIEW_TARGETED_FRONTIER_REPAIRED"
+_INVESTIGATOR_CLAIM_VALUE_SHAPE_NORMALIZED = "INVESTIGATOR_CLAIM_VALUE_SHAPE_NORMALIZED"
 
 # `InvestigatorClaim` is a plain `Union` (anyOf, not a discriminated oneOf — see
 # contracts/handoffs.py for why). Pydantic's "smart union" validates a claim against every
@@ -172,8 +173,6 @@ def _normalize_investigator_payload(
         if not isinstance(claim, dict):
             normalized_claims.append(claim)
             continue
-        if allow_fail_closed_recovery:
-            claim = _fail_closed_investigator_claim(claim)
         if (
             claim.get("claim_type")
             != ENGINEERING_EVIDENCE_CLAIM_TYPES["rule_scope_not_applicable"]
@@ -181,9 +180,47 @@ def _normalize_investigator_payload(
         ):
             claim = dict(claim)
             claim.pop("customer_context_refs", None)
+        # Lossless provider-shape repair runs on every attempt so a safely repairable
+        # response never costs another model call. Fail-closed downgrades stay gated.
+        claim = _normalize_not_met_null_value_shape(claim)
+        if allow_fail_closed_recovery:
+            claim = _fail_closed_investigator_claim(claim)
         normalized_claims.append(claim)
     normalized["claims"] = normalized_claims
     return normalized
+
+
+def _normalize_not_met_null_value_shape(claim: dict[str, Any]) -> dict[str, Any]:
+    """Fill only the value already fixed by an explicit RULE_REQUIREMENT_NOT_MET variant.
+
+    Gemini sometimes drops the ``const: false`` value of the NOT_MET variant. The
+    claim type alone fixes that value, so restoring it is lossless, but only when the
+    claim is otherwise a complete NOT_MET claim: a non-blank criterion, at least one
+    technical provenance ref, and every other field accepted by the strict contract
+    model. Anything less is left untouched for strict validation / fail-closed handling.
+    MET, UNRESOLVED, unknown variants and non-null values are never touched, so no
+    positive or negative truth is inferred from a missing value.
+    """
+    if claim.get("claim_type") != ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_not_met"]:
+        return claim
+    if claim.get("value") is not None:
+        return claim
+    criterion = claim.get("criterion")
+    if not isinstance(criterion, str) or not criterion.strip():
+        return claim
+    if not _investigator_claim_refs(claim):
+        return claim
+    candidate = {**claim, "value": False}
+    try:
+        InvestigatorRequirementNotMetClaim.model_validate(candidate)
+    except ValidationError:
+        return claim
+    _LOGGER.warning(
+        "%s claim_id=%s reason=missing_not_met_const_value",
+        _INVESTIGATOR_CLAIM_VALUE_SHAPE_NORMALIZED,
+        claim.get("claim_id"),
+    )
+    return candidate
 
 
 def _fail_closed_investigator_claim(claim: dict[str, Any]) -> dict[str, Any]:

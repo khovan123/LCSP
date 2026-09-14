@@ -23,8 +23,14 @@ import {
 } from "@/components/ui/dialog";
 import { resolveAppMessage } from "@/lib/i18n";
 import {
-  getProgramEvidenceGraphDetail,
+  PROGRAM_EVIDENCE_GRAPH_PENDING_POLL_MS,
+  PROGRAM_EVIDENCE_GRAPH_UNAVAILABLE_MESSAGE_KEYS,
+} from "../../config/program-evidence-graph";
+import {
+  getProgramEvidenceGraphDetailState,
+  PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES,
   type ProgramEvidenceGraphDetail,
+  type ProgramEvidenceGraphDetailLoadState,
   type ProgramEvidenceGraphOverview,
 } from "@/lib/api/evidence-graph-detail-client";
 import {
@@ -73,6 +79,9 @@ export function ProgramEvidenceGraphProvider({
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<ProgramEvidenceGraphDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadState, setLoadState] = useState<ProgramEvidenceGraphDetailLoadState>(
+    PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.unavailable,
+  );
   const triggerRef = useRef<HTMLElement | null>(null);
   const wasOpenRef = useRef(false);
   const requestVersionRef = useRef(0);
@@ -81,16 +90,18 @@ export function ProgramEvidenceGraphProvider({
     const requestVersion = ++requestVersionRef.current;
     // Keep a previously rendered graph visible while a later open refreshes it.
     setLoading(true);
-    void getProgramEvidenceGraphDetail(assessmentId)
+    void getProgramEvidenceGraphDetailState(assessmentId)
       .then((value) => {
         if (requestVersion === requestVersionRef.current) {
-          setDetail(value);
+          setDetail(value.detail);
+          setLoadState(value.state);
           setLoading(false);
         }
       })
       .catch(() => {
         if (requestVersion === requestVersionRef.current) {
           setDetail(null);
+          setLoadState(PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.unavailable);
           setLoading(false);
         }
       });
@@ -112,6 +123,18 @@ export function ProgramEvidenceGraphProvider({
     }
     wasOpenRef.current = open;
   }, [open]);
+  useEffect(() => {
+    // A building graph is not an error: keep refetching while the drawer is open.
+    if (
+      !open ||
+      loading ||
+      loadState !== PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.pending
+    ) {
+      return;
+    }
+    const timer = setTimeout(loadDetail, PROGRAM_EVIDENCE_GRAPH_PENDING_POLL_MS);
+    return () => clearTimeout(timer);
+  }, [open, loading, loadState, loadDetail]);
   return (
     <DrawerContext.Provider
       value={{ openArtifact, overview: detail?.overview ?? null }}
@@ -122,6 +145,7 @@ export function ProgramEvidenceGraphProvider({
           assessmentId={assessmentId}
           detail={detail}
           loading={loading}
+          loadState={loadState}
           open={open}
           onOpenChange={setOpen}
         />
@@ -138,12 +162,14 @@ function ProgramEvidenceGraphDrawer({
   assessmentId,
   detail,
   loading,
+  loadState,
   open,
   onOpenChange,
 }: {
   assessmentId: string;
   detail: ProgramEvidenceGraphDetail | null;
   loading: boolean;
+  loadState: ProgramEvidenceGraphDetailLoadState;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -187,7 +213,18 @@ function ProgramEvidenceGraphDrawer({
           </div>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-hidden">
-          {loading ? (
+          {loadState === PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.pending ? (
+            <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Spinner
+                aria-label={resolveAppMessage(
+                  "pages.assessmentFlow.graph.building",
+                )}
+              />
+              <span>
+                {resolveAppMessage("pages.assessmentFlow.graph.building")}
+              </span>
+            </div>
+          ) : loading ? (
             <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
               <Spinner
                 aria-label={resolveAppMessage(
@@ -203,9 +240,14 @@ function ProgramEvidenceGraphDrawer({
           ) : detail ? (
             <GraphFirstDetail assessmentId={assessmentId} detail={detail} />
           ) : (
-            <p className="text-sm text-muted-foreground">
+            <p
+              className="text-sm text-muted-foreground"
+              data-graph-load-state={loadState}
+            >
               {resolveAppMessage(
-                "pages.assessmentFlow.graph.loadError" as never,
+                loadState === PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.ready
+                  ? "pages.assessmentFlow.graph.loadError"
+                  : PROGRAM_EVIDENCE_GRAPH_UNAVAILABLE_MESSAGE_KEYS[loadState],
               )}
             </p>
           )}

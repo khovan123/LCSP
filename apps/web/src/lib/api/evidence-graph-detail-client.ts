@@ -1,3 +1,5 @@
+import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
+
 import { apiRequest } from "./api-request.ts";
 
 export type ProgramEvidenceGraphOverview = {
@@ -66,6 +68,38 @@ export type ProgramEvidenceGraphDetail = {
   };
 };
 
+export const PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES = {
+  ready: "READY",
+  pending: "PENDING",
+  failed: "FAILED",
+  notFound: "NOT_FOUND",
+  unavailable: "UNAVAILABLE",
+} as const;
+
+export type ProgramEvidenceGraphDetailLoadState =
+  (typeof PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES)[keyof typeof PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES];
+
+type UnavailableProgramEvidenceGraphState = Exclude<
+  ProgramEvidenceGraphDetailLoadState,
+  typeof PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.ready
+>;
+
+export type ProgramEvidenceGraphDetailLoadResult =
+  | {
+      state: typeof PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.ready;
+      detail: ProgramEvidenceGraphDetail;
+    }
+  | { state: UnavailableProgramEvidenceGraphState; detail: null };
+
+const UNAVAILABLE_GRAPH_STATE_BY_PROBLEM_CODE: Record<
+  string,
+  UnavailableProgramEvidenceGraphState
+> = {
+  [EVIDENCE_ERROR_CODES.notReady]: PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.pending,
+  [EVIDENCE_ERROR_CODES.buildFailed]: PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.failed,
+  [EVIDENCE_ERROR_CODES.notFound]: PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.notFound,
+};
+
 /** Normalize optional upstream metric properties to the contract's null sentinel. */
 export function normalizeProgramEvidenceGraphDetail(
   detail: ProgramEvidenceGraphDetail,
@@ -89,11 +123,34 @@ function normalizeMetric(value: unknown): number | null {
 export async function getProgramEvidenceGraphDetail(
   assessmentId: string,
 ): Promise<ProgramEvidenceGraphDetail | null> {
+  const result = await getProgramEvidenceGraphDetailState(assessmentId);
+  return result.state === PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.ready
+    ? result.detail
+    : null;
+}
+
+export async function getProgramEvidenceGraphDetailState(
+  assessmentId: string,
+): Promise<ProgramEvidenceGraphDetailLoadResult> {
   const { payload, ok } = await apiRequest(
     `/api/assessments/${encodeURIComponent(assessmentId)}/evidence-graph`,
     { cache: "no-store" },
   );
-  return ok
-    ? normalizeProgramEvidenceGraphDetail(payload as ProgramEvidenceGraphDetail)
-    : null;
+  if (ok) {
+    return {
+      state: PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.ready,
+      detail: normalizeProgramEvidenceGraphDetail(
+        payload as ProgramEvidenceGraphDetail,
+      ),
+    };
+  }
+
+  const problemCode = (payload as { problem?: { code?: string } } | null)
+    ?.problem?.code;
+  return {
+    state:
+      (problemCode && UNAVAILABLE_GRAPH_STATE_BY_PROBLEM_CODE[problemCode]) ||
+      PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.unavailable,
+    detail: null,
+  };
 }

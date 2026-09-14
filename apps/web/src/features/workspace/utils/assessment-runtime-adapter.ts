@@ -44,6 +44,7 @@ import {
   type NormalizeAssessmentRuntimeParams,
 } from "../types/assessment-runtime-adapter.types";
 import {
+  RUNTIME_THINKING_PHASES,
   WORKSPACE_RUNTIME_CONNECTION_STATES,
   type WorkspaceRuntimeConnectionState,
   type WorkspaceRuntimeRun,
@@ -56,7 +57,15 @@ import {
 } from "../../artifacts/types/artifact.types";
 import { stageLabel } from "./assessment-runtime-formatter";
 import { runtimeActivityDisplaySummary } from "./runtime-activity-summary";
-import { ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES } from "../config/runtime-activity";
+import {
+  formatRuntimeThinkingItem,
+  projectRuntimeThinking,
+  runtimeThinkingPhase,
+} from "./runtime-thinking-projection";
+import {
+  ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES,
+  ENGINEERING_RULE_GATE_TOOL_NAME,
+} from "../config/runtime-activity";
 import { resolveMessage, type MessageKey } from "@lcsp/i18n";
 import { appLocale } from "../../../lib/locale";
 
@@ -335,8 +344,11 @@ function normalizeWorkflow({
   repositorySnapshot: AdapterTimelineInput["repositorySnapshot"];
 }): NormalizedAssessmentWorkflow {
   const currentRun = timeline?.currentRun ?? null;
-  const recentActivity = timeline?.recentActivity ?? [];
   const latestRunId = timeline?.latestRunId ?? currentRun?.runId ?? null;
+  const recentActivity = scopeRuntimeActivity(
+    timeline?.recentActivity ?? [],
+    latestRunId,
+  );
 
   // Targeted clarification loop detection:
   // e.g. Investigator paused / waiting for business context + Interview active/clarifying
@@ -371,8 +383,20 @@ function normalizeWorkflow({
       currentRun,
       recentActivity,
       repositorySnapshot,
+      sanitizedInterview,
     }),
   };
+}
+
+function scopeRuntimeActivity(
+  recentActivity: WorkspaceRuntimeActivityItem[],
+  latestRunId: string | null,
+): WorkspaceRuntimeActivityItem[] {
+  if (!latestRunId) {
+    return recentActivity;
+  }
+
+  return recentActivity.filter((item) => item.runId === latestRunId);
 }
 
 function normalizeRepository(
@@ -400,10 +424,12 @@ function normalizeWorkflowSteps({
   currentRun,
   recentActivity,
   repositorySnapshot,
+  sanitizedInterview,
 }: {
   currentRun: WorkspaceRuntimeRun | null;
   recentActivity: WorkspaceRuntimeActivityItem[];
   repositorySnapshot: AdapterTimelineInput["repositorySnapshot"];
+  sanitizedInterview: AssessmentInterviewRuntimeState | null;
 }): NormalizedWorkflowStep[] {
   const defaultSteps = [
     [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.repository, "pages.appShell.runtimePanelRepository"],
@@ -430,9 +456,15 @@ function normalizeWorkflowSteps({
       id,
       label: steps.has(id) ? steps.get(id)!.label : stageLabel(activity.stage),
       status: normalizeActivityStepStatus(activity),
-      detail: activity.summary ? runtimeActivityDisplaySummary(activity) : null,
+      // Per-rule Planner/Investigator lines carry internal rule IDs and reason codes;
+      // those steps get an aggregated detail below instead.
+      detail:
+        activity.summary && !runtimeThinkingPhase(activity)
+          ? runtimeActivityDisplaySummary(activity)
+          : null,
     });
   }
+  applyEngineeringRuleStepDetails(steps, recentActivity);
   if (currentRun) {
     const id = workflowStepIdForRun(currentRun);
     steps.set(id, {
@@ -442,8 +474,137 @@ function normalizeWorkflowSteps({
       detail: null,
     });
   }
+  const interviewStepStatus = normalizeInterviewStepStatus(sanitizedInterview);
+  if (interviewStepStatus) {
+    const id = ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.interview;
+    const existingStep = steps.get(id);
+    steps.set(id, {
+      id,
+      label: existingStep?.label ?? stageLabel(id),
+      status: interviewStepStatus,
+      detail: existingStep?.detail ?? null,
+    });
+  }
+  applyLegacyClassificationGateProjection({
+    steps,
+    currentRun,
+    recentActivity,
+  });
   completeQueuedPredecessors(steps);
   return [...steps.values()];
+}
+
+function applyEngineeringRuleStepDetails(
+  steps: Map<string, NormalizedWorkflowStep>,
+  recentActivity: WorkspaceRuntimeActivityItem[],
+): void {
+  const items = projectRuntimeThinking(recentActivity);
+  for (const [stepId, phase] of [
+    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.planner, RUNTIME_THINKING_PHASES.planner],
+    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.investigate, RUNTIME_THINKING_PHASES.investigator],
+  ] as const) {
+    const step = steps.get(stepId);
+    const detail = items
+      .filter((item) => item.phase === phase)
+      .map(formatRuntimeThinkingItem)
+      .join(" ");
+    if (step && detail) {
+      steps.set(stepId, { ...step, detail });
+    }
+  }
+}
+
+const TERMINAL_WORKFLOW_STEP_STATUSES = new Set<NormalizedWorkflowStep["status"]>([
+  NORMALIZED_WORKFLOW_STEP_STATUSES.completed,
+  NORMALIZED_WORKFLOW_STEP_STATUSES.skipped,
+  NORMALIZED_WORKFLOW_STEP_STATUSES.failed,
+]);
+
+/**
+ * Compatibility fallback for historical runs recorded before the API emitted an
+ * explicit terminal Gate event. New runs carry `engineering_rule_gate` COMPLETED or
+ * SKIPPED/NOT_REQUIRED in the Classification run, which always wins over this.
+ * It also enforces the scope invariant: a non-terminal Gate never coexists with a
+ * completed Classification in the same execution scope.
+ */
+function applyLegacyClassificationGateProjection({
+  steps,
+  currentRun,
+  recentActivity,
+}: {
+  steps: Map<string, NormalizedWorkflowStep>;
+  currentRun: WorkspaceRuntimeRun | null;
+  recentActivity: WorkspaceRuntimeActivityItem[];
+}): void {
+  const gateStep = steps.get(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.gate);
+  if (
+    !gateStep ||
+    TERMINAL_WORKFLOW_STEP_STATUSES.has(gateStep.status) ||
+    hasExplicitTerminalGateEvent(recentActivity) ||
+    !hasCompletedClassificationRuntime(currentRun, recentActivity)
+  ) {
+    return;
+  }
+
+  steps.set(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.gate, {
+    ...gateStep,
+    status: NORMALIZED_WORKFLOW_STEP_STATUSES.skipped,
+  });
+}
+
+function hasExplicitTerminalGateEvent(
+  recentActivity: WorkspaceRuntimeActivityItem[],
+): boolean {
+  return recentActivity.some(
+    (activity) =>
+      activity.toolName === ENGINEERING_RULE_GATE_TOOL_NAME &&
+      (activity.eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted ||
+        activity.eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped ||
+        activity.eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.toolFailed),
+  );
+}
+
+function hasCompletedClassificationRuntime(
+  currentRun: WorkspaceRuntimeRun | null,
+  recentActivity: WorkspaceRuntimeActivityItem[],
+): boolean {
+  if (
+    currentRun?.stage === ASSESSMENT_RUNTIME_STAGE_CODES.classification &&
+    currentRun.status === ASSESSMENT_RUNTIME_RUN_STATUSES.completed
+  ) {
+    return true;
+  }
+
+  return recentActivity.some(
+    (activity) =>
+      activity.stage === ASSESSMENT_RUNTIME_STAGE_CODES.classification &&
+      (activity.eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.runCompleted ||
+        activity.runStatus === ASSESSMENT_RUNTIME_RUN_STATUSES.completed),
+  );
+}
+
+function normalizeInterviewStepStatus(
+  sanitizedInterview: AssessmentInterviewRuntimeState | null,
+): NormalizedWorkflowStep["status"] | null {
+  if (!sanitizedInterview) {
+    return null;
+  }
+
+  switch (sanitizedInterview.outcome) {
+    case ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer:
+      return sanitizedInterview.activeQuestion
+        ? NORMALIZED_WORKFLOW_STEP_STATUSES.running
+        : NORMALIZED_WORKFLOW_STEP_STATUSES.waiting;
+    case ASSESSMENT_INTERVIEW_OUTCOMES.contextReady:
+    case ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved:
+      return NORMALIZED_WORKFLOW_STEP_STATUSES.completed;
+    case ASSESSMENT_INTERVIEW_OUTCOMES.failed:
+      return NORMALIZED_WORKFLOW_STEP_STATUSES.failed;
+    case ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved:
+      return NORMALIZED_WORKFLOW_STEP_STATUSES.waiting;
+    default:
+      return null;
+  }
 }
 
 function workflowStepIdForRun(run: WorkspaceRuntimeRun): string {
@@ -465,6 +626,9 @@ function workflowStepIdForRuntimeActivity(
 }
 
 function workflowStepIdForStage(stage: string, toolName: string | null): string {
+  if (toolName === ENGINEERING_RULE_GATE_TOOL_NAME) {
+    return ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.gate;
+  }
   if (stage === ASSESSMENT_RUNTIME_STAGE_CODES.snapshot) {
     return ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.repository;
   }
@@ -489,6 +653,14 @@ function workflowStepIdForStage(stage: string, toolName: string | null): string 
 function normalizeActivityStepStatus(
   activity: WorkspaceRuntimeActivityItem,
 ): NormalizedWorkflowStep["status"] {
+  // Only the Gate treats TOOL_SKIPPED as a terminal SKIPPED step. Planner rule-level
+  // SKIP decisions are progress inside a completed Planner step.
+  if (
+    activity.toolName === ENGINEERING_RULE_GATE_TOOL_NAME &&
+    activity.eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped
+  ) {
+    return NORMALIZED_WORKFLOW_STEP_STATUSES.skipped;
+  }
   if (
     activity.eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted ||
     activity.eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped ||

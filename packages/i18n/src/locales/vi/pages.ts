@@ -250,6 +250,7 @@ export const viPages = {
       running: "Đang chạy",
       waiting: "Đang chờ",
       completed: "Hoàn tất",
+      skipped: "Bỏ qua",
       failed: "Thất bại",
     },
     runtimePanelStages: {
@@ -1461,6 +1462,12 @@ export const viPages = {
         "Các đường dẫn bằng chứng từ snapshot repository đã pin.",
       close: "Đóng Program Evidence Graph",
       loading: "Đang tải evidence graph...",
+      building:
+        "Evidence graph đang được xây dựng và sẽ tự hiển thị tại đây.",
+      buildFailed:
+        "Lượt quét evidence chưa hoàn tất nên chưa có evidence graph cho lần chạy này.",
+      notFound:
+        "Assessment này chưa có evidence graph.",
       loadError: "Không thể tải evidence graph. Vui lòng thử lại sau.",
       repositorySnapshot: "Snapshot repository",
       overview: "Tổng quan graph",
@@ -1531,6 +1538,14 @@ export const viPages = {
         "Điều tra EngineeringRule {engineeringRuleId} không thành công",
       investigated:
         "Đã điều tra EngineeringRule {engineeringRuleId}: {evaluationStatus}",
+      plannerTargetedSummary:
+        "Yêu cầu được đánh giá lại theo câu trả lời mới: {selected}. Yêu cầu không liên quan được bỏ qua: {skipped}.",
+      plannerSummary:
+        "Yêu cầu được chọn để điều tra: {selected}/{total}. Tạm thời ngoài phạm vi: {skipped}.",
+      investigatorSummary:
+        "Yêu cầu đã điều tra: {investigated}/{selected}.",
+      investigatorLimitedSummary:
+        "Lượt điều tra yêu cầu gặp giới hạn và chưa kết luận: {failed}.",
       readinessWaiting:
         "Assessment đang chờ EngineeringRules trạng thái READY; Legal Rule Triage tự động đã được yêu cầu.",
     },
@@ -1917,6 +1932,31 @@ export const viPages = {
       "Theo dõi tiến trình phân loại hiện tại và bước tiếp theo cho assessment này.",
     loading: "Đang tải trạng thái phân loại",
     summaryLabel: "Tóm tắt",
+    executionLabel: "Phiên đánh giá",
+    resultLabel: "Kết quả assessment",
+    evidenceLabel: "Bằng chứng",
+    resultUnavailable: "Chưa có",
+    evidenceUnavailable: "Chưa có",
+    executionStates: {
+      queued: "Đang xếp hàng",
+      running: "Đang chạy",
+      completed: "Hoàn tất",
+      failed: "Thất bại",
+      blocked: "Bị chặn",
+      skipped: "Bỏ qua",
+    },
+    assessmentOutcomes: {
+      compliant: "Đáp ứng",
+      nonCompliant: "Chưa đáp ứng",
+      unknown: "Chưa kết luận",
+      notApplicable: "Không áp dụng",
+    },
+    evidenceQualities: {
+      evidenceBacked: "Có bằng chứng xác thực",
+      limitedEvidence: "Bằng chứng còn giới hạn",
+      noValidatedEvidence: "Chưa có claim được xác thực bằng bằng chứng",
+      coverageLimited: "Độ phủ còn giới hạn",
+    },
     referencesLabel: "Tham chiếu pháp lý áp dụng",
     generateFinalReport: "Tạo Báo cáo Cuối cùng",
     generateGapAnalysis: "Tạo Phân tích Khoảng trống",

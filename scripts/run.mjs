@@ -68,6 +68,8 @@ const defaultDockerPhoenixTracing =
   "false";
 const defaultPhoenixCollectorEndpoint =
   process.env.PHOENIX_COLLECTOR_ENDPOINT ?? "http://localhost:6006/v1/traces";
+const defaultPhoenixHost =
+  process.env.PHOENIX_HOST ?? rootEnv.PHOENIX_HOST ?? "127.0.0.1";
 const defaultPhoenixProject =
   process.env.PHOENIX_PROJECT ?? rootEnv.PHOENIX_PROJECT ?? "deepagents";
 const defaultDockerWorkerImage =
@@ -206,7 +208,16 @@ const targets = {
   phoenix: {
     cwd: repoRoot,
     cmd: "uvx",
-    args: ["--python", "3.13", "arize-phoenix", "serve", "--port", "6006"],
+    args: [
+      "--python",
+      "3.13",
+      "arize-phoenix",
+      "serve",
+      "--host",
+      defaultPhoenixHost,
+      "--port",
+      "6006",
+    ],
     env: rootEnv,
     description: "Start Arize Phoenix trace UI",
     healthPort: 6006,

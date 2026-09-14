@@ -247,6 +247,7 @@ export const enPages = {
       running: "Running",
       waiting: "Waiting",
       completed: "Completed",
+      skipped: "Skipped",
       failed: "Failed",
     },
     runtimePanelStages: {
@@ -1457,6 +1458,12 @@ export const enPages = {
         "Bounded evidence paths from the pinned repository snapshot.",
       close: "Close Program Evidence Graph",
       loading: "Loading evidence graph...",
+      building:
+        "The evidence graph is still being built. It will appear here automatically.",
+      buildFailed:
+        "The evidence scan did not finish, so no evidence graph is available for this run.",
+      notFound:
+        "No evidence graph exists for this assessment yet.",
       loadError: "Unable to load the evidence graph. Try again later.",
       repositorySnapshot: "Repository snapshot",
       overview: "Graph overview",
@@ -1528,6 +1535,14 @@ export const enPages = {
         "Investigation failed for EngineeringRule {engineeringRuleId}",
       investigated:
         "Investigated EngineeringRule {engineeringRuleId}: {evaluationStatus}",
+      plannerTargetedSummary:
+        "Requirements re-evaluated for the new answer: {selected}. Unrelated requirements skipped: {skipped}.",
+      plannerSummary:
+        "Requirements selected for investigation: {selected} of {total}. Out of scope for now: {skipped}.",
+      investigatorSummary:
+        "Requirements investigated: {investigated} of {selected}.",
+      investigatorLimitedSummary:
+        "Requirement investigations that hit a limitation and stay unresolved: {failed}.",
       readinessWaiting:
         "Assessment is waiting for READY EngineeringRules; automatic Legal Rule Triage was requested.",
     },
@@ -1916,6 +1931,31 @@ export const enPages = {
       "Track the current classification progress and the next step for this assessment.",
     loading: "Loading classification status",
     summaryLabel: "Summary",
+    executionLabel: "Assessment run",
+    resultLabel: "Assessment result",
+    evidenceLabel: "Evidence",
+    resultUnavailable: "Not available",
+    evidenceUnavailable: "Not available",
+    executionStates: {
+      queued: "Queued",
+      running: "Running",
+      completed: "Completed",
+      failed: "Failed",
+      blocked: "Blocked",
+      skipped: "Skipped",
+    },
+    assessmentOutcomes: {
+      compliant: "Compliant",
+      nonCompliant: "Non-compliant",
+      unknown: "Unknown",
+      notApplicable: "Not applicable",
+    },
+    evidenceQualities: {
+      evidenceBacked: "Evidence-backed",
+      limitedEvidence: "Limited evidence",
+      noValidatedEvidence: "No validated evidence-backed claim",
+      coverageLimited: "Coverage limited",
+    },
     referencesLabel: "Applicable legal references",
     generateFinalReport: "Generate Final Report",
     generateGapAnalysis: "Generate Gap Analysis",

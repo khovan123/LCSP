@@ -16,6 +16,8 @@ import {
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
+import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
+import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
@@ -29,8 +31,17 @@ import { AcceptTechnicalProfileCommand } from "../../application/commands/accept
 import type { TechnicalProfileCallbackRequest } from "../../application/contracts/evidence/technical-profile-callback.contract.js";
 import { GetEvidenceQuery } from "../../application/queries/get-evidence/get-evidence.query.js";
 import { ProgramEvidenceGraphDetailService } from "../../application/services/evidence/program-evidence-graph-detail.service.js";
-import { toPrismaEvidenceAcceptanceStatus } from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
+import {
+  fromPrismaRepositoryScanJobStatus,
+  toPrismaEvidenceAcceptanceStatus,
+} from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
+
+const FAILED_EVIDENCE_GRAPH_SCAN_STATUSES = new Set<string>([
+  REPOSITORY_SCAN_JOB_STATUSES.failed,
+  REPOSITORY_SCAN_JOB_STATUSES.blocked,
+  REPOSITORY_SCAN_JOB_STATUSES.blockedMapping,
+]);
 
 @Controller("assessments")
 export class EvidenceController {
@@ -96,7 +107,6 @@ export class EvidenceController {
         assessmentId: true,
         scanJobId: true,
         snapshotId: true,
-        evidencePayload: true,
         createdAt: true,
         snapshot: {
           select: {
@@ -110,10 +120,23 @@ export class EvidenceController {
       },
     });
     if (!report) {
-      throw new NotFoundException("Technical evidence not found");
+      throw await this.unavailableEvidenceGraphProblem(
+        assessmentId,
+        request.correlationId ?? randomUUID(),
+      );
     }
     return resultEnvelope(
-      await this.graphDetail.project({ report, snapshot: report.snapshot }),
+      await this.graphDetail.projectAcceptedReport({
+        report,
+        snapshot: report.snapshot,
+        loadEvidencePayload: async () =>
+          (
+            await this.prisma.technicalEvidenceReport.findUnique({
+              where: { id: report.id },
+              select: { evidencePayload: true },
+            })
+          )?.evidencePayload ?? null,
+      }),
     );
   }
 
@@ -154,6 +177,62 @@ export class EvidenceController {
     return resultEnvelope(
       this.graphDetail.projectOverview(report.evidencePayload),
     );
+  }
+
+  /**
+   * Distinguishes why no accepted graph exists: still building (NOT_READY), the
+   * latest scan or its evidence report failed (BUILD_FAILED), or nothing was ever
+   * started for this assessment (NOT_FOUND).
+   */
+  private async unavailableEvidenceGraphProblem(
+    assessmentId: string,
+    correlationId: string,
+  ) {
+    const latestScanJob = await this.prisma.repositoryScanJob.findFirst({
+      where: { assessmentId },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      select: { id: true, status: true },
+    });
+    if (!latestScanJob) {
+      return problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+        status: HttpStatus.NOT_FOUND,
+      });
+    }
+    const scanStatus = fromPrismaRepositoryScanJobStatus(latestScanJob.status);
+    const meta = { scanJobId: latestScanJob.id, scanStatus };
+    if (FAILED_EVIDENCE_GRAPH_SCAN_STATUSES.has(scanStatus)) {
+      return problemException(EVIDENCE_ERROR_CODES.buildFailed, correlationId, {
+        status: HttpStatus.CONFLICT,
+        meta,
+      });
+    }
+    if (scanStatus === REPOSITORY_SCAN_JOB_STATUSES.completed) {
+      const rejectedReport =
+        await this.prisma.technicalEvidenceReport.findFirst({
+          where: {
+            scanJobId: latestScanJob.id,
+            status: toPrismaEvidenceAcceptanceStatus(
+              TECHNICAL_EVIDENCE_REPORT_STATUSES.rejected,
+            ),
+          },
+          select: { id: true },
+        });
+      if (rejectedReport) {
+        return problemException(
+          EVIDENCE_ERROR_CODES.buildFailed,
+          correlationId,
+          {
+            status: HttpStatus.CONFLICT,
+            meta,
+          },
+        );
+      }
+    }
+    // Active scans, and completed scans whose report acceptance is still pending.
+    return problemException(EVIDENCE_ERROR_CODES.notReady, correlationId, {
+      status: HttpStatus.ACCEPTED,
+      meta,
+    });
   }
 }
 

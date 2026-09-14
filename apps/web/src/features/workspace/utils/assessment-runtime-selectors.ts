@@ -27,13 +27,9 @@ import {
   type NormalizedAssessmentSidebarWorkflowItem,
   type NormalizedAssessmentRuntime,
 } from "../types/assessment-runtime-adapter.types";
-import {
-  ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES,
-  PRESENTABLE_RUNTIME_ACTIVITY_EVENTS,
-  TECHNICAL_EVIDENCE_THINKING_LIMIT,
-} from "../config/runtime-activity";
+import { projectRuntimeThinking } from "./runtime-thinking-projection";
 import type {
-  WorkspaceRuntimeActivityItem,
+  RuntimeThinkingItem,
   WorkspaceRuntimeRepositorySnapshot,
 } from "../types/workspace-runtime.types";
 
@@ -113,27 +109,10 @@ export function selectWorkflowPresentation(
   };
 }
 
-export function selectRuntimeThinkingActivities(
+export function selectRuntimeThinkingItems(
   normalized: NormalizedAssessmentRuntime,
-): WorkspaceRuntimeActivityItem[] {
-  return normalized.workflow.recentActivity
-    .filter(isPresentableTechnicalEvidenceActivity)
-    .slice(0, TECHNICAL_EVIDENCE_THINKING_LIMIT)
-    .reverse();
-}
-
-function isPresentableTechnicalEvidenceActivity(
-  item: WorkspaceRuntimeActivityItem,
-): boolean {
-  return (
-    item.stage === ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence &&
-    Boolean(item.summary.trim()) &&
-    PRESENTABLE_RUNTIME_ACTIVITY_EVENTS.has(item.eventType) &&
-    (item.toolName?.startsWith(ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES.planner) === true ||
-      item.toolName?.startsWith(
-        ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES.investigator,
-      ) === true)
-  );
+): RuntimeThinkingItem[] {
+  return projectRuntimeThinking(normalized.workflow.recentActivity);
 }
 
 export function selectRightSidebarPresentation(
