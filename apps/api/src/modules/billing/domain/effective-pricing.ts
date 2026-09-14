@@ -16,11 +16,10 @@ export function selectEffectivePricingSnapshot<T extends EffectiveDated>(
   );
   if (
     applicable.length > 1 &&
-    applicable[0]!.effectiveAt.getTime() ===
-      applicable[1]!.effectiveAt.getTime()
+    applicable[0].effectiveAt.getTime() === applicable[1].effectiveAt.getTime()
   )
     throw new BillingDomainError(
       "Ambiguous pricing snapshot effective time for provider/model",
     );
-  return applicable[0]!;
+  return applicable[0];
 }
