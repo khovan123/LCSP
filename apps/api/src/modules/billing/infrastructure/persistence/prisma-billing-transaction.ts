@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PaymentReconciliationStatus } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
+import { selectEffectivePricingSnapshot } from "../../domain/effective-pricing.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import type {
   BillingTransactionPort,
@@ -210,11 +211,9 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
                 outputPricePerMillion: x.outputPricePerMillion.toString(),
                 reasoningPricePerMillion:
                   x.reasoningPricePerMillion?.toString(),
-                markupBps: x.markupBps ?? undefined,
+                markupBps: x.markupBps,
                 fxRateVndNumerator: x.fxRateVndNumerator ?? undefined,
                 fxRateVndDenominator: x.fxRateVndDenominator ?? undefined,
-                markupSnapshotId: x.markupSnapshotId ?? undefined,
-                fxSnapshotId: x.fxSnapshotId ?? undefined,
               }
             );
           },
@@ -222,17 +221,8 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
             const rows = await tx.modelPricingSnapshot.findMany({
               where: { provider, model, effectiveAt: { lte: occurredAt } },
               orderBy: { effectiveAt: "desc" },
-              take: 2,
             });
-            const x = rows[0] ?? null;
-            if (
-              x &&
-              rows[1] &&
-              rows[1].effectiveAt.getTime() === x.effectiveAt.getTime()
-            )
-              throw new Error(
-                "Ambiguous pricing snapshot: multiple rows share the same effective time for this provider/model",
-              );
+            const x = selectEffectivePricingSnapshot(rows, occurredAt);
             return (
               x && {
                 ...x,
@@ -244,11 +234,9 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
                 outputPricePerMillion: x.outputPricePerMillion.toString(),
                 reasoningPricePerMillion:
                   x.reasoningPricePerMillion?.toString(),
-                markupBps: x.markupBps ?? undefined,
+                markupBps: x.markupBps,
                 fxRateVndNumerator: x.fxRateVndNumerator ?? undefined,
                 fxRateVndDenominator: x.fxRateVndDenominator ?? undefined,
-                markupSnapshotId: x.markupSnapshotId ?? undefined,
-                fxSnapshotId: x.fxSnapshotId ?? undefined,
               }
             );
           },

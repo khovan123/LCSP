@@ -53,8 +53,6 @@ export type UsageRecord = {
   chargedCredits: bigint | null;
   providerCostCredits: bigint | null;
   customerChargeVnd: bigint | null;
-  markupSnapshotId: string | null;
-  fxSnapshotId: string | null;
   occurredAt: Date;
 };
 export type PricingRecord = {
@@ -68,11 +66,11 @@ export type PricingRecord = {
   reasoningPricePerMillion?: string;
   version: number;
   effectiveAt: Date;
-  markupBps?: bigint;
+  providerCurrency: string;
+  customerCurrency: string;
+  markupBps: bigint;
   fxRateVndNumerator?: bigint;
   fxRateVndDenominator?: bigint;
-  markupSnapshotId?: string;
-  fxSnapshotId?: string;
 };
 
 export interface BillingWalletPort {
@@ -191,8 +189,6 @@ export interface LlmUsagePort {
     chargedCredits: bigint;
     providerCostCredits?: bigint;
     customerChargeVnd?: bigint;
-    markupSnapshotId?: string;
-    fxSnapshotId?: string;
     occurredAt?: Date;
   }): Promise<UsageRecord>;
 }

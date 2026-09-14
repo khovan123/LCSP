@@ -96,7 +96,10 @@ describe("LCSP-310 usage and pricing foundation", () => {
         model: "MODEL_A",
         version: Math.floor(Math.random() * 1_000_000_000),
         inputPricePerMillion: "1.00000000",
+        cachedInputPricePerMillion: "0.50000000",
         outputPricePerMillion: "2.00000000",
+        providerCurrency: "VND",
+        customerCurrency: "VND",
         markupBps: 0n,
         effectiveAt: new Date(Date.now() - 1000),
       },
@@ -111,6 +114,9 @@ describe("LCSP-310 usage and pricing foundation", () => {
       model: "MODEL_A",
       inputPricePerMillion: "1.00000000",
       outputPricePerMillion: "2.00000000",
+      providerCurrency: "VND",
+      customerCurrency: "VND",
+      markupBps: 0n,
       version: 1,
       effectiveAt: new Date(),
     };
@@ -160,6 +166,24 @@ describe("LCSP-310 usage and pricing foundation", () => {
         })
       ).pricingSnapshotId,
     ).toBe(f.pricing.id);
+  });
+
+  it("accepts a provider total that overlaps canonical cached-input buckets", async () => {
+    const f = await fixture();
+    const event = await usage.recordAndSettleUsage({
+      userId: f.user.id,
+      reservationId: f.reservation.id,
+      invocationId: "INV-CACHED-SLICE",
+      provider: "OPENAI",
+      model: "MODEL_A",
+      // Provider adapter normalized raw input=1M and cached=250k into the
+      // disjoint billable 750k uncached + 250k cached dimensions.
+      inputTokens: 750_000n,
+      cachedInputTokens: 250_000n,
+      totalTokens: 1_000_000n,
+    });
+    expect(event.chargedCredits).toBe(1n);
+    expect(event.totalTokens).toBe(1_000_000n);
   });
 
   it("rejects conflicting invocation replay and provider/model pricing mismatch", async () => {
@@ -298,6 +322,8 @@ describe("LCSP-310 usage and pricing foundation", () => {
         version: 2,
         inputPricePerMillion: "9.00000000",
         outputPricePerMillion: "9.00000000",
+        providerCurrency: "VND",
+        customerCurrency: "VND",
         markupBps: 0n,
         effectiveAt: new Date(),
       },
@@ -341,6 +367,8 @@ describe("LCSP-310 usage and pricing foundation", () => {
         version: Math.floor(Math.random() * 1_000_000_000),
         inputPricePerMillion: "9.00000000",
         outputPricePerMillion: "9.00000000",
+        providerCurrency: "VND",
+        customerCurrency: "VND",
         markupBps: 0n,
         effectiveAt: new Date(t3.getTime() - 100),
       },
@@ -397,6 +425,8 @@ describe("LCSP-310 usage and pricing foundation", () => {
         version: Math.floor(Math.random() * 1_000_000_000),
         inputPricePerMillion: "3.00000000",
         outputPricePerMillion: "4.00000000",
+        providerCurrency: "VND",
+        customerCurrency: "VND",
         markupBps: 0n,
         effectiveAt: new Date(),
       },

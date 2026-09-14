@@ -3,6 +3,7 @@ import type { EffectiveRuntimeModel } from "@lcsp/contracts/billing";
 import {
   calculateUsageChargeCredits,
   calculateCustomerChargeCredits,
+  calculateCustomerChargeVnd,
   type UsageDimensions,
 } from "../../domain/usage-pricing.js";
 import type { PricingRecord } from "../../domain/repositories/billing-transaction.port.js";
@@ -29,11 +30,10 @@ export class BillingEstimateService {
       policyVersion: input.runtimeModel.policyVersion,
       providerCostCredits,
       customerChargeCredits,
-      customerChargeVnd:
-        input.pricing.fxRateVndNumerator && input.pricing.fxRateVndDenominator
-          ? (customerChargeCredits * input.pricing.fxRateVndNumerator) /
-            input.pricing.fxRateVndDenominator
-          : undefined,
+      customerChargeVnd: calculateCustomerChargeVnd(
+        customerChargeCredits,
+        input.pricing,
+      ),
     };
   }
 }

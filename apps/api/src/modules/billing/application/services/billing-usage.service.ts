@@ -7,6 +7,7 @@ import {
 } from "../../domain/billing.errors.js";
 import {
   calculateCustomerChargeCredits,
+  calculateCustomerChargeVnd,
   calculateUsageChargeCredits,
 } from "../../domain/usage-pricing.js";
 import {
@@ -63,11 +64,6 @@ export class BillingUsageService {
         throw new BillingDomainError("Token counts cannot be negative");
       if (i.totalTokens !== undefined && i.totalTokens < 0n)
         throw new BillingDomainError("Token counts cannot be negative");
-      if (
-        i.totalTokens !== undefined &&
-        i.totalTokens < input + cachedInput + cacheWrite + output + reasoning
-      )
-        throw new BillingDomainError("Total tokens are inconsistent");
       const existing = await usage.findByInvocation(i.userId, i.invocationId);
       if (existing) {
         if (
@@ -78,9 +74,7 @@ export class BillingUsageService {
           existing.cacheWriteTokens !== cacheWrite ||
           existing.outputTokens !== output ||
           existing.reasoningTokens !== reasoning ||
-          existing.totalTokens !==
-            (i.totalTokens ??
-              input + cachedInput + cacheWrite + output + reasoning) ||
+          existing.totalTokens !== (i.totalTokens ?? null) ||
           existing.providerResponseId !== (i.providerResponseId ?? null) ||
           existing.reservationId !== i.reservationId ||
           (i.occurredAt !== undefined &&
@@ -97,16 +91,6 @@ export class BillingUsageService {
       );
       if (!snapshot)
         throw new BillingDomainError("No applicable pricing snapshot");
-      // At settlement time a non-zero markup must be anchored to a traceable
-      // snapshot row.  Zero-markup rows need no authority anchor.
-      if (
-        snapshot.markupBps &&
-        snapshot.markupBps > 0n &&
-        !snapshot.markupSnapshotId
-      )
-        throw new BillingDomainError(
-          "Pricing snapshot has non-zero markupBps but markupSnapshotId is not linked",
-        );
       const providerCost = calculateUsageChargeCredits(
         {
           inputTokens: input,
@@ -127,22 +111,7 @@ export class BillingUsageService {
         },
         snapshot,
       );
-      // FX integrity: partial configuration is a data error.
-      // Fully absent FX is valid — pricing row has no VND conversion configured.
-      const hasFxNumerator = snapshot.fxRateVndNumerator !== undefined;
-      const hasFxDenominator = snapshot.fxRateVndDenominator !== undefined;
-      if (hasFxNumerator !== hasFxDenominator)
-        throw new BillingDomainError(
-          "Pricing snapshot has partial FX rate: both fxRateVndNumerator and fxRateVndDenominator must be present or both absent",
-        );
-      if (hasFxNumerator && !snapshot.fxSnapshotId)
-        throw new BillingDomainError(
-          "Pricing snapshot has FX rate but fxSnapshotId is not linked",
-        );
-      const customerChargeVnd = hasFxNumerator
-        ? (charge * snapshot.fxRateVndNumerator!) /
-          snapshot.fxRateVndDenominator!
-        : undefined;
+      const customerChargeVnd = calculateCustomerChargeVnd(charge, snapshot);
       if (i.providerResponseId) {
         const response = await usage.findByProviderResponse(
           provider,
@@ -167,14 +136,12 @@ export class BillingUsageService {
         cacheWriteTokens: cacheWrite,
         outputTokens: output,
         reasoningTokens: reasoning,
-        totalTokens:
-          i.totalTokens ??
-          input + cachedInput + cacheWrite + output + reasoning,
+        // Provider totals can overlap canonical billable dimensions; they are
+        // informational and must never be rebuilt from billed buckets.
+        totalTokens: i.totalTokens,
         pricingSnapshotId: snapshot.id,
         providerCostCredits: providerCost,
         customerChargeVnd,
-        markupSnapshotId: snapshot.markupSnapshotId,
-        fxSnapshotId: snapshot.fxSnapshotId,
         reservationId: i.reservationId,
         chargedCredits: charge,
         occurredAt,

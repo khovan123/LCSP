@@ -19,6 +19,8 @@ describe("billing estimates", () => {
         outputPricePerMillion: "2",
         version: 1,
         effectiveAt: new Date(),
+        providerCurrency: "VND",
+        customerCurrency: "VND",
         markupBps: 1000n,
       },
     });

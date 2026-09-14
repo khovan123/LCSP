@@ -1,6 +1,7 @@
 import type { EffectiveRuntimeModel } from "./runtime-model.ts";
 
-export type ProviderUsageDimensions = {
+/** Provider adapters must emit disjoint billable dimensions; totalTokens is informational. */
+export type CanonicalBillableUsageDimensions = {
   inputTokens?: string;
   cachedInputTokens?: string;
   cacheWriteTokens?: string;
@@ -9,7 +10,7 @@ export type ProviderUsageDimensions = {
 };
 
 /** Worker-to-API accounting payload. Estimates must never use this settled shape. */
-export type SettledUsageInput = ProviderUsageDimensions & {
+export type SettledUsageInput = CanonicalBillableUsageDimensions & {
   userId: string;
   reservationId: string;
   effectiveRuntimeModel: EffectiveRuntimeModel;

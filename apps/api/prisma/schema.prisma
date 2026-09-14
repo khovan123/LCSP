@@ -1339,11 +1339,12 @@ model ModelPricingSnapshot {
   cacheWritePricePerMillion Decimal?    @db.Decimal(20, 8)
   outputPricePerMillion Decimal         @db.Decimal(20, 8)
   reasoningPricePerMillion Decimal?     @db.Decimal(20, 8)
-  markupBps             BigInt?
+  // Immutable composite authority for provider cost, customer markup, and FX.
+  providerCurrency      String
+  customerCurrency      String
+  markupBps             BigInt
   fxRateVndNumerator    BigInt?
   fxRateVndDenominator  BigInt?
-  markupSnapshotId      String?
-  fxSnapshotId          String?
   version               Int
   effectiveAt           DateTime
   createdAt             DateTime        @default(now())
@@ -1351,29 +1352,6 @@ model ModelPricingSnapshot {
 
   @@unique([provider, model, version])
   @@index([provider, model, effectiveAt])
-}
-
-model BillingMarkupSnapshot {
-  id        String   @id @default(uuid())
-  markupBps BigInt
-  version   Int
-  effectiveAt DateTime
-  createdAt DateTime @default(now())
-  @@unique([version])
-  @@index([effectiveAt])
-}
-
-model BillingFxSnapshot {
-  id          String   @id @default(uuid())
-  fromCurrency String
-  toCurrency   String
-  numerator    BigInt
-  denominator  BigInt
-  version      Int
-  effectiveAt  DateTime
-  createdAt    DateTime @default(now())
-  @@unique([fromCurrency, toCurrency, version])
-  @@index([fromCurrency, toCurrency, effectiveAt])
 }
 
 model LlmUsageEvent {
@@ -1392,8 +1370,6 @@ model LlmUsageEvent {
   pricingSnapshotId  String?
   providerCostCredits BigInt?
   customerChargeVnd  BigInt?
-  markupSnapshotId   String?
-  fxSnapshotId       String?
   reservationId      String?
   chargedCredits     BigInt?
   occurredAt         DateTime              @default(now())
