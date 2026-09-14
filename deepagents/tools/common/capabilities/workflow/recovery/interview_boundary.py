@@ -1250,6 +1250,21 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         )
         confirmed_context = guarded_state.get("confirmedContext")
         if not isinstance(confirmed_context, dict):
+            logger.warning(
+                "GUARDED_STATE_MISSING_CONFIRMED_CONTEXT",
+                guarded_state_keys=list(guarded_state.keys()),
+                status=guarded_state.get("status"),
+                requested_revision=context_revision,
+                thread_context=guarded_state.get("currentRevision"),
+                has_confirmed_context=isinstance(
+                    guarded_state.get("confirmedContext"), dict
+                ),
+                public_state_outcome=(
+                    guarded_state.get("publicState", {}) or {}
+                ).get("outcome"),
+                source_version=source_version,
+                pge_version=pge_version,
+            )
             raise ValueError(
                 "guarded CONTEXT_RESOLVED is missing authoritative confirmedContext"
             )
