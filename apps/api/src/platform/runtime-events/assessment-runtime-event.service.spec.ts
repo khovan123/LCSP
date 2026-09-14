@@ -614,7 +614,8 @@ describe("AssessmentRuntimeEventService", () => {
     const baseTime = new Date("2026-09-14T08:00:00.000Z");
 
     const runtimeEventRow = (
-      overrides: Partial<MockRuntimeEventRow> & Pick<MockRuntimeEventRow, "id" | "sequence" | "eventType" | "toolName">,
+      overrides: Partial<MockRuntimeEventRow> &
+        Pick<MockRuntimeEventRow, "id" | "sequence" | "eventType" | "toolName">,
     ): MockRuntimeEventRow => ({
       assessmentId: "assessment-live",
       runId: "scan-live",
@@ -718,9 +719,7 @@ describe("AssessmentRuntimeEventService", () => {
           if (typeof where.runId === "string") {
             rows = rows.filter((row) => row.runId === where.runId);
           }
-          const sequence = where.sequence as
-            | { gt?: number }
-            | undefined;
+          const sequence = where.sequence as { gt?: number } | undefined;
           if (sequence && typeof sequence.gt === "number") {
             rows = rows.filter((row) => row.sequence > sequence.gt!);
           }
@@ -730,7 +729,8 @@ describe("AssessmentRuntimeEventService", () => {
           } else if (
             toolName &&
             typeof toolName === "object" &&
-            typeof (toolName as { startsWith?: unknown }).startsWith === "string"
+            typeof (toolName as { startsWith?: unknown }).startsWith ===
+              "string"
           ) {
             const prefix = (toolName as { startsWith: string }).startsWith;
             rows = rows.filter((row) => row.toolName?.startsWith(prefix));
@@ -739,7 +739,9 @@ describe("AssessmentRuntimeEventService", () => {
             rows = rows.filter((row) => row.stage === where.stage);
           }
           if (typeof where.assessmentId === "string") {
-            rows = rows.filter((row) => row.assessmentId === where.assessmentId);
+            rows = rows.filter(
+              (row) => row.assessmentId === where.assessmentId,
+            );
           }
           return [...rows].sort(
             (left, right) =>

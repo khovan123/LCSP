@@ -423,9 +423,8 @@ export class AssessmentRuntimeEventService {
     const persistedActivity = events.map((event) =>
       this.toActivityEvent(event),
     );
-    const engineeringProgress = await this.deriveDurableEngineeringProgress(
-      persistedActivity,
-    );
+    const engineeringProgress =
+      await this.deriveDurableEngineeringProgress(persistedActivity);
     const syntheticActivity = buildSyntheticRuntimeActivity(
       scanJobs,
       evidenceReports,
@@ -654,7 +653,10 @@ export class AssessmentRuntimeEventService {
     const windowProgress = deriveEngineeringProgress(persistedActivity);
     const durableProgress =
       await this.deriveExplicitEngineeringProgressFromDurableState();
-    const progressByRun = new Map<string, AssessmentRuntimeEngineeringProgress>();
+    const progressByRun = new Map<
+      string,
+      AssessmentRuntimeEngineeringProgress
+    >();
     for (const progress of windowProgress) {
       progressByRun.set(`${progress.assessmentId}:${progress.runId}`, progress);
     }
@@ -687,7 +689,10 @@ export class AssessmentRuntimeEventService {
       orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
       take: ENGINEERING_PROGRESS_SUMMARY_SCAN_LIMIT,
     });
-    const latestSummaryByRun = new Map<string, PersistedAssessmentRuntimeEvent>();
+    const latestSummaryByRun = new Map<
+      string,
+      PersistedAssessmentRuntimeEvent
+    >();
     for (const row of summaryRows) {
       const key = `${row.assessmentId}:${row.runId}`;
       if (!latestSummaryByRun.has(key)) {
@@ -713,10 +718,13 @@ export class AssessmentRuntimeEventService {
         take: ENGINEERING_PROGRESS_INVESTIGATION_SCAN_LIMIT,
       });
       const plannerEvent = this.toActivityEvent(summary);
-      const ordered = [plannerEvent, ...investigationRows.map((row) => this.toActivityEvent(row))].sort(
-        (left, right) => left.sequence - right.sequence,
+      const ordered = [
+        plannerEvent,
+        ...investigationRows.map((row) => this.toActivityEvent(row)),
+      ].sort((left, right) => left.sequence - right.sequence);
+      progressList.push(
+        deriveExplicitEngineeringProgress(ordered, plannerEvent),
       );
-      progressList.push(deriveExplicitEngineeringProgress(ordered, plannerEvent));
     }
     return progressList;
   }

@@ -1687,15 +1687,12 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       expect(
         mockInterviewAudit.recordTargetedClarification,
       ).toHaveBeenCalledTimes(1);
-      expect(mockRuntimeEvents.recordToolWaitingInput).toHaveBeenCalledTimes(
-        1,
-      );
+      expect(mockRuntimeEvents.recordToolWaitingInput).toHaveBeenCalledTimes(1);
       expect(mockRuntimeEvents.recordToolWaitingInput).toHaveBeenCalledWith(
         expect.objectContaining({
           assessmentId: "assessment-1",
           toolName: "assessment_interview",
-          waitingReason:
-            ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
+          waitingReason: ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
         }),
       );
     });

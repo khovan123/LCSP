@@ -1321,9 +1321,10 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
     );
 
-    const threadAfterRegistration = await prisma.assessmentInterviewThread.findUnique(
-      { where: { assessmentId: "assessment-1" } },
-    );
+    const threadAfterRegistration =
+      await prisma.assessmentInterviewThread.findUnique({
+        where: { assessmentId: "assessment-1" },
+      });
     const privateAfterRegistration = jsonRecord(
       threadAfterRegistration?.privateContextJson,
     );
@@ -1372,9 +1373,9 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       "a retried registration must not enqueue a second outbox message",
     );
 
-    const threadAfterRetry = await prisma.assessmentInterviewThread.findUnique(
-      { where: { assessmentId: "assessment-1" } },
-    );
+    const threadAfterRetry = await prisma.assessmentInterviewThread.findUnique({
+      where: { assessmentId: "assessment-1" },
+    });
     assert.equal(
       threadAfterRetry?.contextRevision,
       threadAfterRegistration?.contextRevision,
