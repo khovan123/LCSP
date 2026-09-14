@@ -2257,3 +2257,58 @@ function runtimeActivity(
     ...overrides,
   };
 }
+
+test("context ready and resolved handoffs resolve deterministic i18n copy without internal tokens", () => {
+  setAppLocale("en");
+  try {
+    const normalized = normalizeAssessmentRuntime({
+      assessmentId: "asm-context-handoff",
+      interviewState: {
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+        answerHistory: [
+          {
+            questionId: "q-1",
+            answeredAt: "2026-09-14T08:00:00.000Z",
+            summary: "Customer confirmed baseline context.",
+          },
+        ],
+      },
+      timeline: {
+        currentRun: null,
+        recentActivity: [],
+        latestRunId: "run-context-handoff",
+        connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+        lastEmittedAt: "2026-09-14T08:00:00.000Z",
+      },
+      coverageOverride: {
+        state: ASSESSMENT_TECHNICAL_COVERAGE_STATES.ready,
+        limitations: [],
+        policyDecision: {
+          permittedForInterview: true,
+        },
+        recoveryReason: null,
+      },
+    });
+
+    const readyHandoff = selectInterviewHandoffPresentation(normalized);
+    assert.equal(
+      readyHandoff.messageKey,
+      "pages.assessmentFlow.interview.contextReadyHandoff",
+    );
+
+    const resolved = {
+      ...normalized,
+      interview: {
+        ...normalized.interview,
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
+      },
+    };
+    const resolvedHandoff = selectInterviewHandoffPresentation(resolved);
+    assert.equal(
+      resolvedHandoff.messageKey,
+      "pages.assessmentFlow.interview.contextResolvedHandoff",
+    );
+  } finally {
+    setAppLocale("vi");
+  }
+});

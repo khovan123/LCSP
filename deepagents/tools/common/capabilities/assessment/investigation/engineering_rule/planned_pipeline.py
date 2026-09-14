@@ -819,13 +819,15 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                         confidence=0.0,
                         limitations=(
                             ENGINEERING_LIMITATION_CODES[
-                                "engineering_investigation_failed"
+                                "engineering_investigation_runtime_error"
                             ],
                         ),
                     )
                 ]
                 limitations.append(
-                    ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
+                    ENGINEERING_LIMITATION_CODES[
+                        "engineering_investigation_runtime_error"
+                    ]
                 )
 
             validated_rule_claims = self._validated_claims_for_evaluation(

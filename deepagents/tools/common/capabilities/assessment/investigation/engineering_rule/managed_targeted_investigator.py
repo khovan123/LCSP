@@ -1052,13 +1052,17 @@ def _failed_investigator_handoff(
                 "source_anchor_refs": [],
                 "confidence": 0.0,
                 "limitations": [
-                    ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
+                    ENGINEERING_LIMITATION_CODES[
+                        "engineering_investigation_runtime_error"
+                    ]
                 ],
                 "criterion": last_error[:500] or None,
             }
         ],
         "limitations": [
-            ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
+            ENGINEERING_LIMITATION_CODES[
+                "engineering_investigation_runtime_error"
+            ]
         ],
         "missing_input": None,
         "business_context_need": None,
@@ -1068,10 +1072,14 @@ def _failed_investigator_handoff(
 
 def _is_failed_investigator_handoff(handoff: dict[str, Any]) -> bool:
     limitations = handoff.get("limitations")
-    return (
-        isinstance(limitations, list)
-        and ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
-        in limitations
+    return isinstance(limitations, list) and any(
+        code in limitations
+        for code in (
+            ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"],
+            ENGINEERING_LIMITATION_CODES[
+                "engineering_investigation_runtime_error"
+            ],
+        )
     )
 
 

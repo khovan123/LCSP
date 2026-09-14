@@ -341,6 +341,12 @@ type MockRuntimeEvents = {
 
 describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => {
   let service: AssessmentInterviewRuntimeService;
+  let mockTransaction: jest.Mock<
+    (
+      callback: (tx: MockPrismaDelegates) => Promise<unknown>,
+      options?: unknown,
+    ) => Promise<unknown>
+  >;
   const findHistoricalQuestion =
     jest.fn<
       (
@@ -511,13 +517,16 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       },
     };
 
+    mockTransaction = jest.fn(
+      async <T>(
+        cb: (tx: MockPrismaDelegates) => Promise<T>,
+        _options?: unknown,
+      ): Promise<T> => cb(mockTx),
+    );
     const mockPrisma = {
       auditEvent: { findFirst: findHistoricalQuestion },
       ...mockTx,
-      $transaction: jest.fn(
-        async <T>(cb: (tx: MockPrismaDelegates) => Promise<T>): Promise<T> =>
-          cb(mockTx),
-      ),
+      $transaction: mockTransaction,
     };
 
     mockOutboxRepository = {
@@ -1616,6 +1625,173 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       expect(mockRuntimeEvents.recordToolWaitingInput).not.toHaveBeenCalled();
     });
 
+    it("retries a transient expired transaction and returns success instead of a callback failure", async () => {
+      const readyState: AssessmentInterviewRuntimeState = {
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+        contextRevision: 2,
+      };
+      const readyThread = {
+        assessmentId: "assessment-1",
+        contextRevision: 2,
+        processedRevision: 2,
+        activeQuestionId: null,
+        stateJson: readyState,
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+      };
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        readyThread,
+      );
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValueOnce({
+        id: "report-1",
+        schemaVersion: "v1",
+        evidencePayload: {
+          technicalCoverageState: "READY",
+          coverageLimitations: [],
+          programEvidenceGraph: {
+            coverage_state: "SUFFICIENT",
+            coverage_notes: [],
+            evidence_refs: ["evidence:region-config"],
+            nodes: [],
+            edges: [],
+          },
+        },
+      });
+      const expiredTransaction = new Error(
+        "Transaction API error: A query cannot be executed on an expired transaction. timeout: 5000 ms",
+      );
+      mockTransaction.mockImplementationOnce(() =>
+        Promise.reject(expiredTransaction),
+      );
+
+      const result = await service.registerTargetedNeedForWorker({
+        assessmentId: "assessment-1",
+        correlationId: "corr-target-transient",
+        target: targetedNeedRegistrationPayload() as never,
+      });
+
+      expect(result.outcome).toBe(
+        ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      );
+      expect(mockTransaction).toHaveBeenCalledTimes(2);
+      expect(mockTransaction).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({ timeout: 15_000, maxWait: 5_000 }),
+      );
+      expect(mockTx.assessmentInterviewThread.upsert).toHaveBeenCalledTimes(1);
+      expect(mockOutboxRepository.enqueue).toHaveBeenCalledTimes(1);
+      expect(
+        mockInterviewAudit.recordTargetedClarification,
+      ).toHaveBeenCalledTimes(1);
+      expect(mockRuntimeEvents.recordToolWaitingInput).toHaveBeenCalledTimes(
+        1,
+      );
+      expect(mockRuntimeEvents.recordToolWaitingInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assessmentId: "assessment-1",
+          toolName: "assessment_interview",
+          waitingReason:
+            ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
+        }),
+      );
+    });
+
+    it("treats a concurrent duplicate registration observed under the lock as idempotent", async () => {
+      const readyState: AssessmentInterviewRuntimeState = {
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+        contextRevision: 2,
+      };
+      const waitingState: AssessmentInterviewRuntimeState = {
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        contextRevision: 2,
+        orchestrationRequested: true,
+      };
+      const readyThread = {
+        assessmentId: "assessment-1",
+        contextRevision: 2,
+        processedRevision: 2,
+        activeQuestionId: null,
+        stateJson: readyState,
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+      };
+      const concurrentlyRegisteredThread = {
+        ...readyThread,
+        stateJson: waitingState,
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+          targetedNeed: {
+            needId: "need-data-residency",
+            businessContextNeed: "Clarify cloud provider region",
+            resolutionCriteria: ["Customer specifies AWS or GCP region"],
+            whyNeeded: "This determines the operational deployment location.",
+            governedEvidenceRefs: ["evidence:region-config"],
+            originatingInvestigationReference: "inv-ref-404",
+            sourceVersion: "snap-1:sha-123456",
+            pgeVersion: "report-1:v1",
+          },
+          targetedContinuation: {
+            originatingInvestigationReference: "inv-ref-404",
+            investigatorExecutionId: "exec-1",
+            workflowRunId: "10000000-0000-4000-8000-000000000010",
+            checkpointId: "cp-1",
+            affectedRuleIds: ["rule-1"],
+            artifactVersions: {
+              technicalEvidenceReportId: "report-1",
+              repositorySnapshotId: "snap-1",
+              legalRuleCatalogVersionId: "catalog-1",
+              legalCorpusVersionId: "corpus-1",
+            },
+            sourceVersion: "snap-1:sha-123456",
+            pgeVersion: "report-1:v1",
+          },
+        },
+      };
+      mockTx.assessmentInterviewThread.findUnique
+        .mockResolvedValueOnce(readyThread)
+        .mockResolvedValueOnce(concurrentlyRegisteredThread);
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValueOnce({
+        id: "report-1",
+        schemaVersion: "v1",
+        evidencePayload: {
+          technicalCoverageState: "READY",
+          coverageLimitations: [],
+          programEvidenceGraph: {
+            coverage_state: "SUFFICIENT",
+            coverage_notes: [],
+            evidence_refs: ["evidence:region-config"],
+            nodes: [],
+            edges: [],
+          },
+        },
+      });
+
+      const result = await service.registerTargetedNeedForWorker({
+        assessmentId: "assessment-1",
+        correlationId: "corr-target-concurrent",
+        target: targetedNeedRegistrationPayload() as never,
+      });
+
+      expect(result.outcome).toBe(
+        ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      );
+      expect(mockTx.assessmentInterviewThread.upsert).not.toHaveBeenCalled();
+      expect(mockOutboxRepository.enqueue).not.toHaveBeenCalled();
+      expect(
+        mockInterviewAudit.recordTargetedClarification,
+      ).not.toHaveBeenCalled();
+      expect(mockRuntimeEvents.recordToolWaitingInput).not.toHaveBeenCalled();
+    });
+
     it("rejects incomplete targeted needs and missing immutable artifact pins", async () => {
       const readyState: AssessmentInterviewRuntimeState = {
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
@@ -2099,12 +2275,27 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         },
       });
 
-      expect(state.assistantMessage).toBe(
-        "The baseline business context has been confirmed. The assessment can now continue to planning and investigation. Additional rule-specific questions may still be asked if needed.",
+      expect(state.assistantMessage).toBeUndefined();
+      const stateUpdate = mockTx.assessmentInterviewThread.updateMany.mock
+        .calls[0]?.[0] as { data?: { stateJson?: unknown } };
+      const serializedState = JSON.stringify(
+        stateUpdate.data?.stateJson ?? null,
       );
-      expect(state.assistantMessage).not.toContain("CUSTOMER_CONFIRMED");
-      expect(state.assistantMessage).not.toContain("CONTEXT_READY");
-      expect(state.assistantMessage).not.toContain("resolutionCriteria");
+      expect(serializedState).not.toContain("authority satisfied");
+      expect(serializedState).not.toContain("assistantMessage");
+      expect(state.activeQuestion).toBeUndefined();
+      const customerVisibleText = JSON.stringify({
+        assistantMessage: state.assistantMessage,
+        activeQuestion: state.activeQuestion,
+        pendingDraft: state.pendingDraft,
+      });
+      for (const token of [
+        "CUSTOMER_CONFIRMED",
+        "CONTEXT_READY",
+        "resolutionCriteria",
+      ]) {
+        expect(customerVisibleText).not.toContain(token);
+      }
     });
 
     it("treats explicit human-review and advisory-only statements as resolved but still asks for missing dimensions", async () => {
@@ -2461,16 +2652,13 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       });
 
       expect(result.outcome).toBe(ASSESSMENT_INTERVIEW_OUTCOMES.contextReady);
-      expect(result.assistantMessage).toBe(
-        "The baseline business context has been confirmed. The assessment can now continue to planning and investigation. Additional rule-specific questions may still be asked if needed.",
-      );
+      expect(result.assistantMessage).toBeUndefined();
       const stateUpdate = mockTx.assessmentInterviewThread.updateMany.mock
         .calls[0]?.[0] as {
         data?: { stateJson?: unknown };
       };
       expect(stateUpdate.data?.stateJson).toMatchObject({
-        assistantMessage:
-          "The baseline business context has been confirmed. The assessment can now continue to planning and investigation. Additional rule-specific questions may still be asked if needed.",
+        assistantMessage: undefined,
       });
       expect(mockRuntimeEvents.recordToolCompleted).toHaveBeenCalledWith(
         expect.objectContaining({

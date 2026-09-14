@@ -601,4 +601,385 @@ describe("AssessmentRuntimeEventService", () => {
       }),
     );
   });
+
+  describe("durable engineering progress", () => {
+    type MockRuntimeEventRow = Record<string, unknown> & {
+      assessmentId: string;
+      runId: string;
+      sequence: number;
+      toolName: string | null;
+      createdAt: Date;
+    };
+
+    const baseTime = new Date("2026-09-14T08:00:00.000Z");
+
+    const runtimeEventRow = (
+      overrides: Partial<MockRuntimeEventRow> & Pick<MockRuntimeEventRow, "id" | "sequence" | "eventType" | "toolName">,
+    ): MockRuntimeEventRow => ({
+      assessmentId: "assessment-live",
+      runId: "scan-live",
+      correlationId: "corr-live",
+      runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
+      stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+      summary: "live scenario row",
+      inputSummaryJson: null,
+      outputSummaryJson: null,
+      errorSummary: null,
+      startedAt: null,
+      completedAt: null,
+      durationMs: null,
+      attempt: null,
+      waitingReason: null,
+      createdAt: new Date(baseTime.getTime() + overrides.sequence * 1_000),
+      ...overrides,
+    });
+
+    const liveScenarioEvents = (): MockRuntimeEventRow[] => {
+      const events: MockRuntimeEventRow[] = [
+        runtimeEventRow({
+          id: "evt-live-summary",
+          sequence: 1,
+          eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+          toolName: "engineering_rule_plan_summary",
+          outputSummaryJson: {
+            planningBatchId: "scan-live:context:12",
+            contextRevisionUsed: 12,
+            candidateCount: 41,
+            selectedCount: 19,
+            skippedCount: 22,
+            targeted: false,
+          },
+        }),
+      ];
+      for (let index = 1; index <= 41; index += 1) {
+        events.push(
+          runtimeEventRow({
+            id: `evt-live-plan-${index}`,
+            sequence: index + 1,
+            eventType:
+              index <= 19
+                ? ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted
+                : ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped,
+            toolName: `engineering_rule_plan:eng-${index}`,
+          }),
+        );
+      }
+      for (let index = 1; index <= 13; index += 1) {
+        events.push(
+          runtimeEventRow({
+            id: `evt-live-investigated-${index}`,
+            sequence: index + 42,
+            eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+            toolName: `engineering_rule_investigation:eng-${index}`,
+          }),
+        );
+      }
+      for (let index = 14; index <= 16; index += 1) {
+        events.push(
+          runtimeEventRow({
+            id: `evt-live-limited-${index}`,
+            sequence: index + 42,
+            eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolFailed,
+            runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+            toolName: `engineering_rule_investigation:eng-${index}`,
+            outputSummaryJson: {},
+            errorSummary: "EvidenceUnavailable",
+          }),
+        );
+      }
+      return events;
+    };
+
+    const noiseEvent = (sequence: number): MockRuntimeEventRow =>
+      runtimeEventRow({
+        id: `evt-live-noise-${sequence}`,
+        sequence,
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+        toolName: `non_progress:${sequence}`,
+      });
+
+    const buildFilteringPrisma = (
+      allEvents: MockRuntimeEventRow[],
+      windowRows: MockRuntimeEventRow[],
+    ) => {
+      const findMany = jest
+        .fn<(args: Record<string, unknown>) => Promise<unknown[]>>()
+        .mockImplementation(async (args) => {
+          const where = (args.where ?? {}) as Record<string, unknown>;
+          if (Object.keys(where).length === 0) {
+            return [...windowRows].sort(
+              (left, right) =>
+                right.createdAt.getTime() - left.createdAt.getTime() ||
+                right.sequence - left.sequence,
+            );
+          }
+          let rows = allEvents;
+          if (typeof where.runId === "string") {
+            rows = rows.filter((row) => row.runId === where.runId);
+          }
+          const sequence = where.sequence as
+            | { gt?: number }
+            | undefined;
+          if (sequence && typeof sequence.gt === "number") {
+            rows = rows.filter((row) => row.sequence > sequence.gt!);
+          }
+          const toolName = where.toolName;
+          if (typeof toolName === "string") {
+            rows = rows.filter((row) => row.toolName === toolName);
+          } else if (
+            toolName &&
+            typeof toolName === "object" &&
+            typeof (toolName as { startsWith?: unknown }).startsWith === "string"
+          ) {
+            const prefix = (toolName as { startsWith: string }).startsWith;
+            rows = rows.filter((row) => row.toolName?.startsWith(prefix));
+          }
+          if (typeof where.stage === "string") {
+            rows = rows.filter((row) => row.stage === where.stage);
+          }
+          if (typeof where.assessmentId === "string") {
+            rows = rows.filter((row) => row.assessmentId === where.assessmentId);
+          }
+          return [...rows].sort(
+            (left, right) =>
+              right.createdAt.getTime() - left.createdAt.getTime() ||
+              right.sequence - left.sequence,
+          );
+        });
+      return {
+        assessmentRuntimeEvent: {
+          findMany,
+          findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
+        },
+        repositorySnapshot: emptyRepositorySnapshots(),
+        repositoryScanJob: {
+          findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+        },
+        technicalEvidenceReport: {
+          findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+        },
+      };
+    };
+
+    it("keeps canonical planner and investigator totals when every planner event has been evicted from the recent-activity window", async () => {
+      const events = liveScenarioEvents();
+      const prisma = buildFilteringPrisma(
+        events,
+        Array.from({ length: 60 }, (_, index) => noiseEvent(index + 60)),
+      );
+      const service = new AssessmentRuntimeEventService(prisma as never);
+
+      const snapshot = await service.buildWorkspaceSnapshot();
+
+      expect(snapshot.recentActivity).toHaveLength(50);
+      expect(
+        snapshot.recentActivity.some((item) =>
+          item.toolName?.startsWith("engineering_rule_plan"),
+        ),
+      ).toBe(false);
+
+      expect(snapshot.engineeringProgress).toEqual([
+        expect.objectContaining({
+          assessmentId: "assessment-live",
+          runId: "scan-live",
+          planningBatchId: "scan-live:context:12",
+          approximate: false,
+          planner: {
+            candidateCount: 41,
+            selectedCount: 19,
+            skippedCount: 22,
+          },
+          investigator: expect.objectContaining({
+            selectedCount: 19,
+            completedCount: 13,
+            domainLimitedCount: 3,
+            runtimeFailedCount: 0,
+            waitingForInputCount: 0,
+            pendingCount: 3,
+          }),
+        }),
+      ]);
+    });
+
+    it("advances investigator progress without changing the planner denominator", async () => {
+      const events = [
+        ...liveScenarioEvents(),
+        runtimeEventRow({
+          id: "evt-live-investigated-14",
+          sequence: 60,
+          eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+          toolName: "engineering_rule_investigation:eng-17",
+        }),
+      ];
+      const prisma = buildFilteringPrisma(
+        events,
+        Array.from({ length: 60 }, (_, index) => noiseEvent(index + 61)),
+      );
+      const service = new AssessmentRuntimeEventService(prisma as never);
+
+      const snapshot = await service.buildWorkspaceSnapshot();
+
+      expect(snapshot.engineeringProgress[0]?.planner).toEqual({
+        candidateCount: 41,
+        selectedCount: 19,
+        skippedCount: 22,
+      });
+      expect(snapshot.engineeringProgress[0]?.investigator).toEqual(
+        expect.objectContaining({
+          selectedCount: 19,
+          completedCount: 14,
+          domainLimitedCount: 3,
+          runtimeFailedCount: 0,
+          pendingCount: 2,
+        }),
+      );
+    });
+
+    it("separates runtime failures from domain limitations and counts waiting-for-input", async () => {
+      const events = [
+        runtimeEventRow({
+          id: "evt-rt-summary",
+          sequence: 1,
+          eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+          toolName: "engineering_rule_plan_summary",
+          outputSummaryJson: {
+            planningBatchId: "scan-live:context:2",
+            candidateCount: 4,
+            selectedCount: 4,
+            skippedCount: 0,
+          },
+        }),
+        runtimeEventRow({
+          id: "evt-rt-ok",
+          sequence: 2,
+          eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+          toolName: "engineering_rule_investigation:eng-1",
+        }),
+        runtimeEventRow({
+          id: "evt-rt-limited",
+          sequence: 3,
+          eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolFailed,
+          runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+          toolName: "engineering_rule_investigation:eng-2",
+          outputSummaryJson: {},
+        }),
+        runtimeEventRow({
+          id: "evt-rt-runtime-failed",
+          sequence: 4,
+          eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolFailed,
+          runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+          toolName: "engineering_rule_investigation:eng-3",
+          outputSummaryJson: {
+            failureKind: "RUNTIME_ERROR",
+            executionFailure: "CALLBACK_ERROR",
+          },
+        }),
+        runtimeEventRow({
+          id: "evt-rt-waiting",
+          sequence: 5,
+          eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolWaitingInput,
+          toolName: "engineering_rule_investigation:eng-4",
+          outputSummaryJson: { outcome: "NEEDS_INPUT" },
+        }),
+      ];
+      const prisma = buildFilteringPrisma(events, []);
+      const service = new AssessmentRuntimeEventService(prisma as never);
+
+      const snapshot = await service.buildWorkspaceSnapshot();
+
+      expect(snapshot.engineeringProgress[0]?.investigator).toEqual({
+        selectedCount: 4,
+        completedCount: 1,
+        domainLimitedCount: 1,
+        limitedOrFailedCount: 2,
+        waitingForInputCount: 1,
+        runtimeFailedCount: 1,
+        pendingCount: 0,
+      });
+    });
+
+    it("prefers the newest planning batch for the run on targeted resume", async () => {
+      const events = [
+        ...liveScenarioEvents(),
+        runtimeEventRow({
+          id: "evt-targeted-summary",
+          sequence: 200,
+          eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+          toolName: "engineering_rule_plan_summary",
+          outputSummaryJson: {
+            planningBatchId: "scan-live:context:13",
+            contextRevisionUsed: 13,
+            candidateCount: 19,
+            selectedCount: 1,
+            skippedCount: 18,
+            targeted: true,
+          },
+        }),
+        runtimeEventRow({
+          id: "evt-targeted-investigated",
+          sequence: 201,
+          eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+          toolName: "engineering_rule_investigation:eng-3",
+        }),
+      ];
+      const prisma = buildFilteringPrisma(events, []);
+      const service = new AssessmentRuntimeEventService(prisma as never);
+
+      const snapshot = await service.buildWorkspaceSnapshot();
+
+      expect(snapshot.engineeringProgress).toHaveLength(1);
+      expect(snapshot.engineeringProgress[0]).toEqual(
+        expect.objectContaining({
+          planningBatchId: "scan-live:context:13",
+          targeted: true,
+          planner: {
+            candidateCount: 19,
+            selectedCount: 1,
+            skippedCount: 18,
+          },
+          investigator: expect.objectContaining({
+            selectedCount: 1,
+            completedCount: 1,
+            pendingCount: 0,
+          }),
+        }),
+      );
+    });
+
+    it("keeps stale previous runs durable while newer runs sort first", async () => {
+      const staleRun = liveScenarioEvents().map((row) => ({
+        ...row,
+        assessmentId: "assessment-stale",
+        runId: "scan-stale",
+      }));
+      const currentRun = [
+        runtimeEventRow({
+          id: "evt-current-summary",
+          sequence: 1,
+          eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+          toolName: "engineering_rule_plan_summary",
+          outputSummaryJson: {
+            planningBatchId: "scan-live:context:5",
+            candidateCount: 10,
+            selectedCount: 5,
+            skippedCount: 5,
+          },
+        }),
+      ];
+      const prisma = buildFilteringPrisma([...staleRun, ...currentRun], []);
+      const service = new AssessmentRuntimeEventService(prisma as never);
+
+      const snapshot = await service.buildWorkspaceSnapshot();
+
+      expect(snapshot.engineeringProgress).toHaveLength(2);
+      expect(snapshot.engineeringProgress[0]?.runId).toBe("scan-live");
+      expect(snapshot.engineeringProgress[1]?.runId).toBe("scan-stale");
+      expect(snapshot.engineeringProgress[1]?.planner).toEqual({
+        candidateCount: 41,
+        selectedCount: 19,
+        skippedCount: 22,
+      });
+    });
+  });
 });

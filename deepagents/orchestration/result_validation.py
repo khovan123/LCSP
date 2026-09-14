@@ -184,10 +184,14 @@ def _normalize_investigator_payload(
         # response never costs another model call. Fail-closed downgrades stay gated.
         claim = _normalize_not_met_null_value_shape(claim)
         claim = _normalize_unresolved_shape(claim)
+        claim = _clamp_investigator_claim_strings(claim)
         if allow_fail_closed_recovery:
             claim = _fail_closed_investigator_claim(claim)
         normalized_claims.append(claim)
     normalized["claims"] = normalized_claims
+    missing_input = normalized.get("missing_input")
+    if isinstance(missing_input, str) and len(missing_input) > 1_000:
+        normalized["missing_input"] = missing_input[:999] + "…"
     return normalized
 
 
@@ -233,6 +237,11 @@ def _normalize_unresolved_shape(claim: dict[str, Any]) -> dict[str, Any]:
     if normalized.get("value") is not None:
         normalized["value"] = None
         changed = True
+    if not isinstance(normalized.get("confidence"), (int, float)) or isinstance(
+        normalized.get("confidence"), bool
+    ):
+        normalized["confidence"] = 0.0
+        changed = True
     limitations = normalized.get("limitations")
     if not isinstance(limitations, list) or not limitations:
         normalized["limitations"] = [
@@ -246,6 +255,37 @@ def _normalize_unresolved_shape(claim: dict[str, Any]) -> dict[str, Any]:
             claim.get("claim_id"),
         )
     return normalized
+
+
+_INVESTIGATOR_CLAIM_STRING_LIMITS = {
+    "criterion": 500,
+    "missing_input": 1_000,
+}
+
+
+def _clamp_investigator_claim_strings(claim: dict[str, Any]) -> dict[str, Any]:
+    """Clamp over-long free-text fields to their contract bounds.
+
+    Gemini's native responseSchema does not reliably enforce ``maxLength``, so the model
+    can copy oversized observation or tool text into bounded explanatory fields. The
+    bounded prefix plus an explicit truncation marker preserves the claim's semantics
+    without costing another model call; identity and provenance fields are never touched.
+    """
+    clamped = claim
+    for field, limit in _INVESTIGATOR_CLAIM_STRING_LIMITS.items():
+        value = clamped.get(field)
+        if not isinstance(value, str) or len(value) <= limit:
+            continue
+        if clamped is claim:
+            clamped = dict(claim)
+        clamped[field] = value[: limit - 1] + "…"
+    if clamped is not claim:
+        _LOGGER.warning(
+            "%s claim_id=%s reason=oversized_string_fields_clamped",
+            _INVESTIGATOR_CLAIM_VALUE_SHAPE_NORMALIZED,
+            claim.get("claim_id"),
+        )
+    return clamped
 
 
 def _fail_closed_investigator_claim(claim: dict[str, Any]) -> dict[str, Any]:

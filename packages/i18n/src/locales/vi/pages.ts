@@ -1520,6 +1520,10 @@ export const viPages = {
       progressCompleted: "Đánh giá Interview đã hoàn tất. Kết quả đã được lưu.",
       progressFailed:
         "Lượt đánh giá này gặp lỗi. Câu trả lời của bạn vẫn được lưu.",
+      contextReadyHandoff:
+        "Bối cảnh kinh doanh cơ bản đã được xác nhận. Assessment giờ có thể tiếp tục với lập kế hoạch và điều tra. Các câu hỏi riêng cho từng yêu cầu vẫn có thể được hỏi thêm nếu cần.",
+      contextResolvedHandoff:
+        "Bối cảnh kinh doanh riêng cho yêu cầu này đã được xác nhận. Phần điều tra liên quan giờ có thể tiếp tục.",
       continuingDescription:
         "Câu trả lời đã được lưu. Đang chờ kết quả đánh giá hoặc câu hỏi tiếp theo.",
       placeholder: "Mô tả project hoặc system...",

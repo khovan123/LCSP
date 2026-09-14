@@ -392,15 +392,17 @@ export function selectInterviewHandoffPresentation(
   const messageKey =
     normalized.availability === ASSESSMENT_RUNTIME_AVAILABILITIES.loading
       ? "pages.assessment.loadingInterviewState"
-      : interview.isContextReady || interview.isContextResolved
-        ? "pages.assessmentFlow.interview.progressCompleted"
-        : progressKey
-          ? progressKey
-          : interview.answerHistory.length > 0
-            ? "pages.assessmentFlow.interview.continuingDescription"
-            : interview.orchestrationRequested
-              ? "pages.assessmentFlow.interview.startingDescription"
-              : "pages.assessmentFlow.interview.pendingDescription";
+      : interview.isContextReady
+        ? "pages.assessmentFlow.interview.contextReadyHandoff"
+        : interview.isContextResolved
+          ? "pages.assessmentFlow.interview.contextResolvedHandoff"
+          : progressKey
+            ? progressKey
+            : interview.answerHistory.length > 0
+              ? "pages.assessmentFlow.interview.continuingDescription"
+              : interview.orchestrationRequested
+                ? "pages.assessmentFlow.interview.startingDescription"
+                : "pages.assessmentFlow.interview.pendingDescription";
 
   return {
     isStartupPending,
