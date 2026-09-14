@@ -9,11 +9,12 @@ import {
   type ClassificationExecutionState,
 } from "@/lib/api/classification-client";
 
+/** UI-only visual tones; deliberately distinct from any domain status value. */
 export const CLASSIFICATION_RESULT_TONES = {
-  neutral: "NEUTRAL",
-  success: "SUCCESS",
-  warning: "WARNING",
-  destructive: "DESTRUCTIVE",
+  neutral: "TONE_NEUTRAL",
+  success: "TONE_POSITIVE",
+  warning: "TONE_CAUTION",
+  destructive: "TONE_CRITICAL",
 } as const;
 
 export type ClassificationResultTone =
