@@ -227,6 +227,22 @@ export class AssessmentRuntimeEventService {
   }
 
   /**
+   * Records that a pipeline tool was intentionally not executed, as a terminal state.
+   *
+   * @param input - Runtime event data excluding the event type and run status supplied by this method.
+   * @returns A promise that resolves after the tool-skipped event is persisted.
+   */
+  async recordToolSkipped(
+    input: Omit<RecordRuntimeEventInput, "eventType" | "runStatus">,
+  ): Promise<void> {
+    await this.recordEvent({
+      ...input,
+      eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped,
+      runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
+    });
+  }
+
+  /**
    * Records that a tool cannot continue until additional input becomes available.
    *
    * @param input - Runtime event data excluding the event type and run status supplied by this method.

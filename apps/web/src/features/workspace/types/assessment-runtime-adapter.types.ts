@@ -164,6 +164,7 @@ export const NORMALIZED_WORKFLOW_STEP_STATUSES = {
   running: REPOSITORY_SCAN_JOB_STATUSES.running,
   waiting: "WAITING",
   completed: REPOSITORY_SCAN_JOB_STATUSES.completed,
+  skipped: "SKIPPED",
   failed: REPOSITORY_SCAN_JOB_STATUSES.failed,
   unknown: "UNKNOWN",
 } as const;

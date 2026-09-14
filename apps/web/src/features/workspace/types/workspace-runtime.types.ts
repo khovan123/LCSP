@@ -1,3 +1,4 @@
+import type { MessageKey } from "@lcsp/i18n";
 import type { AssessmentPostFindingRuntimeState } from "@lcsp/contracts/evidence";
 
 export const WORKSPACE_RUNTIME_CONNECTION_STATES = {
@@ -114,4 +115,21 @@ export type WorkspaceRuntimeContextValue = WorkspaceRuntimeSnapshot & {
   getAssessmentRuntime: (
     assessmentId: string,
   ) => WorkspaceRuntimeAssessmentTimeline;
+};
+
+export const RUNTIME_THINKING_PHASES = {
+  planner: "PLANNER",
+  investigator: "INVESTIGATOR",
+} as const;
+
+export type RuntimeThinkingPhase =
+  (typeof RUNTIME_THINKING_PHASES)[keyof typeof RUNTIME_THINKING_PHASES];
+
+/** Customer-facing aggregate of internal Planner/Investigator runtime telemetry. */
+export type RuntimeThinkingItem = {
+  id: string;
+  phase: RuntimeThinkingPhase;
+  limited: boolean;
+  messageKey: MessageKey;
+  params: Record<string, string>;
 };

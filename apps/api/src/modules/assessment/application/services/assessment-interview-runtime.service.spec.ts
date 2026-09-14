@@ -6,6 +6,7 @@ import {
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
   ASSESSMENT_INTERVIEW_CONTROLS,
   ASSESSMENT_INTERVIEW_FLAGS,
+  ASSESSMENT_INTERVIEW_READINESS_ERROR_CODES,
   ASSESSMENT_INTERVIEW_MODES,
   ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS,
   ASSESSMENT_INTERVIEW_OUTCOMES,
@@ -33,44 +34,79 @@ import type { OutboxRepository } from "../../../../platform/outbox/outbox.reposi
 import type { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import type { InterviewAuditService } from "../../../audit/application/services/interview-audit.service.js";
 import { AssessmentInterviewRuntimeService } from "./assessment-interview-runtime.service.js";
+import { missingInitialPlanningContextDimensions } from "./interview-minimum-planning-context.js";
 
 const TEST_GUIDANCE_VERSION = "interview-context-test-v1";
+const RICH_INITIAL_PLANNING_CONTEXT_STATEMENT =
+  "The AI model drafts recommendations in the customer onboarding workflow; " +
+  "a human reviewer approves every customer-facing action before any status update " +
+  "or workflow gate changes, affected subjects are customers and their organizations, " +
+  "and the material data sources are customer profile records, support tickets, " +
+  "repository code, and business documents.";
+
+function initialPlanningReadyStatements(): Array<{
+  topic: string;
+  statement: string;
+  normalizedValue?: unknown;
+}> {
+  return [
+    {
+      topic: "initial_planning_context",
+      statement: RICH_INITIAL_PLANNING_CONTEXT_STATEMENT,
+      normalizedValue: "rich_initial_planning_context",
+    },
+  ];
+}
 
 function confirmedStructuredContext(input: {
   assessmentId?: string;
   contextRevision?: number;
   topic?: string;
+  statement?: string;
+  normalizedValue?: unknown;
+  statements?: Array<{
+    topic: string;
+    statement: string;
+    normalizedValue?: unknown;
+    evidenceRefs?: string[];
+  }>;
   source?: string;
   resolutionState?: string;
   evidenceRefs?: string[];
 }): Record<string, unknown> {
   const topic = input.topic ?? "decision_authority";
+  const statements = input.statements ?? [
+    {
+      topic,
+      statement: input.statement ?? "Human approval is required before action.",
+      normalizedValue: input.normalizedValue ?? "human_approval_required",
+      evidenceRefs: input.evidenceRefs,
+    },
+  ];
   return {
     assessmentId: input.assessmentId ?? "assessment-1",
     contextRevision: input.contextRevision ?? 2,
     authority:
       CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES.customerConfirmedConfirmedOnly,
-    statements: [
-      {
-        statementId: `stmt-${topic}`,
-        assessmentId: input.assessmentId ?? "assessment-1",
-        topic,
-        statement: "Human approval is required before action.",
-        normalizedValue: "human_approval_required",
-        scope: { needId: "need-1" },
-        evidenceRefs: input.evidenceRefs ?? [
-          "technicalEvidenceReport:report-1",
-        ],
-        respondentRef: "actor:authenticated:user-1",
-        createdAt: "2026-09-05T00:00:00Z",
-        source:
-          input.source ??
-          ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
-        resolutionState:
-          input.resolutionState ??
-          ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
-      },
-    ],
+    statements: statements.map((statement, index) => ({
+      statementId: `stmt-${statement.topic}-${index}`,
+      assessmentId: input.assessmentId ?? "assessment-1",
+      topic: statement.topic,
+      statement: statement.statement,
+      normalizedValue: Object.hasOwn(statement, "normalizedValue")
+        ? statement.normalizedValue
+        : statement.statement,
+      scope: { needId: "need-1" },
+      evidenceRefs: statement.evidenceRefs ??
+        input.evidenceRefs ?? ["technicalEvidenceReport:report-1"],
+      respondentRef: "actor:authenticated:user-1",
+      createdAt: "2026-09-05T00:00:00Z",
+      source:
+        input.source ?? ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+      resolutionState:
+        input.resolutionState ??
+        ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+    })),
     limitations: ["customer-confirmed current statements only"],
     sourceVersionRef: "snap-1:sha-123456",
     pgeVersion: "report-1:v1",
@@ -93,6 +129,54 @@ function submitAnswerCommand(input: {
     clientRequestId:
       input.clientRequestId ?? `client-request-${input.questionId}`,
     answer: input.answer,
+  };
+}
+
+function initialInterviewThreadFixture(
+  revision: Partial<{
+    questionId: string;
+    answer: Record<string, unknown>;
+    questionIntent: string;
+    questionControl: string;
+  }> = {},
+): Record<string, unknown> {
+  return {
+    assessmentId: "assessment-1",
+    contextRevision: 1,
+    processedRevision: 0,
+    activeQuestionId: revision.questionId ?? "q-1",
+    stateJson: {
+      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      contextRevision: 1,
+    },
+    privateContextJson: {
+      revisions: [
+        {
+          questionId: revision.questionId ?? "q-1",
+          answer: revision.answer ?? {
+            questionId: revision.questionId ?? "q-1",
+            selectedChoiceIds: ["yes"],
+          },
+          actorId: "user-1",
+          answeredAt: "2026-09-07T00:00:00.000Z",
+          contextRevision: 1,
+          priorRevision: 0,
+          authority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
+          questionIntent:
+            revision.questionIntent ??
+            ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+          questionControl:
+            revision.questionControl ?? ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+          sourceVersion: "snap-1:sha-123456",
+          pgeVersion: "report-1:v1",
+          governedEvidenceRefs: [],
+        },
+      ],
+      workflowRunId: "10000000-0000-4000-8000-000000000002",
+      partialCoveragePolicyDecision: partialCoveragePolicyDecision(),
+    },
+    sourceVersion: "snap-1:sha-123456",
+    pgeVersion: "report-1:v1",
   };
 }
 
@@ -163,6 +247,17 @@ function partialCoveragePolicyDecision(overrides?: {
     limitations: overrides?.limitations ?? [
       "dynamic routing was not statically resolved",
     ],
+  };
+}
+
+function readyTechnicalEvidenceReport(): Record<string, unknown> {
+  return {
+    id: "report-1",
+    schemaVersion: "v1",
+    evidencePayload: {
+      technicalCoverageState: INTERVIEW_TECHNICAL_COVERAGE_STATES.partial,
+      partialCoveragePolicyDecision: partialCoveragePolicyDecision(),
+    },
   };
 }
 
@@ -1768,6 +1863,244 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       });
     });
 
+    it("rejects initial CONTEXT_READY when only AI usage was confirmed", async () => {
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValue(
+        readyTechnicalEvidenceReport() as never,
+      );
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        initialInterviewThreadFixture(),
+      );
+
+      await expect(
+        service.recordAgentDecision({
+          assessmentId: "assessment-1",
+          correlationId: "corr-initial-context-incomplete",
+          decision: {
+            expectedContextRevision: 1,
+            mode: "INITIAL_INTERVIEW",
+            outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+            contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+            confirmedContext: confirmedStructuredContext({
+              contextRevision: 1,
+              topic: "ai_usage",
+              statement:
+                "The AI model drafts recommendations in the onboarding workflow.",
+              normalizedValue: "ai_model_recommendations",
+            }),
+          },
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          ok: false,
+          problem: {
+            code: ASSESSMENT_INTERVIEW_READINESS_ERROR_CODES.minimumContextIncomplete,
+            meta: {
+              missingDimensions: expect.stringContaining("humanOversight"),
+            },
+          },
+        },
+      });
+      await expect(
+        service.recordAgentDecision({
+          assessmentId: "assessment-1",
+          correlationId: "corr-initial-broad-context-not-ready-repeat",
+          decision: {
+            expectedContextRevision: 1,
+            mode: "INITIAL_INTERVIEW",
+            outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+            contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+            confirmedContext: confirmedStructuredContext({
+              contextRevision: 1,
+              topic: "ai_usage",
+              statement:
+                "The AI model drafts recommendations in the onboarding workflow.",
+              normalizedValue: "ai_model_recommendations",
+            }),
+          },
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          problem: {
+            meta: {
+              missingDimensions: expect.stringContaining("affectedSubjects"),
+            },
+          },
+        },
+      });
+      await expect(
+        service.recordAgentDecision({
+          assessmentId: "assessment-1",
+          correlationId: "corr-initial-broad-context-not-ready-repeat-2",
+          decision: {
+            expectedContextRevision: 1,
+            mode: "INITIAL_INTERVIEW",
+            outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+            contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+            confirmedContext: confirmedStructuredContext({
+              contextRevision: 1,
+              topic: "ai_usage",
+              statement:
+                "The AI model drafts recommendations in the onboarding workflow.",
+              normalizedValue: "ai_model_recommendations",
+            }),
+          },
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          problem: {
+            meta: {
+              missingDimensions: expect.stringContaining("dataCategories"),
+            },
+          },
+        },
+      });
+    });
+
+    it("accepts initial CONTEXT_READY from one rich customer-confirmed planning statement", async () => {
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValue(
+        readyTechnicalEvidenceReport() as never,
+      );
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        initialInterviewThreadFixture(),
+      );
+
+      const result = await service.recordAgentDecision({
+        assessmentId: "assessment-1",
+        correlationId: "corr-initial-rich-context-ready",
+        decision: {
+          expectedContextRevision: 1,
+          mode: "INITIAL_INTERVIEW",
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+          contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+          confirmedContext: confirmedStructuredContext({
+            contextRevision: 1,
+            statements: initialPlanningReadyStatements(),
+          }),
+        },
+      });
+
+      expect(result.outcome).toBe(ASSESSMENT_INTERVIEW_OUTCOMES.contextReady);
+    });
+
+    it("treats explicit human-review and advisory-only statements as resolved but still asks for missing dimensions", async () => {
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValueOnce(
+        readyTechnicalEvidenceReport() as never,
+      );
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        initialInterviewThreadFixture(),
+      );
+
+      await expect(
+        service.recordAgentDecision({
+          assessmentId: "assessment-1",
+          correlationId: "corr-initial-explicit-negative",
+          decision: {
+            expectedContextRevision: 1,
+            mode: "INITIAL_INTERVIEW",
+            outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+            contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+            confirmedContext: confirmedStructuredContext({
+              contextRevision: 1,
+              statements: [
+                {
+                  topic: "decision_influence",
+                  statement:
+                    "AI only drafts recommendations; a person must approve every action.",
+                  normalizedValue: "advisory_only_human_approval_required",
+                },
+              ],
+            }),
+          },
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          ok: false,
+          problem: {
+            code: ASSESSMENT_INTERVIEW_READINESS_ERROR_CODES.minimumContextIncomplete,
+            meta: {
+              missingDimensions:
+                expect.not.stringContaining("decisionInfluence"),
+            },
+          },
+        },
+      });
+      await expect(
+        service.recordAgentDecision({
+          assessmentId: "assessment-1",
+          correlationId: "corr-initial-explicit-negative-repeat",
+          decision: {
+            expectedContextRevision: 1,
+            mode: "INITIAL_INTERVIEW",
+            outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+            contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+            confirmedContext: confirmedStructuredContext({
+              contextRevision: 1,
+              statements: [
+                {
+                  topic: "decision_influence",
+                  statement:
+                    "AI only drafts recommendations; a person must approve every action.",
+                  normalizedValue: "advisory_only_human_approval_required",
+                },
+              ],
+            }),
+          },
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          problem: {
+            meta: {
+              missingDimensions: expect.not.stringContaining("humanOversight"),
+            },
+          },
+        },
+      });
+    });
+
+    it("keeps unknown decision influence distinct from an explicit negative while requiring the remaining context", async () => {
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValueOnce(
+        readyTechnicalEvidenceReport() as never,
+      );
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        initialInterviewThreadFixture(),
+      );
+
+      await expect(
+        service.recordAgentDecision({
+          assessmentId: "assessment-1",
+          correlationId: "corr-initial-unknown-decision-effect",
+          decision: {
+            expectedContextRevision: 1,
+            mode: "INITIAL_INTERVIEW",
+            outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+            contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
+            confirmedContext: confirmedStructuredContext({
+              contextRevision: 1,
+              statements: [
+                {
+                  topic: "decision_influence",
+                  statement:
+                    "I don't know whether the AI output is automatically applied to any decision or action.",
+                  normalizedValue: "UNKNOWN",
+                },
+              ],
+            }),
+          },
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          ok: false,
+          problem: {
+            code: ASSESSMENT_INTERVIEW_READINESS_ERROR_CODES.minimumContextIncomplete,
+            meta: {
+              missingDimensions:
+                expect.not.stringContaining("decisionInfluence"),
+            },
+          },
+        },
+      });
+    });
+
     it("rejects targeted resolution when criteria are unsatisfied", async () => {
       mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
         targetedResolutionThreadFixture(),
@@ -1915,6 +2248,34 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       );
     });
 
+    it("E: never re-applies the initial minimum context gate to targeted resolution", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        targetedResolutionThreadFixture(),
+      );
+      const shallowTargetedContext = confirmedStructuredContext({});
+      expect(
+        missingInitialPlanningContextDimensions(shallowTargetedContext),
+      ).not.toEqual([]);
+
+      const result = await service.recordAgentDecision({
+        assessmentId: "assessment-1",
+        correlationId: "corr-target-not-initial-gated",
+        decision: {
+          expectedContextRevision: 2,
+          mode: "INVESTIGATOR_RESOLUTION",
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
+          contextAuthority:
+            ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+          confirmedContext: shallowTargetedContext,
+          flags: [ASSESSMENT_INTERVIEW_FLAGS.downstreamImpact],
+        },
+      });
+
+      expect(result.outcome).toBe(
+        ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
+      );
+    });
+
     it("routes initial CONTEXT_READY to engineering rule evaluation workflow", async () => {
       mockTx.technicalEvidenceReport.findFirst.mockResolvedValueOnce({
         id: "report-1",
@@ -1969,6 +2330,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed,
           confirmedContext: confirmedStructuredContext({
             contextRevision: 1,
+            statements: initialPlanningReadyStatements(),
           }),
         },
       });
@@ -2069,22 +2431,36 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
               CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES.customerConfirmedConfirmedOnly,
             statements: [
               {
-                statementId: "stmt-decision-authority",
+                statementId: "stmt-ai-usage",
                 assessmentId: "assessment-1",
-                topic: "decision_authority",
-                statement: "A recruiter approves every rejection.",
-                normalizedValue: "recruiter_approval_required",
+                topic: "ai_usage",
+                statement:
+                  "The AI model drafts recommendations in the customer onboarding workflow.",
+                normalizedValue: "ai_model_recommendations_customer_onboarding",
                 scope: { needId: "need-1" },
                 evidenceRefs: [],
                 respondentRef: "actor:authenticated:user-1",
               },
               {
-                statementId: "stmt-senior-approval",
+                statementId: "stmt-human-approval",
                 assessmentId: "assessment-1",
-                topic: "senior_approval",
+                topic: "human_approval",
                 statement:
-                  "For senior positions, the hiring manager must also approve.",
-                normalizedValue: "hiring_manager_approval_required",
+                  "A recruiter reviews and approves every customer-facing action before any status update or workflow gate changes.",
+                normalizedValue:
+                  "recruiter_approval_before_status_or_gate_change",
+                scope: { needId: "need-1" },
+                evidenceRefs: [],
+                respondentRef: "actor:authenticated:user-1",
+              },
+              {
+                statementId: "stmt-data-sources",
+                assessmentId: "assessment-1",
+                topic: "data_sources",
+                statement:
+                  "Material data sources are customer profile records, support tickets, repository code, and business documents.",
+                normalizedValue:
+                  "customer_profile_support_repository_documents",
                 scope: { needId: "need-1" },
                 evidenceRefs: [],
                 respondentRef: "actor:authenticated:user-1",
@@ -2106,8 +2482,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       expect(stateUpdate.data?.stateJson).toMatchObject({
         confirmedContext: {
           statements: [
-            expect.objectContaining({ topic: "decision_authority" }),
-            expect.objectContaining({ topic: "senior_approval" }),
+            expect.objectContaining({ topic: "ai_usage" }),
+            expect.objectContaining({ topic: "human_approval" }),
+            expect.objectContaining({ topic: "data_sources" }),
           ],
         },
       });

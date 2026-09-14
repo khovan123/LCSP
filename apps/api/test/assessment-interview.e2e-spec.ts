@@ -7,6 +7,7 @@ import {
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
   ASSESSMENT_INTERVIEW_CONTROLS,
   ASSESSMENT_INTERVIEW_MODES,
+  ASSESSMENT_INTERVIEW_READINESS_ERROR_CODES,
   ASSESSMENT_INTERVIEW_OUTCOMES,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
   CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES,
@@ -28,7 +29,7 @@ import {
   seedRepositoryScanGraph,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest, successBody } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 const QUESTION_ID = "agent-question-1";
 const RAW_ANSWER = "Payment assistant recommends review actions.";
@@ -41,6 +42,14 @@ function jsonRecord(value: unknown): Record<string, unknown> {
   }
   return value as Record<string, unknown>;
 }
+
+// Initial CONTEXT_READY requires the minimum planning context (AI usage, process,
+// decision influence, human oversight, affected subjects, data) to be confirmed.
+const RICH_INITIAL_PLANNING_STATEMENT =
+  "The AI model drafts recommendations in the customer onboarding workflow; " +
+  "a human reviewer approves every customer-facing action before any status update, " +
+  "affected subjects are customers, and the material data sources are customer " +
+  "profile records and repository code.";
 
 function confirmedStructuredContext(input: {
   assessmentId: string;
@@ -510,7 +519,7 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       });
     assert.equal(falseReady.status, 409, JSON.stringify(falseReady.body));
 
-    const directCustomerConfirmation = await httpRequest(app)
+    const shallowReady = await httpRequest(app)
       .post("/internal/assessment-interviews/assessment-1/agent-decisions")
       .set("x-worker-api-key", WORKER_KEY)
       .send({
@@ -524,6 +533,28 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
           contextRevision: 1,
           topic: "decision_authority",
           statement: "human approval required",
+        }),
+      });
+    assert.equal(shallowReady.status, 409, JSON.stringify(shallowReady.body));
+    assert.equal(
+      problemCode(shallowReady),
+      ASSESSMENT_INTERVIEW_READINESS_ERROR_CODES.minimumContextIncomplete,
+    );
+
+    const directCustomerConfirmation = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/agent-decisions")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        expectedContextRevision: 1,
+        mode: ASSESSMENT_INTERVIEW_MODES.initialInterview,
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+        contextAuthority:
+          ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+        confirmedContext: confirmedStructuredContext({
+          assessmentId: "assessment-1",
+          contextRevision: 1,
+          topic: "initial_planning_context",
+          statement: RICH_INITIAL_PLANNING_STATEMENT,
         }),
       });
     assert.equal(
@@ -547,8 +578,8 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
         confirmedContext: confirmedStructuredContext({
           assessmentId: "assessment-1",
           contextRevision: 1,
-          topic: "decision_authority",
-          statement: "human approval required",
+          topic: "initial_planning_context",
+          statement: RICH_INITIAL_PLANNING_STATEMENT,
         }),
       });
     assert.equal(duplicate.status, 409, JSON.stringify(duplicate.body));
@@ -943,8 +974,8 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
         confirmedContext: confirmedStructuredContext({
           assessmentId: "assessment-1",
           contextRevision: 1,
-          topic: "baseline",
-          statement: "confirmed",
+          topic: "initial_planning_context",
+          statement: RICH_INITIAL_PLANNING_STATEMENT,
         }),
       });
     assert.equal(ready.status, 201, JSON.stringify(ready.body));

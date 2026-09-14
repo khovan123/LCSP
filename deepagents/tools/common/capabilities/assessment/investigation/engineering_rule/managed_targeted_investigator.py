@@ -275,6 +275,10 @@ class _ManagedInvestigatorAdapter:
 class ResumedManagedInvestigatorPipeline:
     """Re-enter only the deterministic gate around an exact resumed Investigator output."""
 
+    # Claims come from the stored Investigator handoff, so no pinned source is read:
+    # re-downloading and extracting the snapshot archive here is pure latency.
+    requires_code_workspace = False
+
     def __init__(
         self,
         *,
@@ -307,6 +311,8 @@ class ResumedManagedInvestigatorPipeline:
 
 class _ExactResumePlanner:
     """Deterministically reconstruct the already-pinned targeted rule scope."""
+
+    requires_openwiki_context = False
 
     def __init__(self, affected_rule_ids: tuple[str, ...]) -> None:
         self._affected_rule_ids = affected_rule_ids

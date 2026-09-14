@@ -20,6 +20,7 @@ import {
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
   ASSESSMENT_INTERVIEW_CONTROLS,
   ASSESSMENT_INTERVIEW_MODES,
+  ASSESSMENT_INTERVIEW_READINESS_ERROR_CODES,
   ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS,
   ASSESSMENT_INTERVIEW_OUTCOMES,
   ASSESSMENT_INTERVIEW_FLAGS,
@@ -76,6 +77,7 @@ import {
   updateInterviewWorkingStrategy,
 } from "./interview-working-strategy.js";
 import { InterviewGuidanceResolver } from "./interview-guidance.resolver.js";
+import { missingInitialPlanningContextDimensions } from "./interview-minimum-planning-context.js";
 
 const INTERVIEW_TOOL_NAME = "assessment_interview";
 const INTERVIEW_SOURCE_VERSION = "assessment-interview-runtime-v1";
@@ -1313,6 +1315,11 @@ export class AssessmentInterviewRuntimeService {
             latestPrivate,
             input.correlationId,
           );
+        assertInitialPlanningContextReady(
+          decision,
+          transition.mode,
+          input.correlationId,
+        );
       }
 
       if (decision.activeQuestion) {
@@ -2878,6 +2885,38 @@ function isAnswerIdempotencyRecord(
     typeof record.questionId === "string" &&
     typeof record.contextRevision === "number" &&
     typeof record.recordedAt === "string"
+  );
+}
+
+function assertInitialPlanningContextReady(
+  decision: AgentDecisionInput,
+  mode: CanonicalAssessmentInterviewMode,
+  correlationId: string,
+): void {
+  // Targeted INVESTIGATOR_RESOLUTION turns resolve one rule-specific need and must
+  // never be re-gated by the initial minimum planning context.
+  if (
+    mode !== ASSESSMENT_INTERVIEW_MODES.initialInterview ||
+    decision.outcome !== ASSESSMENT_INTERVIEW_OUTCOMES.contextReady
+  ) {
+    return;
+  }
+  const missingDimensions = missingInitialPlanningContextDimensions(
+    decision.confirmedContext,
+  );
+  if (missingDimensions.length === 0) {
+    return;
+  }
+  throw problemException(
+    ASSESSMENT_INTERVIEW_READINESS_ERROR_CODES.minimumContextIncomplete,
+    correlationId,
+    {
+      status: HttpStatus.CONFLICT,
+      meta: {
+        missingDimensionCount: missingDimensions.length,
+        missingDimensions: missingDimensions.join(","),
+      },
+    },
   );
 }
 

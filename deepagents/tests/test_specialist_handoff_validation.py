@@ -7,6 +7,7 @@ from tools.common.capabilities.assessment.claims.evidence_claim.models import (
 )
 from orchestration.result_validation import (
     SpecialistHandoffValidationError,
+    _normalize_investigator_payload,
     validate_specialist_handoff,
 )
 from contracts.handoffs import InvestigatorResult
@@ -230,6 +231,118 @@ def test_fail_closed_recovery_converts_decided_claim_without_refs_to_unresolved(
         }
     )
 
+    normalized = _normalize_investigator_payload(
+        payload,
+        allow_fail_closed_recovery=True,
+    )
+    handoff = InvestigatorResult.model_validate(normalized)
+
+    claim = handoff.model_dump(mode="json")["claims"][0]
+    assert claim["claim_type"] == "UNRESOLVED_ENGINEERING_FACT"
+    assert claim["value"] is None
+    assert claim["confidence"] == 0.0
+    assert claim["limitations"] == [
+        ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]
+    ]
+    assert claim["evidence_refs"] == []
+    assert claim["graph_path_refs"] == []
+    assert claim["source_anchor_refs"] == []
+
+
+def _not_met_null_claim(**overrides) -> dict:
+    claim = {
+        "claim_id": "claim-1",
+        "engineering_rule_id": "eng-1",
+        "claim_type": "RULE_REQUIREMENT_NOT_MET",
+        "value": None,
+        "evidence_refs": [],
+        "graph_path_refs": ["node:ai", "edge:receives", "node:output"],
+        "source_anchor_refs": [],
+        "confidence": 0.9,
+        "limitations": [],
+        "criterion": "Configured retry limit is present",
+    }
+    claim.update(overrides)
+    return claim
+
+
+@pytest.mark.parametrize("allow_fail_closed_recovery", [False, True])
+def test_not_met_null_value_with_criterion_and_refs_is_normalized_on_every_attempt(
+    allow_fail_closed_recovery,
+) -> None:
+    payload = _investigator_payload()
+    payload["claims"][0] = _not_met_null_claim()
+
+    normalized = _normalize_investigator_payload(
+        payload,
+        allow_fail_closed_recovery=allow_fail_closed_recovery,
+    )
+    handoff = InvestigatorResult.model_validate(normalized)
+
+    claim = handoff.model_dump(mode="json")["claims"][0]
+    assert claim["claim_type"] == "RULE_REQUIREMENT_NOT_MET"
+    assert claim["value"] is False
+    assert claim["graph_path_refs"] == ["node:ai", "edge:receives", "node:output"]
+    assert payload["claims"][0]["value"] is None
+
+
+def test_normalized_not_met_claim_still_passes_through_the_graph_evidence_gate() -> None:
+    payload = _investigator_payload()
+    payload["claims"][0] = _not_met_null_claim()
+
+    # The value repair never bypasses EvidenceClaimValidator: this fixture graph has no
+    # criterion-aligned material production evidence, so the closed claim is rejected.
+    with pytest.raises(SpecialistHandoffValidationError, match="evidence-claim validation"):
+        validate_specialist_handoff(
+            "investigator",
+            payload,
+            graph=_graph(),
+            pinned_rule_ids=("eng-1",),
+            pinned_versions={"technicalEvidenceReportId": "ter-1"},
+        )
+
+
+def test_not_met_with_missing_value_key_is_normalized_like_null() -> None:
+    payload = _investigator_payload()
+    claim = _not_met_null_claim()
+    claim.pop("value")
+    payload["claims"][0] = claim
+
+    normalized = _normalize_investigator_payload(payload)
+
+    assert normalized["claims"][0]["value"] is False
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        pytest.param({"graph_path_refs": []}, id="not-met-null-no-refs"),
+        pytest.param({"graph_path_refs": [" "]}, id="not-met-null-blank-refs"),
+        pytest.param({"criterion": None}, id="not-met-null-missing-criterion"),
+        pytest.param({"criterion": "   "}, id="not-met-null-blank-criterion"),
+        pytest.param({"confidence": 0.0}, id="not-met-null-invalid-confidence"),
+        pytest.param({"limitations": ["NOT_A_LIMITATION"]}, id="not-met-null-invalid-limitation"),
+        pytest.param({"unexpected": "field"}, id="not-met-null-extra-field"),
+        pytest.param({"value": "false"}, id="not-met-string-value"),
+    ],
+)
+def test_unsafe_not_met_shapes_are_not_normalized_and_fail_strict_validation(
+    overrides,
+) -> None:
+    payload = _investigator_payload()
+    payload["claims"][0] = _not_met_null_claim(**overrides)
+
+    normalized = _normalize_investigator_payload(payload)
+
+    assert normalized["claims"][0] == payload["claims"][0]
+    with pytest.raises(SpecialistHandoffValidationError, match="schema validation"):
+        validate_specialist_handoff("investigator", payload)
+
+
+def test_not_met_null_without_criterion_stays_fail_closed_unresolved_on_recovery() -> None:
+    payload = _investigator_payload()
+    payload["claims"][0] = _not_met_null_claim(criterion=None, graph_path_refs=[])
+
     handoff = validate_specialist_handoff(
         "investigator",
         payload,
@@ -242,13 +355,99 @@ def test_fail_closed_recovery_converts_decided_claim_without_refs_to_unresolved(
     claim = handoff.model_dump(mode="json")["claims"][0]
     assert claim["claim_type"] == "UNRESOLVED_ENGINEERING_FACT"
     assert claim["value"] is None
-    assert claim["confidence"] == 0.0
+
+
+def test_met_null_value_is_never_normalized_to_true() -> None:
+    payload = _investigator_payload()
+    payload["claims"][0] = _not_met_null_claim(claim_type="RULE_REQUIREMENT_MET")
+
+    assert _normalize_investigator_payload(payload)["claims"][0]["value"] is None
+    with pytest.raises(SpecialistHandoffValidationError, match="schema validation"):
+        validate_specialist_handoff("investigator", payload)
+
+    recovered = validate_specialist_handoff(
+        "investigator",
+        payload,
+        graph=_graph(),
+        pinned_rule_ids=("eng-1",),
+        pinned_versions={"technicalEvidenceReportId": "ter-1"},
+        allow_fail_closed_recovery=True,
+    )
+    claim = recovered.model_dump(mode="json")["claims"][0]
+    assert claim["claim_type"] == "UNRESOLVED_ENGINEERING_FACT"
+    assert claim["value"] is None
+
+
+def test_unresolved_null_value_stays_unresolved() -> None:
+    payload = _investigator_payload()
+
+    normalized = _normalize_investigator_payload(payload)
+
+    assert normalized["claims"][0]["claim_type"] == "UNRESOLVED_ENGINEERING_FACT"
+    assert normalized["claims"][0]["value"] is None
+
+
+def test_unknown_claim_variant_with_null_value_is_not_normalized() -> None:
+    payload = _investigator_payload()
+    payload["claims"][0] = _not_met_null_claim(claim_type="RULE_REQUIREMENT_MAYBE_NOT_MET")
+
+    assert _normalize_investigator_payload(payload)["claims"][0] == payload["claims"][0]
+    with pytest.raises(SpecialistHandoffValidationError, match="schema validation"):
+        validate_specialist_handoff("investigator", payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param(None, id="none"),
+        pytest.param([], id="list"),
+        pytest.param({"status": "READY", "claims": "not-a-list"}, id="claims-not-list"),
+        pytest.param({"status": "READY", "claims": ["not-a-claim"]}, id="claim-not-object"),
+    ],
+)
+def test_malformed_investigator_payload_is_not_normalized(payload) -> None:
+    assert _normalize_investigator_payload(payload) == payload
+    with pytest.raises(SpecialistHandoffValidationError, match="schema validation"):
+        validate_specialist_handoff("investigator", payload)
+
+
+def test_not_met_contract_still_rejects_null_value() -> None:
+    from pydantic import ValidationError
+
+    from contracts.handoffs import InvestigatorRequirementNotMetClaim
+
+    with pytest.raises(ValidationError):
+        InvestigatorRequirementNotMetClaim.model_validate(_not_met_null_claim())
+
+
+def test_fail_closed_recovery_does_not_normalize_not_met_null_without_refs() -> None:
+    payload = _investigator_payload()
+    payload["claims"][0].update(
+        {
+            "claim_type": "RULE_REQUIREMENT_NOT_MET",
+            "value": None,
+            "evidence_refs": [],
+            "graph_path_refs": [],
+            "source_anchor_refs": [],
+            "limitations": [],
+        }
+    )
+
+    handoff = validate_specialist_handoff(
+        "investigator",
+        payload,
+        graph=_graph(),
+        pinned_rule_ids=("eng-1",),
+        pinned_versions={"technicalEvidenceReportId": "ter-1"},
+        allow_fail_closed_recovery=True,
+    )
+
+    claim = handoff.model_dump(mode="json")["claims"][0]
+    assert claim["claim_type"] == "UNRESOLVED_ENGINEERING_FACT"
+    assert claim["value"] is None
     assert claim["limitations"] == [
         ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]
     ]
-    assert claim["evidence_refs"] == []
-    assert claim["graph_path_refs"] == []
-    assert claim["source_anchor_refs"] == []
 
 
 def test_fail_closed_recovery_fills_unresolved_limitation_without_refs() -> None:

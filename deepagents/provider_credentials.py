@@ -8,6 +8,13 @@ PROVIDER_KEY_ENV = {
     "openai": ("OPENAI_API_KEY",),
     "google_genai": ("GOOGLE_API_KEY", "GEMINI_API_KEY"),
 }
+# SDK value that disables SDK-internal retries when credential rotation owns retries.
+# langchain_google_genai maps max_retries to HttpRetryOptions(attempts=...): 0 means
+# "Google default" (5 retries), so a single attempt is 1 there and 0 for OpenAI.
+NO_SDK_RETRY_MAX_RETRIES = {
+    "openai": 0,
+    "google_genai": 1,
+}
 
 
 def provider_token_source(provider: str) -> tuple[str, tuple[str, ...]] | None:
@@ -33,5 +40,5 @@ def credential_init_kwargs(provider: str) -> dict[str, object]:
     # Explicitly pass one key: SDKs must never receive the comma-separated list.
     kwargs: dict[str, object] = {"api_key": tokens[0]}
     if len(tokens) > 1:
-        kwargs["max_retries"] = 1 if provider == "google_genai" else 0
+        kwargs["max_retries"] = NO_SDK_RETRY_MAX_RETRIES[provider]
     return kwargs

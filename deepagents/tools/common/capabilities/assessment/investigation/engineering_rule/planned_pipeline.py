@@ -410,71 +410,88 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 candidates
             ),
         }
-        try:
-            openwiki_context = OpenWikiContextProvider(
-                workspace_path or Path.cwd()
-            ).collect_required_for_candidates(candidates)
+        if not getattr(self._planner, "requires_openwiki_context", True):
+            # A deterministic planner (exact targeted resume) never reads planner hints.
+            # Generating OpenWiki here would cost time, and its SELECT-ALL fallback on
+            # unavailability would silently widen an exact-resume scope to every rule.
             observability["openwiki"] = {
-                "available": True,
-                "hint_count": int(openwiki_context.get("hintCount") or 0),
-                "authority": str(openwiki_context.get("authority") or ""),
+                "available": False,
+                "skipped": "DETERMINISTIC_PLANNER_DOES_NOT_USE_OPENWIKI",
             }
-            logger.info(
-                "OPENWIKI_PLANNER_HINTS_READY",
-                hint_count=openwiki_context.get("hintCount", 0),
-                authority=openwiki_context.get("authority"),
-                workflow_run_id=workflow_run_id,
-                correlationId=correlation_id,
-            )
             plan = self._planner.plan(
                 candidates=candidates,
                 confirmed_customer_context=confirmed_customer_context,
                 graph=graph,
                 workflow_run_id=workflow_run_id,
                 correlation_id=correlation_id,
-                openwiki_context=openwiki_context,
+                openwiki_context=None,
             )
-        except OpenWikiContextRequiredError as error:
-            observability["openwiki"] = {
-                "available": False,
-                "error": str(error),
-                "fallback": "OPENWIKI_REQUIRED_FALLBACK_ALL",
-            }
-            logger.warning(
-                "OPENWIKI_PLANNER_HINTS_REQUIRED_FALLBACK_ALL",
-                reason=str(error),
-                candidate_count=len(candidates),
-                workflow_run_id=workflow_run_id,
-                correlationId=correlation_id,
-            )
-            plan = EngineeringRulePlan(
-                selected_rule_ids=tuple(
-                    candidate.engineering_rule_id for candidate in candidates
-                ),
-                skipped_rule_ids=(),
-                fallback_used=True,
-                decision_audit=tuple(
-                    EngineeringRulePlanDecisionAudit(
-                        engineering_rule_id=candidate.engineering_rule_id,
-                        requested_decision="FALLBACK",
-                        final_decision="SELECT",
-                        reason_code="OPENWIKI_REQUIRED_CONTEXT_UNAVAILABLE",
-                        basis=(),
-                        validation_override="OPENWIKI_REQUIRED_FALLBACK_ALL",
-                        interview_context_revision_used=(
-                            confirmed_customer_context.context_revision
-                        ),
-                        confirmed_statement_refs_used=(
-                            confirmed_customer_context.confirmed_statement_refs
-                        ),
-                        context_limitations_used=confirmed_customer_context.limitations,
-                        source_version_ref=confirmed_customer_context.source_version_ref,
-                        pge_version=confirmed_customer_context.pge_version,
-                        guidance_version=confirmed_customer_context.guidance_version,
-                    )
-                    for candidate in candidates
-                ),
-            )
+        else:
+            try:
+                openwiki_context = OpenWikiContextProvider(
+                    workspace_path or Path.cwd()
+                ).collect_required_for_candidates(candidates)
+                observability["openwiki"] = {
+                    "available": True,
+                    "hint_count": int(openwiki_context.get("hintCount") or 0),
+                    "authority": str(openwiki_context.get("authority") or ""),
+                }
+                logger.info(
+                    "OPENWIKI_PLANNER_HINTS_READY",
+                    hint_count=openwiki_context.get("hintCount", 0),
+                    authority=openwiki_context.get("authority"),
+                    workflow_run_id=workflow_run_id,
+                    correlationId=correlation_id,
+                )
+                plan = self._planner.plan(
+                    candidates=candidates,
+                    confirmed_customer_context=confirmed_customer_context,
+                    graph=graph,
+                    workflow_run_id=workflow_run_id,
+                    correlation_id=correlation_id,
+                    openwiki_context=openwiki_context,
+                )
+            except OpenWikiContextRequiredError as error:
+                observability["openwiki"] = {
+                    "available": False,
+                    "error": str(error),
+                    "fallback": "OPENWIKI_REQUIRED_FALLBACK_ALL",
+                }
+                logger.warning(
+                    "OPENWIKI_PLANNER_HINTS_REQUIRED_FALLBACK_ALL",
+                    reason=str(error),
+                    candidate_count=len(candidates),
+                    workflow_run_id=workflow_run_id,
+                    correlationId=correlation_id,
+                )
+                plan = EngineeringRulePlan(
+                    selected_rule_ids=tuple(
+                        candidate.engineering_rule_id for candidate in candidates
+                    ),
+                    skipped_rule_ids=(),
+                    fallback_used=True,
+                    decision_audit=tuple(
+                        EngineeringRulePlanDecisionAudit(
+                            engineering_rule_id=candidate.engineering_rule_id,
+                            requested_decision="FALLBACK",
+                            final_decision="SELECT",
+                            reason_code="OPENWIKI_REQUIRED_CONTEXT_UNAVAILABLE",
+                            basis=(),
+                            validation_override="OPENWIKI_REQUIRED_FALLBACK_ALL",
+                            interview_context_revision_used=(
+                                confirmed_customer_context.context_revision
+                            ),
+                            confirmed_statement_refs_used=(
+                                confirmed_customer_context.confirmed_statement_refs
+                            ),
+                            context_limitations_used=confirmed_customer_context.limitations,
+                            source_version_ref=confirmed_customer_context.source_version_ref,
+                            pge_version=confirmed_customer_context.pge_version,
+                            guidance_version=confirmed_customer_context.guidance_version,
+                        )
+                        for candidate in candidates
+                    ),
+                )
 
         # Existing implementation continues below in this helper.
         return self._finish_planned_investigation(

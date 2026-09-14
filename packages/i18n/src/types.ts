@@ -271,6 +271,7 @@ export type PagesMessages = {
       running: string;
       waiting: string;
       completed: string;
+      skipped: string;
       failed: string;
     };
     runtimePanelStages: {
@@ -1414,6 +1415,9 @@ export type PagesMessages = {
       drawerDescription: string;
       close: string;
       loading: string;
+      building: string;
+      buildFailed: string;
+      notFound: string;
       loadError: string;
       repositorySnapshot: string;
       overview: string;
@@ -1470,6 +1474,10 @@ export type PagesMessages = {
       plannerFailed: string;
       investigatorProgress: string;
       investigatorFailed: string;
+      plannerTargetedSummary: string;
+      plannerSummary: string;
+      investigatorSummary: string;
+      investigatorLimitedSummary: string;
       plannerDecision: string;
       investigationFailed: string;
       investigated: string;
@@ -1698,6 +1706,31 @@ export type PagesMessages = {
     pageDescription: string;
     loading: string;
     summaryLabel: string;
+    executionLabel: string;
+    resultLabel: string;
+    evidenceLabel: string;
+    resultUnavailable: string;
+    evidenceUnavailable: string;
+    executionStates: {
+      queued: string;
+      running: string;
+      completed: string;
+      failed: string;
+      blocked: string;
+      skipped: string;
+    };
+    assessmentOutcomes: {
+      compliant: string;
+      nonCompliant: string;
+      unknown: string;
+      notApplicable: string;
+    };
+    evidenceQualities: {
+      evidenceBacked: string;
+      limitedEvidence: string;
+      noValidatedEvidence: string;
+      coverageLimited: string;
+    };
     referencesLabel: string;
     generateFinalReport: string;
     generateGapAnalysis: string;

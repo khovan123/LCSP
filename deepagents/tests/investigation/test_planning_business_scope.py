@@ -10,6 +10,7 @@ from tools.common.capabilities.assessment.planning.engineering_rule.confirmed_bu
 from tools.common.capabilities.assessment.planning.engineering_rule.planning_business_scope import (
     BusinessAwareScopedEngineeringRulePlanningCandidate,
     BusinessAwareScopedMaterialEngineeringRulePlanner,
+    RulePlanningBusinessScope,
     RulePlanningBusinessScopeProjector,
 )
 from tools.common.capabilities.evidence.graph.schema.models import ProgramEvidenceGraph
@@ -219,6 +220,13 @@ def test_rule_planning_business_scope_detects_bounded_no_human_path() -> None:
 
     assert scope.decision_influence_state == "AUTOMATED_DECISION_CANDIDATE"
     assert scope.human_oversight_state == "ABSENT_WITH_BOUNDED_PATH"
+
+
+def test_business_scope_defaults_unknown_when_decision_effect_was_not_evidenced() -> None:
+    scope = RulePlanningBusinessScope()
+
+    assert scope.decision_influence_state == "DECISION_PATH_UNRESOLVED"
+    assert scope.human_oversight_state == "UNKNOWN"
 
 
 def test_business_aware_candidate_exposes_semantics_to_planner_prompt() -> None:
