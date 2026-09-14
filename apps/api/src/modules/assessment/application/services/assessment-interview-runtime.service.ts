@@ -62,6 +62,7 @@ import {
   BadRequestException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
@@ -241,6 +242,29 @@ type WorkerPrivateContext = {
   workingStrategy: InterviewWorkingStrategy;
 };
 
+type InterviewThreadSnapshot = {
+  state: AssessmentInterviewRuntimeState;
+  privateStore: PrivateInterviewStore;
+  privateRevisions: PrivateInterviewAnswerRevision[];
+  contextRevision: number;
+  activeQuestionId: string | null;
+  processedRevision: number;
+  sourceVersion: string | null;
+  pgeVersion: string | null;
+  guidanceVersion: string | null;
+};
+
+type AssessmentProvenanceSnapshot = {
+  sourceVersion: string;
+  pgeVersion: string;
+  snapshotId?: string;
+  commitSha?: string;
+  technicalCoverageState: InterviewTechnicalCoverageState;
+  coverageLimitations: string[];
+  partialCoveragePolicyDecision?: PartialCoveragePolicyDecision;
+  governedEvidenceRefs: string[];
+};
+
 type AgentDecisionInput = {
   expectedContextRevision: number;
   mode?: CanonicalAssessmentInterviewMode;
@@ -263,6 +287,8 @@ type OrchestratorInterviewTransition = {
 
 @Injectable()
 export class AssessmentInterviewRuntimeService {
+  private readonly logger = new Logger(AssessmentInterviewRuntimeService.name);
+
   private readonly guidanceResolver = new InterviewGuidanceResolver();
 
   constructor(
@@ -1047,47 +1073,37 @@ export class AssessmentInterviewRuntimeService {
     target: TargetedNeedRegistrationInput;
   }): Promise<AssessmentInterviewRuntimeState> {
     const target = parseTargetedNeedRegistration(input.target);
+    const initialThread = await this.readThread(input.assessmentId);
+    if (this.isDuplicateTargetedNeed(initialThread.privateStore, target)) {
+      return initialThread.state;
+    }
+    const initialProvenance = await this.assessmentProvenance(
+      input.assessmentId,
+    );
+    this.validateTargetedNeedRegistrationContext({
+      thread: initialThread,
+      provenance: initialProvenance,
+      target,
+      correlationId: input.correlationId,
+    });
     const targetResult = await this.prisma.$transaction(async (tx) => {
+      await this.lockInterviewThread(input.assessmentId, tx);
       const thread = await this.readThread(input.assessmentId, tx);
-      if (thread.state.outcome !== ASSESSMENT_INTERVIEW_OUTCOMES.contextReady) {
-        throw problemException(
-          "INTERVIEW_TARGETED_NEED_REQUIRES_READY_CONTEXT",
-          input.correlationId,
-          { status: HttpStatus.CONFLICT },
-        );
+      if (this.isDuplicateTargetedNeed(thread.privateStore, target)) {
+        return {
+          state: thread.state,
+          workflowRunId: target.workflowRunId,
+          partialCoveragePolicyDecision:
+            thread.privateStore.partialCoveragePolicyDecision,
+          registered: false,
+        };
       }
-      const provenance = await this.assessmentProvenance(
-        input.assessmentId,
-        tx,
-      );
-      this.assertInitialInterviewCoverageUsable(
-        provenance.technicalCoverageState,
-        provenance.coverageLimitations,
-        provenance.partialCoveragePolicyDecision,
-        input.correlationId,
-      );
-      if (
-        !thread.sourceVersion ||
-        !thread.pgeVersion ||
-        thread.sourceVersion !== provenance.sourceVersion ||
-        thread.pgeVersion !== provenance.pgeVersion
-      ) {
-        throw problemException(
-          "INTERVIEW_TARGETED_REGISTRATION_STALE_PROVENANCE",
-          input.correlationId,
-          { status: HttpStatus.CONFLICT },
-        );
-      }
-      const authoritativeRefs = new Set(provenance.governedEvidenceRefs);
-      for (const ref of target.governedEvidenceRefs ?? []) {
-        if (!authoritativeRefs.has(ref)) {
-          throw problemException(
-            "INTERVIEW_EVIDENCE_REF_UNAUTHORIZED",
-            input.correlationId,
-            { status: HttpStatus.BAD_REQUEST, meta: { unauthorizedRef: ref } },
-          );
-        }
-      }
+      this.validateTargetedNeedRegistrationContext({
+        thread,
+        provenance: initialProvenance,
+        target,
+        correlationId: input.correlationId,
+      });
       const targetedNeed: TargetedInterviewNeed = {
         needId: target.needId,
         businessContextNeed: target.businessContextNeed,
@@ -1096,8 +1112,8 @@ export class AssessmentInterviewRuntimeService {
         governedEvidenceRefs: target.governedEvidenceRefs,
         originatingInvestigationReference:
           target.originatingInvestigationReference,
-        sourceVersion: thread.sourceVersion,
-        pgeVersion: thread.pgeVersion,
+        sourceVersion: initialProvenance.sourceVersion,
+        pgeVersion: initialProvenance.pgeVersion,
       };
       const targetedContinuation: TargetedInterviewContinuation = {
         originatingInvestigationReference:
@@ -1107,8 +1123,8 @@ export class AssessmentInterviewRuntimeService {
         checkpointId: target.checkpointId,
         affectedRuleIds: target.affectedRuleIds,
         artifactVersions: target.artifactVersions,
-        sourceVersion: thread.sourceVersion,
-        pgeVersion: thread.pgeVersion,
+        sourceVersion: initialProvenance.sourceVersion,
+        pgeVersion: initialProvenance.pgeVersion,
       };
       const nextState: AssessmentInterviewRuntimeState = {
         ...thread.state,
@@ -1120,15 +1136,16 @@ export class AssessmentInterviewRuntimeService {
         ...thread.privateStore,
         targetedNeed,
         targetedContinuation,
-        partialCoveragePolicyDecision: provenance.partialCoveragePolicyDecision,
+        partialCoveragePolicyDecision:
+          initialProvenance.partialCoveragePolicyDecision,
       };
       await this.persistThreadState(input.assessmentId, nextState, tx, {
         contextRevision: thread.contextRevision,
         activeQuestionId: null,
         processedRevision: thread.processedRevision,
         privateStore,
-        sourceVersion: thread.sourceVersion,
-        pgeVersion: thread.pgeVersion,
+        sourceVersion: initialProvenance.sourceVersion,
+        pgeVersion: initialProvenance.pgeVersion,
         guidanceVersion:
           thread.guidanceVersion ?? this.resolveGuidanceVersion(),
       });
@@ -1140,8 +1157,8 @@ export class AssessmentInterviewRuntimeService {
           correlationId: input.correlationId,
           contextRevision: thread.contextRevision,
           questionId: target.needId,
-          sourceVersion: thread.sourceVersion,
-          pgeVersion: thread.pgeVersion,
+          sourceVersion: initialProvenance.sourceVersion,
+          pgeVersion: initialProvenance.pgeVersion,
           guidanceVersion:
             thread.guidanceVersion ?? this.resolveGuidanceVersion(),
           resumeReason: "INVESTIGATOR_RESOLUTION_REQUIRED",
@@ -1159,14 +1176,14 @@ export class AssessmentInterviewRuntimeService {
           runId: target.workflowRunId,
           stage: ASSESSMENT_INTERVIEW_MODES.investigatorResolution,
           sourceSnapshot: {
-            snapshotId: provenance.snapshotId,
-            commitSha: provenance.commitSha,
-            sourceVersion: thread.sourceVersion ?? undefined,
-            pgeVersion: thread.pgeVersion ?? undefined,
-            technicalCoverageState: provenance.technicalCoverageState,
-            coverageLimitations: provenance.coverageLimitations,
+            snapshotId: initialProvenance.snapshotId,
+            commitSha: initialProvenance.commitSha,
+            sourceVersion: initialProvenance.sourceVersion,
+            pgeVersion: initialProvenance.pgeVersion,
+            technicalCoverageState: initialProvenance.technicalCoverageState,
+            coverageLimitations: initialProvenance.coverageLimitations,
             partialCoveragePolicyDecision:
-              provenance.partialCoveragePolicyDecision,
+              initialProvenance.partialCoveragePolicyDecision,
             guidanceVersion:
               thread.guidanceVersion ?? this.resolveGuidanceVersion(),
           },
@@ -1178,33 +1195,121 @@ export class AssessmentInterviewRuntimeService {
       return {
         state: nextState,
         workflowRunId: target.workflowRunId,
-        partialCoveragePolicyDecision: provenance.partialCoveragePolicyDecision,
+        partialCoveragePolicyDecision:
+          initialProvenance.partialCoveragePolicyDecision,
+        registered: true,
       };
     });
 
-    await this.runtimeEvents.recordToolWaitingInput({
-      assessmentId: input.assessmentId,
-      runId: targetResult.workflowRunId,
-      correlationId: input.correlationId,
-      stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
-      toolName: INTERVIEW_TOOL_NAME,
-      summary:
-        "Investigator-resolution Interview has started and is waiting for Customer context.",
-      outputSummary: {
-        assessmentInterview: publicState(targetResult.state),
-        interviewWorkflowEvent:
-          ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
-        orchestratorAction:
-          ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.waitForCustomer,
-        interviewMode: ASSESSMENT_INTERVIEW_MODES.investigatorResolution,
-        partialCoveragePolicyDecision:
-          targetResult.partialCoveragePolicyDecision ?? null,
-      },
-      waitingReason: ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
-      startedAt: new Date(),
-    });
+    if (targetResult.registered) {
+      try {
+        await this.runtimeEvents.recordToolWaitingInput({
+          assessmentId: input.assessmentId,
+          runId: targetResult.workflowRunId,
+          correlationId: input.correlationId,
+          stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+          toolName: INTERVIEW_TOOL_NAME,
+          summary:
+            "Investigator-resolution Interview has started and is waiting for Customer context.",
+          outputSummary: {
+            assessmentInterview: publicState(targetResult.state),
+            interviewWorkflowEvent:
+              ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
+            orchestratorAction:
+              ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.waitForCustomer,
+            interviewMode: ASSESSMENT_INTERVIEW_MODES.investigatorResolution,
+            partialCoveragePolicyDecision:
+              targetResult.partialCoveragePolicyDecision ?? null,
+          },
+          waitingReason: ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
+          startedAt: new Date(),
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Targeted Interview runtime event failed after commit: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
 
     return targetResult.state;
+  }
+
+  private validateTargetedNeedRegistrationContext(input: {
+    thread: InterviewThreadSnapshot;
+    provenance: AssessmentProvenanceSnapshot;
+    target: TargetedNeedRegistrationInput;
+    correlationId: string;
+  }): void {
+    if (
+      input.thread.state.outcome !== ASSESSMENT_INTERVIEW_OUTCOMES.contextReady
+    ) {
+      throw problemException(
+        "INTERVIEW_TARGETED_NEED_REQUIRES_READY_CONTEXT",
+        input.correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
+    }
+    this.assertInitialInterviewCoverageUsable(
+      input.provenance.technicalCoverageState,
+      input.provenance.coverageLimitations,
+      input.provenance.partialCoveragePolicyDecision,
+      input.correlationId,
+    );
+    if (
+      !input.thread.sourceVersion ||
+      !input.thread.pgeVersion ||
+      input.thread.sourceVersion !== input.provenance.sourceVersion ||
+      input.thread.pgeVersion !== input.provenance.pgeVersion
+    ) {
+      throw problemException(
+        "INTERVIEW_TARGETED_REGISTRATION_STALE_PROVENANCE",
+        input.correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
+    }
+    const authoritativeRefs = new Set(input.provenance.governedEvidenceRefs);
+    for (const ref of input.target.governedEvidenceRefs ?? []) {
+      if (!authoritativeRefs.has(ref)) {
+        throw problemException(
+          "INTERVIEW_EVIDENCE_REF_UNAUTHORIZED",
+          input.correlationId,
+          { status: HttpStatus.BAD_REQUEST, meta: { unauthorizedRef: ref } },
+        );
+      }
+    }
+  }
+
+  private isDuplicateTargetedNeed(
+    privateStore: PrivateInterviewStore,
+    target: TargetedNeedRegistrationInput,
+  ): boolean {
+    const need = privateStore.targetedNeed;
+    const continuation = privateStore.targetedContinuation;
+    return (
+      need?.needId === target.needId &&
+      need.originatingInvestigationReference ===
+        target.originatingInvestigationReference &&
+      continuation?.investigatorExecutionId ===
+        target.investigatorExecutionId &&
+      continuation.workflowRunId === target.workflowRunId &&
+      continuation.checkpointId === target.checkpointId &&
+      sameStringSet(continuation.affectedRuleIds, target.affectedRuleIds) &&
+      sameRecord(continuation.artifactVersions, target.artifactVersions)
+    );
+  }
+
+  private async lockInterviewThread(
+    assessmentId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    await tx.$queryRaw`
+      SELECT id
+      FROM "AssessmentInterviewThread"
+      WHERE "assessmentId" = ${assessmentId}
+      FOR UPDATE
+    `;
   }
 
   async getWorkerStateForWorker(
@@ -1779,17 +1884,7 @@ export class AssessmentInterviewRuntimeService {
   private async readThread(
     assessmentId: string,
     tx?: Prisma.TransactionClient,
-  ): Promise<{
-    state: AssessmentInterviewRuntimeState;
-    privateStore: PrivateInterviewStore;
-    privateRevisions: PrivateInterviewAnswerRevision[];
-    contextRevision: number;
-    activeQuestionId: string | null;
-    processedRevision: number;
-    sourceVersion: string | null;
-    pgeVersion: string | null;
-    guidanceVersion: string | null;
-  }> {
+  ): Promise<InterviewThreadSnapshot> {
     const client = tx ?? this.prisma;
     const thread = await client.assessmentInterviewThread.findUnique({
       where: { assessmentId },
@@ -1951,16 +2046,7 @@ export class AssessmentInterviewRuntimeService {
     assessmentId: string,
     tx?: Prisma.TransactionClient,
     technicalEvidenceReportId?: string,
-  ): Promise<{
-    sourceVersion: string;
-    pgeVersion: string;
-    snapshotId?: string;
-    commitSha?: string;
-    technicalCoverageState: InterviewTechnicalCoverageState;
-    coverageLimitations: string[];
-    partialCoveragePolicyDecision?: PartialCoveragePolicyDecision;
-    governedEvidenceRefs: string[];
-  }> {
+  ): Promise<AssessmentProvenanceSnapshot> {
     const client = tx ?? this.prisma;
     const report = await client.technicalEvidenceReport.findFirst({
       where: technicalEvidenceReportId
@@ -3378,10 +3464,11 @@ function decisionState(
   decision: AgentDecisionInput,
 ): AssessmentInterviewRuntimeState {
   const assistantMessage =
-    decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextReady ||
-    decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved
-      ? sanitizePublicText(decision.rationale)
-      : undefined;
+    decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextReady
+      ? "The baseline business context has been confirmed. The assessment can now continue to planning and investigation. Additional rule-specific questions may still be asked if needed."
+      : decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved
+        ? "The rule-specific business context has been confirmed. The affected investigation can now resume."
+        : undefined;
   return {
     ...current,
     outcome: decision.outcome,
@@ -3705,6 +3792,25 @@ function objectRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+function sameStringSet(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  const rightSet = new Set(right);
+  return left.every((value) => rightSet.has(value));
+}
+
+function sameRecord(
+  left: Record<string, string>,
+  right: Record<string, string>,
+): boolean {
+  const leftEntries = Object.entries(left);
+  if (leftEntries.length !== Object.keys(right).length) {
+    return false;
+  }
+  return leftEntries.every(([key, value]) => right[key] === value);
 }
 
 function toJson(value: unknown): Prisma.InputJsonValue {

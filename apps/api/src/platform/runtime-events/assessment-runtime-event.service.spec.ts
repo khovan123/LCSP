@@ -126,6 +126,144 @@ describe("AssessmentRuntimeEventService", () => {
     ]);
   });
 
+  it("projects canonical engineering progress independently of the recent activity cap", async () => {
+    const events = [
+      {
+        id: "evt-plan-summary",
+        assessmentId: "assessment-1",
+        runId: "scan-1",
+        correlationId: "corr-1",
+        sequence: 1,
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+        toolName: "engineering_rule_plan_summary",
+        summary: "ENGINEERING_RULE_PLANNER_DECISION",
+        inputSummaryJson: null,
+        outputSummaryJson: {
+          planningBatchId: "scan-1:context:12",
+          contextRevisionUsed: 12,
+          candidateCount: 41,
+          selectedCount: 19,
+          skippedCount: 22,
+          targeted: false,
+        },
+        errorSummary: null,
+        startedAt: null,
+        completedAt: null,
+        durationMs: null,
+        attempt: null,
+        waitingReason: null,
+        createdAt: new Date("2026-08-14T08:00:00.000Z"),
+      },
+      ...Array.from({ length: 13 }, (_, index) => ({
+        id: `evt-investigated-${index + 1}`,
+        assessmentId: "assessment-1",
+        runId: "scan-1",
+        correlationId: "corr-1",
+        sequence: index + 2,
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+        toolName: `engineering_rule_investigation:eng-${index + 1}`,
+        summary: "ENGINEERING_RULE_INVESTIGATED",
+        inputSummaryJson: null,
+        outputSummaryJson: { evaluationStatus: "MET" },
+        errorSummary: null,
+        startedAt: null,
+        completedAt: null,
+        durationMs: null,
+        attempt: null,
+        waitingReason: null,
+        createdAt: new Date(
+          `2026-08-14T08:00:${String(index + 1).padStart(2, "0")}.000Z`,
+        ),
+      })),
+      ...Array.from({ length: 3 }, (_, index) => ({
+        id: `evt-limited-${index + 1}`,
+        assessmentId: "assessment-1",
+        runId: "scan-1",
+        correlationId: "corr-1",
+        sequence: index + 20,
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolFailed,
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+        toolName: `engineering_rule_investigation:eng-${index + 14}`,
+        summary: "ENGINEERING_RULE_INVESTIGATION_FAILED",
+        inputSummaryJson: null,
+        outputSummaryJson: {},
+        errorSummary: "EvidenceUnavailable",
+        startedAt: null,
+        completedAt: null,
+        durationMs: null,
+        attempt: null,
+        waitingReason: null,
+        createdAt: new Date(`2026-08-14T08:01:0${index}.000Z`),
+      })),
+      ...Array.from({ length: 55 }, (_, index) => ({
+        id: `evt-noise-${index + 1}`,
+        assessmentId: "assessment-1",
+        runId: "scan-1",
+        correlationId: "corr-1",
+        sequence: index + 100,
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+        toolName: `non_progress:${index + 1}`,
+        summary: "Noise",
+        inputSummaryJson: null,
+        outputSummaryJson: null,
+        errorSummary: null,
+        startedAt: null,
+        completedAt: null,
+        durationMs: null,
+        attempt: null,
+        waitingReason: null,
+        createdAt: new Date(
+          `2026-08-14T08:02:${String(index).padStart(2, "0")}.000Z`,
+        ),
+      })),
+    ];
+    const prisma = {
+      assessmentRuntimeEvent: {
+        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue(events),
+        findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
+      },
+      repositorySnapshot: emptyRepositorySnapshots(),
+      repositoryScanJob: {
+        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+      },
+      technicalEvidenceReport: {
+        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+      },
+    };
+    const service = new AssessmentRuntimeEventService(prisma as never);
+
+    const snapshot = await service.buildWorkspaceSnapshot();
+
+    expect(snapshot.recentActivity).toHaveLength(50);
+    expect(snapshot.engineeringProgress).toEqual([
+      expect.objectContaining({
+        assessmentId: "assessment-1",
+        runId: "scan-1",
+        planningBatchId: "scan-1:context:12",
+        approximate: false,
+        planner: {
+          candidateCount: 41,
+          selectedCount: 19,
+          skippedCount: 22,
+        },
+        investigator: expect.objectContaining({
+          selectedCount: 19,
+          completedCount: 13,
+          domainLimitedCount: 3,
+          runtimeFailedCount: 0,
+          pendingCount: 3,
+        }),
+      }),
+    ]);
+  });
+
   it("derives the latest post-finding state from runtime event output summaries", async () => {
     const prisma = {
       assessmentRuntimeEvent: {

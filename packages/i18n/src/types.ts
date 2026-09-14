@@ -1442,16 +1442,16 @@ export type PagesMessages = {
       edges: string;
       pinnedNote: string;
       noGovernedClaims: string;
-        noOverviewProvenance: string;
-        topologyTitle: string;
-        topologyDescription: string;
-        legendNode: string;
-        legendRelationship: string;
-        legendInspected: string;
-        repositoryEvidence: string;
-        legendLabel: string;
-        selectedNode: string;
-        relationships: string;
+      noOverviewProvenance: string;
+      topologyTitle: string;
+      topologyDescription: string;
+      legendNode: string;
+      legendRelationship: string;
+      legendInspected: string;
+      repositoryEvidence: string;
+      legendLabel: string;
+      selectedNode: string;
+      relationships: string;
     };
     interview: {
       thought: string;
@@ -1478,6 +1478,7 @@ export type PagesMessages = {
       plannerSummary: string;
       investigatorSummary: string;
       investigatorLimitedSummary: string;
+      investigatorRuntimeFailedSummary: string;
       plannerDecision: string;
       investigationFailed: string;
       investigated: string;

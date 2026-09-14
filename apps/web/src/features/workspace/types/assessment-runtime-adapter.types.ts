@@ -8,6 +8,7 @@ import {
   type AssessmentInterviewFlag,
   type AssessmentInterviewOutcome,
   type AssessmentInterviewQuestion,
+  type AssessmentRuntimeEngineeringProgress,
   type AssessmentPostFindingActivity,
   type AssessmentPostFindingRuntimeState,
   type AssessmentTechnicalCoverageState,
@@ -153,6 +154,7 @@ export type NormalizedAssessmentWorkflow = {
   currentRunId: string | null;
   activeTools: WorkspaceRuntimeActiveTool[];
   recentActivity: WorkspaceRuntimeActivityItem[];
+  engineeringProgress: AssessmentRuntimeEngineeringProgress[];
   lastEmittedAt: string | null;
   isTargetedClarificationLoop: boolean;
   latestRun: WorkspaceRuntimeRun | null;
@@ -262,8 +264,10 @@ export type NormalizedAssessmentPostFinding = {
   availableDecisions: RemediationDecision[];
   selectedDecision: RemediationDecision | null;
   selectedDecisionAt: string | null;
-  detectedPullRequest: AssessmentPostFindingRuntimeState["detectedPullRequest"] | null;
-  createdPullRequest: AssessmentPostFindingRuntimeState["createdPullRequest"] | null;
+  detectedPullRequest:
+    AssessmentPostFindingRuntimeState["detectedPullRequest"] | null;
+  createdPullRequest:
+    AssessmentPostFindingRuntimeState["createdPullRequest"] | null;
   approvalStatus: RemediationApprovalStatus;
   approvedPatchVersion: string | null;
   verificationActivities: NormalizedPostFindingActivity[];
@@ -314,6 +318,7 @@ export type AdapterInterviewStateInput = {
 export type AdapterTimelineInput = {
   currentRun: WorkspaceRuntimeRun | null;
   recentActivity: WorkspaceRuntimeActivityItem[];
+  engineeringProgress?: AssessmentRuntimeEngineeringProgress[];
   latestRunId: string | null;
   connectionState: WorkspaceRuntimeConnectionState;
   lastEmittedAt: string | null;

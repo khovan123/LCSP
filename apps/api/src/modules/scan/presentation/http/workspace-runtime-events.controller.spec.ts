@@ -55,6 +55,7 @@ describe("WorkspaceRuntimeEventsController", () => {
             waitingReason: null,
           },
         ],
+        engineeringProgress: [],
         repositorySnapshots: [
           {
             id: "snapshot-1",
@@ -131,6 +132,7 @@ describe("WorkspaceRuntimeEventsController", () => {
           summary: "Starting get_scan_coverage",
         },
       ],
+      engineering_progress: [],
       repository_snapshots: [
         {
           id: "snapshot-1",
@@ -198,6 +200,7 @@ describe("WorkspaceRuntimeEventsController", () => {
       emittedAt: "2026-08-09T14:05:00.000Z",
       runs: [],
       recentActivity: [],
+      engineeringProgress: [],
       repositorySnapshots: [],
       scanJobs: [],
       evidenceReports: [],

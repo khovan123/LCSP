@@ -1462,12 +1462,10 @@ export const viPages = {
         "Các đường dẫn bằng chứng từ snapshot repository đã pin.",
       close: "Đóng Program Evidence Graph",
       loading: "Đang tải evidence graph...",
-      building:
-        "Evidence graph đang được xây dựng và sẽ tự hiển thị tại đây.",
+      building: "Evidence graph đang được xây dựng và sẽ tự hiển thị tại đây.",
       buildFailed:
         "Lượt quét evidence chưa hoàn tất nên chưa có evidence graph cho lần chạy này.",
-      notFound:
-        "Assessment này chưa có evidence graph.",
+      notFound: "Assessment này chưa có evidence graph.",
       loadError: "Không thể tải evidence graph. Vui lòng thử lại sau.",
       repositorySnapshot: "Snapshot repository",
       overview: "Tổng quan graph",
@@ -1490,13 +1488,13 @@ export const viPages = {
       zoomIn: "Phóng to",
       nodes: "nút",
       edges: "cạnh",
-      pinnedNote:
-        "Sơ đồ này được tạo từ snapshot kho mã đã được chấp nhận.",
+      pinnedNote: "Sơ đồ này được tạo từ snapshot kho mã đã được chấp nhận.",
       noGovernedClaims: "Chưa có governed claim.",
       noOverviewProvenance:
         "Chưa có thêm thông tin nguồn evidence cho phần tổng quan này.",
       topologyTitle: "Luồng thực thi và bằng chứng",
-      topologyDescription: "Hiển thị các luồng thực thi chính cùng bằng chứng liên quan.",
+      topologyDescription:
+        "Hiển thị các luồng thực thi chính cùng bằng chứng liên quan.",
       legendNode: "Nút",
       legendRelationship: "Quan hệ",
       legendInspected: "Đang chọn",
@@ -1543,9 +1541,11 @@ export const viPages = {
       plannerSummary:
         "Yêu cầu được chọn để điều tra: {selected}/{total}. Tạm thời ngoài phạm vi: {skipped}.",
       investigatorSummary:
-        "Yêu cầu đã điều tra: {investigated}/{selected}.",
+        "Yêu cầu đã điều tra: {investigated}/{selected}. Đang chờ: {pending}.",
       investigatorLimitedSummary:
         "Lượt điều tra yêu cầu gặp giới hạn và chưa kết luận: {failed}.",
+      investigatorRuntimeFailedSummary:
+        "Lượt điều tra yêu cầu bị gián đoạn bởi lỗi runtime: {failed}.",
       readinessWaiting:
         "Assessment đang chờ EngineeringRules trạng thái READY; Legal Rule Triage tự động đã được yêu cầu.",
     },
@@ -2277,8 +2277,7 @@ export const viPages = {
         emptyDescription:
           "Chưa có hoạt động đánh giá nào được ghi nhận trong khoảng thời gian đã chọn.",
         errorTitle: "Không thể tải dữ liệu hoạt động",
-        errorDescription:
-          "Đã xảy ra lỗi khi tải xu hướng hoạt động đánh giá.",
+        errorDescription: "Đã xảy ra lỗi khi tải xu hướng hoạt động đánh giá.",
         barTooltip: "{date}: {started} bắt đầu, {completed} hoàn thành",
       },
       accountStatus: {

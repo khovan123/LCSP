@@ -120,6 +120,39 @@ export type AssessmentRuntimeActivityEvent = {
   waitingReason: string | null;
 };
 
+export const ASSESSMENT_RUNTIME_ENGINEERING_PROGRESS_TOOL_NAMES = {
+  plannerSummary: "engineering_rule_plan_summary",
+  investigatorSummary: "engineering_rule_investigation_summary",
+} as const;
+
+export const ASSESSMENT_RUNTIME_ENGINEERING_RULE_TOOL_PREFIXES = {
+  planner: "engineering_rule_plan:",
+  investigator: "engineering_rule_investigation:",
+} as const;
+
+export type AssessmentRuntimeEngineeringProgress = {
+  assessmentId: string;
+  runId: string;
+  planningBatchId: string;
+  contextRevisionUsed: number | null;
+  targeted: boolean;
+  approximate: boolean;
+  planner: {
+    candidateCount: number;
+    selectedCount: number;
+    skippedCount: number;
+  };
+  investigator: {
+    selectedCount: number;
+    completedCount: number;
+    domainLimitedCount: number;
+    limitedOrFailedCount: number;
+    waitingForInputCount: number;
+    runtimeFailedCount: number;
+    pendingCount: number;
+  };
+};
+
 export type AssessmentRuntimeActiveTool = {
   toolName: string;
   status: AssessmentRuntimeRunStatus;
@@ -141,6 +174,7 @@ export type AssessmentRuntimeSnapshot = {
   emittedAt: string;
   runs: AssessmentRuntimeRun[];
   recentActivity: AssessmentRuntimeActivityEvent[];
+  engineeringProgress: AssessmentRuntimeEngineeringProgress[];
   repositorySnapshots: unknown[];
   scanJobs: unknown[];
   evidenceReports: unknown[];

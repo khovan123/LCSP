@@ -112,7 +112,10 @@ export function selectWorkflowPresentation(
 export function selectRuntimeThinkingItems(
   normalized: NormalizedAssessmentRuntime,
 ): RuntimeThinkingItem[] {
-  return projectRuntimeThinking(normalized.workflow.recentActivity);
+  return projectRuntimeThinking(
+    normalized.workflow.recentActivity,
+    normalized.workflow.engineeringProgress,
+  );
 }
 
 export function selectRightSidebarPresentation(
@@ -355,32 +358,49 @@ export function selectInterviewHandoffPresentation(
     Boolean(interview.questionTurnProps) || interview.isBlocked;
   const isStartupPending = !hasCustomerVisibleTurn;
   const phaseKeys = {
-    [INTERVIEW_PROGRESS_PHASES.queued]: "pages.assessmentFlow.interview.progressQueued",
-    [INTERVIEW_PROGRESS_PHASES.running]: "pages.assessmentFlow.interview.progressRunning",
-    [INTERVIEW_PROGRESS_PHASES.toolRunning]: "pages.assessmentFlow.interview.progressTool",
-    [INTERVIEW_PROGRESS_PHASES.completed]: "pages.assessmentFlow.interview.progressCompleted",
-    [INTERVIEW_PROGRESS_PHASES.failed]: "pages.assessmentFlow.interview.progressFailed",
+    [INTERVIEW_PROGRESS_PHASES.queued]:
+      "pages.assessmentFlow.interview.progressQueued",
+    [INTERVIEW_PROGRESS_PHASES.running]:
+      "pages.assessmentFlow.interview.progressRunning",
+    [INTERVIEW_PROGRESS_PHASES.toolRunning]:
+      "pages.assessmentFlow.interview.progressTool",
+    [INTERVIEW_PROGRESS_PHASES.completed]:
+      "pages.assessmentFlow.interview.progressCompleted",
+    [INTERVIEW_PROGRESS_PHASES.failed]:
+      "pages.assessmentFlow.interview.progressFailed",
   };
-  const progress = [...normalized.workflow.recentActivity].sort((a, b) => b.emittedAt.localeCompare(a.emittedAt))
+  const progress = [...normalized.workflow.recentActivity]
+    .sort((a, b) => b.emittedAt.localeCompare(a.emittedAt))
     .map((event) => {
       const output = event.outputSummary;
-      if (!output || typeof output !== "object" || Array.isArray(output)) return null;
+      if (!output || typeof output !== "object" || Array.isArray(output))
+        return null;
       const item = output.interviewProgress;
-      return item && typeof item === "object" && !Array.isArray(item) ? item : null;
-    }).find((item) => item?.contextRevision === normalized.identity.contextRevision);
-  const progressKey = progress && typeof progress.phase === "string" && Object.hasOwn(phaseKeys, progress.phase)
-    ? phaseKeys[progress.phase as keyof typeof phaseKeys] : null;
+      return item && typeof item === "object" && !Array.isArray(item)
+        ? item
+        : null;
+    })
+    .find(
+      (item) => item?.contextRevision === normalized.identity.contextRevision,
+    );
+  const progressKey =
+    progress &&
+    typeof progress.phase === "string" &&
+    Object.hasOwn(phaseKeys, progress.phase)
+      ? phaseKeys[progress.phase as keyof typeof phaseKeys]
+      : null;
   const messageKey =
     normalized.availability === ASSESSMENT_RUNTIME_AVAILABILITIES.loading
       ? "pages.assessment.loadingInterviewState"
       : interview.isContextReady || interview.isContextResolved
         ? "pages.assessmentFlow.interview.progressCompleted"
-      : progressKey ? progressKey
-      : interview.answerHistory.length > 0
-        ? "pages.assessmentFlow.interview.continuingDescription"
-        : interview.orchestrationRequested
-          ? "pages.assessmentFlow.interview.startingDescription"
-          : "pages.assessmentFlow.interview.pendingDescription";
+        : progressKey
+          ? progressKey
+          : interview.answerHistory.length > 0
+            ? "pages.assessmentFlow.interview.continuingDescription"
+            : interview.orchestrationRequested
+              ? "pages.assessmentFlow.interview.startingDescription"
+              : "pages.assessmentFlow.interview.pendingDescription";
 
   return {
     isStartupPending,
