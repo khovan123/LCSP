@@ -100,12 +100,11 @@ describe("SePay webhook transaction rollback (integration)", () => {
         callback: (tx: Prisma.TransactionClient) => Promise<T>,
       ) =>
         prismaService.$transaction((tx) => {
-          const findWebhookEvent = tx.sePayWebhookEvent.findUnique.bind(
-            tx.sePayWebhookEvent,
-          ) as unknown as Prisma.TransactionClient["sePayWebhookEvent"]["findUnique"];
           const transactionClient = {
             sePayWebhookEvent: {
-              findUnique: findWebhookEvent,
+              findUnique: tx.sePayWebhookEvent.findUnique.bind(
+                tx.sePayWebhookEvent,
+              ),
               create: () =>
                 Promise.reject(new Error("TEST_INJECTED_PERSISTENCE_FAILURE")),
             },
