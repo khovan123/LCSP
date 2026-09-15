@@ -105,6 +105,7 @@ def test_t09_secret_field_names_are_redacted_and_logged(caplog) -> None:
         "private_key",
         "password",
         "GEMINI_API_KEY",
+        "LLM7_API_KEY",
         "WORKER_API_KEY",
         "authToken",
         "auth_token",

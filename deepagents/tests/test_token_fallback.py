@@ -6,7 +6,7 @@ from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from middleware.failure_policy import TerminalCredentialError, is_terminal_task_error
-from middleware.token_fallback import TokenFallbackMiddleware, model_with_token
+from middleware.token_fallback import TokenFallbackMiddleware, model_provider, model_with_token
 from provider_credentials import provider_tokens, credential_init_kwargs
 
 
@@ -37,6 +37,42 @@ def test_parse_tokens_and_empty_list(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", ", ,")
     with pytest.raises(ValueError, match="at least one"):
         provider_tokens("openai")
+
+
+def test_llm7_credentials_are_isolated_from_openai(monkeypatch):
+    monkeypatch.setenv("LLM7_API_KEY", "llm7-one,llm7-two")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-must-not-be-used")
+
+    assert provider_tokens("llm7") == ("llm7-one", "llm7-two")
+    assert credential_init_kwargs("llm7") == {
+        "api_key": "llm7-one",
+        "max_retries": 0,
+    }
+
+
+def test_llm7_chat_openai_rotation_preserves_gateway_policy(monkeypatch):
+    monkeypatch.setenv("LLM7_API_KEY", "llm7-first,llm7-second")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-must-not-be-used")
+    model = ChatOpenAI(
+        model="gemini-3.1-flash-lite",
+        base_url="https://api.llm7.io/v1",
+        use_responses_api=False,
+        **credential_init_kwargs("llm7"),
+    )
+    assert model_provider(model) == "llm7"
+
+    request = ModelRequest(model=model, messages=[], tools=[])
+    response = ModelResponse(result=[])
+    handler = MagicMock(side_effect=[QuotaError(), response])
+    result = TokenFallbackMiddleware().wrap_model_call(request, handler)
+
+    assert result is response
+    assert handler.call_count == 2
+    fallback = handler.call_args.args[0].model
+    assert fallback.openai_api_key.get_secret_value() == "llm7-second"
+    assert str(fallback.openai_api_base).rstrip("/") == "https://api.llm7.io/v1"
+    assert fallback.use_responses_api is False
+    assert fallback.max_retries == 0
 
 
 @pytest.fixture(autouse=True)

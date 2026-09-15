@@ -13,7 +13,12 @@ from middleware.failure_policy import (
     is_auth_failure,
     error_status,
 )
-from provider_credentials import NO_SDK_RETRY_MAX_RETRIES, provider_token_source
+from provider_credentials import (
+    LLM7_DEFAULT_BASE_URL,
+    NO_SDK_RETRY_MAX_RETRIES,
+    llm7_base_url,
+    provider_token_source,
+)
 from tools.common.capabilities.platform.logging import get_logger
 
 
@@ -93,6 +98,13 @@ def credential_failure(error: BaseException) -> bool:
 def model_provider(model) -> str | None:
     module = type(model).__module__
     if module.startswith("langchain_openai."):
+        base_url = str(getattr(model, "openai_api_base", "") or "").rstrip("/")
+        configured_llm7 = llm7_base_url()
+        default_llm7 = LLM7_DEFAULT_BASE_URL.rstrip("/")
+        if base_url == configured_llm7 or base_url == default_llm7 or base_url.startswith(
+            f"{default_llm7}/"
+        ):
+            return "llm7"
         return "openai"
     if module.startswith("langchain_google_genai."):
         return "google_genai"
