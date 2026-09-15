@@ -1,5 +1,9 @@
 import { Injectable } from "@nestjs/common";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUDIT_DECISIONS,
+  BILLING_RECONCILIATION_RESULTS,
+  PAYMENT_RECONCILIATION_STATUSES,
+} from "@lcsp/contracts";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../platform/audit/audit-writer.service.js";
 
@@ -24,7 +28,7 @@ export class BillingAdminReconciliationService {
       if (
         !payment ||
         payment.reconciliationStatus !== input.expectedStatus ||
-        payment.reconciliationStatus === "MATCHED"
+        payment.reconciliationStatus === PAYMENT_RECONCILIATION_STATUSES.MATCHED
       )
         throw new Error("RECONCILIATION_VERSION_CONFLICT");
       const updated = await tx.paymentTransaction.updateMany({
@@ -32,7 +36,10 @@ export class BillingAdminReconciliationService {
           id: input.paymentId,
           reconciliationStatus: input.expectedStatus as never,
         },
-        data: { reconciliationStatus: "REJECTED", reconciledAt: new Date() },
+        data: {
+          reconciliationStatus: BILLING_RECONCILIATION_RESULTS.rejected,
+          reconciledAt: new Date(),
+        },
       });
       if (updated.count !== 1)
         throw new Error("RECONCILIATION_VERSION_CONFLICT");
@@ -44,7 +51,7 @@ export class BillingAdminReconciliationService {
           resourceId: payment.id,
           reasonCode: "MANUAL_RECONCILIATION",
           decision: AUDIT_DECISIONS.allow,
-          result: "REJECTED",
+          result: BILLING_RECONCILIATION_RESULTS.rejected,
           payload: {
             rationale: input.rationale,
             paymentId: payment.id,
@@ -53,12 +60,15 @@ export class BillingAdminReconciliationService {
             userId: payment.userId,
             billingOrderId: payment.billingOrderId,
             beforeStatus: input.expectedStatus,
-            afterStatus: "REJECTED",
+            afterStatus: BILLING_RECONCILIATION_RESULTS.rejected,
           },
         },
         tx,
       );
-      return { id: payment.id, status: "REJECTED" };
+      return {
+        id: payment.id,
+        status: BILLING_RECONCILIATION_RESULTS.rejected,
+      };
     });
   }
 }

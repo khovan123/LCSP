@@ -4,6 +4,7 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import {
   BILLING_PROVIDER,
   BILLING_RECONCILIATION_EVENT_TYPES,
+  BILLING_RECONCILIATION_RESULTS,
   OUTBOX_AGGREGATE_TYPES,
   buildOutboxMessageInput,
   AUDIT_REDACTION_STATUSES,
@@ -93,7 +94,7 @@ export class SePayWebhookIngressService {
         correlationId: `sepay:${normalized.providerTransactionId}`,
         causationId: eventId,
         actor: { type: "SYSTEM", id: "sepay" },
-        result: "ACCEPTED",
+        result: BILLING_RECONCILIATION_RESULTS.accepted,
         redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
         idempotencyKey: `sepay-webhook:${normalized.providerTransactionId}`,
         payload: { ...safePayload, webhookEventId: eventId },
