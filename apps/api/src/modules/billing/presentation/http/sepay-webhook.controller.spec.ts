@@ -15,7 +15,7 @@ describe("SePayWebhookController", () => {
     );
     const controller = new SePayWebhookController({
       accept,
-    } as SePayWebhookIngressService);
+    } as unknown as SePayWebhookIngressService);
     const rawBody = Buffer.from('{"id":"TX-1"}');
 
     await expect(
@@ -34,7 +34,7 @@ describe("SePayWebhookController", () => {
     );
     const controller = new SePayWebhookController({
       accept,
-    } as SePayWebhookIngressService);
+    } as unknown as SePayWebhookIngressService);
 
     await expect(
       controller.receive(

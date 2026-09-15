@@ -16,9 +16,14 @@ import { SePayWebhookController } from "./presentation/http/sepay-webhook.contro
 import { BillingAdminReconciliationController } from "./presentation/http/billing-admin-reconciliation.controller.js";
 import { BillingAdminReconciliationService } from "./application/services/billing-admin-reconciliation.service.js";
 import { SePayReconciliationConsumerService } from "./application/services/sepay-reconciliation-consumer.service.js";
+import { OutboxModule } from "../../platform/outbox/outbox.module.js";
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), RbacModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    RbacModule,
+    OutboxModule,
+  ],
   controllers: [
     BillingUsageController,
     BillingCustomerController,
