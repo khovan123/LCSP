@@ -259,6 +259,57 @@ describe("LCSP-310 usage and pricing foundation", () => {
     ).toBe(0);
   });
 
+  it("uses the VND wallet-credit amount consistently for cross-currency usage", async () => {
+    const f = await fixture();
+    await accounting.appendLedger({
+      userId: f.user.id,
+      walletId: f.wallet.id,
+      deltaCredits: 30_000n,
+      idempotencyKey: `cross-currency-seed-${id()}`,
+      source: "TEST",
+    });
+    const reservation = await accounting.reserveCredits({
+      userId: f.user.id,
+      amountCredits: 27_500n,
+      idempotencyKey: `cross-currency-reservation-${id()}`,
+    });
+    await prisma.modelPricingSnapshot.create({
+      data: {
+        provider: "OPENAI",
+        model: "MODEL_A",
+        version: Math.floor(Math.random() * 1_000_000_000),
+        inputPricePerMillion: "1.00000000",
+        outputPricePerMillion: "2.00000000",
+        providerCurrency: "USD",
+        customerCurrency: "VND",
+        markupBps: 1000n,
+        fxRateVndNumerator: 25_000n,
+        fxRateVndDenominator: 1n,
+        effectiveAt: new Date(),
+      },
+    });
+    const tx = new PrismaBillingTransaction(new PrismaService());
+    const strictUsage = new BillingUsageService(
+      tx,
+      new BillingAccountingService(tx),
+    );
+    const event = await strictUsage.recordAndSettleUsage({
+      userId: f.user.id,
+      reservationId: reservation.id,
+      invocationId: "INV-CROSS-CURRENCY",
+      agentRole: "TEST_USAGE",
+      effectiveRuntimeModel: runtimeModel,
+      inputTokens: 1_000_000n,
+    });
+    expect(event.chargedCredits).toBe(27_500n);
+    expect(event.customerChargeVnd).toBe(27_500n);
+    expect(event.runtimePolicySnapshotId).toBeTruthy();
+    const debit = await prisma.creditLedgerEntry.findFirstOrThrow({
+      where: { referenceId: reservation.id, source: "RESERVATION_SETTLEMENT" },
+    });
+    expect(debit.deltaCredits).toBe(-27_500n);
+  });
+
   it("rejects conflicting invocation replay and provider/model pricing mismatch", async () => {
     const f = await fixture();
     const base = {

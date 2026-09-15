@@ -49,6 +49,7 @@ export type UsageRecord = {
   totalTokens: bigint | null;
   reasoningTokens: bigint | null;
   pricingSnapshotId: string | null;
+  runtimePolicySnapshotId: string | null;
   reservationId: string | null;
   chargedCredits: bigint | null;
   providerCostCredits: bigint | null;
@@ -193,6 +194,7 @@ export interface LlmUsagePort {
     reasoningTokens?: bigint;
     totalTokens?: bigint;
     pricingSnapshotId?: string;
+    runtimePolicySnapshotId?: string;
     reservationId: string;
     chargedCredits: bigint;
     providerCostCredits?: bigint;

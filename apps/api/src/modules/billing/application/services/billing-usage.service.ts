@@ -10,7 +10,6 @@ import {
   assertMatchesEffectiveRuntimeModel,
 } from "../../domain/effective-runtime-model.js";
 import {
-  calculateCustomerChargeCredits,
   calculateCustomerChargeVnd,
   calculateUsageChargeCredits,
 } from "../../domain/usage-pricing.js";
@@ -60,15 +59,6 @@ export class BillingUsageService {
         throw new BillingDomainError(
           "Usage provider/model differs from effective runtime policy",
         );
-      const selected = await repos.runtimePolicy.findApplicable(
-        i.agentRole,
-        occurredAt,
-      );
-      if (!selected)
-        throw new BillingDomainError(
-          "No effective runtime model configuration",
-        );
-      assertMatchesEffectiveRuntimeModel(selected, i.effectiveRuntimeModel);
       const input = i.inputTokens ?? 0n;
       const cachedInput = i.cachedInputTokens ?? 0n;
       const cacheWrite = i.cacheWriteTokens ?? 0n;
@@ -99,6 +89,15 @@ export class BillingUsageService {
           throw new BillingIdempotencyConflictError("Usage replay differs");
         return existing;
       }
+      const selected = await repos.runtimePolicy.findApplicable(
+        i.agentRole,
+        occurredAt,
+      );
+      if (!selected)
+        throw new BillingDomainError(
+          "No effective runtime model configuration",
+        );
+      assertMatchesEffectiveRuntimeModel(selected, i.effectiveRuntimeModel);
       const snapshot = await pricing.findApplicable(
         provider,
         model,
@@ -107,16 +106,6 @@ export class BillingUsageService {
       if (!snapshot)
         throw new BillingDomainError("No applicable pricing snapshot");
       const providerCost = calculateUsageChargeCredits(
-        {
-          inputTokens: input,
-          cachedInputTokens: cachedInput,
-          cacheWriteTokens: cacheWrite,
-          outputTokens: output,
-          reasoningTokens: reasoning,
-        },
-        snapshot,
-      );
-      const charge = calculateCustomerChargeCredits(
         {
           inputTokens: input,
           cachedInputTokens: cachedInput,
@@ -164,10 +153,11 @@ export class BillingUsageService {
         // informational and must never be rebuilt from billed buckets.
         totalTokens: i.totalTokens,
         pricingSnapshotId: snapshot.id,
+        runtimePolicySnapshotId: selected.id,
         providerCostCredits: providerCost,
         customerChargeVnd,
         reservationId: i.reservationId,
-        chargedCredits: charge,
+        chargedCredits: customerChargeVnd,
         occurredAt,
       });
       await this.accounting.settleWithinTransaction(repos, {

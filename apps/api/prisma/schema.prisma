@@ -1363,6 +1363,7 @@ model RuntimeModelPolicySnapshot {
   policyVersion String
   effectiveAt   DateTime
   createdAt     DateTime @default(now())
+  usageEvents   LlmUsageEvent[]
 
   @@unique([role, policyVersion])
   @@index([role, effectiveAt])
@@ -1382,6 +1383,7 @@ model LlmUsageEvent {
   reasoningTokens    BigInt?
   totalTokens        BigInt?
   pricingSnapshotId  String?
+  runtimePolicySnapshotId String?
   providerCostCredits BigInt?
   customerChargeVnd  BigInt?
   reservationId      String?
@@ -1390,6 +1392,7 @@ model LlmUsageEvent {
   createdAt          DateTime              @default(now())
   user               User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
   pricingSnapshot    ModelPricingSnapshot? @relation(fields: [pricingSnapshotId], references: [id], onDelete: Restrict)
+  runtimePolicySnapshot RuntimeModelPolicySnapshot? @relation(fields: [runtimePolicySnapshotId], references: [id], onDelete: Restrict)
   reservation        BillingReservation?   @relation(fields: [reservationId], references: [id], onDelete: Restrict)
 
   @@unique([userId, invocationId])
