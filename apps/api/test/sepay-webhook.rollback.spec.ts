@@ -5,9 +5,7 @@ import { afterAll, beforeAll, describe, expect, it, jest } from "@jest/globals";
 import { ConfigService } from "@nestjs/config";
 import { OutboxRepository } from "../src/platform/outbox/outbox.repository.js";
 import { PrismaService } from "../src/infrastructure/prisma/prisma.service.js";
-import {
-  SePayWebhookIngressService,
-} from "../src/modules/billing/application/services/sepay-webhook-ingress.service.js";
+import { SePayWebhookIngressService } from "../src/modules/billing/application/services/sepay-webhook-ingress.service.js";
 import type { OutboxMessageInput } from "@lcsp/contracts/outbox";
 import {
   TEST_DATABASE_URL,
@@ -29,7 +27,12 @@ function signedInput(providerTransactionId: string) {
   const signature = `sha256=${createHmac("sha256", secret)
     .update(`${timestamp}.${rawBody.toString("utf8")}`)
     .digest("hex")}`;
-  return { rawBody, signature, timestamp, now: new Date(Number(timestamp) * 1000) };
+  return {
+    rawBody,
+    signature,
+    timestamp,
+    now: new Date(Number(timestamp) * 1000),
+  };
 }
 
 function config() {
@@ -76,9 +79,9 @@ describe("SePay webhook transaction rollback (integration)", () => {
       config(),
     );
 
-    await expect(service.accept(signedInput(providerTransactionId))).rejects.toThrow(
-      "TEST_INJECTED_OUTBOX_FAILURE",
-    );
+    await expect(
+      service.accept(signedInput(providerTransactionId)),
+    ).rejects.toThrow("TEST_INJECTED_OUTBOX_FAILURE");
     expect(enqueue).toHaveBeenCalled();
     expect(
       await prisma.sePayWebhookEvent.count({
@@ -128,9 +131,9 @@ describe("SePay webhook transaction rollback (integration)", () => {
       config(),
     );
 
-    await expect(service.accept(signedInput(providerTransactionId))).rejects.toThrow(
-      "TEST_INJECTED_PERSISTENCE_FAILURE",
-    );
+    await expect(
+      service.accept(signedInput(providerTransactionId)),
+    ).rejects.toThrow("TEST_INJECTED_PERSISTENCE_FAILURE");
     expect(enqueue).not.toHaveBeenCalled();
     expect(
       await prisma.sePayWebhookEvent.count({
