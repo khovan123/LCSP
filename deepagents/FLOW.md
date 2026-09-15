@@ -215,6 +215,7 @@ Select all role models together with a code-owned preset:
 ```env
 LCSP_MODEL_PROVIDER=openai
 # Or: LCSP_MODEL_PROVIDER=google_genai
+# Or: LCSP_MODEL_PROVIDER=llm7
 ```
 
 OpenAI uses GPT-5 nano with low reasoning for reasoning roles and GPT-4.1 nano
@@ -222,7 +223,11 @@ for narrators/proposers. Google uses Gemini 3.5 Flash-Lite for every role:
 reasoning roles receive `thinking_level="low"`; narrators/proposers receive `"minimal"`.
 Minimal reduces thinking but does not guarantee zero thinking tokens.
 The exact Google harness profile supports the reasoning root and subagents;
-narrators/proposers use the agent-scoped constructor with minimal thinking.
+narrators/proposers use the agent-scoped constructor with minimal thinking. LLM7 uses
+`gemini-3.1-flash-lite` for every role through its OpenAI-compatible endpoint. The
+transport remains LangChain OpenAI, but LCSP forces `use_responses_api=False`, routes
+credentials only from `LLM7_API_KEY`, and defaults to `https://api.llm7.io/v1`
+(`LLM7_BASE_URL` may override the endpoint).
 
 An explicit provider preset takes precedence over legacy per-role model and
 reasoning environment variables. Unset `LCSP_MODEL_PROVIDER` to retain legacy
@@ -308,9 +313,14 @@ OPENAI_API_KEY=token1,token2,token3,
 # For Google instead:
 # LCSP_MODEL_PROVIDER=google_genai
 # GOOGLE_API_KEY=token1,token2,token3,
+# For LLM7 instead:
+# LCSP_MODEL_PROVIDER=llm7
+# LLM7_API_KEY=token1,token2,token3,
 ```
 
-Google also accepts `GEMINI_API_KEY` when `GOOGLE_API_KEY` is unset. Whitespace,
+Google also accepts `GEMINI_API_KEY` when `GOOGLE_API_KEY` is unset. LLM7 never
+falls back to `OPENAI_API_KEY`; its compatible ChatOpenAI client keeps the LLM7
+base URL and Chat Completions mode while rotating only `LLM7_API_KEY` slots. Whitespace,
 empty entries and duplicate keys are removed; a non-empty list containing only
 commas/whitespace is invalid. A single key retains normal SDK behavior.
 
