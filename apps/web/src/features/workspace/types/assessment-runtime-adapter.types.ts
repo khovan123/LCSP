@@ -1,6 +1,7 @@
 import {
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   ASSESSMENT_TECHNICAL_COVERAGE_STATES,
+  type AssessmentArtifactAvailabilityProjection,
   type AssessmentContextAuthorityStatus,
   type AssessmentInterviewAnswerHistoryItem,
   type AssessmentInterviewAuditRef,
@@ -315,6 +316,12 @@ export type AdapterInterviewStateInput = {
   dataUpdatedAt?: number;
 };
 
+export type AdapterArtifactAvailabilityInput = {
+  data?: AssessmentArtifactAvailabilityProjection | null;
+  isLoading?: boolean;
+  isError?: boolean;
+};
+
 export type AdapterTimelineInput = {
   currentRun: WorkspaceRuntimeRun | null;
   recentActivity: WorkspaceRuntimeActivityItem[];
@@ -331,6 +338,7 @@ export type AdapterTimelineInput = {
 export type NormalizeAssessmentRuntimeParams = {
   assessmentId: string;
   interviewState?: unknown | AdapterInterviewStateInput | null;
+  artifactState?: AdapterArtifactAvailabilityInput | null;
   timeline?: AdapterTimelineInput | null;
   coverageOverride?: {
     state?: AssessmentTechnicalCoverageState;

@@ -3669,7 +3669,7 @@ function summarizeAnswer(answer: AssessmentInterviewAnswerInput): string {
   return "Customer supplied free-text Interview context.";
 }
 
-function sanitizePublicText(text?: string): string | undefined {
+export function sanitizePublicText(text?: string): string | undefined {
   if (!text) return undefined;
   let sanitized = text;
   sanitized = sanitized.replace(
