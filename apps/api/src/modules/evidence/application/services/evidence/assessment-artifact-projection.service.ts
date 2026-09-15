@@ -82,7 +82,10 @@ export class AssessmentArtifactProjectionService {
       pgeVersion: thread?.pgeVersion ?? null,
     };
     if (!thread) {
-      return businessContextUnavailable(identity, ASSESSMENT_ARTIFACT_STATUSES.notAvailable);
+      return businessContextUnavailable(
+        identity,
+        ASSESSMENT_ARTIFACT_STATUSES.notAvailable,
+      );
     }
 
     const state = record(thread.stateJson);
@@ -114,11 +117,7 @@ export class AssessmentArtifactProjectionService {
       );
     }
 
-    const missing = new Set(
-      missingInitialPlanningContextDimensions(
-        candidate as unknown as Record<string, unknown>,
-      ),
-    );
+    const missing = new Set(missingInitialPlanningContextDimensions(candidate));
     const dimensions = [
       ["aiUsage", BUSINESS_CONTEXT_DIMENSIONS.aiUsage],
       ["operationalProcess", BUSINESS_CONTEXT_DIMENSIONS.operationalProcess],
@@ -148,7 +147,9 @@ export class AssessmentArtifactProjectionService {
           statement: publicStatement,
           topic: publicTopic,
           ...(statement.normalizedValue !== undefined
-            ? { normalizedValue: sanitizePublicValue(statement.normalizedValue) }
+            ? {
+                normalizedValue: sanitizePublicValue(statement.normalizedValue),
+              }
             : {}),
           scope: publicScope,
           evidenceRefs: statement.evidenceRefs
@@ -194,31 +195,31 @@ export class AssessmentArtifactProjectionService {
       classification,
       latestRunStart,
     ] = await Promise.all([
-        this.prisma.assessmentInterviewThread.findUnique({
-          where: { assessmentId },
-          select: { contextRevision: true },
-        }),
-        this.prisma.repositoryScanJob.findFirst({
-          where: { assessmentId },
-          orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-          select: { id: true, updatedAt: true },
-        }),
-        this.prisma.technicalEvidenceReport.findFirst({
-          where: { assessmentId },
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-          select: { id: true, scanJobId: true, createdAt: true },
-        }),
-        this.prisma.technicalEvidenceReport.findUnique({
-          where: { scanJobId: progress.runId },
-          select: { id: true, snapshotId: true, createdAt: true },
-        }),
-        this.prisma.classificationResult.findFirst({
-          where: { assessmentId, createdAt: { gte: plannerAt } },
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-          select: { classificationData: true, createdAt: true },
-        }),
-        this.runtimeEvents.getLatestAssessmentRunStart(assessmentId),
-      ]);
+      this.prisma.assessmentInterviewThread.findUnique({
+        where: { assessmentId },
+        select: { contextRevision: true },
+      }),
+      this.prisma.repositoryScanJob.findFirst({
+        where: { assessmentId },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        select: { id: true, updatedAt: true },
+      }),
+      this.prisma.technicalEvidenceReport.findFirst({
+        where: { assessmentId },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: { id: true, scanJobId: true, createdAt: true },
+      }),
+      this.prisma.technicalEvidenceReport.findUnique({
+        where: { scanJobId: progress.runId },
+        select: { id: true, snapshotId: true, createdAt: true },
+      }),
+      this.prisma.classificationResult.findFirst({
+        where: { assessmentId, createdAt: { gte: plannerAt } },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: { classificationData: true, createdAt: true },
+      }),
+      this.runtimeEvents.getLatestAssessmentRunStart(assessmentId),
+    ]);
 
     const identity = {
       assessmentId,
@@ -242,7 +243,8 @@ export class AssessmentArtifactProjectionService {
       latestReport.createdAt.getTime() > plannerAt.getTime();
     const staleForContext =
       progress.contextRevisionUsed === null ||
-      (thread !== null && thread.contextRevision !== progress.contextRevisionUsed);
+      (thread !== null &&
+        thread.contextRevision !== progress.contextRevisionUsed);
     if (
       staleForNewWorkflowRun ||
       staleForNewRun ||
@@ -285,11 +287,16 @@ export class AssessmentArtifactProjectionService {
       const eventOutcome = eventRuleOutcome(latest);
       const evaluationOutcome = evaluationRuleOutcome(evaluation);
       const outcome = eventOutcome ?? evaluationOutcome;
-      const executionFailure = stringValue(record(latest?.outputSummary)?.executionFailure);
+      const executionFailure = stringValue(
+        record(latest?.outputSummary)?.executionFailure,
+      );
       const limitations = unique([
         ...(evaluation?.limitations ?? []),
         ...(outcome === INVESTIGATION_RULE_OUTCOMES.runtimeError
-          ? [PUBLIC_RUNTIME_ERROR, ...(executionFailure ? [executionFailure] : [])]
+          ? [
+              PUBLIC_RUNTIME_ERROR,
+              ...(executionFailure ? [executionFailure] : []),
+            ]
           : []),
         ...(outcome === INVESTIGATION_RULE_OUTCOMES.unresolved
           ? [PUBLIC_UNRESOLVED_EVIDENCE]
@@ -315,7 +322,8 @@ export class AssessmentArtifactProjectionService {
     });
 
     const substantive = evaluations.filter(
-      (value) => value.status !== ENGINEERING_RULE_EVALUATION_STATUSES.notApplicable,
+      (value) =>
+        value.status !== ENGINEERING_RULE_EVALUATION_STATUSES.notApplicable,
     );
     const fullyEvidenceBacked =
       progress.planner.selectedCount > 0 &&
@@ -324,7 +332,8 @@ export class AssessmentArtifactProjectionService {
       substantive.every(
         (value) =>
           (value.status === ENGINEERING_RULE_EVALUATION_STATUSES.compliant ||
-            value.status === ENGINEERING_RULE_EVALUATION_STATUSES.nonCompliant) &&
+            value.status ===
+              ENGINEERING_RULE_EVALUATION_STATUSES.nonCompliant) &&
           value.evidenceRefs.length > 0,
       );
     const hasEvidenceBackedNonCompliance = substantive.some(
@@ -352,13 +361,18 @@ export class AssessmentArtifactProjectionService {
       ...(progress.investigator.domainLimitedCount > 0
         ? [PUBLIC_UNRESOLVED_EVIDENCE]
         : []),
-      ...(progress.investigator.runtimeFailedCount > 0 ? [PUBLIC_RUNTIME_ERROR] : []),
+      ...(progress.investigator.runtimeFailedCount > 0
+        ? [PUBLIC_RUNTIME_ERROR]
+        : []),
     ]).map((value) => sanitizePublicText(value) ?? value);
-    const updatedAt = [
-      plannerEvent.emittedAt,
-      ...investigationEvents.map((event) => event.emittedAt),
-      ...(classification ? [classification.createdAt.toISOString()] : []),
-    ].sort().at(-1) ?? plannerEvent.emittedAt;
+    const updatedAt =
+      [
+        plannerEvent.emittedAt,
+        ...investigationEvents.map((event) => event.emittedAt),
+        ...(classification ? [classification.createdAt.toISOString()] : []),
+      ]
+        .sort()
+        .at(-1) ?? plannerEvent.emittedAt;
 
     return {
       type: ASSESSMENT_ARTIFACT_TYPES.investigationNotes,
@@ -424,9 +438,9 @@ function investigationUnavailable(
   };
 }
 
-function withoutContent<T extends BusinessContextArtifact | InvestigationNotesArtifact>(
-  artifact: T,
-): Omit<T, "content"> {
+function withoutContent<
+  T extends BusinessContextArtifact | InvestigationNotesArtifact,
+>(artifact: T): Omit<T, "content"> {
   const { content: _content, ...rest } = artifact;
   return rest;
 }
@@ -449,8 +463,11 @@ function classificationEvaluations(value: unknown): EvaluationProjection[] {
       ) {
         return null;
       }
-      const concept = sanitizePublicText(stringValue(evaluation.concept) ?? undefined) ?? null;
-      const reason = sanitizePublicText(stringValue(evaluation.reason) ?? undefined) ?? null;
+      const concept =
+        sanitizePublicText(stringValue(evaluation.concept) ?? undefined) ??
+        null;
+      const reason =
+        sanitizePublicText(stringValue(evaluation.reason) ?? undefined) ?? null;
       return {
         ruleId,
         concept,
@@ -511,7 +528,8 @@ function latestEventsByRule(
     const ruleId = ruleIdFromEvent(event);
     if (!ruleId) continue;
     const current = result.get(ruleId);
-    if (!current || event.sequence > current.sequence) result.set(ruleId, event);
+    if (!current || event.sequence > current.sequence)
+      result.set(ruleId, event);
   }
   return result;
 }

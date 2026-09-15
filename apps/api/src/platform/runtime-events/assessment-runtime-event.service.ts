@@ -411,7 +411,6 @@ export class AssessmentRuntimeEventService {
     };
   }
 
-
   /**
    * Returns the most recent persisted workflow run start for stale-artifact checks.
    * This is intentionally separate from rolling workspace activity projections.

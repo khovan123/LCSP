@@ -72,7 +72,9 @@ export class EvidenceController {
     @Req() request: AuthenticatedRequest,
   ) {
     await this.assertAssessmentArtifactAccess(assessmentId, request);
-    return resultEnvelope(await this.artifacts.getBusinessContext(assessmentId));
+    return resultEnvelope(
+      await this.artifacts.getBusinessContext(assessmentId),
+    );
   }
 
   @Get(":assessmentId/artifacts/investigation-notes")
@@ -83,7 +85,9 @@ export class EvidenceController {
     @Req() request: AuthenticatedRequest,
   ) {
     await this.assertAssessmentArtifactAccess(assessmentId, request);
-    return resultEnvelope(await this.artifacts.getInvestigationNotes(assessmentId));
+    return resultEnvelope(
+      await this.artifacts.getInvestigationNotes(assessmentId),
+    );
   }
 
   /**
