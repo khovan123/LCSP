@@ -409,7 +409,7 @@ class LawGuidedInvestigator:
     def _claims_response_schema(cls) -> dict[str, Any]:
         claim_schema = cls._closed_schema(
             {
-                "criterion": {"type": "string"},
+                "criterion": {"type": "string", "maxLength": 500},
                 "claimType": {"type": "string", "enum": sorted(CANONICAL_CLAIM_TYPES)},
                 "observationRefs": {"type": "array", "items": {"type": "string"}, "maxItems": 12},
                 "confidence": {"type": "number", "minimum": 0, "maximum": 1},
@@ -805,6 +805,7 @@ class LawGuidedInvestigator:
                     "If required evidence is still missing after truncated=true, continue or narrow the search from continuationFrontiers before finishing.",
                     "Treat dynamic or external uncertainty as UNRESOLVED only when the relevant observation contains an actual unresolvedFrontier or boundary that can affect the required criterion.",
                     "Every EvidenceLedger summary advertises availableSections. Never guess section names across graph, customer context, repo-map, or code-search observations.",
+                    "Keep the structured response compact: reference observation IDs only and never copy observation text, tool output, or code into any response field; every string must stay well under 500 characters.",
                 ],
             }
         )
@@ -834,6 +835,7 @@ class LawGuidedInvestigator:
                     "Do not emit MET or NOT_MET from search_nodes/search_program_graph alone; absenceProven=false or matchMode=SUBSTRING requires unresolved or a concrete trace_static_flow/inspect_data_path observation from packet seeds.",
                     "Do not invent evidence/node/edge/source-anchor IDs.",
                     "Use only observationRefs returned by the EvidenceLedger.",
+                    "Keep the structured response compact: never copy observation text, tool output, or code into any response field; every string must stay well under 500 characters.",
                 ],
             }
         )
