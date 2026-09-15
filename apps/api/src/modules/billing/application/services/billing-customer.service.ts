@@ -1,12 +1,19 @@
 import { Injectable } from "@nestjs/common";
-import { PREPAID_BILLING_CONFIG } from "@lcsp/contracts/billing";
+import {
+  BILLING_AUDIT_EVENT_TYPES,
+  BILLING_ORDER_STATUSES,
+  PREPAID_BILLING_CONFIG,
+} from "@lcsp/contracts/billing";
 import type {
   BillingHistoryView,
   BillingOrderView,
   BillingWalletView,
   PrepaidEstimate,
 } from "@lcsp/contracts/billing";
-import { BillingDomainError } from "../../domain/billing.errors.js";
+import {
+  BillingOrderNotFoundError,
+  InvalidBillingInputError,
+} from "../../domain/billing.errors.js";
 import {
   BILLING_TRANSACTION_PORT,
   type BillingTransactionPort,
@@ -14,7 +21,6 @@ import {
 } from "../../domain/repositories/billing-transaction.port.js";
 import { Inject } from "@nestjs/common";
 import { BillingPaymentService } from "./billing-payment.service.js";
-import { BILLING_ORDER_STATUSES } from "@lcsp/contracts/billing";
 
 @Injectable()
 export class BillingCustomerService {
@@ -36,13 +42,21 @@ export class BillingCustomerService {
     };
   }
 
-  async createOrder(userId: string, amountVnd: bigint, idempotencyKey: string) {
+  async createOrder(
+    userId: string,
+    amountVnd: bigint,
+    idempotencyKey: string,
+    audit?: { correlationId: string; sessionId?: string },
+  ) {
     const estimate = this.estimate(amountVnd);
     const order = await this.payments.createOrder({
       userId,
       idempotencyKey,
       amountMinorUnits: amountVnd,
       creditUnits: BigInt(estimate.creditUnits),
+      actorId: userId,
+      sessionId: audit?.sessionId,
+      correlationId: audit?.correlationId,
     });
     return this.toOrderView(order);
   }
@@ -62,35 +76,23 @@ export class BillingCustomerService {
     };
   }
 
-  async getOrder(userId: string, id: string): Promise<BillingOrderView> {
+  async getOrder(
+    userId: string,
+    id: string,
+    audit?: { correlationId: string; sessionId?: string },
+  ): Promise<BillingOrderView> {
     const order = await this.transactions.runForUser(userId, (r) =>
       r.order.findForUser(userId, id),
     );
-    if (!order) throw new BillingDomainError("Billing order not found");
-    if (
-      order.status === BILLING_ORDER_STATUSES.PENDING_PAYMENT &&
-      order.expiresAt &&
-      order.expiresAt <= new Date()
-    ) {
-      await this.transactions.runForUser(userId, (r) =>
-        r.order.transition(
-          order.id,
-          BILLING_ORDER_STATUSES.PENDING_PAYMENT,
-          BILLING_ORDER_STATUSES.EXPIRED,
-        ),
-      );
-      const expired = await this.transactions.runForUser(userId, (r) =>
-        r.order.findForUser(userId, id),
-      );
-      return this.toOrderView(expired ?? order);
-    }
-    return this.toOrderView(order);
+    if (!order) throw new BillingOrderNotFoundError("Billing order not found");
+    return this.toOrderView(await this.expireIfNeeded(userId, order, audit));
   }
 
   async listHistory(
     userId: string,
     page = 1,
     pageSize = 20,
+    audit?: { correlationId: string; sessionId?: string },
   ): Promise<BillingHistoryView> {
     const safePage = Number.isInteger(page) && page > 0 ? page : 1;
     const safePageSize =
@@ -103,7 +105,11 @@ export class BillingCustomerService {
       }),
     );
     return {
-      orders: result.orders.map((order) => this.toOrderView(order)),
+      orders: await Promise.all(
+        result.orders.map(async (order) =>
+          this.toOrderView(await this.expireIfNeeded(userId, order, audit)),
+        ),
+      ),
       page: safePage,
       pageSize: safePageSize,
       totalCount: result.totalCount,
@@ -116,7 +122,42 @@ export class BillingCustomerService {
       amountVnd > PREPAID_BILLING_CONFIG.maximumAmountVnd ||
       amountVnd % PREPAID_BILLING_CONFIG.amountStepVnd !== 0n
     )
-      throw new BillingDomainError("Invalid prepaid amount");
+      throw new InvalidBillingInputError("Invalid prepaid amount");
+  }
+
+  private async expireIfNeeded(
+    userId: string,
+    order: OrderRecord,
+    audit?: { correlationId: string; sessionId?: string },
+  ): Promise<OrderRecord> {
+    if (
+      order.status !== BILLING_ORDER_STATUSES.PENDING_PAYMENT ||
+      !order.expiresAt ||
+      order.expiresAt > new Date()
+    )
+      return order;
+    await this.transactions.runForUser(userId, async (r) => {
+      const claimed = await r.order.transition(
+        order.id,
+        BILLING_ORDER_STATUSES.PENDING_PAYMENT,
+        BILLING_ORDER_STATUSES.EXPIRED,
+      );
+      if (claimed && audit) {
+        await r.audit.append({
+          eventType: BILLING_AUDIT_EVENT_TYPES.orderExpired,
+          actorId: userId,
+          sessionId: audit.sessionId,
+          correlationId: audit.correlationId,
+          resourceId: order.id,
+          payload: { previousStatus: BILLING_ORDER_STATUSES.PENDING_PAYMENT },
+        });
+      }
+    });
+    return (
+      (await this.transactions.runForUser(userId, (r) =>
+        r.order.findForUser(userId, order.id),
+      )) ?? order
+    );
   }
 
   private toOrderView(order: OrderRecord): BillingOrderView {

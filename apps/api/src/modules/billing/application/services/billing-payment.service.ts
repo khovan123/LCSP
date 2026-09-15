@@ -3,7 +3,10 @@ import { BillingAccountingService } from "./billing-accounting.service.js";
 import { BillingIdempotencyConflictError } from "../../domain/billing.errors.js";
 import { createHash } from "node:crypto";
 import { randomBytes } from "node:crypto";
-import { PREPAID_BILLING_CONFIG } from "@lcsp/contracts/billing";
+import {
+  BILLING_AUDIT_EVENT_TYPES,
+  PREPAID_BILLING_CONFIG,
+} from "@lcsp/contracts/billing";
 import {
   BILLING_TRANSACTION_PORT,
   type BillingTransactionPort,
@@ -25,6 +28,9 @@ export class BillingPaymentService {
     amountMinorUnits: bigint;
     creditUnits: bigint;
     expiresAt?: Date;
+    actorId?: string;
+    sessionId?: string;
+    correlationId?: string;
   }) {
     const requestFingerprint = createHash("sha256")
       .update(
@@ -35,7 +41,7 @@ export class BillingPaymentService {
         }),
       )
       .digest("hex");
-    return this.transactions.runForUser(i.userId, async ({ order }) => {
+    return this.transactions.runForUser(i.userId, async ({ order, audit }) => {
       const old = await order.findByIdempotencyKey(i.userId, i.idempotencyKey);
       if (old) {
         if (old.requestFingerprint !== requestFingerprint)
@@ -44,8 +50,9 @@ export class BillingPaymentService {
       }
       const paymentCode =
         i.paymentCode ?? (await this.generatePaymentCode(order));
-      return order.createPending({
-        ...i,
+      const { actorId, sessionId, correlationId, ...orderInput } = i;
+      const created = await order.createPending({
+        ...orderInput,
         paymentCode,
         requestFingerprint,
         expiresAt:
@@ -55,6 +62,21 @@ export class BillingPaymentService {
               PREPAID_BILLING_CONFIG.orderExpiryHours * 60 * 60 * 1000,
           ),
       });
+      if (correlationId) {
+        await audit.append({
+          eventType: BILLING_AUDIT_EVENT_TYPES.orderCreated,
+          actorId: actorId ?? i.userId,
+          sessionId,
+          correlationId,
+          resourceId: created.id,
+          payload: {
+            amountMinorUnits: created.amountMinorUnits.toString(),
+            creditUnits: created.creditUnits.toString(),
+            status: created.status,
+          },
+        });
+      }
+      return created;
     });
   }
 
@@ -112,6 +134,26 @@ export class BillingPaymentService {
             reconciliationStatus: "UNMATCHED",
             webhookEventId: webhook.id,
           });
+        if (
+          lockedOrder.status === "PENDING_PAYMENT" &&
+          lockedOrder.expiresAt !== null &&
+          lockedOrder.expiresAt <= new Date()
+        ) {
+          await repos.order.transition(
+            lockedOrder.id,
+            "PENDING_PAYMENT",
+            "EXPIRED",
+          );
+          return repos.payment.create({
+            provider: i.provider,
+            providerTransactionId: i.providerTransactionId,
+            amountMinorUnits: i.amountMinorUnits,
+            userId: lockedOrder.userId,
+            billingOrderId: lockedOrder.id,
+            reconciliationStatus: "NEEDS_REVIEW",
+            webhookEventId: webhook.id,
+          });
+        }
         if (lockedOrder.status !== "PENDING_PAYMENT")
           return repos.payment.create({
             provider: i.provider,

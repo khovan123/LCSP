@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from "@jest/globals";
 import { BillingCustomerService } from "../src/modules/billing/application/services/billing-customer.service.js";
 import { BillingPaymentService } from "../src/modules/billing/application/services/billing-payment.service.js";
 import { PREPAID_BILLING_CONFIG } from "@lcsp/contracts/billing";
+import { BILLING_AUDIT_EVENT_TYPES } from "@lcsp/contracts/billing";
 
 const order = {
   id: "order-1",
@@ -66,5 +67,50 @@ describe("BillingCustomerService", () => {
     );
     await service.getOrder("user-1", "order-1");
     expect(findForUser).toHaveBeenCalledWith("user-1", "order-1");
+  });
+
+  it("materializes expiry with one correlated lifecycle audit fact", async () => {
+    const expiredOrder = {
+      ...order,
+      expiresAt: new Date(Date.now() - 1_000),
+    };
+    const append = jest
+      .fn<(input: unknown) => Promise<void>>()
+      .mockResolvedValue();
+    const transition = jest
+      .fn<(id: string, from: string, to: string) => Promise<boolean>>()
+      .mockImplementation(() => {
+        expiredOrder.status = "EXPIRED";
+        return Promise.resolve(true);
+      });
+    const findForUser = jest
+      .fn<(user: string, id: string) => Promise<any>>()
+      .mockImplementation(() => Promise.resolve(expiredOrder));
+    const transactions = {
+      runForUser: jest.fn(
+        (_user: string, operation: (repos: never) => unknown) =>
+          Promise.resolve(
+            operation({
+              order: { findForUser, transition },
+              audit: { append },
+            } as never),
+          ),
+      ),
+    };
+    const service = new BillingCustomerService(
+      transactions as never,
+      {} as never,
+    );
+    const result = await service.getOrder("user-1", "order-1", {
+      correlationId: "corr-expiry",
+      sessionId: "session-1",
+    });
+    expect(result.status).toBe("EXPIRED");
+    expect(append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: BILLING_AUDIT_EVENT_TYPES.orderExpired,
+        correlationId: "corr-expiry",
+      }),
+    );
   });
 });

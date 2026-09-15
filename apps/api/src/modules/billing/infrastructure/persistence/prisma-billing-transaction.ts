@@ -1,6 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import { PaymentReconciliationStatus } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
+import {
+  AUDIT_DECISIONS,
+  AUDIT_REDACTION_STATUSES,
+  AUDIT_RESOURCE_TYPES,
+  buildAuditEventInput,
+} from "@lcsp/contracts/audit";
 import { selectEffectivePricingSnapshot } from "../../domain/effective-pricing.js";
 import { resolveEffectiveRuntimeModel } from "../../domain/effective-runtime-model.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
@@ -278,6 +284,35 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
                   row.effectiveAt.getTime() === selected.effectiveAt.getTime(),
               ) ?? null
             );
+          },
+        },
+        audit: {
+          append: async (i) => {
+            const event = buildAuditEventInput({
+              eventType: i.eventType,
+              actorId: i.actorId,
+              sessionId: i.sessionId,
+              correlationId: i.correlationId,
+              resourceType: AUDIT_RESOURCE_TYPES.httpRoute,
+              resourceId: i.resourceId,
+              decision: AUDIT_DECISIONS.allow,
+              result: "RECORDED",
+              redactionStatus: AUDIT_REDACTION_STATUSES.none,
+              payload: i.payload,
+            });
+            await tx.auditEvent.create({
+              data: {
+                id: crypto.randomUUID(),
+                eventType: event.eventType,
+                actorId: event.actorId,
+                sessionId: event.sessionId ?? null,
+                correlationId: event.correlationId,
+                resourceType: "HTTP_ROUTE",
+                resourceId: event.resourceId,
+                decision: "ALLOW",
+                payload: event.payload as Prisma.InputJsonValue,
+              },
+            });
           },
         },
       };

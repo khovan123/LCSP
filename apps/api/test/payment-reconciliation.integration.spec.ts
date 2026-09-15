@@ -59,6 +59,7 @@ describe("LCSP-310 payment reconciliation", () => {
 
   async function setupOrder(
     status: "PENDING_PAYMENT" | "EXPIRED" | "CANCELLED" = "PENDING_PAYMENT",
+    expiresAt?: Date,
   ) {
     const a = user("owner");
     await prisma.user.create({ data: a });
@@ -69,6 +70,7 @@ describe("LCSP-310 payment reconciliation", () => {
       idempotencyKey: randomUUID(),
       amountMinorUnits: 100000n,
       creditUnits: 500n,
+      expiresAt,
     });
     if (status !== "PENDING_PAYMENT")
       await prisma.billingOrder.update({
@@ -249,6 +251,29 @@ describe("LCSP-310 payment reconciliation", () => {
         }),
       ).toBe(0);
     }
+  });
+
+  it("expires an unread pending order at the settlement boundary", async () => {
+    const { order } = await setupOrder(
+      "PENDING_PAYMENT",
+      new Date(Date.now() - 1_000),
+    );
+    const result = await payments.reconcilePayment({
+      provider: "SEPAY",
+      providerTransactionId: "TX-EXPIRED-UNREAD",
+      paymentCode: order.paymentCode,
+      amountMinorUnits: 100000n,
+    });
+    expect(result.reconciliationStatus).toBe("NEEDS_REVIEW");
+    expect(
+      (await prisma.billingOrder.findUniqueOrThrow({ where: { id: order.id } }))
+        .status,
+    ).toBe("EXPIRED");
+    expect(
+      await prisma.creditLedgerEntry.count({
+        where: { billingOrderId: order.id },
+      }),
+    ).toBe(0);
   });
 
   it("keeps payment credit and reservation projections canonical when concurrent", async () => {

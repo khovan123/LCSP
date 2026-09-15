@@ -233,6 +233,16 @@ export interface RuntimeModelPolicyPort {
     occurredAt: Date,
   ): Promise<RuntimeModelPolicyRecord | null>;
 }
+export interface BillingAuditPort {
+  append(input: {
+    eventType: string;
+    actorId: string | null;
+    sessionId?: string;
+    correlationId: string;
+    resourceId: string;
+    payload: Record<string, unknown>;
+  }): Promise<void>;
+}
 export type BillingTransactionRepositories = {
   wallet: BillingWalletPort;
   ledger: CreditLedgerPort;
@@ -242,6 +252,7 @@ export type BillingTransactionRepositories = {
   webhook: WebhookEventPort;
   usage: LlmUsagePort;
   pricing: PricingSnapshotPort;
+  audit: BillingAuditPort;
   runtimePolicy: RuntimeModelPolicyPort;
   lockUserAccount(userId: string): Promise<void>;
 };

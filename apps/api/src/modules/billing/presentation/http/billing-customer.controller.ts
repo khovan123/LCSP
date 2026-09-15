@@ -19,8 +19,9 @@ import type { AuthenticatedRequest } from "../../../../common/interfaces/authent
 import { BillingCustomerService } from "../../application/services/billing-customer.service.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import {
-  BillingDomainError,
   BillingIdempotencyConflictError,
+  BillingOrderNotFoundError,
+  InvalidBillingInputError,
 } from "../../domain/billing.errors.js";
 
 @Controller("billing")
@@ -58,7 +59,7 @@ export class BillingCustomerController {
     @Headers("idempotency-key") key: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
-    if (!key)
+    if (!key?.trim())
       throw problemException(
         BILLING_ERROR_CODES.idempotencyKeyRequired,
         request.correlationId ?? "billing-order",
@@ -70,7 +71,10 @@ export class BillingCustomerController {
         : undefined;
     try {
       return await this.billing
-        .createOrder(request.rbacContext.userId, parseAmount(amount), key)
+        .createOrder(request.rbacContext.userId, parseAmount(amount), key, {
+          correlationId: request.correlationId ?? "billing-order",
+          sessionId: request.rbacContext.sessionId,
+        })
         .then(resultEnvelope);
     } catch (error) {
       throw mapBillingError(error, request);
@@ -84,7 +88,10 @@ export class BillingCustomerController {
   ) {
     try {
       return await this.billing
-        .getOrder(request.rbacContext.userId, id)
+        .getOrder(request.rbacContext.userId, id, {
+          correlationId: request.correlationId ?? "billing-order-read",
+          sessionId: request.rbacContext.sessionId,
+        })
         .then(resultEnvelope);
     } catch (error) {
       throw mapBillingError(error, request);
@@ -103,6 +110,10 @@ export class BillingCustomerController {
           request.rbacContext.userId,
           Number(page ?? 1),
           Number(pageSize ?? 20),
+          {
+            correlationId: request.correlationId ?? "billing-history",
+            sessionId: request.rbacContext.sessionId,
+          },
         )
         .then(resultEnvelope);
     } catch (error) {
@@ -136,7 +147,15 @@ function mapBillingError(error: unknown, request: AuthenticatedRequest) {
       correlationId,
       { status: HttpStatus.CONFLICT },
     );
-  if (error instanceof BillingDomainError)
+  if (error instanceof InvalidBillingInputError)
+    return problemException(
+      BILLING_ERROR_CODES.validationFailed,
+      correlationId,
+      {
+        status: HttpStatus.BAD_REQUEST,
+      },
+    );
+  if (error instanceof BillingOrderNotFoundError)
     return problemException(BILLING_ERROR_CODES.notFound, correlationId, {
       status: HttpStatus.NOT_FOUND,
     });
