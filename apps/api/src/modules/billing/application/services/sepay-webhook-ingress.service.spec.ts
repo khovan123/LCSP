@@ -4,6 +4,7 @@ import { jest } from "@jest/globals";
 import {
   BILLING_PROVIDER,
   BILLING_RECONCILIATION_EVENT_TYPES,
+  SEPAY_HMAC_FIXTURE,
 } from "@lcsp/contracts/billing";
 import { ConfigService } from "@nestjs/config";
 
@@ -41,6 +42,7 @@ function createSubject(
     existing?: unknown;
     create?: () => Promise<unknown>;
     enqueue?: () => Promise<unknown>;
+    webhookSecret?: string;
   } = {},
 ) {
   const findUnique = jest.fn(() => Promise.resolve(overrides.existing ?? null));
@@ -56,7 +58,8 @@ function createSubject(
   );
   const config = {
     get: (key: string, fallback?: unknown) => {
-      if (key === "sepay.webhookSecret") return secret;
+      if (key === "sepay.webhookSecret")
+        return overrides.webhookSecret ?? secret;
       if (key === "sepay.timestampSkewSeconds") return 300;
       return fallback;
     },
@@ -105,6 +108,22 @@ describe("SePayWebhookIngressService", () => {
       }),
       expect.any(Object),
     );
+  });
+
+  it("matches the governed SePay HMAC interoperability fixture", async () => {
+    const { service, create } = createSubject({
+      webhookSecret: SEPAY_HMAC_FIXTURE.secret,
+    });
+    const fixtureNow = new Date(Number(SEPAY_HMAC_FIXTURE.timestamp) * 1000);
+    const result = await service.accept({
+      rawBody: Buffer.from(SEPAY_HMAC_FIXTURE.rawBody, "utf8"),
+      signature: SEPAY_HMAC_FIXTURE.signature,
+      timestamp: SEPAY_HMAC_FIXTURE.timestamp,
+      now: fixtureNow,
+    });
+
+    expect(result).toEqual({ duplicate: false });
+    expect(create).toHaveBeenCalled();
   });
 
   it("rejects a signature made for re-stringified JSON rather than the received bytes", async () => {
