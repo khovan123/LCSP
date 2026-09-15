@@ -1,7 +1,9 @@
 import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import {
   BILLING_AUDIT_EVENT_TYPES,
   BILLING_ORDER_STATUSES,
+  BILLING_PAYMENT_PROVIDERS,
   PREPAID_BILLING_CONFIG,
 } from "@lcsp/contracts/billing";
 import type {
@@ -21,6 +23,7 @@ import {
 } from "../../domain/repositories/billing-transaction.port.js";
 import { Inject } from "@nestjs/common";
 import { BillingPaymentService } from "./billing-payment.service.js";
+import type { AppConfig } from "../../../../config/config.types.js";
 
 @Injectable()
 export class BillingCustomerService {
@@ -28,6 +31,7 @@ export class BillingCustomerService {
     @Inject(BILLING_TRANSACTION_PORT)
     private readonly transactions: BillingTransactionPort,
     private readonly payments: BillingPaymentService,
+    private readonly config: ConfigService<AppConfig, true>,
   ) {}
 
   estimate(amountVnd: bigint): PrepaidEstimate {
@@ -162,6 +166,8 @@ export class BillingCustomerService {
 
   private toOrderView(order: OrderRecord): BillingOrderView {
     const amountVnd = order.amountMinorUnits.toString();
+    const payment = this.config.getOrThrow<AppConfig["billing"]>("billing");
+    const transferContent = order.paymentCode;
     return {
       id: order.id,
       amountVnd,
@@ -173,9 +179,17 @@ export class BillingCustomerService {
       createdAt: order.createdAt.toISOString(),
       updatedAt: order.updatedAt.toISOString(),
       paymentInstructions: {
+        provider: BILLING_PAYMENT_PROVIDERS.sepay,
         currency: "VND",
         paymentCode: order.paymentCode,
         amountVnd,
+        bankName: payment.sePayBankName,
+        bankAccountNumber: payment.sePayBankAccountNumber,
+        accountHolder: payment.sePayAccountHolder,
+        transferContent,
+        qrCodeUrl: payment.sePayQrUrlTemplate
+          .replaceAll("{amountVnd}", encodeURIComponent(amountVnd))
+          .replaceAll("{paymentCode}", encodeURIComponent(transferContent)),
       },
     };
   }

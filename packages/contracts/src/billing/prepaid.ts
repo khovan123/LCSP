@@ -8,6 +8,13 @@ export const PREPAID_BILLING_CONFIG = {
   paymentCodePrefix: "LCSP",
 } as const;
 
+export const BILLING_PAYMENT_PROVIDERS = {
+  sepay: "SEPAY",
+} as const;
+
+export type BillingPaymentProvider =
+  (typeof BILLING_PAYMENT_PROVIDERS)[keyof typeof BILLING_PAYMENT_PROVIDERS];
+
 export type PrepaidOrderInput = {
   amountVnd: string;
 };
@@ -38,9 +45,15 @@ export type BillingOrderView = {
   createdAt: string;
   updatedAt: string;
   paymentInstructions: {
+    provider: typeof BILLING_PAYMENT_PROVIDERS.sepay;
     currency: "VND";
     paymentCode: string;
     amountVnd: string;
+    bankName: string;
+    bankAccountNumber: string;
+    accountHolder: string;
+    transferContent: string;
+    qrCodeUrl: string;
   };
 };
 

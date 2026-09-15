@@ -2,6 +2,8 @@ import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   BILLING_AUDIT_EVENT_TYPES,
   BILLING_ERROR_CODES,
+  BILLING_PAYMENT_PROVIDERS,
+  PREPAID_BILLING_CONFIG,
 } from "@lcsp/contracts/billing";
 import * as assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -26,6 +28,17 @@ type OrderResponse = {
   paymentCode: string;
   status: string;
   amountVnd: string;
+  paymentInstructions: {
+    provider: string;
+    currency: string;
+    paymentCode: string;
+    amountVnd: string;
+    bankName: string;
+    bankAccountNumber: string;
+    accountHolder: string;
+    transferContent: string;
+    qrCodeUrl: string;
+  };
 };
 
 describe("LCSP-312 customer billing HTTP API (e2e)", () => {
@@ -102,6 +115,17 @@ describe("LCSP-312 customer billing HTTP API (e2e)", () => {
     assert.equal(first.id, second.id);
     assert.match(first.paymentCode, /^LCSP[A-Za-z0-9]+$/);
     assert.notEqual(first.paymentCode, payload.paymentCode);
+    assert.deepEqual(first.paymentInstructions, {
+      provider: BILLING_PAYMENT_PROVIDERS.sepay,
+      currency: PREPAID_BILLING_CONFIG.currency,
+      paymentCode: first.paymentCode,
+      amountVnd: "10000",
+      bankName: "Test Bank",
+      bankAccountNumber: "1234567890",
+      accountHolder: "LCSP TEST",
+      transferContent: first.paymentCode,
+      qrCodeUrl: `https://payments.test/qr?amount=10000&content=${first.paymentCode}`,
+    });
     assert.equal(
       await prisma.billingOrder.count({ where: { userId: customerA.id } }),
       1,

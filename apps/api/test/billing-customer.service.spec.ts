@@ -1,8 +1,21 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { BillingCustomerService } from "../src/modules/billing/application/services/billing-customer.service.js";
 import { BillingPaymentService } from "../src/modules/billing/application/services/billing-payment.service.js";
-import { PREPAID_BILLING_CONFIG } from "@lcsp/contracts/billing";
+import {
+  BILLING_PAYMENT_PROVIDERS,
+  PREPAID_BILLING_CONFIG,
+} from "@lcsp/contracts/billing";
 import { BILLING_AUDIT_EVENT_TYPES } from "@lcsp/contracts/billing";
+
+const billingConfig = {
+  getOrThrow: () => ({
+    sePayBankName: "Test Bank",
+    sePayBankAccountNumber: "1234567890",
+    sePayAccountHolder: "LCSP TEST",
+    sePayQrUrlTemplate:
+      "https://payments.test/qr?amount={amountVnd}&content={paymentCode}",
+  }),
+};
 
 const order = {
   id: "order-1",
@@ -21,7 +34,11 @@ const order = {
 
 describe("BillingCustomerService", () => {
   it("uses the configured prepaid limits and conversion", () => {
-    const service = new BillingCustomerService({} as never, {} as never);
+    const service = new BillingCustomerService(
+      {} as never,
+      {} as never,
+      billingConfig as never,
+    );
     expect(
       service.estimate(PREPAID_BILLING_CONFIG.minimumAmountVnd),
     ).toMatchObject({
@@ -39,6 +56,7 @@ describe("BillingCustomerService", () => {
     const service = new BillingCustomerService(
       {} as never,
       { createOrder } as unknown as BillingPaymentService,
+      billingConfig as never,
     );
     const result = await service.createOrder("user-1", 10000n, "key-1");
     expect(createOrder).toHaveBeenCalledWith(
@@ -64,6 +82,7 @@ describe("BillingCustomerService", () => {
     const service = new BillingCustomerService(
       transactions as never,
       {} as never,
+      billingConfig as never,
     );
     await service.getOrder("user-1", "order-1");
     expect(findForUser).toHaveBeenCalledWith("user-1", "order-1");
@@ -100,6 +119,7 @@ describe("BillingCustomerService", () => {
     const service = new BillingCustomerService(
       transactions as never,
       {} as never,
+      billingConfig as never,
     );
     const result = await service.getOrder("user-1", "order-1", {
       correlationId: "corr-expiry",
@@ -112,5 +132,30 @@ describe("BillingCustomerService", () => {
         correlationId: "corr-expiry",
       }),
     );
+  });
+
+  it("returns executable public SePay transfer and QR instructions", async () => {
+    const createOrder = jest
+      .fn<(input: unknown) => Promise<typeof order>>()
+      .mockResolvedValue(order);
+    const service = new BillingCustomerService(
+      {} as never,
+      { createOrder } as unknown as BillingPaymentService,
+      billingConfig as never,
+    );
+
+    const result = await service.createOrder("user-1", 10000n, "key-1");
+
+    expect(result.paymentInstructions).toEqual({
+      provider: BILLING_PAYMENT_PROVIDERS.sepay,
+      currency: "VND",
+      paymentCode: "LCSPABC123",
+      amountVnd: "10000",
+      bankName: "Test Bank",
+      bankAccountNumber: "1234567890",
+      accountHolder: "LCSP TEST",
+      transferContent: "LCSPABC123",
+      qrCodeUrl: "https://payments.test/qr?amount=10000&content=LCSPABC123",
+    });
   });
 });

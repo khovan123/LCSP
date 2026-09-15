@@ -203,6 +203,34 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
       .integer()
       .min(0)
       .default(0),
+    BILLING_SEPAY_BANK_NAME: Joi.string().trim().min(1).required(),
+    BILLING_SEPAY_BANK_ACCOUNT_NUMBER: Joi.string()
+      .trim()
+      .pattern(/^[A-Za-z0-9-]+$/)
+      .min(4)
+      .max(34)
+      .required(),
+    BILLING_SEPAY_ACCOUNT_HOLDER: Joi.string().trim().min(1).required(),
+    BILLING_SEPAY_QR_URL_TEMPLATE: Joi.string()
+      .trim()
+      .custom((value: string, helpers): string => {
+        if (
+          !value.includes("{amountVnd}") ||
+          !value.includes("{paymentCode}")
+        ) {
+          return helpers.error("string.paymentQrTemplate") as unknown as string;
+        }
+        try {
+          const rendered = value
+            .replaceAll("{amountVnd}", "10000")
+            .replaceAll("{paymentCode}", "LCSPTEST");
+          if (new URL(rendered).protocol === "https:") return value;
+        } catch {
+          // Report the stable payment-template validation error below.
+        }
+        return helpers.error("string.paymentQrTemplate") as unknown as string;
+      })
+      .required(),
   })
     .unknown(true)
     .custom((env: Record<string, unknown>, helpers) => {
@@ -244,6 +272,8 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
         "GitHub CLI snapshot pinning requires credential persistence",
       "credentialKek.archiveRetrieval":
         "GitHub CLI archive retrieval requires credential persistence and snapshot pinning",
+      "string.paymentQrTemplate":
+        '"BILLING_SEPAY_QR_URL_TEMPLATE" must include {amountVnd} and {paymentCode} placeholders',
     });
 }
 
@@ -450,6 +480,13 @@ export function config(): AppConfig {
       consolidationIntervalMs: Number(
         env.VERIFIED_EPISODE_CONSOLIDATION_INTERVAL_MS ?? 0,
       ),
+    },
+    billing: {
+      sePayBankName: env.BILLING_SEPAY_BANK_NAME?.trim() ?? "",
+      sePayBankAccountNumber:
+        env.BILLING_SEPAY_BANK_ACCOUNT_NUMBER?.trim() ?? "",
+      sePayAccountHolder: env.BILLING_SEPAY_ACCOUNT_HOLDER?.trim() ?? "",
+      sePayQrUrlTemplate: env.BILLING_SEPAY_QR_URL_TEMPLATE?.trim() ?? "",
     },
     interview: {
       guidanceVersion: env.INTERVIEW_GUIDANCE_VERSION?.trim() ?? "",

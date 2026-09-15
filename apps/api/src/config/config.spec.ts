@@ -39,6 +39,11 @@ const VALID_ENV = {
   SMTP_FROM: "lcsp@example.com",
   WORKER_API_KEY: "w".repeat(32),
   INTERVIEW_GUIDANCE_VERSION: "interview-context-test-v1",
+  BILLING_SEPAY_BANK_NAME: "Test Bank",
+  BILLING_SEPAY_BANK_ACCOUNT_NUMBER: "1234567890",
+  BILLING_SEPAY_ACCOUNT_HOLDER: "LCSP TEST",
+  BILLING_SEPAY_QR_URL_TEMPLATE:
+    "https://payments.test/qr?amount={amountVnd}&content={paymentCode}",
 };
 
 function validate(env: Record<string, string | undefined>) {
@@ -375,6 +380,13 @@ describe("config()", () => {
       orchestration: { debug: false },
       verifiedEpisodes: {
         consolidationIntervalMs: 0,
+      },
+      billing: {
+        sePayBankName: "Test Bank",
+        sePayBankAccountNumber: "1234567890",
+        sePayAccountHolder: "LCSP TEST",
+        sePayQrUrlTemplate:
+          "https://payments.test/qr?amount={amountVnd}&content={paymentCode}",
       },
       interview: {
         guidanceVersion: "interview-context-test-v1",
