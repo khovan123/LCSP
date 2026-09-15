@@ -30,6 +30,7 @@ import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-ke
 import { AcceptTechnicalProfileCommand } from "../../application/commands/accept-technical-profile/accept-technical-profile.command.js";
 import type { TechnicalProfileCallbackRequest } from "../../application/contracts/evidence/technical-profile-callback.contract.js";
 import { GetEvidenceQuery } from "../../application/queries/get-evidence/get-evidence.query.js";
+import { AssessmentArtifactProjectionService } from "../../application/services/evidence/assessment-artifact-projection.service.js";
 import { ProgramEvidenceGraphDetailService } from "../../application/services/evidence/program-evidence-graph-detail.service.js";
 import {
   fromPrismaRepositoryScanJobStatus,
@@ -49,7 +50,41 @@ export class EvidenceController {
     private readonly queryBus: QueryBus,
     private readonly prisma: PrismaService,
     private readonly graphDetail: ProgramEvidenceGraphDetailService,
+    private readonly artifacts: AssessmentArtifactProjectionService,
   ) {}
+
+  @Get(":assessmentId/artifacts")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
+  async getArtifacts(
+    @Param("assessmentId") assessmentId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    await this.assertAssessmentArtifactAccess(assessmentId, request);
+    return resultEnvelope(await this.artifacts.getAvailability(assessmentId));
+  }
+
+  @Get(":assessmentId/artifacts/business-context")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
+  async getBusinessContextArtifact(
+    @Param("assessmentId") assessmentId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    await this.assertAssessmentArtifactAccess(assessmentId, request);
+    return resultEnvelope(await this.artifacts.getBusinessContext(assessmentId));
+  }
+
+  @Get(":assessmentId/artifacts/investigation-notes")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
+  async getInvestigationNotesArtifact(
+    @Param("assessmentId") assessmentId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    await this.assertAssessmentArtifactAccess(assessmentId, request);
+    return resultEnvelope(await this.artifacts.getInvestigationNotes(assessmentId));
+  }
 
   /**
    * Return the persisted evidence/report view only.
@@ -233,6 +268,25 @@ export class EvidenceController {
       status: HttpStatus.ACCEPTED,
       meta,
     });
+  }
+
+  private async assertAssessmentArtifactAccess(
+    assessmentId: string,
+    request: AuthenticatedRequest,
+  ): Promise<void> {
+    const context = request.rbacContext;
+    if (context.role === AUTH_USER_ROLES.admin) return;
+    const assessment = await this.prisma.assessment.findUnique({
+      where: { id: assessmentId },
+      select: { ownerId: true },
+    });
+    if (!assessment || assessment.ownerId !== context.userId) {
+      throw problemException(
+        ASSESSMENT_ERROR_CODES.notFound,
+        request.correlationId ?? randomUUID(),
+        { status: HttpStatus.NOT_FOUND },
+      );
+    }
   }
 }
 

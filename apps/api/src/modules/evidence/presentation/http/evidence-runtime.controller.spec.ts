@@ -85,6 +85,11 @@ function buildPublicEvidenceController() {
       }),
     ),
   };
+  const artifacts = {
+    getAvailability: jest.fn(async () => null as any),
+    getBusinessContext: jest.fn(async () => null as any),
+    getInvestigationNotes: jest.fn(async () => null as any),
+  };
   const prisma = {
     technicalEvidenceReport: {
       findFirst: technicalEvidenceReportFindFirst,
@@ -98,12 +103,14 @@ function buildPublicEvidenceController() {
       {} as never,
       prisma,
       graphDetail as never,
+      artifacts as never,
     ),
     technicalEvidenceReportFindFirst,
     technicalEvidenceReportFindUnique,
     repositoryScanJobFindFirst,
     assessmentFindUnique,
     graphDetail,
+    artifacts,
   };
 }
 
@@ -356,6 +363,58 @@ describe("EvidenceController graph lifecycle", () => {
     });
     expect(graphDetail.projectAcceptedReport).toHaveBeenCalledTimes(1);
     expect(repositoryScanJobFindFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe("EvidenceController assessment artifact reads", () => {
+  const customerRequest = {
+    correlationId: "corr-artifact",
+    rbacContext: { role: AUTH_USER_ROLES.customer, userId: "owner-1" },
+  } as never;
+
+  it("returns the artifact projection for the assessment owner", async () => {
+    const { controller, assessmentFindUnique, artifacts } =
+      buildPublicEvidenceController();
+    assessmentFindUnique.mockResolvedValue({ ownerId: "owner-1" });
+    artifacts.getBusinessContext.mockResolvedValue({
+      type: "BUSINESS_CONTEXT",
+      status: "READY",
+      content: { confirmedStatements: [] },
+    });
+
+    await expect(
+      controller.getBusinessContextArtifact("assessment-1", customerRequest),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { type: "BUSINESS_CONTEXT", status: "READY" },
+    });
+    expect(artifacts.getBusinessContext).toHaveBeenCalledWith("assessment-1");
+  });
+
+  it("denies another customer from reading assessment artifacts", async () => {
+    const { controller, assessmentFindUnique, artifacts } =
+      buildPublicEvidenceController();
+    assessmentFindUnique.mockResolvedValue({ ownerId: "another-owner" });
+
+    await expect(
+      controller.getInvestigationNotesArtifact("assessment-1", customerRequest),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(artifacts.getInvestigationNotes).not.toHaveBeenCalled();
+  });
+
+  it("allows an admin to read artifact availability", async () => {
+    const { controller, assessmentFindUnique, artifacts } =
+      buildPublicEvidenceController();
+    assessmentFindUnique.mockResolvedValue({ ownerId: "owner-1" });
+    artifacts.getAvailability.mockResolvedValue({
+      assessmentId: "assessment-1",
+      artifacts: [],
+    });
+
+    await expect(
+      controller.getArtifacts("assessment-1", adminGraphRequest),
+    ).resolves.toMatchObject({ ok: true });
+    expect(artifacts.getAvailability).toHaveBeenCalledWith("assessment-1");
   });
 });
 

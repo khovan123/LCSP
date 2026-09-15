@@ -11,7 +11,13 @@ import {
 } from "react";
 import { XIcon } from "lucide-react";
 import Link from "next/link";
-import { ASSESSMENT_TECHNICAL_COVERAGE_STATES } from "@lcsp/contracts/evidence";
+import {
+  ASSESSMENT_ARTIFACT_STATUSES,
+  ASSESSMENT_ARTIFACT_TYPES,
+  ASSESSMENT_TECHNICAL_COVERAGE_STATES,
+  type BusinessContextArtifact,
+  type InvestigationNotesArtifact,
+} from "@lcsp/contracts/evidence";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -37,6 +43,14 @@ import {
   ARTIFACT_TYPES,
   type ArtifactRef,
 } from "@/features/artifacts/types/artifact.types";
+import {
+  getBusinessContextArtifact,
+  getInvestigationNotesArtifact,
+} from "@/lib/api/assessment-artifact-client";
+import {
+  AssessmentTextArtifactDialog,
+  type AssessmentTextArtifact,
+} from "./assessment-text-artifact-dialog";
 import {
   ARTIFACT_OPEN_KINDS,
   buildArtifactOpenTarget,
@@ -82,6 +96,9 @@ export function ProgramEvidenceGraphProvider({
   const [loadState, setLoadState] = useState<ProgramEvidenceGraphDetailLoadState>(
     PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.unavailable,
   );
+  const [textArtifactOpen, setTextArtifactOpen] = useState(false);
+  const [textArtifactLoading, setTextArtifactLoading] = useState(false);
+  const [textArtifact, setTextArtifact] = useState<AssessmentTextArtifact | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const wasOpenRef = useRef(false);
   const requestVersionRef = useRef(0);
@@ -107,14 +124,43 @@ export function ProgramEvidenceGraphProvider({
       });
   }, [assessmentId]);
   const openArtifact = (ref: ArtifactRef, trigger?: HTMLElement | null) => {
-    if (
-      ref.type === ARTIFACT_TYPES.programEvidenceGraph &&
-      ref.assessmentId === assessmentId
-    ) {
-      triggerRef.current = trigger ?? null;
+    if (ref.assessmentId !== assessmentId) return;
+    triggerRef.current = trigger ?? null;
+    if (ref.type === ARTIFACT_TYPES.programEvidenceGraph) {
       setOpen(true);
       loadDetail();
+      return;
     }
+    if (
+      ref.type !== ARTIFACT_TYPES.businessContext &&
+      ref.type !== ARTIFACT_TYPES.investigationNotes
+    ) {
+      return;
+    }
+    setTextArtifact(null);
+    setTextArtifactOpen(true);
+    setTextArtifactLoading(true);
+    const request =
+      ref.type === ARTIFACT_TYPES.businessContext
+        ? getBusinessContextArtifact(ref.assessmentId)
+        : getInvestigationNotesArtifact(ref.assessmentId);
+    void request
+      .then((value: BusinessContextArtifact | InvestigationNotesArtifact | null) => {
+        if (
+          value?.status === ASSESSMENT_ARTIFACT_STATUSES.ready &&
+          value.content &&
+          ((ref.type === ARTIFACT_TYPES.businessContext &&
+            value.type === ASSESSMENT_ARTIFACT_TYPES.businessContext) ||
+            (ref.type === ARTIFACT_TYPES.investigationNotes &&
+              value.type === ASSESSMENT_ARTIFACT_TYPES.investigationNotes))
+        ) {
+          setTextArtifact(value);
+        } else {
+          setTextArtifact(value);
+        }
+      })
+      .catch(() => setTextArtifact(null))
+      .finally(() => setTextArtifactLoading(false));
   };
   useEffect(() => {
     if (wasOpenRef.current && !open) {
@@ -123,6 +169,14 @@ export function ProgramEvidenceGraphProvider({
     }
     wasOpenRef.current = open;
   }, [open]);
+  const textWasOpenRef = useRef(false);
+  useEffect(() => {
+    if (textWasOpenRef.current && !textArtifactOpen) {
+      const trigger = triggerRef.current;
+      if (trigger) requestAnimationFrame(() => trigger.focus());
+    }
+    textWasOpenRef.current = textArtifactOpen;
+  }, [textArtifactOpen]);
   useEffect(() => {
     // A building graph is not an error: keep refetching while the drawer is open.
     if (
@@ -141,14 +195,22 @@ export function ProgramEvidenceGraphProvider({
     >
       {children}
       {assessmentId ? (
-        <ProgramEvidenceGraphDrawer
-          assessmentId={assessmentId}
-          detail={detail}
-          loading={loading}
-          loadState={loadState}
-          open={open}
-          onOpenChange={setOpen}
-        />
+        <>
+          <ProgramEvidenceGraphDrawer
+            assessmentId={assessmentId}
+            detail={detail}
+            loading={loading}
+            loadState={loadState}
+            open={open}
+            onOpenChange={setOpen}
+          />
+          <AssessmentTextArtifactDialog
+            artifact={textArtifact}
+            loading={textArtifactLoading}
+            open={textArtifactOpen}
+            onOpenChange={setTextArtifactOpen}
+          />
+        </>
       ) : null}
     </DrawerContext.Provider>
   );

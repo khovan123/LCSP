@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  ASSESSMENT_ARTIFACT_STATUSES,
+  ASSESSMENT_ARTIFACT_TYPES,
   ASSESSMENT_CONTEXT_AUTHORITY_STATUSES,
   ASSESSMENT_CONTEXT_UPDATE_SOURCES,
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
@@ -1643,11 +1645,11 @@ test("20. TARGETED LOOP: investigator waiting + interview clarifying creates syn
   const artifacts = selectArtifactPresentation(normalized);
   assert.equal(
     artifacts.investigationNotes.availability,
-    ASSESSMENT_ARTIFACT_AVAILABILITIES.paused,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting,
   );
   assert.equal(
     artifacts.businessContext.availability,
-    ASSESSMENT_ARTIFACT_AVAILABILITIES.updating,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting,
   );
 
   const screen = selectAssessmentScreenProjection(normalized);
@@ -2044,11 +2046,11 @@ test("26. FIGMA PROJECTION TEST — F09: Targeted loop semantic projection", () 
   const sidebar = selectRightSidebarPresentation(normalized);
   assert.equal(
     sidebar.businessContext.availability,
-    ASSESSMENT_ARTIFACT_AVAILABILITIES.updating,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting,
   );
   assert.equal(
     sidebar.investigationNotes.availability,
-    ASSESSMENT_ARTIFACT_AVAILABILITIES.paused,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting,
   );
 });
 
@@ -2311,4 +2313,120 @@ test("context ready and resolved handoffs resolve deterministic i18n copy withou
   } finally {
     setAppLocale("vi");
   }
+});
+
+
+test("artifact cards derive Business Context and Investigation Notes readiness only from artifact API state", () => {
+  const normalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-artifacts",
+    artifactState: {
+      data: {
+        businessContext: {
+          type: ASSESSMENT_ARTIFACT_TYPES.businessContext,
+          status: ASSESSMENT_ARTIFACT_STATUSES.ready,
+          generatedAt: "2026-09-15T01:00:00.000Z",
+          updatedAt: "2026-09-15T01:00:00.000Z",
+          identity: {
+            assessmentId: "asm-artifacts",
+            contextRevision: 3,
+            sourceVersion: "source-v3",
+            pgeVersion: "pge-v3",
+          },
+        },
+        investigationNotes: {
+          type: ASSESSMENT_ARTIFACT_TYPES.investigationNotes,
+          status: ASSESSMENT_ARTIFACT_STATUSES.pending,
+          generatedAt: null,
+          updatedAt: null,
+          identity: {
+            assessmentId: "asm-artifacts",
+            workflowRunId: "run-2",
+            planningBatchId: null,
+            contextRevisionUsed: 3,
+            technicalEvidenceReportId: null,
+            snapshotId: null,
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+    },
+    timeline: {
+      currentRun: null,
+      recentActivity: [],
+      latestRunId: null,
+      connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+      lastEmittedAt: null,
+    },
+  });
+
+  assert.equal(
+    normalized.artifacts.businessContext.availability,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.ready,
+  );
+  assert.equal(
+    normalized.artifacts.investigationNotes.availability,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.updating,
+  );
+  assert.equal(normalized.artifacts.businessContext.customerSafeSummary, null);
+  assert.equal(normalized.artifacts.investigationNotes.customerSafeSummary, null);
+});
+
+test("completed workflow stages cannot fabricate READY textual artifacts when the artifact API says unavailable", () => {
+  const normalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-artifacts-unavailable",
+    artifactState: {
+      data: {
+        businessContext: {
+          type: ASSESSMENT_ARTIFACT_TYPES.businessContext,
+          status: ASSESSMENT_ARTIFACT_STATUSES.notAvailable,
+          generatedAt: null,
+          updatedAt: null,
+          identity: {
+            assessmentId: "asm-artifacts-unavailable",
+            contextRevision: null,
+            sourceVersion: null,
+            pgeVersion: null,
+          },
+        },
+        investigationNotes: {
+          type: ASSESSMENT_ARTIFACT_TYPES.investigationNotes,
+          status: ASSESSMENT_ARTIFACT_STATUSES.notAvailable,
+          generatedAt: null,
+          updatedAt: null,
+          identity: {
+            assessmentId: "asm-artifacts-unavailable",
+            workflowRunId: null,
+            planningBatchId: null,
+            contextRevisionUsed: null,
+            technicalEvidenceReportId: null,
+            snapshotId: null,
+          },
+        },
+      },
+    },
+    timeline: {
+      currentRun: {
+        assessmentId: "asm-artifacts-unavailable",
+        runId: "run-complete",
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.classification,
+        status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+        activeTools: [],
+        updatedAt: "2026-09-15T03:00:00.000Z",
+      },
+      recentActivity: [],
+      latestRunId: "run-complete",
+      connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+      lastEmittedAt: "2026-09-15T03:00:00.000Z",
+    },
+  });
+
+  assert.notEqual(
+    normalized.artifacts.businessContext.availability,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.ready,
+  );
+  assert.notEqual(
+    normalized.artifacts.investigationNotes.availability,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.ready,
+  );
 });

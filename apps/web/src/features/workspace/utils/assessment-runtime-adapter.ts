@@ -1,4 +1,5 @@
 import {
+  ASSESSMENT_ARTIFACT_STATUSES,
   ASSESSMENT_CONTEXT_AUTHORITY_STATUSES,
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
   ASSESSMENT_INTERVIEW_FLAGS,
@@ -81,6 +82,7 @@ export function normalizeAssessmentRuntime(
   const {
     assessmentId,
     interviewState: rawInterviewInput,
+    artifactState,
     timeline: rawTimeline,
     coverageOverride,
   } = params;
@@ -172,6 +174,7 @@ export function normalizeAssessmentRuntime(
     scanJobs: rawTimeline?.scanJobs ?? [],
     evidenceReports: rawTimeline?.evidenceReports ?? [],
     postFinding,
+    artifactState,
   });
 
   // 8. Customer Actions normalization
@@ -966,12 +969,11 @@ function normalizeProgramEvidenceAvailability({
 
 function normalizeArtifacts({
   assessmentId,
-  workflow,
-  interview,
   postFinding,
   repositorySnapshot,
   scanJobs,
   evidenceReports,
+  artifactState,
 }: {
   assessmentId: string;
   workflow: NormalizedAssessmentWorkflow;
@@ -980,8 +982,8 @@ function normalizeArtifacts({
   repositorySnapshot: AdapterTimelineInput["repositorySnapshot"];
   scanJobs: NonNullable<AdapterTimelineInput["scanJobs"]>;
   evidenceReports: NonNullable<AdapterTimelineInput["evidenceReports"]>;
+  artifactState: NormalizeAssessmentRuntimeParams["artifactState"];
 }): NormalizedAssessmentArtifacts {
-  // Program Evidence Graph artifact
   const pegAvailability = normalizeProgramEvidenceAvailability({
     assessmentId,
     repositorySnapshot,
@@ -1004,29 +1006,10 @@ function normalizeArtifacts({
         : null,
   };
 
-  // Business Context artifact
-  let businessContextAvailability: AssessmentArtifactAvailability =
-    ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting;
-  if (
-    interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextReady ||
-    interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved
-  ) {
-    businessContextAvailability = ASSESSMENT_ARTIFACT_AVAILABILITIES.ready;
-  } else if (
-    interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
-    (interview.activeQuestion?.intent ===
-      ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify ||
-      workflow.isTargetedClarificationLoop)
-  ) {
-    businessContextAvailability = ASSESSMENT_ARTIFACT_AVAILABILITIES.updating;
-  } else if (
-    interview.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved
-  ) {
-    businessContextAvailability = ASSESSMENT_ARTIFACT_AVAILABILITIES.paused;
-  } else if (interview.stale) {
-    businessContextAvailability = ASSESSMENT_ARTIFACT_AVAILABILITIES.updating;
-  }
-
+  const businessContextAvailability = apiArtifactAvailability(
+    artifactState?.data?.businessContext.status,
+    artifactState,
+  );
   const businessContext: NormalizedAssessmentArtifactItem = {
     ref: { assessmentId, type: ARTIFACT_TYPES.businessContext },
     type: ARTIFACT_TYPES.businessContext,
@@ -1036,28 +1019,13 @@ function normalizeArtifacts({
     kind: "BUSINESS_CONTEXT",
     labelKey: "artifacts.types.businessContext",
     availability: businessContextAvailability,
-    customerSafeSummary:
-      businessContextAvailability === ASSESSMENT_ARTIFACT_AVAILABILITIES.ready
-        ? "Business context confirmed"
-        : null,
+    customerSafeSummary: null,
   };
 
-  // Investigation Notes artifact
-  let notesAvailability: AssessmentArtifactAvailability =
-    ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting;
-  if (workflow.isTargetedClarificationLoop) {
-    notesAvailability = ASSESSMENT_ARTIFACT_AVAILABILITIES.paused;
-  } else if (
-    workflow.stage === "INVESTIGATE" ||
-    workflow.stage === "investigate" ||
-    workflow.stage === ASSESSMENT_RUNTIME_STAGE_CODES.classification
-  ) {
-    notesAvailability =
-      workflow.status === ASSESSMENT_RUNTIME_RUN_STATUSES.running
-        ? ASSESSMENT_ARTIFACT_AVAILABILITIES.updating
-        : ASSESSMENT_ARTIFACT_AVAILABILITIES.ready;
-  }
-
+  const notesAvailability = apiArtifactAvailability(
+    artifactState?.data?.investigationNotes.status,
+    artifactState,
+  );
   const investigationNotes: NormalizedAssessmentArtifactItem = {
     ref: { assessmentId, type: ARTIFACT_TYPES.investigationNotes },
     type: ARTIFACT_TYPES.investigationNotes,
@@ -1067,10 +1035,7 @@ function normalizeArtifacts({
     kind: "INVESTIGATION_NOTES",
     labelKey: "artifacts.types.investigationNotes",
     availability: notesAvailability,
-    customerSafeSummary:
-      notesAvailability === ASSESSMENT_ARTIFACT_AVAILABILITIES.paused
-        ? "Investigation paused for business context"
-        : null,
+    customerSafeSummary: null,
   };
 
   const remediationPatch = normalizePostFindingArtifact({
@@ -1097,8 +1062,7 @@ function normalizeArtifacts({
     businessContext,
     investigationNotes,
     ...[remediationPatch, verificationReport, finalReport].filter(
-      (artifact): artifact is NormalizedAssessmentArtifactItem =>
-        artifact !== null,
+      (artifact): artifact is NormalizedAssessmentArtifactItem => artifact !== null,
     ),
   ];
 
@@ -1111,6 +1075,28 @@ function normalizeArtifacts({
     verificationReport,
     finalReport,
   };
+}
+
+function apiArtifactAvailability(
+  status: string | undefined,
+  query: NormalizeAssessmentRuntimeParams["artifactState"],
+): AssessmentArtifactAvailability {
+  if (query?.isLoading && !query.data) {
+    return ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting;
+  }
+  switch (status) {
+    case ASSESSMENT_ARTIFACT_STATUSES.ready:
+      return ASSESSMENT_ARTIFACT_AVAILABILITIES.ready;
+    case ASSESSMENT_ARTIFACT_STATUSES.pending:
+      return ASSESSMENT_ARTIFACT_AVAILABILITIES.updating;
+    case ASSESSMENT_ARTIFACT_STATUSES.failed:
+    case ASSESSMENT_ARTIFACT_STATUSES.notAvailable:
+      return ASSESSMENT_ARTIFACT_AVAILABILITIES.unavailable;
+    default:
+      return query?.isError
+        ? ASSESSMENT_ARTIFACT_AVAILABILITIES.unavailable
+        : ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting;
+  }
 }
 
 function normalizePostFindingArtifact({

@@ -364,6 +364,76 @@ export class AssessmentRuntimeEventService {
   }
 
   /**
+   * Returns the newest exact Planner batch and its durable per-rule Investigator
+   * events for one assessment. Unlike workspace recent activity this reads the
+   * persisted runtime-event history for the selected batch, so artifact projections
+   * do not drift when events leave the rolling activity window.
+   */
+  async getLatestDurableEngineeringState(assessmentId: string): Promise<{
+    progress: AssessmentRuntimeEngineeringProgress;
+    plannerEvent: AssessmentRuntimeActivityEvent;
+    investigationEvents: AssessmentRuntimeActivityEvent[];
+  } | null> {
+    const [summary] = await this.safeFindMany({
+      where: {
+        assessmentId,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+        toolName:
+          ASSESSMENT_RUNTIME_ENGINEERING_PROGRESS_TOOL_NAMES.plannerSummary,
+      },
+      orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
+      take: 1,
+    });
+    if (!summary) return null;
+
+    const rows = await this.safeFindMany({
+      where: {
+        assessmentId,
+        runId: summary.runId,
+        sequence: { gt: summary.sequence },
+        toolName: {
+          startsWith:
+            ASSESSMENT_RUNTIME_ENGINEERING_RULE_TOOL_PREFIXES.investigator,
+        },
+      },
+      orderBy: [{ sequence: "asc" }],
+      take: ENGINEERING_PROGRESS_INVESTIGATION_SCAN_LIMIT,
+    });
+    const plannerEvent = this.toActivityEvent(summary);
+    const investigationEvents = rows.map((row) => this.toActivityEvent(row));
+    const ordered = [plannerEvent, ...investigationEvents].sort(
+      (left, right) => left.sequence - right.sequence,
+    );
+    return {
+      progress: deriveExplicitEngineeringProgress(ordered, plannerEvent),
+      plannerEvent,
+      investigationEvents,
+    };
+  }
+
+
+  /**
+   * Returns the most recent persisted workflow run start for stale-artifact checks.
+   * This is intentionally separate from rolling workspace activity projections.
+   */
+  async getLatestAssessmentRunStart(assessmentId: string): Promise<{
+    runId: string;
+    emittedAt: string;
+  } | null> {
+    const [row] = await this.safeFindMany({
+      where: {
+        assessmentId,
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runStarted,
+      },
+      orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
+      take: 1,
+    });
+    if (!row) return null;
+    const event = this.toActivityEvent(row);
+    return { runId: event.runId, emittedAt: event.emittedAt };
+  }
+
+  /**
    * Builds the workspace runtime snapshot from persisted runtime events plus current scan-job and evidence-report state.
    *
    * @returns Snapshot containing recent activity, derived runs, scan jobs, and evidence reports.
