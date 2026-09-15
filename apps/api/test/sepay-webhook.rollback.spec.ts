@@ -94,36 +94,23 @@ describe("SePay webhook transaction rollback (integration)", () => {
   it("creates no outbox intent when event persistence fails inside a real transaction", async () => {
     const providerTransactionId = `TX-PERSISTENCE-FAIL-${randomUUID()}`;
     const outboxBefore = await prisma.outboxMessage.count();
-    const enqueue = jest.fn(async () => "never-written");
+    const enqueue = jest.fn(() => Promise.resolve("never-written"));
     const failingPrisma = {
       $transaction: <T>(
         callback: (tx: Prisma.TransactionClient) => Promise<T>,
       ) =>
-        prismaService.$transaction((tx) =>
-          callback(
-            new Proxy(tx, {
-              get(target, property, receiver) {
-                if (property === "sePayWebhookEvent") {
-                  return new Proxy(target.sePayWebhookEvent, {
-                    get(delegate, delegateProperty, delegateReceiver) {
-                      if (delegateProperty === "create") {
-                        return async () => {
-                          throw new Error("TEST_INJECTED_PERSISTENCE_FAILURE");
-                        };
-                      }
-                      return Reflect.get(
-                        delegate,
-                        delegateProperty,
-                        delegateReceiver,
-                      );
-                    },
-                  });
-                }
-                return Reflect.get(target, property, receiver);
-              },
-            }) as Prisma.TransactionClient,
-          ),
-        ),
+        prismaService.$transaction((tx) => {
+          const transactionClient = {
+            sePayWebhookEvent: {
+              findUnique: tx.sePayWebhookEvent.findUnique.bind(
+                tx.sePayWebhookEvent,
+              ),
+              create: () =>
+                Promise.reject(new Error("TEST_INJECTED_PERSISTENCE_FAILURE")),
+            },
+          } as unknown as Prisma.TransactionClient;
+          return callback(transactionClient);
+        }),
     } as unknown as PrismaService;
     const service = new SePayWebhookIngressService(
       failingPrisma,
