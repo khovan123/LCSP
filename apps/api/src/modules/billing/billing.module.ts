@@ -19,7 +19,11 @@ import { SePayReconciliationConsumerService } from "./application/services/sepay
 import { OutboxModule } from "../../platform/outbox/outbox.module.js";
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), RbacModule, OutboxModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    RbacModule,
+    OutboxModule,
+  ],
   controllers: [
     BillingUsageController,
     BillingCustomerController,
