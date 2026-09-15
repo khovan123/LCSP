@@ -14,6 +14,8 @@ Canonical active use-case catalog for the A-to-Z runnable MVP. Detailed user int
 - Delegated free-form clarification under `FR-052` is Deferred.
 - RBAC is the authorization source of truth. Role labels are not final authorization authority.
 - Internal legal corpus operations are API/CLI-only for MVP, not Manager product UX.
+- Repository integration is read-only by default for connect, snapshot, scan, and re-run evidence. Repository write capability is requested and verified only after an authorized Customer explicitly approves remediation PR creation.
+- Business Context used by a running assessment is an immutable context snapshot. Edits during an active run are blocked or queued and may apply only after the current run completes, to a subsequent reassessment or new run.
 
 ## Inventory
 
@@ -57,6 +59,8 @@ Goal: capture purpose, sector, data, affected people, decision role, oversight, 
 
 Goal: connect a selected read-only GitHub repository through GitHub App. The system validates installation/repository scope separately from LCSP login.
 
+Default repository connection, discovery, snapshot, and scan actions require read-only repository access. The UX may show write-access readiness for remediation, but it must not request or validate write capability during the default connect/read/scan path.
+
 ## UC-006 Create Repository Snapshot
 
 Goal: pin repository evidence to an immutable branch/commit snapshot. Inaccessible commits or invalid scope block snapshot creation.
@@ -85,6 +89,8 @@ Goal: preserve evidence-backed AIUsageFlow context for classification without a 
 
 Goal: prepare an approved immutable legal corpus and compile citation-backed LegalRules into validated EngineeringRules. Source validation, ingestion, review, approval, and index build are Internal Legal Operator API/CLI operations. Manager UX only sees assessment-relevant corpus version and citations.
 
+Every legal-corpus content change creates a new `LegalCorpusVersion`. Approved versions are immutable, and existing evaluations/reports remain traceable to the exact corpus version used at evaluation time.
+
 ## UC-013 Run Risk Classification
 
 Goal: create a cited risk result or explicit blocked state from direct EngineeringRule investigation. The acceptance run uses a real configured provider; missing citation, missing evidence refs, provider failure, invalid output, or unknown critical usage fails closed.
@@ -92,6 +98,17 @@ Goal: create a cited risk result or explicit blocked state from direct Engineeri
 ## UC-014 Generate Gap Analysis and Documents
 
 Goal: derive compliance gaps and create a guarded final document. Readiness-only export may exist earlier without risk level. Missing classification, gap, citation, or conflict prerequisite blocks final output.
+
+When a generated gap includes a code remediation recommendation, the Customer review flow is:
+
+1. System presents a remediation recommendation/proposal with evidence, gap, legal basis, and affected repository references.
+2. Customer reviews the proposal and chooses an evidenced remediation action: continue an existing detected PR, update repository credentials, or approve creation of a remediation PR.
+3. On `Approve remediation / create remediation PR`, the system verifies repository write capability at that point.
+4. If the current credential is insufficient, the system requires an updated PAT or equivalent credential with the required Contents and Pull requests write capability before any repository mutation.
+5. After write capability is verified, the system creates a patch revision and remediation branch/commit/PR, then stores the branch, commit, PR number/URL, patch version, and actor/correlation references.
+6. The system re-scans the patched commit, re-evaluates the affected EngineeringRule/risk/gap context, and links verification, history, audit, and report artifacts to the remediation chain.
+
+Implementation status is separate from required behavior. Current evidence supports persisted Customer post-finding decisions and related UI/i18n intent, but the full write-capability verification, PAT upgrade, branch/commit/PR mutation, patched re-scan, re-evaluation, and remediation-specific history chain remain implementation/test gaps until evidenced.
 
 ## UC-015 Review and Export Audit Trail
 
@@ -107,7 +124,7 @@ Goal: enforce source non-execution, restricted workspace, cleanup, redaction, no
 
 ## UX Boundary
 
-`bmad-ux` designs Manager experiences for UC-001..UC-017, excluding the internal operations portion of UC-012. It must cover loading, empty, insufficient, permission-denied, blocked, failed, retry/rerun, degraded, automatic trigger mapping states, and audit-reference states. It must not create active screens for Developer invitations/tasks, manual scanner report upload, `FR-051`, `FR-052`, structured attestation, or customer-facing corpus administration.
+`bmad-ux` designs Manager experiences for UC-001..UC-017, excluding the internal operations portion of UC-012. It must cover loading, empty, insufficient, permission-denied, blocked, failed, retry/rerun, degraded, automatic trigger mapping states, and audit-reference states. It must close entry-point/control mappings for Business Context edit/queue, Evaluation, AI Risk, Gap, Report, History/Reassess, Program Evidence Graph navigation, and Code Remediation approval/PAT/write-access controls. It must not create active screens for Developer invitations/tasks, manual scanner report upload, `FR-051`, `FR-052`, structured attestation, or customer-facing corpus administration.
 
 ```text
 CANONICAL_USE_CASES_NORMALIZED
