@@ -7,6 +7,10 @@ import {
   AUDIT_RESOURCE_TYPES,
   buildAuditEventInput,
 } from "@lcsp/contracts/audit";
+import {
+  toPrismaAuditResourceType,
+  toPrismaAuthDecision,
+} from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { selectEffectivePricingSnapshot } from "../../domain/effective-pricing.js";
 import { resolveEffectiveRuntimeModel } from "../../domain/effective-runtime-model.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
@@ -307,9 +311,13 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
                 actorId: event.actorId,
                 sessionId: event.sessionId ?? null,
                 correlationId: event.correlationId,
-                resourceType: "HTTP_ROUTE",
+                resourceType: toPrismaAuditResourceType(
+                  AUDIT_RESOURCE_TYPES.httpRoute,
+                ),
                 resourceId: event.resourceId,
-                decision: "ALLOW",
+                decision: event.decision
+                  ? toPrismaAuthDecision(event.decision)
+                  : null,
                 payload: event.payload as Prisma.InputJsonValue,
               },
             });
