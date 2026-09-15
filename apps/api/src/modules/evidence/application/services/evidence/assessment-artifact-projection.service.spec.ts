@@ -107,8 +107,7 @@ function plannerEvent(): AssessmentRuntimeActivityEvent {
 function investigatorEvent(
   ruleId: string,
   sequence: number,
-  eventType: AssessmentRuntimeActivityEvent["eventType"] =
-    ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+  eventType: AssessmentRuntimeActivityEvent["eventType"] = ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
   outputSummary: AssessmentRuntimeActivityEvent["outputSummary"] = null,
 ): AssessmentRuntimeActivityEvent {
   return {
@@ -197,7 +196,9 @@ function primeInvestigation(
   );
 }
 
-function evaluations(status1: string = ENGINEERING_RULE_EVALUATION_STATUSES.compliant) {
+function evaluations(
+  status1: string = ENGINEERING_RULE_EVALUATION_STATUSES.compliant,
+) {
   return {
     evaluations: [
       {
@@ -250,9 +251,13 @@ describe("AssessmentArtifactProjectionService", () => {
 
     expect(artifact.status).toBe(ASSESSMENT_ARTIFACT_STATUSES.ready);
     expect(artifact.identity.contextRevision).toBe(3);
-    expect(artifact.content?.confirmedStatements[0]?.scope).toContain("1 systems");
+    expect(artifact.content?.confirmedStatements[0]?.scope).toContain(
+      "1 systems",
+    );
     expect(artifact.content?.dimensions).toContainEqual(
-      expect.objectContaining({ status: BUSINESS_CONTEXT_DIMENSION_STATUSES.unknown }),
+      expect.objectContaining({
+        status: BUSINESS_CONTEXT_DIMENSION_STATUSES.unknown,
+      }),
     );
     expect(JSON.stringify(artifact)).not.toContain('"UNKNOWN":false');
   });
@@ -275,7 +280,9 @@ describe("AssessmentArtifactProjectionService", () => {
 
   it("does not mark Investigation Notes READY without durable investigation state", async () => {
     const fixture = buildService();
-    fixture.runtimeEvents.getLatestDurableEngineeringState.mockResolvedValue(null);
+    fixture.runtimeEvents.getLatestDurableEngineeringState.mockResolvedValue(
+      null,
+    );
 
     const artifact = await fixture.service.getInvestigationNotes(ASSESSMENT_ID);
 
@@ -333,7 +340,9 @@ describe("AssessmentArtifactProjectionService", () => {
     expect(artifact.content?.rules[0]?.outcome).toBe(
       INVESTIGATION_RULE_OUTCOMES.unresolved,
     );
-    expect(artifact.content?.rules[0]?.limitations).toContain("UNRESOLVED_EVIDENCE");
+    expect(artifact.content?.rules[0]?.limitations).toContain(
+      "UNRESOLVED_EVIDENCE",
+    );
     expect(artifact.content?.rules[1]?.outcome).toBe(
       INVESTIGATION_RULE_OUTCOMES.runtimeError,
     );
