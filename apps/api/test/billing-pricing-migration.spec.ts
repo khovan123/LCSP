@@ -12,7 +12,7 @@ const migrationPath = fileURLToPath(
 describe("LCSP-311 pricing migration upgrade path", () => {
   it("preserves legacy pricing rows while adding nullable composite authority fields", () => {
     const migration = readFileSync(migrationPath, "utf8");
-    const pricingUpgrade = migration.split('ALTER TABLE "LlmUsageEvent"')[0]!;
+    const pricingUpgrade = migration.split('ALTER TABLE "LlmUsageEvent"')[0];
     expect(pricingUpgrade).toContain('ADD COLUMN "providerCurrency" TEXT');
     expect(pricingUpgrade).toContain('ADD COLUMN "customerCurrency" TEXT');
     expect(pricingUpgrade).toContain('ADD COLUMN "markupBps" BIGINT');
