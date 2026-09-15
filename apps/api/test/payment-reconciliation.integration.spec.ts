@@ -9,6 +9,7 @@ import {
   it,
 } from "@jest/globals";
 import { randomUUID } from "node:crypto";
+import { BILLING_AUDIT_EVENT_TYPES } from "@lcsp/contracts/billing";
 import { BillingAccountingService } from "../src/modules/billing/application/services/billing-accounting.service.js";
 import { BillingPaymentService } from "../src/modules/billing/application/services/billing-payment.service.js";
 import { PrismaBillingTransaction } from "../src/modules/billing/infrastructure/persistence/prisma-billing-transaction.js";
@@ -263,6 +264,7 @@ describe("LCSP-310 payment reconciliation", () => {
       providerTransactionId: "TX-EXPIRED-UNREAD",
       paymentCode: order.paymentCode,
       amountMinorUnits: 100000n,
+      correlationId: "corr-expired-settlement",
     });
     expect(result.reconciliationStatus).toBe("NEEDS_REVIEW");
     expect(
@@ -274,6 +276,15 @@ describe("LCSP-310 payment reconciliation", () => {
         where: { billingOrderId: order.id },
       }),
     ).toBe(0);
+    expect(
+      await prisma.auditEvent.findMany({
+        where: {
+          eventType: BILLING_AUDIT_EVENT_TYPES.orderExpired,
+          resourceId: order.id,
+        },
+        select: { actorId: true, correlationId: true },
+      }),
+    ).toEqual([{ actorId: null, correlationId: "corr-expired-settlement" }]);
   });
 
   it("keeps payment credit and reservation projections canonical when concurrent", async () => {

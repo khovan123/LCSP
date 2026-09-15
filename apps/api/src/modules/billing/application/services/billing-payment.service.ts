@@ -101,6 +101,9 @@ export class BillingPaymentService {
     paymentCode: string;
     amountMinorUnits: bigint;
     sanitizedPayload?: unknown;
+    actorId?: string | null;
+    sessionId?: string;
+    correlationId?: string;
   }) {
     return this.transactions.runForUser(
       `payment:${i.provider}:${i.providerTransactionId}`,
@@ -139,11 +142,26 @@ export class BillingPaymentService {
           lockedOrder.expiresAt !== null &&
           lockedOrder.expiresAt <= new Date()
         ) {
-          await repos.order.transition(
+          const expired = await repos.order.transition(
             lockedOrder.id,
             "PENDING_PAYMENT",
             "EXPIRED",
           );
+          if (expired) {
+            await repos.audit.append({
+              eventType: BILLING_AUDIT_EVENT_TYPES.orderExpired,
+              actorId: i.actorId ?? null,
+              sessionId: i.sessionId,
+              correlationId:
+                i.correlationId ??
+                `billing-reconcile:${i.providerTransactionId}`,
+              resourceId: lockedOrder.id,
+              payload: {
+                previousStatus: "PENDING_PAYMENT",
+                source: "AUTHORITATIVE_SETTLEMENT",
+              },
+            });
+          }
           return repos.payment.create({
             provider: i.provider,
             providerTransactionId: i.providerTransactionId,

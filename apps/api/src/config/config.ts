@@ -36,6 +36,24 @@ function findWorkspaceRoot(startDir: string): string {
 const SMTP_MAILBOX_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 const SMTP_DISPLAY_NAME_PATTERN = /^([^<>]+)<\s*([^<>]+)\s*>$/;
 
+function paymentQrTemplateSchema() {
+  return Joi.string()
+    .trim()
+    .custom((value: string, helpers): string => {
+      if (!value.includes("{amountVnd}") || !value.includes("{paymentCode}"))
+        return helpers.error("string.paymentQrTemplate") as unknown as string;
+      try {
+        const rendered = value
+          .replaceAll("{amountVnd}", "10000")
+          .replaceAll("{paymentCode}", "LCSPTEST");
+        if (new URL(rendered).protocol === "https:") return value;
+      } catch {
+        // Report the stable payment-template validation error below.
+      }
+      return helpers.error("string.paymentQrTemplate") as unknown as string;
+    });
+}
+
 /**
  * Validates the supported SMTP sender formats: an empty value, a mailbox, or a display-name mailbox.
  *
@@ -203,55 +221,39 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
       .integer()
       .min(0)
       .default(0),
-    BILLING_SEPAY_BANK_NAME: Joi.string()
-      .trim()
-      .allow("")
-      .when("NODE_ENV", {
+    BILLING_SEPAY_BANK_NAME: Joi.alternatives().conditional("NODE_ENV", {
+      is: NODE_ENVS.production,
+      then: Joi.string().trim().min(1).required(),
+      otherwise: Joi.string().trim().allow("").default(""),
+    }),
+    BILLING_SEPAY_BANK_ACCOUNT_NUMBER: Joi.alternatives().conditional(
+      "NODE_ENV",
+      {
         is: NODE_ENVS.production,
-        then: Joi.string().min(1).required(),
-      }),
-    BILLING_SEPAY_BANK_ACCOUNT_NUMBER: Joi.string()
-      .trim()
-      .allow("")
-      .pattern(/^[A-Za-z0-9-]+$/)
-      .min(4)
-      .max(34)
-      .when("NODE_ENV", {
-        is: NODE_ENVS.production,
-        then: Joi.string().min(4).required(),
-      }),
-    BILLING_SEPAY_ACCOUNT_HOLDER: Joi.string()
-      .trim()
-      .allow("")
-      .when("NODE_ENV", {
-        is: NODE_ENVS.production,
-        then: Joi.string().min(1).required(),
-      }),
-    BILLING_SEPAY_QR_URL_TEMPLATE: Joi.string()
-      .trim()
-      .allow("")
-      .custom((value: string, helpers): string => {
-        if (value.length === 0) return value;
-        if (
-          !value.includes("{amountVnd}") ||
-          !value.includes("{paymentCode}")
-        ) {
-          return helpers.error("string.paymentQrTemplate") as unknown as string;
-        }
-        try {
-          const rendered = value
-            .replaceAll("{amountVnd}", "10000")
-            .replaceAll("{paymentCode}", "LCSPTEST");
-          if (new URL(rendered).protocol === "https:") return value;
-        } catch {
-          // Report the stable payment-template validation error below.
-        }
-        return helpers.error("string.paymentQrTemplate") as unknown as string;
-      })
-      .when("NODE_ENV", {
-        is: NODE_ENVS.production,
-        then: Joi.string().min(1).required(),
-      }),
+        then: Joi.string()
+          .trim()
+          .pattern(/^[A-Za-z0-9-]+$/)
+          .min(4)
+          .max(34)
+          .required(),
+        otherwise: Joi.string()
+          .trim()
+          .allow("")
+          .pattern(/^[A-Za-z0-9-]*$/)
+          .max(34)
+          .default(""),
+      },
+    ),
+    BILLING_SEPAY_ACCOUNT_HOLDER: Joi.alternatives().conditional("NODE_ENV", {
+      is: NODE_ENVS.production,
+      then: Joi.string().trim().min(1).required(),
+      otherwise: Joi.string().trim().allow("").default(""),
+    }),
+    BILLING_SEPAY_QR_URL_TEMPLATE: Joi.alternatives().conditional("NODE_ENV", {
+      is: NODE_ENVS.production,
+      then: paymentQrTemplateSchema().min(1).required(),
+      otherwise: Joi.string().trim().allow("").default(""),
+    }),
   })
     .unknown(true)
     .custom((env: Record<string, unknown>, helpers) => {
