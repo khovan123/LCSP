@@ -318,8 +318,9 @@ OPENAI_API_KEY=token1,token2,token3,
 # LLM7_API_KEY=token1,token2,token3,
 ```
 
-Google also accepts `GEMINI_API_KEY` when `GOOGLE_API_KEY` is unset. LLM7 never
-falls back to `OPENAI_API_KEY`; its compatible ChatOpenAI client keeps the LLM7
+Google also accepts `GEMINI_API_KEY` when `GOOGLE_API_KEY` is unset. OpenAI,
+Google/Gemini, and LLM7 use the same credential health/rotation state machine.
+LLM7 never falls back to `OPENAI_API_KEY`; its compatible ChatOpenAI client keeps the LLM7
 base URL and Chat Completions mode while rotating only `LLM7_API_KEY` slots. Whitespace,
 empty entries and duplicate keys are removed; a non-empty list containing only
 commas/whitespace is invalid. A single key retains normal SDK behavior.
@@ -328,7 +329,35 @@ For multiple keys, each model call tries keys in order on HTTP 401/403/429
 (including wrapped provider errors). SDK retries are disabled for these lists.
 The model, provider, reasoning/thinking settings, tools, and input stay the same.
 Schema/type errors and HTTP 400/404/422 stop immediately without trying another key.
-Exhausting the list stops the task without model retry, queue requeue, or automatic
-waiting-assessment resume. Completed tool operations are not replayed by token
-fallback. Token values are never included in fallback diagnostics. Restart workers
+If no cross-provider fallback is configured, exhausting the list stops the task
+without model retry, queue requeue, or automatic waiting-assessment resume.
+Completed tool operations are not replayed by token fallback. Token values are never included in fallback diagnostics. Restart workers
 after changing the environment. This is credential fallback, not data rollback.
+
+### Cross-provider fallback
+
+Provider failover is configured independently from same-provider key rotation:
+
+```env
+LCSP_MODEL_PROVIDER=openai
+OPENAI_API_KEY=openai1,openai2
+
+LLM_FALLBACK_PROVIDER_1=google_genai
+GOOGLE_API_KEY=google1,google2
+
+LLM_FALLBACK_PROVIDER_2=llm7
+LLM7_API_KEY=llm7a,llm7b
+```
+
+`LLM_FALLBACK_PROVIDER_<number>` entries are sorted numerically and accept the
+same provider aliases as `LCSP_MODEL_PROVIDER` (`gemini` resolves to
+`google_genai`). Each route uses its code-owned provider preset. The current
+provider is skipped if it also appears in the fallback list, and duplicate
+fallback providers are de-duplicated by first occurrence.
+
+Fallback happens only after the current provider's key pool is exhausted by
+credential, quota, transient HTTP, timeout, or connection failures. The next
+provider then performs its own full key rotation before the chain advances
+again. Schema/request failures and HTTP 400/404/422 never cross providers. A
+configured fallback provider must have its own credential environment variable;
+LLM7 always uses `LLM7_API_KEY` and never borrows `OPENAI_API_KEY`.

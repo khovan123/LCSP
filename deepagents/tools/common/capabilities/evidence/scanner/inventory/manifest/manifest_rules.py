@@ -58,6 +58,7 @@ AI_ENV_VAR_PATTERNS = {
     "OLLAMA_BASE_URL",
     "VLLM_ENDPOINT",
 }
+AI_ENV_VAR_PREFIXES = ("LLM_FALLBACK_PROVIDER_",)
 
 
 ManifestParserFunc = Callable[[Path, Path], ManifestFact]
@@ -467,7 +468,10 @@ def _build_fact(
         package for package in normalized_packages if package in AI_PACKAGE_REGISTRY
     ]
     ai_signals.extend(
-        env for env in normalized_env_vars if env.upper() in AI_ENV_VAR_PATTERNS
+        env
+        for env in normalized_env_vars
+        if env.upper() in AI_ENV_VAR_PATTERNS
+        or env.upper().startswith(AI_ENV_VAR_PREFIXES)
     )
 
     return ManifestFact(

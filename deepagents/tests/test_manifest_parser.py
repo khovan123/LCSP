@@ -31,15 +31,22 @@ def test_t02_env_values_not_extracted(workspace_dir: Path) -> None:
     (workspace_dir / ".env.example").write_text(
         "OPENAI_API_KEY=sk-secret-value\n"
         "ANTHROPIC_API_KEY=sk-ant-secret\n"
-        "LLM7_API_KEY=llm7-secret-value\n",
+        "LLM7_API_KEY=llm7-secret-value\n"
+        "LLM_FALLBACK_PROVIDER_1=llm7\n",
         encoding="utf-8",
     )
 
     result = ManifestParser().parse_workspace(workspace_dir)
     fact = _find_fact(result, "env_file", ".env.example")
 
-    assert fact.env_var_names == ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "LLM7_API_KEY"]
+    assert fact.env_var_names == [
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "LLM7_API_KEY",
+        "LLM_FALLBACK_PROVIDER_1",
+    ]
     assert "LLM7_API_KEY" in fact.ai_relevant_signals
+    assert "LLM_FALLBACK_PROVIDER_1" in fact.ai_relevant_signals
     rendered = json.dumps(fact.__dict__)
     assert "sk-secret-value" not in rendered
     assert "sk-ant-secret" not in rendered

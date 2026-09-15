@@ -825,6 +825,17 @@ function dockerWorkerEnv() {
       rootEnv.LCSP_API_BASE_URL ??
       "http://127.0.0.1:4000",
   );
+  const fallbackProviderKeys = Array.from(
+    new Set(
+      [...Object.keys(rootEnv), ...Object.keys(process.env)].filter((key) =>
+        /^LLM_FALLBACK_PROVIDER_\d+$/.test(key),
+      ),
+    ),
+  ).sort(
+    (left, right) =>
+      Number(left.slice("LLM_FALLBACK_PROVIDER_".length)) -
+      Number(right.slice("LLM_FALLBACK_PROVIDER_".length)),
+  );
   const selectedKeys = [
     "LOG_LEVEL",
     "NODE_ENV",
@@ -845,6 +856,7 @@ function dockerWorkerEnv() {
     "GOOGLE_API_KEY",
     "LLM7_API_KEY",
     "LLM7_BASE_URL",
+    ...fallbackProviderKeys,
     "LCSP_ROOT_AGENT_MODEL",
     "LCSP_TRIAGE_MODEL",
     "LCSP_PLANNER_MODEL",

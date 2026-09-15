@@ -86,16 +86,36 @@ def clear_dead_credential_slots():
     token_fallback._RATE_LIMITED_UNTIL.clear()
 
 
-@pytest.mark.parametrize("provider", ["openai", "google_genai"])
+@pytest.mark.parametrize("provider", ["openai", "google_genai", "llm7"])
 @pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.asyncio
 async def test_token_fallback_preserves_model_policy(monkeypatch, provider, asynchronous):
-    name = "OPENAI_API_KEY" if provider == "openai" else "GOOGLE_API_KEY"
+    name = {
+        "openai": "OPENAI_API_KEY",
+        "google_genai": "GOOGLE_API_KEY",
+        "llm7": "LLM7_API_KEY",
+    }[provider]
     monkeypatch.setenv(name, "first-test-token,second-test-token,")
-    model = (ChatOpenAI(model="gpt-5-nano", reasoning={"effort": "low"}, use_responses_api=True,
-                        **credential_init_kwargs(provider)) if provider == "openai" else
-             ChatGoogleGenerativeAI(model="gemini-3.5-flash-lite", thinking_level="minimal",
-                                    **credential_init_kwargs(provider)))
+    if provider == "openai":
+        model = ChatOpenAI(
+            model="gpt-5-nano",
+            reasoning={"effort": "low"},
+            use_responses_api=True,
+            **credential_init_kwargs(provider),
+        )
+    elif provider == "llm7":
+        model = ChatOpenAI(
+            model="gemini-3.1-flash-lite",
+            base_url="https://api.llm7.io/v1",
+            use_responses_api=False,
+            **credential_init_kwargs(provider),
+        )
+    else:
+        model = ChatGoogleGenerativeAI(
+            model="gemini-3.5-flash-lite",
+            thinking_level="minimal",
+            **credential_init_kwargs(provider),
+        )
     request = ModelRequest(model=model, messages=[], tools=[])
     response = ModelResponse(result=[])
     handler = AsyncMock(side_effect=[QuotaError(), response]) if asynchronous else MagicMock(side_effect=[QuotaError(), response])
@@ -104,12 +124,17 @@ async def test_token_fallback_preserves_model_policy(monkeypatch, provider, asyn
     assert result is response
     assert handler.call_count == 2
     fallback = handler.call_args.args[0].model
-    key = fallback.openai_api_key if provider == "openai" else fallback.google_api_key
+    key = fallback.openai_api_key if provider in {"openai", "llm7"} else fallback.google_api_key
     assert key.get_secret_value() == "second-test-token"
     assert fallback is not model
     if provider == "openai":
         assert fallback.reasoning == {"effort": "low"}
         assert fallback.use_responses_api is True
+        assert fallback.root_client is not model.root_client
+    elif provider == "llm7":
+        assert str(fallback.openai_api_base).rstrip("/") == "https://api.llm7.io/v1"
+        assert fallback.use_responses_api is False
+        assert fallback.max_retries == 0
         assert fallback.root_client is not model.root_client
     else:
         assert fallback.reasoning_effort == "minimal"
@@ -173,6 +198,15 @@ def _gemini_model():
         model="gemini-3.5-flash-lite",
         thinking_level="minimal",
         **credential_init_kwargs("google_genai"),
+    )
+
+
+def _llm7_model():
+    return ChatOpenAI(
+        model="gemini-3.1-flash-lite",
+        base_url="https://api.llm7.io/v1",
+        use_responses_api=False,
+        **credential_init_kwargs("llm7"),
     )
 
 
@@ -246,6 +280,41 @@ def test_auth_401_slot_then_429_slot_then_successful_later_slot(monkeypatch):
     assert token_fallback._DEAD_CREDENTIAL_SLOTS[("google_genai", "GEMINI_API_KEY")] == {0}
 
 
+def test_llm7_roll_key_uses_same_dead_and_cooldown_semantics(monkeypatch):
+    monkeypatch.setenv(
+        "LLM7_API_KEY",
+        "slot-a-test-token,slot-b-test-token,slot-c-test-token",
+    )
+    clock = {"now": 1_000.0}
+    from middleware import token_fallback
+
+    monkeypatch.setattr(token_fallback, "_monotonic", lambda: clock["now"])
+    model = _llm7_model()
+    response = ModelResponse(result=[])
+    middleware = TokenFallbackMiddleware()
+
+    first = MagicMock(side_effect=[AuthError(), QuotaError(), response])
+    assert middleware.wrap_model_call(ModelRequest(model=model, messages=[], tools=[]), first) is response
+    assert [
+        call.args[0].model.openai_api_key.get_secret_value()
+        for call in first.call_args_list
+    ] == [
+        "slot-a-test-token",
+        "slot-b-test-token",
+        "slot-c-test-token",
+    ]
+
+    second = MagicMock(side_effect=[response])
+    assert middleware.wrap_model_call(ModelRequest(model=model, messages=[], tools=[]), second) is response
+    assert second.call_args.args[0].model.openai_api_key.get_secret_value() == "slot-c-test-token"
+
+    clock["now"] += token_fallback._DEFAULT_RATE_LIMIT_COOLDOWN_SECONDS + 1
+    third = MagicMock(side_effect=[response])
+    assert middleware.wrap_model_call(ModelRequest(model=model, messages=[], tools=[]), third) is response
+    assert third.call_args.args[0].model.openai_api_key.get_secret_value() == "slot-b-test-token"
+    assert token_fallback._DEAD_CREDENTIAL_SLOTS[("llm7", "LLM7_API_KEY")] == {0}
+
+
 def test_rate_limited_slots_are_cooled_not_marked_dead_and_still_tried_last(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
     from middleware import token_fallback
@@ -307,9 +376,11 @@ def test_outer_model_retry_does_not_resend_auth_failures(monkeypatch):
 def test_multi_token_primary_disables_sdk_internal_retries(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "primary-test-token,secondary-test-token")
     monkeypatch.setenv("OPENAI_API_KEY", "primary-test-token,secondary-test-token")
+    monkeypatch.setenv("LLM7_API_KEY", "primary-test-token,secondary-test-token")
 
     assert credential_init_kwargs("google_genai")["max_retries"] == 1
     assert credential_init_kwargs("openai")["max_retries"] == 0
+    assert credential_init_kwargs("llm7")["max_retries"] == 0
 
 
 def test_fallback_auth_failure_marks_dead_and_continues_to_next_token(monkeypatch):
