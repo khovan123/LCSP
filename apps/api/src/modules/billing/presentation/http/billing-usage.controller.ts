@@ -21,22 +21,29 @@ export class BillingUsageController {
     const runtime = body.effectiveRuntimeModel as
       Record<string, unknown> | undefined;
     if (
+      typeof body.agentRole !== "string" ||
+      !body.agentRole.trim() ||
       !runtime ||
       typeof runtime.provider !== "string" ||
-      typeof runtime.model !== "string"
+      typeof runtime.model !== "string" ||
+      typeof runtime.policyVersion !== "string" ||
+      !runtime.policyVersion.trim() ||
+      typeof runtime.effectiveAt !== "string" ||
+      Number.isNaN(new Date(runtime.effectiveAt).getTime())
     )
       throw new Error("effectiveRuntimeModel is required");
     const result = await this.usage.recordAndSettleUsage({
       userId: text(body.userId),
       reservationId: text(body.reservationId),
       invocationId: text(body.invocationId),
+      agentRole: body.agentRole.trim(),
       provider: runtime.provider,
       model: runtime.model,
       effectiveRuntimeModel: {
         provider: runtime.provider,
         model: runtime.model,
-        policyVersion: String(runtime.policyVersion),
-        effectiveAt: String(runtime.effectiveAt),
+        policyVersion: runtime.policyVersion,
+        effectiveAt: runtime.effectiveAt,
       },
       providerResponseId: body.providerResponseId
         ? text(body.providerResponseId)

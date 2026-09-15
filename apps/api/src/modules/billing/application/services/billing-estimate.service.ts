@@ -30,10 +30,7 @@ export class BillingEstimateService {
       policyVersion: input.runtimeModel.policyVersion,
       providerCostCredits,
       customerChargeCredits,
-      customerChargeVnd: calculateCustomerChargeVnd(
-        customerChargeCredits,
-        input.pricing,
-      ),
+      customerChargeVnd: calculateCustomerChargeVnd(input.usage, input.pricing),
     };
   }
 }

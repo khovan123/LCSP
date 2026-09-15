@@ -12,6 +12,8 @@ export type UsageDimensions = {
 
 const SCALE = 100000000n;
 const DENOMINATOR = 1_000_000n * SCALE;
+const MARKUP_DENOMINATOR = 10_000n;
+const CUSTOMER_CHARGE_DENOMINATOR = DENOMINATOR * MARKUP_DENOMINATOR;
 
 export function calculateUsageChargeCredits(
   usage: UsageDimensions | bigint,
@@ -35,9 +37,22 @@ export function calculateCustomerChargeCredits(
   usage: UsageDimensions,
   pricing: PricingRecord,
 ): bigint {
-  const numerator =
-    usageNumerator(usage, pricing) * (10_000n + pricing.markupBps);
-  return (numerator + DENOMINATOR * 10_000n - 1n) / (DENOMINATOR * 10_000n);
+  return ceilDiv(
+    calculateCustomerChargeNumerator(usage, pricing),
+    CUSTOMER_CHARGE_DENOMINATOR,
+  );
+}
+
+/** Exact fixed-point customer charge in the provider currency. */
+export function calculateCustomerChargeNumerator(
+  usage: UsageDimensions,
+  pricing: PricingRecord,
+): bigint {
+  if (pricing.markupBps === undefined)
+    throw new BillingDomainError("Pricing snapshot markup is required");
+  return (
+    usageNumerator(usage, pricing) * (MARKUP_DENOMINATOR + pricing.markupBps)
+  );
 }
 
 export function applyMarkup(
@@ -51,14 +66,16 @@ export function applyMarkup(
 
 /** Converts with the immutable FX configuration carried by the pricing row. */
 export function calculateCustomerChargeVnd(
-  customerChargeCredits: bigint,
+  usage: UsageDimensions,
   pricing: PricingRecord,
 ): bigint {
   if (pricing.customerCurrency !== "VND")
     throw new BillingDomainError(
       "Pricing snapshot customer currency must be VND for wallet settlement",
     );
-  if (pricing.providerCurrency === "VND") return customerChargeCredits;
+  const numerator = calculateCustomerChargeNumerator(usage, pricing);
+  if (pricing.providerCurrency === "VND")
+    return ceilDiv(numerator, CUSTOMER_CHARGE_DENOMINATOR);
   const hasNumerator = pricing.fxRateVndNumerator !== undefined;
   const hasDenominator = pricing.fxRateVndDenominator !== undefined;
   if (hasNumerator !== hasDenominator)
@@ -69,11 +86,9 @@ export function calculateCustomerChargeVnd(
     );
   if (pricing.fxRateVndNumerator! <= 0n || pricing.fxRateVndDenominator! <= 0n)
     throw new BillingDomainError("Pricing snapshot FX rate must be positive");
-  return (
-    (customerChargeCredits * pricing.fxRateVndNumerator! +
-      pricing.fxRateVndDenominator! -
-      1n) /
-    pricing.fxRateVndDenominator!
+  return ceilDiv(
+    numerator * pricing.fxRateVndNumerator!,
+    CUSTOMER_CHARGE_DENOMINATOR * pricing.fxRateVndDenominator!,
   );
 }
 
@@ -104,4 +119,8 @@ function usageNumerator(
 function fixedPoint(value: string): bigint {
   const [whole, fraction = ""] = value.split(".");
   return BigInt(whole) * SCALE + BigInt(fraction.padEnd(8, "0").slice(0, 8));
+}
+
+function ceilDiv(numerator: bigint, denominator: bigint): bigint {
+  return (numerator + denominator - 1n) / denominator;
 }

@@ -8,22 +8,26 @@ ALTER TABLE "ModelPricingSnapshot"
   ADD COLUMN "fxRateVndNumerator" BIGINT,
   ADD COLUMN "fxRateVndDenominator" BIGINT;
 
--- Historical price rows cannot safely be assigned a currency, markup, or FX
--- by a migration.  Deployments with such rows must backfill an immutable
--- successor snapshot explicitly before applying this schema change.
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM "ModelPricingSnapshot") THEN
-    RAISE EXCEPTION 'ModelPricingSnapshot rows require explicit currency and markup successor snapshots';
-  END IF;
-END $$;
-
-ALTER TABLE "ModelPricingSnapshot"
-  ALTER COLUMN "providerCurrency" SET NOT NULL,
-  ALTER COLUMN "customerCurrency" SET NOT NULL,
-  ALTER COLUMN "markupBps" SET NOT NULL;
+-- Preserve historical immutable snapshots as legacy records.  They remain
+-- reproducible through existing usage references, but new settlement rejects
+-- any row without the complete composite authority below.
 
 ALTER TABLE "LlmUsageEvent"
   ADD COLUMN "cacheWriteTokens" BIGINT,
   ADD COLUMN "providerCostCredits" BIGINT,
   ADD COLUMN "customerChargeVnd" BIGINT;
+
+CREATE TABLE "RuntimeModelPolicySnapshot" (
+  "id" TEXT NOT NULL,
+  "role" TEXT NOT NULL,
+  "provider" TEXT NOT NULL,
+  "model" TEXT NOT NULL,
+  "policyVersion" TEXT NOT NULL,
+  "effectiveAt" TIMESTAMP(3) NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "RuntimeModelPolicySnapshot_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX "RuntimeModelPolicySnapshot_role_policyVersion_key"
+  ON "RuntimeModelPolicySnapshot"("role", "policyVersion");
+CREATE INDEX "RuntimeModelPolicySnapshot_role_effectiveAt_idx"
+  ON "RuntimeModelPolicySnapshot"("role", "effectiveAt");

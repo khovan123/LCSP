@@ -6,6 +6,10 @@ import {
   OwnershipMismatchError,
 } from "../../domain/billing.errors.js";
 import {
+  assertEffectiveRuntimeModelAt,
+  assertMatchesEffectiveRuntimeModel,
+} from "../../domain/effective-runtime-model.js";
+import {
   calculateCustomerChargeCredits,
   calculateCustomerChargeVnd,
   calculateUsageChargeCredits,
@@ -27,9 +31,10 @@ export class BillingUsageService {
     userId: string;
     reservationId: string;
     invocationId: string;
+    agentRole: string;
     provider?: string;
     model?: string;
-    effectiveRuntimeModel?: EffectiveRuntimeModel;
+    effectiveRuntimeModel: EffectiveRuntimeModel;
     providerResponseId?: string;
     inputTokens?: bigint;
     cachedInputTokens?: bigint;
@@ -41,8 +46,10 @@ export class BillingUsageService {
   }) {
     return this.transactions.runForUser(i.userId, async (repos) => {
       const { usage, pricing, reservation } = repos;
-      const provider = i.effectiveRuntimeModel?.provider ?? i.provider;
-      const model = i.effectiveRuntimeModel?.model ?? i.model;
+      const occurredAt = i.occurredAt ?? new Date();
+      assertEffectiveRuntimeModelAt(i.effectiveRuntimeModel, occurredAt);
+      const provider = i.effectiveRuntimeModel.provider;
+      const model = i.effectiveRuntimeModel.model;
       if (!i.invocationId || !provider || !model)
         throw new BillingDomainError("Usage identity is required");
       if (
@@ -53,6 +60,15 @@ export class BillingUsageService {
         throw new BillingDomainError(
           "Usage provider/model differs from effective runtime policy",
         );
+      const selected = await repos.runtimePolicy.findApplicable(
+        i.agentRole,
+        occurredAt,
+      );
+      if (!selected)
+        throw new BillingDomainError(
+          "No effective runtime model configuration",
+        );
+      assertMatchesEffectiveRuntimeModel(selected, i.effectiveRuntimeModel);
       const input = i.inputTokens ?? 0n;
       const cachedInput = i.cachedInputTokens ?? 0n;
       const cacheWrite = i.cacheWriteTokens ?? 0n;
@@ -83,7 +99,6 @@ export class BillingUsageService {
           throw new BillingIdempotencyConflictError("Usage replay differs");
         return existing;
       }
-      const occurredAt = i.occurredAt ?? new Date();
       const snapshot = await pricing.findApplicable(
         provider,
         model,
@@ -111,7 +126,16 @@ export class BillingUsageService {
         },
         snapshot,
       );
-      const customerChargeVnd = calculateCustomerChargeVnd(charge, snapshot);
+      const customerChargeVnd = calculateCustomerChargeVnd(
+        {
+          inputTokens: input,
+          cachedInputTokens: cachedInput,
+          cacheWriteTokens: cacheWrite,
+          outputTokens: output,
+          reasoningTokens: reasoning,
+        },
+        snapshot,
+      );
       if (i.providerResponseId) {
         const response = await usage.findByProviderResponse(
           provider,
@@ -149,7 +173,7 @@ export class BillingUsageService {
       await this.accounting.settleWithinTransaction(repos, {
         userId: i.userId,
         reservationId: i.reservationId,
-        chargedCredits: charge,
+        chargedCredits: customerChargeVnd,
       });
       return event;
     });

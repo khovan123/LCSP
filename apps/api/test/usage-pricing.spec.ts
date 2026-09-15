@@ -130,12 +130,41 @@ describe("usage pricing", () => {
     );
 
     expect(settledCharge).toBe(2n);
-    expect(calculateCustomerChargeVnd(settledCharge, settledSnapshot)).toBe(
-      50_000n,
-    );
+    expect(calculateCustomerChargeVnd(usage, settledSnapshot)).toBe(27_500n);
     expect(successorCharge).toBe(1n);
-    expect(calculateCustomerChargeVnd(successorCharge, successorSnapshot)).toBe(
-      30_000n,
-    );
+    expect(calculateCustomerChargeVnd(usage, successorSnapshot)).toBe(30_000n);
+  });
+
+  it("prices output-only usage from its output dimension", () => {
+    expect(
+      calculateUsageChargeCredits({ outputTokens: 1_000_000n }, pricing),
+    ).toBe(2n);
+  });
+
+  it("keeps fractional provider currency through markup and FX", () => {
+    const crossCurrency = {
+      ...pricing,
+      providerCurrency: "USD",
+      customerCurrency: "VND",
+      inputPricePerMillion: "0.10000000",
+      markupBps: 1000n,
+      fxRateVndNumerator: 25_000n,
+      fxRateVndDenominator: 1n,
+    };
+    expect(
+      calculateCustomerChargeVnd({ inputTokens: 1_000_000n }, crossCurrency),
+    ).toBe(2_750n);
+  });
+
+  it("rejects legacy pricing snapshots that lack composite settlement authority", () => {
+    const legacyPricing: PricingRecord = {
+      ...pricing,
+      providerCurrency: undefined,
+      customerCurrency: undefined,
+      markupBps: undefined,
+    };
+    expect(() =>
+      calculateCustomerChargeVnd({ inputTokens: 1n }, legacyPricing),
+    ).toThrow();
   });
 });

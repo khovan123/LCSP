@@ -13,6 +13,7 @@ export type CanonicalBillableUsageDimensions = {
 export type SettledUsageInput = CanonicalBillableUsageDimensions & {
   userId: string;
   reservationId: string;
+  agentRole: string;
   effectiveRuntimeModel: EffectiveRuntimeModel;
   invocationId: string;
   providerResponseId?: string;

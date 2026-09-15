@@ -66,11 +66,19 @@ export type PricingRecord = {
   reasoningPricePerMillion?: string;
   version: number;
   effectiveAt: Date;
-  providerCurrency: string;
-  customerCurrency: string;
-  markupBps: bigint;
+  providerCurrency?: string;
+  customerCurrency?: string;
+  markupBps?: bigint;
   fxRateVndNumerator?: bigint;
   fxRateVndDenominator?: bigint;
+};
+export type RuntimeModelPolicyRecord = {
+  id: string;
+  role: string;
+  provider: string;
+  model: string;
+  policyVersion: string;
+  effectiveAt: Date;
 };
 
 export interface BillingWalletPort {
@@ -200,6 +208,12 @@ export interface PricingSnapshotPort {
     occurredAt: Date,
   ): Promise<PricingRecord | null>;
 }
+export interface RuntimeModelPolicyPort {
+  findApplicable(
+    role: string,
+    occurredAt: Date,
+  ): Promise<RuntimeModelPolicyRecord | null>;
+}
 export type BillingTransactionRepositories = {
   wallet: BillingWalletPort;
   ledger: CreditLedgerPort;
@@ -209,6 +223,7 @@ export type BillingTransactionRepositories = {
   webhook: WebhookEventPort;
   usage: LlmUsagePort;
   pricing: PricingSnapshotPort;
+  runtimePolicy: RuntimeModelPolicyPort;
   lockUserAccount(userId: string): Promise<void>;
 };
 export interface BillingTransactionPort {

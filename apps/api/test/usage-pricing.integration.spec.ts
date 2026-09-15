@@ -17,6 +17,7 @@ import type {
   BillingTransactionPort,
   BillingTransactionRepositories,
 } from "../src/modules/billing/domain/repositories/billing-transaction.port.js";
+import type { EffectiveRuntimeModel } from "@lcsp/contracts/billing";
 import { PrismaService } from "../src/infrastructure/prisma/prisma.service.js";
 import {
   TEST_DATABASE_URL,
@@ -26,8 +27,22 @@ import {
 describe("LCSP-310 usage and pricing foundation", () => {
   let prisma: PrismaClient;
   let accounting: BillingAccountingService;
-  let usage: BillingUsageService;
+  type LegacyUsageInput = Omit<
+    Parameters<BillingUsageService["recordAndSettleUsage"]>[0],
+    "agentRole" | "effectiveRuntimeModel"
+  >;
+  let usage: {
+    recordAndSettleUsage: (
+      input: LegacyUsageInput,
+    ) => ReturnType<BillingUsageService["recordAndSettleUsage"]>;
+  };
   const id = () => randomUUID();
+  const runtimeModel: EffectiveRuntimeModel = {
+    provider: "OPENAI",
+    model: "MODEL_A",
+    policyVersion: "usage-test-v1",
+    effectiveAt: "2020-01-01T00:00:00.000Z",
+  };
 
   beforeAll(async () => {
     process.env.DATABASE_URL = TEST_DATABASE_URL;
@@ -46,7 +61,15 @@ describe("LCSP-310 usage and pricing foundation", () => {
     `);
     const tx = new PrismaBillingTransaction(new PrismaService());
     accounting = new BillingAccountingService(tx);
-    usage = new BillingUsageService(tx, accounting);
+    const usageService = new BillingUsageService(tx, accounting);
+    usage = {
+      recordAndSettleUsage: (input) =>
+        usageService.recordAndSettleUsage({
+          ...input,
+          agentRole: "TEST_USAGE",
+          effectiveRuntimeModel: runtimeModel,
+        }),
+    };
   });
   beforeEach(async () => {
     await prisma.$executeRawUnsafe(
@@ -56,6 +79,16 @@ describe("LCSP-310 usage and pricing foundation", () => {
     await prisma.billingReservation.deleteMany();
     await prisma.creditLedgerEntry.deleteMany();
     await prisma.modelPricingSnapshot.deleteMany();
+    await prisma.runtimeModelPolicySnapshot.deleteMany();
+    await prisma.runtimeModelPolicySnapshot.create({
+      data: {
+        role: "TEST_USAGE",
+        provider: runtimeModel.provider,
+        model: runtimeModel.model,
+        policyVersion: runtimeModel.policyVersion,
+        effectiveAt: new Date(runtimeModel.effectiveAt),
+      },
+    });
     await prisma.billingWallet.deleteMany();
     await prisma.user.deleteMany({
       where: { email: { endsWith: "@usage.test" } },
@@ -184,6 +217,46 @@ describe("LCSP-310 usage and pricing foundation", () => {
     });
     expect(event.chargedCredits).toBe(1n);
     expect(event.totalTokens).toBe(1_000_000n);
+  });
+
+  it("rejects a priced provider/model that is not the effective runtime policy", async () => {
+    const f = await fixture();
+    await prisma.modelPricingSnapshot.create({
+      data: {
+        provider: "OPENAI",
+        model: "MODEL_NOT_EFFECTIVE",
+        version: Math.floor(Math.random() * 1_000_000_000),
+        inputPricePerMillion: "1.00000000",
+        outputPricePerMillion: "2.00000000",
+        providerCurrency: "VND",
+        customerCurrency: "VND",
+        markupBps: 0n,
+        effectiveAt: new Date(Date.now() - 1_000),
+      },
+    });
+    const tx = new PrismaBillingTransaction(new PrismaService());
+    const strictUsage = new BillingUsageService(
+      tx,
+      new BillingAccountingService(tx),
+    );
+    await expect(
+      strictUsage.recordAndSettleUsage({
+        userId: f.user.id,
+        reservationId: f.reservation.id,
+        invocationId: "INV-NON-EFFECTIVE",
+        agentRole: "TEST_USAGE",
+        effectiveRuntimeModel: {
+          ...runtimeModel,
+          model: "MODEL_NOT_EFFECTIVE",
+        },
+        inputTokens: 1n,
+      }),
+    ).rejects.toThrow("not the effective runtime policy");
+    expect(
+      await prisma.llmUsageEvent.count({
+        where: { invocationId: "INV-NON-EFFECTIVE" },
+      }),
+    ).toBe(0);
   });
 
   it("rejects conflicting invocation replay and provider/model pricing mismatch", async () => {
@@ -605,6 +678,8 @@ describe("LCSP-310 usage and pricing foundation", () => {
         userId: f.user.id,
         reservationId: f.reservation.id,
         invocationId: "INV-ROLLBACK",
+        agentRole: "TEST_USAGE",
+        effectiveRuntimeModel: runtimeModel,
         provider: "OPENAI",
         model: "MODEL_A",
         inputTokens: 1_000_000n,
