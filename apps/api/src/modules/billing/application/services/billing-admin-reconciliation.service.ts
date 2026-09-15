@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../platform/audit/audit-writer.service.js";
 
@@ -42,6 +43,7 @@ export class BillingAdminReconciliationService {
           correlationId: input.correlationId,
           resourceId: payment.id,
           reasonCode: "MANUAL_RECONCILIATION",
+          decision: AUDIT_DECISIONS.allow,
           result: "REJECTED",
           payload: {
             rationale: input.rationale,

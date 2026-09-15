@@ -1,7 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import type { Prisma } from "@prisma/client";
 import {
   BILLING_PROVIDER,
   BILLING_RECONCILIATION_EVENT_TYPES,
@@ -34,7 +33,7 @@ export class SePayWebhookIngressService {
   }): Promise<{ duplicate: boolean }> {
     const now = input.now ?? new Date();
     this.verifyTimestamp(input.timestamp, now);
-    this.verifySignature(input.rawBody, input.signature);
+    this.verifySignature(input.rawBody, input.timestamp, input.signature);
 
     let payload: Record<string, unknown>;
     try {
@@ -71,32 +70,33 @@ export class SePayWebhookIngressService {
       });
       if (existing) return { duplicate: true };
 
-      let event;
+      let eventId: string;
       try {
-        event = await tx.sePayWebhookEvent.create({
+        const created: unknown = await tx.sePayWebhookEvent.create({
           data: {
             provider: BILLING_PROVIDER.sepay,
             providerTransactionId: normalized.providerTransactionId,
-            sanitizedPayload: safePayload as Prisma.InputJsonValue,
+            sanitizedPayload: safePayload,
             integrityHash,
             securityAcceptedAt: now,
           },
         });
+        eventId = readEventId(created);
       } catch (error) {
         if (!isPrismaUniqueViolation(error)) throw error;
         return { duplicate: true };
       }
       const message = buildOutboxMessageInput({
         aggregateType: OUTBOX_AGGREGATE_TYPES.billingPayment,
-        aggregateId: event.id,
+        aggregateId: eventId,
         eventType: BILLING_RECONCILIATION_EVENT_TYPES.sepayWebhookAccepted,
         correlationId: `sepay:${normalized.providerTransactionId}`,
-        causationId: event.id,
+        causationId: eventId,
         actor: { type: "SYSTEM", id: "sepay" },
         result: "ACCEPTED",
         redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
         idempotencyKey: `sepay-webhook:${normalized.providerTransactionId}`,
-        payload: safePayload,
+        payload: { ...safePayload, webhookEventId: eventId },
       });
       await this.outbox.enqueue(message, tx);
       return { duplicate: false };
@@ -113,10 +113,16 @@ export class SePayWebhookIngressService {
       throw new SePayWebhookIngressError("TIMESTAMP");
   }
 
-  private verifySignature(rawBody: Buffer, supplied: string | undefined): void {
+  private verifySignature(
+    rawBody: Buffer,
+    timestamp: string | undefined,
+    supplied: string | undefined,
+  ): void {
     const secret = this.config.get<string>("sepay.webhookSecret", "");
     if (!secret) throw new SePayWebhookIngressError("SIGNATURE");
-    const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
+    const expected = createHmac("sha256", secret)
+      .update(`${timestamp}.${rawBody.toString("utf8")}`)
+      .digest("hex");
     const actual = (supplied ?? "")
       .replace(/^sha256=/i, "")
       .trim()
@@ -131,15 +137,18 @@ export class SePayWebhookIngressService {
 function normalizePayload(payload: Record<string, unknown>) {
   const id = payload.id;
   const amount = payload.transferAmount;
+  const providerTransactionId =
+    typeof id === "string" || typeof id === "number" ? String(id).trim() : "";
   if (
-    (typeof id !== "string" && typeof id !== "number") ||
+    !providerTransactionId ||
+    providerTransactionId.length > 128 ||
     (typeof amount !== "string" && typeof amount !== "number") ||
     !/^\d+$/.test(String(amount))
   )
     throw new SePayWebhookIngressError("PAYLOAD");
   const direction = payload.transferType;
   return {
-    providerTransactionId: String(id),
+    providerTransactionId,
     paymentCode:
       typeof payload.code === "string" ? payload.code.trim() || null : null,
     amountMinorUnits: BigInt(String(amount)),
@@ -161,4 +170,17 @@ function isPrismaUniqueViolation(error: unknown): boolean {
     "code" in error &&
     error.code === "P2002"
   );
+}
+
+function readEventId(value: unknown): string {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("id" in value) ||
+    typeof value.id !== "string" ||
+    value.id.length === 0
+  ) {
+    throw new Error("SEPAY_WEBHOOK_EVENT_CREATE_INVALID");
+  }
+  return value.id;
 }

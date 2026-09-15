@@ -1,10 +1,12 @@
 import { Controller, Headers, HttpStatus, Post, Req } from "@nestjs/common";
 import type { Request } from "express";
+import { BILLING_RECONCILIATION_ERROR_CODES } from "@lcsp/contracts/billing";
 import {
   SePayWebhookIngressError,
   SePayWebhookIngressService,
 } from "../../application/services/sepay-webhook-ingress.service.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 
 @Controller("billing/sepay")
 export class SePayWebhookController {
@@ -25,15 +27,17 @@ export class SePayWebhookController {
         signature,
         timestamp,
       });
-      return { success: true, duplicate: result.duplicate };
+      return resultEnvelope({ duplicate: result.duplicate });
     } catch (error) {
       if (error instanceof SePayWebhookIngressError) {
         const code =
           error.reason === "SIGNATURE"
-            ? "BILLING_WEBHOOK_SIGNATURE_INVALID"
+            ? BILLING_RECONCILIATION_ERROR_CODES.invalidSignature
             : error.reason === "TIMESTAMP"
-              ? "BILLING_WEBHOOK_TIMESTAMP_STALE"
-              : "BILLING_WEBHOOK_PAYLOAD_INVALID";
+              ? BILLING_RECONCILIATION_ERROR_CODES.staleTimestamp
+              : error.reason === "BODY"
+                ? BILLING_RECONCILIATION_ERROR_CODES.malformedBody
+                : BILLING_RECONCILIATION_ERROR_CODES.invalidPayload;
         throw problemException(code, "sepay-webhook", {
           status: HttpStatus.BAD_REQUEST,
         });

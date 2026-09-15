@@ -188,7 +188,11 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
     OUTBOX_POLL_INTERVAL_MS: Joi.number().integer().positive().default(1000),
     OUTBOX_BATCH_SIZE: Joi.number().integer().positive().default(50),
     OUTBOX_MAX_ATTEMPTS: Joi.number().integer().positive().default(5),
-    SEPAY_WEBHOOK_SECRET: Joi.string().min(16).allow("").default(""),
+    SEPAY_WEBHOOK_SECRET: Joi.alternatives().conditional("NODE_ENV", {
+      is: NODE_ENVS.production,
+      then: Joi.string().min(16).required(),
+      otherwise: Joi.string().min(16).allow("").default(""),
+    }),
     SEPAY_WEBHOOK_TIMESTAMP_SKEW_SECONDS: Joi.number()
       .integer()
       .positive()
