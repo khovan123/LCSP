@@ -184,20 +184,19 @@ describe("WorkspaceRuntimeEventsController", () => {
 
   it("forwards only the owner-scoped live agent stream", () => {
     const live = new Subject<Record<string, unknown>>();
-    const observeAgentStreamEvents = jest.fn((_ownerId: string) =>
-      live.asObservable(),
-    );
+    const observeAgentStreamEvents = jest.fn(() => live.asObservable());
     const controller = new WorkspaceRuntimeEventsController({
-      buildWorkspaceSnapshot: async () => ({
-        emittedAt: "2026-09-16T00:00:00.000Z",
-        runs: [],
-        recentActivity: [],
-        engineeringProgress: [],
-        repositorySnapshots: [],
-        scanJobs: [],
-        evidenceReports: [],
-        postFindingStates: [],
-      }),
+      buildWorkspaceSnapshot: () =>
+        Promise.resolve({
+          emittedAt: "2026-09-16T00:00:00.000Z",
+          runs: [],
+          recentActivity: [],
+          engineeringProgress: [],
+          repositorySnapshots: [],
+          scanJobs: [],
+          evidenceReports: [],
+          postFindingStates: [],
+        }),
       observeAgentStreamEvents,
     } as unknown as AssessmentRuntimeEventService);
     const events: Array<{ type?: string; data?: unknown }> = [];

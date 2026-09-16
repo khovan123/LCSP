@@ -441,7 +441,8 @@ function investigationUnavailable(
 function withoutContent<
   T extends BusinessContextArtifact | InvestigationNotesArtifact,
 >(artifact: T): Omit<T, "content"> {
-  const { content: _content, ...rest } = artifact;
+  const { content, ...rest } = artifact;
+  void content;
   return rest;
 }
 

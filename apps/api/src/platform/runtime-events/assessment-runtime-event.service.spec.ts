@@ -33,12 +33,14 @@ describe("AssessmentRuntimeEventService", () => {
   it("isolates live agent events by assessment owner", async () => {
     const prisma = {
       assessment: {
-        findUnique: jest.fn(async ({ where }: { where: { id: string } }) =>
-          where.id === "assessment-a"
-            ? { ownerId: "user-a" }
-            : where.id === "assessment-b"
-              ? { ownerId: "user-b" }
-              : null,
+        findUnique: jest.fn(({ where }: { where: { id: string } }) =>
+          Promise.resolve(
+            where.id === "assessment-a"
+              ? { ownerId: "user-a" }
+              : where.id === "assessment-b"
+                ? { ownerId: "user-b" }
+                : null,
+          ),
         ),
       },
     };

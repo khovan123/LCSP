@@ -192,10 +192,12 @@ describe("InternalScanController", () => {
     });
   });
   it("publishes worker agent stream events without trimming streamed text", async () => {
-    const publishAgentStreamEvent = jest.fn(async (value: unknown) => ({
-      ...(value as object),
-      eventId: "agent-event-1",
-    }));
+    const publishAgentStreamEvent = jest.fn((value: unknown) =>
+      Promise.resolve({
+        ...(value as object),
+        eventId: "agent-event-1",
+      }),
+    );
     const controller = new InternalScanController(
       {} as unknown as CommandBus,
       { publishAgentStreamEvent } as never,

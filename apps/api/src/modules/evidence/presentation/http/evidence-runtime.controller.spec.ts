@@ -86,9 +86,15 @@ function buildPublicEvidenceController() {
     ),
   };
   const artifacts = {
-    getAvailability: jest.fn(async () => null as any),
-    getBusinessContext: jest.fn(async () => null as any),
-    getInvestigationNotes: jest.fn(async () => null as any),
+    getAvailability: jest
+      .fn<(_assessmentId: string) => Promise<unknown>>()
+      .mockResolvedValue(null),
+    getBusinessContext: jest
+      .fn<(_assessmentId: string) => Promise<unknown>>()
+      .mockResolvedValue(null),
+    getInvestigationNotes: jest
+      .fn<(_assessmentId: string) => Promise<unknown>>()
+      .mockResolvedValue(null),
   };
   const prisma = {
     technicalEvidenceReport: {

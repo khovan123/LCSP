@@ -14,6 +14,7 @@ import {
   INVESTIGATION_RULE_OUTCOMES,
   type AssessmentRuntimeActivityEvent,
   type AssessmentRuntimeEngineeringProgress,
+  type ConfirmedStructuredBusinessContext,
 } from "@lcsp/contracts/evidence";
 import { ENGINEERING_RULE_EVALUATION_STATUSES } from "@lcsp/contracts/scan";
 
@@ -25,17 +26,19 @@ const PLANNER_AT = "2026-09-15T01:00:00.000Z";
 
 function buildService() {
   const prisma = {
-    assessmentInterviewThread: { findUnique: jest.fn(async () => null as any) },
-    repositoryScanJob: { findFirst: jest.fn(async () => null as any) },
-    technicalEvidenceReport: {
-      findFirst: jest.fn(async () => null as any),
-      findUnique: jest.fn(async () => null as any),
+    assessmentInterviewThread: {
+      findUnique: jest.fn(() => Promise.resolve(null)),
     },
-    classificationResult: { findFirst: jest.fn(async () => null as any) },
+    repositoryScanJob: { findFirst: jest.fn(() => Promise.resolve(null)) },
+    technicalEvidenceReport: {
+      findFirst: jest.fn(() => Promise.resolve(null)),
+      findUnique: jest.fn(() => Promise.resolve(null)),
+    },
+    classificationResult: { findFirst: jest.fn(() => Promise.resolve(null)) },
   };
   const runtimeEvents = {
-    getLatestDurableEngineeringState: jest.fn(async () => null as any),
-    getLatestAssessmentRunStart: jest.fn(async () => null as any),
+    getLatestDurableEngineeringState: jest.fn(() => Promise.resolve(null)),
+    getLatestAssessmentRunStart: jest.fn(() => Promise.resolve(null)),
   };
   const service = new AssessmentArtifactProjectionService(
     prisma as never,
@@ -44,7 +47,7 @@ function buildService() {
   return { service, prisma, runtimeEvents };
 }
 
-function confirmedContext(revision = 3): any {
+function confirmedContext(revision = 3): ConfirmedStructuredBusinessContext {
   return {
     assessmentId: ASSESSMENT_ID,
     contextRevision: revision,
@@ -237,7 +240,7 @@ describe("AssessmentArtifactProjectionService", () => {
   it("projects authoritative Business Context and preserves unknown rather than false", async () => {
     const fixture = buildService();
     const context = confirmedContext();
-    context.statements[0]!.statement =
+    context.statements[0].statement =
       "The AI model supports a customer support workflow with staff review.";
     fixture.prisma.assessmentInterviewThread.findUnique.mockResolvedValue({
       stateJson: { confirmedContext: context },
@@ -452,11 +455,11 @@ describe("AssessmentArtifactProjectionService", () => {
   it("sanitizes public Business Context values and keys at the API projection boundary", async () => {
     const fixture = buildService();
     const context = confirmedContext();
-    context.statements[0]!.normalizedValue = {
+    context.statements[0].normalizedValue = {
       resolutionCriteria: "CUSTOMER_CONFIRMED",
       safeField: "CONTEXT_READY customer-visible value",
     };
-    context.statements[0]!.statement =
+    context.statements[0].statement =
       "Customer context CUSTOMER_CONFIRMED is accepted after CONTEXT_READY.";
     fixture.prisma.assessmentInterviewThread.findUnique.mockResolvedValue({
       stateJson: { confirmedContext: context },

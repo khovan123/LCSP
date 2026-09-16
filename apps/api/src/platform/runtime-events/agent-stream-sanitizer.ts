@@ -19,7 +19,7 @@ const SENSITIVE_VALUE_PATTERNS = [
   /\bsk-ant-[A-Za-z0-9._-]+\b/gi,
   /\bsk_(?:live|test)_[A-Za-z0-9_-]{12,}\b/gi,
   /((?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp):\/\/[^:\s/@]+:)[^@\s/]+@/gi,
-  /((?:["\']?)(?:api[_-]?key|access[_-]?token|refresh[_-]?token|secret|password|credential|client[_-]?secret)(?:["\']?)\s*[:=]\s*)[^\s,;}]+/gi,
+  /((?:["']?)(?:api[_-]?key|access[_-]?token|refresh[_-]?token|secret|password|credential|client[_-]?secret)(?:["']?)\s*[:=]\s*)[^\s,;}]+/gi,
 ] as const;
 
 /** Preserve streaming whitespace while removing credential material and bounding one event. */
