@@ -57,7 +57,9 @@ export class AssessmentInterviewSnippetService {
       select: { id: true, commitSha: true },
     });
     if (!snapshot) {
-      throw new NotFoundException({ code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE" });
+      throw new NotFoundException({
+        code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE",
+      });
     }
 
     const scanJob = await this.prisma.repositoryScanJob.findFirst({
@@ -69,7 +71,9 @@ export class AssessmentInterviewSnippetService {
       select: { id: true },
     });
     if (!scanJob) {
-      throw new NotFoundException({ code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE" });
+      throw new NotFoundException({
+        code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE",
+      });
     }
 
     const archive = await this.queryBus.execute<
@@ -87,7 +91,9 @@ export class AssessmentInterviewSnippetService {
       archive.commitSha !== input.snippetRef.commit_sha
     ) {
       (archive.stream as { destroy?: () => void }).destroy?.();
-      throw new NotFoundException({ code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE" });
+      throw new NotFoundException({
+        code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE",
+      });
     }
 
     const source = await readFileFromGzipTar(
@@ -96,7 +102,9 @@ export class AssessmentInterviewSnippetService {
     );
     const hash = `sha256:${createHash("sha256").update(source).digest("hex")}`;
     if (hash !== input.snippetRef.evidence_hash.toLowerCase()) {
-      throw new NotFoundException({ code: "INTERVIEW_SOURCE_SNIPPET_HASH_MISMATCH" });
+      throw new NotFoundException({
+        code: "INTERVIEW_SOURCE_SNIPPET_HASH_MISMATCH",
+      });
     }
 
     const text = source.toString("utf8");
@@ -114,7 +122,11 @@ export class AssessmentInterviewSnippetService {
     let truncated = end < input.snippetRef.end_line;
     const lines: AssessmentInterviewSourceSnippet["lines"] = [];
 
-    for (let line = start; line <= end && lines.length < MAX_SNIPPET_LINES; line += 1) {
+    for (
+      let line = start;
+      line <= end && lines.length < MAX_SNIPPET_LINES;
+      line += 1
+    ) {
       const original = allLines[line - 1] ?? "";
       const sanitized = sanitizedLines[line - 1] ?? "";
       redacted ||= sanitized !== original;
@@ -180,8 +192,13 @@ async function readFileFromGzipTar(
 
       const member = tarMember(header);
       if (member.size < 0) break;
-      if (member.size > MAX_SOURCE_FILE_BYTES && archivePathMatches(member.name, target)) {
-        throw new NotFoundException({ code: "INTERVIEW_SOURCE_SNIPPET_FILE_TOO_LARGE" });
+      if (
+        member.size > MAX_SOURCE_FILE_BYTES &&
+        archivePathMatches(member.name, target)
+      ) {
+        throw new NotFoundException({
+          code: "INTERVIEW_SOURCE_SNIPPET_FILE_TOO_LARGE",
+        });
       }
 
       if (member.regular && archivePathMatches(member.name, target)) {
@@ -203,11 +220,17 @@ async function readFileFromGzipTar(
   throw new NotFoundException({ code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE" });
 }
 
-function tarMember(header: Buffer): { name: string; size: number; regular: boolean } {
+function tarMember(header: Buffer): {
+  name: string;
+  size: number;
+  regular: boolean;
+} {
   const name = readTarString(header.subarray(0, 100));
   const prefix = readTarString(header.subarray(345, 500));
   const sizeRaw = readTarString(header.subarray(124, 136)).trim();
-  const size = sizeRaw ? Number.parseInt(sizeRaw.replace(/\0/g, "").trim(), 8) : 0;
+  const size = sizeRaw
+    ? Number.parseInt(sizeRaw.replace(/\0/g, "").trim(), 8)
+    : 0;
   const type = header[156] ?? 0;
   return {
     name: normalizeArchivePath(prefix ? `${prefix}/${name}` : name),
@@ -218,7 +241,10 @@ function tarMember(header: Buffer): { name: string; size: number; regular: boole
 
 function readTarString(value: Buffer): string {
   const zero = value.indexOf(0);
-  return value.subarray(0, zero >= 0 ? zero : value.length).toString("utf8").trim();
+  return value
+    .subarray(0, zero >= 0 ? zero : value.length)
+    .toString("utf8")
+    .trim();
 }
 
 function archivePathMatches(memberName: string, target: string): boolean {
@@ -251,7 +277,10 @@ function redactSecrets(value: string): string {
   return result;
 }
 
-function boundUtf8(value: string, maxBytes: number): { value: string; truncated: boolean } {
+function boundUtf8(
+  value: string,
+  maxBytes: number,
+): { value: string; truncated: boolean } {
   if (maxBytes <= 0) return { value: "", truncated: value.length > 0 };
   if (Buffer.byteLength(value, "utf8") <= maxBytes) {
     return { value, truncated: false };

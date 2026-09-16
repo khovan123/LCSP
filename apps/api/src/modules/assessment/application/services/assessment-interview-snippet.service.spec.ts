@@ -11,7 +11,12 @@ import { AssessmentInterviewSnippetService } from "./assessment-interview-snippe
 function tarGzip(path: string, source: Buffer): Buffer {
   const header = Buffer.alloc(512);
   header.write(path, 0, Math.min(Buffer.byteLength(path), 100), "utf8");
-  header.write(source.length.toString(8).padStart(11, "0") + "\0", 124, 12, "ascii");
+  header.write(
+    source.length.toString(8).padStart(11, "0") + "\0",
+    124,
+    12,
+    "ascii",
+  );
   header[156] = "0".charCodeAt(0);
   const padding = Buffer.alloc((512 - (source.length % 512)) % 512);
   return gzipSync(Buffer.concat([header, source, padding, Buffer.alloc(1024)]));
@@ -47,7 +52,10 @@ describe("AssessmentInterviewSnippetService pinned snapshot integration", () => 
     const archivedSource = overrides?.source ?? source;
     const prisma = {
       repositorySnapshot: {
-        findFirst: jest.fn(async () => ({ id: "snapshot-1", commitSha: "abc123" })),
+        findFirst: jest.fn(async () => ({
+          id: "snapshot-1",
+          commitSha: "abc123",
+        })),
       },
       repositoryScanJob: {
         findFirst: jest.fn(async () => ({ id: "scan-1" })),
@@ -60,11 +68,16 @@ describe("AssessmentInterviewSnippetService pinned snapshot integration", () => 
         repositoryFullName: "owner/repository",
         contentType: "application/gzip",
         resolvedUrl: "https://example.invalid/archive",
-        stream: Readable.from(tarGzip("repository-abc123/src/gateway.ts", archivedSource)),
+        stream: Readable.from(
+          tarGzip("repository-abc123/src/gateway.ts", archivedSource),
+        ),
       })),
     };
     return {
-      service: new AssessmentInterviewSnippetService(prisma as never, queryBus as never),
+      service: new AssessmentInterviewSnippetService(
+        prisma as never,
+        queryBus as never,
+      ),
       prisma,
       queryBus,
     };
@@ -90,7 +103,9 @@ describe("AssessmentInterviewSnippetService pinned snapshot integration", () => 
     );
     expect(queryBus.execute).toHaveBeenCalledTimes(1);
     expect(result.snippetRef).toEqual(snippetRef(source));
-    expect(result.lines.map((line) => line.line)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(result.lines.map((line) => line.line)).toEqual([
+      1, 2, 3, 4, 5, 6, 7,
+    ]);
     const rendered = result.lines.map((line) => line.text).join("\n");
     expect(rendered).toContain("customer-safe");
     expect(rendered).toContain("[REDACTED]");
@@ -102,7 +117,9 @@ describe("AssessmentInterviewSnippetService pinned snapshot integration", () => 
   });
 
   it("rejects archive bytes that do not match the pinned evidence hash", async () => {
-    const { service } = harness({ source: Buffer.from("changed snapshot bytes", "utf8") });
+    const { service } = harness({
+      source: Buffer.from("changed snapshot bytes", "utf8"),
+    });
 
     await expect(
       service.resolve({
