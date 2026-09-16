@@ -184,7 +184,9 @@ describe("WorkspaceRuntimeEventsController", () => {
 
   it("forwards only the owner-scoped live agent stream", () => {
     const live = new Subject<Record<string, unknown>>();
-    const observeAgentStreamEvents = jest.fn(() => live.asObservable());
+    const observeAgentStreamEvents = jest.fn<
+      (_ownerId: string) => ReturnType<typeof live.asObservable>
+    >(() => live.asObservable());
     const controller = new WorkspaceRuntimeEventsController({
       buildWorkspaceSnapshot: () =>
         Promise.resolve({

@@ -24,21 +24,27 @@ const ASSESSMENT_ID = "assessment-1";
 const RUN_ID = "scan-1";
 const PLANNER_AT = "2026-09-15T01:00:00.000Z";
 
+function asyncUnknownMock() {
+  return jest.fn<(...args: unknown[]) => Promise<unknown>>(() =>
+    Promise.resolve(null),
+  );
+}
+
 function buildService() {
   const prisma = {
     assessmentInterviewThread: {
-      findUnique: jest.fn(() => Promise.resolve(null)),
+      findUnique: asyncUnknownMock(),
     },
-    repositoryScanJob: { findFirst: jest.fn(() => Promise.resolve(null)) },
+    repositoryScanJob: { findFirst: asyncUnknownMock() },
     technicalEvidenceReport: {
-      findFirst: jest.fn(() => Promise.resolve(null)),
-      findUnique: jest.fn(() => Promise.resolve(null)),
+      findFirst: asyncUnknownMock(),
+      findUnique: asyncUnknownMock(),
     },
-    classificationResult: { findFirst: jest.fn(() => Promise.resolve(null)) },
+    classificationResult: { findFirst: asyncUnknownMock() },
   };
   const runtimeEvents = {
-    getLatestDurableEngineeringState: jest.fn(() => Promise.resolve(null)),
-    getLatestAssessmentRunStart: jest.fn(() => Promise.resolve(null)),
+    getLatestDurableEngineeringState: asyncUnknownMock(),
+    getLatestAssessmentRunStart: asyncUnknownMock(),
   };
   const service = new AssessmentArtifactProjectionService(
     prisma as never,
