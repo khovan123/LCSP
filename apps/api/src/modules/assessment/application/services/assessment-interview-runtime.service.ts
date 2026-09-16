@@ -3894,11 +3894,17 @@ function runtimeEventState(
   return { ...publicState(state), pendingDraft: undefined, audit: undefined };
 }
 
-function parseAiDiscoverySnippetRef(value: unknown): AiDiscoverySnippetRef | undefined {
+function parseAiDiscoverySnippetRef(
+  value: unknown,
+): AiDiscoverySnippetRef | undefined {
   const record = objectRecord(value);
   if (!record) return undefined;
-  const snapshotId = nonEmptyString(record.snapshot_id) ? record.snapshot_id.trim() : "";
-  const commitSha = nonEmptyString(record.commit_sha) ? record.commit_sha.trim() : "";
+  const snapshotId = nonEmptyString(record.snapshot_id)
+    ? record.snapshot_id.trim()
+    : "";
+  const commitSha = nonEmptyString(record.commit_sha)
+    ? record.commit_sha.trim()
+    : "";
   const filePath = nonEmptyString(record.file_path)
     ? record.file_path.replaceAll("\\", "/").replace(/^\/+/, "")
     : "";
