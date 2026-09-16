@@ -28,27 +28,19 @@ export class DisableMfaHandler implements ICommandHandler<DisableMfaCommand> {
   async execute(
     command: DisableMfaCommand,
   ): Promise<AuthProblemResult | DisableMfaSuccess> {
-    const { sessionToken, requestMeta } = command;
+    const { userId, sessionId, requestMeta } = command;
     const correlationId =
-      requestMeta.correlationId ?? this.support.createCorrelationId();
+      requestMeta?.correlationId ?? this.support.createCorrelationId();
 
-    const session = await this.support.findValidSession(
-      this.repositories,
-      sessionToken,
-    );
-    if (!session) {
+    if (!userId) {
       return createProblemResult(
         AUTH_ERROR_CODES.sessionInvalid,
         correlationId,
       );
     }
 
-    if (!session.isMfaVerified()) {
-      return createProblemResult(AUTH_ERROR_CODES.mfaRequired, correlationId);
-    }
-
     const enrollment = await this.repositories.mfaEnrollments.findByUserId(
-      session.userId,
+      userId,
     );
     if (!enrollment) {
       return { ok: true, correlationId: correlationId };
@@ -56,7 +48,7 @@ export class DisableMfaHandler implements ICommandHandler<DisableMfaCommand> {
 
     const user = await this.support.resolveUserById(
       this.repositories,
-      session.userId,
+      userId,
     );
     if (!user) {
       return createProblemResult(
@@ -66,24 +58,31 @@ export class DisableMfaHandler implements ICommandHandler<DisableMfaCommand> {
     }
 
     const now = this.support.now();
-    await this.repositories.mfaEnrollments.deleteByUserId(session.userId);
+    await this.repositories.mfaEnrollments.deleteByUserId(userId);
     await this.repositories.mfaRecoveryCodes.revokeActiveForUser(
-      session.userId,
+      userId,
       now,
     );
     user.mfaRequired = false;
     await this.repositories.users.save(user);
-    session.mfaVerifiedAt = null;
-    await this.repositories.sessions.save(session);
+
+    if (sessionId) {
+      const session = await this.repositories.sessions.findById(sessionId);
+      if (session) {
+        session.mfaVerifiedAt = null;
+        await this.repositories.sessions.save(session);
+      }
+    }
 
     await this.support.recordAudit(this.repositories, {
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaDisabled,
-      actor_id: session.userId,
+      actor_id: userId,
       decision: AUDIT_DECISIONS.allow,
       correlationId: correlationId,
-      session_id: session.id,
+      session_id: sessionId ?? null,
     });
 
     return { ok: true, correlationId: correlationId };
   }
+
 }

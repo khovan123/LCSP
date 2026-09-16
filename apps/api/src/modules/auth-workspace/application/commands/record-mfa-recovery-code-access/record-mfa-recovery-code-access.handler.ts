@@ -40,23 +40,15 @@ export class RecordMfaRecoveryCodeAccessHandler implements ICommandHandler<Recor
   async execute(
     command: RecordMfaRecoveryCodeAccessCommand,
   ): Promise<AuthProblemResult | RecordMfaRecoveryCodeAccessSuccess> {
-    const { sessionToken, action, requestMeta } = command;
+    const { userId, action, sessionId, requestMeta } = command;
     const correlationId =
-      requestMeta.correlationId ?? this.support.createCorrelationId();
+      requestMeta?.correlationId ?? this.support.createCorrelationId();
 
-    const session = await this.support.findValidSession(
-      this.repositories,
-      sessionToken,
-    );
-    if (!session) {
+    if (!userId) {
       return createProblemResult(
         AUTH_ERROR_CODES.sessionInvalid,
         correlationId,
       );
-    }
-
-    if (!session.isMfaVerified()) {
-      return createProblemResult(AUTH_ERROR_CODES.mfaRequired, correlationId);
     }
 
     const eventType = RECOVERY_CODE_ACCESS_EVENTS[action];
@@ -69,15 +61,16 @@ export class RecordMfaRecoveryCodeAccessHandler implements ICommandHandler<Recor
 
     await this.support.recordAudit(this.repositories, {
       event_type: eventType,
-      actor_id: session.userId,
+      actor_id: userId,
       resource_type: AUDIT_RESOURCE_TYPES.authMfaRecoveryCode,
-      resource_id: session.userId,
+      resource_id: userId,
       decision: AUDIT_DECISIONS.allow,
       correlationId: correlationId,
-      session_id: session.id,
+      session_id: sessionId ?? null,
       action,
     });
 
     return { ok: true, correlationId: correlationId };
   }
+
 }

@@ -46,23 +46,12 @@ import {
   SignInCommand,
   SignUpCommand,
   UpdateProfileCommand,
-  type UpdateProfilePayload,
   VerifyMfaOtpCommand,
   VerifyMfaRecoveryCodeCommand,
 } from "../../application/commands/index.ts";
 import type {
-  ConfirmRecoveryPayload,
-  CredentialPayload,
-  OAuthCallbackPayload,
-  OAuthLinkCallbackPayload,
-  OAuthLinkStartPayload,
-  OAuthStartPayload,
-  PasswordReauthPayload,
   RequestMeta,
-  RequestRecoveryPayload,
   SensitiveRouteCheckDto,
-  SignUpPayload,
-  WorkspaceRequest,
 } from "../../application/contracts/auth-workspace/index.ts";
 import {
   CheckSensitiveRouteQuery,
@@ -71,17 +60,24 @@ import {
   ListAuthRepositoriesQuery,
   ListAuthSessionsQuery,
 } from "../../application/queries/index.ts";
+import {
+  CheckSensitiveRouteDto,
+  ConfirmPasswordRecoveryDto,
+  OAuthCallbackQueryDto,
+  OAuthLinkCallbackQueryDto,
+  OAuthLinkStartQueryDto,
+  OAuthStartQueryDto,
+  PasswordReauthDto,
+  RecordMfaRecoveryCodeAccessDto,
+  RequestPasswordRecoveryDto,
+  RevokeSessionDto,
+  SignInDto,
+  SignUpDto,
+  UpdateProfileDto,
+  VerifyMfaOtpDto,
+  VerifyMfaRecoveryCodeDto,
+} from "./dto/index.ts";
 
-type SensitiveRouteCheckPayload = {
-  method?: unknown;
-  path?: unknown;
-  route?: unknown;
-};
-
-type MfaRecoveryCodeAccessPayload = {
-  action?: unknown;
-  session_token?: string;
-};
 
 const MFA_RECOVERY_CODE_ACCESS_ACTION_VALUES = Object.values(
   MFA_RECOVERY_CODE_ACCESS_ACTIONS,
@@ -97,7 +93,7 @@ export class AuthWorkspaceController {
   @Post("auth/sign-in")
   @HttpCode(HttpStatus.OK)
   async signIn(
-    @Body() payload: CredentialPayload,
+    @Body() payload: SignInDto,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
     return resultEnvelope(
@@ -109,7 +105,7 @@ export class AuthWorkspaceController {
 
   @Post("auth/sign-up")
   async signUp(
-    @Body() payload: SignUpPayload,
+    @Body() payload: SignUpDto,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
     return resultEnvelope(
@@ -126,7 +122,7 @@ export class AuthWorkspaceController {
 
   @Post("auth/revoke-session")
   async revokeSession(
-    @Body() body: { session_token?: string },
+    @Body() body: RevokeSessionDto,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
     return resultEnvelope(
@@ -142,16 +138,14 @@ export class AuthWorkspaceController {
   @Get("workspace")
   @UseGuards(RbacGuard)
   @RequireSession()
-  async getWorkspace(
-    @Req() request: AuthenticatedRequest,
-    @Headers("authorization") authorization?: string,
-  ) {
-    const workspaceRequest: WorkspaceRequest = {
-      session_token: bearerToken(authorization),
-      correlationId: request.correlationId,
-    };
+  async getWorkspace(@Req() request: AuthenticatedRequest) {
     return resultEnvelope(
-      await this.queryBus.execute(new GetWorkspaceQuery(workspaceRequest)),
+      await this.queryBus.execute(
+        new GetWorkspaceQuery(
+          request.rbacContext,
+          request.correlationId,
+        ),
+      ),
     );
   }
 
@@ -159,15 +153,12 @@ export class AuthWorkspaceController {
   @UseGuards(RbacGuard)
   @RequireSession()
   @AllowPendingMfa()
-  async enrollMfa(
-    @Body() body: { session_token?: string },
-    @Headers("authorization") authorization: string | undefined,
-    @Req() request: AuthenticatedRequest,
-  ) {
+  async enrollMfa(@Req() request: AuthenticatedRequest) {
     return resultEnvelope(
       await this.commandBus.execute(
         new EnrollMfaCommand(
-          bearerToken(authorization) ?? body.session_token ?? "",
+          request.rbacContext.userId,
+          request.rbacContext.sessionId,
           requestMeta(request.correlationId),
         ),
       ),
@@ -177,15 +168,12 @@ export class AuthWorkspaceController {
   @Delete("auth/mfa")
   @UseGuards(RbacGuard)
   @RequireSession()
-  async disableMfa(
-    @Body() body: { session_token?: string },
-    @Headers("authorization") authorization: string | undefined,
-    @Req() request: AuthenticatedRequest,
-  ) {
+  async disableMfa(@Req() request: AuthenticatedRequest) {
     return resultEnvelope(
       await this.commandBus.execute(
         new DisableMfaCommand(
-          bearerToken(authorization) ?? body.session_token ?? "",
+          request.rbacContext.userId,
+          request.rbacContext.sessionId,
           requestMeta(request.correlationId),
         ),
       ),
@@ -194,7 +182,7 @@ export class AuthWorkspaceController {
 
   @Post("auth/mfa/verify-otp")
   async verifyMfaOtp(
-    @Body() body: { session_token?: string; otp?: string },
+    @Body() body: VerifyMfaOtpDto,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
     return resultEnvelope(
@@ -210,7 +198,7 @@ export class AuthWorkspaceController {
 
   @Post("auth/mfa/recovery-code/verify")
   async verifyMfaRecoveryCode(
-    @Body() body: { session_token?: string; code?: string },
+    @Body() body: VerifyMfaRecoveryCodeDto,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
     return resultEnvelope(
@@ -233,15 +221,12 @@ export class AuthWorkspaceController {
     pathTemplate: "/auth/mfa/recovery-codes",
     aliases: [{ method: "POST", pathTemplate: "/api/auth/mfa/recovery-codes" }],
   })
-  async generateMfaRecoveryCodes(
-    @Body() body: { session_token?: string },
-    @Headers("authorization") authorization: string | undefined,
-    @Req() request: AuthenticatedRequest,
-  ) {
+  async generateMfaRecoveryCodes(@Req() request: AuthenticatedRequest) {
     return resultEnvelope(
       await this.commandBus.execute(
         new GenerateMfaRecoveryCodesCommand(
-          bearerToken(authorization) ?? body.session_token ?? "",
+          request.rbacContext.userId,
+          request.rbacContext.sessionId,
           requestMeta(request.correlationId),
         ),
       ),
@@ -252,8 +237,7 @@ export class AuthWorkspaceController {
   @UseGuards(RbacGuard)
   @RequireSession()
   async recordMfaRecoveryCodeAccess(
-    @Body() body: MfaRecoveryCodeAccessPayload,
-    @Headers("authorization") authorization: string | undefined,
+    @Body() body: RecordMfaRecoveryCodeAccessDto,
     @Req() request: AuthenticatedRequest,
   ) {
     const action =
@@ -275,8 +259,9 @@ export class AuthWorkspaceController {
     return resultEnvelope(
       await this.commandBus.execute(
         new RecordMfaRecoveryCodeAccessCommand(
-          bearerToken(authorization) ?? body.session_token ?? "",
+          request.rbacContext.userId,
           action,
+          request.rbacContext.sessionId,
           requestMeta(request.correlationId),
         ),
       ),
@@ -288,23 +273,21 @@ export class AuthWorkspaceController {
   @RequireSession()
   @AllowPendingMfa()
   async reauthenticatePassword(
-    @Body() body: PasswordReauthPayload,
-    @Headers("authorization") authorization: string | undefined,
+    @Body() body: PasswordReauthDto,
     @Req() request: AuthenticatedRequest,
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
         new ReauthenticatePasswordCommand(
-          {
-            session_token:
-              bearerToken(authorization) ?? body.session_token ?? "",
-            password: body.password,
-          },
+          body.password ?? "",
+          request.rbacContext.userId,
+          request.rbacContext.sessionId,
           requestMeta(request.correlationId),
         ),
       ),
     );
   }
+
 
   @Post("auth/sensitive-route/check")
   @HttpCode(HttpStatus.OK)
@@ -312,7 +295,7 @@ export class AuthWorkspaceController {
   @RequireSession()
   @AllowPendingMfa()
   async checkSensitiveRoute(
-    @Body() body: SensitiveRouteCheckPayload,
+    @Body() body: CheckSensitiveRouteDto,
     @Req() request: AuthenticatedRequest,
   ) {
     const method = typeof body.method === "string" ? body.method : "";
@@ -349,23 +332,21 @@ export class AuthWorkspaceController {
   @UseGuards(RbacGuard)
   @RequireSession()
   async updateProfile(
-    @Body() body: UpdateProfilePayload & { session_token?: string },
-    @Headers("authorization") authorization: string | undefined,
+    @Body() body: UpdateProfileDto,
     @Req() request: AuthenticatedRequest,
   ) {
-    const { session_token, ...payload } = body;
     return resultEnvelope(
       await this.commandBus.execute(
         new UpdateProfileCommand(
-          {
-            ...payload,
-            session_token: bearerToken(authorization) ?? session_token ?? "",
-          },
+          body,
+          request.rbacContext.userId,
           requestMeta(request.correlationId),
         ),
       ),
     );
   }
+
+
 
   @Get("auth/profile")
   @UseGuards(RbacGuard)
@@ -420,7 +401,7 @@ export class AuthWorkspaceController {
 
   @Post("auth/recovery/request")
   async requestPasswordRecovery(
-    @Body() payload: RequestRecoveryPayload,
+    @Body() payload: RequestPasswordRecoveryDto,
     @Headers("x-correlation-id") correlationId?: string,
     @Headers("x-app-origin") appOrigin?: string,
   ) {
@@ -436,7 +417,7 @@ export class AuthWorkspaceController {
 
   @Post("auth/recovery/confirm")
   async confirmPasswordRecovery(
-    @Body() payload: ConfirmRecoveryPayload,
+    @Body() payload: ConfirmPasswordRecoveryDto,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
     return resultEnvelope(
@@ -448,32 +429,24 @@ export class AuthWorkspaceController {
 
   @Get("auth/oauth/start")
   async oauthStart(
-    @Query("provider") provider?: string,
-    @Query("redirect_uri") redirectUri?: string,
+    @Query() query: OAuthStartQueryDto,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    const payload: OAuthStartPayload = {
-      provider,
-      redirect_uri: redirectUri,
-    };
     return resultEnvelope(
       await this.commandBus.execute(
-        new OAuthStartCommand(payload, requestMeta(correlationId)),
+        new OAuthStartCommand(query, requestMeta(correlationId)),
       ),
     );
   }
 
   @Get("auth/oauth/callback")
   async oauthCallback(
-    @Query("code") code?: string,
-    @Query("state") state?: string,
-    @Query("provider") provider?: string,
+    @Query() query: OAuthCallbackQueryDto,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    const payload: OAuthCallbackPayload = { code, state, provider };
     return resultEnvelope(
       await this.commandBus.execute(
-        new OAuthCallbackCommand(payload, requestMeta(correlationId)),
+        new OAuthCallbackCommand(query, requestMeta(correlationId)),
       ),
     );
   }
@@ -483,18 +456,13 @@ export class AuthWorkspaceController {
   @RequireSession()
   async oauthLinkStart(
     @Req() request: AuthenticatedRequest,
-    @Query("provider") provider?: string,
-    @Query("redirect_uri") redirectUri?: string,
+    @Query() query: OAuthLinkStartQueryDto,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    const payload: OAuthLinkStartPayload = {
-      provider,
-      redirect_uri: redirectUri,
-    };
     return resultEnvelope(
       await this.commandBus.execute(
         new OAuthLinkStartCommand(
-          payload,
+          query,
           request.rbacContext.userId,
           request.rbacContext.sessionId,
           requestMeta(correlationId),
@@ -508,16 +476,13 @@ export class AuthWorkspaceController {
   @RequireSession()
   async oauthLinkCallback(
     @Req() request: AuthenticatedRequest,
-    @Query("code") code?: string,
-    @Query("state") state?: string,
-    @Query("provider") provider?: string,
+    @Query() query: OAuthLinkCallbackQueryDto,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    const payload: OAuthLinkCallbackPayload = { code, state, provider };
     return resultEnvelope(
       await this.commandBus.execute(
         new OAuthLinkCallbackCommand(
-          payload,
+          query,
           request.rbacContext.userId,
           request.rbacContext.sessionId,
           requestMeta(correlationId),
@@ -534,10 +499,3 @@ function requestMeta(correlationId?: string, appOrigin?: string): RequestMeta {
   };
 }
 
-function bearerToken(authorization?: string): string | undefined {
-  if (!authorization) {
-    return undefined;
-  }
-  const [scheme, token] = authorization.split(" ");
-  return scheme?.toLowerCase() === "bearer" && token ? token : undefined;
-}

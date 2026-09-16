@@ -2,7 +2,10 @@ import type { RequestMeta } from "../../contracts/auth-workspace/common.contract
 
 export class DisableMfaCommand {
   constructor(
-    readonly sessionToken: string,
+    readonly userId: string,
+    readonly sessionId?: string,
     readonly requestMeta: RequestMeta = {},
   ) {}
 }
+
+

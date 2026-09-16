@@ -30,31 +30,22 @@ export class ReauthenticatePasswordHandler implements ICommandHandler<Reauthenti
   async execute(
     command: ReauthenticatePasswordCommand,
   ): Promise<AuthProblemResult | PasswordReauthSuccess> {
-    const { payload, requestMeta } = command;
+    const { password, userId, sessionId, requestMeta } = command;
     const correlationId =
-      requestMeta.correlationId ?? this.support.createCorrelationId();
+      requestMeta?.correlationId ?? this.support.createCorrelationId();
 
-    if (
-      typeof payload.session_token !== "string" ||
-      payload.session_token.trim().length === 0
-    ) {
-      return createProblemResult(AUTH_ERROR_CODES.authRequired, correlationId);
-    }
-
-    if (
-      typeof payload.password !== "string" ||
-      payload.password.trim().length === 0
-    ) {
+    if (typeof password !== "string" || password.trim().length === 0) {
       return createProblemResult(
         AUTH_ERROR_CODES.validationFailed,
         correlationId,
       );
     }
 
-    const session = await this.support.findValidSession(
-      this.repositories,
-      payload.session_token,
-    );
+    if (!userId || !sessionId) {
+      return createProblemResult(AUTH_ERROR_CODES.authRequired, correlationId);
+    }
+
+    const session = await this.repositories.sessions.findById(sessionId);
     if (!session) {
       return createProblemResult(
         AUTH_ERROR_CODES.sessionInvalid,
@@ -64,7 +55,7 @@ export class ReauthenticatePasswordHandler implements ICommandHandler<Reauthenti
 
     const user = await this.support.resolveUserById(
       this.repositories,
-      session.userId,
+      userId,
     );
     if (!user) {
       return createProblemResult(
@@ -73,7 +64,7 @@ export class ReauthenticatePasswordHandler implements ICommandHandler<Reauthenti
       );
     }
 
-    if (!verifySecret(payload.password, user.passwordHash)) {
+    if (!verifySecret(password, user.passwordHash)) {
       await this.support.recordAudit(this.repositories, {
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginFailed,
         actor_id: user.id,
@@ -106,4 +97,5 @@ export class ReauthenticatePasswordHandler implements ICommandHandler<Reauthenti
       verified: true,
     };
   }
+
 }

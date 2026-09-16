@@ -14,8 +14,19 @@ export type UpdateProfilePayload = {
 };
 
 export class UpdateProfileCommand {
+  readonly payload: UpdateProfilePayload;
+  readonly userId: string;
+  readonly requestMeta: RequestMeta;
+
   constructor(
-    public readonly payload: UpdateProfilePayload,
-    public readonly requestMeta: RequestMeta,
-  ) {}
+    payload: UpdateProfilePayload,
+    userId: string,
+    requestMeta: RequestMeta = {},
+  ) {
+    this.payload = payload;
+    this.userId = userId;
+    this.requestMeta = requestMeta;
+  }
 }
+
+
