@@ -41,7 +41,7 @@ export class BillingAdminReconciliationController {
         }),
       );
     } catch (error) {
-      throw toBillingAdminProblem(error, "billing-admin");
+      toBillingAdminProblem(error, "billing-admin");
     }
   }
 
@@ -50,7 +50,7 @@ export class BillingAdminReconciliationController {
     try {
       return resultEnvelope(await this.service.get(paymentId));
     } catch (error) {
-      throw toBillingAdminProblem(error, "billing-admin");
+      toBillingAdminProblem(error, "billing-admin");
     }
   }
 
@@ -78,7 +78,7 @@ export class BillingAdminReconciliationController {
         }),
       );
     } catch (error) {
-      throw toBillingAdminProblem(error, correlationId);
+      toBillingAdminProblem(error, correlationId);
     }
   }
 
@@ -107,12 +107,12 @@ export class BillingAdminReconciliationController {
         }),
       );
     } catch (error) {
-      throw toBillingAdminProblem(error, correlationId);
+      toBillingAdminProblem(error, correlationId);
     }
   }
 }
 
-function toBillingAdminProblem(error: unknown, correlationId: string) {
+function toBillingAdminProblem(error: unknown, correlationId: string): never {
   const code = error instanceof Error ? error.message : "INTERNAL_ERROR";
   const mapped =
     code === "PAYMENT_NOT_FOUND"
@@ -141,7 +141,10 @@ function toBillingAdminProblem(error: unknown, correlationId: string) {
                     409,
                   ] as const)
                 : null;
-  if (!mapped) throw error;
+  if (!mapped) {
+    if (error instanceof Error) throw error;
+    throw new Error("INTERNAL_ERROR", { cause: error });
+  }
   throw problemException(mapped[0], correlationId, {
     status: mapped[1],
   });
