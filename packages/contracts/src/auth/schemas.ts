@@ -146,7 +146,7 @@ export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
  */
 export const checkSensitiveRouteSchema = z
   .object({
-    method: z.string().min(1),
+    method: z.string().trim().min(1),
     path: z.string().optional(),
     route: z.string().optional(),
   })

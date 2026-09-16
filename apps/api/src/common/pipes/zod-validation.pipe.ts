@@ -1,6 +1,5 @@
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { HttpStatus, Injectable, type PipeTransform } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
 import type { z } from "zod";
 
 import { problemException } from "../../platform/problems/problem-factory.js";
