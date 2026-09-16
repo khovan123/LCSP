@@ -125,6 +125,30 @@ _ASSIGNMENT_RE = re.compile(
     r"\b(?:const|let|var)?\s*([A-Za-z_$][\w$]*)\s*=|^\s*([A-Za-z_][\w]*)\s*="
 )
 
+_UNMODELED_OUTBOUND_CLIENT_PATTERNS = (
+    (
+        "GRAPHQL_CLIENT",
+        re.compile(r"@apollo/client|\bApolloClient\b|graphql-request|\bGraphQLClient\b|\burql\b", re.I),
+    ),
+    (
+        "GRPC_CLIENT",
+        re.compile(
+            r"@grpc/grpc-js|\bgrpc\.(?:Dial|insecure_channel|secure_channel)\b|"
+            r"\bManagedChannelBuilder\b|\bGrpcChannel\.ForAddress\b|"
+            r"tonic::transport::Channel",
+            re.I,
+        ),
+    ),
+    (
+        "RETROFIT_CLIENT",
+        re.compile(
+            r"\bRetrofit\.Builder\b|\bretrofit2\.|"
+            r"@(?:GET|POST|PUT|PATCH|DELETE|HTTP)\s*\(",
+            re.I,
+        ),
+    ),
+)
+
 # Discovery confirmation is source-seeded, but coverage is graph-owned.  These
 # relations are deliberately broader than lexical HTTP detection so parameters,
 # config objects, helpers, DI/service dispatch, GraphQL/gRPC and cross-module hops
@@ -224,6 +248,7 @@ class AIDiscoveryEnricher:
                 continue
             aliases = _env_aliases(lines)
             self._environment_and_conditions(program, relative, lines, aliases)
+            self._preserve_unmodeled_transport_frontiers(program, relative, lines)
             self._outbound_candidates(program, relative, lines, aliases)
             self._guard_invocations(
                 program,
@@ -466,6 +491,43 @@ class AIDiscoveryEnricher:
             note = f"ai_discovery_unsupported_source:extension={suffix}:example={rel}"
             if note not in program.coverage_notes:
                 program.coverage_notes.append(note)
+
+    @staticmethod
+    def _preserve_unmodeled_transport_frontiers(
+        program: SemanticProgram, relative: str, lines: list[str]
+    ) -> None:
+        """Keep client-framework flows unresolved until PGE models them end-to-end."""
+        for transport, pattern in _UNMODELED_OUTBOUND_CLIENT_PATTERNS:
+            for line_no, line in enumerate(lines, start=1):
+                if not pattern.search(line):
+                    continue
+                key = f"ai-coverage-unresolved:transport:{transport}:{relative}"
+                program.add_node(
+                    SemanticNodeFact(
+                        key,
+                        "UNRESOLVED_DYNAMIC_TARGET",
+                        f"unmodeled outbound client flow: {transport}",
+                        relative,
+                        line_no,
+                        line_no,
+                        attributes={
+                            "aiMaterial": True,
+                            "aiDiscoveryReason": "UNMODELED_OUTBOUND_CLIENT_FLOW",
+                            "transport": transport,
+                        },
+                        coverage_state="LIMITED",
+                        resolution_state="UNRESOLVED",
+                    )
+                )
+                if key not in program.unresolved_frontiers:
+                    program.unresolved_frontiers.append(key)
+                note = (
+                    "ai_discovery_unmodeled_transport:"
+                    f"transport={transport}:file={relative}:line={line_no}"
+                )
+                if note not in program.coverage_notes:
+                    program.coverage_notes.append(note)
+                break
 
     def _source_files(self) -> list[Path]:
         result: list[Path] = []
@@ -1071,26 +1133,20 @@ def _finding(
         raw_end = int(source.get("end_line") or start)
         end = max(start, min(raw_end, start + 6))
         source_hash = str(source.get("source_hash") or "")
-        evidence_hash = (
-            source_hash
-            if re.fullmatch(r"sha256:[0-9a-f]{64}", source_hash, re.I)
-            else "sha256:" + hashlib.sha256(
-                (
-                    f"{graph.snapshot_id}|{graph.commit_sha}|"
-                    f"{source.get('file_path')}|{start}|{end}|{node_id}"
-                ).encode()
-            ).hexdigest()
-        )
-        result["snippet_ref"] = {
-            "snapshot_id": graph.snapshot_id,
-            "commit_sha": graph.commit_sha,
-            "file_path": str(source["file_path"]),
-            "symbol": source.get("symbol_ref"),
-            "start_line": start,
-            "end_line": end,
-            "evidence_hash": evidence_hash,
-            "snippet_policy": "PINNED_SNAPSHOT_BOUNDED_REDACTED_V1",
-        }
+        # The snippet resolver verifies the complete pinned file bytes, so only emit a
+        # customer-display locator when PGE carries that exact full-file digest. A
+        # synthetic locator hash would be unverifiable and must not reach Interview.
+        if re.fullmatch(r"sha256:[0-9a-f]{64}", source_hash, re.I):
+            result["snippet_ref"] = {
+                "snapshot_id": graph.snapshot_id,
+                "commit_sha": graph.commit_sha,
+                "file_path": str(source["file_path"]),
+                "symbol": source.get("symbol_ref"),
+                "start_line": start,
+                "end_line": end,
+                "evidence_hash": source_hash.lower(),
+                "snippet_policy": "PINNED_SNAPSHOT_BOUNDED_REDACTED_V1",
+            }
     return result
 
 

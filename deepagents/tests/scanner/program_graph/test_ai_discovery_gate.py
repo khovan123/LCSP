@@ -180,6 +180,41 @@ def test_partial_coverage_never_becomes_ai_absent_confirmed(tmp_path: Path) -> N
 
 
 
+def test_unmodeled_graphql_grpc_and_retrofit_clients_preserve_ai_frontier(
+    tmp_path: Path,
+) -> None:
+    cases = (
+        (
+            "graphql",
+            "client.ts",
+            'import { GraphQLClient } from "graphql-request";\nconst client = new GraphQLClient(endpoint);\n',
+        ),
+        (
+            "grpc",
+            "client.go",
+            'conn, err := grpc.Dial(target, grpc.WithTransportCredentials(creds))\n',
+        ),
+        (
+            "retrofit",
+            "Gateway.kt",
+            'val client = Retrofit.Builder().baseUrl(endpoint).build()\n',
+        ),
+    )
+
+    for case_name, filename, source in cases:
+        case_dir = tmp_path / case_name
+        case_dir.mkdir()
+        discovery = _discovery(case_dir, source, filename=filename)
+        assert discovery["gate"] == "AI_UNKNOWN"
+        assert discovery["coverage_state"] == "PARTIAL"
+        assert discovery["material_unresolved_frontiers"]
+        assert any(
+            item["kind"] == "DYNAMIC_TARGET"
+            and item["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+            for item in discovery["findings"]
+        )
+
+
 def test_dynamic_outbound_target_blocks_false_absence_until_pge_resolves_flow(
     tmp_path: Path,
 ) -> None:
