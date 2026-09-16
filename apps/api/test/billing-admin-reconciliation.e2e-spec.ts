@@ -18,7 +18,7 @@ import {
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest, successBody } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 describe("Admin billing reconciliation (e2e)", () => {
   let app: INestApplication;

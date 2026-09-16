@@ -41,7 +41,7 @@ export class BillingAdminReconciliationController {
         }),
       );
     } catch (error) {
-      toBillingAdminProblem(error, "billing-admin");
+      throw toBillingAdminProblem(error, "billing-admin");
     }
   }
 
@@ -50,7 +50,7 @@ export class BillingAdminReconciliationController {
     try {
       return resultEnvelope(await this.service.get(paymentId));
     } catch (error) {
-      toBillingAdminProblem(error, "billing-admin");
+      throw toBillingAdminProblem(error, "billing-admin");
     }
   }
 
@@ -78,7 +78,7 @@ export class BillingAdminReconciliationController {
         }),
       );
     } catch (error) {
-      toBillingAdminProblem(error, correlationId);
+      throw toBillingAdminProblem(error, correlationId);
     }
   }
 
@@ -107,7 +107,7 @@ export class BillingAdminReconciliationController {
         }),
       );
     } catch (error) {
-      toBillingAdminProblem(error, correlationId);
+      throw toBillingAdminProblem(error, correlationId);
     }
   }
 }
