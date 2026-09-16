@@ -6,6 +6,8 @@ import {
 } from "@lcsp/contracts/auth";
 import { Logger } from "@nestjs/common";
 
+import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+
 import { MfaRateLimit } from "../../../domain/entities/mfa-rate-limit.entity.ts";
 import {
   hashMfaRecoveryCode,
@@ -20,7 +22,8 @@ import { VerifyMfaRecoveryCodeCommand } from "./verify-mfa-recovery-code.command
 const MFA_RECOVERY_RATE_LIMIT = 5;
 const MFA_RECOVERY_LOCK_WINDOW_MS = 15 * 60_000;
 
-export class VerifyMfaRecoveryCodeHandler {
+@CommandHandler(VerifyMfaRecoveryCodeCommand)
+export class VerifyMfaRecoveryCodeHandler implements ICommandHandler<VerifyMfaRecoveryCodeCommand> {
   private readonly logger = new Logger(VerifyMfaRecoveryCodeHandler.name);
 
   constructor(

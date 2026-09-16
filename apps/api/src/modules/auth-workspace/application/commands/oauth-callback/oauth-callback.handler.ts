@@ -6,6 +6,8 @@ import {
   createProblemResult,
 } from "@lcsp/contracts/auth";
 
+import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+
 import type { OAuthCallbackClaims } from "../../../infrastructure/oauth/oauth-provider.interface.ts";
 import type { OAuthProviderRegistry } from "../../../infrastructure/oauth/oauth-provider.registry.ts";
 import type { AuthProblemResult } from "../../contracts/auth-workspace/common.contract.ts";
@@ -14,7 +16,8 @@ import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-wor
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { OAuthCallbackCommand } from "./oauth-callback.command.ts";
 
-export class OAuthCallbackHandler {
+@CommandHandler(OAuthCallbackCommand)
+export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
     private readonly repositories: AuthWorkspaceRepositories,

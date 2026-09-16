@@ -7,6 +7,8 @@ import {
   createProblemResult,
 } from "@lcsp/contracts/auth";
 
+import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+
 import { EmailAddress } from "../../../domain/value-objects/email-address.value-object.ts";
 import type { AuthProblemResult } from "../../contracts/auth-workspace/common.contract.ts";
 import type { UpdateProfileSuccess } from "../../contracts/auth-workspace/profile.contract.ts";
@@ -19,7 +21,8 @@ import {
 
 const MAX_DISPLAY_NAME_LENGTH = 120;
 
-export class UpdateProfileHandler {
+@CommandHandler(UpdateProfileCommand)
+export class UpdateProfileHandler implements ICommandHandler<UpdateProfileCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
     private readonly repositories: AuthWorkspaceRepositories,

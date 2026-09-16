@@ -6,6 +6,8 @@ import {
 } from "@lcsp/contracts/auth";
 import { Logger } from "@nestjs/common";
 
+import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+
 import { MfaRateLimit } from "../../../domain/entities/mfa-rate-limit.entity.ts";
 import {
   decryptMfaSecret,
@@ -22,7 +24,8 @@ const MFA_LOCK_WINDOW_MS = 15 * 60_000;
 // ±1 TOTP step (30s) plus clock-skew slack; anything older can never be replayed.
 const OTP_USED_RETENTION_MS = 5 * 60_000;
 
-export class VerifyMfaOtpHandler {
+@CommandHandler(VerifyMfaOtpCommand)
+export class VerifyMfaOtpHandler implements ICommandHandler<VerifyMfaOtpCommand> {
   private readonly logger = new Logger(VerifyMfaOtpHandler.name);
 
   constructor(

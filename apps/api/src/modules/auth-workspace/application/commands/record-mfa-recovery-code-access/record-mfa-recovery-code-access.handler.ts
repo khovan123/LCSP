@@ -6,6 +6,8 @@ import {
   createProblemResult,
 } from "@lcsp/contracts/auth";
 
+import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+
 import type { AuthProblemResult } from "../../contracts/auth-workspace/common.contract.ts";
 import type { RecordMfaRecoveryCodeAccessSuccess } from "../../contracts/auth-workspace/mfa.contract.ts";
 import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-workspace-repositories.ts";
@@ -23,7 +25,8 @@ const RECOVERY_CODE_ACCESS_EVENTS = {
     AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodeCopied,
 } as const;
 
-export class RecordMfaRecoveryCodeAccessHandler {
+@CommandHandler(RecordMfaRecoveryCodeAccessCommand)
+export class RecordMfaRecoveryCodeAccessHandler implements ICommandHandler<RecordMfaRecoveryCodeAccessCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
     private readonly repositories: AuthWorkspaceRepositories,

@@ -1,13 +1,16 @@
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { AUTH_LEGACY_AUDIT_EVENT_TYPES } from "@lcsp/contracts/auth";
 
+import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+
 import { fingerprintToken } from "../../../infrastructure/security/security.utils.ts";
 import type { RevokeSessionSuccess } from "../../contracts/auth-workspace/revoke-session.contract.ts";
 import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-workspace-repositories.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { RevokeSessionCommand } from "./revoke-session.command.ts";
 
-export class RevokeSessionHandler {
+@CommandHandler(RevokeSessionCommand)
+export class RevokeSessionHandler implements ICommandHandler<RevokeSessionCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
     private readonly repositories: AuthWorkspaceRepositories,

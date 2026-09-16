@@ -4,6 +4,7 @@ import {
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
   createProblemResult,
 } from "@lcsp/contracts/auth";
+import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import type { ConfigService } from "@nestjs/config";
 
 import { OAuthState } from "../../../domain/models/auth-workspace.models.ts";
@@ -17,7 +18,8 @@ import { OAuthLinkStartCommand } from "./oauth-link-start.command.ts";
 
 const OAUTH_STATE_TTL_MS = 10 * 60_000;
 
-export class OAuthLinkStartHandler {
+@CommandHandler(OAuthLinkStartCommand)
+export class OAuthLinkStartHandler implements ICommandHandler<OAuthLinkStartCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
     private readonly repositories: AuthWorkspaceRepositories,

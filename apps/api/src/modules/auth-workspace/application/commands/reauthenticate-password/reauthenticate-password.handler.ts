@@ -6,6 +6,8 @@ import {
   createProblemResult,
 } from "@lcsp/contracts/auth";
 
+import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+
 import { verifySecret } from "../../../infrastructure/security/security.utils.ts";
 import type { AuthProblemResult } from "../../contracts/auth-workspace/common.contract.ts";
 import type { PasswordReauthSuccess } from "../../contracts/auth-workspace/password-reauth.contract.ts";
@@ -13,7 +15,8 @@ import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-wor
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { ReauthenticatePasswordCommand } from "./reauthenticate-password.command.ts";
 
-export class ReauthenticatePasswordHandler {
+@CommandHandler(ReauthenticatePasswordCommand)
+export class ReauthenticatePasswordHandler implements ICommandHandler<ReauthenticatePasswordCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
     private readonly repositories: AuthWorkspaceRepositories,

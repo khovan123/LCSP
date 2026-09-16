@@ -5,6 +5,8 @@ import {
   createProblemResult,
 } from "@lcsp/contracts/auth";
 
+import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+
 import {
   generateMfaRecoveryCodes,
   hashMfaRecoveryCode,
@@ -15,7 +17,8 @@ import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-wor
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { GenerateMfaRecoveryCodesCommand } from "./generate-mfa-recovery-codes.command.ts";
 
-export class GenerateMfaRecoveryCodesHandler {
+@CommandHandler(GenerateMfaRecoveryCodesCommand)
+export class GenerateMfaRecoveryCodesHandler implements ICommandHandler<GenerateMfaRecoveryCodesCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
     private readonly repositories: AuthWorkspaceRepositories,

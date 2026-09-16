@@ -6,6 +6,8 @@ import {
   createProblemResult,
 } from "@lcsp/contracts/auth";
 
+import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+
 import {
   fingerprintToken,
   hashSecret,
@@ -16,7 +18,8 @@ import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-wor
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { ConfirmPasswordRecoveryCommand } from "./confirm-password-recovery.command.ts";
 
-export class ConfirmPasswordRecoveryHandler {
+@CommandHandler(ConfirmPasswordRecoveryCommand)
+export class ConfirmPasswordRecoveryHandler implements ICommandHandler<ConfirmPasswordRecoveryCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
     private readonly repositories: AuthWorkspaceRepositories,

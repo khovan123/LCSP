@@ -6,6 +6,8 @@ import {
   createProblemResult,
 } from "@lcsp/contracts/auth";
 
+import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+
 import {
   hashSecret,
   verifySecret,
@@ -20,7 +22,8 @@ const DECOY_PASSWORD_HASH = hashSecret(
   "decoy-password-for-constant-time-compare",
 );
 
-export class SignInHandler {
+@CommandHandler(SignInCommand)
+export class SignInHandler implements ICommandHandler<SignInCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
     private readonly repositories: AuthWorkspaceRepositories,

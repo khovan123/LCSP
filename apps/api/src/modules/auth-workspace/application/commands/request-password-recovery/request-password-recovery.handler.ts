@@ -6,6 +6,8 @@ import {
   createProblemResult,
 } from "@lcsp/contracts/auth";
 
+import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+
 import { RecoveryRequest } from "../../../domain/models/auth-workspace.models.ts";
 import {
   fingerprintToken,
@@ -21,7 +23,8 @@ import { RequestPasswordRecoveryCommand } from "./request-password-recovery.comm
 
 const RECOVERY_TOKEN_TTL_MS = 30 * 60_000;
 
-export class RequestPasswordRecoveryHandler {
+@CommandHandler(RequestPasswordRecoveryCommand)
+export class RequestPasswordRecoveryHandler implements ICommandHandler<RequestPasswordRecoveryCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
     private readonly repositories: AuthWorkspaceRepositories,
