@@ -7,6 +7,7 @@ from typing import Iterable
 from tools.common.capabilities.evidence.scanner.dependencies.dependency_fact import normalize_package_name
 
 from tools.common.capabilities.evidence.graph.lineage.ai.ai_invocation_gate import AIInvocationSemanticGate
+from tools.common.capabilities.evidence.graph.lineage.ai.ai_discovery import AIDiscoveryEnricher
 from tools.common.capabilities.evidence.graph.lineage.ai.ai_lifecycle import AILifecycleExtractor
 from tools.common.capabilities.evidence.graph.resolution.boundary.api_boundary_resolution import ApiBoundaryResolver
 from tools.common.capabilities.evidence.graph.construction.assembly.builder import ProgramGraphBuilder
@@ -100,6 +101,11 @@ class ProgramGraphAssembler:
         # materialized so false provider/config/redaction calls cannot create derived
         # AI_OUTPUT nodes that later look corroborated to Planner/Investigator.
         AIInvocationSemanticGate().enrich(program)
+
+        # Resolve AI-relevant outbound API/config/control evidence while raw source is
+        # still available inside the ephemeral scanner workspace. Only bounded metadata
+        # (env names, hosts/paths, payload key hints and source anchors) is emitted.
+        AIDiscoveryEnricher(workspace_path).enrich(program)
 
         # Normalize concrete repository evidence for model ownership/lifecycle before
         # data-lineage enrichment. Dependency presence alone is not a lifecycle stage.

@@ -112,6 +112,47 @@ def _report():
     }
 
 
+def _ai_report(gate, findings, *, coverage="READY"):
+    report = _report()
+    graph = report["evidence_payload"]["evidence_graph"]
+    graph["coverage_state"] = coverage
+    graph["coverage_notes"] = []
+    graph.pop("partialCoveragePolicyDecision", None)
+    report["evidence_payload"]["ai_discovery"] = {
+        "schema_version": "1.0.0",
+        "gate": gate,
+        "coverage_state": coverage,
+        "findings": findings,
+        "material_unresolved_frontiers": [],
+    }
+    return report
+
+
+def _ai_finding(kind, clarification_kind, *, owner="CUSTOMER"):
+    return {
+        "evidence_id": "ai-evidence:stable-1",
+        "state": (
+            "POSSIBLE_AI_CALL"
+            if clarification_kind == "OUTBOUND_AI_CONFIRMATION"
+            else "CONFIRMED_AI_CALL"
+        ),
+        "resolution_state": "UNRESOLVED" if owner == "TECHNICAL" else "OBSERVED",
+        "kind": kind,
+        "clarification_owner": owner,
+        "clarification_kind": clarification_kind,
+        "evidence_refs": [],
+        "snippet_ref": {
+            "snapshot_id": "snapshot-1",
+            "commit_sha": "abc123",
+            "file_path": "src/ai.ts",
+            "start_line": 42,
+            "end_line": 42,
+            "evidence_hash": "sha256:test",
+            "snippet_policy": "PINNED_SNAPSHOT_BOUNDED_REDACTED_V1",
+        },
+    }
+
+
 def test_stale_accepted_evidence_event_is_terminal_before_interview_dispatch() -> None:
     api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
     api.get_accepted_technical_evidence_report = lambda _report_id: (_ for _ in ()).throw(
@@ -261,6 +302,115 @@ def test_initial_pge_event_bootstraps_interview_and_stops_before_pipeline() -> N
     assert api.seeded[0][0] == "assessment-1"
     assert api.seeded[0][1]["outcome"] == "WAITING_FOR_CUSTOMER"
     assert api.seeded[0][1]["technicalEvidenceReportId"] == "ter-1"
+
+
+def test_ready_no_ai_gate_short_circuits_before_interview_dispatch() -> None:
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    dispatcher = FakeDispatcher()
+    root = RecordingRoot()
+
+    result = _boundary(api, dispatcher, root)._prepare_interview(
+        evidence_report=_ai_report("AI_ABSENT_CONFIRMED", []),
+        evidence_report_id="ter-no-ai",
+        assessment_id="assessment-1",
+        correlation_id="corr-no-ai",
+        workflow_run_id="workflow-no-ai",
+    )
+
+    assert result is None
+    assert dispatcher.calls == []
+    assert api.seeded == []
+    assert root.calls == []
+
+
+def test_confirmed_ai_invocation_asks_purpose_and_feature_not_is_this_ai() -> None:
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    dispatcher = FakeDispatcher()
+    finding = _ai_finding("SDK_INVOCATION", "AI_PURPOSE_FEATURE_MAPPING")
+    finding["provider"] = "OPENAI"
+
+    _boundary(api, dispatcher)._prepare_interview(
+        evidence_report=_ai_report("AI_CONFIRMED", [finding]),
+        evidence_report_id="ter-ai",
+        assessment_id="assessment-1",
+        correlation_id="corr-ai",
+        workflow_run_id="workflow-ai",
+    )
+
+    assert dispatcher.calls == []
+    question = api.seeded[0][1]["activeQuestion"]
+    assert question["control"] == "FREE_TEXT"
+    assert "what is this AI call used for" in question["prompt"]
+    assert "Web/Mobile/API feature or module" in question["prompt"]
+    assert "does this endpoint invoke" not in question["prompt"].lower()
+    assert "is this an ai" not in question["prompt"].lower()
+
+
+def test_runtime_guard_asks_only_assessed_environment_reachability() -> None:
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    dispatcher = FakeDispatcher()
+    finding = _ai_finding("SDK_INVOCATION", "AI_RUNTIME_REACHABILITY")
+    finding["runtime_guard"] = "ENABLE_AI"
+
+    _boundary(api, dispatcher)._prepare_interview(
+        evidence_report=_ai_report("AI_UNKNOWN", [finding]),
+        evidence_report_id="ter-guarded",
+        assessment_id="assessment-1",
+        correlation_id="corr-guarded",
+        workflow_run_id="workflow-guarded",
+    )
+
+    question = api.seeded[0][1]["activeQuestion"]
+    assert question["control"] == "SINGLE_SELECT"
+    assert [choice["id"] for choice in question["choices"]] == ["YES", "NO", "UNSURE"]
+    assert "ENABLE_AI" in question["prompt"]
+    assert "production environment" in question["prompt"]
+
+
+def test_custom_outbound_candidate_uses_yes_no_unsure_and_stable_identity() -> None:
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    dispatcher = FakeDispatcher()
+    finding = _ai_finding("OUTBOUND_API", "OUTBOUND_AI_CONFIRMATION")
+    report = _ai_report("AI_UNKNOWN", [finding])
+    boundary = _boundary(api, dispatcher)
+
+    for _ in range(2):
+        boundary._prepare_interview(
+            evidence_report=report,
+            evidence_report_id="ter-gateway",
+            assessment_id="assessment-1",
+            correlation_id="corr-gateway",
+            workflow_run_id="workflow-gateway",
+        )
+
+    first = api.seeded[0][1]["activeQuestion"]
+    second = api.seeded[1][1]["activeQuestion"]
+    assert first["id"] == second["id"]
+    assert [choice["id"] for choice in first["choices"]] == ["YES", "NO", "UNSURE"]
+    assert first["choices"][0]["requiresFreeText"] is True
+    assert "provider" in first["prompt"]
+    assert dispatcher.calls == []
+
+
+def test_technical_ai_unknown_routes_to_reanalysis_not_customer_question() -> None:
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    dispatcher = FakeDispatcher()
+    root = RecordingRoot()
+    finding = _ai_finding(
+        "PROVIDER_REFERENCE", "TARGETED_TECHNICAL_REANALYSIS", owner="TECHNICAL"
+    )
+
+    _boundary(api, dispatcher, root)._prepare_interview(
+        evidence_report=_ai_report("AI_UNKNOWN", [finding]),
+        evidence_report_id="ter-provider-ref",
+        assessment_id="assessment-1",
+        correlation_id="corr-provider-ref",
+        workflow_run_id="workflow-provider-ref",
+    )
+
+    assert dispatcher.calls == []
+    assert api.seeded == []
+    assert root.calls[0][1]["metadata"]["trigger"] == "AI_DISCOVERY_REANALYSIS_REQUIRED"
 
 
 def test_unavailable_coverage_routes_to_orchestration_before_interview() -> None:
