@@ -245,5 +245,4 @@ describe("AssessmentInterviewSnippetService pinned snapshot integration", () => 
       response: { code: "INTERVIEW_SOURCE_SNIPPET_ARCHIVE_TOO_LARGE" },
     });
   });
-
 });
