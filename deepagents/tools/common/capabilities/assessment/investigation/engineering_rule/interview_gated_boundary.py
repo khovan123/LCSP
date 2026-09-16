@@ -6,6 +6,7 @@ from orchestration.agent_stream import invoke_with_stream
 
 import hashlib
 import json
+import re
 from typing import Any
 
 from orchestration.dispatcher import RootSubagentDispatcher
@@ -131,19 +132,30 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
         coverage_state, coverage_notes = _technical_coverage(evidence_report)
         ai_discovery = _ai_discovery(evidence_report)
 
+        # Customer authority is part of the absence closure. Load persisted Interview
+        # state before evaluating the Scanner/PGE no-AI gate so a later repository-only
+        # scan cannot erase already confirmed external/off-repository AI context.
+        state = self._api_client.get_interview_worker_state(assessment_id)
+        outcome = str(state.get("outcome") or "")
+        context_revision = int(state.get("contextRevision") or 0)
+        active_question = state.get("activeQuestion")
+        authoritative_customer_ai = _has_authoritative_customer_ai_context(state)
+
         # The no-AI fast path is governed Scanner/PGE truth, not an Interview/LLM
-        # conclusion. It is valid only when the persisted gate and technical coverage
-        # independently agree that absence was established.
+        # conclusion. It is valid only when technical coverage is READY and there is no
+        # authoritative Customer confirmation of AI usage outside repository evidence.
         if ai_discovery and ai_discovery.get("gate") == "AI_ABSENT_CONFIRMED":
             if coverage_state == "READY" and ai_discovery.get("coverage_state") == "READY":
+                if not authoritative_customer_ai:
+                    return None
+            else:
+                self._route_ai_discovery_to_recovery(
+                    assessment_id=assessment_id,
+                    evidence_report_id=evidence_report_id,
+                    ai_discovery=ai_discovery,
+                    correlation_id=correlation_id,
+                )
                 return None
-            self._route_ai_discovery_to_recovery(
-                assessment_id=assessment_id,
-                evidence_report_id=evidence_report_id,
-                ai_discovery=ai_discovery,
-                correlation_id=correlation_id,
-            )
-            return None
 
         if not _can_start_initial_interview(coverage_state, coverage_notes, evidence_report):
             self._route_coverage_to_recovery(
@@ -155,10 +167,17 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
             )
             return None
 
-        state = self._api_client.get_interview_worker_state(assessment_id)
-        outcome = str(state.get("outcome") or "")
-        context_revision = int(state.get("contextRevision") or 0)
-        active_question = state.get("activeQuestion")
+        # Scanner/PGE-owned uncertainty is independent of Customer-owned clarification.
+        # A Customer question may exist, but downstream assessment must not resume while
+        # material technical frontiers remain unresolved.
+        if ai_discovery and ai_discovery.get("gate") == "AI_UNKNOWN" and _has_technical_ai_uncertainty(ai_discovery):
+            self._route_ai_discovery_to_recovery(
+                assessment_id=assessment_id,
+                evidence_report_id=evidence_report_id,
+                ai_discovery=ai_discovery,
+                correlation_id=correlation_id,
+            )
+            return None
 
         if outcome == "CONTEXT_READY":
             return normalize_confirmed_structured_business_context(
@@ -175,18 +194,6 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
 
         if outcome != "WAITING_FOR_CUSTOMER" or context_revision != 0:
             return None
-
-        if ai_discovery and ai_discovery.get("gate") == "AI_UNKNOWN":
-            if _select_customer_ai_finding(ai_discovery) is None:
-                # Technical uncertainty (provider reference, partial technical
-                # coverage, unresolved static target) stays on the Scanner/PGE side.
-                self._route_ai_discovery_to_recovery(
-                    assessment_id=assessment_id,
-                    evidence_report_id=evidence_report_id,
-                    ai_discovery=ai_discovery,
-                    correlation_id=correlation_id,
-                )
-                return None
 
         from uuid import UUID
         from orchestration.context import LCSPRunContext
@@ -548,6 +555,54 @@ def _ai_discovery(evidence_report: dict[str, Any]) -> dict[str, Any] | None:
         )[:64],
     }
 
+
+
+def _has_technical_ai_uncertainty(ai_discovery: dict[str, Any]) -> bool:
+    if ai_discovery.get("material_unresolved_frontiers"):
+        return True
+    return any(
+        isinstance(item, dict)
+        and (
+            item.get("clarification_owner") == "TECHNICAL"
+            or str(item.get("resolution_state") or "").upper() not in {"OBSERVED", "CORROBORATED"}
+            and item.get("state") in {"AI_PROVIDER_REFERENCE", "UNRESOLVED_DYNAMIC"}
+        )
+        for item in ai_discovery.get("findings", [])
+    )
+
+
+def _has_authoritative_customer_ai_context(state: dict[str, Any]) -> bool:
+    confirmed = state.get("confirmedContext")
+    if not isinstance(confirmed, dict):
+        return False
+    statements = confirmed.get("statements")
+    if not isinstance(statements, list):
+        return False
+    ai_terms = re.compile(
+        r"(?:^|[^a-z0-9])(?:ai|artificial intelligence|llm|model|openai|anthropic|claude|gemini|genai|bedrock|copilot)(?:[^a-z0-9]|$)",
+        re.I,
+    )
+    negative = re.compile(
+        r"(?:no|not|without|does(?:n['’]?t| not)|do(?:n['’]?t| not))\s+(?:use|using|usage of\s+)?(?:external\s+|off[- ]repository\s+)?(?:ai|artificial intelligence|llm|model)",
+        re.I,
+    )
+    for item in statements:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("source") or "").upper() != "CUSTOMER_CONFIRMED":
+            continue
+        if str(item.get("resolutionState") or "").upper() != "CONFIRMED":
+            continue
+        text = " ".join(
+            str(item.get(key) or "")
+            for key in ("topic", "statement", "normalizedValue")
+        ).strip()
+        topic = str(item.get("topic") or "").strip().lower()
+        if negative.search(text):
+            continue
+        if topic in {"ai_usage", "ai_use", "external_ai_usage", "off_repository_ai_usage"} or ai_terms.search(text):
+            return True
+    return False
 
 def _select_customer_ai_finding(ai_discovery: dict[str, Any]) -> dict[str, Any] | None:
     findings = [

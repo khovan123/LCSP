@@ -75,8 +75,9 @@ class ProgramGraphAssembler:
         config_hash: str = "",
         project_discovery=None,
     ):
+        scoped_files = tuple(include_files) if include_files is not None else None
         program = RepositorySemanticExtractor(workspace_path).extract(
-            include_files=include_files
+            include_files=scoped_files
         )
         if semantic_program is not None:
             program.extend(semantic_program)
@@ -105,7 +106,9 @@ class ProgramGraphAssembler:
         # Resolve AI-relevant outbound API/config/control evidence while raw source is
         # still available inside the ephemeral scanner workspace. Only bounded metadata
         # (env names, hosts/paths, payload key hints and source anchors) is emitted.
-        AIDiscoveryEnricher(workspace_path).enrich(program)
+        AIDiscoveryEnricher(
+            workspace_path, include_files=scoped_files
+        ).enrich(program)
 
         # Normalize concrete repository evidence for model ownership/lifecycle before
         # data-lineage enrichment. Dependency presence alone is not a lifecycle stage.
@@ -308,7 +311,9 @@ class ProgramGraphAssembler:
         # only after architecture, data-flow, protocol and additive dependency/finding
         # edges exist. This allows bounded deterministic PGE traversal across parameters,
         # helpers/DI, config objects, GraphQL/gRPC and cross-module/service continuations.
-        AIDiscoveryEnricher(workspace_path).finalize(program)
+        AIDiscoveryEnricher(
+            workspace_path, include_files=scoped_files
+        ).finalize(program)
 
         # High-recall extractors and legacy technical findings may use broad lexical
         # categories. Normalize them only after every additive evidence source has been
