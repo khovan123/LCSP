@@ -5,10 +5,21 @@ import type { z } from "zod";
 
 import { problemException } from "../../platform/problems/problem-factory.js";
 
+/**
+ * NestJS Pipe that parses and validates incoming payloads using a Zod schema.
+ * Throws a standard RFC 7807 problem exception with HTTP 400 when validation fails.
+ */
 @Injectable()
 export class ZodValidationPipe<TOutput = unknown> implements PipeTransform<unknown, TOutput> {
   constructor(private readonly schema: z.ZodTypeAny) {}
 
+  /**
+   * Transforms and validates the incoming value against the configured Zod schema.
+   *
+   * @param value - Raw incoming request body, query, or param value.
+   * @returns Typed, sanitized, and parsed output.
+   * @throws HttpException with standard RFC 7807 problem when parsing fails.
+   */
   transform(value: unknown): TOutput {
     const result = this.schema.safeParse(value);
     if (!result.success) {

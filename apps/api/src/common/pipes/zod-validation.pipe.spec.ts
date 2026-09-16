@@ -5,6 +5,10 @@ import { z } from "zod";
 
 import { ZodValidationPipe } from "./zod-validation.pipe.ts";
 
+/**
+ * Unit test suite for ZodValidationPipe.
+ * Verifies that valid inputs pass through with correct types and invalid inputs throw standard RFC 7807 problem exceptions.
+ */
 describe("ZodValidationPipe", () => {
   const schema = z.object({
     email: z.string().email(),
