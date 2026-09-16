@@ -26,7 +26,7 @@ export class ZodValidationPipe<TOutput = unknown> implements PipeTransform<
   transform(value: unknown): TOutput {
     const result = this.schema.safeParse(value);
     if (!result.success) {
-      throw problemException(AUTH_ERROR_CODES.validationFailed, randomUUID(), {
+      throw problemException(AUTH_ERROR_CODES.validationFailed, "", {
         status: HttpStatus.BAD_REQUEST,
       });
     }

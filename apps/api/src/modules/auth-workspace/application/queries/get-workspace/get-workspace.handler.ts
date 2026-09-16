@@ -50,6 +50,16 @@ export class GetWorkspaceHandler implements IQueryHandler<GetWorkspaceQuery> {
     const session = await this.repositories.sessions.findById(
       context.sessionId,
     );
+    if (!session || !session.isActive(this.support.now())) {
+      await this.support.recordAudit(repositories, {
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.workspaceAccessDenied,
+        actor_id: user.id,
+        decision: AUDIT_DECISIONS.deny,
+        reason_code: AUTH_ERROR_CODES.sessionInvalid,
+        correlationId: cid,
+      });
+      return createProblemResult(AUTH_ERROR_CODES.sessionInvalid, cid);
+    }
 
     const authorization = await this.support.authorizeWorkspace(
       repositories,
@@ -79,10 +89,8 @@ export class GetWorkspaceHandler implements IQueryHandler<GetWorkspaceQuery> {
       user_id: user.id,
       display_name: user.displayName ?? user.email.toString(),
       role: authorization.role,
-      session_expires_at: session?.expiresAt
-        ? new Date(session.expiresAt).toISOString()
-        : new Date(Date.now() + 86400000).toISOString(),
-      mfa_verified: session ? session.isMfaVerified() : true,
+      session_expires_at: new Date(session.expiresAt).toISOString(),
+      mfa_verified: session.isMfaVerified(),
       correlationId: cid,
     };
   }
