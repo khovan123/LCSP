@@ -48,6 +48,7 @@ import {
   type AssessmentInterviewWorkflowEvent,
   type AssessmentInterviewQuestion,
   type AssessmentInterviewQuestionIntent,
+  type AiDiscoverySnippetRef,
   type AssessmentInterviewRuntimeState,
   EMPTY_INTERVIEW_WORKING_STRATEGY,
   type InterviewWorkingStrategy,
@@ -2838,6 +2839,7 @@ function parsePersistableInterviewQuestion(
       typeof record.whyAreWeAsking === "string"
         ? record.whyAreWeAsking.trim()
         : undefined,
+    snippetRef: parseAiDiscoverySnippetRef(record.snippetRef),
     frontier: {
       owner: INTERVIEW_FRONTIER_OWNERS.customer,
       materiality: INTERVIEW_FRONTIER_MATERIALITIES.material,
@@ -3857,6 +3859,7 @@ function publicActiveQuestion(
     proposedInterpretation: sanitizePublicText(question.proposedInterpretation),
     whyAreWeAsking: sanitizePublicText(question.whyAreWeAsking),
     hasSupportingEvidence,
+    snippetRef: question.snippetRef,
     frontier,
   };
 }
@@ -3889,6 +3892,48 @@ function runtimeEventState(
   state: AssessmentInterviewRuntimeState,
 ): AssessmentInterviewRuntimeState {
   return { ...publicState(state), pendingDraft: undefined, audit: undefined };
+}
+
+function parseAiDiscoverySnippetRef(value: unknown): AiDiscoverySnippetRef | undefined {
+  const record = objectRecord(value);
+  if (!record) return undefined;
+  const snapshotId = nonEmptyString(record.snapshot_id) ? record.snapshot_id.trim() : "";
+  const commitSha = nonEmptyString(record.commit_sha) ? record.commit_sha.trim() : "";
+  const filePath = nonEmptyString(record.file_path)
+    ? record.file_path.replaceAll("\\", "/").replace(/^\/+/, "")
+    : "";
+  const startLine = record.start_line;
+  const endLine = record.end_line;
+  const evidenceHash = nonEmptyString(record.evidence_hash)
+    ? record.evidence_hash.trim().toLowerCase()
+    : "";
+  if (
+    !snapshotId ||
+    !commitSha ||
+    !filePath ||
+    filePath.split("/").includes("..") ||
+    typeof startLine !== "number" ||
+    typeof endLine !== "number" ||
+    !Number.isSafeInteger(startLine) ||
+    !Number.isSafeInteger(endLine) ||
+    startLine < 1 ||
+    endLine < startLine ||
+    endLine - startLine + 1 > 7 ||
+    !/^sha256:[0-9a-f]{64}$/.test(evidenceHash) ||
+    record.snippet_policy !== "PINNED_SNAPSHOT_BOUNDED_REDACTED_V1"
+  ) {
+    return undefined;
+  }
+  return {
+    snapshot_id: snapshotId,
+    commit_sha: commitSha,
+    file_path: filePath,
+    symbol: nonEmptyString(record.symbol) ? record.symbol.trim() : undefined,
+    start_line: startLine,
+    end_line: endLine,
+    evidence_hash: evidenceHash,
+    snippet_policy: "PINNED_SNAPSHOT_BOUNDED_REDACTED_V1",
+  };
 }
 
 function objectRecord(value: unknown): Record<string, unknown> | null {

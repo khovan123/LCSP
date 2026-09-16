@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections import deque
+from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -42,7 +44,35 @@ _SOURCE_EXTENSIONS = {
     ".java",
     ".kt",
     ".cs",
+    ".go",
+    ".rs",
 }
+# Source-like languages that can contain executable client/control flow but are not yet
+# represented by the deterministic semantic extractor. Their presence preserves a
+# bounded technical frontier instead of allowing a false AI-absence conclusion.
+_SOURCE_LIKE_EXTENSIONS = frozenset(
+    {
+        *_SOURCE_EXTENSIONS,
+        ".rb",
+        ".php",
+        ".swift",
+        ".scala",
+        ".dart",
+        ".c",
+        ".cc",
+        ".cpp",
+        ".cxx",
+        ".h",
+        ".hh",
+        ".hpp",
+        ".fs",
+        ".fsx",
+        ".ex",
+        ".exs",
+        ".lua",
+        ".ps1",
+    }
+)
 _EXCLUDED_PARTS = {
     ".git",
     "node_modules",
@@ -95,6 +125,40 @@ _ASSIGNMENT_RE = re.compile(
     r"\b(?:const|let|var)?\s*([A-Za-z_$][\w$]*)\s*=|^\s*([A-Za-z_][\w]*)\s*="
 )
 
+# Discovery confirmation is source-seeded, but coverage is graph-owned.  These
+# relations are deliberately broader than lexical HTTP detection so parameters,
+# config objects, helpers, DI/service dispatch, GraphQL/gRPC and cross-module hops
+# remain in one deterministic bounded frontier.
+_AI_GRAPH_EDGES = frozenset(
+    {
+        "CALLS", "CALLS_DYNAMICALLY", "CALLS_EXTERNAL", "CALLS_API",
+        "DEPENDS_ON", "IMPORTS", "RESOLVES_TO", "IMPLEMENTS", "EXTENDS",
+        "HANDLED_BY", "INVOKES_BOUNDARY", "CONFIGURES", "CONTROLS", "GUARDS",
+        "HAS_PARAMETER", "PASSES_ARGUMENT", "RETURNS", "RECEIVES_RETURN",
+        "ASSIGNS", "ALIASES", "READS_PROPERTY", "WRITES_PROPERTY", "MAPS_TO",
+        "FLOWS_TO", "CARRIES_DATA", "SENDS_TO_EXTERNAL", "RECEIVES_FROM_EXTERNAL",
+        "SENDS_TO_AI", "RECEIVES_FROM_AI", "INVOKES_AI",
+        "PUBLISHES_EVENT", "CONSUMES_EVENT", "PUBLISHES_COMMAND", "HANDLES_COMMAND",
+        "PUBLISHES_QUERY", "HANDLES_QUERY",
+    }
+)
+_AI_BOUNDARY_TYPES = frozenset(
+    {"EXTERNAL_API", "GRAPHQL_OPERATION", "GRPC_METHOD", "CALL_SITE", "AI_GATEWAY"}
+)
+_AI_STRONG_TYPES = frozenset(
+    {"AI_MODEL_INVOCATION", "AI_API_CANDIDATE", "AI_GATEWAY", "AI_CAPABILITY"}
+)
+_AI_GRAPH_STRONG_RE = re.compile(
+    r"(?:^|[^a-z0-9])(?:ai|llm|openai|anthropic|gemini|genai|bedrock|ollama|"
+    r"huggingface|openrouter|inference|embedding|chatgpt)(?:[^a-z0-9]|$)", re.I
+)
+_AI_GRAPH_PAYLOAD_RE = re.compile(
+    r"(?:^|[^a-z0-9])(?:prompt|messages|model|tools|contents|completion|response_format)(?:[^a-z0-9]|$)",
+    re.I,
+)
+_AI_GRAPH_TRANSPORT_RE = re.compile(r"graphql|grpc|retrofit|gateway|client|endpoint|transport", re.I)
+_MAX_GRAPH_HOPS = 12
+
 _PROVIDER_HOSTS = (
     ("OPENAI", ("api.openai.com",)),
     ("AZURE_OPENAI", ("openai.azure.com",)),
@@ -139,6 +203,7 @@ class AIDiscoveryEnricher:
         self.workspace = Path(workspace_path).resolve(strict=False)
 
     def enrich(self, program: SemanticProgram) -> SemanticProgram:
+        self._preserve_uncovered_source_frontiers(program)
         invocation_by_file: dict[str, list[SemanticNodeFact]] = {}
         for node in program.nodes:
             if node.node_type == "AI_MODEL_INVOCATION" and node.file_path:
@@ -168,6 +233,239 @@ class AIDiscoveryEnricher:
                 aliases,
             )
         return program
+
+    def finalize(self, program: SemanticProgram) -> SemanticProgram:
+        """Resolve AI-material frontiers from the completed semantic PGE IR.
+
+        This pass must run after architecture/data/protocol resolution.  It never
+        upgrades a generic transport to confirmed AI; it only creates a possible
+        candidate or preserves a technical unresolved frontier when connected PGE
+        evidence carries AI semantics.
+        """
+        node_by_key = {node.key: node for node in program.nodes}
+        adjacency: dict[str, list[tuple[str, str]]] = {}
+        for edge in program.edges:
+            if edge.edge_type not in _AI_GRAPH_EDGES:
+                continue
+            if edge.source_key not in node_by_key or edge.target_key not in node_by_key:
+                continue
+            adjacency.setdefault(edge.source_key, []).append((edge.target_key, edge.edge_type))
+            adjacency.setdefault(edge.target_key, []).append((edge.source_key, edge.edge_type))
+
+        replacements: dict[str, SemanticNodeFact] = {}
+        added_candidates: set[str] = set()
+        for boundary in list(program.nodes):
+            if boundary.node_type not in _AI_BOUNDARY_TYPES or boundary.node_type == "AI_API_CANDIDATE":
+                continue
+            evidence = self._walk_ai_frontier(boundary.key, node_by_key, adjacency)
+            if not evidence["ai_material"]:
+                continue
+
+            for unresolved_key in evidence["unresolved"]:
+                unresolved = node_by_key.get(unresolved_key)
+                if unresolved is None:
+                    continue
+                attrs = dict(unresolved.attributes or {})
+                if attrs.get("aiMaterial") is not True:
+                    attrs["aiMaterial"] = True
+                    attrs["aiDiscoveryReason"] = "PGE_MULTI_HOP_FRONTIER"
+                    replacements[unresolved.key] = replace(
+                        unresolved, attributes=attrs, coverage_state="LIMITED", resolution_state="UNRESOLVED"
+                    )
+                if unresolved.key not in program.unresolved_frontiers:
+                    program.unresolved_frontiers.append(unresolved.key)
+
+            # A bounded traversal that exhausts before resolving the AI-relevant
+            # transport is itself a material technical frontier; absence is unsafe.
+            if evidence["truncated"] and not evidence["strong"]:
+                frontier_key = f"ai-frontier:{boundary.key}"
+                if frontier_key not in node_by_key:
+                    frontier = SemanticNodeFact(
+                        frontier_key,
+                        "UNRESOLVED_DYNAMIC_TARGET",
+                        "AI-relevant PGE traversal frontier",
+                        boundary.file_path,
+                        boundary.start_line,
+                        boundary.end_line,
+                        boundary.symbol_ref,
+                        attributes={
+                            "aiMaterial": True,
+                            "aiDiscoveryReason": "MAX_GRAPH_HOPS_REACHED",
+                        },
+                        coverage_state="LIMITED",
+                        resolution_state="UNRESOLVED",
+                    )
+                    program.add_node(frontier)
+                    node_by_key[frontier_key] = frontier
+                if frontier_key not in program.unresolved_frontiers:
+                    program.unresolved_frontiers.append(frontier_key)
+
+            # Generic GraphQL/gRPC/Retrofit/custom boundaries are not proof of AI.
+            # When connected PGE evidence does contain AI semantics, persist only an
+            # unresolved outbound candidate for Customer confirmation.
+            if boundary.node_type in {"EXTERNAL_API", "GRAPHQL_OPERATION", "GRPC_METHOD", "AI_GATEWAY"} or evidence["transport"]:
+                candidate_key = f"ai-api-candidate:pge:{boundary.key}"
+                if candidate_key in node_by_key or candidate_key in added_candidates:
+                    continue
+                payload_hints = sorted(evidence["payload_hints"])[:8]
+                attrs: dict[str, object] = {
+                    "discoveryState": POSSIBLE_AI_CALL,
+                    "clarificationOwner": "CUSTOMER",
+                    "clarificationKind": "OUTBOUND_AI_CONFIRMATION",
+                    "endpointSource": "PGE_MULTI_HOP",
+                    "graphHopCount": evidence["hops"],
+                }
+                if payload_hints:
+                    attrs["payloadHints"] = payload_hints
+                candidate = SemanticNodeFact(
+                    candidate_key,
+                    "AI_API_CANDIDATE",
+                    "PGE-connected unresolved AI-capable outbound API",
+                    boundary.file_path,
+                    boundary.start_line,
+                    boundary.end_line,
+                    boundary.symbol_ref,
+                    attributes=attrs,
+                    coverage_state="LIMITED" if evidence["unresolved"] else boundary.coverage_state,
+                    resolution_state="UNRESOLVED",
+                    support_refs=tuple(sorted(set(boundary.evidence_refs + boundary.support_refs))),
+                )
+                program.add_node(candidate)
+                program.add_edge(
+                    SemanticEdgeFact(
+                        "CALLS_EXTERNAL",
+                        boundary.key,
+                        candidate_key,
+                        coverage_state=candidate.coverage_state,
+                        resolution_state="UNRESOLVED",
+                    )
+                )
+                node_by_key[candidate_key] = candidate
+                added_candidates.add(candidate_key)
+
+        if replacements:
+            program.nodes = [replacements.get(node.key, node) for node in program.nodes]
+        return program
+
+    @classmethod
+    def _walk_ai_frontier(
+        cls,
+        start: str,
+        node_by_key: dict[str, SemanticNodeFact],
+        adjacency: dict[str, list[tuple[str, str]]],
+    ) -> dict[str, object]:
+        queue = deque([(start, 0)])
+        seen: set[str] = set()
+        strong = False
+        ai_named = False
+        transport = False
+        payload_hints: set[str] = set()
+        unresolved: set[str] = set()
+        truncated = False
+        max_hops = 0
+        while queue:
+            key, depth = queue.popleft()
+            if key in seen:
+                continue
+            seen.add(key)
+            max_hops = max(max_hops, depth)
+            node = node_by_key.get(key)
+            if node is None:
+                continue
+            text = cls._node_signal_text(node)
+            attrs = node.attributes or {}
+            if (
+                node.node_type in _AI_STRONG_TYPES
+                or (node.node_type == "SDK_CLIENT" and str(attrs.get("semanticRole") or "").startswith("PROVIDER_"))
+                or attrs.get("aiRelevant") is True
+            ):
+                strong = True
+            if _AI_GRAPH_STRONG_RE.search(text):
+                ai_named = True
+            if node.node_type in {"GRAPHQL_OPERATION", "GRPC_METHOD", "AI_GATEWAY"} or _AI_GRAPH_TRANSPORT_RE.search(text):
+                transport = True
+            for match in _AI_GRAPH_PAYLOAD_RE.finditer(text):
+                payload_hints.add(match.group(1).lower() if match.lastindex else match.group(0).strip(" _.-").lower())
+            if node.node_type == "UNRESOLVED_DYNAMIC_TARGET" or node.resolution_state == "UNRESOLVED":
+                if node.node_type == "UNRESOLVED_DYNAMIC_TARGET":
+                    unresolved.add(key)
+            if depth >= _MAX_GRAPH_HOPS:
+                if adjacency.get(key):
+                    truncated = True
+                continue
+            for nxt, _edge_type in sorted(adjacency.get(key, [])):
+                if nxt not in seen:
+                    queue.append((nxt, depth + 1))
+
+        # A lone generic `model` token is not enough.  Strong semantic nodes are
+        # sufficient; otherwise require AI naming plus payload/transport corroboration.
+        ai_material = strong or (ai_named and (bool(payload_hints) or transport))
+        return {
+            "ai_material": ai_material,
+            "strong": strong,
+            "transport": transport,
+            "payload_hints": payload_hints,
+            "unresolved": unresolved,
+            "truncated": truncated,
+            "hops": max_hops,
+        }
+
+    @staticmethod
+    def _node_signal_text(node: SemanticNodeFact) -> str:
+        attrs = node.attributes or {}
+        safe_values: list[str] = []
+        for key, value in attrs.items():
+            if key in {"name", "semanticRole", "provider", "host", "path", "endpointSource", "configNames", "payloadHints", "protocol", "service", "method"}:
+                if isinstance(value, list):
+                    safe_values.extend(str(item) for item in value[:16])
+                else:
+                    safe_values.append(str(value))
+        return " ".join([node.node_type, node.label or "", node.symbol_ref or "", *node.semantic_types, *safe_values])
+
+    def _preserve_uncovered_source_frontiers(self, program: SemanticProgram) -> None:
+        """Prevent absence closure when executable source is outside PGE language coverage."""
+        examples: dict[str, str] = {}
+        for path in self.workspace.rglob("*"):
+            if not path.is_file():
+                continue
+            try:
+                relative = path.relative_to(self.workspace)
+            except ValueError:
+                continue
+            if any(part in _EXCLUDED_PARTS for part in relative.parts):
+                continue
+            rel = relative.as_posix()
+            if is_test_source_path(rel):
+                continue
+            suffix = path.suffix.lower()
+            if suffix in _SOURCE_LIKE_EXTENSIONS and suffix not in _SOURCE_EXTENSIONS:
+                examples.setdefault(suffix, rel)
+
+        for suffix, rel in sorted(examples.items()):
+            language = suffix.lstrip(".") or "unknown"
+            key = f"ai-coverage-unresolved:unsupported-language:{language}"
+            program.add_node(
+                SemanticNodeFact(
+                    key,
+                    "UNRESOLVED_DYNAMIC_TARGET",
+                    f"AI discovery unsupported source language: {suffix}",
+                    rel,
+                    1,
+                    1,
+                    attributes={
+                        "aiMaterial": True,
+                        "aiDiscoveryReason": "UNSUPPORTED_SOURCE_LANGUAGE",
+                        "sourceExtension": suffix,
+                    },
+                    coverage_state="LIMITED",
+                    resolution_state="UNRESOLVED",
+                )
+            )
+            if key not in program.unresolved_frontiers:
+                program.unresolved_frontiers.append(key)
+            note = f"ai_discovery_unsupported_source:extension={suffix}:example={rel}"
+            if note not in program.coverage_notes:
+                program.coverage_notes.append(note)
 
     def _source_files(self) -> list[Path]:
         result: list[Path] = []
@@ -307,13 +605,21 @@ class AIDiscoveryEnricher:
                 state = POSSIBLE_AI_CALL
                 resolution = "UNRESOLVED"
                 clarification = "OUTBOUND_AI_CONFIRMATION"
-            elif strong_payload_signature and (urls or env_names):
+            elif strong_payload_signature:
+                # The endpoint may be propagated through a parameter/config object.
+                # Strong AI-shaped payload evidence is enough to keep it unresolved
+                # even when the destination is not lexically visible at this callsite.
                 state = POSSIBLE_AI_CALL
                 resolution = "UNRESOLVED"
                 clarification = "OUTBOUND_AI_CONFIRMATION"
             else:
-                # A normal HTTP call remains an EXTERNAL_API/CALL_SITE elsewhere in
-                # the PGE. It is deliberately not promoted without an AI signal.
+                # A literal, non-AI REST destination can remain ordinary PGE evidence.
+                # A dynamic outbound target cannot prove AI absence: preserve a bounded
+                # technical frontier so PGE reanalysis can follow parameters/config/DI.
+                if not urls:
+                    self._dynamic_outbound_frontier(
+                        program, relative, line_no, match.group(1)
+                    )
                 continue
 
             key = f"ai-api-candidate:{relative}:{line_no}:{match.group(1)}"
@@ -378,6 +684,45 @@ class AIDiscoveryEnricher:
                         resolution_state="OBSERVED",
                     )
                 )
+
+    def _dynamic_outbound_frontier(
+        self,
+        program: SemanticProgram,
+        relative: str,
+        line_no: int,
+        call_name: str,
+    ) -> None:
+        key = f"ai-transport-frontier:{relative}:{line_no}:{call_name}"
+        program.add_node(
+            SemanticNodeFact(
+                key,
+                "UNRESOLVED_DYNAMIC_TARGET",
+                "unresolved outbound transport target",
+                relative,
+                line_no,
+                line_no,
+                attributes={
+                    "aiMaterial": True,
+                    "aiDiscoveryReason": "DYNAMIC_OUTBOUND_TARGET",
+                    "transport": call_name,
+                },
+                coverage_state="LIMITED",
+                resolution_state="UNRESOLVED",
+            )
+        )
+        call = self._call_node(program, relative, line_no)
+        if call:
+            program.add_edge(
+                SemanticEdgeFact(
+                    "CALLS_DYNAMICALLY",
+                    call.key,
+                    key,
+                    coverage_state="LIMITED",
+                    resolution_state="UNRESOLVED",
+                )
+            )
+        if key not in program.unresolved_frontiers:
+            program.unresolved_frontiers.append(key)
 
     def _guard_invocations(
         self,
@@ -725,12 +1070,17 @@ def _finding(
         start = max(1, int(source["start_line"]))
         raw_end = int(source.get("end_line") or start)
         end = max(start, min(raw_end, start + 6))
-        evidence_hash = "sha256:" + hashlib.sha256(
-            (
-                f"{graph.snapshot_id}|{graph.commit_sha}|"
-                f"{source.get('file_path')}|{start}|{end}|{node_id}"
-            ).encode()
-        ).hexdigest()
+        source_hash = str(source.get("source_hash") or "")
+        evidence_hash = (
+            source_hash
+            if re.fullmatch(r"sha256:[0-9a-f]{64}", source_hash, re.I)
+            else "sha256:" + hashlib.sha256(
+                (
+                    f"{graph.snapshot_id}|{graph.commit_sha}|"
+                    f"{source.get('file_path')}|{start}|{end}|{node_id}"
+                ).encode()
+            ).hexdigest()
+        )
         result["snippet_ref"] = {
             "snapshot_id": graph.snapshot_id,
             "commit_sha": graph.commit_sha,

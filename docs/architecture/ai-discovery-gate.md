@@ -36,10 +36,13 @@ answer may provide the customer-hosted/provider identity as free text.
 PGE does not persist unrestricted source for Interview display. Each AI finding may persist
 only a `snippet_ref`: pinned `snapshot_id`, `commit_sha`, `file_path`, optional symbol,
 bounded `start_line`/`end_line`, `evidence_hash`, and
-`PINNED_SNAPSHOT_BOUNDED_REDACTED_V1`. A UI must retrieve source on demand through the
-governed snapshot/evidence boundary, verify the pinned version/hash, cap context, redact
-secret-looking values, and return only the authorized range. API keys, tokens, passwords,
-credentials, or unrelated source are never requested or displayed.
+`PINNED_SNAPSHOT_BOUNDED_REDACTED_V1`. The canonical Interview question carries that
+locator unchanged. Customer/Admin clients resolve it on demand through
+`GET /assessments/:assessmentId/interview/questions/:questionId/source-snippet`; the API
+reopens the exact completed pinned snapshot, verifies commit + full-file evidence hash,
+returns at most 7 lines / 4096 UTF-8 bytes, and redacts secret-looking values before the
+response leaves the governed boundary. Raw source is never written to PGE or Interview
+state. API keys, tokens, passwords, credentials, or unrelated source are never returned.
 
 ## Idempotency
 

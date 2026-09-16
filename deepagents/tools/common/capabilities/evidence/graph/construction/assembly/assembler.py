@@ -304,6 +304,12 @@ class ProgramGraphAssembler:
         # legacy finding categories from persisting under AI_MODEL_INVOCATION identity.
         AIInvocationSemanticGate().enrich(program)
 
+        # AI discovery has a source-seeding pass above, but the safety gate is finalized
+        # only after architecture, data-flow, protocol and additive dependency/finding
+        # edges exist. This allows bounded deterministic PGE traversal across parameters,
+        # helpers/DI, config objects, GraphQL/gRPC and cross-module/service continuations.
+        AIDiscoveryEnricher(workspace_path).finalize(program)
+
         # High-recall extractors and legacy technical findings may use broad lexical
         # categories. Normalize them only after every additive evidence source has been
         # attached, so weak provider/config/action vocabulary cannot become trusted
