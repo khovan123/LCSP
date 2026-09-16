@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -44,8 +45,6 @@ _SOURCE_EXTENSIONS = {
     ".java",
     ".kt",
     ".cs",
-    ".go",
-    ".rs",
 }
 # Source-like languages that can contain executable client/control flow but are not yet
 # represented by the deterministic semantic extractor. Their presence preserves a
@@ -53,6 +52,8 @@ _SOURCE_EXTENSIONS = {
 _SOURCE_LIKE_EXTENSIONS = frozenset(
     {
         *_SOURCE_EXTENSIONS,
+        ".go",
+        ".rs",
         ".rb",
         ".php",
         ".swift",
@@ -205,10 +206,20 @@ def _env_names(text: str) -> list[str]:
 
 
 def _provider_for_host(host: str) -> str | None:
-    lower = host.lower()
+    lower = host.lower().rstrip(".")
     for provider, hints in _PROVIDER_HOSTS:
-        if any(hint in lower for hint in hints):
-            return provider
+        for hint in hints:
+            normalized = hint.lower().rstrip(".")
+            if hint.endswith("."):
+                if (
+                    provider == "AWS_BEDROCK"
+                    and lower.startswith(f"{normalized}.")
+                    and lower.endswith(".amazonaws.com")
+                ):
+                    return provider
+                continue
+            if lower == normalized or lower.endswith(f".{normalized}"):
+                return provider
     return None
 
 
@@ -220,11 +231,141 @@ def _method_for_call(name: str) -> str | None:
     return None
 
 
+def _http_target_expression(window: str) -> str:
+    """Return only the first request-target argument for a recognized HTTP call."""
+    match = _HTTP_CALL_RE.search(window)
+    if not match:
+        return ""
+    chars: list[str] = []
+    stack: list[str] = []
+    quote: str | None = None
+    escaped = False
+    pairs = {"(": ")", "[": "]", "{": "}"}
+    for char in window[match.end():]:
+        if quote is not None:
+            chars.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in {"'", '"', "`"}:
+            quote = char
+            chars.append(char)
+            continue
+        if char in pairs:
+            stack.append(pairs[char])
+            chars.append(char)
+            continue
+        if stack and char == stack[-1]:
+            stack.pop()
+            chars.append(char)
+            continue
+        if not stack and char in {",", ")"}:
+            break
+        chars.append(char)
+    return "".join(chars).strip()
+
+
+def _condition_env_names(line: str, aliases: dict[str, str]) -> list[str]:
+    names = _env_names(line)
+    names.extend(
+        env_name
+        for alias, env_name in aliases.items()
+        if re.search(rf"\b{re.escape(alias)}\b", line)
+    )
+    return list(dict.fromkeys(names))
+
+
+def _brace_delta(line: str) -> int:
+    # Structural-only approximation: remove quoted strings and line comments before
+    # counting braces, so URLs/payload literals cannot affect block containment.
+    scrubbed = re.sub(r"(['\"]).*?(?<!\\)\1", "", line)
+    scrubbed = scrubbed.split("//", 1)[0]
+    return scrubbed.count("{") - scrubbed.count("}")
+
+
+def _brace_depths(lines: list[str]) -> list[int]:
+    depths: list[int] = []
+    depth = 0
+    for line in lines:
+        depths.append(depth)
+        depth = max(0, depth + _brace_delta(line))
+    return depths
+
+
+def _verified_guard_line(
+    lines: list[str], invocation_index: int, aliases: dict[str, str]
+) -> tuple[int, list[str]] | None:
+    if invocation_index < 0 or invocation_index >= len(lines):
+        return None
+    depths = _brace_depths(lines)
+    invocation_line = lines[invocation_index]
+    same_names = _condition_env_names(invocation_line, aliases)
+    if same_names and _CONDITION_RE.search(invocation_line):
+        return invocation_index + 1, same_names
+
+    invocation_indent = len(invocation_line) - len(invocation_line.lstrip())
+    for index in range(invocation_index - 1, -1, -1):
+        line = lines[index]
+        names = _condition_env_names(line, aliases)
+        if not names or not _CONDITION_RE.search(line):
+            continue
+
+        # Curly-brace languages: the invocation must be structurally inside the
+        # condition block, not merely within a nearby lexical window.
+        if "{" in line and depths[invocation_index] > depths[index]:
+            depth = depths[index] + max(1, _brace_delta(line))
+            enclosed = True
+            for middle in range(index + 1, invocation_index):
+                depth += _brace_delta(lines[middle])
+                if depth <= depths[index]:
+                    enclosed = False
+                    break
+            if enclosed:
+                return index + 1, names
+
+        # Dominating single-line early exit (for example `if (!enabled) return`).
+        # This is a real control-flow guard even though the invocation is after the if.
+        if re.search(r"\b(?:return|throw|continue)\b", line) and depths[index] == depths[invocation_index]:
+            return index + 1, names
+
+        # Indentation languages: require uninterrupted deeper indentation until the
+        # invocation, so a sibling `if` cannot be attached as a guard.
+        stripped = line.rstrip()
+        condition_indent = len(line) - len(line.lstrip())
+        if stripped.endswith(":") and invocation_indent > condition_indent:
+            enclosed = True
+            for middle in range(index + 1, invocation_index):
+                candidate = lines[middle]
+                if not candidate.strip() or candidate.lstrip().startswith("#"):
+                    continue
+                indent = len(candidate) - len(candidate.lstrip())
+                if indent <= condition_indent:
+                    enclosed = False
+                    break
+            if enclosed:
+                return index + 1, names
+    return None
+
+
 class AIDiscoveryEnricher:
     """Add only AI-material config/control/outbound facts to a semantic graph."""
 
-    def __init__(self, workspace_path: str | Path) -> None:
+    def __init__(
+        self, workspace_path: str | Path, *, include_files: Iterable[str] | None = None
+    ) -> None:
         self.workspace = Path(workspace_path).resolve(strict=False)
+        self._include_files = (
+            {str(value).replace("\\", "/").lstrip("./") for value in include_files}
+            if include_files is not None
+            else None
+        )
+
+    def _in_scope(self, relative: str) -> bool:
+        return self._include_files is None or relative in self._include_files
 
     def enrich(self, program: SemanticProgram) -> SemanticProgram:
         self._preserve_uncovered_source_frontiers(program)
@@ -262,20 +403,20 @@ class AIDiscoveryEnricher:
     def finalize(self, program: SemanticProgram) -> SemanticProgram:
         """Resolve AI-material frontiers from the completed semantic PGE IR.
 
-        This pass must run after architecture/data/protocol resolution.  It never
-        upgrades a generic transport to confirmed AI; it only creates a possible
-        candidate or preserves a technical unresolved frontier when connected PGE
-        evidence carries AI semantics.
+        Traversal is directional and trust-aware. Only OBSERVED/CORROBORATED,
+        sufficiently covered edges/nodes may establish a Customer-owned AI relation.
+        Unresolved/inferred continuations remain Scanner/PGE-owned frontiers.
         """
         node_by_key = {node.key: node for node in program.nodes}
-        adjacency: dict[str, list[tuple[str, str]]] = {}
+        adjacency: dict[str, list[tuple[str, SemanticEdgeFact]]] = {}
         for edge in program.edges:
             if edge.edge_type not in _AI_GRAPH_EDGES:
                 continue
             if edge.source_key not in node_by_key or edge.target_key not in node_by_key:
                 continue
-            adjacency.setdefault(edge.source_key, []).append((edge.target_key, edge.edge_type))
-            adjacency.setdefault(edge.target_key, []).append((edge.source_key, edge.edge_type))
+            # Preserve semantic direction. Reversing CALLS/HANDLED_BY/etc. lets a
+            # boundary walk through a shared caller into unrelated sibling calls.
+            adjacency.setdefault(edge.source_key, []).append((edge.target_key, edge))
 
         replacements: dict[str, SemanticNodeFact] = {}
         added_candidates: set[str] = set()
@@ -283,26 +424,30 @@ class AIDiscoveryEnricher:
             if boundary.node_type not in _AI_BOUNDARY_TYPES or boundary.node_type == "AI_API_CANDIDATE":
                 continue
             evidence = self._walk_ai_frontier(boundary.key, node_by_key, adjacency)
-            if not evidence["ai_material"]:
-                continue
 
-            for unresolved_key in evidence["unresolved"]:
-                unresolved = node_by_key.get(unresolved_key)
-                if unresolved is None:
-                    continue
-                attrs = dict(unresolved.attributes or {})
-                if attrs.get("aiMaterial") is not True:
-                    attrs["aiMaterial"] = True
-                    attrs["aiDiscoveryReason"] = "PGE_MULTI_HOP_FRONTIER"
-                    replacements[unresolved.key] = replace(
-                        unresolved, attributes=attrs, coverage_state="LIMITED", resolution_state="UNRESOLVED"
-                    )
-                if unresolved.key not in program.unresolved_frontiers:
-                    program.unresolved_frontiers.append(unresolved.key)
+            uncertain_keys = set(evidence["unresolved"]) | set(evidence["uncertain"])
+            if uncertain_keys and (
+                evidence["ai_material"]
+                or boundary.node_type in {"EXTERNAL_API", "GRAPHQL_OPERATION", "GRPC_METHOD", "AI_GATEWAY"}
+            ):
+                for unresolved_key in uncertain_keys:
+                    unresolved = node_by_key.get(unresolved_key)
+                    if unresolved is None:
+                        continue
+                    attrs = dict(unresolved.attributes or {})
+                    if attrs.get("aiMaterial") is not True:
+                        attrs["aiMaterial"] = True
+                        attrs["aiDiscoveryReason"] = "PGE_UNTRUSTED_OR_UNRESOLVED_FRONTIER"
+                        replacements[unresolved.key] = replace(
+                            unresolved,
+                            attributes=attrs,
+                            coverage_state="LIMITED",
+                            resolution_state="UNRESOLVED",
+                        )
+                    if unresolved.key not in program.unresolved_frontiers:
+                        program.unresolved_frontiers.append(unresolved.key)
 
-            # A bounded traversal that exhausts before resolving the AI-relevant
-            # transport is itself a material technical frontier; absence is unsafe.
-            if evidence["truncated"] and not evidence["strong"]:
+            if evidence["truncated"]:
                 frontier_key = f"ai-frontier:{boundary.key}"
                 if frontier_key not in node_by_key:
                     frontier = SemanticNodeFact(
@@ -325,9 +470,11 @@ class AIDiscoveryEnricher:
                 if frontier_key not in program.unresolved_frontiers:
                     program.unresolved_frontiers.append(frontier_key)
 
-            # Generic GraphQL/gRPC/Retrofit/custom boundaries are not proof of AI.
-            # When connected PGE evidence does contain AI semantics, persist only an
-            # unresolved outbound candidate for Customer confirmation.
+            # Customer clarification is allowed only after a deterministic trusted path
+            # established the AI relation. Technical uncertainty never becomes a
+            # Customer-owned confirmation question.
+            if not evidence["ai_material"] or evidence["technical_uncertainty"]:
+                continue
             if boundary.node_type in {"EXTERNAL_API", "GRAPHQL_OPERATION", "GRPC_METHOD", "AI_GATEWAY"} or evidence["transport"]:
                 candidate_key = f"ai-api-candidate:pge:{boundary.key}"
                 if candidate_key in node_by_key or candidate_key in added_candidates:
@@ -351,7 +498,7 @@ class AIDiscoveryEnricher:
                     boundary.end_line,
                     boundary.symbol_ref,
                     attributes=attrs,
-                    coverage_state="LIMITED" if evidence["unresolved"] else boundary.coverage_state,
+                    coverage_state=boundary.coverage_state,
                     resolution_state="UNRESOLVED",
                     support_refs=tuple(sorted(set(boundary.evidence_refs + boundary.support_refs))),
                 )
@@ -370,14 +517,31 @@ class AIDiscoveryEnricher:
 
         if replacements:
             program.nodes = [replacements.get(node.key, node) for node in program.nodes]
+            node_by_key.update(replacements)
+        self._reconcile_unmodeled_transport_frontiers(program, node_by_key, adjacency)
         return program
+
+    @staticmethod
+    def _edge_is_trusted(edge: SemanticEdgeFact) -> bool:
+        return (
+            str(edge.resolution_state or "").upper() in {"OBSERVED", "CORROBORATED"}
+            and str(edge.coverage_state or "").upper() in {"SUFFICIENT", "READY"}
+            and float(edge.confidence) >= 0.8
+        )
+
+    @staticmethod
+    def _node_is_trusted(node: SemanticNodeFact) -> bool:
+        return (
+            str(node.resolution_state or "").upper() in {"OBSERVED", "CORROBORATED"}
+            and str(node.coverage_state or "").upper() in {"SUFFICIENT", "READY"}
+        )
 
     @classmethod
     def _walk_ai_frontier(
         cls,
         start: str,
         node_by_key: dict[str, SemanticNodeFact],
-        adjacency: dict[str, list[tuple[str, str]]],
+        adjacency: dict[str, list[tuple[str, SemanticEdgeFact]]],
     ) -> dict[str, object]:
         queue = deque([(start, 0)])
         seen: set[str] = set()
@@ -386,6 +550,7 @@ class AIDiscoveryEnricher:
         transport = False
         payload_hints: set[str] = set()
         unresolved: set[str] = set()
+        uncertain: set[str] = set()
         truncated = False
         max_hops = 0
         while queue:
@@ -397,43 +562,145 @@ class AIDiscoveryEnricher:
             node = node_by_key.get(key)
             if node is None:
                 continue
+            trusted_node = cls._node_is_trusted(node)
             text = cls._node_signal_text(node)
             attrs = node.attributes or {}
-            if (
+            if not trusted_node:
+                uncertain.add(key)
+                if node.node_type == "UNRESOLVED_DYNAMIC_TARGET":
+                    unresolved.add(key)
+                # Do not let evidence beyond an inferred/unresolved node establish AI.
+                if key != start:
+                    continue
+            if trusted_node and (
                 node.node_type in _AI_STRONG_TYPES
                 or (node.node_type == "SDK_CLIENT" and str(attrs.get("semanticRole") or "").startswith("PROVIDER_"))
                 or attrs.get("aiRelevant") is True
             ):
                 strong = True
-            if _AI_GRAPH_STRONG_RE.search(text):
+            if trusted_node and _AI_GRAPH_STRONG_RE.search(text):
                 ai_named = True
-            if node.node_type in {"GRAPHQL_OPERATION", "GRPC_METHOD", "AI_GATEWAY"} or _AI_GRAPH_TRANSPORT_RE.search(text):
+            if trusted_node and (node.node_type in {"GRAPHQL_OPERATION", "GRPC_METHOD", "AI_GATEWAY"} or _AI_GRAPH_TRANSPORT_RE.search(text)):
                 transport = True
-            for match in _AI_GRAPH_PAYLOAD_RE.finditer(text):
-                payload_hints.add(match.group(1).lower() if match.lastindex else match.group(0).strip(" _.-").lower())
-            if node.node_type == "UNRESOLVED_DYNAMIC_TARGET" or node.resolution_state == "UNRESOLVED":
-                if node.node_type == "UNRESOLVED_DYNAMIC_TARGET":
-                    unresolved.add(key)
+            if trusted_node:
+                for match in _AI_GRAPH_PAYLOAD_RE.finditer(text):
+                    payload_hints.add(match.group(1).lower() if match.lastindex else match.group(0).strip(" _.-").lower())
+            if node.node_type == "UNRESOLVED_DYNAMIC_TARGET":
+                unresolved.add(key)
+
+            neighbors = sorted(adjacency.get(key, []), key=lambda item: (item[1].edge_type, item[0]))
             if depth >= _MAX_GRAPH_HOPS:
-                if adjacency.get(key):
+                if any(
+                    nxt not in seen
+                    and cls._edge_is_trusted(edge)
+                    and cls._node_is_trusted(node_by_key[nxt])
+                    for nxt, edge in neighbors
+                    if nxt in node_by_key
+                ):
                     truncated = True
                 continue
-            for nxt, _edge_type in sorted(adjacency.get(key, [])):
-                if nxt not in seen:
-                    queue.append((nxt, depth + 1))
+            for nxt, edge in neighbors:
+                if nxt in seen:
+                    continue
+                target = node_by_key.get(nxt)
+                if target is None:
+                    continue
+                if not cls._edge_is_trusted(edge) or not cls._node_is_trusted(target):
+                    uncertain.add(nxt)
+                    if target.node_type == "UNRESOLVED_DYNAMIC_TARGET" or str(target.resolution_state).upper() == "UNRESOLVED":
+                        unresolved.add(nxt)
+                    continue
+                queue.append((nxt, depth + 1))
 
-        # A lone generic `model` token is not enough.  Strong semantic nodes are
-        # sufficient; otherwise require AI naming plus payload/transport corroboration.
         ai_material = strong or (ai_named and (bool(payload_hints) or transport))
+        technical_uncertainty = bool(unresolved or uncertain or truncated)
         return {
             "ai_material": ai_material,
             "strong": strong,
             "transport": transport,
             "payload_hints": payload_hints,
             "unresolved": unresolved,
+            "uncertain": uncertain,
             "truncated": truncated,
+            "technical_uncertainty": technical_uncertainty,
             "hops": max_hops,
         }
+
+    @classmethod
+    def _reconcile_unmodeled_transport_frontiers(
+        cls,
+        program: SemanticProgram,
+        node_by_key: dict[str, SemanticNodeFact],
+        adjacency: dict[str, list[tuple[str, SemanticEdgeFact]]],
+    ) -> None:
+        transport_types = {
+            "GRAPHQL_CLIENT": {"GRAPHQL_OPERATION", "EXTERNAL_API", "CALL_SITE"},
+            "GRPC_CLIENT": {"GRPC_METHOD", "EXTERNAL_API", "CALL_SITE"},
+            "RETROFIT_CLIENT": {"EXTERNAL_API", "CALL_SITE"},
+        }
+        proof_edge_types = {
+            "RESOLVES_TO",
+            "CALLS_EXTERNAL",
+            "CALLS_API",
+            "HANDLED_BY",
+            "INVOKES_BOUNDARY",
+        }
+        remove: set[str] = set()
+        for frontier in list(program.nodes):
+            attrs = frontier.attributes or {}
+            if attrs.get("aiDiscoveryReason") != "UNMODELED_OUTBOUND_CLIENT_FLOW":
+                continue
+            transport_name = str(attrs.get("transport") or "")
+            expected_types = transport_types.get(transport_name, set())
+            boundaries = []
+            for node in program.nodes:
+                if (
+                    node.file_path != frontier.file_path
+                    or node.node_type not in expected_types
+                    or not cls._node_is_trusted(node)
+                ):
+                    continue
+                frontier_line = frontier.start_line or 0
+                node_start = node.start_line or 0
+                node_end = node.end_line or node_start
+                if frontier_line and not (node_start <= frontier_line <= node_end):
+                    continue
+                trusted_proof = any(
+                    edge.edge_type in proof_edge_types
+                    and cls._edge_is_trusted(edge)
+                    and target_key in node_by_key
+                    and cls._node_is_trusted(node_by_key[target_key])
+                    for target_key, edge in adjacency.get(node.key, [])
+                )
+                if trusted_proof:
+                    boundaries.append(node)
+            if not boundaries:
+                continue
+            results = [cls._walk_ai_frontier(node.key, node_by_key, adjacency) for node in boundaries]
+            if all(
+                not result["ai_material"]
+                and not result["technical_uncertainty"]
+                for result in results
+            ):
+                remove.add(frontier.key)
+                prefix = (
+                    f"ai_discovery_unmodeled_transport:transport={transport_name}:"
+                    f"file={frontier.file_path}:"
+                )
+                program.coverage_notes = [
+                    note for note in program.coverage_notes if not note.startswith(prefix)
+                ]
+        if not remove:
+            return
+        program.nodes = [node for node in program.nodes if node.key not in remove]
+        program.edges = [
+            edge
+            for edge in program.edges
+            if edge.source_key not in remove and edge.target_key not in remove
+        ]
+        program.unresolved_frontiers = [
+            key for key in program.unresolved_frontiers if key not in remove
+        ]
 
     @staticmethod
     def _node_signal_text(node: SemanticNodeFact) -> str:
@@ -460,6 +727,8 @@ class AIDiscoveryEnricher:
             if any(part in _EXCLUDED_PARTS for part in relative.parts):
                 continue
             rel = relative.as_posix()
+            if not self._in_scope(rel):
+                continue
             if is_test_source_path(rel):
                 continue
             suffix = path.suffix.lower()
@@ -539,6 +808,8 @@ class AIDiscoveryEnricher:
                 continue
             relative = path.relative_to(self.workspace)
             rel = relative.as_posix()
+            if not self._in_scope(rel):
+                continue
             if any(part in _EXCLUDED_PARTS for part in relative.parts):
                 continue
             if is_test_source_path(rel):
@@ -623,12 +894,13 @@ class AIDiscoveryEnricher:
                 continue
             line_no = index + 1
             window = "\n".join(lines[index : min(len(lines), index + 5)])
-            urls = _URL_RE.findall(window)
-            env_names = _env_names(window)
+            target_expression = _http_target_expression(window)
+            urls = _URL_RE.findall(target_expression)
+            env_names = _env_names(target_expression)
             env_names.extend(
                 env_name
                 for alias, env_name in aliases.items()
-                if re.search(rf"\b{re.escape(alias)}\b", window)
+                if re.search(rf"\b{re.escape(alias)}\b", target_expression)
             )
             env_names = list(dict.fromkeys(env_names))
             payload_hints = sorted(
@@ -645,7 +917,9 @@ class AIDiscoveryEnricher:
                 host = parsed.hostname or ""
                 path_value = parsed.path or "/"
                 provider = _provider_for_host(host)
-            endpoint_signature = bool(_AI_ENDPOINT_RE.search(window))
+            endpoint_signature = bool(
+                _AI_ENDPOINT_RE.search(path_value or target_expression)
+            )
             payload_signature = bool(payload_hints)
             strong_payload_signature = len(
                 set(payload_hints)
@@ -797,7 +1071,6 @@ class AIDiscoveryEnricher:
         for invocation in invocations:
             if not invocation.start_line:
                 continue
-            start = max(0, invocation.start_line - 12)
             invocation_index = invocation.start_line - 1
             invocation_window = "\n".join(
                 lines[invocation_index : min(len(lines), invocation_index + 5)]
@@ -820,55 +1093,45 @@ class AIDiscoveryEnricher:
                         resolution_state="OBSERVED",
                     )
                 )
-            for index in range(invocation.start_line - 2, start - 1, -1):
-                if index < 0 or index >= len(lines):
-                    continue
-                line = lines[index]
-                names = _env_names(line)
-                names.extend(
-                    env_name
-                    for alias, env_name in aliases.items()
-                    if re.search(rf"\b{re.escape(alias)}\b", line)
+
+            verified = _verified_guard_line(lines, invocation_index, aliases)
+            if verified is None:
+                continue
+            condition_line, names = verified
+            condition_key = f"control-condition:{relative}:{condition_line}"
+            program.add_node(
+                SemanticNodeFact(
+                    condition_key,
+                    "CONTROL_CONDITION",
+                    "runtime configuration condition",
+                    relative,
+                    condition_line,
+                    condition_line,
+                    attributes={
+                        "configNames": sorted(names),
+                        "aiMaterial": True,
+                    },
+                    resolution_state="OBSERVED",
                 )
-                names = list(dict.fromkeys(names))
-                if not names or not _CONDITION_RE.search(line):
-                    continue
-                condition_line = index + 1
-                condition_key = f"control-condition:{relative}:{condition_line}"
-                program.add_node(
-                    SemanticNodeFact(
-                        condition_key,
-                        "CONTROL_CONDITION",
-                        "runtime configuration condition",
-                        relative,
-                        condition_line,
-                        condition_line,
-                        attributes={
-                            "configNames": sorted(names),
-                            "aiMaterial": True,
-                        },
-                        resolution_state="UNRESOLVED",
-                    )
-                )
-                for name in names:
-                    env_key = self._env_node(
-                        program, relative, condition_line, name
-                    )
-                    program.add_edge(
-                        SemanticEdgeFact(
-                            "CONTROLS", env_key, condition_key
-                        )
-                    )
+            )
+            for name in names:
+                env_key = self._env_node(program, relative, condition_line, name)
                 program.add_edge(
                     SemanticEdgeFact(
-                        "GUARDS",
+                        "CONTROLS",
+                        env_key,
                         condition_key,
-                        invocation.key,
-                        coverage_state="LIMITED",
-                        resolution_state="UNRESOLVED",
+                        resolution_state="OBSERVED",
                     )
                 )
-                break
+            program.add_edge(
+                SemanticEdgeFact(
+                    "GUARDS",
+                    condition_key,
+                    invocation.key,
+                    resolution_state="OBSERVED",
+                )
+            )
 
     @staticmethod
     def _call_node(

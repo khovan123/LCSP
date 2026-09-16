@@ -211,10 +211,23 @@ export class AssessmentController {
         code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE",
       });
     }
+    const evidenceReportRef = [
+      ...(state.activeQuestion.whyEvidenceRefs ?? []),
+      ...(state.activeQuestion.frontier?.evidenceRefs ?? []),
+    ].find((ref) => ref.startsWith("technicalEvidenceReport:"));
+    const evidenceReportId = evidenceReportRef?.slice(
+      "technicalEvidenceReport:".length,
+    );
+    if (!evidenceReportId) {
+      throw new NotFoundException({
+        code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE",
+      });
+    }
     return resultEnvelope(
       await this.interviewSnippet.resolve({
         assessmentId,
         correlationId: request.correlationId ?? "interview-source-snippet",
+        evidenceReportId,
         snippetRef: state.activeQuestion.snippetRef,
       }),
     );

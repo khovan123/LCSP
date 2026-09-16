@@ -22,6 +22,19 @@ function tarGzip(path: string, source: Buffer): Buffer {
   return gzipSync(Buffer.concat([header, source, padding, Buffer.alloc(1024)]));
 }
 
+function oversizedTarGzip(path: string, claimedSize: number): Buffer {
+  const header = Buffer.alloc(512);
+  header.write(path, 0, Math.min(Buffer.byteLength(path), 100), "utf8");
+  header.write(
+    claimedSize.toString(8).padStart(11, "0") + "\0",
+    124,
+    12,
+    "ascii",
+  );
+  header[156] = "0".charCodeAt(0);
+  return gzipSync(Buffer.concat([header, Buffer.alloc(1024)]));
+}
+
 function snippetRef(source: Buffer): AiDiscoverySnippetRef {
   return {
     snapshot_id: "snapshot-1",
@@ -51,6 +64,13 @@ describe("AssessmentInterviewSnippetService pinned snapshot integration", () => 
   function harness(overrides?: { source?: Buffer; commitSha?: string }) {
     const archivedSource = overrides?.source ?? source;
     const prisma = {
+      technicalEvidenceReport: {
+        findFirst: jest.fn(async () => ({
+          evidencePayload: {
+            ai_discovery: { findings: [{ snippet_ref: snippetRef(source) }] },
+          },
+        })),
+      },
       repositorySnapshot: {
         findFirst: jest.fn(async () => ({
           id: "snapshot-1",
@@ -89,6 +109,7 @@ describe("AssessmentInterviewSnippetService pinned snapshot integration", () => 
     const result = await service.resolve({
       assessmentId: "assessment-1",
       correlationId: "corr-1",
+      evidenceReportId: "report-1",
       snippetRef: snippetRef(source),
     });
 
@@ -125,6 +146,7 @@ describe("AssessmentInterviewSnippetService pinned snapshot integration", () => 
       service.resolve({
         assessmentId: "assessment-1",
         correlationId: "corr-hash",
+        evidenceReportId: "report-1",
         snippetRef: snippetRef(source),
       }),
     ).rejects.toMatchObject({
@@ -139,10 +161,89 @@ describe("AssessmentInterviewSnippetService pinned snapshot integration", () => 
       service.resolve({
         assessmentId: "assessment-1",
         correlationId: "corr-commit",
+        evidenceReportId: "report-1",
         snippetRef: snippetRef(source),
       }),
     ).rejects.toMatchObject({
       response: { code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE" },
     });
   });
+  it("rejects a locator whose line range is not present in the governed AI finding", async () => {
+    const { service } = harness();
+    const forged = { ...snippetRef(source), start_line: 6, end_line: 7 };
+
+    await expect(
+      service.resolve({
+        assessmentId: "assessment-1",
+        correlationId: "corr-range",
+        evidenceReportId: "report-1",
+        snippetRef: forged,
+      }),
+    ).rejects.toMatchObject({
+      response: { code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE" },
+    });
+  });
+
+  it("fails closed for common credential-looking source lines", async () => {
+    const credentialSource = Buffer.from(
+      [
+        'const password = "value-that-must-not-render";',
+        'const token = "another-value-that-must-not-render";',
+        'const headers = { "x-api-key": "key-material" };',
+        'const authorization = "Basic dXNlcjpwYXNz";',
+        'const AWS_SECRET_ACCESS_KEY = "aws-secret-material";',
+        'const providerKey = "sk-proj-abcdefghijklmnopqrstuvwxyz";',
+      ].join("\n"),
+      "utf8",
+    );
+    const { service, prisma } = harness({ source: credentialSource });
+    prisma.technicalEvidenceReport.findFirst.mockResolvedValueOnce({
+      evidencePayload: {
+        ai_discovery: {
+          findings: [{ snippet_ref: snippetRef(credentialSource) }],
+        },
+      },
+    });
+
+    const result = await service.resolve({
+      assessmentId: "assessment-1",
+      correlationId: "corr-secrets",
+      evidenceReportId: "report-1",
+      snippetRef: snippetRef(credentialSource),
+    });
+    const rendered = result.lines.map((line) => line.text).join("\n");
+    expect(rendered).toContain("[REDACTED]");
+    expect(rendered).not.toContain("value-that-must-not-render");
+    expect(rendered).not.toContain("another-value-that-must-not-render");
+    expect(rendered).not.toContain("key-material");
+    expect(rendered).not.toContain("dXNlcjpwYXNz");
+    expect(rendered).not.toContain("aws-secret-material");
+    expect(rendered).not.toContain("sk-proj-");
+  });
+
+  it("aborts before decompressing an oversized non-target tar member", async () => {
+    const { service, queryBus } = harness();
+    queryBus.execute.mockResolvedValueOnce({
+      snapshotId: "snapshot-1",
+      commitSha: "abc123",
+      repositoryFullName: "owner/repository",
+      contentType: "application/gzip",
+      resolvedUrl: "https://example.invalid/archive",
+      stream: Readable.from(
+        oversizedTarGzip("repository-abc123/huge.bin", 65 * 1024 * 1024),
+      ),
+    });
+
+    await expect(
+      service.resolve({
+        assessmentId: "assessment-1",
+        correlationId: "corr-archive-budget",
+        evidenceReportId: "report-1",
+        snippetRef: snippetRef(source),
+      }),
+    ).rejects.toMatchObject({
+      response: { code: "INTERVIEW_SOURCE_SNIPPET_ARCHIVE_TOO_LARGE" },
+    });
+  });
+
 });

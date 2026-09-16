@@ -323,6 +323,68 @@ def test_ready_no_ai_gate_short_circuits_before_interview_dispatch() -> None:
     assert root.calls == []
 
 
+
+def test_no_ai_gate_does_not_override_authoritative_customer_confirmed_ai_context() -> None:
+    context = _structured_context(revision=3)
+    context["statements"][0].update(
+        {
+            "statementId": "stmt-ai-usage",
+            "topic": "ai_usage",
+            "statement": "An external AI service is used outside the scanned repository.",
+            "normalizedValue": "external_ai_service",
+        }
+    )
+    api = FakeApi(
+        {
+            "outcome": "CONTEXT_READY",
+            "contextRevision": 3,
+            "confirmedContext": context,
+        }
+    )
+
+    result = _boundary(api, FakeDispatcher())._prepare_interview(
+        evidence_report=_ai_report("AI_ABSENT_CONFIRMED", []),
+        evidence_report_id="ter-no-repo-ai",
+        assessment_id="assessment-1",
+        correlation_id="corr-external-ai",
+        workflow_run_id="workflow-external-ai",
+    )
+
+    assert result is not None
+    assert result.context_revision == 3
+    assert result.confirmed_statement_refs == ("stmt-ai-usage",)
+
+
+def test_mixed_customer_and_technical_ai_uncertainty_routes_to_reanalysis_before_ready_context() -> None:
+    customer = _ai_finding("OUTBOUND_API", "OUTBOUND_AI_CONFIRMATION")
+    technical = _ai_finding(
+        "DYNAMIC_TARGET", "TARGETED_TECHNICAL_REANALYSIS", owner="TECHNICAL"
+    )
+    report = _ai_report("AI_UNKNOWN", [customer, technical])
+    report["evidence_payload"]["ai_discovery"]["material_unresolved_frontiers"] = [
+        "frontier:dynamic-1"
+    ]
+    api = FakeApi(
+        {
+            "outcome": "CONTEXT_READY",
+            "contextRevision": 2,
+            "confirmedContext": _structured_context(revision=2),
+        }
+    )
+    root = RecordingRoot()
+
+    result = _boundary(api, FakeDispatcher(), root)._prepare_interview(
+        evidence_report=report,
+        evidence_report_id="ter-mixed",
+        assessment_id="assessment-1",
+        correlation_id="corr-mixed",
+        workflow_run_id="workflow-mixed",
+    )
+
+    assert result is None
+    assert len(root.calls) == 1
+    assert root.calls[0][1]["metadata"]["trigger"] == "AI_DISCOVERY_REANALYSIS_REQUIRED"
+
 def test_confirmed_ai_invocation_asks_purpose_and_feature_not_is_this_ai() -> None:
     api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
     dispatcher = FakeDispatcher()

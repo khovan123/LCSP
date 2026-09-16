@@ -8,15 +8,21 @@ import type {
   AiDiscoverySnippetRef,
   AssessmentInterviewSourceSnippet,
 } from "@lcsp/contracts/evidence";
+import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { RepositoryScanJobStatus } from "@prisma/client";
 
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
+import {
+  containsSensitiveCredentialText,
+  sanitizeAgentStreamText,
+} from "../../../../platform/runtime-events/agent-stream-sanitizer.js";
 import type { SnapshotArchiveStreamResult } from "../../../github-integration/application/queries/stream-snapshot-archive/stream-snapshot-archive.handler.js";
 import { StreamSnapshotArchiveQuery } from "../../../github-integration/application/queries/stream-snapshot-archive/stream-snapshot-archive.query.js";
 
 const MAX_SNIPPET_LINES = 7;
 const MAX_SNIPPET_BYTES = 4096;
 const MAX_SOURCE_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_ARCHIVE_UNCOMPRESSED_BYTES = 64 * 1024 * 1024;
 const TAR_BLOCK_SIZE = 512;
 const REDACTED = "[REDACTED]";
 
@@ -44,9 +50,26 @@ export class AssessmentInterviewSnippetService {
   async resolve(input: {
     assessmentId: string;
     correlationId: string;
+    evidenceReportId: string;
     snippetRef: AiDiscoverySnippetRef;
   }): Promise<AssessmentInterviewSourceSnippet> {
     assertSnippetRef(input.snippetRef);
+
+    const evidenceReport = await this.prisma.technicalEvidenceReport.findFirst({
+      where: {
+        id: input.evidenceReportId,
+        assessmentId: input.assessmentId,
+        snapshotId: input.snippetRef.snapshot_id,
+        status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+      },
+      select: { evidencePayload: true },
+    });
+    if (
+      !evidenceReport ||
+      !isGovernedSnippetRef(evidenceReport.evidencePayload, input.snippetRef)
+    ) {
+      throw new NotFoundException({ code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE" });
+    }
 
     const snapshot = await this.prisma.repositorySnapshot.findFirst({
       where: {
@@ -128,7 +151,10 @@ export class AssessmentInterviewSnippetService {
       line += 1
     ) {
       const original = allLines[line - 1] ?? "";
-      const sanitized = sanitizedLines[line - 1] ?? "";
+      const preSanitized = sanitizedLines[line - 1] ?? "";
+      const sanitized = containsSensitiveCredentialText(original)
+        ? REDACTED
+        : (sanitizeAgentStreamText(preSanitized) ?? REDACTED);
       redacted ||= sanitized !== original;
       const separatorBytes = lines.length > 0 ? 1 : 0;
       if (remainingBytes <= separatorBytes) {
@@ -153,6 +179,38 @@ export class AssessmentInterviewSnippetService {
       truncated,
     };
   }
+}
+
+function isGovernedSnippetRef(
+  evidencePayload: unknown,
+  ref: AiDiscoverySnippetRef,
+): boolean {
+  const payload = objectRecord(evidencePayload);
+  const discovery = objectRecord(payload?.ai_discovery ?? payload?.aiDiscovery);
+  const findings = Array.isArray(discovery?.findings) ? discovery.findings : [];
+  return findings.some((finding) => {
+    const record = objectRecord(finding);
+    const candidate = objectRecord(record?.snippet_ref ?? record?.snippetRef);
+    if (!candidate) return false;
+    return (
+      candidate.snapshot_id === ref.snapshot_id &&
+      candidate.commit_sha === ref.commit_sha &&
+      normalizeArchivePath(String(candidate.file_path ?? "")) ===
+        normalizeArchivePath(ref.file_path) &&
+      Number(candidate.start_line) === ref.start_line &&
+      Number(candidate.end_line) === ref.end_line &&
+      String(candidate.symbol ?? "") === String(ref.symbol ?? "") &&
+      String(candidate.evidence_hash ?? "").toLowerCase() ===
+        ref.evidence_hash.toLowerCase() &&
+      candidate.snippet_policy === ref.snippet_policy
+    );
+  });
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function assertSnippetRef(ref: AiDiscoverySnippetRef): void {
@@ -185,13 +243,25 @@ async function readFileFromGzipTar(
   const reader = new AsyncByteReader(gunzip);
   const target = normalizeArchivePath(filePath);
 
+  let uncompressedBytes = 0;
   try {
     while (true) {
       const header = await reader.readExactly(TAR_BLOCK_SIZE);
       if (!header || header.every((value) => value === 0)) break;
+      uncompressedBytes += TAR_BLOCK_SIZE;
+      if (uncompressedBytes > MAX_ARCHIVE_UNCOMPRESSED_BYTES) {
+        throw new NotFoundException({ code: "INTERVIEW_SOURCE_SNIPPET_ARCHIVE_TOO_LARGE" });
+      }
 
       const member = tarMember(header);
       if (member.size < 0) break;
+      const memberBytes = member.size + paddingFor(member.size);
+      if (uncompressedBytes + memberBytes > MAX_ARCHIVE_UNCOMPRESSED_BYTES) {
+        throw new NotFoundException({
+          code: "INTERVIEW_SOURCE_SNIPPET_ARCHIVE_TOO_LARGE",
+        });
+      }
+      uncompressedBytes += memberBytes;
       if (
         member.size > MAX_SOURCE_FILE_BYTES &&
         archivePathMatches(member.name, target)
@@ -199,6 +269,7 @@ async function readFileFromGzipTar(
         throw new NotFoundException({
           code: "INTERVIEW_SOURCE_SNIPPET_FILE_TOO_LARGE",
         });
+      }
       }
 
       if (member.regular && archivePathMatches(member.name, target)) {
@@ -210,7 +281,7 @@ async function readFileFromGzipTar(
         return body;
       }
 
-      await reader.skip(member.size + paddingFor(member.size));
+      await reader.skip(memberBytes);
     }
   } finally {
     input.destroy();
