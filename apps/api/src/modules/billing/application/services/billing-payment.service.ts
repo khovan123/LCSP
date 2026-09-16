@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { randomBytes } from "node:crypto";
 import {
   BILLING_AUDIT_EVENT_TYPES,
+  BILLING_RECONCILIATION_ACTIONS,
   BILLING_ORDER_STATUSES,
   PAYMENT_RECONCILIATION_REASONS,
   PAYMENT_RECONCILIATION_STATUSES,
@@ -280,15 +281,41 @@ export class BillingPaymentService {
           orderId: lockedOrder.id,
           creditUnits: lockedOrder.creditUnits,
         });
-        return repos.payment.create({
+        const correlationId =
+          i.correlationId ??
+          `billing-reconcile:${i.provider}:${i.providerTransactionId}`;
+        const reconciledAt = new Date();
+        const payment = await repos.payment.create({
           provider: i.provider,
           providerTransactionId: i.providerTransactionId,
           amountMinorUnits: i.amountMinorUnits,
           userId: lockedOrder.userId,
           billingOrderId: lockedOrder.id,
           reconciliationStatus: PAYMENT_RECONCILIATION_STATUSES.MATCHED,
+          reconciledAt,
           webhookEventId: webhook.id,
         });
+        await repos.audit.append({
+          eventType: BILLING_AUDIT_EVENT_TYPES.reconciliationSettled,
+          actorId: i.actorId ?? "SYSTEM",
+          sessionId: i.sessionId,
+          correlationId,
+          resourceId: payment.id,
+          payload: {
+            action: BILLING_RECONCILIATION_ACTIONS.SETTLE,
+            beforePaymentStatus: null,
+            afterPaymentStatus: payment.reconciliationStatus,
+            beforeOrderStatus: BILLING_ORDER_STATUSES.PENDING_PAYMENT,
+            afterOrderStatus: BILLING_ORDER_STATUSES.CREDITED,
+            provider: i.provider,
+            providerTransactionId: i.providerTransactionId,
+            webhookEventId: webhook.id,
+            billingOrderId: lockedOrder.id,
+            userId: lockedOrder.userId,
+            reconciledAt: reconciledAt.toISOString(),
+          },
+        });
+        return payment;
       },
     );
   }

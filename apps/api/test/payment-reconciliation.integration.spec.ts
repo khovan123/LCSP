@@ -97,6 +97,24 @@ describe("LCSP-310 payment reconciliation", () => {
       amountMinorUnits: 100000n,
     });
     expect(result.reconciliationStatus).toBe("MATCHED");
+    expect(result.reconciledAt).not.toBeNull();
+    const audit = await prisma.auditEvent.findFirstOrThrow({
+      where: {
+        eventType: BILLING_AUDIT_EVENT_TYPES.reconciliationSettled,
+        resourceId: result.id,
+      },
+    });
+    expect(audit).toMatchObject({
+      actorId: "SYSTEM",
+      correlationId: "billing-reconcile:SEPAY:TX-MATCH",
+    });
+    expect(audit.payload).toMatchObject({
+      providerTransactionId: "TX-MATCH",
+      billingOrderId: order.id,
+      userId: a.id,
+      afterPaymentStatus: "MATCHED",
+      afterOrderStatus: "CREDITED",
+    });
     expect(
       await prisma.creditLedgerEntry.count({
         where: { billingOrderId: order.id },

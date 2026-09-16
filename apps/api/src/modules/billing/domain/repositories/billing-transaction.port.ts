@@ -44,6 +44,7 @@ export type PaymentRecord = {
   reconciliationStatus: string;
   reconciliationReason: string | null;
   reconciliationVersion: number;
+  reconciledAt: Date | null;
   userId: string | null;
   billingOrderId: string | null;
   webhookEventId: string | null;
@@ -181,6 +182,7 @@ export interface PaymentTransactionPort {
     webhookEventId?: string;
     reconciliationStatus: string;
     reconciliationReason?: string;
+    reconciledAt?: Date;
   }): Promise<PaymentRecord>;
   setStatus(
     id: string,
