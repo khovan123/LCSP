@@ -460,7 +460,15 @@ describe("LCSP-310 billing persistence constraints", () => {
     ]);
     expect(
       settleResults.filter((result) => result.status === "fulfilled"),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
+    expect(settleResults[0]).toMatchObject({
+      status: "fulfilled",
+      value: { reservationId: settled.id, chargedCredits: 63n },
+    });
+    expect(settleResults[1]).toMatchObject({
+      status: "fulfilled",
+      value: { reservationId: settled.id, chargedCredits: 63n },
+    });
     const release = await accounting.reserveCredits({
       userId: a.id,
       amountCredits: 10n,
@@ -478,7 +486,7 @@ describe("LCSP-310 billing persistence constraints", () => {
     ]);
     expect(
       releaseResults.filter((result) => result.status === "fulfilled"),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     const finalWallet = await prisma.billingWallet.findUniqueOrThrow({
       where: { userId: a.id },
     });
