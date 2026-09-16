@@ -20,6 +20,10 @@ export type ReservationRecord = {
   userId: string;
   walletId: string;
   amountCredits: bigint;
+  remainingCredits: bigint;
+  assessmentId: string | null;
+  runId: string | null;
+  idempotencyKey: string | null;
   status: string;
 };
 export type OrderRecord = {
@@ -52,9 +56,14 @@ export type PaymentRecord = {
 export type UsageRecord = {
   id: string;
   userId: string;
+  assessmentId: string | null;
+  runId: string | null;
+  agentRole: string;
   provider: string;
   model: string;
   invocationId: string;
+  status: string;
+  availabilityReason: string | null;
   providerResponseId: string | null;
   inputTokens: bigint | null;
   cachedInputTokens: bigint | null;
@@ -96,6 +105,10 @@ export type RuntimeModelPolicyRecord = {
   effectiveAt: Date;
 };
 
+export interface AssessmentOwnershipPort {
+  findOwnerId(assessmentId: string): Promise<string | null>;
+}
+
 export interface BillingWalletPort {
   findForUser(userId: string): Promise<WalletRecord | null>;
   getOrCreateForUser(userId: string): Promise<WalletRecord>;
@@ -129,9 +142,15 @@ export interface BillingReservationPort {
     userId: string;
     walletId: string;
     amountCredits: bigint;
+    assessmentId?: string;
+    runId?: string;
     idempotencyKey: string;
   }): Promise<ReservationRecord>;
   listReservedForWallet(walletId: string): Promise<ReservationRecord[]>;
+  consumeRemaining(input: {
+    reservationId: string;
+    amountCredits: bigint;
+  }): Promise<boolean>;
   transitionFromReserved(input: {
     reservationId: string;
     to: "SETTLED" | "RELEASED";
@@ -224,6 +243,9 @@ export interface LlmUsagePort {
   ): Promise<UsageRecord | null>;
   create(input: {
     userId: string;
+    assessmentId?: string;
+    runId?: string;
+    agentRole: string;
     provider: string;
     model: string;
     invocationId: string;
@@ -237,10 +259,26 @@ export interface LlmUsagePort {
     pricingSnapshotId?: string;
     runtimePolicySnapshotId?: string;
     reservationId: string;
+    status?: LlmUsageStatus;
+    availabilityReason?: string;
     chargedCredits: bigint;
     providerCostCredits?: bigint;
     customerChargeVnd?: bigint;
     occurredAt?: Date;
+  }): Promise<UsageRecord>;
+  updateRetryable(input: {
+    id: string;
+    providerResponseId?: string;
+    inputTokens: bigint;
+    cachedInputTokens?: bigint;
+    cacheWriteTokens?: bigint;
+    outputTokens: bigint;
+    reasoningTokens?: bigint;
+    totalTokens?: bigint;
+    pricingSnapshotId: string;
+    runtimePolicySnapshotId: string;
+    providerCostCredits: bigint;
+    customerChargeVnd: bigint;
   }): Promise<UsageRecord>;
 }
 export interface PricingSnapshotPort {
@@ -278,6 +316,7 @@ export type BillingTransactionRepositories = {
   pricing: PricingSnapshotPort;
   audit: BillingAuditPort;
   runtimePolicy: RuntimeModelPolicyPort;
+  assessment: AssessmentOwnershipPort;
   lockUserAccount(userId: string): Promise<void>;
 };
 export interface BillingTransactionPort {
@@ -288,3 +327,4 @@ export interface BillingTransactionPort {
 }
 
 export const BILLING_TRANSACTION_PORT = Symbol("BILLING_TRANSACTION_PORT");
+import type { LlmUsageStatus } from "@lcsp/contracts/billing";

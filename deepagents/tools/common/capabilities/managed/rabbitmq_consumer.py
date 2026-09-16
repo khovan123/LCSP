@@ -337,12 +337,23 @@ def _delivery_handler(
 
 def _dispatch_delivery(boundary_name: str, properties: Any, body: bytes) -> None:
     message = _decode_message(body)
+    message = _with_billing_attempt(message, _delivery_attempt(properties))
     correlation_id = _correlation_id(
         message,
         getattr(properties, "headers", None),
         boundary_name,
     )
     invoke_boundary(boundary_name, message, correlation_id)
+
+
+def _with_billing_attempt(message: dict[str, Any], attempt: int) -> dict[str, Any]:
+    """Copy the broker-managed retry attempt into server-issued billing context."""
+    billing = message.get("billing")
+    if attempt <= 0 or not isinstance(billing, dict):
+        return message
+    enriched = dict(message)
+    enriched["billing"] = {**billing, "attempt": str(attempt)}
+    return enriched
 
 
 def _schedule_delivery_settlement(

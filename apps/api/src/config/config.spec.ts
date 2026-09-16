@@ -428,6 +428,8 @@ describe("config()", () => {
         sePayAccountHolder: "LCSP TEST",
         sePayQrUrlTemplate:
           "https://payments.test/qr?amount={amountVnd}&content={paymentCode}",
+        meteringEnabled: false,
+        reservationCredits: "",
       },
       interview: {
         guidanceVersion: "interview-context-test-v1",

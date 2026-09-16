@@ -1,5 +1,9 @@
-import { Inject, Injectable } from "@nestjs/common";
-import type { EffectiveRuntimeModel } from "@lcsp/contracts/billing";
+import { Inject, Injectable, Optional } from "@nestjs/common";
+import {
+  LLM_USAGE_AVAILABILITY_REASONS,
+  LLM_USAGE_STATUSES,
+  type EffectiveRuntimeModel,
+} from "@lcsp/contracts/billing";
 import {
   BillingDomainError,
   BillingIdempotencyConflictError,
@@ -18,6 +22,7 @@ import {
   type BillingTransactionPort,
 } from "../../domain/repositories/billing-transaction.port.js";
 import { BillingAccountingService } from "./billing-accounting.service.js";
+import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 
 @Injectable()
 export class BillingUsageService {
@@ -25,15 +30,60 @@ export class BillingUsageService {
     @Inject(BILLING_TRANSACTION_PORT)
     private readonly transactions: BillingTransactionPort,
     private readonly accounting: BillingAccountingService,
+    @Optional() private readonly prisma?: PrismaService,
   ) {}
+
+  async resolveAssessmentOwner(assessmentId: string): Promise<string> {
+    if (!this.prisma)
+      throw new BillingDomainError(
+        "Assessment ownership resolver is unavailable",
+      );
+    const assessment = await this.prisma.assessment.findUnique({
+      where: { id: assessmentId },
+      select: { ownerId: true },
+    });
+    if (!assessment)
+      throw new OwnershipMismatchError("Assessment does not exist");
+    return assessment.ownerId;
+  }
+
+  async reserveForAssessment(input: {
+    assessmentId: string;
+    runId: string;
+    amountCredits: bigint;
+    idempotencyKey: string;
+  }) {
+    const userId = await this.resolveAssessmentOwner(input.assessmentId);
+    return this.accounting.reserveCredits({
+      userId,
+      assessmentId: input.assessmentId,
+      runId: input.runId,
+      amountCredits: input.amountCredits,
+      idempotencyKey: input.idempotencyKey,
+    });
+  }
+
+  async releaseForAssessment(input: {
+    assessmentId: string;
+    reservationId: string;
+  }) {
+    const userId = await this.resolveAssessmentOwner(input.assessmentId);
+    return this.accounting.releaseReservation({
+      userId,
+      reservationId: input.reservationId,
+      assessmentId: input.assessmentId,
+    });
+  }
   recordAndSettleUsage(i: {
     userId: string;
+    assessmentId?: string;
+    runId?: string;
     reservationId: string;
     invocationId: string;
     agentRole: string;
     provider?: string;
     model?: string;
-    effectiveRuntimeModel: EffectiveRuntimeModel;
+    effectiveRuntimeModel?: EffectiveRuntimeModel;
     providerResponseId?: string;
     inputTokens?: bigint;
     cachedInputTokens?: bigint;
@@ -46,19 +96,23 @@ export class BillingUsageService {
     return this.transactions.runForUser(i.userId, async (repos) => {
       const { usage, pricing, reservation } = repos;
       const occurredAt = i.occurredAt ?? new Date();
-      assertEffectiveRuntimeModelAt(i.effectiveRuntimeModel, occurredAt);
-      const provider = i.effectiveRuntimeModel.provider;
-      const model = i.effectiveRuntimeModel.model;
+      if ((i.assessmentId && !i.runId) || (!i.assessmentId && i.runId))
+        throw new BillingDomainError(
+          "Assessment and run identifiers must be supplied together",
+        );
+      if (i.assessmentId) {
+        const ownerId = await repos.assessment.findOwnerId(i.assessmentId);
+        if (ownerId !== i.userId)
+          throw new OwnershipMismatchError(
+            "Assessment does not belong to the billing user",
+          );
+      }
+      const provider = i.provider ?? i.effectiveRuntimeModel?.provider;
+      const model = i.model ?? i.effectiveRuntimeModel?.model;
       if (!i.invocationId || !provider || !model)
         throw new BillingDomainError("Usage identity is required");
-      if (
-        i.effectiveRuntimeModel &&
-        ((i.provider && i.provider !== i.effectiveRuntimeModel.provider) ||
-          (i.model && i.model !== i.effectiveRuntimeModel.model))
-      )
-        throw new BillingDomainError(
-          "Usage provider/model differs from effective runtime policy",
-        );
+      if (i.effectiveRuntimeModel)
+        assertEffectiveRuntimeModelAt(i.effectiveRuntimeModel, occurredAt);
       const input = i.inputTokens ?? 0n;
       const cachedInput = i.cachedInputTokens ?? 0n;
       const cacheWrite = i.cacheWriteTokens ?? 0n;
@@ -71,66 +125,39 @@ export class BillingUsageService {
       if (i.totalTokens !== undefined && i.totalTokens < 0n)
         throw new BillingDomainError("Token counts cannot be negative");
       const existing = await usage.findByInvocation(i.userId, i.invocationId);
+      const hasRequiredProviderUsage =
+        i.inputTokens !== undefined && i.outputTokens !== undefined;
+      const retryableExisting =
+        existing?.status === LLM_USAGE_STATUSES.RETRYABLE;
       if (existing) {
         if (
           existing.provider !== provider ||
           existing.model !== model ||
-          existing.inputTokens !== input ||
-          existing.cachedInputTokens !== cachedInput ||
-          existing.cacheWriteTokens !== cacheWrite ||
-          existing.outputTokens !== output ||
-          existing.reasoningTokens !== reasoning ||
-          existing.totalTokens !== (i.totalTokens ?? null) ||
-          existing.providerResponseId !== (i.providerResponseId ?? null) ||
+          existing.agentRole !== i.agentRole ||
+          (existing.inputTokens !== input && !retryableExisting) ||
+          (existing.cachedInputTokens !== cachedInput && !retryableExisting) ||
+          (existing.cacheWriteTokens !== cacheWrite && !retryableExisting) ||
+          (existing.outputTokens !== output && !retryableExisting) ||
+          (existing.reasoningTokens !== reasoning && !retryableExisting) ||
+          (existing.totalTokens !== (i.totalTokens ?? null) &&
+            !retryableExisting) ||
+          (existing.providerResponseId !== (i.providerResponseId ?? null) &&
+            !retryableExisting) ||
+          existing.assessmentId !== (i.assessmentId ?? null) ||
+          existing.runId !== (i.runId ?? null) ||
           existing.reservationId !== i.reservationId ||
           (i.occurredAt !== undefined &&
             existing.occurredAt.getTime() !== i.occurredAt.getTime())
         )
           throw new BillingIdempotencyConflictError("Usage replay differs");
-        return existing;
+        if (!retryableExisting || !hasRequiredProviderUsage) return existing;
       }
-      const selected = await repos.runtimePolicy.findApplicable(
-        i.agentRole,
-        occurredAt,
-      );
-      if (!selected)
-        throw new BillingDomainError(
-          "No effective runtime model configuration",
-        );
-      assertMatchesEffectiveRuntimeModel(selected, i.effectiveRuntimeModel);
-      const snapshot = await pricing.findApplicable(
-        provider,
-        model,
-        occurredAt,
-      );
-      if (!snapshot)
-        throw new BillingDomainError("No applicable pricing snapshot");
-      const providerCost = calculateUsageChargeCredits(
-        {
-          inputTokens: input,
-          cachedInputTokens: cachedInput,
-          cacheWriteTokens: cacheWrite,
-          outputTokens: output,
-          reasoningTokens: reasoning,
-        },
-        snapshot,
-      );
-      const customerChargeVnd = calculateCustomerChargeVnd(
-        {
-          inputTokens: input,
-          cachedInputTokens: cachedInput,
-          cacheWriteTokens: cacheWrite,
-          outputTokens: output,
-          reasoningTokens: reasoning,
-        },
-        snapshot,
-      );
       if (i.providerResponseId) {
         const response = await usage.findByProviderResponse(
           provider,
           i.providerResponseId,
         );
-        if (response)
+        if (response && response.id !== existing?.id)
           throw new BillingIdempotencyConflictError(
             "Provider response already recorded",
           );
@@ -138,33 +165,167 @@ export class BillingUsageService {
       const r = await reservation.findForUser(i.userId, i.reservationId);
       if (!r)
         throw new OwnershipMismatchError("Reservation does not belong to user");
-      const event = await usage.create({
-        userId: i.userId,
+      if (
+        (i.assessmentId && r.assessmentId !== i.assessmentId) ||
+        (i.runId && r.runId !== i.runId)
+      )
+        throw new OwnershipMismatchError(
+          "Reservation does not belong to the assessment run",
+        );
+      const createRetryable = (availabilityReason: string) => {
+        if (existing) return existing;
+        return usage.create({
+          userId: i.userId,
+          assessmentId: i.assessmentId,
+          runId: i.runId,
+          agentRole: i.agentRole,
+          provider,
+          model,
+          invocationId: i.invocationId,
+          providerResponseId: i.providerResponseId,
+          inputTokens: i.inputTokens,
+          cachedInputTokens: i.cachedInputTokens,
+          cacheWriteTokens: i.cacheWriteTokens,
+          outputTokens: i.outputTokens,
+          reasoningTokens: i.reasoningTokens,
+          totalTokens: i.totalTokens,
+          reservationId: i.reservationId,
+          chargedCredits: 0n,
+          providerCostCredits: 0n,
+          customerChargeVnd: 0n,
+          status: LLM_USAGE_STATUSES.RETRYABLE,
+          availabilityReason,
+          occurredAt,
+        });
+      };
+      if (i.assessmentId && i.runId && !hasRequiredProviderUsage)
+        return createRetryable(
+          LLM_USAGE_AVAILABILITY_REASONS.providerUsageMetadataMissing,
+        );
+      const selected = await repos.runtimePolicy.findApplicable(
+        i.agentRole,
+        occurredAt,
+      );
+      if (!selected) {
+        if (i.assessmentId && i.runId)
+          return createRetryable(
+            LLM_USAGE_AVAILABILITY_REASONS.runtimePolicySnapshotMissing,
+          );
+        throw new BillingDomainError(
+          "No effective runtime model configuration",
+        );
+      }
+      const effectiveRuntimeModel = i.effectiveRuntimeModel ?? {
+        provider: selected.provider,
+        model: selected.model,
+        policyVersion: selected.policyVersion,
+        effectiveAt: selected.effectiveAt.toISOString(),
+      };
+      if (
+        provider !== effectiveRuntimeModel.provider ||
+        model !== effectiveRuntimeModel.model
+      )
+        throw new BillingDomainError(
+          "Usage provider/model differs from effective runtime policy",
+        );
+      assertMatchesEffectiveRuntimeModel(selected, effectiveRuntimeModel);
+      const snapshot = await pricing.findApplicable(
         provider,
         model,
-        invocationId: i.invocationId,
-        providerResponseId: i.providerResponseId,
-        inputTokens: input,
-        cachedInputTokens: cachedInput,
-        cacheWriteTokens: cacheWrite,
-        outputTokens: output,
-        reasoningTokens: reasoning,
-        // Provider totals can overlap canonical billable dimensions; they are
-        // informational and must never be rebuilt from billed buckets.
-        totalTokens: i.totalTokens,
-        pricingSnapshotId: snapshot.id,
-        runtimePolicySnapshotId: selected.id,
-        providerCostCredits: providerCost,
-        customerChargeVnd,
-        reservationId: i.reservationId,
-        chargedCredits: customerChargeVnd,
         occurredAt,
-      });
-      await this.accounting.settleWithinTransaction(repos, {
-        userId: i.userId,
-        reservationId: i.reservationId,
-        chargedCredits: customerChargeVnd,
-      });
+      );
+      if (!snapshot) {
+        if (i.assessmentId && i.runId)
+          return createRetryable(
+            LLM_USAGE_AVAILABILITY_REASONS.pricingSnapshotMissing,
+          );
+        throw new BillingDomainError("No applicable pricing snapshot");
+      }
+      let providerCost: bigint;
+      let customerChargeVnd: bigint;
+      try {
+        providerCost = calculateUsageChargeCredits(
+          {
+            inputTokens: input,
+            cachedInputTokens: cachedInput,
+            cacheWriteTokens: cacheWrite,
+            outputTokens: output,
+            reasoningTokens: reasoning,
+          },
+          snapshot,
+        );
+        customerChargeVnd = calculateCustomerChargeVnd(
+          {
+            inputTokens: input,
+            cachedInputTokens: cachedInput,
+            cacheWriteTokens: cacheWrite,
+            outputTokens: output,
+            reasoningTokens: reasoning,
+          },
+          snapshot,
+        );
+      } catch (error) {
+        if (i.assessmentId && i.runId && error instanceof BillingDomainError)
+          return createRetryable(
+            LLM_USAGE_AVAILABILITY_REASONS.pricingSnapshotInvalid,
+          );
+        throw error;
+      }
+      const event =
+        existing && retryableExisting
+          ? await usage.updateRetryable({
+              id: existing.id,
+              providerResponseId: i.providerResponseId,
+              inputTokens: input,
+              cachedInputTokens: cachedInput,
+              cacheWriteTokens: cacheWrite,
+              outputTokens: output,
+              reasoningTokens: reasoning,
+              totalTokens: i.totalTokens,
+              pricingSnapshotId: snapshot.id,
+              runtimePolicySnapshotId: selected.id,
+              providerCostCredits: providerCost,
+              customerChargeVnd,
+            })
+          : await usage.create({
+              userId: i.userId,
+              assessmentId: i.assessmentId,
+              runId: i.runId,
+              agentRole: i.agentRole,
+              provider,
+              model,
+              invocationId: i.invocationId,
+              providerResponseId: i.providerResponseId,
+              inputTokens: input,
+              cachedInputTokens: cachedInput,
+              cacheWriteTokens: cacheWrite,
+              outputTokens: output,
+              reasoningTokens: reasoning,
+              // Provider totals can overlap canonical billable dimensions; they are
+              // informational and must never be rebuilt from billed buckets.
+              totalTokens: i.totalTokens,
+              pricingSnapshotId: snapshot.id,
+              runtimePolicySnapshotId: selected.id,
+              providerCostCredits: providerCost,
+              customerChargeVnd,
+              reservationId: i.reservationId,
+              chargedCredits: customerChargeVnd,
+              occurredAt,
+            });
+      if (i.assessmentId && i.runId) {
+        await this.accounting.settleUsageWithinTransaction(repos, {
+          userId: i.userId,
+          reservationId: i.reservationId,
+          usageEventId: event.id,
+          chargedCredits: customerChargeVnd,
+        });
+      } else {
+        await this.accounting.settleWithinTransaction(repos, {
+          userId: i.userId,
+          reservationId: i.reservationId,
+          chargedCredits: customerChargeVnd,
+        });
+      }
       return event;
     });
   }

@@ -96,17 +96,35 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
                 userId_idempotencyKey: { userId: id, idempotencyKey: key },
               },
             }),
-          createReserved: (i) => tx.billingReservation.create({ data: i }),
+          createReserved: (i) =>
+            tx.billingReservation.create({
+              data: {
+                ...i,
+                remainingCredits: i.amountCredits,
+              },
+            }),
           listReservedForWallet: (walletId) =>
             tx.billingReservation.findMany({
               where: { walletId, status: "RESERVED" },
             }),
+          consumeRemaining: async (i) =>
+            (
+              await tx.billingReservation.updateMany({
+                where: {
+                  id: i.reservationId,
+                  status: "RESERVED",
+                  remainingCredits: { gte: i.amountCredits },
+                },
+                data: { remainingCredits: { decrement: i.amountCredits } },
+              })
+            ).count === 1,
           transitionFromReserved: async (i) =>
             (
               await tx.billingReservation.updateMany({
                 where: { id: i.reservationId, status: "RESERVED" },
                 data: {
                   status: i.to,
+                  remainingCredits: 0n,
                   ...(i.to === "SETTLED"
                     ? { settledAt: i.timestamp }
                     : { releasedAt: i.timestamp }),
@@ -295,6 +313,26 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
             const x = await tx.llmUsageEvent.create({ data: i });
             return x;
           },
+          updateRetryable: async (i) =>
+            tx.llmUsageEvent.update({
+              where: { id: i.id },
+              data: {
+                providerResponseId: i.providerResponseId,
+                inputTokens: i.inputTokens,
+                cachedInputTokens: i.cachedInputTokens,
+                cacheWriteTokens: i.cacheWriteTokens,
+                outputTokens: i.outputTokens,
+                reasoningTokens: i.reasoningTokens,
+                totalTokens: i.totalTokens,
+                pricingSnapshotId: i.pricingSnapshotId,
+                runtimePolicySnapshotId: i.runtimePolicySnapshotId,
+                providerCostCredits: i.providerCostCredits,
+                customerChargeVnd: i.customerChargeVnd,
+                chargedCredits: i.customerChargeVnd,
+                status: "SETTLED",
+                availabilityReason: null,
+              },
+            }),
         },
         pricing: {
           findById: async (id) => {
@@ -397,6 +435,15 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
                 payload: event.payload as Prisma.InputJsonValue,
               },
             });
+          },
+        },
+        assessment: {
+          findOwnerId: async (assessmentId) => {
+            const assessment = await tx.assessment.findUnique({
+              where: { id: assessmentId },
+              select: { ownerId: true },
+            });
+            return assessment?.ownerId ?? null;
           },
         },
       };

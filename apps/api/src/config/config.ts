@@ -263,6 +263,20 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
       then: paymentQrTemplateSchema().min(1).required(),
       otherwise: Joi.string().trim().allow("").default(""),
     }),
+    BILLING_METERING_ENABLED: Joi.boolean().default(
+      process.env.NODE_ENV === NODE_ENVS.production,
+    ),
+    BILLING_RESERVATION_CREDITS: Joi.alternatives().conditional(
+      "BILLING_METERING_ENABLED",
+      {
+        is: true,
+        then: Joi.string()
+          .trim()
+          .pattern(/^[1-9]\d*$/)
+          .required(),
+        otherwise: Joi.string().trim().allow("").default(""),
+      },
+    ),
   })
     .unknown(true)
     .custom((env: Record<string, unknown>, helpers) => {
@@ -525,6 +539,11 @@ export function config(): AppConfig {
         env.BILLING_SEPAY_BANK_ACCOUNT_NUMBER?.trim() ?? "",
       sePayAccountHolder: env.BILLING_SEPAY_ACCOUNT_HOLDER?.trim() ?? "",
       sePayQrUrlTemplate: env.BILLING_SEPAY_QR_URL_TEMPLATE?.trim() ?? "",
+      meteringEnabled:
+        (env.BILLING_METERING_ENABLED ??
+          (env.NODE_ENV === NODE_ENVS.production ? "true" : "false")) ===
+        "true",
+      reservationCredits: env.BILLING_RESERVATION_CREDITS?.trim() ?? "",
     },
     interview: {
       guidanceVersion: env.INTERVIEW_GUIDANCE_VERSION?.trim() ?? "",

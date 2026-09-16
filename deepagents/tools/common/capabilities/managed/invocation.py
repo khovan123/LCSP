@@ -16,6 +16,10 @@ from tools.common.capabilities.agentic_evidence.governance.authorization import 
 from tools.common.capabilities.platform.rbac_client import RbacClient
 from tools.common.capabilities.platform.api_client import WorkerApiClient
 from tools.common.capabilities.platform.config import load_config
+from middleware.billing_metering import (
+    BillingMeteringSession,
+    activate_billing_metering,
+)
 from tools.common.capabilities.managed.boundary import AgentBoundaryBase
 from orchestration.agent_stream import (
     AgentStreamSession,
@@ -187,36 +191,108 @@ def invoke_boundary(
         raise ValueError(f"unknown managed agent invocation boundary: {boundary_name}")
     boundary_handler = build_boundary(boundary.target)
     session = _agent_stream_session(boundary.name, message, correlation_id)
-    with activate_agent_stream(session):
-        publish_agent_stream_event(
-            "BOUNDARY_STARTED",
-            status="RUNNING",
-            data={"boundary": boundary.name, "source_event": boundary.source_event},
-        )
-        try:
-            boundary_handler.handle(message, correlation_id)
-        except Exception as error:
-            publish_agent_stream_event(
-                "BOUNDARY_FAILED",
-                status="FAILED",
-                text=str(error),
-                data={
-                    "boundary": boundary.name,
-                    "exception_type": type(error).__name__,
-                },
-            )
-            raise
-        publish_agent_stream_event(
-            "BOUNDARY_COMPLETED",
-            status="COMPLETED",
-            data={"boundary": boundary.name},
-        )
+    billing_session = _billing_metering_session(boundary.name, message, correlation_id)
+    try:
+        billing_context = activate_billing_metering(billing_session)
+        with billing_context:
+            with activate_agent_stream(session):
+                _run_boundary_handler(
+                    boundary_handler,
+                    message,
+                    correlation_id,
+                    boundary,
+                )
+    finally:
+        if billing_session is not None:
+            billing_session.release()
     return {
         "boundary": boundary.name,
         "target": boundary.target,
         "source_event": boundary.source_event,
         "status": "COMPLETED",
     }
+
+
+def _run_boundary_handler(
+    boundary_handler: Type[AgentBoundaryBase],
+    message: dict[str, Any],
+    correlation_id: str,
+    boundary: AgentInvocationBoundary,
+) -> None:
+    """Run one boundary while preserving existing stream failure telemetry."""
+    publish_agent_stream_event(
+        "BOUNDARY_STARTED",
+        status="RUNNING",
+        data={"boundary": boundary.name, "source_event": boundary.source_event},
+    )
+    try:
+        boundary_handler.handle(message, correlation_id)
+    except Exception as error:
+        publish_agent_stream_event(
+            "BOUNDARY_FAILED",
+            status="FAILED",
+            text=str(error),
+            data={
+                "boundary": boundary.name,
+                "exception_type": type(error).__name__,
+            },
+        )
+        raise
+    publish_agent_stream_event(
+        "BOUNDARY_COMPLETED",
+        status="COMPLETED",
+        data={"boundary": boundary.name},
+    )
+
+
+def _billing_metering_session(
+    boundary_name: str,
+    message: dict[str, Any],
+    correlation_id: str,
+) -> BillingMeteringSession | None:
+    """Start billing from API-issued context and reject assessment bypasses."""
+    message_assessment_id = _find_first_text(
+        message, ("assessmentId", "assessment_id")
+    )
+    billing = message.get("billing")
+    if not isinstance(billing, dict):
+        if message_assessment_id:
+            raise ValueError(
+                "billing context is required for assessment model invocation"
+            )
+        return None
+    assessment_id = _find_first_text(billing, ("assessmentId", "assessment_id"))
+    run_id = _find_first_text(billing, ("runId", "run_id", "workflowRunId"))
+    amount = _find_first_text(billing, ("amountCredits", "reservationCredits"))
+    idempotency_key = _find_first_text(billing, ("idempotencyKey",))
+    # The boundary/agent owns the billing role. Never trust a role supplied inside
+    # an event payload because the pricing snapshot is selected by this identity.
+    role = boundary_name
+    effective = billing.get("effectiveRuntimeModel")
+    attempt = _find_first_text(billing, ("attempt",)) or "0"
+    if not attempt.isdigit():
+        raise ValueError("billing attempt is invalid")
+    if not all((assessment_id, run_id, amount, idempotency_key)) or (
+        effective is not None and not isinstance(effective, dict)
+    ):
+        raise ValueError("billing context is incomplete")
+    if message_assessment_id and message_assessment_id != assessment_id:
+        raise ValueError("billing assessment does not match invocation assessment")
+    config = load_config()
+    client = WorkerApiClient(config.nestjs_api_base_url, config.worker_api_key)
+    return BillingMeteringSession.reserve(
+        api_client=client,
+        assessment_id=assessment_id,
+        run_id=run_id,
+        agent_role=role,
+        amount_credits=amount,
+        idempotency_key=f"{idempotency_key}:{boundary_name}:attempt:{attempt}",
+        effective_runtime_model=(
+            {str(k): str(v) for k, v in effective.items()}
+            if isinstance(effective, dict)
+            else None
+        ),
+    )
 
 
 

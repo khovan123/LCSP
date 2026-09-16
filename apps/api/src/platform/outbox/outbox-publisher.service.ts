@@ -1,3 +1,11 @@
+import { ASSESSMENT_EVENT_TYPES } from "@lcsp/contracts/assessment";
+import { DOCUMENT_EVENT_TYPES } from "@lcsp/contracts/document";
+import { GITHUB_INTEGRATION_EVENT_TYPES } from "@lcsp/contracts/github-integration";
+import {
+  SCAN_ERROR_CODES,
+  SCAN_EVENT_TYPES,
+  TARGETED_REANALYSIS_CAPACITY_POLICY,
+} from "@lcsp/contracts/scan";
 import {
   AUDIT_ACTOR_TYPES,
   AUDIT_DECISIONS,
@@ -8,10 +16,6 @@ import {
   OUTBOX_AGGREGATE_TYPES,
   OUTBOX_AUDIT_EVENT_TYPES,
 } from "@lcsp/contracts/outbox";
-import {
-  SCAN_ERROR_CODES,
-  TARGETED_REANALYSIS_CAPACITY_POLICY,
-} from "@lcsp/contracts/scan";
 import {
   HttpException,
   Injectable,
@@ -131,19 +135,20 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
 
             try {
               await this.snapshotCreatedAutoScanService.handle(message);
-              const headers = contextHeaders(message.payload);
+              const payload = this.withBillingContext(message);
+              const headers = contextHeaders(payload);
               if (headers) {
                 await this.rabbitMqClient.publish(
                   exchange,
                   message.eventType,
-                  message.payload,
+                  payload,
                   headers,
                 );
               } else {
                 await this.rabbitMqClient.publish(
                   exchange,
                   message.eventType,
-                  message.payload,
+                  payload,
                 );
               }
               await this.outboxRepository.markPublished(tx, message.id, now);
@@ -204,6 +209,49 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Adds the server-issued billing context consumed by the Managed Agent boundary.
+   * The context contains no user-supplied owner; the internal billing API resolves
+   * the assessment owner again before reserving credit.
+   */
+  private withBillingContext(
+    message: OutboxMessageEntity,
+  ): Record<string, unknown> {
+    const payload = message.payload;
+    if (!this.configService.get<boolean>("billing.meteringEnabled", false)) {
+      return payload;
+    }
+    if (!BILLABLE_MODEL_EVENTS.has(message.eventType)) return payload;
+
+    const assessmentId = readString(payload.assessmentId);
+    const amountCredits = this.configService.get<string>(
+      "billing.reservationCredits",
+      "",
+    );
+    if (!assessmentId || !/^[1-9]\d*$/.test(amountCredits)) {
+      throw new Error(
+        "Billing metering requires an assessment and positive reservation credits",
+      );
+    }
+
+    return {
+      ...payload,
+      billing: {
+        assessmentId,
+        runId:
+          firstPayloadText(payload, [
+            "runId",
+            "workflowRunId",
+            "scanJobId",
+            "documentRequestId",
+          ]) ?? `outbox:${message.id}`,
+        amountCredits,
+        idempotencyKey: `outbox:${message.id}:billing-reservation`,
+        agentRole: `outbox:${message.eventType}`,
+      },
+    };
+  }
+
+  /**
    * Writes an audit event describing a scheduled retry or transition into the outbox DLQ.
    *
    * @param failure - Failed message plus retry count, limit, reason, and next-attempt timestamp.
@@ -257,6 +305,15 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
     });
   }
 }
+
+const BILLABLE_MODEL_EVENTS = new Set<string>([
+  ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox,
+  DOCUMENT_EVENT_TYPES.finalReportRequested,
+  DOCUMENT_EVENT_TYPES.gapAnalysisRequested,
+  GITHUB_INTEGRATION_EVENT_TYPES.scanTriggered,
+  GITHUB_INTEGRATION_EVENT_TYPES.targetedReanalysisRequested,
+  SCAN_EVENT_TYPES.evidenceAccepted,
+]);
 
 /**
  * Extracts non-sensitive exception metadata for outbox failure logs. Payloads are
@@ -369,6 +426,17 @@ function contextHeaders(
  */
 function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function firstPayloadText(
+  payload: Record<string, unknown>,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = readString(payload[key]);
+    if (value) return value;
+  }
+  return undefined;
 }
 
 /**

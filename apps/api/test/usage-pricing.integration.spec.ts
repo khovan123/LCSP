@@ -26,7 +26,9 @@ import {
 
 describe("LCSP-310 usage and pricing foundation", () => {
   let prisma: PrismaClient;
+  let billingPrisma: PrismaService;
   let accounting: BillingAccountingService;
+  let governedUsage: BillingUsageService;
   type LegacyUsageInput = Omit<
     Parameters<BillingUsageService["recordAndSettleUsage"]>[0],
     "agentRole" | "effectiveRuntimeModel"
@@ -59,9 +61,11 @@ describe("LCSP-310 usage and pricing foundation", () => {
       BEFORE UPDATE OR DELETE ON "ModelPricingSnapshot"
       FOR EACH ROW EXECUTE FUNCTION "prevent_model_pricing_snapshot_mutation"();
     `);
-    const tx = new PrismaBillingTransaction(new PrismaService());
+    billingPrisma = new PrismaService();
+    const tx = new PrismaBillingTransaction(billingPrisma);
     accounting = new BillingAccountingService(tx);
-    const usageService = new BillingUsageService(tx, accounting);
+    const usageService = new BillingUsageService(tx, accounting, billingPrisma);
+    governedUsage = usageService;
     usage = {
       recordAndSettleUsage: (input) =>
         usageService.recordAndSettleUsage({
@@ -80,6 +84,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
     await prisma.creditLedgerEntry.deleteMany();
     await prisma.modelPricingSnapshot.deleteMany();
     await prisma.runtimeModelPolicySnapshot.deleteMany();
+    await prisma.assessment.deleteMany();
     await prisma.runtimeModelPolicySnapshot.create({
       data: {
         role: "TEST_USAGE",
@@ -99,7 +104,10 @@ describe("LCSP-310 usage and pricing foundation", () => {
       FOR EACH ROW EXECUTE FUNCTION "prevent_model_pricing_snapshot_mutation"();
     `);
   });
-  afterAll(async () => prisma?.$disconnect());
+  afterAll(async () => {
+    await prisma?.$disconnect();
+    await billingPrisma?.$disconnect();
+  });
 
   async function fixture() {
     const user = {
@@ -140,6 +148,32 @@ describe("LCSP-310 usage and pricing foundation", () => {
     return { user, wallet, reservation, pricing };
   }
 
+  async function governedFixture(amountCredits = 20n) {
+    const f = await fixture();
+    const assessmentId = `assessment-${id()}`;
+    const runId = `run-${id()}`;
+    await prisma.assessment.create({
+      data: { id: assessmentId, ownerId: f.user.id, name: "Governed usage" },
+    });
+    await prisma.runtimeModelPolicySnapshot.create({
+      data: {
+        role: "GOVERNED_PLANNER",
+        provider: runtimeModel.provider,
+        model: runtimeModel.model,
+        policyVersion: runtimeModel.policyVersion,
+        effectiveAt: new Date(runtimeModel.effectiveAt),
+      },
+    });
+    const reservation = await accounting.reserveCredits({
+      userId: f.user.id,
+      assessmentId,
+      runId,
+      amountCredits,
+      idempotencyKey: `governed-reserve-${id()}`,
+    });
+    return { ...f, assessmentId, runId, reservation };
+  }
+
   it("calculates exact deterministic charges with ceil rounding", () => {
     const pricing = {
       id: "pricing-test",
@@ -155,6 +189,195 @@ describe("LCSP-310 usage and pricing foundation", () => {
     };
     expect(calculateUsageChargeCredits(1_000_000n, 500_000n, pricing)).toBe(2n);
     expect(calculateUsageChargeCredits(1n, 0n, pricing)).toBe(1n);
+  });
+
+  it("settles multiple governed provider events individually and releases only unused reservation", async () => {
+    const f = await governedFixture();
+    const base = {
+      userId: f.user.id,
+      assessmentId: f.assessmentId,
+      runId: f.runId,
+      reservationId: f.reservation.id,
+      provider: "OPENAI",
+      model: "MODEL_A",
+      agentRole: "GOVERNED_PLANNER",
+      outputTokens: 0n,
+    };
+    await governedUsage.recordAndSettleUsage({
+      ...base,
+      invocationId: "GOVERNED-1",
+      inputTokens: 1_000_000n,
+    });
+    await governedUsage.recordAndSettleUsage({
+      ...base,
+      invocationId: "GOVERNED-2",
+      inputTokens: 1_000_000n,
+    });
+
+    expect(
+      await prisma.creditLedgerEntry.count({
+        where: { source: "LLM_USAGE_DEBIT", userId: f.user.id },
+      }),
+    ).toBe(2);
+    expect(
+      (
+        await prisma.billingReservation.findUniqueOrThrow({
+          where: { id: f.reservation.id },
+        })
+      ).remainingCredits,
+    ).toBe(18n);
+    await accounting.releaseReservation({
+      userId: f.user.id,
+      reservationId: f.reservation.id,
+    });
+    expect(
+      (
+        await prisma.billingReservation.findUniqueOrThrow({
+          where: { id: f.reservation.id },
+        })
+      ).status,
+    ).toBe("RELEASED");
+  });
+
+  it("does not release a reservation through a different assessment context", async () => {
+    const f = await governedFixture();
+    const otherAssessmentId = `assessment-${id()}`;
+    await prisma.assessment.create({
+      data: {
+        id: otherAssessmentId,
+        ownerId: f.user.id,
+        name: "Other governed usage",
+      },
+    });
+
+    await expect(
+      governedUsage.releaseForAssessment({
+        assessmentId: otherAssessmentId,
+        reservationId: f.reservation.id,
+      }),
+    ).rejects.toThrow("Reservation does not belong to the assessment");
+    expect(
+      (
+        await prisma.billingReservation.findUniqueOrThrow({
+          where: { id: f.reservation.id },
+        })
+      ).status,
+    ).toBe("RESERVED");
+  });
+
+  it("records missing provider usage as retryable and upgrades it once metadata arrives", async () => {
+    const f = await governedFixture();
+    const base = {
+      userId: f.user.id,
+      assessmentId: f.assessmentId,
+      runId: f.runId,
+      reservationId: f.reservation.id,
+      invocationId: "GOVERNED-RETRYABLE",
+      provider: "OPENAI",
+      model: "MODEL_A",
+      agentRole: "GOVERNED_PLANNER",
+    };
+    const unavailable = await governedUsage.recordAndSettleUsage(base);
+    expect(unavailable.status).toBe("RETRYABLE");
+    expect(unavailable.chargedCredits).toBe(0n);
+    const settled = await governedUsage.recordAndSettleUsage({
+      ...base,
+      inputTokens: 1_000_000n,
+      outputTokens: 0n,
+    });
+    expect(settled.id).toBe(unavailable.id);
+    expect(settled.status).toBe("SETTLED");
+    expect(
+      await prisma.creditLedgerEntry.count({
+        where: { source: "LLM_USAGE_DEBIT", referenceId: settled.id },
+      }),
+    ).toBe(1);
+  });
+
+  it("does not allow concurrent governed events to overspend one reservation", async () => {
+    const f = await governedFixture(3n);
+    const base = {
+      userId: f.user.id,
+      assessmentId: f.assessmentId,
+      runId: f.runId,
+      reservationId: f.reservation.id,
+      provider: "OPENAI",
+      model: "MODEL_A",
+      agentRole: "GOVERNED_PLANNER",
+      inputTokens: 2_000_000n,
+      outputTokens: 0n,
+    };
+    const results = await Promise.allSettled([
+      governedUsage.recordAndSettleUsage({
+        ...base,
+        invocationId: "GOVERNED-CONCURRENT-A",
+      }),
+      governedUsage.recordAndSettleUsage({
+        ...base,
+        invocationId: "GOVERNED-CONCURRENT-B",
+      }),
+    ]);
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      await prisma.creditLedgerEntry.count({
+        where: { source: "LLM_USAGE_DEBIT", userId: f.user.id },
+      }),
+    ).toBe(1);
+    expect(
+      (
+        await prisma.billingReservation.findUniqueOrThrow({
+          where: { id: f.reservation.id },
+        })
+      ).remainingCredits,
+    ).toBe(1n);
+  });
+
+  it("rejects governed usage when the assessment belongs to another user", async () => {
+    const f = await governedFixture();
+    const other = {
+      id: `usage-other-${id()}`,
+      email: `${id()}@usage.test`,
+      passwordHash: "test",
+      emailVerified: true,
+      failedLoginCount: 0,
+    };
+    await prisma.user.create({ data: other });
+    const otherWallet = await accounting.getOrCreateWallet(other.id);
+    await accounting.appendLedger({
+      userId: other.id,
+      walletId: otherWallet.id,
+      deltaCredits: 100n,
+      idempotencyKey: `other-seed-${id()}`,
+      source: "TEST",
+    });
+    const otherReservation = await accounting.reserveCredits({
+      userId: other.id,
+      assessmentId: undefined,
+      amountCredits: 20n,
+      idempotencyKey: `other-reserve-${id()}`,
+    });
+
+    await expect(
+      governedUsage.recordAndSettleUsage({
+        userId: other.id,
+        assessmentId: f.assessmentId,
+        runId: f.runId,
+        reservationId: otherReservation.id,
+        invocationId: "GOVERNED-CROSS-ACCOUNT",
+        provider: "OPENAI",
+        model: "MODEL_A",
+        agentRole: "GOVERNED_PLANNER",
+        inputTokens: 1_000_000n,
+        outputTokens: 0n,
+      }),
+    ).rejects.toThrow("Assessment does not belong to the billing user");
+    expect(
+      await prisma.llmUsageEvent.count({
+        where: { invocationId: "GOVERNED-CROSS-ACCOUNT" },
+      }),
+    ).toBe(0);
   });
 
   it("records and settles usage exactly once, preserving its pricing snapshot", async () => {

@@ -117,6 +117,8 @@ export interface BillingConfig {
   sePayBankAccountNumber: string;
   sePayAccountHolder: string;
   sePayQrUrlTemplate: string;
+  meteringEnabled: boolean;
+  reservationCredits: string;
 }
 
 export const NODE_ENVS = {
