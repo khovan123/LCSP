@@ -3122,6 +3122,15 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
           prompt: "What is your cloud environment?",
           control: ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
+          snippetRef: {
+            snapshot_id: "snap-1",
+            commit_sha: "sha-123456",
+            file_path: "src/cloud.ts",
+            start_line: 10,
+            end_line: 12,
+            evidence_hash: `sha256:${"a".repeat(64)}`,
+            snippet_policy: "PINNED_SNAPSHOT_BOUNDED_REDACTED_V1",
+          },
           frontier: {
             owner: INTERVIEW_FRONTIER_OWNERS.customer,
             materiality: INTERVIEW_FRONTIER_MATERIALITIES.material,
@@ -3139,6 +3148,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
 
       expect(result.outcome).toBe(
         ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      );
+      expect(result.activeQuestion?.snippetRef).toEqual(
+        initialState.activeQuestion?.snippetRef,
       );
       expect(mockTx.assessmentInterviewThread.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -4015,6 +4027,15 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
               "evidence:symbol:storage_config",
               "repositorySnapshot:snap-1",
             ],
+            snippetRef: {
+              snapshot_id: "snap-1",
+              commit_sha: "sha-123456",
+              file_path: "src/storage.ts",
+              start_line: 20,
+              end_line: 24,
+              evidence_hash: `sha256:${"b".repeat(64)}`,
+              snippet_policy: "PINNED_SNAPSHOT_BOUNDED_REDACTED_V1",
+            },
             frontier: {
               owner: INTERVIEW_FRONTIER_OWNERS.customer,
               materiality: INTERVIEW_FRONTIER_MATERIALITIES.material,
@@ -4055,6 +4076,15 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         "The available technical evidence does not establish whether multi-region is configured.",
       );
       expect(q.hasSupportingEvidence).toBe(true);
+      expect(q.snippetRef).toEqual({
+        snapshot_id: "snap-1",
+        commit_sha: "sha-123456",
+        file_path: "src/storage.ts",
+        start_line: 20,
+        end_line: 24,
+        evidence_hash: `sha256:${"b".repeat(64)}`,
+        snippet_policy: "PINNED_SNAPSHOT_BOUNDED_REDACTED_V1",
+      });
 
       // Verify internal refs are stripped from public projection
       expect(q.whyEvidenceRefs).toBeUndefined();

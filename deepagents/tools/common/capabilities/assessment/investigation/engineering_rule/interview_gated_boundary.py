@@ -648,6 +648,10 @@ def _ai_discovery_handoff(
     }
     if choices is not None:
         question["choices"] = choices
+    if snippet:
+        # Persist only the governed pinned locator/hash. The API resolves source
+        # transiently for display and never stores raw source in Interview/PGE state.
+        question["snippetRef"] = dict(snippet)
     return {
         "mode": "INITIAL_INTERVIEW",
         "outcome": "WAITING_FOR_CUSTOMER",

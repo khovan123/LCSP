@@ -147,7 +147,7 @@ def _ai_finding(kind, clarification_kind, *, owner="CUSTOMER"):
             "file_path": "src/ai.ts",
             "start_line": 42,
             "end_line": 42,
-            "evidence_hash": "sha256:test",
+            "evidence_hash": "sha256:" + "a" * 64,
             "snippet_policy": "PINNED_SNAPSHOT_BOUNDED_REDACTED_V1",
         },
     }
@@ -389,6 +389,9 @@ def test_custom_outbound_candidate_uses_yes_no_unsure_and_stable_identity() -> N
     assert [choice["id"] for choice in first["choices"]] == ["YES", "NO", "UNSURE"]
     assert first["choices"][0]["requiresFreeText"] is True
     assert "provider" in first["prompt"]
+    assert first["snippetRef"] == finding["snippet_ref"]
+    assert "source" not in first
+    assert "raw_source" not in first
     assert dispatcher.calls == []
 
 

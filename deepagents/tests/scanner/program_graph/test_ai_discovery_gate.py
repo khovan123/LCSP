@@ -15,6 +15,11 @@ from tools.common.capabilities.evidence.graph.lineage.ai.ai_discovery import (
 from tools.common.capabilities.evidence.graph.lineage.ai.ai_invocation_gate import (
     AIInvocationSemanticGate,
 )
+from tools.common.capabilities.evidence.graph.schema.semantic_ir import (
+    SemanticEdgeFact,
+    SemanticNodeFact,
+    SemanticProgram,
+)
 
 
 def _discovery(
@@ -172,3 +177,156 @@ def test_partial_coverage_never_becomes_ai_absent_confirmed(tmp_path: Path) -> N
 
     assert discovery["coverage_state"] == "PARTIAL"
     assert discovery["gate"] == "AI_UNKNOWN"
+
+
+
+def test_dynamic_outbound_target_blocks_false_absence_until_pge_resolves_flow(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+export async function forward(endpoint: string, request: unknown) {
+  return fetch(endpoint, { method: "POST", body: JSON.stringify(request) });
+}
+""",
+    )
+
+    assert discovery["coverage_state"] == "PARTIAL"
+    assert discovery["gate"] == "AI_UNKNOWN"
+    assert any(
+        item["kind"] == "DYNAMIC_TARGET"
+        and item["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+        for item in discovery["findings"]
+    )
+
+
+def test_unsupported_source_language_preserves_unresolved_ai_frontier(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        "def charge(amount)\n  BillingClient.charge(amount)\nend\n",
+        filename="billing.rb",
+    )
+
+    assert discovery["coverage_state"] == "PARTIAL"
+    assert discovery["gate"] == "AI_UNKNOWN"
+    assert discovery["material_unresolved_frontiers"]
+    assert any(
+        item["kind"] == "DYNAMIC_TARGET"
+        and item["clarification_owner"] == "TECHNICAL"
+        for item in discovery["findings"]
+    )
+
+def _graph_discovery(tmp_path: Path, nodes, edges):
+    program = SemanticProgram(nodes=list(nodes), edges=list(edges))
+    AIDiscoveryEnricher(tmp_path).finalize(program)
+    builder = ProgramGraphBuilder(
+        tmp_path,
+        scan_job_id="scan-graph",
+        snapshot_id="snapshot-graph",
+        commit_sha="deadbeef",
+    )
+    builder.add_program(program)
+    return summarize_ai_discovery(builder.build())
+
+
+def test_pge_parameter_and_config_propagation_preserves_ai_frontier(tmp_path: Path) -> None:
+    discovery = _graph_discovery(
+        tmp_path,
+        [
+            SemanticNodeFact("env", "ENV_SOURCE", "AI_GATEWAY_URL", "config.ts", 1, 1),
+            SemanticNodeFact("parameter", "PARAMETER", "endpoint", "client.ts", 3, 3),
+            SemanticNodeFact("messages", "PARAMETER", "messages", "client.ts", 3, 3),
+            SemanticNodeFact("helper", "FUNCTION", "postGateway", "client.ts", 3, 8),
+            SemanticNodeFact("outbound", "EXTERNAL_API", "custom gateway", "client.ts", 7, 7),
+            SemanticNodeFact(
+                "dynamic",
+                "UNRESOLVED_DYNAMIC_TARGET",
+                "runtime endpoint",
+                "client.ts",
+                7,
+                7,
+                resolution_state="UNRESOLVED",
+            ),
+        ],
+        [
+            SemanticEdgeFact("ASSIGNS", "env", "parameter"),
+            SemanticEdgeFact("PASSES_ARGUMENT", "parameter", "helper"),
+            SemanticEdgeFact("PASSES_ARGUMENT", "messages", "helper"),
+            SemanticEdgeFact("CALLS_EXTERNAL", "helper", "outbound"),
+            SemanticEdgeFact("RESOLVES_TO", "outbound", "dynamic", resolution_state="UNRESOLVED"),
+        ],
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    assert discovery["material_unresolved_frontiers"]
+    assert any(
+        item["kind"] == "OUTBOUND_API" and item["endpoint_source"] == "PGE_MULTI_HOP"
+        for item in discovery["findings"]
+    )
+
+
+def test_pge_helper_di_cross_module_chain_reaches_provider_client(tmp_path: Path) -> None:
+    discovery = _graph_discovery(
+        tmp_path,
+        [
+            SemanticNodeFact(
+                "provider",
+                "SDK_CLIENT",
+                "OpenAIClient",
+                "infra/openai.ts",
+                2,
+                2,
+                attributes={"semanticRole": "PROVIDER_OPENAI"},
+            ),
+            SemanticNodeFact("service", "CLASS", "AiService", "services/ai.ts", 1, 12),
+            SemanticNodeFact("helper", "FUNCTION", "complete", "services/helper.ts", 4, 8),
+            SemanticNodeFact("gateway", "EXTERNAL_API", "service gateway", "api/controller.ts", 10, 10),
+        ],
+        [
+            SemanticEdgeFact("DEPENDS_ON", "service", "provider"),
+            SemanticEdgeFact("CALLS", "helper", "service"),
+            SemanticEdgeFact("HANDLED_BY", "gateway", "helper"),
+        ],
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    assert any(item["kind"] == "OUTBOUND_API" for item in discovery["findings"])
+
+
+def test_pge_graphql_grpc_and_cross_language_service_boundaries_are_not_absence(tmp_path: Path) -> None:
+    discovery = _graph_discovery(
+        tmp_path,
+        [
+            SemanticNodeFact("graphql", "GRAPHQL_OPERATION", "aiCompletion", "web/query.ts", 4, 4),
+            SemanticNodeFact("prompt", "PARAMETER", "prompt", "web/query.ts", 4, 4),
+            SemanticNodeFact("grpc", "GRPC_METHOD", "InferenceGateway.Generate", "proto/ai.proto", 8, 8),
+            SemanticNodeFact("go-helper", "FUNCTION", "invokeRemote", "service/invoke.go", 12, 20),
+            SemanticNodeFact("rust-client", "FUNCTION", "llm_transport", "worker/src/client.rs", 7, 16),
+        ],
+        [
+            SemanticEdgeFact("PASSES_ARGUMENT", "prompt", "graphql"),
+            SemanticEdgeFact("CALLS_API", "graphql", "grpc"),
+            SemanticEdgeFact("HANDLED_BY", "grpc", "go-helper"),
+            SemanticEdgeFact("CALLS", "go-helper", "rust-client"),
+        ],
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    kinds = [item["kind"] for item in discovery["findings"]]
+    assert "OUTBOUND_API" in kinds
+    assert len([item for item in discovery["findings"] if item["kind"] == "OUTBOUND_API"]) >= 2
+
+
+def test_generic_graphql_transport_without_ai_semantics_still_allows_absence(tmp_path: Path) -> None:
+    discovery = _graph_discovery(
+        tmp_path,
+        [
+            SemanticNodeFact("graphql", "GRAPHQL_OPERATION", "getInvoices", "billing/query.ts", 4, 4),
+            SemanticNodeFact("invoice", "PARAMETER", "invoiceId", "billing/query.ts", 4, 4),
+        ],
+        [SemanticEdgeFact("PASSES_ARGUMENT", "invoice", "graphql")],
+    )
+
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+    assert discovery["findings"] == []
