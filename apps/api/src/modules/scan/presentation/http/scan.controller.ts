@@ -341,7 +341,9 @@ export class InternalScanController {
       throw new BadRequestException("invalid agent stream event");
     }
     const namespace = Array.isArray(payload.namespace)
-      ? payload.namespace.filter((item): item is string => typeof item === "string")
+      ? payload.namespace.filter(
+          (item): item is string => typeof item === "string",
+        )
       : [];
     const event = await this.runtimeEvents.publishAgentStreamEvent({
       eventId: optionalText(payload.event_id),

@@ -14,7 +14,9 @@ const freshRuntimeEvent = () =>
   Promise.resolve({ createdAt: new Date("2099-01-01T00:00:00.000Z") });
 
 const emptyRepositorySnapshots = () => ({
-  findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
+  findMany: jest
+    .fn<(args?: unknown) => Promise<unknown[]>>()
+    .mockResolvedValue([]),
 });
 
 const assessmentOwner = () => ({
@@ -75,36 +77,42 @@ describe("AssessmentRuntimeEventService", () => {
   it("builds orchestration activity from scan jobs and evidence reports when runtime events are absent", async () => {
     const prisma = {
       assessmentRuntimeEvent: {
-        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([]),
         findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
       repositorySnapshot: emptyRepositorySnapshots(),
       assessment: assessmentOwner(),
       repositoryScanJob: {
-        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([
-          {
-            id: "scan-1",
-            assessmentId: "assessment-1",
-            snapshotId: "snapshot-1",
-            status: "COMPLETED",
-            attemptCount: 1,
-            blockedReason: null,
-            updatedAt: new Date("2026-08-14T08:00:00.000Z"),
-          },
-        ]),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([
+            {
+              id: "scan-1",
+              assessmentId: "assessment-1",
+              snapshotId: "snapshot-1",
+              status: "COMPLETED",
+              attemptCount: 1,
+              blockedReason: null,
+              updatedAt: new Date("2026-08-14T08:00:00.000Z"),
+            },
+          ]),
       },
       technicalEvidenceReport: {
-        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([
-          {
-            id: "report-1",
-            assessmentId: "assessment-1",
-            scanJobId: "scan-1",
-            snapshotId: "snapshot-1",
-            status: "ACCEPTED",
-            rejectionReason: null,
-            createdAt: new Date("2026-08-14T08:01:00.000Z"),
-          },
-        ]),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([
+            {
+              id: "report-1",
+              assessmentId: "assessment-1",
+              scanJobId: "scan-1",
+              snapshotId: "snapshot-1",
+              status: "ACCEPTED",
+              rejectionReason: null,
+              createdAt: new Date("2026-08-14T08:01:00.000Z"),
+            },
+          ]),
       },
     };
     const service = new AssessmentRuntimeEventService(prisma as never);
@@ -153,26 +161,32 @@ describe("AssessmentRuntimeEventService", () => {
     jest.setSystemTime(new Date("2026-08-14T08:02:00.000Z"));
     const prisma = {
       assessmentRuntimeEvent: {
-        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([]),
         findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
       repositorySnapshot: emptyRepositorySnapshots(),
       assessment: assessmentOwner(),
       repositoryScanJob: {
-        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([
-          {
-            id: "scan-1",
-            assessmentId: "assessment-1",
-            snapshotId: "snapshot-1",
-            status: "RUNNING",
-            attemptCount: 1,
-            blockedReason: null,
-            updatedAt: new Date("2026-08-14T08:00:00.000Z"),
-          },
-        ]),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([
+            {
+              id: "scan-1",
+              assessmentId: "assessment-1",
+              snapshotId: "snapshot-1",
+              status: "RUNNING",
+              attemptCount: 1,
+              blockedReason: null,
+              updatedAt: new Date("2026-08-14T08:00:00.000Z"),
+            },
+          ]),
       },
       technicalEvidenceReport: {
-        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([]),
       },
     };
     const service = new AssessmentRuntimeEventService(prisma as never);
@@ -291,16 +305,22 @@ describe("AssessmentRuntimeEventService", () => {
     ];
     const prisma = {
       assessmentRuntimeEvent: {
-        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue(events),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue(events),
         findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
       repositorySnapshot: emptyRepositorySnapshots(),
       assessment: assessmentOwner(),
       repositoryScanJob: {
-        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([]),
       },
       technicalEvidenceReport: {
-        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([]),
       },
     };
     const service = new AssessmentRuntimeEventService(prisma as never);
@@ -333,51 +353,57 @@ describe("AssessmentRuntimeEventService", () => {
   it("derives the latest post-finding state from runtime event output summaries", async () => {
     const prisma = {
       assessmentRuntimeEvent: {
-        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([
-          {
-            id: "evt-latest",
-            assessmentId: "assessment-1",
-            runId: "interview:assessment-1",
-            correlationId: "corr-1",
-            sequence: 2,
-            eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolWaitingInput,
-            runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
-            stage: ASSESSMENT_RUNTIME_STAGE_CODES.remediation,
-            toolName: "post_finding_remediation_decision",
-            summary: "Customer remediation decision persisted",
-            inputSummaryJson: null,
-            outputSummaryJson: {
-              postFinding: {
-                assessmentId: "assessment-1",
-                phase: POST_FINDING_RUNTIME_PHASES.createPr,
-                codeReviewActivities: [],
-                decisionAvailability: [
-                  REMEDIATION_DECISIONS.createRemediationPr,
-                ],
-                selectedDecision: REMEDIATION_DECISIONS.createRemediationPr,
-                selectedDecisionAt: "2026-09-07T01:02:03.000Z",
-                approvalStatus: REMEDIATION_APPROVAL_STATUSES.pendingCustomer,
-                verificationActivities: [],
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([
+            {
+              id: "evt-latest",
+              assessmentId: "assessment-1",
+              runId: "interview:assessment-1",
+              correlationId: "corr-1",
+              sequence: 2,
+              eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolWaitingInput,
+              runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
+              stage: ASSESSMENT_RUNTIME_STAGE_CODES.remediation,
+              toolName: "post_finding_remediation_decision",
+              summary: "Customer remediation decision persisted",
+              inputSummaryJson: null,
+              outputSummaryJson: {
+                postFinding: {
+                  assessmentId: "assessment-1",
+                  phase: POST_FINDING_RUNTIME_PHASES.createPr,
+                  codeReviewActivities: [],
+                  decisionAvailability: [
+                    REMEDIATION_DECISIONS.createRemediationPr,
+                  ],
+                  selectedDecision: REMEDIATION_DECISIONS.createRemediationPr,
+                  selectedDecisionAt: "2026-09-07T01:02:03.000Z",
+                  approvalStatus: REMEDIATION_APPROVAL_STATUSES.pendingCustomer,
+                  verificationActivities: [],
+                },
               },
+              errorSummary: null,
+              startedAt: null,
+              completedAt: null,
+              durationMs: null,
+              attempt: null,
+              waitingReason: null,
+              createdAt: new Date("2026-09-07T01:02:03.000Z"),
             },
-            errorSummary: null,
-            startedAt: null,
-            completedAt: null,
-            durationMs: null,
-            attempt: null,
-            waitingReason: null,
-            createdAt: new Date("2026-09-07T01:02:03.000Z"),
-          },
-        ]),
+          ]),
         findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
       repositorySnapshot: emptyRepositorySnapshots(),
       assessment: assessmentOwner(),
       repositoryScanJob: {
-        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([]),
       },
       technicalEvidenceReport: {
-        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([]),
       },
     };
     const service = new AssessmentRuntimeEventService(prisma as never);
@@ -617,48 +643,54 @@ describe("AssessmentRuntimeEventService", () => {
   it("does not build synthetic scan activity when persisted worker activity exists", async () => {
     const prisma = {
       assessmentRuntimeEvent: {
-        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([
-          {
-            id: "evt-1",
-            assessmentId: "assessment-1",
-            runId: "scan-1",
-            correlationId: "corr-1",
-            sequence: 1,
-            eventType: "TOOL_STARTED",
-            runStatus: "RUNNING",
-            stage: "SCAN",
-            toolName: "materialize_snapshot",
-            summary: "Materializing repository snapshot",
-            inputSummaryJson: null,
-            outputSummaryJson: null,
-            errorSummary: null,
-            startedAt: null,
-            completedAt: null,
-            durationMs: null,
-            attempt: null,
-            waitingReason: null,
-            createdAt: new Date("2026-08-14T08:00:00.000Z"),
-          },
-        ]),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([
+            {
+              id: "evt-1",
+              assessmentId: "assessment-1",
+              runId: "scan-1",
+              correlationId: "corr-1",
+              sequence: 1,
+              eventType: "TOOL_STARTED",
+              runStatus: "RUNNING",
+              stage: "SCAN",
+              toolName: "materialize_snapshot",
+              summary: "Materializing repository snapshot",
+              inputSummaryJson: null,
+              outputSummaryJson: null,
+              errorSummary: null,
+              startedAt: null,
+              completedAt: null,
+              durationMs: null,
+              attempt: null,
+              waitingReason: null,
+              createdAt: new Date("2026-08-14T08:00:00.000Z"),
+            },
+          ]),
         findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
       repositorySnapshot: emptyRepositorySnapshots(),
       assessment: assessmentOwner(),
       repositoryScanJob: {
-        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([
-          {
-            id: "scan-1",
-            assessmentId: "assessment-1",
-            snapshotId: "snapshot-1",
-            status: "RUNNING",
-            attemptCount: 1,
-            blockedReason: null,
-            updatedAt: new Date("2026-08-14T07:59:00.000Z"),
-          },
-        ]),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([
+            {
+              id: "scan-1",
+              assessmentId: "assessment-1",
+              snapshotId: "snapshot-1",
+              status: "RUNNING",
+              attemptCount: 1,
+              blockedReason: null,
+              updatedAt: new Date("2026-08-14T07:59:00.000Z"),
+            },
+          ]),
       },
       technicalEvidenceReport: {
-        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([]),
       },
     };
     const service = new AssessmentRuntimeEventService(prisma as never);
@@ -833,10 +865,14 @@ describe("AssessmentRuntimeEventService", () => {
         repositorySnapshot: emptyRepositorySnapshots(),
         assessment: assessmentOwner(),
         repositoryScanJob: {
-          findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
+          findMany: jest
+            .fn<(args?: unknown) => Promise<unknown[]>>()
+            .mockResolvedValue([]),
         },
         technicalEvidenceReport: {
-          findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
+          findMany: jest
+            .fn<(args?: unknown) => Promise<unknown[]>>()
+            .mockResolvedValue([]),
         },
       };
     };

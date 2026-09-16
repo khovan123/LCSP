@@ -227,5 +227,4 @@ describe("InternalScanController", () => {
       data: { recorded: true, eventId: "agent-event-1" },
     });
   });
-
 });

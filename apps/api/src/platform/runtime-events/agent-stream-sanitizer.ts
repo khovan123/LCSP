@@ -90,9 +90,7 @@ export function sanitizeAgentStreamValue(
 }
 
 function truncate(value: string, maxLength: number): string {
-  return value.length > maxLength
-    ? `${value.slice(0, maxLength - 1)}…`
-    : value;
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
 }
 
 export { MAX_AGENT_STREAM_TEXT_LENGTH };

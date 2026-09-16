@@ -440,17 +440,16 @@ export class AssessmentRuntimeEventService {
         sanitizeAgentStreamIdentifier(input.assessmentId) ?? input.assessmentId,
       runId: sanitizeAgentStreamIdentifier(input.runId) ?? input.runId,
       correlationId:
-        sanitizeAgentStreamIdentifier(input.correlationId) ?? input.correlationId,
+        sanitizeAgentStreamIdentifier(input.correlationId) ??
+        input.correlationId,
       eventType: input.eventType,
       source: sanitizeAgentStreamIdentifier(input.source),
       agentName: sanitizeAgentStreamIdentifier(input.agentName),
       subagentName: sanitizeAgentStreamIdentifier(input.subagentName),
-      namespace: (input.namespace ?? [])
-        .slice(0, 32)
-        .flatMap((item) => {
-          const sanitized = sanitizeAgentStreamIdentifier(item);
-          return sanitized === null ? [] : [sanitized];
-        }),
+      namespace: (input.namespace ?? []).slice(0, 32).flatMap((item) => {
+        const sanitized = sanitizeAgentStreamIdentifier(item);
+        return sanitized === null ? [] : [sanitized];
+      }),
       nodeName: sanitizeAgentStreamIdentifier(input.nodeName),
       messageId: sanitizeAgentStreamIdentifier(input.messageId),
       toolName: sanitizeAgentStreamIdentifier(input.toolName),
@@ -464,14 +463,18 @@ export class AssessmentRuntimeEventService {
   }
 
   /** Observe live events belonging only to assessments owned by one customer. */
-  observeAgentStreamEvents(ownerId: string): Observable<AssessmentAgentStreamEvent> {
+  observeAgentStreamEvents(
+    ownerId: string,
+  ): Observable<AssessmentAgentStreamEvent> {
     return this.agentStreamEvents.pipe(
       filter((entry) => entry.ownerId === ownerId),
       map((entry) => entry.event),
     );
   }
 
-  private async resolveAssessmentOwnerId(assessmentId: string): Promise<string | null> {
+  private async resolveAssessmentOwnerId(
+    assessmentId: string,
+  ): Promise<string | null> {
     const cached = this.assessmentOwnerIds.get(assessmentId);
     if (cached) return cached;
     const assessment = await this.prisma.assessment.findUnique({
@@ -557,7 +560,9 @@ export class AssessmentRuntimeEventService {
    *
    * @returns Snapshot containing recent activity, derived runs, scan jobs, and evidence reports.
    */
-  async buildWorkspaceSnapshot(ownerId?: string): Promise<AssessmentRuntimeSnapshot> {
+  async buildWorkspaceSnapshot(
+    ownerId?: string,
+  ): Promise<AssessmentRuntimeSnapshot> {
     const emittedAt = new Date().toISOString();
     await failStaleRepositoryScanJobs(this.prisma, {
       now: new Date(emittedAt),

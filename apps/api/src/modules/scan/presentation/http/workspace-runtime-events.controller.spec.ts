@@ -6,7 +6,6 @@ import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import type { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import { WorkspaceRuntimeEventsController } from "./workspace-runtime-events.controller.js";
 
-
 const customerRequest = {
   rbacContext: {
     userId: "user-1",
@@ -185,33 +184,58 @@ describe("WorkspaceRuntimeEventsController", () => {
 
   it("forwards only the owner-scoped live agent stream", () => {
     const live = new Subject<Record<string, unknown>>();
-    const observeAgentStreamEvents = jest.fn((_ownerId: string) => live.asObservable());
+    const observeAgentStreamEvents = jest.fn((_ownerId: string) =>
+      live.asObservable(),
+    );
     const controller = new WorkspaceRuntimeEventsController({
       buildWorkspaceSnapshot: async () => ({
-        emittedAt: "2026-09-16T00:00:00.000Z", runs: [], recentActivity: [],
-        engineeringProgress: [], repositorySnapshots: [], scanJobs: [],
-        evidenceReports: [], postFindingStates: [],
+        emittedAt: "2026-09-16T00:00:00.000Z",
+        runs: [],
+        recentActivity: [],
+        engineeringProgress: [],
+        repositorySnapshots: [],
+        scanJobs: [],
+        evidenceReports: [],
+        postFindingStates: [],
       }),
       observeAgentStreamEvents,
     } as unknown as AssessmentRuntimeEventService);
     const events: Array<{ type?: string; data?: unknown }> = [];
-    const subscription = controller.stream(customerRequest).subscribe((event) => events.push(event));
+    const subscription = controller
+      .stream(customerRequest)
+      .subscribe((event) => events.push(event));
 
     expect(observeAgentStreamEvents).toHaveBeenCalledWith("user-1");
 
     live.next({
-      eventId: "agent-event-1", sequence: 4, clientSequence: 2,
-      emittedAt: "2026-09-16T00:00:01.000Z", assessmentId: "assessment-1",
-      runId: "run-1", correlationId: "corr-1", eventType: "TOOL_RESULT",
-      source: "engineering", agentName: "investigator", subagentName: null,
-      namespace: [], nodeName: "tools", messageId: "message-1",
-      toolName: "lookup_rule", toolCallId: "call-1", status: "COMPLETED",
-      text: "tool output", data: { count: 1 },
+      eventId: "agent-event-1",
+      sequence: 4,
+      clientSequence: 2,
+      emittedAt: "2026-09-16T00:00:01.000Z",
+      assessmentId: "assessment-1",
+      runId: "run-1",
+      correlationId: "corr-1",
+      eventType: "TOOL_RESULT",
+      source: "engineering",
+      agentName: "investigator",
+      subagentName: null,
+      namespace: [],
+      nodeName: "tools",
+      messageId: "message-1",
+      toolName: "lookup_rule",
+      toolCallId: "call-1",
+      status: "COMPLETED",
+      text: "tool output",
+      data: { count: 1 },
     });
 
     expect(events.at(-1)).toMatchObject({
       type: "workspace.agent-stream",
-      data: { event_id: "agent-event-1", event_type: "TOOL_RESULT", text: "tool output" },
+      data: {
+        event_id: "agent-event-1",
+        event_type: "TOOL_RESULT",
+        text: "tool output",
+      },
     });
     subscription.unsubscribe();
   });
@@ -232,9 +256,11 @@ describe("WorkspaceRuntimeEventsController", () => {
     } as unknown as AssessmentRuntimeEventService);
     const events: unknown[] = [];
 
-    const subscription = controller.stream(customerRequest).subscribe((event) => {
-      events.push(event);
-    });
+    const subscription = controller
+      .stream(customerRequest)
+      .subscribe((event) => {
+        events.push(event);
+      });
 
     expect(buildWorkspaceSnapshot).toHaveBeenCalledTimes(1);
 
