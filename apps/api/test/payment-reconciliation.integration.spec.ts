@@ -9,6 +9,7 @@ import {
   it,
 } from "@jest/globals";
 import { randomUUID } from "node:crypto";
+import { AUDIT_ACTOR_TYPES } from "@lcsp/contracts/audit";
 import { BILLING_AUDIT_EVENT_TYPES } from "@lcsp/contracts/billing";
 import { BillingAccountingService } from "../src/modules/billing/application/services/billing-accounting.service.js";
 import { BillingPaymentService } from "../src/modules/billing/application/services/billing-payment.service.js";
@@ -105,10 +106,11 @@ describe("LCSP-310 payment reconciliation", () => {
       },
     });
     expect(audit).toMatchObject({
-      actorId: "SYSTEM",
+      actorId: null,
       correlationId: "billing-reconcile:SEPAY:TX-MATCH",
     });
     expect(audit.payload).toMatchObject({
+      actor: { id: null, type: AUDIT_ACTOR_TYPES.system },
       providerTransactionId: "TX-MATCH",
       billingOrderId: order.id,
       userId: a.id,

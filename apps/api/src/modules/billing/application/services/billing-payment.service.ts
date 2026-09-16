@@ -297,7 +297,7 @@ export class BillingPaymentService {
         });
         await repos.audit.append({
           eventType: BILLING_AUDIT_EVENT_TYPES.reconciliationSettled,
-          actorId: i.actorId ?? "SYSTEM",
+          actorId: i.actorId ?? null,
           sessionId: i.sessionId,
           correlationId,
           resourceId: payment.id,
