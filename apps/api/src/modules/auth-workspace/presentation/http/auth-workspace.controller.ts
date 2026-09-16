@@ -296,7 +296,8 @@ export class AuthWorkspaceController {
       await this.commandBus.execute(
         new ReauthenticatePasswordCommand(
           {
-            session_token: bearerToken(authorization) ?? body.session_token ?? "",
+            session_token:
+              bearerToken(authorization) ?? body.session_token ?? "",
             password: body.password,
           },
           requestMeta(request.correlationId),
@@ -372,10 +373,7 @@ export class AuthWorkspaceController {
   async getProfile(@Req() request: AuthenticatedRequest) {
     return resultEnvelope(
       await this.queryBus.execute(
-        new GetAuthProfileQuery(
-          request.rbacContext,
-          request.correlationId!,
-        ),
+        new GetAuthProfileQuery(request.rbacContext, request.correlationId!),
       ),
     );
   }
@@ -443,10 +441,7 @@ export class AuthWorkspaceController {
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
-        new ConfirmPasswordRecoveryCommand(
-          payload,
-          requestMeta(correlationId),
-        ),
+        new ConfirmPasswordRecoveryCommand(payload, requestMeta(correlationId)),
       ),
     );
   }
@@ -463,10 +458,7 @@ export class AuthWorkspaceController {
     };
     return resultEnvelope(
       await this.commandBus.execute(
-        new OAuthStartCommand(
-          payload,
-          requestMeta(correlationId),
-        ),
+        new OAuthStartCommand(payload, requestMeta(correlationId)),
       ),
     );
   }
@@ -481,10 +473,7 @@ export class AuthWorkspaceController {
     const payload: OAuthCallbackPayload = { code, state, provider };
     return resultEnvelope(
       await this.commandBus.execute(
-        new OAuthCallbackCommand(
-          payload,
-          requestMeta(correlationId),
-        ),
+        new OAuthCallbackCommand(payload, requestMeta(correlationId)),
       ),
     );
   }
