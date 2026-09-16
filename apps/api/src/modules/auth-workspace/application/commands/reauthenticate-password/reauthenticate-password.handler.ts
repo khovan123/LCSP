@@ -53,10 +53,7 @@ export class ReauthenticatePasswordHandler implements ICommandHandler<Reauthenti
       );
     }
 
-    const user = await this.support.resolveUserById(
-      this.repositories,
-      userId,
-    );
+    const user = await this.support.resolveUserById(this.repositories, userId);
     if (!user) {
       return createProblemResult(
         AUTH_ERROR_CODES.sessionInvalid,
@@ -97,5 +94,4 @@ export class ReauthenticatePasswordHandler implements ICommandHandler<Reauthenti
       verified: true,
     };
   }
-
 }

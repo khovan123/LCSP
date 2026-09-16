@@ -7,5 +7,3 @@ export class DisableMfaCommand {
     readonly requestMeta: RequestMeta = {},
   ) {}
 }
-
-

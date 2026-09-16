@@ -7,4 +7,3 @@ export class GenerateMfaRecoveryCodesCommand {
     public readonly requestMeta: RequestMeta = {},
   ) {}
 }
-

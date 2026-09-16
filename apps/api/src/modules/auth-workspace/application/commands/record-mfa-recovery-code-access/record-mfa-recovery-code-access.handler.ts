@@ -72,5 +72,4 @@ export class RecordMfaRecoveryCodeAccessHandler implements ICommandHandler<Recor
 
     return { ok: true, correlationId: correlationId };
   }
-
 }

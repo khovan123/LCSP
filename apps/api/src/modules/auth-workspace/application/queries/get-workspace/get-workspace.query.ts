@@ -6,4 +6,3 @@ export class GetWorkspaceQuery {
     public readonly correlationId?: string,
   ) {}
 }
-

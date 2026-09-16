@@ -9,4 +9,3 @@ export class RecordMfaRecoveryCodeAccessCommand {
     public readonly requestMeta: RequestMeta = {},
   ) {}
 }
-

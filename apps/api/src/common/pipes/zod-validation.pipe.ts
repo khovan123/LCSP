@@ -10,7 +10,10 @@ import { problemException } from "../../platform/problems/problem-factory.js";
  * Throws a standard RFC 7807 problem exception with HTTP 400 when validation fails.
  */
 @Injectable()
-export class ZodValidationPipe<TOutput = unknown> implements PipeTransform<unknown, TOutput> {
+export class ZodValidationPipe<TOutput = unknown> implements PipeTransform<
+  unknown,
+  TOutput
+> {
   constructor(private readonly schema: z.ZodTypeAny) {}
 
   /**
@@ -23,13 +26,9 @@ export class ZodValidationPipe<TOutput = unknown> implements PipeTransform<unkno
   transform(value: unknown): TOutput {
     const result = this.schema.safeParse(value);
     if (!result.success) {
-      throw problemException(
-        AUTH_ERROR_CODES.validationFailed,
-        randomUUID(),
-        {
-          status: HttpStatus.BAD_REQUEST,
-        },
-      );
+      throw problemException(AUTH_ERROR_CODES.validationFailed, randomUUID(), {
+        status: HttpStatus.BAD_REQUEST,
+      });
     }
     return result.data as TOutput;
   }

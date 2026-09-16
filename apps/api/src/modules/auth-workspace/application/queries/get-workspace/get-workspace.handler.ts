@@ -30,8 +30,7 @@ export class GetWorkspaceHandler implements IQueryHandler<GetWorkspaceQuery> {
   ): Promise<AuthProblemResult | WorkspaceSuccess> {
     const { context, correlationId } = query;
     const { repositories } = this;
-    const cid =
-      correlationId ?? this.support.createCorrelationId();
+    const cid = correlationId ?? this.support.createCorrelationId();
 
     const user = await this.support.resolveUserById(
       repositories,
@@ -45,13 +44,12 @@ export class GetWorkspaceHandler implements IQueryHandler<GetWorkspaceQuery> {
         reason_code: AUTH_ERROR_CODES.sessionInvalid,
         correlationId: cid,
       });
-      return createProblemResult(
-        AUTH_ERROR_CODES.sessionInvalid,
-        cid,
-      );
+      return createProblemResult(AUTH_ERROR_CODES.sessionInvalid, cid);
     }
 
-    const session = await this.repositories.sessions.findById(context.sessionId);
+    const session = await this.repositories.sessions.findById(
+      context.sessionId,
+    );
 
     const authorization = await this.support.authorizeWorkspace(
       repositories,
@@ -88,5 +86,4 @@ export class GetWorkspaceHandler implements IQueryHandler<GetWorkspaceQuery> {
       correlationId: cid,
     };
   }
-
 }

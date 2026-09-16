@@ -72,10 +72,7 @@ export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
       }
     }
 
-    const user = await this.support.resolveUserById(
-      this.repositories,
-      userId,
-    );
+    const user = await this.support.resolveUserById(this.repositories, userId);
     if (!user) {
       return createProblemResult(
         AUTH_ERROR_CODES.sessionInvalid,
@@ -141,7 +138,6 @@ export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
       decision: AUDIT_DECISIONS.allow,
       correlationId: correlationId,
     });
-
 
     return {
       ok: true,

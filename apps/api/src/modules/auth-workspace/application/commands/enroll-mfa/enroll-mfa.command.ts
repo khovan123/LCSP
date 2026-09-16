@@ -7,4 +7,3 @@ export class EnrollMfaCommand {
     public readonly requestMeta: RequestMeta = {},
   ) {}
 }
-

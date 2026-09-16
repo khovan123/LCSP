@@ -161,10 +161,7 @@ export class AuthWorkspaceController {
   async getWorkspace(@Req() request: AuthenticatedRequest) {
     return resultEnvelope(
       await this.queryBus.execute(
-        new GetWorkspaceQuery(
-          request.rbacContext,
-          request.correlationId,
-        ),
+        new GetWorkspaceQuery(request.rbacContext, request.correlationId),
       ),
     );
   }
@@ -218,11 +215,9 @@ export class AuthWorkspaceController {
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
-        new VerifyMfaOtpCommand(
-          body.session_token,
-          body.otp,
-          { correlationId },
-        ),
+        new VerifyMfaOtpCommand(body.session_token, body.otp, {
+          correlationId,
+        }),
       ),
     );
   }
@@ -238,11 +233,9 @@ export class AuthWorkspaceController {
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
-        new VerifyMfaRecoveryCodeCommand(
-          body.session_token,
-          body.code,
-          { correlationId },
-        ),
+        new VerifyMfaRecoveryCodeCommand(body.session_token, body.code, {
+          correlationId,
+        }),
       ),
     );
   }
@@ -303,7 +296,8 @@ export class AuthWorkspaceController {
   @RequireSession()
   @AllowPendingMfa()
   async reauthenticatePassword(
-    @Body(new ZodValidationPipe(passwordReauthSchema)) body: PasswordReauthInput,
+    @Body(new ZodValidationPipe(passwordReauthSchema))
+    body: PasswordReauthInput,
     @Req() request: AuthenticatedRequest,
   ) {
     return resultEnvelope(
@@ -358,11 +352,9 @@ export class AuthWorkspaceController {
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
-        new UpdateProfileCommand(
-          body,
-          request.rbacContext.userId,
-          { correlationId: request.correlationId },
-        ),
+        new UpdateProfileCommand(body, request.rbacContext.userId, {
+          correlationId: request.correlationId,
+        }),
       ),
     );
   }
@@ -407,11 +399,9 @@ export class AuthWorkspaceController {
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
-        new RevokeOwnedSessionCommand(
-          sessionId,
-          request.rbacContext,
-          { correlationId: request.correlationId },
-        ),
+        new RevokeOwnedSessionCommand(sessionId, request.rbacContext, {
+          correlationId: request.correlationId,
+        }),
       ),
     );
   }
@@ -442,10 +432,10 @@ export class AuthWorkspaceController {
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
-        new RequestPasswordRecoveryCommand(
-          payload,
-          { correlationId, app_origin: appOrigin },
-        ),
+        new RequestPasswordRecoveryCommand(payload, {
+          correlationId,
+          app_origin: appOrigin,
+        }),
       ),
     );
   }
@@ -486,7 +476,8 @@ export class AuthWorkspaceController {
    */
   @Get("auth/oauth/callback")
   async oauthCallback(
-    @Query(new ZodValidationPipe(oauthCallbackSchema)) query: OAuthCallbackInput,
+    @Query(new ZodValidationPipe(oauthCallbackSchema))
+    query: OAuthCallbackInput,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
     return resultEnvelope(
@@ -504,7 +495,8 @@ export class AuthWorkspaceController {
   @RequireSession()
   async oauthLinkStart(
     @Req() request: AuthenticatedRequest,
-    @Query(new ZodValidationPipe(oauthLinkStartSchema)) query: OAuthLinkStartInput,
+    @Query(new ZodValidationPipe(oauthLinkStartSchema))
+    query: OAuthLinkStartInput,
   ) {
     return resultEnvelope(
       await this.commandBus.execute(

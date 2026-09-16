@@ -39,17 +39,13 @@ export class DisableMfaHandler implements ICommandHandler<DisableMfaCommand> {
       );
     }
 
-    const enrollment = await this.repositories.mfaEnrollments.findByUserId(
-      userId,
-    );
+    const enrollment =
+      await this.repositories.mfaEnrollments.findByUserId(userId);
     if (!enrollment) {
       return { ok: true, correlationId: correlationId };
     }
 
-    const user = await this.support.resolveUserById(
-      this.repositories,
-      userId,
-    );
+    const user = await this.support.resolveUserById(this.repositories, userId);
     if (!user) {
       return createProblemResult(
         AUTH_ERROR_CODES.sessionInvalid,
@@ -59,10 +55,7 @@ export class DisableMfaHandler implements ICommandHandler<DisableMfaCommand> {
 
     const now = this.support.now();
     await this.repositories.mfaEnrollments.deleteByUserId(userId);
-    await this.repositories.mfaRecoveryCodes.revokeActiveForUser(
-      userId,
-      now,
-    );
+    await this.repositories.mfaRecoveryCodes.revokeActiveForUser(userId, now);
     user.mfaRequired = false;
     await this.repositories.users.save(user);
 
@@ -84,5 +77,4 @@ export class DisableMfaHandler implements ICommandHandler<DisableMfaCommand> {
 
     return { ok: true, correlationId: correlationId };
   }
-
 }

@@ -12,4 +12,3 @@ export interface SessionRepository {
   /** Revokes every active (non-expired, non-revoked) session for a user — used after a password reset. */
   revokeAllForUser(userId: string, now: number): Promise<void>;
 }
-

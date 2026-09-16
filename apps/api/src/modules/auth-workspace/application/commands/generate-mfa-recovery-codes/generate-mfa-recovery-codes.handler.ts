@@ -43,9 +43,8 @@ export class GenerateMfaRecoveryCodesHandler implements ICommandHandler<Generate
       );
     }
 
-    const enrollment = await this.repositories.mfaEnrollments.findByUserId(
-      userId,
-    );
+    const enrollment =
+      await this.repositories.mfaEnrollments.findByUserId(userId);
     if (!enrollment) {
       return createProblemResult(AUTH_ERROR_CODES.mfaRequired, correlationId);
     }
@@ -91,5 +90,4 @@ export class GenerateMfaRecoveryCodesHandler implements ICommandHandler<Generate
       recovery_codes: recoveryCodes,
     };
   }
-
 }

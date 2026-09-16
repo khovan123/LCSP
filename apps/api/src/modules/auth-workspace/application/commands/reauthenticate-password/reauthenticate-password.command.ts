@@ -9,4 +9,3 @@ export class ReauthenticatePasswordCommand {
     public readonly requestMeta: RequestMeta = {},
   ) {}
 }
-

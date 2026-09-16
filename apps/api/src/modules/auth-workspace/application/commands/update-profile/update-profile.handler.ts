@@ -95,18 +95,13 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
       );
     }
 
-    const user = await this.support.resolveUserById(
-      this.repositories,
-      userId,
-    );
+    const user = await this.support.resolveUserById(this.repositories, userId);
     if (!user) {
       return createProblemResult(
         AUTH_ERROR_CODES.sessionInvalid,
         correlationId,
       );
     }
-
-
 
     const nextRecoveryEmail =
       typeof payload.recovery_email === "string"
