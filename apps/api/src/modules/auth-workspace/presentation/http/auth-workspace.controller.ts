@@ -76,10 +76,7 @@ import {
   VerifyMfaOtpCommand,
   VerifyMfaRecoveryCodeCommand,
 } from "../../application/commands/index.ts";
-import type {
-  RequestMeta,
-  SensitiveRouteCheckDto,
-} from "../../application/contracts/auth-workspace/index.ts";
+import type { SensitiveRouteCheckDto } from "../../application/contracts/auth-workspace/index.ts";
 import {
   CheckSensitiveRouteQuery,
   GetAuthProfileQuery,
@@ -88,6 +85,11 @@ import {
   ListAuthSessionsQuery,
 } from "../../application/queries/index.ts";
 
+/**
+ * Controller exposing all authentication, session, MFA, profile, and OAuth endpoints.
+ * Validates request bodies/queries using Zod schemas via ZodValidationPipe
+ * and passes authenticated context directly from RbacGuard.
+ */
 @Controller()
 export class AuthWorkspaceController {
   constructor(
@@ -95,6 +97,10 @@ export class AuthWorkspaceController {
     private readonly queryBus: QueryBus,
   ) {}
 
+  /**
+   * Public sign-in endpoint.
+   * Validates credentials against `signInSchema` and returns safe user/session projection.
+   */
   @Post("auth/sign-in")
   @HttpCode(HttpStatus.OK)
   async signIn(
@@ -103,11 +109,15 @@ export class AuthWorkspaceController {
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
-        new SignInCommand(payload, requestMeta(correlationId)),
+        new SignInCommand(payload, { correlationId }),
       ),
     );
   }
 
+  /**
+   * Public self-service sign-up endpoint.
+   * Validates payload against `signUpSchema` and creates new user and session.
+   */
   @Post("auth/sign-up")
   async signUp(
     @Body(new ZodValidationPipe(signUpSchema)) payload: SignUpInput,
@@ -119,12 +129,16 @@ export class AuthWorkspaceController {
           email: payload.email,
           displayName: payload.display_name ?? payload.name ?? "",
           password: payload.password,
-          correlationId: requestMeta(correlationId).correlationId,
+          correlationId,
         }),
       ),
     );
   }
 
+  /**
+   * Public session revocation endpoint.
+   * Revokes the specified session token.
+   */
   @Post("auth/revoke-session")
   async revokeSession(
     @Body(new ZodValidationPipe(revokeSessionSchema)) body: RevokeSessionInput,
@@ -132,14 +146,15 @@ export class AuthWorkspaceController {
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
-        new RevokeSessionCommand(
-          body.session_token,
-          requestMeta(correlationId),
-        ),
+        new RevokeSessionCommand(body.session_token, { correlationId }),
       ),
     );
   }
 
+  /**
+   * Guarded workspace retrieval endpoint.
+   * Retrieves workspace data using authenticated RBAC context.
+   */
   @Get("workspace")
   @UseGuards(RbacGuard)
   @RequireSession()
@@ -154,6 +169,10 @@ export class AuthWorkspaceController {
     );
   }
 
+  /**
+   * Guarded MFA enrollment endpoint.
+   * Enrolls the authenticated user in TOTP MFA using context userId and sessionId.
+   */
   @Post("auth/mfa/enroll")
   @UseGuards(RbacGuard)
   @RequireSession()
@@ -164,12 +183,16 @@ export class AuthWorkspaceController {
         new EnrollMfaCommand(
           request.rbacContext.userId,
           request.rbacContext.sessionId,
-          requestMeta(request.correlationId),
+          { correlationId: request.correlationId },
         ),
       ),
     );
   }
 
+  /**
+   * Guarded MFA disable endpoint.
+   * Disables MFA for the authenticated user.
+   */
   @Delete("auth/mfa")
   @UseGuards(RbacGuard)
   @RequireSession()
@@ -179,12 +202,15 @@ export class AuthWorkspaceController {
         new DisableMfaCommand(
           request.rbacContext.userId,
           request.rbacContext.sessionId,
-          requestMeta(request.correlationId),
+          { correlationId: request.correlationId },
         ),
       ),
     );
   }
 
+  /**
+   * Public MFA OTP verification endpoint during sign-in.
+   */
   @Post("auth/mfa/verify-otp")
   async verifyMfaOtp(
     @Body(new ZodValidationPipe(verifyMfaOtpSchema)) body: VerifyMfaOtpInput,
@@ -195,12 +221,15 @@ export class AuthWorkspaceController {
         new VerifyMfaOtpCommand(
           body.session_token,
           body.otp,
-          requestMeta(correlationId),
+          { correlationId },
         ),
       ),
     );
   }
 
+  /**
+   * Public MFA recovery code verification endpoint during sign-in.
+   */
   @Post("auth/mfa/recovery-code/verify")
   async verifyMfaRecoveryCode(
     @Body(new ZodValidationPipe(verifyMfaRecoveryCodeSchema))
@@ -212,12 +241,16 @@ export class AuthWorkspaceController {
         new VerifyMfaRecoveryCodeCommand(
           body.session_token,
           body.code,
-          requestMeta(correlationId),
+          { correlationId },
         ),
       ),
     );
   }
 
+  /**
+   * Guarded MFA recovery codes generation endpoint.
+   * Requires step-up re-authentication for sensitive action.
+   */
   @Post("auth/mfa/recovery-codes")
   @UseGuards(RbacGuard)
   @RequireSession()
@@ -233,12 +266,15 @@ export class AuthWorkspaceController {
         new GenerateMfaRecoveryCodesCommand(
           request.rbacContext.userId,
           request.rbacContext.sessionId,
-          requestMeta(request.correlationId),
+          { correlationId: request.correlationId },
         ),
       ),
     );
   }
 
+  /**
+   * Guarded audit recording endpoint for MFA recovery code view/copy actions.
+   */
   @Post("auth/mfa/recovery-codes/access")
   @UseGuards(RbacGuard)
   @RequireSession()
@@ -253,12 +289,15 @@ export class AuthWorkspaceController {
           request.rbacContext.userId,
           body.action,
           request.rbacContext.sessionId,
-          requestMeta(request.correlationId),
+          { correlationId: request.correlationId },
         ),
       ),
     );
   }
 
+  /**
+   * Guarded password re-authentication endpoint for sensitive operations.
+   */
   @Post("auth/re-auth/password")
   @UseGuards(RbacGuard)
   @RequireSession()
@@ -273,12 +312,15 @@ export class AuthWorkspaceController {
           body.password,
           request.rbacContext.userId,
           request.rbacContext.sessionId,
-          requestMeta(request.correlationId),
+          { correlationId: request.correlationId },
         ),
       ),
     );
   }
 
+  /**
+   * Guarded check endpoint to determine if sensitive action requires re-authentication.
+   */
   @Post("auth/sensitive-route/check")
   @HttpCode(HttpStatus.OK)
   @UseGuards(RbacGuard)
@@ -304,6 +346,9 @@ export class AuthWorkspaceController {
     );
   }
 
+  /**
+   * Guarded profile update endpoint.
+   */
   @Patch("auth/profile")
   @UseGuards(RbacGuard)
   @RequireSession()
@@ -316,12 +361,15 @@ export class AuthWorkspaceController {
         new UpdateProfileCommand(
           body,
           request.rbacContext.userId,
-          requestMeta(request.correlationId),
+          { correlationId: request.correlationId },
         ),
       ),
     );
   }
 
+  /**
+   * Guarded profile retrieval endpoint.
+   */
   @Get("auth/profile")
   @UseGuards(RbacGuard)
   @RequireSession()
@@ -333,6 +381,9 @@ export class AuthWorkspaceController {
     );
   }
 
+  /**
+   * Guarded active sessions list endpoint.
+   */
   @Get("auth/sessions")
   @UseGuards(RbacGuard)
   @RequireSession()
@@ -344,6 +395,9 @@ export class AuthWorkspaceController {
     );
   }
 
+  /**
+   * Guarded session revocation endpoint for a user's own session by sessionId.
+   */
   @Delete("auth/sessions/:sessionId")
   @UseGuards(RbacGuard)
   @RequireSession()
@@ -356,12 +410,15 @@ export class AuthWorkspaceController {
         new RevokeOwnedSessionCommand(
           sessionId,
           request.rbacContext,
-          requestMeta(request.correlationId),
+          { correlationId: request.correlationId },
         ),
       ),
     );
   }
 
+  /**
+   * Guarded repositories list endpoint for the user.
+   */
   @Get("auth/repositories")
   @UseGuards(RbacGuard)
   @RequireSession()
@@ -373,6 +430,9 @@ export class AuthWorkspaceController {
     );
   }
 
+  /**
+   * Public password recovery request endpoint.
+   */
   @Post("auth/recovery/request")
   async requestPasswordRecovery(
     @Body(new ZodValidationPipe(requestPasswordRecoverySchema))
@@ -384,12 +444,15 @@ export class AuthWorkspaceController {
       await this.commandBus.execute(
         new RequestPasswordRecoveryCommand(
           payload,
-          requestMeta(correlationId, appOrigin),
+          { correlationId, app_origin: appOrigin },
         ),
       ),
     );
   }
 
+  /**
+   * Public password recovery confirmation endpoint.
+   */
   @Post("auth/recovery/confirm")
   async confirmPasswordRecovery(
     @Body(new ZodValidationPipe(confirmPasswordRecoverySchema))
@@ -398,11 +461,14 @@ export class AuthWorkspaceController {
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
-        new ConfirmPasswordRecoveryCommand(payload, requestMeta(correlationId)),
+        new ConfirmPasswordRecoveryCommand(payload, { correlationId }),
       ),
     );
   }
 
+  /**
+   * Public OAuth start flow endpoint.
+   */
   @Get("auth/oauth/start")
   async oauthStart(
     @Query(new ZodValidationPipe(oauthStartSchema)) query: OAuthStartInput,
@@ -410,11 +476,14 @@ export class AuthWorkspaceController {
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
-        new OAuthStartCommand(query, requestMeta(correlationId)),
+        new OAuthStartCommand(query, { correlationId }),
       ),
     );
   }
 
+  /**
+   * Public OAuth callback handler endpoint.
+   */
   @Get("auth/oauth/callback")
   async oauthCallback(
     @Query(new ZodValidationPipe(oauthCallbackSchema)) query: OAuthCallbackInput,
@@ -422,18 +491,20 @@ export class AuthWorkspaceController {
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
-        new OAuthCallbackCommand(query, requestMeta(correlationId)),
+        new OAuthCallbackCommand(query, { correlationId }),
       ),
     );
   }
 
+  /**
+   * Guarded OAuth identity linking start flow endpoint.
+   */
   @Get("auth/oauth/link/start")
   @UseGuards(RbacGuard)
   @RequireSession()
   async oauthLinkStart(
     @Req() request: AuthenticatedRequest,
     @Query(new ZodValidationPipe(oauthLinkStartSchema)) query: OAuthLinkStartInput,
-    @Headers("x-correlation-id") correlationId?: string,
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
@@ -441,12 +512,15 @@ export class AuthWorkspaceController {
           query,
           request.rbacContext.userId,
           request.rbacContext.sessionId,
-          requestMeta(correlationId),
+          { correlationId: request.correlationId },
         ),
       ),
     );
   }
 
+  /**
+   * Guarded OAuth identity linking callback endpoint.
+   */
   @Get("auth/oauth/link/callback")
   @UseGuards(RbacGuard)
   @RequireSession()
@@ -454,7 +528,6 @@ export class AuthWorkspaceController {
     @Req() request: AuthenticatedRequest,
     @Query(new ZodValidationPipe(oauthLinkCallbackSchema))
     query: OAuthLinkCallbackInput,
-    @Headers("x-correlation-id") correlationId?: string,
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
@@ -462,17 +535,9 @@ export class AuthWorkspaceController {
           query,
           request.rbacContext.userId,
           request.rbacContext.sessionId,
-          requestMeta(correlationId),
+          { correlationId: request.correlationId },
         ),
       ),
     );
   }
 }
-
-function requestMeta(correlationId?: string, appOrigin?: string): RequestMeta {
-  return {
-    ...(correlationId ? { correlationId: correlationId } : {}),
-    ...(appOrigin ? { app_origin: appOrigin } : {}),
-  };
-}
-
