@@ -1,10 +1,12 @@
 import {
   ASSESSMENT_RUNTIME_RUN_STATUSES,
+  isAssessmentAgentStreamEventType,
   FINAL_ASSESSMENT_RESULT_STATUSES,
   isPostFindingRuntimePhase,
   isRemediationDecision,
   REMEDIATION_APPROVAL_STATUSES,
   VERIFICATION_RESULT_STATUSES,
+  type AssessmentAgentStreamEvent,
   type AssessmentPostFindingActivity,
   type AssessmentPostFindingRuntimeState,
   type AssessmentRuntimeEngineeringProgress,
@@ -21,6 +23,47 @@ import {
   type WorkspaceRuntimeScanJob,
   type WorkspaceRuntimeSummaryValue,
 } from "../types/workspace-runtime.types.ts";
+
+
+export function parseAgentStreamEvent(data: string): AssessmentAgentStreamEvent | null {
+  const item = parseObject(data);
+  if (
+    item === null ||
+    typeof item.event_id !== "string" ||
+    typeof item.sequence !== "number" ||
+    typeof item.emitted_at !== "string" ||
+    typeof item.assessment_id !== "string" ||
+    typeof item.run_id !== "string" ||
+    typeof item.correlation_id !== "string" ||
+    !isAssessmentAgentStreamEventType(item.event_type)
+  ) {
+    return null;
+  }
+  return {
+    eventId: item.event_id,
+    sequence: item.sequence,
+    clientSequence:
+      typeof item.client_sequence === "number" ? item.client_sequence : null,
+    emittedAt: item.emitted_at,
+    assessmentId: item.assessment_id,
+    runId: item.run_id,
+    correlationId: item.correlation_id,
+    eventType: item.event_type,
+    source: optionalString(item.source),
+    agentName: optionalString(item.agent_name),
+    subagentName: optionalString(item.subagent_name),
+    namespace: Array.isArray(item.namespace)
+      ? item.namespace.filter((value): value is string => typeof value === "string")
+      : [],
+    nodeName: optionalString(item.node_name),
+    messageId: optionalString(item.message_id),
+    toolName: optionalString(item.tool_name),
+    toolCallId: optionalString(item.tool_call_id),
+    status: optionalString(item.status),
+    text: optionalString(item.text),
+    data: parseSummaryValue(item.data),
+  };
+}
 
 export function parseRuntimeEvent(
   data: string,
@@ -79,6 +122,7 @@ export function parseRuntimeEvent(
     runsByAssessmentId,
     recentActivityByAssessmentId,
     engineeringProgressByAssessmentId,
+    agentStreamEventsByAssessmentId: {},
     latestRunIdByAssessmentId,
     postFindingByAssessmentId,
     getAssessmentRuntime: (assessmentId: string) => ({
@@ -86,6 +130,7 @@ export function parseRuntimeEvent(
       recentActivity: recentActivityByAssessmentId[assessmentId] ?? [],
       engineeringProgress:
         engineeringProgressByAssessmentId[assessmentId] ?? [],
+      agentStreamEvents: [],
       latestRunId: latestRunIdByAssessmentId[assessmentId] ?? null,
       connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
       lastEmittedAt: payload.emitted_at as string,
@@ -509,6 +554,10 @@ function parseSummaryValue(
           entry[1] !== null,
       ),
   );
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
 }
 
 function parseObject(value: unknown): Record<string, unknown> | null {

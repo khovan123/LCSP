@@ -231,9 +231,11 @@ credentials only from `LLM7_API_KEY`, and defaults to `https://api.llm7.io/v1`
 
 An explicit provider preset takes precedence over legacy per-role model and
 reasoning environment variables. Unset `LCSP_MODEL_PROVIDER` to retain legacy
-per-role overrides. Unknown preset names fail at startup. Restart the worker
-after switching. This selects a provider at startup; it is not automatic
-failover/replay after an API error. Configure credentials for the selected provider.
+per-role overrides. Unknown preset names fail at startup. Restart the worker after switching.
+The preset selects the primary provider. Automatic cross-provider failover occurs only
+when one or more `LLM_FALLBACK_PROVIDER_<number>` entries are configured; otherwise
+provider exhaustion remains terminal. Configure credentials independently for every
+provider in the chain.
 
 All role models receive the same LCSP harness profile.
 
@@ -361,3 +363,61 @@ provider then performs its own full key rotation before the chain advances
 again. Schema/request failures and HTTP 400/404/422 never cross providers. A
 configured fallback provider must have its own credential environment variable;
 LLM7 always uses `LLM7_API_KEY` and never borrows `OPENAI_API_KEY`.
+
+## Live Deep Agents stream to workspace Chat
+
+Managed assessment boundaries open one `AgentStreamSession` when their trusted event
+contains an assessment identifier. Agent/model execution then uses the LangGraph v2
+stream instead of a separate `.invoke()` call, while preserving the previous return
+contract by returning the final root `values` projection. Agent streams subscribe to
+`messages`, `updates`, `custom`, and `values` with `subgraphs=True`; deterministic
+LangGraph workflows use `updates`, `custom`, and `values`. When no live session is
+active, the wrappers retain the existing `.invoke()` behavior.
+
+The live bridge emits ordered, bounded events for boundary/agent/subagent lifecycle,
+provider-exposed model content and reasoning summaries, tool-call deltas and tool
+results, graph updates/state shape, runtime progress, provider fallback, credential
+rotation, and structured logs. It never synthesizes or publishes hidden
+chain-of-thought, system prompts, private interview context, scratchpads, or raw
+message state. Tool arguments and structured payloads are credential-redacted before
+they leave the worker. Provider fallback and key rotation keep their existing retry
+semantics; streaming only reports those transitions.
+
+```text
+Managed Agent / LangGraph
+        │ ordered buffered events
+        ▼
+WorkerApiClient
+        │ POST /internal/scan-jobs/agent-stream-events
+        ▼
+Nest runtime event service
+        │ workspace.agent-stream
+        ▼
+Workspace SSE → runtime provider → assessment Chat transcript
+```
+
+The worker queues event delivery off the model execution thread and attempts to
+flush the ordered queue when the managed boundary closes. Live telemetry is
+best-effort: queue insertion never blocks model/tool execution, and shutdown uses a
+bounded wait so an unavailable/slow API cannot stall the governed assessment workflow.
+Excess live events may be dropped under sustained backpressure; durable runtime and
+checkpoint state remain authoritative.
+
+The Nest endpoint validates event type/identity, resolves the assessment owner on the
+server, applies a second sanitizer before publication, and only exposes replay/live
+events to the authenticated owner. Workspace runtime snapshots use the same owner
+scope. Browser grouping by `assessmentId` is presentation only and is never treated as
+an authorization boundary. The workspace client de-duplicates events by `eventId`,
+keeps a bounded recent stream per assessment, and renders deltas in server sequence
+order. The live stream is an observability/UI projection and does not replace durable
+workflow state.
+
+### Deep Agents test environment isolation
+
+The unit-test harness treats the repository `.env` as external developer state. At
+collection startup it discovers the keys declared by that `.env` without importing
+their values into tests, removes those keys from the pytest process, and clears them
+again before and after each test. Tests that need provider/model credentials or other
+runtime configuration must set them explicitly through `monkeypatch` or a fixture.
+This prevents a local `LCSP_MODEL_PROVIDER`, `LLM7_API_KEY`, or similar setting from
+changing later model-policy tests or causing accidental real-provider access.

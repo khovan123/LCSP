@@ -20,6 +20,12 @@ def test_t02_nested_api_key_is_stripped_at_all_levels() -> None:
     assert copied["a"]["b"]["c"]["api_key"] == ""
 
 
+def test_json_quoted_secret_assignment_is_redacted() -> None:
+    redacted = redact_string('{"api_key":"super-secret-value"}')
+    assert "super-secret-value" not in redacted
+    assert redacted == '{"api_key":""}'
+
+
 def test_t03_github_token_in_string_is_stripped() -> None:
     token = "ghp_1234567890abcdefABCDEF1234567890abcd"
 

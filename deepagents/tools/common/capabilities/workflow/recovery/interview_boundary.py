@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from orchestration.agent_stream import invoke_with_stream
+
 import hashlib
 import json
 import logging
@@ -1324,7 +1326,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         if not isinstance(artifact_versions, dict) or not artifact_versions:
             raise RuntimeError("downstream impact re-evaluation requires artifact pins")
         root = self._root_agent or self._load_root_agent()
-        root.invoke(
+        invoke_with_stream(root,
             {
                 "messages": [
                     {
@@ -1478,7 +1480,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         correlationId: str,
         root: Any,
     ) -> None:
-        root.invoke(
+        invoke_with_stream(root,
             {
                 "messages": [
                     {
@@ -1517,7 +1519,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         correlationId: str,
         root: Any,
     ) -> None:
-        root.invoke(
+        invoke_with_stream(root,
             {
                 "messages": [
                     {

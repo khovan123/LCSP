@@ -12,6 +12,7 @@ from middleware.failure_policy import (
     is_auth_failure,
     is_terminal_task_error,
 )
+from orchestration.agent_stream import publish_agent_stream_event
 from middleware.token_fallback import credential_failure, model_provider
 from model_policy import PROVIDER_PRESETS, canonical_provider, provider_init_kwargs
 from provider_credentials import (
@@ -109,6 +110,16 @@ class ProviderFallbackMiddleware(AgentMiddleware):
             current_provider=current_provider or "unknown",
             fallback_provider=provider,
             fallback_index=index,
+        )
+        publish_agent_stream_event(
+            "PROVIDER_FALLBACK",
+            status="RUNNING",
+            text="provider fallback attempt",
+            data={
+                "current_provider": current_provider or "unknown",
+                "fallback_provider": provider,
+                "fallback_index": index,
+            },
         )
 
     def wrap_model_call(self, request, handler):

@@ -12,6 +12,7 @@ import {
 
 import { apiQueryKeys } from "../../../../lib/api/query-keys.ts";
 import {
+  parseAgentStreamEvent,
   parseRuntimeEvent,
   runtimeFingerprint,
   affectedAssessmentIds,
@@ -35,12 +36,14 @@ const initialRuntime: WorkspaceRuntimeContextValue = {
   runsByAssessmentId: {},
   recentActivityByAssessmentId: {},
   engineeringProgressByAssessmentId: {},
+  agentStreamEventsByAssessmentId: {},
   latestRunIdByAssessmentId: {},
   postFindingByAssessmentId: {},
   getAssessmentRuntime: (): WorkspaceRuntimeAssessmentTimeline => ({
     currentRun: null,
     recentActivity: [],
     engineeringProgress: [],
+    agentStreamEvents: [],
     latestRunId: null,
     connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connecting,
     lastEmittedAt: null,
@@ -70,7 +73,9 @@ export function WorkspaceRuntimeProvider({
       const parsed = parseRuntimeEvent(event.data);
       if (parsed !== null) {
         attempts = 0;
-        setRuntime(parsed);
+        setRuntime((current) =>
+          withAgentStreamEvents(parsed, current.agentStreamEventsByAssessmentId),
+        );
         const fingerprint = runtimeFingerprint(parsed);
         if (latestFingerprint.current !== fingerprint) {
           latestFingerprint.current = fingerprint;
@@ -95,10 +100,26 @@ export function WorkspaceRuntimeProvider({
       }
     };
 
+    const onAgentStream = (event: MessageEvent<string>) => {
+      const parsed = parseAgentStreamEvent(event.data);
+      if (parsed === null) return;
+      attempts = 0;
+      setRuntime((current) => {
+        const previous = current.agentStreamEventsByAssessmentId[parsed.assessmentId] ?? [];
+        if (previous.some((item) => item.eventId === parsed.eventId)) return current;
+        const nextEvents = [...previous, parsed].slice(-1000);
+        return withAgentStreamEvents(current, {
+          ...current.agentStreamEventsByAssessmentId,
+          [parsed.assessmentId]: nextEvents,
+        });
+      });
+    };
+
     const connect = () => {
       if (stopped) return;
       source = new EventSource("/api/workspace/runtime-events");
       source.addEventListener("workspace.runtime", onRuntime);
+      source.addEventListener("workspace.agent-stream", onAgentStream);
       source.onopen = () => {
         if (needsResync) {
           latestFingerprint.current = null;
@@ -120,6 +141,7 @@ export function WorkspaceRuntimeProvider({
       };
       source.onerror = () => {
         source.removeEventListener("workspace.runtime", onRuntime);
+        source.removeEventListener("workspace.agent-stream", onAgentStream);
         source.onopen = null;
         source.onerror = null;
         source.close();
@@ -138,6 +160,7 @@ export function WorkspaceRuntimeProvider({
       stopped = true;
       clearTimeout(retryTimer);
       source.removeEventListener("workspace.runtime", onRuntime);
+      source.removeEventListener("workspace.agent-stream", onAgentStream);
       source.onopen = null;
       source.onerror = null;
       source.close();
@@ -149,6 +172,27 @@ export function WorkspaceRuntimeProvider({
       {children}
     </WorkspaceRuntimeContext.Provider>
   );
+}
+
+function withAgentStreamEvents(
+  runtime: WorkspaceRuntimeContextValue,
+  agentStreamEventsByAssessmentId: WorkspaceRuntimeContextValue["agentStreamEventsByAssessmentId"],
+): WorkspaceRuntimeContextValue {
+  return {
+    ...runtime,
+    agentStreamEventsByAssessmentId,
+    getAssessmentRuntime: (assessmentId: string) => ({
+      currentRun: runtime.runsByAssessmentId[assessmentId]?.[0] ?? null,
+      recentActivity: runtime.recentActivityByAssessmentId[assessmentId] ?? [],
+      engineeringProgress:
+        runtime.engineeringProgressByAssessmentId[assessmentId] ?? [],
+      agentStreamEvents: agentStreamEventsByAssessmentId[assessmentId] ?? [],
+      latestRunId: runtime.latestRunIdByAssessmentId[assessmentId] ?? null,
+      connectionState: runtime.connectionState,
+      lastEmittedAt: runtime.emittedAt,
+      postFinding: runtime.postFindingByAssessmentId[assessmentId] ?? null,
+    }),
+  };
 }
 
 export function useWorkspaceRuntime() {

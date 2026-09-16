@@ -98,6 +98,60 @@ export type AssessmentRuntimeSummaryValue =
   | { [key: string]: AssessmentRuntimeSummaryValue }
   | AssessmentRuntimeSummaryValue[];
 
+export const ASSESSMENT_AGENT_STREAM_EVENT_TYPES = {
+  boundaryStarted: "BOUNDARY_STARTED",
+  boundaryCompleted: "BOUNDARY_COMPLETED",
+  boundaryFailed: "BOUNDARY_FAILED",
+  agentStarted: "AGENT_STARTED",
+  agentCompleted: "AGENT_COMPLETED",
+  agentFailed: "AGENT_FAILED",
+  subagentSelected: "SUBAGENT_SELECTED",
+  modelContentDelta: "MODEL_CONTENT_DELTA",
+  modelReasoningDelta: "MODEL_REASONING_DELTA",
+  toolCallDelta: "TOOL_CALL_DELTA",
+  toolResult: "TOOL_RESULT",
+  customProgress: "CUSTOM_PROGRESS",
+  graphUpdate: "GRAPH_UPDATE",
+  graphState: "GRAPH_STATE",
+  runtimeEvent: "RUNTIME_EVENT",
+  providerFallback: "PROVIDER_FALLBACK",
+  credentialRotation: "CREDENTIAL_ROTATION",
+  log: "LOG",
+} as const;
+
+export type AssessmentAgentStreamEventType =
+  (typeof ASSESSMENT_AGENT_STREAM_EVENT_TYPES)[keyof typeof ASSESSMENT_AGENT_STREAM_EVENT_TYPES];
+
+export function isAssessmentAgentStreamEventType(
+  value: unknown,
+): value is AssessmentAgentStreamEventType {
+  return Object.values(ASSESSMENT_AGENT_STREAM_EVENT_TYPES).includes(
+    value as AssessmentAgentStreamEventType,
+  );
+}
+
+export type AssessmentAgentStreamEvent = {
+  eventId: string;
+  sequence: number;
+  clientSequence: number | null;
+  emittedAt: string;
+  assessmentId: string;
+  runId: string;
+  correlationId: string;
+  eventType: AssessmentAgentStreamEventType;
+  source: string | null;
+  agentName: string | null;
+  subagentName: string | null;
+  namespace: string[];
+  nodeName: string | null;
+  messageId: string | null;
+  toolName: string | null;
+  toolCallId: string | null;
+  status: string | null;
+  text: string | null;
+  data: AssessmentRuntimeSummaryValue | null;
+};
+
 export type AssessmentRuntimeActivityEvent = {
   eventId: string;
   sequence: number;

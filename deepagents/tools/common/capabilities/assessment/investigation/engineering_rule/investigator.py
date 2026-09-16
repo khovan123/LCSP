@@ -1,6 +1,8 @@
 """LLM-guided, evidence-bounded investigation over the Program Evidence Graph."""
 from __future__ import annotations
 
+from orchestration.agent_stream import invoke_with_stream
+
 import hashlib
 import json
 from typing import Any, Callable
@@ -142,7 +144,7 @@ class LawGuidedInvestigator:
             ],
         )
         try:
-            response = agent.invoke(
+            response = invoke_with_stream(agent,
                 {"messages": [{"role": "user", "content": self._agent_prompt(packet, ledger)}]},
                 config={
                     "metadata": {

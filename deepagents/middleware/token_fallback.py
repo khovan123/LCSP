@@ -13,6 +13,7 @@ from middleware.failure_policy import (
     is_auth_failure,
     error_status,
 )
+from orchestration.agent_stream import publish_agent_stream_event
 from provider_credentials import (
     LLM7_DEFAULT_BASE_URL,
     NO_SDK_RETRY_MAX_RETRIES,
@@ -181,6 +182,17 @@ class TokenFallbackMiddleware(AgentMiddleware):
             fallback_enabled=True,
             reason=reason,
         )
+        publish_agent_stream_event(
+            "CREDENTIAL_ROTATION",
+            status="RUNNING",
+            text="credential fallback attempt",
+            data={
+                "provider": provider,
+                "credential_source": env_name,
+                "credential_slot": index,
+                "reason": reason,
+            },
+        )
 
     def _log_dead_slot(self, *, provider: str, env_name: str, index: int, status: int | None) -> None:
         logger.warning(
@@ -190,6 +202,17 @@ class TokenFallbackMiddleware(AgentMiddleware):
             credential_slot=index,
             fallback_enabled=True,
             status_code=status,
+        )
+        publish_agent_stream_event(
+            "CREDENTIAL_ROTATION",
+            status="FAILED",
+            text="credential slot marked dead",
+            data={
+                "provider": provider,
+                "credential_source": env_name,
+                "credential_slot": index,
+                "status_code": status,
+            },
         )
 
     def _log_skip_dead_slot(self, *, provider: str, env_name: str, index: int) -> None:
@@ -212,6 +235,17 @@ class TokenFallbackMiddleware(AgentMiddleware):
             credential_slot=index,
             fallback_enabled=True,
             cooldown_seconds=cooldown_seconds,
+        )
+        publish_agent_stream_event(
+            "CREDENTIAL_ROTATION",
+            status="WAITING",
+            text="credential slot rate limited",
+            data={
+                "provider": provider,
+                "credential_source": env_name,
+                "credential_slot": index,
+                "cooldown_seconds": cooldown_seconds,
+            },
         )
 
     def _mark_dead(self, *, provider: str, env_name: str, index: int, error: BaseException) -> None:

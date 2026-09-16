@@ -193,6 +193,23 @@ export type PagesMessages = {
       completed: string;
       failed: string;
     };
+    agentStreamLabels: {
+      subagent: string;
+      agent: string;
+      flow: string;
+      reasoning: string;
+      output: string;
+      toolCall: string;
+      toolOutput: string;
+      log: string;
+      runtime: string;
+      progress: string;
+      update: string;
+      state: string;
+      provider: string;
+      credential: string;
+    };
+    agentStreamSelected: string;
     recentAssessments: string;
     moreAssessments: string;
     allAssessments: string;

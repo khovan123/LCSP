@@ -1,5 +1,6 @@
 import type { MessageKey } from "@lcsp/i18n";
 import type {
+  AssessmentAgentStreamEvent,
   AssessmentPostFindingRuntimeState,
   AssessmentRuntimeEngineeringProgress,
 } from "@lcsp/contracts/evidence";
@@ -94,6 +95,7 @@ export type WorkspaceRuntimeAssessmentTimeline = {
   currentRun: WorkspaceRuntimeRun | null;
   recentActivity: WorkspaceRuntimeActivityItem[];
   engineeringProgress?: AssessmentRuntimeEngineeringProgress[];
+  agentStreamEvents?: AssessmentAgentStreamEvent[];
   latestRunId: string | null;
   connectionState: WorkspaceRuntimeConnectionState;
   lastEmittedAt: string | null;
@@ -119,6 +121,7 @@ export type WorkspaceRuntimeContextValue = WorkspaceRuntimeSnapshot & {
     string,
     AssessmentRuntimeEngineeringProgress[]
   >;
+  agentStreamEventsByAssessmentId: Record<string, AssessmentAgentStreamEvent[]>;
   latestRunIdByAssessmentId: Record<string, string>;
   postFindingByAssessmentId: Record<string, AssessmentPostFindingRuntimeState>;
   getAssessmentRuntime: (

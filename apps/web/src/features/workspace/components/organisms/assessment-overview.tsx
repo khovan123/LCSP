@@ -58,6 +58,7 @@ import {
 } from "../molecules/assessment-question-turn";
 import { PostFindingFlowSteps } from "../molecules/post-finding-flow-steps";
 import { RuntimeThinkingActivity } from "../molecules/runtime-thinking-activity";
+import { AgentStreamTimeline } from "../molecules/agent-stream-timeline";
 import { AssessmentComposer } from "./assessment-composer";
 import { InterviewAnswerHistory } from "../molecules/interview-answer-history";
 import { AssessmentTranscript } from "./assessment-transcript";
@@ -187,6 +188,7 @@ function AssessmentInterviewFlow({
   scanFailed: boolean;
   runtimeKey: string;
 }) {
+  const liveTimeline = useWorkspaceRuntime().getAssessmentRuntime(assessmentId);
   // Query hook reference preserved for reactivity & test compatibility.
   const interviewQuery = useAssessmentInterviewStateQuery(
     assessmentId,
@@ -218,6 +220,7 @@ function AssessmentInterviewFlow({
   const [draftMap, setDraftMap] = useState<
     Record<string, InterviewAnswerDraft>
   >({});
+  const [submittedQuestionId, setSubmittedQuestionId] = useState<string | null>(null);
   const [lastSavedMessage, setLastSavedMessage] = useState<string | null>(null);
 
   const activeDraft: InterviewAnswerDraft =
@@ -318,6 +321,7 @@ function AssessmentInterviewFlow({
     workflow.currentRunId,
     workflow.status,
     normalized.workflow.latestRun?.updatedAt ?? workflow.lastEmittedAt,
+    liveTimeline.agentStreamEvents?.at(-1)?.eventId,
     runtimeThinkingItems.map((item) => item.id).join("|"),
     interviewQuery.dataUpdatedAt,
     activeQuestionId,
@@ -417,6 +421,7 @@ function AssessmentInterviewFlow({
       { answer: input, state: runtimeInterviewState },
       {
         onSuccess: () => {
+          setSubmittedQuestionId(input.questionId);
           clearDraft();
           setLastSavedMessage(t("pages.assessment.answerSavedForRuntime"));
         },
@@ -505,6 +510,7 @@ function AssessmentInterviewFlow({
     >
       <AssessmentTranscript autoScrollKey={autoScrollKey}>
         {scanner}
+        <AgentStreamTimeline events={liveTimeline.agentStreamEvents ?? []} />
 
         {interviewEnabled ? (
           <>
@@ -545,6 +551,7 @@ function AssessmentInterviewFlow({
                     isAdjusting={activeDraft.isAdjusting}
                     onAdjust={handleAdjust}
                     canSubmitSelection={isSubmitReady}
+                    hideSubmitSelection={submittedQuestionId === activeQuestion?.id}
                     onSubmitSelection={handleSubmit}
                     blockedActions={interview.questionTurnProps.blockedActions}
                     disabled={

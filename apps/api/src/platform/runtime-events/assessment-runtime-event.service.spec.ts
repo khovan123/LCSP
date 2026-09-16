@@ -14,7 +14,13 @@ const freshRuntimeEvent = () =>
   Promise.resolve({ createdAt: new Date("2099-01-01T00:00:00.000Z") });
 
 const emptyRepositorySnapshots = () => ({
-  findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+  findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
+});
+
+const assessmentOwner = () => ({
+  findUnique: jest
+    .fn<(args?: unknown) => Promise<{ ownerId: string }>>()
+    .mockResolvedValue({ ownerId: "user-1" }),
 });
 
 describe("AssessmentRuntimeEventService", () => {
@@ -22,15 +28,60 @@ describe("AssessmentRuntimeEventService", () => {
     jest.useRealTimers();
   });
 
+  it("isolates live agent events by assessment owner", async () => {
+    const prisma = {
+      assessment: {
+        findUnique: jest.fn(async ({ where }: { where: { id: string } }) =>
+          where.id === "assessment-a"
+            ? { ownerId: "user-a" }
+            : where.id === "assessment-b"
+              ? { ownerId: "user-b" }
+              : null,
+        ),
+      },
+    };
+    const service = new AssessmentRuntimeEventService(prisma as never);
+    const ownerAEvents: string[] = [];
+    const ownerBEvents: string[] = [];
+    const ownerASubscription = service
+      .observeAgentStreamEvents("user-a")
+      .subscribe((event) => ownerAEvents.push(event.assessmentId));
+    const ownerBSubscription = service
+      .observeAgentStreamEvents("user-b")
+      .subscribe((event) => ownerBEvents.push(event.assessmentId));
+
+    await service.publishAgentStreamEvent({
+      assessmentId: "assessment-a",
+      runId: "run-a",
+      correlationId: "corr-a",
+      eventType: "MODEL_CONTENT_DELTA",
+      text: "A",
+    });
+    await service.publishAgentStreamEvent({
+      assessmentId: "assessment-b",
+      runId: "run-b",
+      correlationId: "corr-b",
+      eventType: "MODEL_CONTENT_DELTA",
+      text: "B",
+    });
+
+    expect(ownerAEvents).toEqual(["assessment-a"]);
+    expect(ownerBEvents).toEqual(["assessment-b"]);
+    expect(prisma.assessment.findUnique).toHaveBeenCalledTimes(2);
+    ownerASubscription.unsubscribe();
+    ownerBSubscription.unsubscribe();
+  });
+
   it("builds orchestration activity from scan jobs and evidence reports when runtime events are absent", async () => {
     const prisma = {
       assessmentRuntimeEvent: {
-        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
         findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
       repositorySnapshot: emptyRepositorySnapshots(),
+      assessment: assessmentOwner(),
       repositoryScanJob: {
-        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([
+        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([
           {
             id: "scan-1",
             assessmentId: "assessment-1",
@@ -43,7 +94,7 @@ describe("AssessmentRuntimeEventService", () => {
         ]),
       },
       technicalEvidenceReport: {
-        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([
+        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([
           {
             id: "report-1",
             assessmentId: "assessment-1",
@@ -58,7 +109,20 @@ describe("AssessmentRuntimeEventService", () => {
     };
     const service = new AssessmentRuntimeEventService(prisma as never);
 
-    const snapshot = await service.buildWorkspaceSnapshot();
+    const snapshot = await service.buildWorkspaceSnapshot("user-1");
+
+    expect(prisma.assessmentRuntimeEvent.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { assessment: { ownerId: "user-1" } } }),
+    );
+    expect(prisma.repositorySnapshot.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { assessment: { ownerId: "user-1" } } }),
+    );
+    expect(prisma.repositoryScanJob.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { assessment: { ownerId: "user-1" } } }),
+    );
+    expect(prisma.technicalEvidenceReport.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { assessment: { ownerId: "user-1" } } }),
+    );
 
     expect(snapshot.recentActivity).toEqual([
       expect.objectContaining({
@@ -89,12 +153,13 @@ describe("AssessmentRuntimeEventService", () => {
     jest.setSystemTime(new Date("2026-08-14T08:02:00.000Z"));
     const prisma = {
       assessmentRuntimeEvent: {
-        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
         findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
       repositorySnapshot: emptyRepositorySnapshots(),
+      assessment: assessmentOwner(),
       repositoryScanJob: {
-        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([
+        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([
           {
             id: "scan-1",
             assessmentId: "assessment-1",
@@ -107,7 +172,7 @@ describe("AssessmentRuntimeEventService", () => {
         ]),
       },
       technicalEvidenceReport: {
-        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
       },
     };
     const service = new AssessmentRuntimeEventService(prisma as never);
@@ -226,15 +291,16 @@ describe("AssessmentRuntimeEventService", () => {
     ];
     const prisma = {
       assessmentRuntimeEvent: {
-        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue(events),
+        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue(events),
         findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
       repositorySnapshot: emptyRepositorySnapshots(),
+      assessment: assessmentOwner(),
       repositoryScanJob: {
-        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
       },
       technicalEvidenceReport: {
-        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
       },
     };
     const service = new AssessmentRuntimeEventService(prisma as never);
@@ -267,7 +333,7 @@ describe("AssessmentRuntimeEventService", () => {
   it("derives the latest post-finding state from runtime event output summaries", async () => {
     const prisma = {
       assessmentRuntimeEvent: {
-        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([
+        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([
           {
             id: "evt-latest",
             assessmentId: "assessment-1",
@@ -306,11 +372,12 @@ describe("AssessmentRuntimeEventService", () => {
         findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
       repositorySnapshot: emptyRepositorySnapshots(),
+      assessment: assessmentOwner(),
       repositoryScanJob: {
-        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
       },
       technicalEvidenceReport: {
-        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
       },
     };
     const service = new AssessmentRuntimeEventService(prisma as never);
@@ -332,6 +399,7 @@ describe("AssessmentRuntimeEventService", () => {
       create: jest.fn().mockImplementation(() => Promise.resolve({})),
     };
     const prisma = {
+      assessment: assessmentOwner(),
       repositoryScanJob: {
         findUnique: jest.fn().mockImplementation(() =>
           Promise.resolve({
@@ -406,6 +474,7 @@ describe("AssessmentRuntimeEventService", () => {
         .mockResolvedValueOnce({}),
     };
     const prisma = {
+      assessment: assessmentOwner(),
       repositoryScanJob: {
         findUnique: jest.fn().mockImplementation(() =>
           Promise.resolve({
@@ -458,6 +527,7 @@ describe("AssessmentRuntimeEventService", () => {
       create: jest.fn().mockImplementation(() => Promise.resolve({})),
     };
     const prisma = {
+      assessment: assessmentOwner(),
       repositoryScanJob: {
         findUnique: jest.fn().mockImplementation(() =>
           Promise.resolve({
@@ -498,6 +568,7 @@ describe("AssessmentRuntimeEventService", () => {
       create: jest.fn().mockImplementation(() => Promise.resolve({})),
     };
     const prisma = {
+      assessment: assessmentOwner(),
       repositoryScanJob: {
         findUnique: jest.fn().mockImplementation(() =>
           Promise.resolve({
@@ -546,7 +617,7 @@ describe("AssessmentRuntimeEventService", () => {
   it("does not build synthetic scan activity when persisted worker activity exists", async () => {
     const prisma = {
       assessmentRuntimeEvent: {
-        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([
+        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([
           {
             id: "evt-1",
             assessmentId: "assessment-1",
@@ -572,8 +643,9 @@ describe("AssessmentRuntimeEventService", () => {
         findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
       repositorySnapshot: emptyRepositorySnapshots(),
+      assessment: assessmentOwner(),
       repositoryScanJob: {
-        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([
+        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([
           {
             id: "scan-1",
             assessmentId: "assessment-1",
@@ -586,7 +658,7 @@ describe("AssessmentRuntimeEventService", () => {
         ]),
       },
       technicalEvidenceReport: {
-        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+        findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
       },
     };
     const service = new AssessmentRuntimeEventService(prisma as never);
@@ -759,11 +831,12 @@ describe("AssessmentRuntimeEventService", () => {
           findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
         },
         repositorySnapshot: emptyRepositorySnapshots(),
+        assessment: assessmentOwner(),
         repositoryScanJob: {
-          findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+          findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
         },
         technicalEvidenceReport: {
-          findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+          findMany: jest.fn<(args?: unknown) => Promise<unknown[]>>().mockResolvedValue([]),
         },
       };
     };

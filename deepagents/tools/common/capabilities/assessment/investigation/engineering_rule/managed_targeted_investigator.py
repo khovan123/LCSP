@@ -9,6 +9,8 @@ before deterministic evaluation or the outer assessment callback can continue.
 
 from __future__ import annotations
 
+from orchestration.agent_stream import invoke_with_stream
+
 import hashlib
 import json
 from dataclasses import asdict
@@ -738,7 +740,7 @@ def _invoke_managed_investigator(
             response_shape: dict[str, Any] | None = None
             candidate_handoff: Any | None = None
             try:
-                invocation = agent.invoke(
+                invocation = invoke_with_stream(agent,
                     {"messages": [{"role": "user", "content": current_instruction}]},
                     config={
                         "configurable": configurable,

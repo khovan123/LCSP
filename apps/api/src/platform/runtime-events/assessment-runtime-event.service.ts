@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   ASSESSMENT_RUNTIME_ENGINEERING_PROGRESS_TOOL_NAMES,
@@ -11,6 +12,8 @@ import {
   REMEDIATION_APPROVAL_STATUSES,
   VERIFICATION_RESULT_STATUSES,
   FINAL_ASSESSMENT_RESULT_STATUSES,
+  type AssessmentAgentStreamEvent,
+  type AssessmentAgentStreamEventType,
   type AssessmentPostFindingActivity,
   type AssessmentPostFindingRuntimeState,
   type AssessmentRuntimeEventType,
@@ -27,6 +30,7 @@ import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import type { Prisma } from "@prisma/client";
 import { Injectable, Logger } from "@nestjs/common";
+import { Observable, ReplaySubject, filter, map } from "rxjs";
 
 import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
 import {
@@ -39,12 +43,37 @@ import {
   sanitizeRuntimeSummaryValue,
   summarizeRuntimeError,
 } from "./runtime-summary-sanitizer.js";
+import {
+  sanitizeAgentStreamIdentifier,
+  sanitizeAgentStreamText,
+  sanitizeAgentStreamValue,
+} from "./agent-stream-sanitizer.js";
 
 const RUNTIME_EVENT_SEQUENCE_RETRY_ATTEMPTS = 8;
 const RUNTIME_EVENT_SEQUENCE_RETRY_DELAY_MS = 5;
 const ENGINEERING_PROGRESS_DURABLE_MAX_RUNS = 10;
 const ENGINEERING_PROGRESS_SUMMARY_SCAN_LIMIT = 40;
 const ENGINEERING_PROGRESS_INVESTIGATION_SCAN_LIMIT = 1_000;
+
+export type PublishAgentStreamEventInput = {
+  eventId?: string | null;
+  clientSequence?: number | null;
+  assessmentId: string;
+  runId: string;
+  correlationId: string;
+  eventType: AssessmentAgentStreamEventType;
+  source?: string | null;
+  agentName?: string | null;
+  subagentName?: string | null;
+  namespace?: string[] | null;
+  nodeName?: string | null;
+  messageId?: string | null;
+  toolName?: string | null;
+  toolCallId?: string | null;
+  status?: string | null;
+  text?: string | null;
+  data?: unknown;
+};
 
 type RecordRuntimeEventInput = {
   assessmentId: string;
@@ -128,6 +157,11 @@ type RuntimeRepositorySnapshot = {
   createdAt: Date;
 };
 
+type OwnedAssessmentAgentStreamEvent = {
+  ownerId: string;
+  event: AssessmentAgentStreamEvent;
+};
+
 type RuntimeEvidenceReportSnapshot = {
   id: string;
   assessmentId: string;
@@ -144,6 +178,10 @@ type RuntimeEvidenceReportSnapshot = {
 @Injectable()
 export class AssessmentRuntimeEventService {
   private readonly logger = new Logger(AssessmentRuntimeEventService.name);
+  private readonly agentStreamEvents =
+    new ReplaySubject<OwnedAssessmentAgentStreamEvent>(1_000);
+  private readonly assessmentOwnerIds = new Map<string, string>();
+  private agentStreamSequence = 0;
 
   /**
    * Creates the runtime-event service with access to Prisma persistence.
@@ -360,7 +398,89 @@ export class AssessmentRuntimeEventService {
       attempt: input.attempt,
       waitingReason: input.waitingReason,
     });
+    await this.publishAgentStreamEvent({
+      assessmentId: scanJob.assessmentId,
+      runId: scanJob.id,
+      correlationId: scanJob.correlationId,
+      eventType: "RUNTIME_EVENT",
+      source: "runtime-event",
+      toolName: input.toolName ?? null,
+      status: input.runStatus,
+      text: input.summary,
+      data: {
+        runtimeEventType: input.eventType,
+        stage: input.stage,
+        inputSummary: input.inputSummary ?? null,
+        outputSummary: input.outputSummary ?? null,
+        errorSummary: input.errorSummary ?? null,
+        waitingReason: input.waitingReason ?? null,
+        attempt: input.attempt ?? null,
+      },
+    });
     return { recorded: true };
+  }
+
+  /** Publish one redacted, bounded live event to connected workspace clients. */
+  async publishAgentStreamEvent(
+    input: PublishAgentStreamEventInput,
+  ): Promise<AssessmentAgentStreamEvent | null> {
+    const ownerId = await this.resolveAssessmentOwnerId(input.assessmentId);
+    if (ownerId === null) {
+      this.logger.warn(
+        `Agent stream event ignored for unknown assessment ${input.assessmentId}`,
+      );
+      return null;
+    }
+    const event: AssessmentAgentStreamEvent = {
+      eventId: sanitizeAgentStreamIdentifier(input.eventId) ?? randomUUID(),
+      sequence: ++this.agentStreamSequence,
+      clientSequence: input.clientSequence ?? null,
+      emittedAt: new Date().toISOString(),
+      assessmentId:
+        sanitizeAgentStreamIdentifier(input.assessmentId) ?? input.assessmentId,
+      runId: sanitizeAgentStreamIdentifier(input.runId) ?? input.runId,
+      correlationId:
+        sanitizeAgentStreamIdentifier(input.correlationId) ?? input.correlationId,
+      eventType: input.eventType,
+      source: sanitizeAgentStreamIdentifier(input.source),
+      agentName: sanitizeAgentStreamIdentifier(input.agentName),
+      subagentName: sanitizeAgentStreamIdentifier(input.subagentName),
+      namespace: (input.namespace ?? [])
+        .slice(0, 32)
+        .flatMap((item) => {
+          const sanitized = sanitizeAgentStreamIdentifier(item);
+          return sanitized === null ? [] : [sanitized];
+        }),
+      nodeName: sanitizeAgentStreamIdentifier(input.nodeName),
+      messageId: sanitizeAgentStreamIdentifier(input.messageId),
+      toolName: sanitizeAgentStreamIdentifier(input.toolName),
+      toolCallId: sanitizeAgentStreamIdentifier(input.toolCallId),
+      status: sanitizeAgentStreamIdentifier(input.status),
+      text: sanitizeAgentStreamText(input.text),
+      data: sanitizeAgentStreamValue(input.data),
+    };
+    this.agentStreamEvents.next({ ownerId, event });
+    return event;
+  }
+
+  /** Observe live events belonging only to assessments owned by one customer. */
+  observeAgentStreamEvents(ownerId: string): Observable<AssessmentAgentStreamEvent> {
+    return this.agentStreamEvents.pipe(
+      filter((entry) => entry.ownerId === ownerId),
+      map((entry) => entry.event),
+    );
+  }
+
+  private async resolveAssessmentOwnerId(assessmentId: string): Promise<string | null> {
+    const cached = this.assessmentOwnerIds.get(assessmentId);
+    if (cached) return cached;
+    const assessment = await this.prisma.assessment.findUnique({
+      where: { id: assessmentId },
+      select: { ownerId: true },
+    });
+    if (!assessment) return null;
+    this.assessmentOwnerIds.set(assessmentId, assessment.ownerId);
+    return assessment.ownerId;
   }
 
   /**
@@ -437,7 +557,7 @@ export class AssessmentRuntimeEventService {
    *
    * @returns Snapshot containing recent activity, derived runs, scan jobs, and evidence reports.
    */
-  async buildWorkspaceSnapshot(): Promise<AssessmentRuntimeSnapshot> {
+  async buildWorkspaceSnapshot(ownerId?: string): Promise<AssessmentRuntimeSnapshot> {
     const emittedAt = new Date().toISOString();
     await failStaleRepositoryScanJobs(this.prisma, {
       now: new Date(emittedAt),
@@ -445,10 +565,12 @@ export class AssessmentRuntimeEventService {
     const [events, repositorySnapshots, scanJobs, evidenceReports] =
       await Promise.all([
         this.safeFindMany({
+          ...(ownerId ? { where: { assessment: { ownerId } } } : {}),
           orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
           take: 200,
         }),
         this.prisma.repositorySnapshot.findMany({
+          ...(ownerId ? { where: { assessment: { ownerId } } } : {}),
           orderBy: { createdAt: "desc" },
           take: 50,
           select: {
@@ -462,6 +584,7 @@ export class AssessmentRuntimeEventService {
           },
         }),
         this.prisma.repositoryScanJob.findMany({
+          ...(ownerId ? { where: { assessment: { ownerId } } } : {}),
           orderBy: { updatedAt: "desc" },
           take: 50,
           select: {
@@ -475,6 +598,7 @@ export class AssessmentRuntimeEventService {
           },
         }),
         this.prisma.technicalEvidenceReport.findMany({
+          ...(ownerId ? { where: { assessment: { ownerId } } } : {}),
           orderBy: { createdAt: "desc" },
           take: 50,
           select: {
