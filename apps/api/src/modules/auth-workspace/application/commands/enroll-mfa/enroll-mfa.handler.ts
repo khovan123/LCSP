@@ -5,6 +5,7 @@ import {
   createProblemResult,
 } from "@lcsp/contracts/auth";
 
+import { Inject } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 
 import { MfaEnrollment } from "../../../domain/entities/mfa-enrollment.entity.ts";
@@ -19,7 +20,10 @@ import {
 } from "../../../infrastructure/security/security.utils.ts";
 import type { AuthProblemResult } from "../../contracts/auth-workspace/common.contract.ts";
 import type { EnrollMfaSuccess } from "../../contracts/auth-workspace/mfa.contract.ts";
-import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-workspace-repositories.ts";
+import {
+  AUTH_WORKSPACE_REPOSITORIES,
+  type AuthWorkspaceRepositories,
+} from "../../ports/persistence/auth-workspace-repositories.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { EnrollMfaCommand } from "./enroll-mfa.command.ts";
 
@@ -27,6 +31,7 @@ import { EnrollMfaCommand } from "./enroll-mfa.command.ts";
 export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
+    @Inject(AUTH_WORKSPACE_REPOSITORIES)
     private readonly repositories: AuthWorkspaceRepositories,
   ) {}
 
