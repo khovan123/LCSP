@@ -68,7 +68,9 @@ export class AssessmentInterviewSnippetService {
       !evidenceReport ||
       !isGovernedSnippetRef(evidenceReport.evidencePayload, input.snippetRef)
     ) {
-      throw new NotFoundException({ code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE" });
+      throw new NotFoundException({
+        code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE",
+      });
     }
 
     const snapshot = await this.prisma.repositorySnapshot.findFirst({
@@ -192,16 +194,25 @@ function isGovernedSnippetRef(
     const record = objectRecord(finding);
     const candidate = objectRecord(record?.snippet_ref ?? record?.snippetRef);
     if (!candidate) return false;
+    const candidateFilePath = candidate.file_path;
+    const candidateSymbol = candidate.symbol;
+    const candidateEvidenceHash = candidate.evidence_hash;
+    if (
+      typeof candidateFilePath !== "string" ||
+      (candidateSymbol !== undefined && typeof candidateSymbol !== "string") ||
+      typeof candidateEvidenceHash !== "string"
+    ) {
+      return false;
+    }
     return (
       candidate.snapshot_id === ref.snapshot_id &&
       candidate.commit_sha === ref.commit_sha &&
-      normalizeArchivePath(String(candidate.file_path ?? "")) ===
+      normalizeArchivePath(candidateFilePath) ===
         normalizeArchivePath(ref.file_path) &&
       Number(candidate.start_line) === ref.start_line &&
       Number(candidate.end_line) === ref.end_line &&
-      String(candidate.symbol ?? "") === String(ref.symbol ?? "") &&
-      String(candidate.evidence_hash ?? "").toLowerCase() ===
-        ref.evidence_hash.toLowerCase() &&
+      (candidateSymbol ?? "") === (ref.symbol ?? "") &&
+      candidateEvidenceHash.toLowerCase() === ref.evidence_hash.toLowerCase() &&
       candidate.snippet_policy === ref.snippet_policy
     );
   });
@@ -250,7 +261,9 @@ async function readFileFromGzipTar(
       if (!header || header.every((value) => value === 0)) break;
       uncompressedBytes += TAR_BLOCK_SIZE;
       if (uncompressedBytes > MAX_ARCHIVE_UNCOMPRESSED_BYTES) {
-        throw new NotFoundException({ code: "INTERVIEW_SOURCE_SNIPPET_ARCHIVE_TOO_LARGE" });
+        throw new NotFoundException({
+          code: "INTERVIEW_SOURCE_SNIPPET_ARCHIVE_TOO_LARGE",
+        });
       }
 
       const member = tarMember(header);
@@ -269,7 +282,6 @@ async function readFileFromGzipTar(
         throw new NotFoundException({
           code: "INTERVIEW_SOURCE_SNIPPET_FILE_TOO_LARGE",
         });
-      }
       }
 
       if (member.regular && archivePathMatches(member.name, target)) {

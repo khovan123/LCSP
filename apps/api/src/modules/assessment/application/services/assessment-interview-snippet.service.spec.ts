@@ -65,33 +65,39 @@ describe("AssessmentInterviewSnippetService pinned snapshot integration", () => 
     const archivedSource = overrides?.source ?? source;
     const prisma = {
       technicalEvidenceReport: {
-        findFirst: jest.fn(async () => ({
-          evidencePayload: {
-            ai_discovery: { findings: [{ snippet_ref: snippetRef(source) }] },
-          },
-        })),
+        findFirst: jest.fn(() =>
+          Promise.resolve({
+            evidencePayload: {
+              ai_discovery: { findings: [{ snippet_ref: snippetRef(source) }] },
+            },
+          }),
+        ),
       },
       repositorySnapshot: {
-        findFirst: jest.fn(async () => ({
-          id: "snapshot-1",
-          commitSha: "abc123",
-        })),
+        findFirst: jest.fn(() =>
+          Promise.resolve({
+            id: "snapshot-1",
+            commitSha: "abc123",
+          }),
+        ),
       },
       repositoryScanJob: {
-        findFirst: jest.fn(async () => ({ id: "scan-1" })),
+        findFirst: jest.fn(() => Promise.resolve({ id: "scan-1" })),
       },
     };
     const queryBus = {
-      execute: jest.fn(async () => ({
-        snapshotId: "snapshot-1",
-        commitSha: overrides?.commitSha ?? "abc123",
-        repositoryFullName: "owner/repository",
-        contentType: "application/gzip",
-        resolvedUrl: "https://example.invalid/archive",
-        stream: Readable.from(
-          tarGzip("repository-abc123/src/gateway.ts", archivedSource),
-        ),
-      })),
+      execute: jest.fn(() =>
+        Promise.resolve({
+          snapshotId: "snapshot-1",
+          commitSha: overrides?.commitSha ?? "abc123",
+          repositoryFullName: "owner/repository",
+          contentType: "application/gzip",
+          resolvedUrl: "https://example.invalid/archive",
+          stream: Readable.from(
+            tarGzip("repository-abc123/src/gateway.ts", archivedSource),
+          ),
+        }),
+      ),
     };
     return {
       service: new AssessmentInterviewSnippetService(
