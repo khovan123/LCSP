@@ -36,17 +36,33 @@ export class BillingUsageController {
     const assessmentId = text(body.assessmentId);
     const runId = text(body.runId);
     const idempotencyKey = text(body.idempotencyKey);
+    const provider = text(body.provider);
+    const model = text(body.model);
+    const maxInputTokens = text(body.maxInputTokens);
+    const maxOutputTokens = text(body.maxOutputTokens);
+    const maxReasoningTokens = text(body.maxReasoningTokens);
     try {
       if (
         !assessmentId ||
         !runId ||
         !idempotencyKey ||
         !amount ||
-        !maxChargeCredits
+        !maxChargeCredits ||
+        !provider ||
+        !model ||
+        !maxInputTokens ||
+        !maxOutputTokens ||
+        !maxReasoningTokens
       )
         throw new BillingDomainError("Reservation input is required");
       const amountValue = parseInteger(amount, "amountCredits");
       const maxChargeValue = parseInteger(maxChargeCredits, "maxChargeCredits");
+      const inputLimit = parseNonNegativeInteger(maxInputTokens, "maxInputTokens");
+      const outputLimit = parseNonNegativeInteger(maxOutputTokens, "maxOutputTokens");
+      const reasoningLimit = parseNonNegativeInteger(
+        maxReasoningTokens,
+        "maxReasoningTokens",
+      );
       if (amountValue < maxChargeValue)
         throw new BillingDomainError(
           "Reservation is below the maximum invocation charge",
@@ -56,6 +72,11 @@ export class BillingUsageController {
         runId,
         amountCredits: amountValue,
         maxChargeCredits: maxChargeValue,
+        provider,
+        model,
+        maxInputTokens: inputLimit,
+        maxOutputTokens: outputLimit,
+        maxReasoningTokens: reasoningLimit,
         idempotencyKey,
       });
       return resultEnvelope(serializeBillingData(projectReservation(result)));
@@ -244,4 +265,10 @@ function parseInteger(value: string, field: string): bigint {
   } catch {
     throw new BillingDomainError(`${field} is invalid`);
   }
+}
+
+function parseNonNegativeInteger(value: string, field: string): bigint {
+  const parsed = parseInteger(value, field);
+  if (parsed < 0n) throw new BillingDomainError(`${field} must be non-negative`);
+  return parsed;
 }

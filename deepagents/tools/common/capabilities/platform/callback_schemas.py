@@ -106,6 +106,11 @@ class BillingReservationPayload(BaseModel):
     runId: str
     amountCredits: str
     maxChargeCredits: str
+    provider: str
+    model: str
+    maxInputTokens: str
+    maxOutputTokens: str
+    maxReasoningTokens: str
     idempotencyKey: str
 
 

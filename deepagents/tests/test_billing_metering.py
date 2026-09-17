@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 from middleware.billing_metering import (
@@ -5,9 +6,11 @@ from middleware.billing_metering import (
     BillingMeteringError,
     BillingMeteringMiddleware,
     BillingMeteringSession,
+    BillingUsageUnavailable,
     activate_billing_metering,
     extract_provider_usage,
 )
+from middleware.billing_recovery import drain
 from tools.common.capabilities.managed.invocation import _billing_metering_session
 from tools.common.capabilities.managed.rabbitmq_consumer import _with_billing_attempt
 
@@ -23,6 +26,24 @@ class FakeClient:
 class FailingClient:
     def post_settled_usage(self, _payload):
         raise RuntimeError("billing-api-unavailable")
+
+
+class RecoveryClient(FakeClient):
+    def __init__(self):
+        super().__init__()
+        self.release_ids = []
+        self.fail_usage = True
+        self.fail_release = True
+
+    def post_settled_usage(self, payload):
+        if self.fail_usage:
+            raise RuntimeError("billing-api-unavailable")
+        super().post_settled_usage(payload)
+
+    def release_billing_reservation(self, reservation_id, _payload):
+        if self.fail_release:
+            raise RuntimeError("billing-api-unavailable")
+        self.release_ids.append(reservation_id)
 
 
 def response(*, input_tokens=3, output_tokens=2, cached=1, response_id="resp-1"):
@@ -130,6 +151,11 @@ def test_reservation_replay_refuses_a_terminal_reservation_before_model_spend():
             agent_role="planner",
             amount_credits="100",
             max_charge_credits="100",
+            provider="openai",
+            model="gpt-test",
+            max_input_tokens="1000",
+            max_output_tokens="1000",
+            max_reasoning_tokens="1000",
             idempotency_key="outbox:1:planner",
         )
 
@@ -182,3 +208,79 @@ def test_usage_delivery_failure_is_terminal_for_model_retry():
     from middleware.failure_policy import retry_model_error
 
     assert not retry_model_error(BillingMeteringError(RuntimeError("api-down")))
+
+
+def test_usage_failure_is_durable_and_replayed_without_provider_retry(tmp_path: Path):
+    client = RecoveryClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-1",
+        run_id="run-1",
+        reservation_id="reservation-1",
+        agent_role="planner",
+        recovery_store_path=str(tmp_path / "billing.sqlite3"),
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="openai", model_name="gpt-test")
+    )
+
+    import pytest
+
+    with activate_billing_metering(session), pytest.raises(BillingMeteringError):
+        BillingMeteringMiddleware().wrap_model_call(request, lambda _: response())
+    assert len(client.payloads) == 0
+
+    client.fail_usage = False
+    client.fail_release = False
+    assert drain(session.recovery_store_path, client) == 2
+    assert len(client.payloads) == 1
+    assert client.payloads[0].invocationId in session._invocation_ids
+    assert client.release_ids == ["reservation-1"]
+    assert drain(session.recovery_store_path, client) == 0
+
+
+def test_release_failure_is_durable_and_replayed_without_model_retry(tmp_path: Path):
+    client = RecoveryClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-1",
+        run_id="run-1",
+        reservation_id="reservation-1",
+        agent_role="planner",
+        recovery_store_path=str(tmp_path / "billing.sqlite3"),
+    )
+
+    import pytest
+
+    with pytest.raises(RuntimeError):
+        session.release()
+    client.fail_release = False
+    assert drain(session.recovery_store_path, client) == 1
+    assert client.release_ids == ["reservation-1"]
+    assert drain(session.recovery_store_path, client) == 0
+
+
+def test_input_ceiling_fails_before_provider_handler():
+    session = BillingMeteringSession(
+        api_client=FakeClient(),
+        assessment_id="assessment-1",
+        run_id="run-1",
+        reservation_id="reservation-1",
+        agent_role="planner",
+        max_input_tokens=1,
+        max_output_tokens=1,
+        max_reasoning_tokens=0,
+    )
+    request = SimpleNamespace(messages=[{"role": "user", "content": "too long"}])
+    called = False
+
+    def provider_handler(_request):
+        nonlocal called
+        called = True
+        return response()
+
+    import pytest
+
+    with activate_billing_metering(session), pytest.raises(BillingUsageUnavailable):
+        BillingMeteringMiddleware().wrap_model_call(request, provider_handler)
+    assert called is False

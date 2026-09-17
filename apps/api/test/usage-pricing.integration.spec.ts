@@ -191,6 +191,29 @@ describe("LCSP-310 usage and pricing foundation", () => {
     expect(calculateUsageChargeCredits(1n, 0n, pricing)).toBe(1n);
   });
 
+  it("rejects a reservation below the pricing-derived worst-case charge", async () => {
+    const f = await fixture();
+    const assessmentId = `assessment-${id()}`;
+    await prisma.assessment.create({
+      data: { id: assessmentId, ownerId: f.user.id, name: "Bounded reservation" },
+    });
+
+    await expect(
+      governedUsage.reserveForAssessment({
+        assessmentId,
+        runId: `run-${id()}`,
+        amountCredits: 20n,
+        maxChargeCredits: 20n,
+        provider: "OPENAI",
+        model: "MODEL_A",
+        maxInputTokens: 21_000_000n,
+        maxOutputTokens: 0n,
+        maxReasoningTokens: 0n,
+        idempotencyKey: `bounded-reserve-${id()}`,
+      }),
+    ).rejects.toThrow("authoritative worst-case provider charge");
+  });
+
   it("settles multiple governed provider events individually and releases only unused reservation", async () => {
     const f = await governedFixture();
     const base = {

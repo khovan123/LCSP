@@ -16,8 +16,10 @@ from tools.common.capabilities.agentic_evidence.governance.authorization import 
 from tools.common.capabilities.platform.rbac_client import RbacClient
 from tools.common.capabilities.platform.api_client import WorkerApiClient
 from tools.common.capabilities.platform.config import load_config
+from middleware.billing_recovery import drain as drain_billing_recovery
 from middleware.billing_metering import (
     BillingMeteringSession,
+    BillingMeteringError,
     BillingFinalizationError,
     activate_billing_metering,
 )
@@ -209,7 +211,9 @@ def invoke_boundary(
         if billing_session is not None:
             from middleware.failure_policy import is_terminal_task_error
 
-            if is_terminal_task_error(error):
+            if is_terminal_task_error(error) and not isinstance(
+                error, BillingMeteringError
+            ):
                 try:
                     billing_session.release()
                 except Exception:
@@ -283,12 +287,30 @@ def _billing_metering_session(
     run_id = _find_first_text(billing, ("runId", "run_id", "workflowRunId"))
     amount = _find_first_text(billing, ("amountCredits", "reservationCredits"))
     max_charge = _find_first_text(billing, ("maxChargeCredits",))
+    provider = _find_first_text(billing, ("provider",))
+    model = _find_first_text(billing, ("model",))
+    max_input_tokens = _find_first_text(billing, ("maxInputTokens",))
+    max_output_tokens = _find_first_text(billing, ("maxOutputTokens",))
+    max_reasoning_tokens = _find_first_text(billing, ("maxReasoningTokens",))
     idempotency_key = _find_first_text(billing, ("idempotencyKey",))
     # The boundary/agent owns the billing role. Never trust a role supplied inside
     # an event payload because the pricing snapshot is selected by this identity.
     role = boundary_name
     effective = billing.get("effectiveRuntimeModel")
-    if not all((assessment_id, run_id, amount, max_charge, idempotency_key)) or (
+    if not all(
+        (
+            assessment_id,
+            run_id,
+            amount,
+            max_charge,
+            provider,
+            model,
+            max_input_tokens,
+            max_output_tokens,
+            max_reasoning_tokens,
+            idempotency_key,
+        )
+    ) or (
         effective is not None and not isinstance(effective, dict)
     ):
         raise ValueError("billing context is incomplete")
@@ -296,6 +318,8 @@ def _billing_metering_session(
         raise ValueError("billing assessment does not match invocation assessment")
     config = load_config()
     client = WorkerApiClient(config.nestjs_api_base_url, config.worker_api_key)
+    if config.billing_recovery_store_path:
+        drain_billing_recovery(config.billing_recovery_store_path, client)
     return BillingMeteringSession.reserve(
         api_client=client,
         assessment_id=assessment_id,
@@ -303,6 +327,11 @@ def _billing_metering_session(
         agent_role=role,
         amount_credits=amount,
         max_charge_credits=max_charge,
+        provider=provider,
+        model=model,
+        max_input_tokens=max_input_tokens,
+        max_output_tokens=max_output_tokens,
+        max_reasoning_tokens=max_reasoning_tokens,
         # The outbox idempotency key identifies the billing group, not a broker
         # delivery attempt. A retry must recover/replay the same reservation;
         # deriving a new key leaves the previous reservation stranded.
@@ -312,6 +341,7 @@ def _billing_metering_session(
             if isinstance(effective, dict)
             else None
         ),
+        recovery_store_path=config.billing_recovery_store_path,
     )
 
 

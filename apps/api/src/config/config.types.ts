@@ -120,6 +120,11 @@ export interface BillingConfig {
   meteringEnabled: boolean;
   reservationCredits: string;
   maxInvocationChargeCredits: string;
+  runtimeProvider: string;
+  runtimeModel: string;
+  maxInputTokens: string;
+  maxOutputTokens: string;
+  maxReasoningTokens: string;
 }
 
 export const NODE_ENVS = {

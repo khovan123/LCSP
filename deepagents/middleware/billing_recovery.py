@@ -1,0 +1,113 @@
+"""Durable, callback-only recovery for billing side effects.
+
+The provider is never replayed from this store.  Rows contain only the billing
+contract payload (numeric usage and identities), never prompts or model output.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from pathlib import Path
+from typing import Any
+
+from tools.common.capabilities.platform.callback_schemas import (
+    BillingReservationReleasePayload,
+    SettledUsagePayload,
+)
+
+
+def enqueue_usage(path: str | Path, payload: SettledUsagePayload) -> None:
+    _enqueue(
+        path,
+        "USAGE",
+        f"usage:{payload.reservationId}:{payload.invocationId}",
+        payload.model_dump(mode="json"),
+    )
+
+
+def enqueue_release(
+    path: str | Path,
+    reservation_id: str,
+    payload: BillingReservationReleasePayload,
+) -> None:
+    _enqueue(
+        path,
+        "RELEASE",
+        f"release:{reservation_id}",
+        {"reservationId": reservation_id, **payload.model_dump(mode="json")},
+    )
+
+
+def drain(path: str | Path, api_client: Any) -> int:
+    """Deliver pending callbacks in order; return the number removed.
+
+    A failed row remains pending, so a later recovery attempt can retry it.  The
+    API endpoints are idempotent and the keys intentionally remain unchanged.
+    """
+    db = _connect(path)
+    delivered = 0
+    try:
+        rows = db.execute(
+            "SELECT id, kind, payload FROM billing_callback_recovery ORDER BY id"
+        ).fetchall()
+        for row_id, kind, raw_payload in rows:
+            payload = json.loads(raw_payload)
+            try:
+                if kind == "USAGE":
+                    api_client.post_settled_usage(
+                        SettledUsagePayload.model_validate(payload)
+                    )
+                else:
+                    api_client.release_billing_reservation(
+                        payload["reservationId"],
+                        BillingReservationReleasePayload.model_validate(
+                            {"assessmentId": payload["assessmentId"]}
+                        ),
+                    )
+            except Exception:
+                break
+            db.execute("DELETE FROM billing_callback_recovery WHERE id = ?", (row_id,))
+            db.commit()
+            delivered += 1
+    finally:
+        db.close()
+    return delivered
+
+
+def _enqueue(path: str | Path, kind: str, key: str, payload: dict[str, Any]) -> None:
+    db = _connect(path)
+    try:
+        db.execute(
+            """
+            INSERT INTO billing_callback_recovery(kind, recovery_key, payload)
+            VALUES (?, ?, ?)
+            ON CONFLICT(recovery_key) DO NOTHING
+            """,
+            (kind, key, json.dumps(payload, separators=(",", ":"), sort_keys=True)),
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
+def _connect(path: str | Path) -> sqlite3.Connection:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(target, timeout=10)
+    db.execute("PRAGMA journal_mode=WAL")
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS billing_callback_recovery (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind TEXT NOT NULL,
+            recovery_key TEXT NOT NULL UNIQUE,
+            payload TEXT NOT NULL
+        )
+        """
+    )
+    db.commit()
+    return db
+
+
+__all__ = ["enqueue_usage", "enqueue_release", "drain"]

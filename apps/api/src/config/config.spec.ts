@@ -431,6 +431,11 @@ describe("config()", () => {
         meteringEnabled: false,
         reservationCredits: "",
         maxInvocationChargeCredits: "",
+        runtimeProvider: "",
+        runtimeModel: "",
+        maxInputTokens: "",
+        maxOutputTokens: "",
+        maxReasoningTokens: "",
       },
       interview: {
         guidanceVersion: "interview-context-test-v1",

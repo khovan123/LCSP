@@ -288,6 +288,46 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
         otherwise: Joi.string().trim().allow("").default(""),
       },
     ),
+    BILLING_RUNTIME_PROVIDER: Joi.alternatives().conditional(
+      "BILLING_METERING_ENABLED",
+      {
+        is: true,
+        then: Joi.string().trim().min(1).required(),
+        otherwise: Joi.string().trim().allow("").default(""),
+      },
+    ),
+    BILLING_RUNTIME_MODEL: Joi.alternatives().conditional(
+      "BILLING_METERING_ENABLED",
+      {
+        is: true,
+        then: Joi.string().trim().min(1).required(),
+        otherwise: Joi.string().trim().allow("").default(""),
+      },
+    ),
+    BILLING_MAX_INPUT_TOKENS: Joi.alternatives().conditional(
+      "BILLING_METERING_ENABLED",
+      {
+        is: true,
+        then: Joi.string().trim().pattern(/^\d+$/).required(),
+        otherwise: Joi.string().trim().allow("").default(""),
+      },
+    ),
+    BILLING_MAX_OUTPUT_TOKENS: Joi.alternatives().conditional(
+      "BILLING_METERING_ENABLED",
+      {
+        is: true,
+        then: Joi.string().trim().pattern(/^\d+$/).required(),
+        otherwise: Joi.string().trim().allow("").default(""),
+      },
+    ),
+    BILLING_MAX_REASONING_TOKENS: Joi.alternatives().conditional(
+      "BILLING_METERING_ENABLED",
+      {
+        is: true,
+        then: Joi.string().trim().pattern(/^\d+$/).required(),
+        otherwise: Joi.string().trim().allow("").default(""),
+      },
+    ),
   })
     .unknown(true)
     .custom((env: Record<string, unknown>, helpers) => {
@@ -557,6 +597,11 @@ export function config(): AppConfig {
       reservationCredits: env.BILLING_RESERVATION_CREDITS?.trim() ?? "",
       maxInvocationChargeCredits:
         env.BILLING_MAX_INVOCATION_CHARGE_CREDITS?.trim() ?? "",
+      runtimeProvider: env.BILLING_RUNTIME_PROVIDER?.trim() ?? "",
+      runtimeModel: env.BILLING_RUNTIME_MODEL?.trim() ?? "",
+      maxInputTokens: env.BILLING_MAX_INPUT_TOKENS?.trim() ?? "",
+      maxOutputTokens: env.BILLING_MAX_OUTPUT_TOKENS?.trim() ?? "",
+      maxReasoningTokens: env.BILLING_MAX_REASONING_TOKENS?.trim() ?? "",
     },
     interview: {
       guidanceVersion: env.INTERVIEW_GUIDANCE_VERSION?.trim() ?? "",

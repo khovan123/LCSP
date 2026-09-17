@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from langchain.agents.middleware import AgentMiddleware
 
+from middleware.billing_recovery import enqueue_release, enqueue_usage
 from middleware.token_fallback import model_provider
 from tools.common.capabilities.platform.api_client import (
     WorkerApiClient,
@@ -67,6 +68,10 @@ class BillingMeteringSession:
     reservation_id: str
     agent_role: str
     effective_runtime_model: dict[str, str] = field(default_factory=dict)
+    recovery_store_path: str | None = None
+    max_input_tokens: int | None = None
+    max_output_tokens: int | None = None
+    max_reasoning_tokens: int | None = None
     _invocation_ids: set[str] = field(default_factory=set, init=False)
 
     @classmethod
@@ -79,8 +84,14 @@ class BillingMeteringSession:
         agent_role: str,
         amount_credits: str,
         max_charge_credits: str,
+        provider: str,
+        model: str,
+        max_input_tokens: str,
+        max_output_tokens: str,
+        max_reasoning_tokens: str,
         idempotency_key: str,
         effective_runtime_model: dict[str, str] | None = None,
+        recovery_store_path: str | None = None,
     ) -> "BillingMeteringSession":
         from tools.common.capabilities.platform.callback_schemas import (
             BillingReservationPayload,
@@ -92,6 +103,11 @@ class BillingMeteringSession:
                 runId=run_id,
                 amountCredits=amount_credits,
                 maxChargeCredits=max_charge_credits,
+                provider=provider,
+                model=model,
+                maxInputTokens=max_input_tokens,
+                maxOutputTokens=max_output_tokens,
+                maxReasoningTokens=max_reasoning_tokens,
                 idempotencyKey=idempotency_key,
             )
         )
@@ -110,6 +126,10 @@ class BillingMeteringSession:
             reservation_id=reservation_id,
             agent_role=agent_role,
             effective_runtime_model=dict(effective_runtime_model or {}),
+            recovery_store_path=recovery_store_path,
+            max_input_tokens=_parse_limit(max_input_tokens),
+            max_output_tokens=_parse_limit(max_output_tokens),
+            max_reasoning_tokens=_parse_limit(max_reasoning_tokens),
         )
 
     def release(self) -> None:
@@ -117,15 +137,47 @@ class BillingMeteringSession:
             BillingReservationReleasePayload,
         )
 
-        self.api_client.release_billing_reservation(
-            self.reservation_id,
-            BillingReservationReleasePayload(assessmentId=self.assessment_id),
+        payload = BillingReservationReleasePayload(
+            assessmentId=self.assessment_id
         )
+        try:
+            self.api_client.release_billing_reservation(
+                self.reservation_id, payload
+            )
+        except Exception:
+            if self.recovery_store_path:
+                enqueue_release(self.recovery_store_path, self.reservation_id, payload)
+            raise
 
     def new_invocation_id(self) -> str:
         invocation_id = str(uuid4())
         self._invocation_ids.add(invocation_id)
         return invocation_id
+
+    def assert_input_within_limit(self, request: Any) -> None:
+        if self.max_input_tokens is None:
+            return
+        request_input = {
+            "messages": getattr(request, "messages", None),
+            "tools": getattr(request, "tools", None),
+            "system": getattr(request, "system_prompt", None),
+        }
+        if all(value is None for value in request_input.values()):
+            return
+        # UTF-8 bytes are a conservative upper bound for provider token input.
+        encoded = str(request_input).encode("utf-8")
+        if len(encoded) > self.max_input_tokens:
+            raise BillingUsageUnavailable("Input exceeds the reserved token ceiling")
+
+    def bounded_model(self, model: Any) -> Any:
+        output_limit = (self.max_output_tokens or 0) + (
+            self.max_reasoning_tokens or 0
+        )
+        if not output_limit or not hasattr(model, "bind"):
+            return model
+        provider, _ = provider_identity(model, None)
+        parameter = "max_output_tokens" if provider in {"OPENAI", "GOOGLE_GENAI"} else "max_tokens"
+        return model.bind(**{parameter: output_limit})
 
     def record(
         self,
@@ -168,6 +220,22 @@ class BillingMeteringSession:
         except BillingMeteringError:
             raise
         except Exception as error:
+            if self.recovery_store_path:
+                from tools.common.capabilities.platform.callback_schemas import (
+                    BillingReservationReleasePayload,
+                )
+
+                enqueue_usage(self.recovery_store_path, payload)
+                # Preserve the reservation until usage delivery is recovered.
+                # SQLite ordering makes the usage callback precede this release,
+                # while both callbacks remain independently idempotent.
+                enqueue_release(
+                    self.recovery_store_path,
+                    self.reservation_id,
+                    BillingReservationReleasePayload(
+                        assessmentId=self.assessment_id
+                    ),
+                )
             raise BillingMeteringError(error) from error
 
 
@@ -226,6 +294,9 @@ class BillingMeteringMiddleware(AgentMiddleware):
         session = active_billing_metering()
         if session is None:
             return handler(request)
+        session.assert_input_within_limit(request)
+        if hasattr(request, "override"):
+            request = request.override(model=session.bounded_model(request.model))
         invocation_id = session.new_invocation_id()
         response = handler(request)
         session.record(
@@ -240,6 +311,9 @@ class BillingMeteringMiddleware(AgentMiddleware):
         session = active_billing_metering()
         if session is None:
             return await handler(request)
+        session.assert_input_within_limit(request)
+        if hasattr(request, "override"):
+            request = request.override(model=session.bounded_model(request.model))
         invocation_id = session.new_invocation_id()
         response = await handler(request)
         session.record(
@@ -386,6 +460,14 @@ def _number(value: dict[str, Any], *keys: str) -> int | None:
         if isinstance(candidate, str) and candidate.isdigit():
             return int(candidate)
     return None
+
+
+def _parse_limit(value: str | None) -> int | None:
+    if value is None or not value.strip():
+        return None
+    if not value.isdigit():
+        raise ValueError("billing token limits must be non-negative integers")
+    return int(value)
 
 
 __all__ = [

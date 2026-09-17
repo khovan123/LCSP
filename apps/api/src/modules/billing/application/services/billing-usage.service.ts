@@ -52,6 +52,11 @@ export class BillingUsageService {
     runId: string;
     amountCredits: bigint;
     maxChargeCredits: bigint;
+    provider: string;
+    model: string;
+    maxInputTokens: bigint;
+    maxOutputTokens: bigint;
+    maxReasoningTokens: bigint;
     idempotencyKey: string;
   }) {
     if (input.amountCredits < input.maxChargeCredits)
@@ -59,6 +64,29 @@ export class BillingUsageService {
         "Reservation is below the maximum invocation charge",
       );
     const userId = await this.resolveAssessmentOwner(input.assessmentId);
+    const worstCase = await this.transactions.runForUser(userId, async (repos) => {
+      const pricing = await repos.pricing.findApplicable(
+        input.provider,
+        input.model,
+        new Date(),
+      );
+      if (!pricing)
+        throw new BillingDomainError(
+          "Pricing snapshot is required before reserving provider spend",
+        );
+      return calculateCustomerChargeVnd(
+        {
+          inputTokens: input.maxInputTokens,
+          outputTokens: input.maxOutputTokens,
+          reasoningTokens: input.maxReasoningTokens,
+        },
+        pricing,
+      );
+    });
+    if (input.maxChargeCredits < worstCase)
+      throw new BillingDomainError(
+        "Reservation is below the authoritative worst-case provider charge",
+      );
     return this.accounting.reserveCredits({
       userId,
       assessmentId: input.assessmentId,
