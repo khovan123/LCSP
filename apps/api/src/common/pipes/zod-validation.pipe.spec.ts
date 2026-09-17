@@ -1,6 +1,7 @@
 import {
   AUTH_ERROR_CODES,
   confirmPasswordRecoverySchema,
+  signUpSchema,
 } from "@lcsp/contracts/auth";
 import { describe, expect, it } from "@jest/globals";
 import { HttpException, HttpStatus } from "@nestjs/common";
@@ -73,5 +74,53 @@ describe("ZodValidationPipe", () => {
       token: "rec-tok-123",
       new_password: "password123",
     });
+  });
+
+  it("validates signUpSchema correctly rejecting missing display name, bad email, or short password", () => {
+    const signUpPipe = new ZodValidationPipe(signUpSchema);
+
+    // Rejects missing display_name
+    expect(() =>
+      signUpPipe.transform({
+        email: "user@example.com",
+        password: "ValidPassword123!",
+      }),
+    ).toThrow(HttpException);
+
+    // Rejects whitespace-only display_name
+    expect(() =>
+      signUpPipe.transform({
+        display_name: "   ",
+        email: "user@example.com",
+        password: "ValidPassword123!",
+      }),
+    ).toThrow(HttpException);
+
+    // Rejects invalid email
+    expect(() =>
+      signUpPipe.transform({
+        display_name: "Valid Name",
+        email: "not-an-email",
+        password: "ValidPassword123!",
+      }),
+    ).toThrow(HttpException);
+
+    // Rejects password < 12 characters
+    expect(() =>
+      signUpPipe.transform({
+        display_name: "Valid Name",
+        email: "user@example.com",
+        password: "short-pass",
+      }),
+    ).toThrow(HttpException);
+
+    // Accepts valid self-service sign-up payload
+    const validPayload = {
+      display_name: "Valid Name",
+      email: "user@example.com",
+      password: "ValidPassword123!",
+    };
+    const parsed = signUpPipe.transform(validPayload);
+    expect(parsed).toEqual(validPayload);
   });
 });

@@ -127,7 +127,7 @@ export class AuthWorkspaceController {
       await this.commandBus.execute(
         new SignUpCommand({
           email: payload.email,
-          displayName: payload.display_name ?? payload.name ?? "",
+          displayName: payload.display_name,
           password: payload.password,
           correlationId,
         }),

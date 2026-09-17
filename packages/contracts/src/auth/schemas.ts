@@ -19,19 +19,9 @@ export type SignInInput = z.infer<typeof signInSchema>;
  * Validation schema and input type for self-service user registration.
  */
 export const signUpSchema = z.object({
-  name: z.string().trim().min(1).optional(),
-  display_name: z.string().trim().min(1).max(100).optional(),
-  organization_name: z.string().trim().optional(),
+  display_name: z.string().trim().min(1).max(100),
   email: z.string().trim().email(),
-  password: z.string().min(1),
-  role: z
-    .enum(
-      Object.values(AUTH_USER_ROLES) as [
-        (typeof AUTH_USER_ROLES)[keyof typeof AUTH_USER_ROLES],
-        ...(typeof AUTH_USER_ROLES)[keyof typeof AUTH_USER_ROLES][],
-      ],
-    )
-    .optional(),
+  password: z.string().min(12),
 });
 export type SignUpInput = z.infer<typeof signUpSchema>;
 
