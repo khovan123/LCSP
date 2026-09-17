@@ -434,9 +434,11 @@ describe("config()", () => {
         runtimeProvider: "",
         runtimeModel: "",
         maxInputTokens: "",
+        maxInputBytes: "",
         maxOutputTokens: "",
         maxReasoningTokens: "",
         maxInvocationsPerGroup: "",
+        authorizedRuntimeModels: "",
       },
       interview: {
         guidanceVersion: "interview-context-test-v1",

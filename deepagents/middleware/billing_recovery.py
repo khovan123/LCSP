@@ -44,6 +44,54 @@ def enqueue_release(
     )
 
 
+def enqueue_usage_and_release(
+    path: str | Path,
+    usage_payload: SettledUsagePayload,
+    release_payload: BillingReservationReleasePayload,
+) -> None:
+    """Persist usage and its dependent release in one SQLite transaction."""
+    reservation_id = usage_payload.reservationId
+    db = _connect(path)
+    try:
+        db.execute("BEGIN")
+        db.execute(
+            """
+            INSERT INTO billing_callback_recovery(kind, recovery_key, payload)
+            VALUES ('USAGE', ?, ?)
+            ON CONFLICT(recovery_key) DO NOTHING
+            """,
+            (
+                f"usage:{reservation_id}:{usage_payload.invocationId}",
+                json.dumps(
+                    usage_payload.model_dump(mode="json"),
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+            ),
+        )
+        db.execute(
+            """
+            INSERT INTO billing_callback_recovery(kind, recovery_key, payload)
+            VALUES ('RELEASE', ?, ?)
+            ON CONFLICT(recovery_key) DO NOTHING
+            """,
+            (
+                f"release:{reservation_id}",
+                json.dumps(
+                    {"reservationId": reservation_id, **release_payload.model_dump(mode="json")},
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+            ),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def drain(path: str | Path, api_client: Any) -> int:
     """Deliver pending callbacks in order; return the number removed.
 
@@ -155,4 +203,10 @@ def _has_pending_usage(db: sqlite3.Connection, reservation_id: str) -> bool:
     return any(json.loads(row[0]).get("reservationId") == reservation_id for row in rows)
 
 
-__all__ = ["enqueue_usage", "enqueue_release", "drain", "start_background_worker"]
+__all__ = [
+    "enqueue_usage",
+    "enqueue_release",
+    "enqueue_usage_and_release",
+    "drain",
+    "start_background_worker",
+]

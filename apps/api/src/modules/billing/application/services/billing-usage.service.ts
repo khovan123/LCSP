@@ -58,43 +58,64 @@ export class BillingUsageService {
     maxOutputTokens: bigint;
     maxReasoningTokens: bigint;
     maxInvocations: bigint;
+    authorizedModels: Array<{ provider: string; model: string }>;
     idempotencyKey: string;
   }) {
     if (input.amountCredits < input.maxChargeCredits)
       throw new BillingDomainError(
         "Reservation is below the maximum invocation charge",
       );
+    if (
+      !input.authorizedModels.some(
+        (candidate) =>
+          candidate.provider === input.provider && candidate.model === input.model,
+      )
+    )
+      throw new BillingDomainError(
+        "Primary runtime model is outside the authorized pricing envelope",
+      );
     const userId = await this.resolveAssessmentOwner(input.assessmentId);
     const worstCase = await this.transactions.runForUser(
       userId,
       async (repos) => {
-        const pricing = await repos.pricing.findApplicable(
-          input.provider,
-          input.model,
-          new Date(),
+        const charges = await Promise.all(
+          input.authorizedModels.map(async (authorized) => {
+            const pricing = await repos.pricing.findApplicable(
+              authorized.provider,
+              authorized.model,
+              new Date(),
+            );
+            if (!pricing)
+              throw new BillingDomainError(
+                "Pricing snapshot is required before reserving provider spend",
+              );
+            return calculateCustomerChargeVnd(
+              {
+                inputTokens: input.maxInputTokens,
+                cachedInputTokens: input.maxInputTokens,
+                cacheWriteTokens: input.maxInputTokens,
+                outputTokens: input.maxOutputTokens,
+                reasoningTokens: input.maxReasoningTokens,
+              },
+              pricing,
+            );
+          }),
         );
-        if (!pricing)
-          throw new BillingDomainError(
-            "Pricing snapshot is required before reserving provider spend",
-          );
-        const oneInvocation = calculateCustomerChargeVnd(
-          {
-            inputTokens: input.maxInputTokens,
-            // Cache dimensions are separately billable. Reserve the
-            // conservative case where the input is charged in every bucket.
-            cachedInputTokens: input.maxInputTokens,
-            cacheWriteTokens: input.maxInputTokens,
-            outputTokens: input.maxOutputTokens,
-            reasoningTokens: input.maxReasoningTokens,
-          },
-          pricing,
+        const oneInvocation = charges.reduce(
+          (maximum, charge) => (charge > maximum ? charge : maximum),
+          0n,
         );
         return oneInvocation * input.maxInvocations;
       },
     );
-    if (input.maxChargeCredits < worstCase)
+    const oneInvocationWorstCase = worstCase / input.maxInvocations;
+    if (input.maxChargeCredits < oneInvocationWorstCase)
       throw new BillingDomainError(
         "Reservation is below the authoritative worst-case provider charge",
+      );
+    if (input.amountCredits < worstCase)
+      throw new BillingDomainError(
+        "Reservation is below the aggregate worst-case provider charge",
       );
     return this.accounting.reserveCredits({
       userId,
@@ -109,11 +130,14 @@ export class BillingUsageService {
   async claimInvocation(input: {
     assessmentId: string;
     reservationId: string;
+    invocationId: string;
   }) {
     const userId = await this.resolveAssessmentOwner(input.assessmentId);
     return this.accounting.claimInvocation({
       userId,
       reservationId: input.reservationId,
+      assessmentId: input.assessmentId,
+      invocationId: input.invocationId,
     });
   }
 

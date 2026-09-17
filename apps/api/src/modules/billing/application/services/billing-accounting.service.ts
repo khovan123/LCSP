@@ -227,7 +227,12 @@ export class BillingAccountingService {
       return out;
     });
   }
-  claimInvocation(i: { userId: string; reservationId: string }) {
+  claimInvocation(i: {
+    userId: string;
+    reservationId: string;
+    assessmentId: string;
+    invocationId: string;
+  }) {
     return this.transactions.runForUser(i.userId, async (repos) => {
       const reservation = await repos.reservation.findForUser(
         i.userId,
@@ -236,6 +241,10 @@ export class BillingAccountingService {
       if (!reservation || reservation.status !== "RESERVED")
         throw new InvalidReservationTransitionError(
           "Reservation is not reservable",
+        );
+      if (reservation.assessmentId !== i.assessmentId)
+        throw new OwnershipMismatchError(
+          "Reservation does not belong to the assessment",
         );
       if (!(await repos.reservation.claimInvocation(i)))
         throw new BillingConcurrencyError(

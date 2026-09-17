@@ -1355,11 +1355,23 @@ model BillingReservation {
   wallet         BillingWallet            @relation(fields: [walletId], references: [id], onDelete: Restrict)
   assessment     Assessment?              @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
   usageEvents    LlmUsageEvent[]
+  invocationClaims BillingReservationInvocationClaim[]
 
   @@unique([userId, idempotencyKey])
   @@index([assessmentId, runId])
   @@index([userId, status, createdAt])
   @@index([walletId, status])
+}
+
+model BillingReservationInvocationClaim {
+  id            String              @id @default(uuid())
+  reservationId String
+  invocationId  String
+  createdAt     DateTime            @default(now())
+  reservation   BillingReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  @@unique([reservationId, invocationId])
+  @@index([invocationId])
 }
 
 model ModelPricingSnapshot {

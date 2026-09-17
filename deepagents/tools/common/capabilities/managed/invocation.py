@@ -293,9 +293,11 @@ def _billing_metering_session(
     provider = _find_first_text(billing, ("provider",))
     model = _find_first_text(billing, ("model",))
     max_input_tokens = _find_first_text(billing, ("maxInputTokens",))
+    max_input_bytes = _find_first_text(billing, ("maxInputBytes",))
     max_output_tokens = _find_first_text(billing, ("maxOutputTokens",))
     max_reasoning_tokens = _find_first_text(billing, ("maxReasoningTokens",))
     max_invocations = _find_first_text(billing, ("maxInvocations",))
+    authorized_models = billing.get("authorizedModels")
     idempotency_key = _find_first_text(billing, ("idempotencyKey",))
     # The boundary/agent owns the billing role. Never trust a role supplied inside
     # an event payload because the pricing snapshot is selected by this identity.
@@ -310,11 +312,18 @@ def _billing_metering_session(
             provider,
             model,
             max_input_tokens,
+            max_input_bytes,
             max_output_tokens,
             max_reasoning_tokens,
             max_invocations,
+            authorized_models,
             idempotency_key,
         )
+    ) or not isinstance(authorized_models, list) or any(
+        not isinstance(item, dict)
+        or not isinstance(item.get("provider"), str)
+        or not isinstance(item.get("model"), str)
+        for item in authorized_models
     ) or (
         effective is not None and not isinstance(effective, dict)
     ):
@@ -336,9 +345,14 @@ def _billing_metering_session(
         provider=provider,
         model=model,
         max_input_tokens=max_input_tokens,
+        max_input_bytes=max_input_bytes,
         max_output_tokens=max_output_tokens,
         max_reasoning_tokens=max_reasoning_tokens,
         max_invocations=max_invocations,
+        authorized_models=[
+            {str(k): str(v) for k, v in item.items()}
+            for item in authorized_models
+        ],
         # The outbox idempotency key identifies the billing group, not a broker
         # delivery attempt. A retry must recover/replay the same reservation;
         # deriving a new key leaves the previous reservation stranded.

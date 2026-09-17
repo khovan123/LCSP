@@ -339,6 +339,22 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
         otherwise: Joi.string().trim().allow("").default(""),
       },
     ),
+    BILLING_MAX_INPUT_BYTES: Joi.alternatives().conditional(
+      "BILLING_METERING_ENABLED",
+      {
+        is: true,
+        then: Joi.string().trim().pattern(/^\d+$/).required(),
+        otherwise: Joi.string().trim().allow("").default(""),
+      },
+    ),
+    BILLING_AUTHORIZED_RUNTIME_MODELS: Joi.alternatives().conditional(
+      "BILLING_METERING_ENABLED",
+      {
+        is: true,
+        then: Joi.string().trim().min(1).required(),
+        otherwise: Joi.string().trim().allow("").default(""),
+      },
+    ),
   })
     .unknown(true)
     .custom((env: Record<string, unknown>, helpers) => {
@@ -611,10 +627,13 @@ export function config(): AppConfig {
       runtimeProvider: env.BILLING_RUNTIME_PROVIDER?.trim() ?? "",
       runtimeModel: env.BILLING_RUNTIME_MODEL?.trim() ?? "",
       maxInputTokens: env.BILLING_MAX_INPUT_TOKENS?.trim() ?? "",
+      maxInputBytes: env.BILLING_MAX_INPUT_BYTES?.trim() ?? "",
       maxOutputTokens: env.BILLING_MAX_OUTPUT_TOKENS?.trim() ?? "",
       maxReasoningTokens: env.BILLING_MAX_REASONING_TOKENS?.trim() ?? "",
       maxInvocationsPerGroup:
         env.BILLING_MAX_INVOCATIONS_PER_GROUP?.trim() ?? "",
+      authorizedRuntimeModels:
+        env.BILLING_AUTHORIZED_RUNTIME_MODELS?.trim() ?? "",
     },
     interview: {
       guidanceVersion: env.INTERVIEW_GUIDANCE_VERSION?.trim() ?? "",

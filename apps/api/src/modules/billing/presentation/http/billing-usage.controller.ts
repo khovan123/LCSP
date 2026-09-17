@@ -42,6 +42,7 @@ export class BillingUsageController {
     const maxOutputTokens = text(body.maxOutputTokens);
     const maxReasoningTokens = text(body.maxReasoningTokens);
     const maxInvocations = text(body.maxInvocations);
+    const authorizedModels = body.authorizedModels;
     try {
       if (
         !assessmentId ||
@@ -54,7 +55,9 @@ export class BillingUsageController {
         !maxInputTokens ||
         !maxOutputTokens ||
         !maxReasoningTokens ||
-        !maxInvocations
+        !maxInvocations ||
+        !Array.isArray(authorizedModels) ||
+        authorizedModels.length === 0
       )
         throw new BillingDomainError("Reservation input is required");
       const amountValue = parseInteger(amount, "amountCredits");
@@ -77,6 +80,16 @@ export class BillingUsageController {
       );
       if (invocationLimit === 0n)
         throw new BillingDomainError("maxInvocations must be positive");
+      const modelEnvelope = authorizedModels.map((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value))
+          throw new BillingDomainError("authorizedModels is invalid");
+        const entry = value as Record<string, unknown>;
+        const entryProvider = text(entry.provider).toUpperCase();
+        const entryModel = text(entry.model);
+        if (!entryProvider || !entryModel)
+          throw new BillingDomainError("authorizedModels is invalid");
+        return { provider: entryProvider, model: entryModel };
+      });
       if (amountValue < maxChargeValue)
         throw new BillingDomainError(
           "Reservation is below the maximum invocation charge",
@@ -92,6 +105,7 @@ export class BillingUsageController {
         maxOutputTokens: outputLimit,
         maxReasoningTokens: reasoningLimit,
         maxInvocations: invocationLimit,
+        authorizedModels: modelEnvelope,
         idempotencyKey,
       });
       return resultEnvelope(serializeBillingData(projectReservation(result)));
@@ -129,12 +143,15 @@ export class BillingUsageController {
   ) {
     const assessmentId =
       typeof body.assessmentId === "string" ? body.assessmentId.trim() : "";
+    const invocationId =
+      typeof body.invocationId === "string" ? body.invocationId.trim() : "";
     try {
-      if (!assessmentId || !reservationId.trim())
+      if (!assessmentId || !reservationId.trim() || !invocationId)
         throw new BillingDomainError("Claim input is required");
       const result = await this.usage.claimInvocation({
         assessmentId,
         reservationId: reservationId.trim(),
+        invocationId,
       });
       return resultEnvelope(serializeBillingData(result));
     } catch (error) {

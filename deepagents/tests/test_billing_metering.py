@@ -154,9 +154,11 @@ def test_reservation_replay_refuses_a_terminal_reservation_before_model_spend():
             provider="openai",
             model="gpt-test",
             max_input_tokens="1000",
+            max_input_bytes="4000",
             max_output_tokens="1000",
             max_reasoning_tokens="1000",
             max_invocations="1",
+            authorized_models=[{"provider": "OPENAI", "model": "gpt-test"}],
             idempotency_key="outbox:1:planner",
         )
 
@@ -268,7 +270,7 @@ def test_input_ceiling_fails_before_provider_handler():
         run_id="run-1",
         reservation_id="reservation-1",
         agent_role="planner",
-        max_input_tokens=1,
+        max_input_bytes=1,
         max_output_tokens=1,
         max_reasoning_tokens=0,
     )

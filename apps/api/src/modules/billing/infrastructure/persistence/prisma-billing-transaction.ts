@@ -104,14 +104,43 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
                 maxInvocations: i.maxInvocations ?? 1n,
               },
             }),
-          claimInvocation: async (i) =>
-            (await tx.$executeRaw(Prisma.sql`
+          claimInvocation: async (i) => {
+            const existing =
+              await tx.billingReservationInvocationClaim.findUnique({
+                where: {
+                  reservationId_invocationId: {
+                    reservationId: i.reservationId,
+                    invocationId: i.invocationId,
+                  },
+                },
+              });
+            if (existing) return true;
+            await tx.billingReservationInvocationClaim.create({
+              data: {
+                reservationId: i.reservationId,
+                invocationId: i.invocationId,
+              },
+            });
+            const updated = await tx.$executeRaw(Prisma.sql`
                 UPDATE "BillingReservation"
                 SET "invocationsStarted" = "invocationsStarted" + 1
                 WHERE "id" = ${i.reservationId}
                   AND "status" = 'RESERVED'
                   AND "invocationsStarted" < "maxInvocations"
-              `)) === 1,
+              `);
+            if (updated !== 1) {
+              await tx.billingReservationInvocationClaim.delete({
+                where: {
+                  reservationId_invocationId: {
+                    reservationId: i.reservationId,
+                    invocationId: i.invocationId,
+                  },
+                },
+              });
+              return false;
+            }
+            return true;
+          },
           listReservedForWallet: (walletId) =>
             tx.billingReservation.findMany({
               where: { walletId, status: "RESERVED" },

@@ -109,9 +109,11 @@ class BillingReservationPayload(BaseModel):
     provider: str
     model: str
     maxInputTokens: str
+    maxInputBytes: str
     maxOutputTokens: str
     maxReasoningTokens: str
     maxInvocations: str
+    authorizedModels: List[Dict[str, str]]
     idempotencyKey: str
 
 
@@ -123,6 +125,7 @@ class BillingReservationReleasePayload(BaseModel):
 class BillingReservationClaimPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     assessmentId: str
+    invocationId: str
 
 
 class ConflictDetectionCallbackPayload(BaseModel):

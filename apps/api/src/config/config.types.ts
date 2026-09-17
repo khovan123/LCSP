@@ -123,9 +123,11 @@ export interface BillingConfig {
   runtimeProvider: string;
   runtimeModel: string;
   maxInputTokens: string;
+  maxInputBytes: string;
   maxOutputTokens: string;
   maxReasoningTokens: string;
   maxInvocationsPerGroup: string;
+  authorizedRuntimeModels: string;
 }
 
 export const NODE_ENVS = {

@@ -211,6 +211,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
         maxChargeCredits: 20n,
         provider: "OPENAI",
         model: "MODEL_A",
+        authorizedModels: [{ provider: "OPENAI", model: "MODEL_A" }],
         maxInputTokens: 21_000_000n,
         maxOutputTokens: 0n,
         maxReasoningTokens: 0n,

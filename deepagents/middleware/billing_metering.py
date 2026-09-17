@@ -15,7 +15,10 @@ from uuid import uuid4
 
 from langchain.agents.middleware import AgentMiddleware
 
-from middleware.billing_recovery import enqueue_release, enqueue_usage
+from middleware.billing_recovery import (
+    enqueue_release,
+    enqueue_usage_and_release,
+)
 from middleware.token_fallback import model_provider
 from tools.common.capabilities.platform.api_client import (
     WorkerApiClient,
@@ -69,12 +72,13 @@ class BillingMeteringSession:
     agent_role: str
     effective_runtime_model: dict[str, str] = field(default_factory=dict)
     recovery_store_path: str | None = None
-    max_input_tokens: int | None = None
+    max_input_bytes: int | None = None
     max_output_tokens: int | None = None
     max_reasoning_tokens: int | None = None
     max_invocations: int | None = None
     reserved_provider: str = ""
     reserved_model: str = ""
+    authorized_models: set[tuple[str, str]] = field(default_factory=set)
     _provider_invocation_count: int = field(default=0, init=False)
     _invocation_ids: set[str] = field(default_factory=set, init=False)
 
@@ -91,9 +95,11 @@ class BillingMeteringSession:
         provider: str,
         model: str,
         max_input_tokens: str,
+        max_input_bytes: str,
         max_output_tokens: str,
         max_reasoning_tokens: str,
         max_invocations: str,
+        authorized_models: list[dict[str, str]],
         idempotency_key: str,
         effective_runtime_model: dict[str, str] | None = None,
         recovery_store_path: str | None = None,
@@ -111,9 +117,11 @@ class BillingMeteringSession:
                 provider=provider,
                 model=model,
                 maxInputTokens=max_input_tokens,
+                maxInputBytes=max_input_bytes,
                 maxOutputTokens=max_output_tokens,
                 maxReasoningTokens=max_reasoning_tokens,
                 maxInvocations=max_invocations,
+                authorizedModels=authorized_models,
                 idempotencyKey=idempotency_key,
             )
         )
@@ -133,12 +141,16 @@ class BillingMeteringSession:
             agent_role=agent_role,
             effective_runtime_model=dict(effective_runtime_model or {}),
             recovery_store_path=recovery_store_path,
-            max_input_tokens=_parse_limit(max_input_tokens),
+            max_input_bytes=_parse_limit(max_input_bytes),
             max_output_tokens=_parse_limit(max_output_tokens),
             max_reasoning_tokens=_parse_limit(max_reasoning_tokens),
             max_invocations=_parse_limit(max_invocations),
             reserved_provider=provider.upper(),
             reserved_model=model,
+            authorized_models={
+                (str(item["provider"]).upper(), str(item["model"]))
+                for item in authorized_models
+            },
         )
 
     def release(self) -> None:
@@ -163,7 +175,7 @@ class BillingMeteringSession:
         self._invocation_ids.add(invocation_id)
         return invocation_id
 
-    def assert_invocation_capacity(self) -> None:
+    def assert_invocation_capacity(self, invocation_id: str) -> None:
         if (
             self.max_invocations is not None
             and self._provider_invocation_count >= self.max_invocations
@@ -178,24 +190,29 @@ class BillingMeteringSession:
 
             self.api_client.claim_billing_invocation(
                 self.reservation_id,
-                BillingReservationClaimPayload(assessmentId=self.assessment_id),
+                BillingReservationClaimPayload(
+                    assessmentId=self.assessment_id,
+                    invocationId=invocation_id,
+                ),
             )
         self._provider_invocation_count += 1
 
     def assert_model_identity(self, model: Any, response: Any | None = None) -> None:
-        provider, model_name = provider_identity(model, response)
-        if (
-            self.reserved_provider
-            and provider != self.reserved_provider
-            or self.reserved_model
-            and model_name != self.reserved_model
+        if not self.authorized_models and not (
+            self.reserved_provider or self.reserved_model
         ):
+            return
+        provider, model_name = provider_identity(model, response)
+        envelope = self.authorized_models or {
+            (self.reserved_provider, self.reserved_model)
+        }
+        if (provider, model_name) not in envelope:
             raise BillingReservationUnavailable(
                 "Provider/model differs from the reserved pricing envelope"
             )
 
     def assert_input_within_limit(self, request: Any) -> None:
-        if self.max_input_tokens is None:
+        if self.max_input_bytes is None:
             return
         request_input = {
             "messages": getattr(request, "messages", None),
@@ -206,8 +223,8 @@ class BillingMeteringSession:
             return
         # UTF-8 bytes are a conservative upper bound for provider token input.
         encoded = str(request_input).encode("utf-8")
-        if len(encoded) > self.max_input_tokens:
-            raise BillingUsageUnavailable("Input exceeds the reserved token ceiling")
+        if len(encoded) > self.max_input_bytes:
+            raise BillingUsageUnavailable("Input exceeds the reserved byte ceiling")
 
     def bounded_model(self, model: Any) -> Any:
         output_limit = (self.max_output_tokens or 0) + (
@@ -265,13 +282,9 @@ class BillingMeteringSession:
                     BillingReservationReleasePayload,
                 )
 
-                enqueue_usage(self.recovery_store_path, payload)
-                # Preserve the reservation until usage delivery is recovered.
-                # SQLite ordering makes the usage callback precede this release,
-                # while both callbacks remain independently idempotent.
-                enqueue_release(
+                enqueue_usage_and_release(
                     self.recovery_store_path,
-                    self.reservation_id,
+                    payload,
                     BillingReservationReleasePayload(
                         assessmentId=self.assessment_id
                     ),
@@ -335,11 +348,11 @@ class BillingMeteringMiddleware(AgentMiddleware):
         if session is None:
             return handler(request)
         session.assert_input_within_limit(request)
-        session.assert_invocation_capacity()
+        invocation_id = session.new_invocation_id()
         session.assert_model_identity(request.model)
+        session.assert_invocation_capacity(invocation_id)
         if hasattr(request, "override"):
             request = request.override(model=session.bounded_model(request.model))
-        invocation_id = session.new_invocation_id()
         response = handler(request)
         session.record(
             response,
@@ -354,11 +367,11 @@ class BillingMeteringMiddleware(AgentMiddleware):
         if session is None:
             return await handler(request)
         session.assert_input_within_limit(request)
-        session.assert_invocation_capacity()
+        invocation_id = session.new_invocation_id()
         session.assert_model_identity(request.model)
+        session.assert_invocation_capacity(invocation_id)
         if hasattr(request, "override"):
             request = request.override(model=session.bounded_model(request.model))
-        invocation_id = session.new_invocation_id()
         response = await handler(request)
         session.record(
             response,

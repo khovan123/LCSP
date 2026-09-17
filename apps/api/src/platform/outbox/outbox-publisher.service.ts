@@ -240,6 +240,10 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
       "billing.maxInputTokens",
       "",
     );
+    const maxInputBytes = this.configService.get<string>(
+      "billing.maxInputBytes",
+      "",
+    );
     const maxOutputTokens = this.configService.get<string>(
       "billing.maxOutputTokens",
       "",
@@ -252,6 +256,11 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
       "billing.maxInvocationsPerGroup",
       "",
     );
+    const authorizedRuntimeModels = this.configService.get<string>(
+      "billing.authorizedRuntimeModels",
+      "",
+    );
+    const authorizedModels = parseAuthorizedModels(authorizedRuntimeModels);
     if (
       !assessmentId ||
       !/^[1-9]\d*$/.test(amountCredits) ||
@@ -259,9 +268,11 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
       !provider ||
       !model ||
       !/^\d+$/.test(maxInputTokens) ||
+      !/^\d+$/.test(maxInputBytes) ||
       !/^\d+$/.test(maxOutputTokens) ||
       !/^\d+$/.test(maxReasoningTokens) ||
       !/^[1-9]\d*$/.test(maxInvocations) ||
+      authorizedModels.length === 0 ||
       BigInt(amountCredits) < BigInt(maxChargeCredits)
     ) {
       throw new Error(
@@ -285,9 +296,11 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
         provider,
         model,
         maxInputTokens,
+        maxInputBytes,
         maxOutputTokens,
         maxReasoningTokens,
         maxInvocations,
+        authorizedModels,
         idempotencyKey: `outbox:${message.id}:billing-reservation`,
         agentRole: `outbox:${message.eventType}`,
       },
@@ -347,6 +360,19 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
       },
     });
   }
+}
+
+function parseAuthorizedModels(
+  value: string,
+): Array<{ provider: string; model: string }> {
+  if (!value.trim()) return [];
+  return value.split(",").map((entry) => {
+    const [provider, ...modelParts] = entry.trim().split(":");
+    const model = modelParts.join(":").trim();
+    if (!provider?.trim() || !model)
+      throw new Error("Invalid authorized billing model envelope");
+    return { provider: provider.trim().toUpperCase(), model };
+  });
 }
 
 const BILLABLE_MODEL_EVENTS = new Set<string>([
