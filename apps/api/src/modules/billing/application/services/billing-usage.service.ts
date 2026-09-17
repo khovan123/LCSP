@@ -106,7 +106,10 @@ export class BillingUsageService {
     });
   }
 
-  async claimInvocation(input: { assessmentId: string; reservationId: string }) {
+  async claimInvocation(input: {
+    assessmentId: string;
+    reservationId: string;
+  }) {
     const userId = await this.resolveAssessmentOwner(input.assessmentId);
     return this.accounting.claimInvocation({
       userId,

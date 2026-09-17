@@ -192,8 +192,8 @@ export class BillingAccountingService {
         if (
           old.amountCredits !== i.amountCredits ||
           old.assessmentId !== (i.assessmentId ?? null) ||
-          old.runId !== (i.runId ?? null)
-          || (i.maxInvocations !== undefined &&
+          old.runId !== (i.runId ?? null) ||
+          (i.maxInvocations !== undefined &&
             old.maxInvocations !== i.maxInvocations)
         )
           throw new BillingIdempotencyConflictError(

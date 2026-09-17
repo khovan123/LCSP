@@ -332,7 +332,10 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
       "BILLING_METERING_ENABLED",
       {
         is: true,
-        then: Joi.string().trim().pattern(/^[1-9]\d*$/).required(),
+        then: Joi.string()
+          .trim()
+          .pattern(/^[1-9]\d*$/)
+          .required(),
         otherwise: Joi.string().trim().allow("").default(""),
       },
     ),

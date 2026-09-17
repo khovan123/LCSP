@@ -149,9 +149,7 @@ export interface BillingReservationPort {
     idempotencyKey: string;
     maxInvocations?: bigint;
   }): Promise<ReservationRecord>;
-  claimInvocation(input: {
-    reservationId: string;
-  }): Promise<boolean>;
+  claimInvocation(input: { reservationId: string }): Promise<boolean>;
   listReservedForWallet(walletId: string): Promise<ReservationRecord[]>;
   consumeRemaining(input: {
     reservationId: string;
