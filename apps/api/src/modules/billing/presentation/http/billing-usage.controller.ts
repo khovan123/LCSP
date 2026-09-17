@@ -32,16 +32,23 @@ export class BillingUsageController {
         ? String(value).trim()
         : "";
     const amount = text(body.amountCredits);
+    const maxChargeCredits = text(body.maxChargeCredits);
     const assessmentId = text(body.assessmentId);
     const runId = text(body.runId);
     const idempotencyKey = text(body.idempotencyKey);
     try {
-      if (!assessmentId || !runId || !idempotencyKey || !amount)
+      if (!assessmentId || !runId || !idempotencyKey || !amount || !maxChargeCredits)
         throw new BillingDomainError("Reservation input is required");
+      const amountValue = parseInteger(amount, "amountCredits");
+      const maxChargeValue = parseInteger(maxChargeCredits, "maxChargeCredits");
+      if (amountValue < maxChargeValue)
+        throw new BillingDomainError(
+          "Reservation is below the maximum invocation charge",
+        );
       const result = await this.usage.reserveForAssessment({
         assessmentId,
         runId,
-        amountCredits: parseInteger(amount, "amountCredits"),
+        amountCredits: amountValue,
         idempotencyKey,
       });
       return resultEnvelope(serializeBillingData(projectReservation(result)));

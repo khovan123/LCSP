@@ -227,9 +227,18 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
       "billing.reservationCredits",
       "",
     );
-    if (!assessmentId || !/^[1-9]\d*$/.test(amountCredits)) {
+    const maxChargeCredits = this.configService.get<string>(
+      "billing.maxInvocationChargeCredits",
+      "",
+    );
+    if (
+      !assessmentId ||
+      !/^[1-9]\d*$/.test(amountCredits) ||
+      !/^[1-9]\d*$/.test(maxChargeCredits) ||
+      BigInt(amountCredits) < BigInt(maxChargeCredits)
+    ) {
       throw new Error(
-        "Billing metering requires an assessment and positive reservation credits",
+        "Billing metering requires a reservation at least as large as the maximum invocation charge",
       );
     }
 
@@ -245,6 +254,7 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
             "documentRequestId",
           ]) ?? `outbox:${message.id}`,
         amountCredits,
+        maxChargeCredits,
         idempotencyKey: `outbox:${message.id}:billing-reservation`,
         agentRole: `outbox:${message.eventType}`,
       },

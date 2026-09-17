@@ -27,6 +27,10 @@ class BillingUsageUnavailable(RuntimeError):
     """Provider returned no complete numeric usage metadata."""
 
 
+class BillingReservationUnavailable(RuntimeError):
+    """The broker replay found a reservation that is no longer spendable."""
+
+
 class BillingMeteringError(WorkerCallbackError):
     """Usage delivery failed after a provider response was received."""
 
@@ -64,6 +68,7 @@ class BillingMeteringSession:
         run_id: str,
         agent_role: str,
         amount_credits: str,
+        max_charge_credits: str,
         idempotency_key: str,
         effective_runtime_model: dict[str, str] | None = None,
     ) -> "BillingMeteringSession":
@@ -76,12 +81,18 @@ class BillingMeteringSession:
                 assessmentId=assessment_id,
                 runId=run_id,
                 amountCredits=amount_credits,
+                maxChargeCredits=max_charge_credits,
                 idempotencyKey=idempotency_key,
             )
         )
         reservation_id = result.get("id") or result.get("reservationId")
         if not isinstance(reservation_id, str) or not reservation_id:
             raise RuntimeError("Billing reservation response did not include an id")
+        status = result.get("status")
+        if status is not None and status != "RESERVED":
+            raise BillingReservationUnavailable(
+                f"Billing reservation is not spendable: {status}"
+            )
         return cls(
             api_client=api_client,
             assessment_id=assessment_id,
@@ -373,6 +384,7 @@ __all__ = [
     "BillingMeteringSession",
     "BillingMeteringError",
     "BillingUsageUnavailable",
+    "BillingReservationUnavailable",
     "activate_billing_metering",
     "active_billing_metering",
     "active_billing_agent_role",

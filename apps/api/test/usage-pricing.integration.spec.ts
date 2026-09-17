@@ -265,33 +265,35 @@ describe("LCSP-310 usage and pricing foundation", () => {
     ).toBe("RESERVED");
   });
 
-  it("records missing provider usage as retryable and upgrades it once metadata arrives", async () => {
+  it("records missing provider usage as unavailable and leaves reservation releasable", async () => {
     const f = await governedFixture();
     const base = {
       userId: f.user.id,
       assessmentId: f.assessmentId,
       runId: f.runId,
       reservationId: f.reservation.id,
-      invocationId: "GOVERNED-RETRYABLE",
+      invocationId: "GOVERNED-UNAVAILABLE",
       provider: "OPENAI",
       model: "MODEL_A",
       agentRole: "GOVERNED_PLANNER",
     };
     const unavailable = await governedUsage.recordAndSettleUsage(base);
-    expect(unavailable.status).toBe("RETRYABLE");
+    expect(unavailable.status).toBe("UNAVAILABLE");
     expect(unavailable.chargedCredits).toBe(0n);
-    const settled = await governedUsage.recordAndSettleUsage({
-      ...base,
-      inputTokens: 1_000_000n,
-      outputTokens: 0n,
-    });
-    expect(settled.id).toBe(unavailable.id);
-    expect(settled.status).toBe("SETTLED");
     expect(
       await prisma.creditLedgerEntry.count({
-        where: { source: "LLM_USAGE_DEBIT", referenceId: settled.id },
+        where: { source: "LLM_USAGE_DEBIT", referenceId: unavailable.id },
       }),
-    ).toBe(1);
+    ).toBe(0);
+    await governedUsage.releaseForAssessment({
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+    });
+    expect(
+      await prisma.billingReservation.findUniqueOrThrow({
+        where: { id: f.reservation.id },
+      }),
+    ).toMatchObject({ status: "RELEASED", remainingCredits: 0n });
   });
 
   it("does not allow concurrent governed events to overspend one reservation", async () => {

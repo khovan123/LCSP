@@ -616,6 +616,7 @@ describe("OutboxPublisherService", () => {
       makeConfigService({
         "billing.meteringEnabled": true,
         "billing.reservationCredits": "100",
+        "billing.maxInvocationChargeCredits": "100",
       }),
       makeAuditWriter(),
       makeSnapshotCreatedAutoScanService(),
@@ -672,7 +673,7 @@ describe("OutboxPublisherService", () => {
       "outbox-1",
       1,
       5,
-      "Billing metering requires an assessment and positive reservation credits",
+      "Billing metering requires a reservation at least as large as the maximum invocation charge",
       expect.any(Date),
       expect.any(Date),
     );

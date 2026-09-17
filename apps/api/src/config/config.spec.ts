@@ -430,6 +430,7 @@ describe("config()", () => {
           "https://payments.test/qr?amount={amountVnd}&content={paymentCode}",
         meteringEnabled: false,
         reservationCredits: "",
+        maxInvocationChargeCredits: "",
       },
       interview: {
         guidanceVersion: "interview-context-test-v1",

@@ -277,6 +277,17 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
         otherwise: Joi.string().trim().allow("").default(""),
       },
     ),
+    BILLING_MAX_INVOCATION_CHARGE_CREDITS: Joi.alternatives().conditional(
+      "BILLING_METERING_ENABLED",
+      {
+        is: true,
+        then: Joi.string()
+          .trim()
+          .pattern(/^[1-9]\d*$/)
+          .required(),
+        otherwise: Joi.string().trim().allow("").default(""),
+      },
+    ),
   })
     .unknown(true)
     .custom((env: Record<string, unknown>, helpers) => {
@@ -544,6 +555,8 @@ export function config(): AppConfig {
           (env.NODE_ENV === NODE_ENVS.production ? "true" : "false")) ===
         "true",
       reservationCredits: env.BILLING_RESERVATION_CREDITS?.trim() ?? "",
+      maxInvocationChargeCredits:
+        env.BILLING_MAX_INVOCATION_CHARGE_CREDITS?.trim() ?? "",
     },
     interview: {
       guidanceVersion: env.INTERVIEW_GUIDANCE_VERSION?.trim() ?? "",

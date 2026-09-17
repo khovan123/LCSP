@@ -119,6 +119,7 @@ export interface BillingConfig {
   sePayQrUrlTemplate: string;
   meteringEnabled: boolean;
   reservationCredits: string;
+  maxInvocationChargeCredits: string;
 }
 
 export const NODE_ENVS = {

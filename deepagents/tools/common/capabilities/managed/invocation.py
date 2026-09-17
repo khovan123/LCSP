@@ -264,15 +264,13 @@ def _billing_metering_session(
     assessment_id = _find_first_text(billing, ("assessmentId", "assessment_id"))
     run_id = _find_first_text(billing, ("runId", "run_id", "workflowRunId"))
     amount = _find_first_text(billing, ("amountCredits", "reservationCredits"))
+    max_charge = _find_first_text(billing, ("maxChargeCredits",))
     idempotency_key = _find_first_text(billing, ("idempotencyKey",))
     # The boundary/agent owns the billing role. Never trust a role supplied inside
     # an event payload because the pricing snapshot is selected by this identity.
     role = boundary_name
     effective = billing.get("effectiveRuntimeModel")
-    attempt = _find_first_text(billing, ("attempt",)) or "0"
-    if not attempt.isdigit():
-        raise ValueError("billing attempt is invalid")
-    if not all((assessment_id, run_id, amount, idempotency_key)) or (
+    if not all((assessment_id, run_id, amount, max_charge, idempotency_key)) or (
         effective is not None and not isinstance(effective, dict)
     ):
         raise ValueError("billing context is incomplete")
@@ -286,7 +284,11 @@ def _billing_metering_session(
         run_id=run_id,
         agent_role=role,
         amount_credits=amount,
-        idempotency_key=f"{idempotency_key}:{boundary_name}:attempt:{attempt}",
+        max_charge_credits=max_charge,
+        # The outbox idempotency key identifies the billing group, not a broker
+        # delivery attempt. A retry must recover/replay the same reservation;
+        # deriving a new key leaves the previous reservation stranded.
+        idempotency_key=f"{idempotency_key}:{boundary_name}",
         effective_runtime_model=(
             {str(k): str(v) for k, v in effective.items()}
             if isinstance(effective, dict)

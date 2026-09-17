@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from middleware.billing_metering import (
+    BillingReservationUnavailable,
     BillingMeteringError,
     BillingMeteringMiddleware,
     BillingMeteringSession,
@@ -87,7 +88,7 @@ def test_metering_middleware_records_one_payload_for_one_response():
     assert payload.model_dump(exclude_none=True).get("reasoningTokens") is None
 
 
-def test_metering_middleware_records_missing_usage_as_retryable_payload():
+def test_metering_middleware_records_missing_usage_for_terminal_release():
     client = FakeClient()
     session = BillingMeteringSession(
         api_client=client,
@@ -114,6 +115,22 @@ def test_metering_middleware_records_missing_usage_as_retryable_payload():
     assert client.payloads[0].inputTokens is None
     assert client.payloads[0].outputTokens is None
     assert client.payloads[0].providerResponseId == "missing-usage-response"
+
+
+def test_reservation_replay_refuses_a_terminal_reservation_before_model_spend():
+    class Client(FakeClient):
+        def reserve_billing_credits(self, _payload):
+            return {"id": "reservation-1", "status": "RELEASED"}
+
+    with __import__("pytest").raises(BillingReservationUnavailable):
+        BillingMeteringSession.reserve(
+            api_client=Client(),
+            assessment_id="assessment-1",
+            run_id="run-1",
+            agent_role="planner",
+            amount_credits="100",
+            idempotency_key="outbox:1:planner",
+        )
 
 
 def test_assessment_invocation_cannot_bypass_server_issued_billing_context():

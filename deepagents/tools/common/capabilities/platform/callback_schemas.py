@@ -105,6 +105,7 @@ class BillingReservationPayload(BaseModel):
     assessmentId: str
     runId: str
     amountCredits: str
+    maxChargeCredits: str
     idempotencyKey: str
 
 

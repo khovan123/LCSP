@@ -51,8 +51,13 @@ export class BillingUsageService {
     assessmentId: string;
     runId: string;
     amountCredits: bigint;
+    maxChargeCredits: bigint;
     idempotencyKey: string;
   }) {
+    if (input.amountCredits < input.maxChargeCredits)
+      throw new BillingDomainError(
+        "Reservation is below the maximum invocation charge",
+      );
     const userId = await this.resolveAssessmentOwner(input.assessmentId);
     return this.accounting.reserveCredits({
       userId,
@@ -172,7 +177,7 @@ export class BillingUsageService {
         throw new OwnershipMismatchError(
           "Reservation does not belong to the assessment run",
         );
-      const createRetryable = (availabilityReason: string) => {
+      const createUnavailable = (availabilityReason: string) => {
         if (existing) return existing;
         return usage.create({
           userId: i.userId,
@@ -193,13 +198,13 @@ export class BillingUsageService {
           chargedCredits: 0n,
           providerCostCredits: 0n,
           customerChargeVnd: 0n,
-          status: LLM_USAGE_STATUSES.RETRYABLE,
+          status: LLM_USAGE_STATUSES.UNAVAILABLE,
           availabilityReason,
           occurredAt,
         });
       };
       if (i.assessmentId && i.runId && !hasRequiredProviderUsage)
-        return createRetryable(
+        return createUnavailable(
           LLM_USAGE_AVAILABILITY_REASONS.providerUsageMetadataMissing,
         );
       const selected = await repos.runtimePolicy.findApplicable(
@@ -208,7 +213,7 @@ export class BillingUsageService {
       );
       if (!selected) {
         if (i.assessmentId && i.runId)
-          return createRetryable(
+          return createUnavailable(
             LLM_USAGE_AVAILABILITY_REASONS.runtimePolicySnapshotMissing,
           );
         throw new BillingDomainError(
@@ -236,7 +241,7 @@ export class BillingUsageService {
       );
       if (!snapshot) {
         if (i.assessmentId && i.runId)
-          return createRetryable(
+          return createUnavailable(
             LLM_USAGE_AVAILABILITY_REASONS.pricingSnapshotMissing,
           );
         throw new BillingDomainError("No applicable pricing snapshot");
@@ -266,7 +271,7 @@ export class BillingUsageService {
         );
       } catch (error) {
         if (i.assessmentId && i.runId && error instanceof BillingDomainError)
-          return createRetryable(
+          return createUnavailable(
             LLM_USAGE_AVAILABILITY_REASONS.pricingSnapshotInvalid,
           );
         throw error;
