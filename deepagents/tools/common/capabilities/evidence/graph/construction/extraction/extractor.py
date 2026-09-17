@@ -20,6 +20,7 @@ EXCLUDED_PARTS = {".git", "node_modules", "dist", "build", ".next", "coverage", 
 TEXT_EXTENSIONS = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".kt", ".go", ".cs", ".rs"}
 AI_HINTS = (("OPENAI", ("openai", "chat.completions", "responses.create", "embeddings.create")), ("ANTHROPIC", ("anthropic", "messages.create")), ("GEMINI", ("google.genai", "generatecontent", "models.generate_content")), ("AZURE_OPENAI", ("azureopenai", "azure.openai")), ("BEDROCK", ("bedrock", "invoke_model", "converse")), ("HUGGINGFACE", ("huggingface", "hfinference", "inferenceclient")), ("OPENROUTER", ("openrouter",)), ("DEEPSEEK", ("deepseek",)), ("MOONSHOT", ("moonshot", "kimi")), ("LOCAL_INFERENCE", ("ollama", "localhost:11434", "/v1/chat/completions")))
 HTTP_HINTS = ("requests.get", "requests.post", "requests.put", "requests.patch", "requests.delete", "httpx.get", "httpx.post", "httpx.put", "httpx.patch", "httpx.delete", "urllib.request", "fetch", "axios.get", "axios.post", "axios.put", "axios.patch", "axios.delete", "httpclient", "resttemplate", "okhttp")
+HTTP_INSTANCE_METHODS = {"get", "post", "put", "patch", "delete", "request"}
 BUSINESS_HINTS = (("approve", "APPROVAL", "APPROVES"), ("accept", "APPROVAL", "APPROVES"), ("reject", "REJECTION", "REJECTS"), ("deny", "REJECTION", "REJECTS"), ("rank", "RANKING", "RANKS"), ("recommend", "RECOMMENDATION", "RECOMMENDS"), ("notify", "NOTIFICATION", "TRIGGERS"), ("update_status", "STATUS_CHANGE", "UPDATES_STATUS"), ("set_status", "STATUS_CHANGE", "UPDATES_STATUS"))
 HUMAN_REVIEW_HINTS = ("human_review", "manual_review", "reviewer", "manager_approval", "review_queue", "approval_queue")
 HUMAN_OVERRIDE_HINTS = ("manual_override", "override", "cancel_ai", "disable_ai", "pause_ai")
@@ -38,6 +39,7 @@ class _PyFile:
     tree: ast.Module
     imports: dict[str, tuple[str, str | None]] = field(default_factory=dict)
     definitions: dict[str, str] = field(default_factory=dict)
+    http_clients: set[str] = field(default_factory=set)
 
 class RepositorySemanticExtractor:
     """Scan every supported source file before any law/LLM-driven investigation."""
@@ -75,6 +77,7 @@ class RepositorySemanticExtractor:
                 elif isinstance(node, ast.ImportFrom):
                     for alias in node.names: item.imports[alias.asname or alias.name] = (node.module or "", alias.name)
                 elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)): item.definitions[node.name] = _symbol_key(relative, node.name)
+            item.http_clients = _python_http_client_aliases(tree, item.imports)
             result.append(item)
         return result
 
@@ -107,6 +110,7 @@ class RepositorySemanticExtractor:
         for match in re.finditer(r"\b(class|interface|function|def|func)\s+([A-Za-z_$][\w$]*)", text):
             kind, name = match.group(1), match.group(2); ntype = "INTERFACE" if kind == "interface" else "CLASS" if kind == "class" else "FUNCTION"; line = text.count("\n", 0, match.start()) + 1; key = _symbol_key(relative, name)
             program.add_node(SemanticNodeFact(key, ntype, name, relative, line, line, name)); program.add_edge(SemanticEdgeFact("DECLARES", mkey, key)); symbols.append((name, key))
+        http_clients = _text_http_client_aliases(text)
         for line_no, line in enumerate(text.splitlines(), start=1):
             assignment = re.search(r"\b(?:const|let|var)?\s*([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$.]*)", line)
             if assignment:
@@ -115,16 +119,16 @@ class RepositorySemanticExtractor:
             route = re.search(r"@(Get|Post|Put|Patch|Delete)\s*\(\s*['\"]([^'\"]*)['\"]", line, re.I)
             if route:
                 key = f"route:{relative}:{line_no}"; program.add_node(SemanticNodeFact(key, "HTTP_ROUTE", f"{route.group(1).upper()} {route.group(2)}", relative, line_no, line_no, attributes={"method": route.group(1).upper(), "route": route.group(2)})); program.add_edge(SemanticEdgeFact("DECLARES", mkey, key))
-            for call in re.finditer(r"\b([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\s*\(", line): self._text_call(program, relative, line_no, call.group(1), line, mkey)
+            for call in re.finditer(r"\b([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\s*\(", line): self._text_call(program, relative, line_no, call.group(1), line, mkey, http_clients)
 
-    def _text_call(self, program: SemanticProgram, relative: str, line: int, name: str, body: str, owner: str) -> None:
-        lower = name.lower(); ntype, attrs = _call_type(lower); key = f"call:{relative}:{line}:{name}"
+    def _text_call(self, program: SemanticProgram, relative: str, line: int, name: str, body: str, owner: str, http_clients: set[str]) -> None:
+        lower = name.lower(); ntype, attrs = _call_type(lower, http_clients); key = f"call:{relative}:{line}:{name}"
         program.add_node(SemanticNodeFact(key, ntype, name, relative, line, line, attributes=attrs)); program.add_edge(SemanticEdgeFact("CALLS", owner, key))
         _call_edges(program, key, name, relative, line)
         urls = re.findall(r"https?://[^'\"\s)]+", body)
         for raw in urls:
             host = safe_external_host(raw)
-            if host:
+            if host and _is_http_call(lower, http_clients):
                 external = f"external:{host}"; program.add_node(SemanticNodeFact(external, "EXTERNAL_API", host, attributes={"host": host})); program.add_edge(SemanticEdgeFact("SENDS_TO_EXTERNAL", key, external))
 
 class _PythonVisitor(ast.NodeVisitor):
@@ -182,7 +186,7 @@ class _PythonVisitor(ast.NodeVisitor):
         name = _name(node.func); line = getattr(node, "lineno", 1)
         if not name:
             key = f"dynamic:{self.item.relative}:{line}"; self.program.add_node(SemanticNodeFact(key, "UNRESOLVED_DYNAMIC_TARGET", "dynamic_call", self.item.relative, line, getattr(node, "end_lineno", line), coverage_state="LIMITED")); self.program.unresolved_frontiers.append(key); self.program.add_edge(SemanticEdgeFact("CALLS_DYNAMICALLY", self.owner, key, coverage_state="LIMITED")); return key
-        ntype, attrs = _call_type(name.lower()); key = f"call:{self.item.relative}:{line}:{name}"
+        ntype, attrs = _call_type(name.lower(), self.item.http_clients); key = f"call:{self.item.relative}:{line}:{name}"
         self.program.add_node(SemanticNodeFact(key, ntype, name, self.item.relative, line, getattr(node, "end_lineno", line), attributes=attrs)); self.program.add_edge(SemanticEdgeFact("CALLS", self.owner, key)); _call_edges(self.program, key, name, self.item.relative, line)
         root = name.split(".")[0]; imported = self.item.imports.get(root)
         if imported:
@@ -200,23 +204,74 @@ class _PythonVisitor(ast.NodeVisitor):
         for arg in [*node.args, *(kw.value for kw in node.keywords)]:
             if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                 host = safe_external_host(arg.value)
-                if host and any(h in name.lower() for h in HTTP_HINTS):
+                if host and _is_http_call(name.lower(), self.item.http_clients):
                     external = f"external:{host}"; self.program.add_node(SemanticNodeFact(external, "EXTERNAL_API", host, attributes={"host": host})); self.program.add_edge(SemanticEdgeFact("SENDS_TO_EXTERNAL", key, external))
                 metadata = safe_literal_metadata(arg.value)
                 if metadata:
                     literal = f"literal:{self.item.relative}:{line}:{metadata['literalType']}"; self.program.add_node(SemanticNodeFact(literal, "SECRET" if metadata["literalType"] == "SECRET" else "SENSITIVE_DATA", str(metadata["literalType"]), self.item.relative, line, line, attributes=metadata, semantic_types=(str(metadata["literalType"]),))); self.program.add_edge(SemanticEdgeFact("PASSES_ARGUMENT", literal, key))
         return key
 
-def _call_type(lower: str) -> tuple[str, dict[str, object]]:
+def _is_http_call(lower: str, http_clients: set[str] | None = None) -> bool:
+    if any(h in lower for h in HTTP_HINTS):
+        return True
+    root, _, method = lower.partition(".")
+    return bool(http_clients and root in http_clients and method in HTTP_INSTANCE_METHODS)
+
+def _call_type(lower: str, http_clients: set[str] | None = None) -> tuple[str, dict[str, object]]:
     for provider, hints in AI_HINTS:
         if any(h in lower for h in hints): return "AI_MODEL_INVOCATION", {"provider": provider}
-    if any(h in lower for h in HTTP_HINTS): return "CALL_SITE", {"integrationType": "HTTP"}
+    if _is_http_call(lower, http_clients): return "CALL_SITE", {"integrationType": "HTTP"}
     if any(h in lower for h in PARSE_HINTS): return "PARSER", {}
     if any(h in lower for h in SERIALIZE_HINTS): return "SERIALIZER", {}
     if any(h in lower for h in VALIDATE_HINTS): return "VALIDATOR", {}
     if any(h in lower for h in HUMAN_REVIEW_HINTS): return "HUMAN_REVIEW", {}
     if any(h in lower for h in HUMAN_OVERRIDE_HINTS): return "HUMAN_OVERRIDE", {}
     return "CALL_SITE", {}
+
+
+def _resolved_import_name(name: str, imports: dict[str, tuple[str, str | None]]) -> str:
+    root, *rest = name.split(".")
+    imported = imports.get(root)
+    if not imported:
+        return name
+    module, symbol = imported
+    prefix = ".".join(part for part in (module, symbol) if part)
+    return ".".join(part for part in (prefix, *rest) if part)
+
+def _is_python_http_constructor(name: str, imports: dict[str, tuple[str, str | None]]) -> bool:
+    resolved = _resolved_import_name(name, imports).lower()
+    return resolved in {"httpx.asyncclient", "httpx.client", "requests.session"}
+
+def _python_http_client_aliases(tree: ast.Module, imports: dict[str, tuple[str, str | None]]) -> set[str]:
+    aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            value = node.value
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if isinstance(value, ast.Call) and _is_python_http_constructor(_name(value.func), imports):
+                for target in targets:
+                    aliases.update(_targets(target))
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            for item in node.items:
+                context = item.context_expr
+                if (
+                    item.optional_vars is not None
+                    and isinstance(context, ast.Call)
+                    and _is_python_http_constructor(_name(context.func), imports)
+                ):
+                    aliases.update(_targets(item.optional_vars))
+    return {alias.lower() for alias in aliases}
+
+def _text_http_client_aliases(text: str) -> set[str]:
+    aliases: set[str] = set()
+    patterns = (
+        r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*axios\.create\s*\(",
+        r"\b([A-Za-z_$][\w$]*)\s*=\s*requests\.Session\s*\(",
+        r"\b([A-Za-z_$][\w$]*)\s*=\s*httpx\.(?:AsyncClient|Client)\s*\(",
+    )
+    for pattern in patterns:
+        aliases.update(match.group(1).lower() for match in re.finditer(pattern, text, re.I))
+    return aliases
 
 def _call_edges(program: SemanticProgram, call_key: str, name: str, file_path: str, line: int) -> None:
     lower = name.lower()
