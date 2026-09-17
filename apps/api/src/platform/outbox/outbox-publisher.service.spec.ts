@@ -633,6 +633,7 @@ describe("OutboxPublisherService", () => {
           assessmentId: "assessment-1",
           runId: "scan-job-1",
           amountCredits: "100",
+          maxChargeCredits: "100",
           idempotencyKey: "outbox:outbox-1:billing-reservation",
           agentRole: `outbox:${GITHUB_INTEGRATION_EVENT_TYPES.scanTriggered}`,
         },

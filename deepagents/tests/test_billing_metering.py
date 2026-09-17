@@ -129,6 +129,7 @@ def test_reservation_replay_refuses_a_terminal_reservation_before_model_spend():
             run_id="run-1",
             agent_role="planner",
             amount_credits="100",
+            max_charge_credits="100",
             idempotency_key="outbox:1:planner",
         )
 

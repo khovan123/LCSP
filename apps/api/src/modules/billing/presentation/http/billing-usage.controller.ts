@@ -55,6 +55,7 @@ export class BillingUsageController {
         assessmentId,
         runId,
         amountCredits: amountValue,
+        maxChargeCredits: maxChargeValue,
         idempotencyKey,
       });
       return resultEnvelope(serializeBillingData(projectReservation(result)));
