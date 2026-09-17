@@ -95,7 +95,7 @@ export const confirmPasswordRecoverySchema = z
   .object({
     token: z.string().min(1).optional(),
     recovery_token: z.string().min(1).optional(),
-    new_password: z.string().min(1),
+    new_password: z.string().min(8),
   })
   .refine((data) => Boolean(data.token || data.recovery_token), {
     message: "Either token or recovery_token must be provided",

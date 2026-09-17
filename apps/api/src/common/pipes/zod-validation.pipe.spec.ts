@@ -1,4 +1,7 @@
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import {
+  AUTH_ERROR_CODES,
+  confirmPasswordRecoverySchema,
+} from "@lcsp/contracts/auth";
 import { describe, expect, it } from "@jest/globals";
 import { HttpException, HttpStatus } from "@nestjs/common";
 import { z } from "zod";
@@ -40,5 +43,35 @@ describe("ZodValidationPipe", () => {
       expect(response.problem.code).toBe(AUTH_ERROR_CODES.validationFailed);
       expect(response.problem.status).toBe(HttpStatus.BAD_REQUEST);
     }
+  });
+
+  it("validates confirmPasswordRecoverySchema correctly rejecting short passwords", () => {
+    const recoveryPipe = new ZodValidationPipe(confirmPasswordRecoverySchema);
+
+    // Rejects password < 8 characters
+    expect(() =>
+      recoveryPipe.transform({ token: "valid-tok", new_password: "short" }),
+    ).toThrow(HttpException);
+
+    // Accepts token with >= 8 characters password
+    const validWithToken = recoveryPipe.transform({
+      token: "valid-tok",
+      new_password: "password123",
+    });
+    expect(validWithToken).toEqual({
+      token: "valid-tok",
+      new_password: "password123",
+    });
+
+    // Normalizes recovery_token to token
+    const validWithRecoveryToken = recoveryPipe.transform({
+      recovery_token: "rec-tok-123",
+      new_password: "password123",
+    });
+    expect(validWithRecoveryToken).toEqual({
+      recovery_token: "rec-tok-123",
+      token: "rec-tok-123",
+      new_password: "password123",
+    });
   });
 });
