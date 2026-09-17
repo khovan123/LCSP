@@ -39,7 +39,7 @@ class _PyFile:
     tree: ast.Module
     imports: dict[str, tuple[str, str | None]] = field(default_factory=dict)
     definitions: dict[str, str] = field(default_factory=dict)
-    http_clients: set[str] = field(default_factory=set)
+    http_clients: dict[int, dict[str, list[tuple[int, bool]]]] = field(default_factory=dict)
 
 class RepositorySemanticExtractor:
     """Scan every supported source file before any law/LLM-driven investigation."""
@@ -119,7 +119,7 @@ class RepositorySemanticExtractor:
             route = re.search(r"@(Get|Post|Put|Patch|Delete)\s*\(\s*['\"]([^'\"]*)['\"]", line, re.I)
             if route:
                 key = f"route:{relative}:{line_no}"; program.add_node(SemanticNodeFact(key, "HTTP_ROUTE", f"{route.group(1).upper()} {route.group(2)}", relative, line_no, line_no, attributes={"method": route.group(1).upper(), "route": route.group(2)})); program.add_edge(SemanticEdgeFact("DECLARES", mkey, key))
-            for call in re.finditer(r"\b([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\s*\(", line): self._text_call(program, relative, line_no, call.group(1), line, mkey, http_clients)
+            for call in re.finditer(r"\b([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\s*\(", line): self._text_call(program, relative, line_no, call.group(1), line, mkey, http_clients.get(line_no, set()))
 
     def _text_call(self, program: SemanticProgram, relative: str, line: int, name: str, body: str, owner: str, http_clients: set[str]) -> None:
         lower = name.lower(); ntype, attrs = _call_type(lower, http_clients); key = f"call:{relative}:{line}:{name}"
@@ -133,7 +133,7 @@ class RepositorySemanticExtractor:
 
 class _PythonVisitor(ast.NodeVisitor):
     def __init__(self, item: _PyFile, program: SemanticProgram, symbols: dict[tuple[str, str], str]) -> None:
-        self.item, self.program, self.symbols = item, program, symbols; self.stack: list[str] = [f"module:{item.module}"]
+        self.item, self.program, self.symbols = item, program, symbols; self.stack: list[str] = [f"module:{item.module}"]; self.scope_stack: list[ast.AST] = [item.tree]
     @property
     def owner(self) -> str: return self.stack[-1]
 
@@ -143,7 +143,7 @@ class _PythonVisitor(ast.NodeVisitor):
             name = _name(base)
             if name:
                 target = f"type:{name}"; self.program.add_node(SemanticNodeFact(target, "TYPE", name)); self.program.add_edge(SemanticEdgeFact("EXTENDS", key, target))
-        self.stack.append(key); self.generic_visit(node); self.stack.pop()
+        self.stack.append(key); self.scope_stack.append(node); self.generic_visit(node); self.scope_stack.pop(); self.stack.pop()
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None: self._function(node)
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None: self._function(node)
@@ -153,7 +153,7 @@ class _PythonVisitor(ast.NodeVisitor):
         for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]:
             pkey = f"param:{key}:{arg.arg}"; self.program.add_node(SemanticNodeFact(pkey, "PARAMETER", arg.arg, self.item.relative, arg.lineno, arg.lineno, f"{symbol}:{arg.arg}", semantic_types=semantic_types_for_identifier(arg.arg))); self.program.add_edge(SemanticEdgeFact("HAS_PARAMETER", key, pkey))
         rkey = f"return:{key}"; self.program.add_node(SemanticNodeFact(rkey, "RETURN_VALUE", f"{symbol}:return", self.item.relative, node.lineno, getattr(node, "end_lineno", node.lineno), f"{symbol}:return"))
-        self.stack.append(key); [self.visit(item) for item in node.body]; self.stack.pop()
+        self.stack.append(key); self.scope_stack.append(node); [self.visit(item) for item in node.body]; self.scope_stack.pop(); self.stack.pop()
 
     def visit_Assign(self, node: ast.Assign) -> None:
         sources = _value_refs(node.value)
@@ -186,7 +186,8 @@ class _PythonVisitor(ast.NodeVisitor):
         name = _name(node.func); line = getattr(node, "lineno", 1)
         if not name:
             key = f"dynamic:{self.item.relative}:{line}"; self.program.add_node(SemanticNodeFact(key, "UNRESOLVED_DYNAMIC_TARGET", "dynamic_call", self.item.relative, line, getattr(node, "end_lineno", line), coverage_state="LIMITED")); self.program.unresolved_frontiers.append(key); self.program.add_edge(SemanticEdgeFact("CALLS_DYNAMICALLY", self.owner, key, coverage_state="LIMITED")); return key
-        ntype, attrs = _call_type(name.lower(), self.item.http_clients); key = f"call:{self.item.relative}:{line}:{name}"
+        root = name.split(".")[0].lower(); active_http_clients = {root} if self._http_client_is_active(root, line) else set()
+        ntype, attrs = _call_type(name.lower(), active_http_clients); key = f"call:{self.item.relative}:{line}:{name}"
         self.program.add_node(SemanticNodeFact(key, ntype, name, self.item.relative, line, getattr(node, "end_lineno", line), attributes=attrs)); self.program.add_edge(SemanticEdgeFact("CALLS", self.owner, key)); _call_edges(self.program, key, name, self.item.relative, line)
         root = name.split(".")[0]; imported = self.item.imports.get(root)
         if imported:
@@ -204,12 +205,30 @@ class _PythonVisitor(ast.NodeVisitor):
         for arg in [*node.args, *(kw.value for kw in node.keywords)]:
             if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                 host = safe_external_host(arg.value)
-                if host and _is_http_call(name.lower(), self.item.http_clients):
+                if host and _is_http_call(name.lower(), active_http_clients):
                     external = f"external:{host}"; self.program.add_node(SemanticNodeFact(external, "EXTERNAL_API", host, attributes={"host": host})); self.program.add_edge(SemanticEdgeFact("SENDS_TO_EXTERNAL", key, external))
                 metadata = safe_literal_metadata(arg.value)
                 if metadata:
                     literal = f"literal:{self.item.relative}:{line}:{metadata['literalType']}"; self.program.add_node(SemanticNodeFact(literal, "SECRET" if metadata["literalType"] == "SECRET" else "SENSITIVE_DATA", str(metadata["literalType"]), self.item.relative, line, line, attributes=metadata, semantic_types=(str(metadata["literalType"]),))); self.program.add_edge(SemanticEdgeFact("PASSES_ARGUMENT", literal, key))
         return key
+
+    def _http_client_is_active(self, name: str, line: int) -> bool:
+        lowered = name.lower()
+        inside_function = False
+        for scope in reversed(self.scope_stack):
+            if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                inside_function = True
+            elif inside_function and isinstance(scope, ast.ClassDef):
+                # Python method bodies do not close over their class-body namespace.
+                continue
+            events = self.item.http_clients.get(id(scope), {}).get(lowered)
+            if events is None:
+                continue
+            prior = [is_http for event_line, is_http in events if event_line <= line]
+            # Any local binding shadows the same identifier in an outer scope.
+            # If the local binding is declared only later, do not inherit provenance.
+            return prior[-1] if prior else False
+        return False
 
 def _is_http_call(lower: str, http_clients: set[str] | None = None) -> bool:
     if any(h in lower for h in HTTP_HINTS):
@@ -242,36 +261,158 @@ def _is_python_http_constructor(name: str, imports: dict[str, tuple[str, str | N
     resolved = _resolved_import_name(name, imports).lower()
     return resolved in {"httpx.asyncclient", "httpx.client", "requests.session"}
 
-def _python_http_client_aliases(tree: ast.Module, imports: dict[str, tuple[str, str | None]]) -> set[str]:
-    aliases: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Assign, ast.AnnAssign)):
-            value = node.value
-            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            if isinstance(value, ast.Call) and _is_python_http_constructor(_name(value.func), imports):
-                for target in targets:
-                    aliases.update(_targets(target))
-        elif isinstance(node, (ast.With, ast.AsyncWith)):
-            for item in node.items:
-                context = item.context_expr
-                if (
-                    item.optional_vars is not None
-                    and isinstance(context, ast.Call)
-                    and _is_python_http_constructor(_name(context.func), imports)
-                ):
-                    aliases.update(_targets(item.optional_vars))
-    return {alias.lower() for alias in aliases}
+def _python_http_client_aliases(
+    tree: ast.Module, imports: dict[str, tuple[str, str | None]]
+) -> dict[int, dict[str, list[tuple[int, bool]]]]:
+    """Index HTTP client provenance by lexical scope and binding event."""
+    result: dict[int, dict[str, list[tuple[int, bool]]]] = {}
+    scope_types = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
 
-def _text_http_client_aliases(text: str) -> set[str]:
-    aliases: set[str] = set()
-    patterns = (
+    def add(table: dict[str, list[tuple[int, bool]]], name: str, line: int, is_http: bool) -> None:
+        table.setdefault(name.lower(), []).append((line, is_http))
+
+    def scope_nodes(scope: ast.AST):
+        stack = list(reversed(list(getattr(scope, "body", []))))
+        while stack:
+            node = stack.pop()
+            yield node
+            if isinstance(node, scope_types):
+                continue
+            stack.extend(reversed(list(ast.iter_child_nodes(node))))
+
+    def nested_scopes(scope: ast.AST):
+        stack = list(reversed(list(getattr(scope, "body", []))))
+        while stack:
+            node = stack.pop()
+            if isinstance(node, scope_types):
+                yield node
+                continue
+            stack.extend(reversed(list(ast.iter_child_nodes(node))))
+
+    def collect(scope: ast.AST) -> None:
+        table: dict[str, list[tuple[int, bool]]] = {}
+        if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            args = scope.args
+            params = [*args.posonlyargs, *args.args, *args.kwonlyargs]
+            if args.vararg:
+                params.append(args.vararg)
+            if args.kwarg:
+                params.append(args.kwarg)
+            for arg in params:
+                add(table, arg.arg, getattr(arg, "lineno", getattr(scope, "lineno", 1)), False)
+
+        for node in scope_nodes(scope):
+            if isinstance(node, ast.Assign):
+                is_http = isinstance(node.value, ast.Call) and _is_python_http_constructor(_name(node.value.func), imports)
+                for target in node.targets:
+                    for name in _targets(target):
+                        add(table, name, node.lineno, is_http)
+            elif isinstance(node, ast.AnnAssign):
+                value = node.value
+                is_http = isinstance(value, ast.Call) and _is_python_http_constructor(_name(value.func), imports)
+                for name in _targets(node.target):
+                    add(table, name, node.lineno, is_http)
+            elif isinstance(node, (ast.With, ast.AsyncWith)):
+                for item in node.items:
+                    if item.optional_vars is None:
+                        continue
+                    context = item.context_expr
+                    is_http = isinstance(context, ast.Call) and _is_python_http_constructor(_name(context.func), imports)
+                    for name in _targets(item.optional_vars):
+                        add(table, name, node.lineno, is_http)
+            elif isinstance(node, (ast.For, ast.AsyncFor)):
+                for name in _targets(node.target):
+                    add(table, name, node.lineno, False)
+            elif isinstance(node, ast.AugAssign):
+                for name in _targets(node.target):
+                    add(table, name, node.lineno, False)
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                for alias in node.names:
+                    add(table, alias.asname or alias.name.split(".")[0], node.lineno, False)
+
+        for events in table.values():
+            events.sort(key=lambda item: item[0])
+        result[id(scope)] = table
+        for nested in nested_scopes(scope):
+            collect(nested)
+
+    collect(tree)
+    return result
+
+def _text_http_client_aliases(text: str) -> dict[int, set[str]]:
+    """Resolve text-language HTTP clients per lexical scope and source line."""
+    lines = text.splitlines()
+    paths: list[tuple[int, ...]] = []
+    opened_by_line: dict[int, list[int]] = {}
+    stack = [0]
+    next_scope = 1
+
+    def scrub(line: str) -> str:
+        value = re.sub(r"(['\"`]).*?(?<!\\)\1", "", line)
+        return value.split("//", 1)[0]
+
+    for line_no, line in enumerate(lines, start=1):
+        structural = scrub(line)
+        leading = len(structural) - len(structural.lstrip("}"))
+        for _ in range(min(leading, max(0, len(stack) - 1))):
+            stack.pop()
+        paths.append(tuple(stack))
+        opened: list[int] = []
+        remainder = structural.lstrip("}") if leading else structural
+        for char in remainder:
+            if char == "{":
+                stack.append(next_scope)
+                opened.append(next_scope)
+                next_scope += 1
+            elif char == "}" and len(stack) > 1:
+                stack.pop()
+        if opened:
+            opened_by_line[line_no] = opened
+
+    bindings: dict[int, dict[str, list[tuple[int, bool]]]] = {}
+    positive_patterns = (
         r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*axios\.create\s*\(",
         r"\b([A-Za-z_$][\w$]*)\s*=\s*requests\.Session\s*\(",
         r"\b([A-Za-z_$][\w$]*)\s*=\s*httpx\.(?:AsyncClient|Client)\s*\(",
     )
-    for pattern in patterns:
-        aliases.update(match.group(1).lower() for match in re.finditer(pattern, text, re.I))
-    return aliases
+
+    def add(scope_id: int, name: str, line_no: int, value: bool) -> None:
+        bindings.setdefault(scope_id, {}).setdefault(name.lower(), []).append((line_no, value))
+
+    for line_no, line in enumerate(lines, start=1):
+        scope_id = paths[line_no - 1][-1]
+        positives: set[str] = set()
+        for pattern in positive_patterns:
+            for match in re.finditer(pattern, line, re.I):
+                positives.add(match.group(1).lower())
+                add(scope_id, match.group(1), line_no, True)
+        assignment = re.search(r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=", line)
+        if assignment and assignment.group(1).lower() not in positives:
+            add(scope_id, assignment.group(1), line_no, False)
+        opened = opened_by_line.get(line_no, [])
+        if opened and (re.search(r"\bfunction\b|=>", line) or re.match(r"\s*(?:async\s+)?[A-Za-z_$][\w$]*\s*\(", line)):
+            params = re.search(r"\(([^)]*)\)", line)
+            if params:
+                for raw in params.group(1).split(","):
+                    match = re.match(r"\s*(?:\.\.\.)?([A-Za-z_$][\w$]*)", raw)
+                    if match:
+                        add(opened[0], match.group(1), line_no, False)
+
+    names = {name for scope in bindings.values() for name in scope}
+    active_by_line: dict[int, set[str]] = {}
+    for line_no, path in enumerate(paths, start=1):
+        active: set[str] = set()
+        for name in names:
+            for scope_id in reversed(path):
+                events = bindings.get(scope_id, {}).get(name)
+                if events is None:
+                    continue
+                prior = [value for event_line, value in events if event_line <= line_no]
+                if prior and prior[-1]:
+                    active.add(name)
+                break
+        active_by_line[line_no] = active
+    return active_by_line
 
 def _call_edges(program: SemanticProgram, call_key: str, name: str, file_path: str, line: int) -> None:
     lower = name.lower()
