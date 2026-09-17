@@ -84,6 +84,7 @@ describe("ProblemExceptionFilter", () => {
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({
         ok: false,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         problem: expect.objectContaining({
           code: AUTH_ERROR_CODES.validationFailed,
           correlationId: "client-correlation-123",
@@ -112,6 +113,7 @@ describe("ProblemExceptionFilter", () => {
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({
         ok: false,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         problem: expect.objectContaining({
           code: AUTH_ERROR_CODES.validationFailed,
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
