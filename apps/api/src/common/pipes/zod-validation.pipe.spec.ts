@@ -52,7 +52,10 @@ describe("ZodValidationPipe", () => {
 
     // Rejects password < 12 characters
     expect(() =>
-      recoveryPipe.transform({ token: "valid-tok", new_password: "shortpass8" }),
+      recoveryPipe.transform({
+        token: "valid-tok",
+        new_password: "shortpass8",
+      }),
     ).toThrow(HttpException);
 
     // Accepts token with >= 12 characters password
@@ -132,9 +135,9 @@ describe("ZodValidationPipe", () => {
     expect(() => updatePipe.transform({})).toThrow(HttpException);
 
     // Rejects payload with only unknown fields
-    expect(() =>
-      updatePipe.transform({ unknown_field: "some_value" }),
-    ).toThrow(HttpException);
+    expect(() => updatePipe.transform({ unknown_field: "some_value" })).toThrow(
+      HttpException,
+    );
 
     // Accepts valid display_name update
     const validDisplayUpdate = updatePipe.transform({
