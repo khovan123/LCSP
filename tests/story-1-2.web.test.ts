@@ -122,4 +122,13 @@ test("sign-up schema validates account fields", () => {
     }).success,
     false,
   );
+  assert.equal(
+    signUpSchema.safeParse({
+      display_name: "a".repeat(101),
+      email: "manager@example.test",
+      password: "twelve-chars",
+      confirm_password: "twelve-chars",
+    }).success,
+    false,
+  );
 });

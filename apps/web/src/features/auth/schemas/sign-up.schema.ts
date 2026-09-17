@@ -1,13 +1,14 @@
+import { signUpSchema as baseSignUpSchema } from "@lcsp/contracts/auth";
 import { z } from "zod";
 
 const MIN_PASSWORD_LENGTH = 12;
 
-export const signUpSchema = z
-  .object({
-    display_name: z
-      .string()
-      .trim()
-      .min(1, "pages.signUp.errors.displayNameRequired"),
+export const signUpSchema = baseSignUpSchema
+  .extend({
+    display_name: baseSignUpSchema.shape.display_name.min(
+      1,
+      "pages.signUp.errors.displayNameRequired",
+    ),
     email: z
       .string()
       .trim()
