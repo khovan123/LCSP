@@ -846,7 +846,9 @@ async def unrelated(client):
     )
 
 
-def test_static_false_config_object_guard_resolves_before_interview(tmp_path: Path) -> None:
+def test_mutable_config_object_guard_remains_unknown_without_closed_def_use(
+    tmp_path: Path,
+) -> None:
     discovery = _discovery(
         tmp_path,
         """
@@ -860,11 +862,50 @@ function summarize(text: string) {
 """,
     )
 
-    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
-    assert not any(item["kind"] == "SDK_INVOCATION" for item in discovery["findings"])
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
+    assert finding["runtime_guard"] == "flags.aiAssistantEnabled"
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+    assert any(
+        item["kind"] == "DYNAMIC_TARGET"
+        and item["clarification_owner"] == "TECHNICAL"
+        for item in discovery["findings"]
+    )
 
 
-def test_literal_false_caller_resolves_parameter_guard_before_interview(tmp_path: Path) -> None:
+def test_config_object_mutation_through_called_sibling_remains_unknown(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+const flags = { aiAssistantEnabled: false };
+function enableAI() { flags.aiAssistantEnabled = true; }
+function summarize(text: string) {
+  if (flags.aiAssistantEnabled) {
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+  return text;
+}
+enableAI();
+summarize("x");
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
+    assert finding["runtime_guard"] == "flags.aiAssistantEnabled"
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+    assert any(
+        item["kind"] == "DYNAMIC_TARGET"
+        and item["clarification_owner"] == "TECHNICAL"
+        for item in discovery["findings"]
+    )
+
+
+def test_literal_false_caller_stays_unknown_without_trusted_pge_call_closure(
+    tmp_path: Path,
+) -> None:
     discovery = _discovery(
         tmp_path,
         """
@@ -877,14 +918,48 @@ summarize("hello", false);
 """,
     )
 
-    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
-    assert not any(
-        item.get("clarification_kind") == "AI_RUNTIME_REACHABILITY"
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
+    assert finding["runtime_guard"] == "aiEnabled"
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+    assert any(
+        item["kind"] == "DYNAMIC_TARGET"
+        and item["clarification_owner"] == "TECHNICAL"
         for item in discovery["findings"]
     )
 
 
-def test_literal_true_caller_resolves_parameter_guard_as_reachable(tmp_path: Path) -> None:
+def test_aliased_function_invocation_with_conflicting_bool_remains_unknown(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+async function summarize(text: string, aiEnabled: boolean) {
+  if (!aiEnabled) return text;
+  return client.responses.create({ model: "gpt-5", input: text });
+}
+
+const run = summarize;
+summarize("hello", false);
+run("x", true);
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
+    assert finding["runtime_guard"] == "aiEnabled"
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+    assert any(
+        item["kind"] == "DYNAMIC_TARGET"
+        and item["clarification_owner"] == "TECHNICAL"
+        for item in discovery["findings"]
+    )
+
+
+def test_literal_true_caller_stays_unknown_without_trusted_pge_call_closure(
+    tmp_path: Path,
+) -> None:
     discovery = _discovery(
         tmp_path,
         """
@@ -897,10 +972,82 @@ summarize("hello", true);
 """,
     )
 
-    assert discovery["gate"] == "AI_CONFIRMED"
+    assert discovery["gate"] == "AI_UNKNOWN"
     finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
     assert finding["runtime_guard"] == "aiEnabled"
-    assert finding["clarification_kind"] == "AI_PURPOSE_FEATURE_MAPPING"
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+    assert any(
+        item["kind"] == "DYNAMIC_TARGET"
+        and item["clarification_owner"] == "TECHNICAL"
+        for item in discovery["findings"]
+    )
+
+
+def test_same_name_functions_across_modules_do_not_cross_contaminate_parameter_proof(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "a.ts").write_text(
+        """
+function summarize(text: string, aiEnabled: boolean) {
+  if (!aiEnabled) return text;
+  return client.responses.create({ model: "gpt-5", input: text });
+}
+summarize("a", false);
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "b.ts").write_text(
+        """
+function summarize(text: string, aiEnabled: boolean) {
+  return aiEnabled ? text : text;
+}
+summarize("b", true);
+""",
+        encoding="utf-8",
+    )
+    program = RepositorySemanticExtractor(tmp_path).extract()
+    AIInvocationSemanticGate().enrich(program)
+    AIDiscoveryEnricher(tmp_path).enrich(program)
+    builder = ProgramGraphBuilder(
+        tmp_path,
+        scan_job_id="scan-1",
+        snapshot_id="snapshot-1",
+        commit_sha="abc123",
+    )
+    builder.add_program(program)
+    discovery = summarize_ai_discovery(builder.build())
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
+    assert finding["runtime_guard"] == "aiEnabled"
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+    assert any(
+        item["kind"] == "DYNAMIC_TARGET"
+        and item["clarification_owner"] == "TECHNICAL"
+        for item in discovery["findings"]
+    )
+
+
+def test_immutable_scalar_const_guard_can_still_resolve_without_mutation_surface(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+const aiAssistantEnabled = false;
+function summarize(text: string) {
+  if (aiAssistantEnabled) {
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+  return text;
+}
+""",
+    )
+
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+    assert not any(item["kind"] == "SDK_INVOCATION" for item in discovery["findings"])
 
 
 def test_shadowed_typescript_http_client_does_not_inherit_other_scope_provenance(
