@@ -131,4 +131,24 @@ test("sign-up schema validates account fields", () => {
     }).success,
     false,
   );
+  assert.equal(
+    signUpSchema.safeParse({
+      display_name: "New Manager",
+      email: "  manager@example.test  ",
+      password: "eleven-char",
+      confirm_password: "eleven-char",
+    }).success,
+    false,
+  );
+  const parsed = signUpSchema.safeParse({
+    display_name: "  Trimmed Manager  ",
+    email: "  manager@example.test  ",
+    password: "twelve-chars",
+    confirm_password: "twelve-chars",
+  });
+  assert.equal(parsed.success, true);
+  if (parsed.success) {
+    assert.equal(parsed.data.display_name, "Trimmed Manager");
+    assert.equal(parsed.data.email, "manager@example.test");
+  }
 });

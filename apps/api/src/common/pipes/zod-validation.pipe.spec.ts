@@ -1,6 +1,7 @@
 import {
   AUTH_ERROR_CODES,
   confirmPasswordRecoverySchema,
+  passwordReauthSchema,
   signUpSchema,
   updateProfileSchema,
 } from "@lcsp/contracts/auth";
@@ -154,5 +155,21 @@ describe("ZodValidationPipe", () => {
     expect(validEmailUpdate).toEqual({
       recovery_email: "recovery@example.com",
     });
+  });
+
+  it("validates passwordReauthSchema rejecting empty or whitespace-only passwords", () => {
+    const reauthPipe = new ZodValidationPipe(passwordReauthSchema);
+
+    // Rejects empty string
+    expect(() => reauthPipe.transform({ password: "" })).toThrow(HttpException);
+
+    // Rejects whitespace-only string
+    expect(() => reauthPipe.transform({ password: "   " })).toThrow(
+      HttpException,
+    );
+
+    // Accepts valid password
+    const valid = reauthPipe.transform({ password: "secure-password" });
+    expect(valid).toEqual({ password: "secure-password" });
   });
 });

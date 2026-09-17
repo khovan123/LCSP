@@ -3,7 +3,6 @@ import { z } from "zod";
 import { AUTH_BACKUP_EMAIL_POLICIES } from "./backup-email-policy.ts";
 import { MFA_RECOVERY_CODE_ACCESS_ACTIONS } from "./mfa.ts";
 import { AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES } from "./primary-email-address-policy.ts";
-import { AUTH_USER_ROLES } from "./roles.ts";
 
 /**
  * Validation schema and input type for user sign-in.
@@ -101,7 +100,9 @@ export type ConfirmPasswordRecoveryInput = z.infer<
  * Validation schema and input type for step-up password re-authentication on sensitive actions.
  */
 export const passwordReauthSchema = z.object({
-  password: z.string().min(1),
+  password: z.string().min(1).refine((val) => val.trim().length > 0, {
+    message: "Password cannot be empty or whitespace only",
+  }),
 });
 export type PasswordReauthInput = z.infer<typeof passwordReauthSchema>;
 

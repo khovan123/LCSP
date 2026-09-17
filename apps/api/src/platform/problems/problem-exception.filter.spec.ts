@@ -94,6 +94,36 @@ describe("ProblemExceptionFilter", () => {
     );
   });
 
+  it("resolves correlation ID from request.correlationId when exception has empty correlation ID and no header", () => {
+    const filter = new ProblemExceptionFilter();
+    const json = jest.fn();
+    const status = jest.fn(() => ({ json }));
+    const response = { locals: {}, status };
+    const request = {
+      method: "POST",
+      url: "/auth/reauthenticate",
+      headers: {},
+      correlationId: "guard-assigned-correlation-456",
+    };
+    const problem = createProblemResult(AUTH_ERROR_CODES.validationFailed, "");
+    const exception = new HttpException(problem, HttpStatus.BAD_REQUEST);
+
+    filter.catch(exception, createArgumentsHost(request, response));
+
+    expect(status).toHaveBeenCalledWith(HttpStatus.BAD_REQUEST);
+    expect(json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ok: false,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        problem: expect.objectContaining({
+          code: AUTH_ERROR_CODES.validationFailed,
+          correlationId: "guard-assigned-correlation-456",
+          status: HttpStatus.BAD_REQUEST,
+        }),
+      }),
+    );
+  });
+
   it("generates a fallback UUID when exception has empty correlation ID and no correlation header", () => {
     const filter = new ProblemExceptionFilter();
     const json = jest.fn();
