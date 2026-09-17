@@ -68,7 +68,8 @@ export class BillingUsageService {
     if (
       !input.authorizedModels.some(
         (candidate) =>
-          candidate.provider === input.provider && candidate.model === input.model,
+          candidate.provider === input.provider &&
+          candidate.model === input.model,
       )
     )
       throw new BillingDomainError(
