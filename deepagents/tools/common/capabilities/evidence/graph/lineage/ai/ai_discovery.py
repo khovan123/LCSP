@@ -576,6 +576,7 @@ def _verified_guard_line(
 class _BoolBinding:
     line_no: int
     value: bool | None
+    technical_frontier: bool = False
 
 
 @dataclass(frozen=True)
@@ -597,7 +598,7 @@ class _ScopedBoolFacts:
         self.bindings = bindings
         self.functions = functions
 
-    def resolve(self, name: str, line_no: int) -> bool | None:
+    def binding(self, name: str, line_no: int) -> _BoolBinding | None:
         if line_no < 1 or line_no > len(self.scope_paths):
             return None
         for scope_id in reversed(self.scope_paths[line_no - 1]):
@@ -605,8 +606,12 @@ class _ScopedBoolFacts:
             if events is None:
                 continue
             prior = [event for event in events if event.line_no <= line_no]
-            return prior[-1].value if prior else None
+            return prior[-1] if prior else None
         return None
+
+    def resolve(self, name: str, line_no: int) -> bool | None:
+        binding = self.binding(name, line_no)
+        return binding.value if binding is not None else None
 
     def parameter_context(
         self, name: str, line_no: int
@@ -645,29 +650,68 @@ def _static_bool_facts(lines: list[str], relative: str) -> _ScopedBoolFacts:
     bindings: dict[int, dict[str, list[_BoolBinding]]] = {}
     functions: dict[int, _FunctionBoolContext] = {}
 
-    def add(scope_id: int, name: str, line_no: int, value: bool | None) -> None:
-        bindings.setdefault(scope_id, {}).setdefault(name, []).append(_BoolBinding(line_no, value))
+    def add(
+        scope_id: int,
+        name: str,
+        line_no: int,
+        value: bool | None,
+        *,
+        technical_frontier: bool = False,
+    ) -> None:
+        bindings.setdefault(scope_id, {}).setdefault(name, []).append(
+            _BoolBinding(line_no, value, technical_frontier)
+        )
 
     for line_no, line in enumerate(lines, start=1):
         current_scope = scope_paths[line_no - 1][-1]
         direct = re.search(
-            r"\b(?:const|let|var)?\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*=\s*(true|false)\b",
+            r"\b(?:(const|let|var)\s+)?([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*=\s*(true|false)\b",
             line, re.I
         )
         if direct:
-            add(current_scope, direct.group(1), line_no, direct.group(2).lower() == "true")
+            declaration, name, literal = direct.groups()
+            # Only a primitive const binding is closed by language semantics. Mutable
+            # bindings and object properties may be changed through sibling helpers,
+            # aliases, callbacks, or module initialization that this lexical pass does
+            # not model. They are retained as shadowing facts but never as proof of
+            # reachability.
+            authoritative = (declaration or "").lower() == "const" and "." not in name
+            add(
+                current_scope,
+                name,
+                line_no,
+                literal.lower() == "true" if authoritative else None,
+                technical_frontier=not authoritative,
+            )
         py_direct = re.match(
             r"\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*=\s*(True|False)\b", line
         )
         if py_direct:
-            add(current_scope, py_direct.group(1), line_no, py_direct.group(2) == "True")
+            # Python names may be rebound via global/nonlocal/callback flows. Until the
+            # PGE proves write closure, a lexical assignment is not authoritative.
+            add(
+                current_scope,
+                py_direct.group(1),
+                line_no,
+                None,
+                technical_frontier=True,
+            )
         object_match = re.search(
             r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\{(.*)\}", line
         )
         if object_match:
             root, body = object_match.group(1), object_match.group(2)
             for item in re.finditer(r"([A-Za-z_$][\w$]*)\s*:\s*(true|false)\b", body, re.I):
-                add(current_scope, f"{root}.{item.group(1)}", line_no, item.group(2).lower() == "true")
+                # A const object does not make its properties immutable. Object-property
+                # guards therefore remain unresolved unless a future def-use/PGE proof
+                # closes every relevant write and alias.
+                add(
+                    current_scope,
+                    f"{root}.{item.group(1)}",
+                    line_no,
+                    None,
+                    technical_frontier=True,
+                )
         opened = opened_by_line.get(line_no, [])
         context = _function_context(line, python_source=python_source)
         if opened and context:
@@ -1563,7 +1607,8 @@ class AIDiscoveryEnricher:
             if verified is None:
                 continue
             condition_line, names, guard_mode = verified
-            reachability = self._guard_reachability(
+            reachability, technical_uncertainty = self._guard_reachability(
+                program,
                 relative,
                 lines,
                 condition_line,
@@ -1594,6 +1639,8 @@ class AIDiscoveryEnricher:
                         "resolutionSource": (
                             "REPOSITORY_STATIC_DEF_USE"
                             if reachability is not None
+                            else "UNRESOLVED_TECHNICAL_DEF_USE"
+                            if technical_uncertainty
                             else "UNRESOLVED_RUNTIME"
                         ),
                     },
@@ -1653,92 +1700,206 @@ class AIDiscoveryEnricher:
                     ),
                 )
             )
+            if technical_uncertainty:
+                frontier_key = f"ai-guard-frontier:{relative}:{condition_line}"
+                program.add_node(
+                    SemanticNodeFact(
+                        frontier_key,
+                        "UNRESOLVED_DYNAMIC_TARGET",
+                        "unproven AI guard reachability",
+                        relative,
+                        condition_line,
+                        condition_line,
+                        attributes={
+                            "aiMaterial": True,
+                            "aiDiscoveryReason": "UNPROVEN_GUARD_DEF_USE_CLOSURE",
+                            "configNames": sorted(names),
+                        },
+                        coverage_state="LIMITED",
+                        resolution_state="UNRESOLVED",
+                    )
+                )
+                program.add_edge(
+                    SemanticEdgeFact(
+                        "CONTROLS",
+                        frontier_key,
+                        condition_key,
+                        coverage_state="LIMITED",
+                        resolution_state="UNRESOLVED",
+                    )
+                )
+                if frontier_key not in program.unresolved_frontiers:
+                    program.unresolved_frontiers.append(frontier_key)
 
     def _guard_reachability(
         self,
+        program: SemanticProgram,
         relative: str,
         lines: list[str],
         condition_line: int,
         names: list[str],
         guard_mode: str,
         facts: _ScopedBoolFacts,
-    ) -> bool | None:
+    ) -> tuple[bool | None, bool]:
         expression = _condition_expression(lines[condition_line - 1])
         if not expression:
-            return None
+            return None, False
+        technical_uncertainty = False
         for name in names:
-            value = facts.resolve(name, condition_line)
+            binding = facts.binding(name, condition_line)
+            value = binding.value if binding is not None else None
+            if binding is not None and binding.technical_frontier:
+                technical_uncertainty = True
             if value is None:
                 parameter = facts.parameter_context(name, condition_line)
                 if parameter is not None:
                     context, index = parameter
-                    value = self._parameter_literal_value(
-                        relative, context, index
+                    value, parameter_technical = self._parameter_literal_value(
+                        program, relative, context, index
                     )
+                    technical_uncertainty = technical_uncertainty or parameter_technical
             if value is None:
                 continue
             condition_value = _predicate_value(expression, name, value)
             if condition_value is None:
                 continue
             return (
-                not condition_value
-                if guard_mode == "AFTER_EARLY_EXIT"
-                else condition_value
+                (
+                    not condition_value
+                    if guard_mode == "AFTER_EARLY_EXIT"
+                    else condition_value
+                ),
+                False,
             )
-        return None
+        return None, technical_uncertainty
 
     def _parameter_literal_value(
         self,
+        program: SemanticProgram,
         relative: str,
         context: _FunctionBoolContext,
         parameter_index: int,
-    ) -> bool | None:
-        cache_key = (f"{relative}:{context.name}", parameter_index)
-        if cache_key in self._bool_call_cache:
-            return self._bool_call_cache[cache_key]
-        # Exported/public functions can have callers outside repository evidence, so
-        # bounded call reasoning must remain unresolved for them.
-        if context.exported:
-            self._bool_call_cache[cache_key] = None
-            return None
+    ) -> tuple[bool | None, bool]:
+        """Resolve a boolean parameter only from a closed, trusted PGE call set.
 
-        declaration_hits = 0
-        values: list[bool] = []
+        Source-text name matching is used only as a completeness check: it may veto a
+        proof when PGE missed a possible call, but it can never establish call identity.
+        Positive authority comes exclusively from trusted RESOLVES_TO edges targeting
+        the exact function symbol. Alias/escape evidence degrades to UNKNOWN.
+        """
+        cache_key = (f"{relative}:{context.name}:pge", parameter_index)
+        if cache_key in self._bool_call_cache:
+            cached = self._bool_call_cache[cache_key]
+            return cached, False if cached is not None else not context.exported
+
+        def unresolved(*, technical: bool = True) -> tuple[None, bool]:
+            self._bool_call_cache[cache_key] = None
+            return None, technical
+
+        # Exported/public functions can have callers outside repository evidence. That
+        # is operational/runtime uncertainty, not a Scanner defect.
+        if context.exported:
+            return unresolved(technical=False)
+
+        symbol_key = f"symbol:{relative}:{context.name}"
+        node_by_key = {node.key: node for node in program.nodes}
+        symbol = node_by_key.get(symbol_key)
+        if symbol is None or not self._node_is_trusted(symbol):
+            return unresolved()
+
+        # Any alias or value-flow use of the function identifier means direct call-site
+        # closure is not established. This catches callbacks and `const run = summarize`
+        # without pretending a textual alias name identifies the target symbol.
+        for edge in program.edges:
+            if edge.edge_type not in {"ALIASES", "ASSIGNS", "PASSES_ARGUMENT"}:
+                continue
+            source = node_by_key.get(edge.source_key)
+            target = node_by_key.get(edge.target_key)
+            if any(
+                node is not None
+                and node.file_path == relative
+                and node.label == context.name
+                for node in (source, target)
+            ):
+                return unresolved()
+
+        resolved_edges = [
+            edge
+            for edge in program.edges
+            if edge.edge_type == "RESOLVES_TO" and edge.target_key == symbol_key
+        ]
+        if not resolved_edges or any(not self._edge_is_trusted(edge) for edge in resolved_edges):
+            return unresolved()
+
+        call_nodes: list[SemanticNodeFact] = []
+        for edge in resolved_edges:
+            call = node_by_key.get(edge.source_key)
+            if (
+                call is None
+                or call.node_type != "CALL_SITE"
+                or not self._node_is_trusted(call)
+                or not call.file_path
+                or not call.start_line
+            ):
+                return unresolved()
+            call_nodes.append(call)
+
+        # Detect direct textual calls only to prove that PGE did not omit one. Name
+        # matches never contribute values or target identity. A same-name call in another
+        # module therefore makes the proof incomplete instead of contaminating it.
+        possible_calls: set[tuple[str, int]] = set()
         call_re = re.compile(rf"(?<![\w$.]){re.escape(context.name)}\s*\(")
         declaration_re = re.compile(
             rf"(?:\bfunction\s+|\bdef\s+){re.escape(context.name)}\s*\("
         )
+        source_text: dict[str, str] = {}
         for path in self._source_files():
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
             except OSError:
-                self._bool_call_cache[cache_key] = None
-                return None
-            declaration_hits += len(declaration_re.findall(text))
+                return unresolved()
+            rel = path.relative_to(self.workspace).as_posix()
+            source_text[rel] = text
             for match in call_re.finditer(text):
-                prefix = text[max(0, match.start() - 48) : match.start()]
+                prefix = text[max(0, match.start() - 64) : match.start()]
+                declaration_start = max(0, match.start() - 32)
+                if declaration_re.search(text[declaration_start : match.end()]):
+                    continue
                 if re.search(r"(?:function|def)\s*$", prefix):
                     continue
-                raw_args = _call_arguments_text(text, match.end() - 1)
-                if raw_args is None:
-                    self._bool_call_cache[cache_key] = None
-                    return None
-                args = _split_top_level_args(raw_args)
-                if parameter_index >= len(args):
-                    self._bool_call_cache[cache_key] = None
-                    return None
-                value = _literal_bool(args[parameter_index])
-                if value is None:
-                    self._bool_call_cache[cache_key] = None
-                    return None
-                values.append(value)
+                possible_calls.add((rel, text.count("\n", 0, match.start()) + 1))
 
-        if declaration_hits > 1 or not values or len(set(values)) != 1:
-            result = None
-        else:
-            result = values[0]
+        trusted_sites = {(str(node.file_path), int(node.start_line or 0)) for node in call_nodes}
+        if possible_calls != trusted_sites:
+            return unresolved()
+
+        values: list[bool] = []
+        for call in call_nodes:
+            text = source_text.get(str(call.file_path))
+            if text is None:
+                return unresolved()
+            lines_for_call = text.splitlines()
+            index = int(call.start_line or 0) - 1
+            if index < 0 or index >= len(lines_for_call):
+                return unresolved()
+            window = "\n".join(lines_for_call[index : min(len(lines_for_call), index + 8)])
+            match = call_re.search(window)
+            if match is None:
+                return unresolved()
+            raw_args = _call_arguments_text(window, match.end() - 1)
+            if raw_args is None:
+                return unresolved()
+            args = _split_top_level_args(raw_args)
+            if parameter_index >= len(args):
+                return unresolved()
+            value = _literal_bool(args[parameter_index])
+            if value is None:
+                return unresolved()
+            values.append(value)
+
+        result = values[0] if values and len(set(values)) == 1 else None
         self._bool_call_cache[cache_key] = result
-        return result
+        return result, result is None
 
     @staticmethod
     def _call_node(
@@ -1828,7 +1989,8 @@ def summarize_ai_discovery(graph: ProgramEvidenceGraph) -> dict[str, object]:
             node.get("resolution_state") or ""
         ) in {"OBSERVED", "CORROBORATED"}:
             guards = incoming_guards.get(str(node.get("node_id") or ""), [])
-            guard_name, guard_reachability = _guard_details(guards, by_id)
+            guard_name, guard_reachability, guard_resolution_source = _guard_details(guards, by_id)
+            guard_technical = guard_resolution_source == "UNRESOLVED_TECHNICAL_DEF_USE"
             if guard_reachability == "UNREACHABLE":
                 # Repository evidence proves this invocation cannot execute. It must
                 # not fabricate a runtime Customer question or a confirmed AI call.
@@ -1842,9 +2004,11 @@ def summarize_ai_discovery(graph: ProgramEvidenceGraph) -> dict[str, object]:
                 node,
                 state=CONFIRMED_AI_CALL,
                 kind="SDK_INVOCATION",
-                clarification_owner="CUSTOMER",
+                clarification_owner=("TECHNICAL" if guard_technical else "CUSTOMER"),
                 clarification_kind=(
-                    "AI_RUNTIME_REACHABILITY"
+                    "TARGETED_TECHNICAL_REANALYSIS"
+                    if guard_technical
+                    else "AI_RUNTIME_REACHABILITY"
                     if guard_name and guard_reachability != "REACHABLE"
                     else "AI_PURPOSE_FEATURE_MAPPING"
                 ),
@@ -1939,7 +2103,7 @@ def _coverage_state(value: object) -> str:
 
 def _guard_details(
     guards: list[dict], by_id: dict[str, dict]
-) -> tuple[str | None, str | None]:
+) -> tuple[str | None, str | None, str | None]:
     for edge in guards:
         source = by_id.get(str(edge.get("source_node_id") or ""), {})
         attrs = (
@@ -1950,9 +2114,10 @@ def _guard_details(
         names = attrs.get("configNames")
         name = str(names[0]) if isinstance(names, list) and names else None
         reachability = str(attrs.get("resolvedReachability") or "").upper() or None
-        if name or reachability:
-            return name, reachability
-    return None, None
+        resolution_source = str(attrs.get("resolutionSource") or "").upper() or None
+        if name or reachability or resolution_source:
+            return name, reachability, resolution_source
+    return None, None, None
 
 
 def _finding(
