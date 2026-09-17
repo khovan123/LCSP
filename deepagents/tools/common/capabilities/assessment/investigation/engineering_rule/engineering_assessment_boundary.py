@@ -440,6 +440,7 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
         values = {
             "runId": str(billing.get("runId") or "").strip(),
             "amountCredits": str(billing.get("amountCredits") or "").strip(),
+            "maxChargeCredits": str(billing.get("maxChargeCredits") or "").strip(),
             "idempotencyKey": str(billing.get("idempotencyKey") or "").strip(),
         }
         billing_assessment_id = str(billing.get("assessmentId") or "").strip()

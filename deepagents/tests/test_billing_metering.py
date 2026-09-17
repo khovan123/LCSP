@@ -176,3 +176,9 @@ def test_usage_delivery_failure_is_not_converted_to_provider_fallback():
 
     with activate_billing_metering(session), pytest.raises(BillingMeteringError):
         BillingMeteringMiddleware().wrap_model_call(request, lambda _: response())
+
+
+def test_usage_delivery_failure_is_terminal_for_model_retry():
+    from middleware.failure_policy import retry_model_error
+
+    assert not retry_model_error(BillingMeteringError(RuntimeError("api-down")))

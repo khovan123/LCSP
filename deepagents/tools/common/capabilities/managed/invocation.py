@@ -18,6 +18,7 @@ from tools.common.capabilities.platform.api_client import WorkerApiClient
 from tools.common.capabilities.platform.config import load_config
 from middleware.billing_metering import (
     BillingMeteringSession,
+    BillingFinalizationError,
     activate_billing_metering,
 )
 from tools.common.capabilities.managed.boundary import AgentBoundaryBase
@@ -202,9 +203,26 @@ def invoke_boundary(
                     correlation_id,
                     boundary,
                 )
-    finally:
+    except Exception as error:
+        # Keep a spendable reservation for broker-retryable execution failures.
+        # Terminal failures are not going to execute again and can release now.
         if billing_session is not None:
-            billing_session.release()
+            from middleware.failure_policy import is_terminal_task_error
+
+            if is_terminal_task_error(error):
+                try:
+                    billing_session.release()
+                except Exception:
+                    pass
+        raise
+    else:
+        if billing_session is not None:
+            try:
+                billing_session.release()
+            except Exception as error:
+                # Do not redeliver completed model work when only finalization
+                # failed. Recovery must handle the reservation separately.
+                raise BillingFinalizationError(error) from error
     return {
         "boundary": boundary.name,
         "target": boundary.target,

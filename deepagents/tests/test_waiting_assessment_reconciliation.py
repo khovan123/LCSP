@@ -133,6 +133,7 @@ def test_reconciliation_restores_billing_context_and_advances_after_failure(tmp_
         billing_context={
             "runId": "scan-1",
             "amountCredits": "100",
+            "maxChargeCredits": "100",
             "idempotencyKey": "outbox:1:billing-reservation",
         },
     )

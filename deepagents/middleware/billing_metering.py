@@ -37,9 +37,19 @@ class BillingMeteringError(WorkerCallbackError):
     def __init__(self, cause: BaseException) -> None:
         status_code = getattr(cause, "status_code", None)
         super().__init__("Billing usage delivery failed", status_code=status_code)
-        self.callback_client_error = bool(
-            getattr(cause, "callback_client_error", False)
-        )
+        # A provider response has already been received. Retrying the model
+        # would create a second billable invocation; delivery recovery must
+        # use the same invocation/response identity instead.
+        self.callback_client_error = True
+
+
+class BillingFinalizationError(WorkerCallbackError):
+    """Reservation finalization failed after model work completed."""
+
+    def __init__(self, cause: BaseException) -> None:
+        super().__init__("Billing reservation finalization failed")
+        self.callback_client_error = True
+        self.__cause__ = cause
 
 
 _active_agent_role: ContextVar[str | None] = ContextVar(
@@ -385,6 +395,7 @@ __all__ = [
     "BillingMeteringError",
     "BillingUsageUnavailable",
     "BillingReservationUnavailable",
+    "BillingFinalizationError",
     "activate_billing_metering",
     "active_billing_metering",
     "active_billing_agent_role",

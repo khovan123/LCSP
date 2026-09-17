@@ -84,6 +84,7 @@ class WaitingAssessmentRegistry:
                     "assessmentId",
                     "billingRunId",
                     "billingAmountCredits",
+                    "billingMaxChargeCredits",
                     "billingIdempotencyKey",
                     "billingAttempt",
                 ):
@@ -95,6 +96,7 @@ class WaitingAssessmentRegistry:
                 for source_key, target_key in (
                     ("runId", "billingRunId"),
                     ("amountCredits", "billingAmountCredits"),
+                    ("maxChargeCredits", "billingMaxChargeCredits"),
                     ("idempotencyKey", "billingIdempotencyKey"),
                 ):
                     value = str(billing_context.get(source_key) or "").strip()
@@ -259,6 +261,7 @@ def _stored_billing_context(checkpoint: dict[str, str]) -> dict[str, str] | None
     values = {
         "runId": checkpoint.get("billingRunId", ""),
         "amountCredits": checkpoint.get("billingAmountCredits", ""),
+        "maxChargeCredits": checkpoint.get("billingMaxChargeCredits", ""),
         "idempotencyKey": checkpoint.get("billingIdempotencyKey", ""),
     }
     return values if all(values.values()) else None
@@ -282,6 +285,7 @@ def _reconciliation_billing_context(
         "assessmentId": assessment_id,
         "runId": stored["runId"],
         "amountCredits": stored["amountCredits"],
+        "maxChargeCredits": stored["maxChargeCredits"],
         "idempotencyKey": (
             f"{stored['idempotencyKey']}:reconciliation:"
             f"{checkpoint['checkpointId']}"

@@ -248,7 +248,9 @@ export class BillingAccountingService {
           throw new InvalidReservationTransitionError(
             "Reservation is already terminal",
           );
-        if (i.chargedCredits < 0n || i.chargedCredits > r.amountCredits)
+        // A grouped reservation may already have been consumed by individual
+        // usage events. The legacy finalizer can only consume what remains.
+        if (i.chargedCredits < 0n || i.chargedCredits > r.remainingCredits)
           throw new BillingDomainError("Invalid charge amount");
         const w = await wallet.findForUser(i.userId);
         if (!w || w.id !== r.walletId)
