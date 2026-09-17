@@ -37,7 +37,13 @@ export class BillingUsageController {
     const runId = text(body.runId);
     const idempotencyKey = text(body.idempotencyKey);
     try {
-      if (!assessmentId || !runId || !idempotencyKey || !amount || !maxChargeCredits)
+      if (
+        !assessmentId ||
+        !runId ||
+        !idempotencyKey ||
+        !amount ||
+        !maxChargeCredits
+      )
         throw new BillingDomainError("Reservation input is required");
       const amountValue = parseInteger(amount, "amountCredits");
       const maxChargeValue = parseInteger(maxChargeCredits, "maxChargeCredits");
