@@ -195,7 +195,11 @@ describe("LCSP-310 usage and pricing foundation", () => {
     const f = await fixture();
     const assessmentId = `assessment-${id()}`;
     await prisma.assessment.create({
-      data: { id: assessmentId, ownerId: f.user.id, name: "Bounded reservation" },
+      data: {
+        id: assessmentId,
+        ownerId: f.user.id,
+        name: "Bounded reservation",
+      },
     });
 
     await expect(

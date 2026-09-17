@@ -64,25 +64,28 @@ export class BillingUsageService {
         "Reservation is below the maximum invocation charge",
       );
     const userId = await this.resolveAssessmentOwner(input.assessmentId);
-    const worstCase = await this.transactions.runForUser(userId, async (repos) => {
-      const pricing = await repos.pricing.findApplicable(
-        input.provider,
-        input.model,
-        new Date(),
-      );
-      if (!pricing)
-        throw new BillingDomainError(
-          "Pricing snapshot is required before reserving provider spend",
+    const worstCase = await this.transactions.runForUser(
+      userId,
+      async (repos) => {
+        const pricing = await repos.pricing.findApplicable(
+          input.provider,
+          input.model,
+          new Date(),
         );
-      return calculateCustomerChargeVnd(
-        {
-          inputTokens: input.maxInputTokens,
-          outputTokens: input.maxOutputTokens,
-          reasoningTokens: input.maxReasoningTokens,
-        },
-        pricing,
-      );
-    });
+        if (!pricing)
+          throw new BillingDomainError(
+            "Pricing snapshot is required before reserving provider spend",
+          );
+        return calculateCustomerChargeVnd(
+          {
+            inputTokens: input.maxInputTokens,
+            outputTokens: input.maxOutputTokens,
+            reasoningTokens: input.maxReasoningTokens,
+          },
+          pricing,
+        );
+      },
+    );
     if (input.maxChargeCredits < worstCase)
       throw new BillingDomainError(
         "Reservation is below the authoritative worst-case provider charge",

@@ -57,8 +57,14 @@ export class BillingUsageController {
         throw new BillingDomainError("Reservation input is required");
       const amountValue = parseInteger(amount, "amountCredits");
       const maxChargeValue = parseInteger(maxChargeCredits, "maxChargeCredits");
-      const inputLimit = parseNonNegativeInteger(maxInputTokens, "maxInputTokens");
-      const outputLimit = parseNonNegativeInteger(maxOutputTokens, "maxOutputTokens");
+      const inputLimit = parseNonNegativeInteger(
+        maxInputTokens,
+        "maxInputTokens",
+      );
+      const outputLimit = parseNonNegativeInteger(
+        maxOutputTokens,
+        "maxOutputTokens",
+      );
       const reasoningLimit = parseNonNegativeInteger(
         maxReasoningTokens,
         "maxReasoningTokens",
@@ -269,6 +275,7 @@ function parseInteger(value: string, field: string): bigint {
 
 function parseNonNegativeInteger(value: string, field: string): bigint {
   const parsed = parseInteger(value, field);
-  if (parsed < 0n) throw new BillingDomainError(`${field} must be non-negative`);
+  if (parsed < 0n)
+    throw new BillingDomainError(`${field} must be non-negative`);
   return parsed;
 }
