@@ -804,3 +804,138 @@ def test_generic_graphql_transport_without_ai_semantics_still_allows_absence(tmp
 
     assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
     assert discovery["findings"] == []
+
+
+def test_shadowed_python_http_client_does_not_inherit_other_scope_provenance(
+    tmp_path: Path,
+) -> None:
+    source = """
+import httpx
+
+async def ordinary(url):
+    client = httpx.AsyncClient()
+    return await client.post(url)
+
+async def unrelated(client):
+    return await client.post(
+        "https://api.openai.com/v1/chat/completions",
+        json={"model": "gpt-5", "messages": []},
+    )
+"""
+    (tmp_path / "app.py").write_text(source, encoding="utf-8")
+    program = RepositorySemanticExtractor(tmp_path).extract()
+    client_calls = [
+        node
+        for node in program.nodes
+        if node.label == "client.post" and node.key.startswith("call:")
+    ]
+    assert len(client_calls) == 2
+    assert client_calls[0].attributes.get("integrationType") == "HTTP"
+    assert client_calls[1].attributes.get("integrationType") is None
+
+    discovery = _discovery(tmp_path, source, filename="app.py")
+    assert discovery["gate"] == "AI_UNKNOWN"
+    assert not any(
+        item["kind"] == "OUTBOUND_API"
+        for item in discovery["findings"]
+    )
+    assert any(
+        item["kind"] == "DYNAMIC_TARGET"
+        and item["clarification_owner"] == "TECHNICAL"
+        for item in discovery["findings"]
+    )
+
+
+def test_static_false_config_object_guard_resolves_before_interview(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+const flags = { aiAssistantEnabled: false };
+function summarize(text: string) {
+  if (flags.aiAssistantEnabled) {
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+  return text;
+}
+""",
+    )
+
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+    assert not any(item["kind"] == "SDK_INVOCATION" for item in discovery["findings"])
+
+
+def test_literal_false_caller_resolves_parameter_guard_before_interview(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+async function summarize(text: string, aiEnabled: boolean) {
+  if (!aiEnabled) return text;
+  return client.responses.create({ model: "gpt-5", input: text });
+}
+
+summarize("hello", false);
+""",
+    )
+
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+    assert not any(
+        item.get("clarification_kind") == "AI_RUNTIME_REACHABILITY"
+        for item in discovery["findings"]
+    )
+
+
+def test_literal_true_caller_resolves_parameter_guard_as_reachable(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+async function summarize(text: string, aiEnabled: boolean) {
+  if (!aiEnabled) return text;
+  return client.responses.create({ model: "gpt-5", input: text });
+}
+
+summarize("hello", true);
+""",
+    )
+
+    assert discovery["gate"] == "AI_CONFIRMED"
+    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
+    assert finding["runtime_guard"] == "aiEnabled"
+    assert finding["clarification_kind"] == "AI_PURPOSE_FEATURE_MAPPING"
+
+
+def test_shadowed_typescript_http_client_does_not_inherit_other_scope_provenance(
+    tmp_path: Path,
+) -> None:
+    source = """
+import axios from "axios";
+
+function ordinary() {
+  const api = axios.create();
+  return api.post("https://payments.example.com/v1/charges", { amount: 1 });
+}
+
+function unrelated(api: unknown) {
+  return api.post("https://api.openai.com/v1/chat/completions", {
+    model: "gpt-5", messages: []
+  });
+}
+"""
+    (tmp_path / "app.ts").write_text(source, encoding="utf-8")
+    program = RepositorySemanticExtractor(tmp_path).extract()
+    api_calls = [
+        node
+        for node in program.nodes
+        if node.label == "api.post" and node.key.startswith("call:")
+    ]
+    assert len(api_calls) == 2
+    assert api_calls[0].attributes.get("integrationType") == "HTTP"
+    assert api_calls[1].attributes.get("integrationType") is None
+
+    discovery = _discovery(tmp_path, source)
+    assert discovery["gate"] == "AI_UNKNOWN"
+    assert not any(item["kind"] == "OUTBOUND_API" for item in discovery["findings"])
+    assert any(
+        item["kind"] == "DYNAMIC_TARGET"
+        and item["clarification_owner"] == "TECHNICAL"
+        for item in discovery["findings"]
+    )

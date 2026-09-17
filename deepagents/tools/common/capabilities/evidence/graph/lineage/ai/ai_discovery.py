@@ -11,7 +11,7 @@ import hashlib
 import re
 from collections import deque
 from collections.abc import Iterable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -263,21 +263,180 @@ def _method_for_call(name: str) -> str | None:
     return None
 
 
+@dataclass(frozen=True)
+class _HttpClientBinding:
+    line_no: int
+    transport: str | None
+    config_names: tuple[str, ...] = ()
+
+
+class _ScopedHttpClientProvenance:
+    def __init__(
+        self,
+        scope_paths: list[tuple[int, ...]],
+        bindings: dict[int, dict[str, list[_HttpClientBinding]]],
+    ) -> None:
+        self.scope_paths = scope_paths
+        self.bindings = bindings
+
+    def resolve(self, name: str, line_no: int) -> _HttpClientBinding | None:
+        if line_no < 1 or line_no > len(self.scope_paths):
+            return None
+        for scope_id in reversed(self.scope_paths[line_no - 1]):
+            events = self.bindings.get(scope_id, {}).get(name)
+            if events is None:
+                continue
+            prior = [event for event in events if event.line_no <= line_no]
+            # A declaration/binding in the nearest lexical scope shadows outer
+            # provenance even if this particular use precedes that binding.
+            return prior[-1] if prior else None
+        return None
+
+
+def _scrub_structure(line: str) -> str:
+    scrubbed = re.sub(r"(['\"`]).*?(?<!\\)\1", "", line)
+    return scrubbed.split("//", 1)[0].split("#", 1)[0]
+
+
+def _lexical_scope_paths(
+    lines: list[str], *, python_source: bool
+) -> tuple[list[tuple[int, ...]], dict[int, list[int]]]:
+    """Return lexical scope ancestry for each source line.
+
+    This is intentionally bounded rather than a full parser for text languages. Python
+    uses indentation; brace languages use structural braces after quoted/comment text is
+    removed. Every nested block is a safe shadowing boundary, which is conservative for
+    provenance and prevents cross-function identifier fabrication.
+    """
+    paths: list[tuple[int, ...]] = []
+    opened_by_line: dict[int, list[int]] = {}
+    next_id = 1
+    if python_source:
+        stack: list[tuple[int, int]] = [(-1, 0)]
+        for line_no, line in enumerate(lines, start=1):
+            stripped = line.strip()
+            indent = len(line) - len(line.lstrip())
+            if stripped and not stripped.startswith("#"):
+                while len(stack) > 1 and indent <= stack[-1][0]:
+                    stack.pop()
+            paths.append(tuple(scope_id for _, scope_id in stack))
+            if re.match(r"\s*(?:async\s+def|def|class)\b", line) and stripped.endswith(":"):
+                scope_id = next_id
+                next_id += 1
+                opened_by_line[line_no] = [scope_id]
+                stack.append((indent, scope_id))
+        return paths, opened_by_line
+
+    stack = [0]
+    for line_no, line in enumerate(lines, start=1):
+        scrubbed = _scrub_structure(line)
+        # Leading close braces belong to the enclosing scope.
+        leading_closes = len(scrubbed) - len(scrubbed.lstrip("}"))
+        for _ in range(min(leading_closes, max(0, len(stack) - 1))):
+            stack.pop()
+        paths.append(tuple(stack))
+        opened: list[int] = []
+        remainder = scrubbed.lstrip("}") if leading_closes else scrubbed
+        for char in remainder:
+            if char == "{":
+                scope_id = next_id
+                next_id += 1
+                stack.append(scope_id)
+                opened.append(scope_id)
+            elif char == "}" and len(stack) > 1:
+                stack.pop()
+        if opened:
+            opened_by_line[line_no] = opened
+    return paths, opened_by_line
+
+
+def _parameter_names(line: str) -> list[str]:
+    if not (
+        re.search(r"\bfunction\b|=>", line)
+        or re.match(r"\s*(?:async\s+)?[A-Za-z_$][\w$]*\s*\(", line)
+    ):
+        return []
+    match = re.search(r"\(([^)]*)\)", line)
+    if not match:
+        return []
+    result: list[str] = []
+    for raw in match.group(1).split(","):
+        token = raw.strip()
+        token = re.sub(r"^(?:\.\.\.)", "", token)
+        name_match = re.match(r"([A-Za-z_$][\w$]*)", token)
+        if name_match:
+            result.append(name_match.group(1))
+    return result
+
+
+def _python_parameter_names(line: str) -> list[str]:
+    match = re.match(r"\s*(?:async\s+def|def)\s+[A-Za-z_]\w*\s*\(([^)]*)\)", line)
+    if not match:
+        return []
+    result: list[str] = []
+    for raw in match.group(1).split(","):
+        token = raw.strip().lstrip("*")
+        name_match = re.match(r"([A-Za-z_]\w*)", token)
+        if name_match and name_match.group(1) not in {"self", "cls"}:
+            result.append(name_match.group(1))
+    return result
+
+
 def _http_client_provenance(
-    lines: list[str],
-) -> dict[str, tuple[str, tuple[str, ...]]]:
-    """Resolve common HTTP client instances and safe constructor config provenance."""
-    clients: dict[str, tuple[str, tuple[str, ...]]] = {}
-    for line in lines:
+    lines: list[str], *, relative: str = ""
+) -> _ScopedHttpClientProvenance:
+    """Resolve HTTP client instances by lexical scope and def-use identity."""
+    python_source = relative.lower().endswith(".py")
+    scope_paths, opened_by_line = _lexical_scope_paths(
+        lines, python_source=python_source
+    )
+    bindings: dict[int, dict[str, list[_HttpClientBinding]]] = {}
+
+    def add(scope_id: int, name: str, binding: _HttpClientBinding) -> None:
+        bindings.setdefault(scope_id, {}).setdefault(name, []).append(binding)
+
+    for line_no, line in enumerate(lines, start=1):
+        current_scope = scope_paths[line_no - 1][-1]
+        positive: set[str] = set()
         for transport, pattern in _HTTP_CLIENT_BINDINGS:
             match = pattern.search(line)
             if match:
-                clients[match.group(1)] = (transport, tuple(_env_names(line)))
-    return clients
+                name = match.group(1)
+                positive.add(name)
+                add(
+                    current_scope,
+                    name,
+                    _HttpClientBinding(line_no, transport, tuple(_env_names(line))),
+                )
+
+        # Record ordinary assignments/declarations too: they are shadowing facts, not
+        # HTTP provenance. This is what prevents a same-named object in another scope
+        # from inheriting a file-level client identity.
+        assignment = _ASSIGNMENT_RE.search(line)
+        if assignment:
+            name = assignment.group(1) or assignment.group(2)
+            if name and name not in positive:
+                add(current_scope, name, _HttpClientBinding(line_no, None))
+
+        opened = opened_by_line.get(line_no, [])
+        if opened:
+            parameter_scope = opened[0]
+            params = (
+                _python_parameter_names(line)
+                if python_source
+                else _parameter_names(line)
+            )
+            for name in params:
+                add(parameter_scope, name, _HttpClientBinding(line_no, None))
+
+    for scope in bindings.values():
+        for events in scope.values():
+            events.sort(key=lambda item: item.line_no)
+    return _ScopedHttpClientProvenance(scope_paths, bindings)
 
 
 def _http_call_on_line(
-    line: str, clients: dict[str, tuple[str, tuple[str, ...]]]
+    line: str, clients: _ScopedHttpClientProvenance, line_no: int
 ) -> tuple[str, int, bool, tuple[str, ...]] | None:
     direct = _HTTP_CALL_RE.search(line)
     if direct:
@@ -286,10 +445,10 @@ def _http_call_on_line(
     if not instance:
         return None
     call_name = f"{instance.group(1)}.{instance.group(2)}"
-    provenance = clients.get(instance.group(1))
-    if provenance is None:
+    provenance = clients.resolve(instance.group(1), line_no)
+    if provenance is None or provenance.transport is None:
         return call_name, instance.end(), False, ()
-    return call_name, instance.end(), True, provenance[1]
+    return call_name, instance.end(), True, provenance.config_names
 
 
 def _http_target_expression(window: str, call_end: int) -> str:
@@ -369,14 +528,14 @@ def _brace_depths(lines: list[str]) -> list[int]:
 
 def _verified_guard_line(
     lines: list[str], invocation_index: int, aliases: dict[str, str]
-) -> tuple[int, list[str]] | None:
+) -> tuple[int, list[str], str] | None:
     if invocation_index < 0 or invocation_index >= len(lines):
         return None
     depths = _brace_depths(lines)
     invocation_line = lines[invocation_index]
     same_names = _condition_guard_names(invocation_line, aliases)
     if same_names and _CONDITION_RE.search(invocation_line):
-        return invocation_index + 1, same_names
+        return invocation_index + 1, same_names, "WHEN_TRUE"
 
     invocation_indent = len(invocation_line) - len(invocation_line.lstrip())
     for index in range(invocation_index - 1, -1, -1):
@@ -384,9 +543,6 @@ def _verified_guard_line(
         names = _condition_guard_names(line, aliases)
         if not names or not _CONDITION_RE.search(line):
             continue
-
-        # Curly-brace languages: the invocation must be structurally inside the
-        # condition block, not merely within a nearby lexical window.
         if "{" in line and depths[invocation_index] > depths[index]:
             depth = depths[index] + max(1, _brace_delta(line))
             enclosed = True
@@ -396,15 +552,9 @@ def _verified_guard_line(
                     enclosed = False
                     break
             if enclosed:
-                return index + 1, names
-
-        # Dominating single-line early exit (for example `if (!enabled) return`).
-        # This is a real control-flow guard even though the invocation is after the if.
+                return index + 1, names, "WHEN_TRUE"
         if re.search(r"\b(?:return|throw|continue)\b", line) and depths[index] == depths[invocation_index]:
-            return index + 1, names
-
-        # Indentation languages: require uninterrupted deeper indentation until the
-        # invocation, so a sibling `if` cannot be attached as a guard.
+            return index + 1, names, "AFTER_EARLY_EXIT"
         stripped = line.rstrip()
         condition_indent = len(line) - len(line.lstrip())
         if stripped.endswith(":") and invocation_indent > condition_indent:
@@ -418,8 +568,231 @@ def _verified_guard_line(
                     enclosed = False
                     break
             if enclosed:
-                return index + 1, names
+                return index + 1, names, "WHEN_TRUE"
     return None
+
+
+@dataclass(frozen=True)
+class _BoolBinding:
+    line_no: int
+    value: bool | None
+
+
+@dataclass(frozen=True)
+class _FunctionBoolContext:
+    name: str
+    params: tuple[str, ...]
+    exported: bool
+    declaration_line: int
+
+
+class _ScopedBoolFacts:
+    def __init__(
+        self,
+        scope_paths: list[tuple[int, ...]],
+        bindings: dict[int, dict[str, list[_BoolBinding]]],
+        functions: dict[int, _FunctionBoolContext],
+    ) -> None:
+        self.scope_paths = scope_paths
+        self.bindings = bindings
+        self.functions = functions
+
+    def resolve(self, name: str, line_no: int) -> bool | None:
+        if line_no < 1 or line_no > len(self.scope_paths):
+            return None
+        for scope_id in reversed(self.scope_paths[line_no - 1]):
+            events = self.bindings.get(scope_id, {}).get(name)
+            if events is None:
+                continue
+            prior = [event for event in events if event.line_no <= line_no]
+            return prior[-1].value if prior else None
+        return None
+
+    def parameter_context(
+        self, name: str, line_no: int
+    ) -> tuple[_FunctionBoolContext, int] | None:
+        if line_no < 1 or line_no > len(self.scope_paths):
+            return None
+        for scope_id in reversed(self.scope_paths[line_no - 1]):
+            context = self.functions.get(scope_id)
+            if context and name in context.params:
+                return context, context.params.index(name)
+        return None
+
+
+def _function_context(line: str, *, python_source: bool) -> _FunctionBoolContext | None:
+    if python_source:
+        match = re.match(r"\s*(?:async\s+def|def)\s+([A-Za-z_]\w*)\s*\(([^)]*)\)", line)
+        if not match:
+            return None
+        params = tuple(_python_parameter_names(line))
+        return _FunctionBoolContext(match.group(1), params, not match.group(1).startswith("_"), 0)
+    for pattern in (
+        r"\s*(?P<export>export\s+)?(?:async\s+)?function\s+(?P<name>[A-Za-z_$][\w$]*)\s*\((?P<params>[^)]*)\)",
+        r"\s*(?P<export>export\s+)?(?:const|let|var)\s+(?P<name>[A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\((?P<params>[^)]*)\)\s*=>",
+    ):
+        match = re.match(pattern, line)
+        if match:
+            return _FunctionBoolContext(
+                match.group("name"), tuple(_parameter_names(line)), bool(match.group("export")), 0
+            )
+    return None
+
+
+def _static_bool_facts(lines: list[str], relative: str) -> _ScopedBoolFacts:
+    python_source = relative.lower().endswith(".py")
+    scope_paths, opened_by_line = _lexical_scope_paths(lines, python_source=python_source)
+    bindings: dict[int, dict[str, list[_BoolBinding]]] = {}
+    functions: dict[int, _FunctionBoolContext] = {}
+
+    def add(scope_id: int, name: str, line_no: int, value: bool | None) -> None:
+        bindings.setdefault(scope_id, {}).setdefault(name, []).append(_BoolBinding(line_no, value))
+
+    for line_no, line in enumerate(lines, start=1):
+        current_scope = scope_paths[line_no - 1][-1]
+        direct = re.search(
+            r"\b(?:const|let|var)?\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*=\s*(true|false)\b",
+            line, re.I
+        )
+        if direct:
+            add(current_scope, direct.group(1), line_no, direct.group(2).lower() == "true")
+        py_direct = re.match(
+            r"\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*=\s*(True|False)\b", line
+        )
+        if py_direct:
+            add(current_scope, py_direct.group(1), line_no, py_direct.group(2) == "True")
+        object_match = re.search(
+            r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\{(.*)\}", line
+        )
+        if object_match:
+            root, body = object_match.group(1), object_match.group(2)
+            for item in re.finditer(r"([A-Za-z_$][\w$]*)\s*:\s*(true|false)\b", body, re.I):
+                add(current_scope, f"{root}.{item.group(1)}", line_no, item.group(2).lower() == "true")
+        opened = opened_by_line.get(line_no, [])
+        context = _function_context(line, python_source=python_source)
+        if opened and context:
+            function_scope = opened[0]
+            functions[function_scope] = replace(context, declaration_line=line_no)
+            for param in context.params:
+                add(function_scope, param, line_no, None)
+    for scope in bindings.values():
+        for events in scope.values():
+            events.sort(key=lambda item: item.line_no)
+    return _ScopedBoolFacts(scope_paths, bindings, functions)
+
+
+def _condition_expression(line: str) -> str | None:
+    paren = re.search(r"\bif\s*\((.*?)\)", line, re.I)
+    if paren:
+        return paren.group(1).strip()
+    python_if = re.match(r"\s*if\s+(.+?)\s*:\s*(?:#.*)?$", line)
+    return python_if.group(1).strip() if python_if else None
+
+
+def _predicate_value(expr: str, name: str, value: bool) -> bool | None:
+    if re.search(r"(?:&&|\|\||\band\b|\bor\b)", expr):
+        return None
+    escaped = re.escape(name)
+    normalized = expr.strip()
+    if re.fullmatch(rf"!?\s*{escaped}", normalized):
+        return (not value) if normalized.lstrip().startswith("!") else value
+    if re.fullmatch(rf"not\s+{escaped}", normalized, re.I):
+        return not value
+    comparison = re.fullmatch(
+        rf"{escaped}\s*(===|==|!==|!=)\s*(true|false|True|False)", normalized
+    )
+    if comparison:
+        expected = comparison.group(2).lower() == "true"
+        equal = value == expected
+        return not equal if comparison.group(1) in {"!==", "!="} else equal
+    return None
+
+
+def _split_top_level_args(raw: str) -> list[str]:
+    args: list[str] = []
+    current: list[str] = []
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    closers: list[str] = []
+    pairs = {"(": ")", "[": "]", "{": "}"}
+    for char in raw:
+        if quote:
+            current.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in {"'", '"', "`"}:
+            quote = char
+            current.append(char)
+        elif char in pairs:
+            depth += 1
+            closers.append(pairs[char])
+            current.append(char)
+        elif closers and char == closers[-1]:
+            closers.pop()
+            depth -= 1
+            current.append(char)
+        elif char == "," and depth == 0:
+            args.append("".join(current).strip())
+            current = []
+        else:
+            current.append(char)
+    if current or raw.strip():
+        args.append("".join(current).strip())
+    return args
+
+
+def _literal_bool(raw: str) -> bool | None:
+    value = raw.strip().rstrip(";")
+    if value in {"true", "True"}:
+        return True
+    if value in {"false", "False"}:
+        return False
+    return None
+
+
+def _call_arguments_text(text: str, open_paren: int) -> str | None:
+    if open_paren < 0 or open_paren >= len(text) or text[open_paren] != "(":
+        return None
+    chars: list[str] = []
+    depth = 1
+    quote: str | None = None
+    escaped = False
+    index = open_paren + 1
+    while index < len(text):
+        char = text[index]
+        if quote is not None:
+            chars.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in {"'", '"', "`"}:
+            quote = char
+            chars.append(char)
+        elif char == "(":
+            depth += 1
+            chars.append(char)
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return "".join(chars)
+            chars.append(char)
+        else:
+            chars.append(char)
+        index += 1
+    return None
+
+
 
 
 class AIDiscoveryEnricher:
@@ -434,6 +807,7 @@ class AIDiscoveryEnricher:
             if include_files is not None
             else None
         )
+        self._bool_call_cache: dict[tuple[str, int], bool | None] = {}
 
     def _in_scope(self, relative: str) -> bool:
         return self._include_files is None or relative in self._include_files
@@ -459,7 +833,7 @@ class AIDiscoveryEnricher:
                 )
                 continue
             aliases = _env_aliases(lines)
-            http_clients = _http_client_provenance(lines)
+            http_clients = _http_client_provenance(lines, relative=relative)
             self._environment_and_conditions(program, relative, lines, aliases)
             self._preserve_unmodeled_transport_frontiers(program, relative, lines)
             self._outbound_candidates(
@@ -961,10 +1335,10 @@ class AIDiscoveryEnricher:
         relative: str,
         lines: list[str],
         aliases: dict[str, str],
-        http_clients: dict[str, tuple[str, tuple[str, ...]]],
+        http_clients: _ScopedHttpClientProvenance,
     ) -> None:
         for index, line in enumerate(lines):
-            call = _http_call_on_line(line, http_clients)
+            call = _http_call_on_line(line, http_clients, index + 1)
             if call is None:
                 continue
             call_name, call_end, transport_proven, client_config_names = call
@@ -1158,6 +1532,7 @@ class AIDiscoveryEnricher:
         invocations: list[SemanticNodeFact],
         aliases: dict[str, str],
     ) -> None:
+        bool_facts = _static_bool_facts(lines, relative)
         for invocation in invocations:
             if not invocation.start_line:
                 continue
@@ -1187,7 +1562,22 @@ class AIDiscoveryEnricher:
             verified = _verified_guard_line(lines, invocation_index, aliases)
             if verified is None:
                 continue
-            condition_line, names = verified
+            condition_line, names, guard_mode = verified
+            reachability = self._guard_reachability(
+                relative,
+                lines,
+                condition_line,
+                names,
+                guard_mode,
+                bool_facts,
+            )
+            reachability_state = (
+                "REACHABLE"
+                if reachability is True
+                else "UNREACHABLE"
+                if reachability is False
+                else "UNKNOWN"
+            )
             condition_key = f"control-condition:{relative}:{condition_line}"
             program.add_node(
                 SemanticNodeFact(
@@ -1200,8 +1590,16 @@ class AIDiscoveryEnricher:
                     attributes={
                         "configNames": sorted(names),
                         "aiMaterial": True,
+                        "resolvedReachability": reachability_state,
+                        "resolutionSource": (
+                            "REPOSITORY_STATIC_DEF_USE"
+                            if reachability is not None
+                            else "UNRESOLVED_RUNTIME"
+                        ),
                     },
-                    resolution_state="OBSERVED",
+                    resolution_state=(
+                        "CORROBORATED" if reachability is not None else "OBSERVED"
+                    ),
                 )
             )
             condition_source = lines[condition_line - 1]
@@ -1224,8 +1622,13 @@ class AIDiscoveryEnricher:
                             attributes={
                                 "sourceKind": "SYMBOLIC_RUNTIME_GUARD",
                                 "name": name,
+                                "resolvedReachability": reachability_state,
                             },
-                            resolution_state="OBSERVED",
+                            resolution_state=(
+                                "CORROBORATED"
+                                if reachability is not None
+                                else "OBSERVED"
+                            ),
                         )
                     )
                 program.add_edge(
@@ -1233,7 +1636,11 @@ class AIDiscoveryEnricher:
                         "CONTROLS",
                         source_key,
                         condition_key,
-                        resolution_state="OBSERVED",
+                        resolution_state=(
+                            "CORROBORATED"
+                            if reachability is not None
+                            else "OBSERVED"
+                        ),
                     )
                 )
             program.add_edge(
@@ -1241,9 +1648,97 @@ class AIDiscoveryEnricher:
                     "GUARDS",
                     condition_key,
                     invocation.key,
-                    resolution_state="OBSERVED",
+                    resolution_state=(
+                        "CORROBORATED" if reachability is not None else "OBSERVED"
+                    ),
                 )
             )
+
+    def _guard_reachability(
+        self,
+        relative: str,
+        lines: list[str],
+        condition_line: int,
+        names: list[str],
+        guard_mode: str,
+        facts: _ScopedBoolFacts,
+    ) -> bool | None:
+        expression = _condition_expression(lines[condition_line - 1])
+        if not expression:
+            return None
+        for name in names:
+            value = facts.resolve(name, condition_line)
+            if value is None:
+                parameter = facts.parameter_context(name, condition_line)
+                if parameter is not None:
+                    context, index = parameter
+                    value = self._parameter_literal_value(
+                        relative, context, index
+                    )
+            if value is None:
+                continue
+            condition_value = _predicate_value(expression, name, value)
+            if condition_value is None:
+                continue
+            return (
+                not condition_value
+                if guard_mode == "AFTER_EARLY_EXIT"
+                else condition_value
+            )
+        return None
+
+    def _parameter_literal_value(
+        self,
+        relative: str,
+        context: _FunctionBoolContext,
+        parameter_index: int,
+    ) -> bool | None:
+        cache_key = (f"{relative}:{context.name}", parameter_index)
+        if cache_key in self._bool_call_cache:
+            return self._bool_call_cache[cache_key]
+        # Exported/public functions can have callers outside repository evidence, so
+        # bounded call reasoning must remain unresolved for them.
+        if context.exported:
+            self._bool_call_cache[cache_key] = None
+            return None
+
+        declaration_hits = 0
+        values: list[bool] = []
+        call_re = re.compile(rf"(?<![\w$.]){re.escape(context.name)}\s*\(")
+        declaration_re = re.compile(
+            rf"(?:\bfunction\s+|\bdef\s+){re.escape(context.name)}\s*\("
+        )
+        for path in self._source_files():
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                self._bool_call_cache[cache_key] = None
+                return None
+            declaration_hits += len(declaration_re.findall(text))
+            for match in call_re.finditer(text):
+                prefix = text[max(0, match.start() - 48) : match.start()]
+                if re.search(r"(?:function|def)\s*$", prefix):
+                    continue
+                raw_args = _call_arguments_text(text, match.end() - 1)
+                if raw_args is None:
+                    self._bool_call_cache[cache_key] = None
+                    return None
+                args = _split_top_level_args(raw_args)
+                if parameter_index >= len(args):
+                    self._bool_call_cache[cache_key] = None
+                    return None
+                value = _literal_bool(args[parameter_index])
+                if value is None:
+                    self._bool_call_cache[cache_key] = None
+                    return None
+                values.append(value)
+
+        if declaration_hits > 1 or not values or len(set(values)) != 1:
+            result = None
+        else:
+            result = values[0]
+        self._bool_call_cache[cache_key] = result
+        return result
 
     @staticmethod
     def _call_node(
@@ -1333,8 +1828,12 @@ def summarize_ai_discovery(graph: ProgramEvidenceGraph) -> dict[str, object]:
             node.get("resolution_state") or ""
         ) in {"OBSERVED", "CORROBORATED"}:
             guards = incoming_guards.get(str(node.get("node_id") or ""), [])
-            guard_name = _guard_name(guards, by_id)
-            if guard_name:
+            guard_name, guard_reachability = _guard_details(guards, by_id)
+            if guard_reachability == "UNREACHABLE":
+                # Repository evidence proves this invocation cannot execute. It must
+                # not fabricate a runtime Customer question or a confirmed AI call.
+                continue
+            if guard_name and guard_reachability != "REACHABLE":
                 guarded_confirmed = True
             else:
                 unguarded_confirmed = True
@@ -1346,7 +1845,7 @@ def summarize_ai_discovery(graph: ProgramEvidenceGraph) -> dict[str, object]:
                 clarification_owner="CUSTOMER",
                 clarification_kind=(
                     "AI_RUNTIME_REACHABILITY"
-                    if guard_name
+                    if guard_name and guard_reachability != "REACHABLE"
                     else "AI_PURPOSE_FEATURE_MAPPING"
                 ),
                 runtime_guard=guard_name,
@@ -1438,7 +1937,9 @@ def _coverage_state(value: object) -> str:
     return "UNAVAILABLE"
 
 
-def _guard_name(guards: list[dict], by_id: dict[str, dict]) -> str | None:
+def _guard_details(
+    guards: list[dict], by_id: dict[str, dict]
+) -> tuple[str | None, str | None]:
     for edge in guards:
         source = by_id.get(str(edge.get("source_node_id") or ""), {})
         attrs = (
@@ -1447,9 +1948,11 @@ def _guard_name(guards: list[dict], by_id: dict[str, dict]) -> str | None:
             else {}
         )
         names = attrs.get("configNames")
-        if isinstance(names, list) and names:
-            return str(names[0])
-    return None
+        name = str(names[0]) if isinstance(names, list) and names else None
+        reachability = str(attrs.get("resolvedReachability") or "").upper() or None
+        if name or reachability:
+            return name, reachability
+    return None, None
 
 
 def _finding(
