@@ -101,6 +101,35 @@ _HTTP_CALL_RE = re.compile(
     r"(?:\w+\.)?(?:WebClient|RestTemplate|OkHttpClient)\.\w+)\s*\(",
     re.I,
 )
+_INSTANCE_HTTP_CALL_RE = re.compile(
+    r"\b([A-Za-z_$][\w$]*)\.(get|post|put|patch|delete|request)\s*\(", re.I
+)
+_HTTP_CLIENT_BINDINGS = (
+    (
+        "HTTPX",
+        re.compile(
+            r"\b(?:async\s+)?with\s+httpx\.(?:AsyncClient|Client)\s*\([^)]*\)\s+as\s+([A-Za-z_][\w]*)",
+            re.I,
+        ),
+    ),
+    (
+        "HTTPX",
+        re.compile(
+            r"\b([A-Za-z_$][\w$]*)\s*=\s*httpx\.(?:AsyncClient|Client)\s*\(", re.I
+        ),
+    ),
+    (
+        "REQUESTS",
+        re.compile(r"\b([A-Za-z_$][\w$]*)\s*=\s*requests\.Session\s*\(", re.I),
+    ),
+    (
+        "AXIOS",
+        re.compile(
+            r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*axios\.create\s*\(",
+            re.I,
+        ),
+    ),
+)
 _URL_RE = re.compile(r"https?://[^'\"\s)`},]+", re.I)
 _AI_PAYLOAD_KEY_RE = re.compile(
     r"(?:['\"](?:model|messages|prompt|input|tools|embedding|contents)['\"]\s*:|"
@@ -120,6 +149,9 @@ _FEATURE_ENV_RE = re.compile(
     r"(?:ENABLE|ENABLED|FEATURE|USE|DISABLE).*(?:AI|LLM|MODEL)|"
     r"(?:AI|LLM|MODEL).*(?:ENABLE|ENABLED|FEATURE|USE|DISABLE)",
     re.I,
+)
+_FEATURE_GUARD_TOKEN_RE = re.compile(
+    r"\b(?:this\.)?[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\b"
 )
 _CONDITION_RE = re.compile(r"\bif\s*\(|^\s*if\b|\bwhen\s*\(", re.I)
 _ASSIGNMENT_RE = re.compile(
@@ -231,17 +263,43 @@ def _method_for_call(name: str) -> str | None:
     return None
 
 
-def _http_target_expression(window: str) -> str:
+def _http_client_provenance(
+    lines: list[str],
+) -> dict[str, tuple[str, tuple[str, ...]]]:
+    """Resolve common HTTP client instances and safe constructor config provenance."""
+    clients: dict[str, tuple[str, tuple[str, ...]]] = {}
+    for line in lines:
+        for transport, pattern in _HTTP_CLIENT_BINDINGS:
+            match = pattern.search(line)
+            if match:
+                clients[match.group(1)] = (transport, tuple(_env_names(line)))
+    return clients
+
+
+def _http_call_on_line(
+    line: str, clients: dict[str, tuple[str, tuple[str, ...]]]
+) -> tuple[str, int, bool, tuple[str, ...]] | None:
+    direct = _HTTP_CALL_RE.search(line)
+    if direct:
+        return direct.group(1), direct.end(), True, ()
+    instance = _INSTANCE_HTTP_CALL_RE.search(line)
+    if not instance:
+        return None
+    call_name = f"{instance.group(1)}.{instance.group(2)}"
+    provenance = clients.get(instance.group(1))
+    if provenance is None:
+        return call_name, instance.end(), False, ()
+    return call_name, instance.end(), True, provenance[1]
+
+
+def _http_target_expression(window: str, call_end: int) -> str:
     """Return only the first request-target argument for a recognized HTTP call."""
-    match = _HTTP_CALL_RE.search(window)
-    if not match:
-        return ""
     chars: list[str] = []
     stack: list[str] = []
     quote: str | None = None
     escaped = False
     pairs = {"(": ")", "[": "]", "{": "}"}
-    for char in window[match.end():]:
+    for char in window[call_end:]:
         if quote is not None:
             chars.append(char)
             if escaped:
@@ -279,6 +337,19 @@ def _condition_env_names(line: str, aliases: dict[str, str]) -> list[str]:
     return list(dict.fromkeys(names))
 
 
+def _condition_guard_names(line: str, aliases: dict[str, str]) -> list[str]:
+    """Resolve direct env guards first, then bounded symbolic feature/config guards."""
+    env_names = _condition_env_names(line, aliases)
+    if env_names:
+        return env_names
+    names = []
+    for token in _FEATURE_GUARD_TOKEN_RE.findall(line):
+        normalized = token.replace(".", "_")
+        if _FEATURE_ENV_RE.search(normalized):
+            names.append(token)
+    return list(dict.fromkeys(names))
+
+
 def _brace_delta(line: str) -> int:
     # Structural-only approximation: remove quoted strings and line comments before
     # counting braces, so URLs/payload literals cannot affect block containment.
@@ -303,14 +374,14 @@ def _verified_guard_line(
         return None
     depths = _brace_depths(lines)
     invocation_line = lines[invocation_index]
-    same_names = _condition_env_names(invocation_line, aliases)
+    same_names = _condition_guard_names(invocation_line, aliases)
     if same_names and _CONDITION_RE.search(invocation_line):
         return invocation_index + 1, same_names
 
     invocation_indent = len(invocation_line) - len(invocation_line.lstrip())
     for index in range(invocation_index - 1, -1, -1):
         line = lines[index]
-        names = _condition_env_names(line, aliases)
+        names = _condition_guard_names(line, aliases)
         if not names or not _CONDITION_RE.search(line):
             continue
 
@@ -388,9 +459,12 @@ class AIDiscoveryEnricher:
                 )
                 continue
             aliases = _env_aliases(lines)
+            http_clients = _http_client_provenance(lines)
             self._environment_and_conditions(program, relative, lines, aliases)
             self._preserve_unmodeled_transport_frontiers(program, relative, lines)
-            self._outbound_candidates(program, relative, lines, aliases)
+            self._outbound_candidates(
+                program, relative, lines, aliases, http_clients
+            )
             self._guard_invocations(
                 program,
                 relative,
@@ -887,16 +961,19 @@ class AIDiscoveryEnricher:
         relative: str,
         lines: list[str],
         aliases: dict[str, str],
+        http_clients: dict[str, tuple[str, tuple[str, ...]]],
     ) -> None:
         for index, line in enumerate(lines):
-            match = _HTTP_CALL_RE.search(line)
-            if not match:
+            call = _http_call_on_line(line, http_clients)
+            if call is None:
                 continue
+            call_name, call_end, transport_proven, client_config_names = call
             line_no = index + 1
             window = "\n".join(lines[index : min(len(lines), index + 5)])
-            target_expression = _http_target_expression(window)
+            target_expression = _http_target_expression(window, call_end)
             urls = _URL_RE.findall(target_expression)
             env_names = _env_names(target_expression)
+            env_names.extend(client_config_names)
             env_names.extend(
                 env_name
                 for alias, env_name in aliases.items()
@@ -931,6 +1008,17 @@ class AIDiscoveryEnricher:
                 if _AI_ENV_RE.search(name) and _ENDPOINT_ENV_RE.search(name)
             ]
 
+            if not transport_proven:
+                if provider or endpoint_signature or ai_named_envs or strong_payload_signature:
+                    self._dynamic_outbound_frontier(
+                        program,
+                        relative,
+                        line_no,
+                        call_name,
+                        reason="UNRESOLVED_HTTP_CLIENT_PROVENANCE",
+                    )
+                continue
+
             if provider and endpoint_signature:
                 state = CONFIRMED_AI_CALL
                 resolution = "CORROBORATED"
@@ -954,11 +1042,11 @@ class AIDiscoveryEnricher:
                 # technical frontier so PGE reanalysis can follow parameters/config/DI.
                 if not urls:
                     self._dynamic_outbound_frontier(
-                        program, relative, line_no, match.group(1)
+                        program, relative, line_no, call_name
                     )
                 continue
 
-            key = f"ai-api-candidate:{relative}:{line_no}:{match.group(1)}"
+            key = f"ai-api-candidate:{relative}:{line_no}:{call_name}"
             attrs: dict[str, object] = {
                 "discoveryState": state,
                 "clarificationOwner": "CUSTOMER",
@@ -971,7 +1059,7 @@ class AIDiscoveryEnricher:
                     else "DYNAMIC"
                 ),
             }
-            method = _method_for_call(match.group(1))
+            method = _method_for_call(call_name)
             if provider:
                 attrs["provider"] = provider
             if host:
@@ -1027,6 +1115,8 @@ class AIDiscoveryEnricher:
         relative: str,
         line_no: int,
         call_name: str,
+        *,
+        reason: str = "DYNAMIC_OUTBOUND_TARGET",
     ) -> None:
         key = f"ai-transport-frontier:{relative}:{line_no}:{call_name}"
         program.add_node(
@@ -1039,7 +1129,7 @@ class AIDiscoveryEnricher:
                 line_no,
                 attributes={
                     "aiMaterial": True,
-                    "aiDiscoveryReason": "DYNAMIC_OUTBOUND_TARGET",
+                    "aiDiscoveryReason": reason,
                     "transport": call_name,
                 },
                 coverage_state="LIMITED",
@@ -1114,12 +1204,34 @@ class AIDiscoveryEnricher:
                     resolution_state="OBSERVED",
                 )
             )
+            condition_source = lines[condition_line - 1]
+            env_names = set(_condition_env_names(condition_source, aliases))
             for name in names:
-                env_key = self._env_node(program, relative, condition_line, name)
+                if name in env_names:
+                    source_key = self._env_node(
+                        program, relative, condition_line, name
+                    )
+                else:
+                    source_key = f"feature-flag:{relative}:{condition_line}:{name}"
+                    program.add_node(
+                        SemanticNodeFact(
+                            source_key,
+                            "FEATURE_FLAG",
+                            name,
+                            relative,
+                            condition_line,
+                            condition_line,
+                            attributes={
+                                "sourceKind": "SYMBOLIC_RUNTIME_GUARD",
+                                "name": name,
+                            },
+                            resolution_state="OBSERVED",
+                        )
+                    )
                 program.add_edge(
                     SemanticEdgeFact(
                         "CONTROLS",
-                        env_key,
+                        source_key,
                         condition_key,
                         resolution_state="OBSERVED",
                     )

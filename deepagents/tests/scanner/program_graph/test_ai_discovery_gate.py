@@ -120,6 +120,145 @@ export async function ask(messages: unknown[]) {
     assert "provider" not in finding
 
 
+def test_httpx_async_client_instance_custom_gateway_is_not_false_absence(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+import httpx
+import os
+
+async def ask(model, messages):
+    async with httpx.AsyncClient() as client:
+        return await client.post(
+            os.getenv("MODEL_GATEWAY_URL"),
+            json={"model": model, "messages": messages},
+        )
+""",
+        filename="app.py",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "OUTBOUND_API"
+    )
+    assert finding["state"] == "POSSIBLE_AI_CALL"
+    assert finding["endpoint_source"] == "ENV:MODEL_GATEWAY_URL"
+    assert finding["method"] == "POST"
+
+
+def test_requests_session_instance_custom_gateway_is_not_false_absence(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+import os
+import requests
+
+def ask(model, messages):
+    session = requests.Session()
+    return session.post(
+        os.getenv("MODEL_GATEWAY_URL"),
+        json={"model": model, "messages": messages},
+    )
+""",
+        filename="app.py",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "OUTBOUND_API"
+    )
+    assert finding["state"] == "POSSIBLE_AI_CALL"
+    assert finding["endpoint_source"] == "ENV:MODEL_GATEWAY_URL"
+    assert finding["method"] == "POST"
+
+
+def test_axios_created_client_custom_gateway_is_not_false_absence(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+import axios from "axios";
+const api = axios.create({ baseURL: process.env.MODEL_GATEWAY_URL });
+export async function ask(model: string, messages: unknown[]) {
+  return api.post("/v1/chat/completions", { model, messages });
+}
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "OUTBOUND_API"
+    )
+    assert finding["state"] == "POSSIBLE_AI_CALL"
+    assert finding["endpoint_source"] == "ENV:MODEL_GATEWAY_URL"
+    assert finding["method"] == "POST"
+
+
+def test_unproven_instance_http_client_with_ai_shaped_dynamic_target_stays_technical(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+export async function ask(client: unknown, model: string, messages: unknown[]) {
+  return client.post(process.env.MODEL_GATEWAY_URL, { model, messages });
+}
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    assert any(
+        item["kind"] == "DYNAMIC_TARGET"
+        and item["clarification_owner"] == "TECHNICAL"
+        for item in discovery["findings"]
+    )
+    assert not any(
+        item["kind"] == "OUTBOUND_API"
+        and item["clarification_owner"] == "CUSTOMER"
+        for item in discovery["findings"]
+    )
+
+
+def test_instance_http_clients_are_typed_as_http_by_semantic_extractor(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "python_client.py").write_text(
+        """
+import httpx
+import requests
+
+async def send(url):
+    async with httpx.AsyncClient() as client:
+        await client.post(url)
+    session = requests.Session()
+    session.post(url)
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "axios_client.ts").write_text(
+        'import axios from "axios";\nconst api = axios.create();\napi.post(endpoint);\n',
+        encoding="utf-8",
+    )
+
+    program = RepositorySemanticExtractor(tmp_path).extract()
+    instance_calls = {
+        node.label: node
+        for node in program.nodes
+        if node.label in {"client.post", "session.post", "api.post"}
+    }
+
+    assert set(instance_calls) == {"client.post", "session.post", "api.post"}
+    assert all(
+        node.attributes.get("integrationType") == "HTTP"
+        for node in instance_calls.values()
+    )
+
+
 def test_feature_flag_alias_guards_invocation_and_asks_only_runtime_fact(
     tmp_path: Path,
 ) -> None:
@@ -146,6 +285,66 @@ export async function summarize(text: string) {
     assert finding["runtime_guard"] == "ENABLE_AI"
     assert finding["clarification_kind"] == "AI_RUNTIME_REACHABILITY"
     assert finding["clarification_owner"] == "CUSTOMER"
+
+
+def test_config_object_feature_flag_guards_ai_invocation(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+const flags = loadRuntimeConfig();
+export async function summarize(text: string) {
+  if (flags.aiAssistantEnabled) {
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+  return text;
+}
+""",
+    )
+
+    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
+    assert discovery["gate"] == "AI_UNKNOWN"
+    assert finding["runtime_guard"] == "flags.aiAssistantEnabled"
+    assert finding["clarification_kind"] == "AI_RUNTIME_REACHABILITY"
+
+
+def test_parameter_propagated_feature_flag_guards_ai_invocation(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+export async function summarize(text: string, aiEnabled: boolean) {
+  if (!aiEnabled) return text;
+  return client.responses.create({ model: "gpt-5", input: text });
+}
+""",
+    )
+
+    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
+    assert discovery["gate"] == "AI_UNKNOWN"
+    assert finding["runtime_guard"] == "aiEnabled"
+    assert finding["clarification_kind"] == "AI_RUNTIME_REACHABILITY"
+
+
+def test_di_backed_feature_flag_guards_ai_invocation(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+export class AiService {
+  constructor(private readonly runtimeConfig: RuntimeConfig) {}
+
+  async summarize(text: string) {
+    if (this.runtimeConfig.features.aiAssistantEnabled) {
+      return client.responses.create({ model: "gpt-5", input: text });
+    }
+    return text;
+  }
+}
+""",
+    )
+
+    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
+    assert discovery["gate"] == "AI_UNKNOWN"
+    assert finding["runtime_guard"] == "this.runtimeConfig.features.aiAssistantEnabled"
+    assert finding["clarification_kind"] == "AI_RUNTIME_REACHABILITY"
 
 
 def test_non_ai_rest_call_is_not_promoted_and_ready_graph_can_confirm_absence(
