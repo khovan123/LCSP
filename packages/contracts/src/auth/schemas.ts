@@ -11,7 +11,6 @@ import { AUTH_USER_ROLES } from "./roles.ts";
 export const signInSchema = z.object({
   email: z.string().trim().email(),
   password: z.string().min(1),
-  session_token: z.string().optional(),
 });
 export type SignInInput = z.infer<typeof signInSchema>;
 
@@ -85,7 +84,7 @@ export const confirmPasswordRecoverySchema = z
   .object({
     token: z.string().min(1).optional(),
     recovery_token: z.string().min(1).optional(),
-    new_password: z.string().min(8),
+    new_password: z.string().min(12),
   })
   .refine((data) => Boolean(data.token || data.recovery_token), {
     message: "Either token or recovery_token must be provided",
@@ -109,26 +108,37 @@ export type PasswordReauthInput = z.infer<typeof passwordReauthSchema>;
 /**
  * Validation schema and input type for updating user profile settings and email policies.
  */
-export const updateProfileSchema = z.object({
-  display_name: z.string().trim().max(120).optional(),
-  recovery_email: z.string().trim().email().or(z.literal("")).optional(),
-  primary_email_address_policy: z
-    .enum(
-      Object.values(AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES) as [
-        (typeof AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES)[keyof typeof AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES],
-        ...(typeof AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES)[keyof typeof AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES][],
-      ],
-    )
-    .optional(),
-  backup_recovery_email_policy: z
-    .enum(
-      Object.values(AUTH_BACKUP_EMAIL_POLICIES) as [
-        (typeof AUTH_BACKUP_EMAIL_POLICIES)[keyof typeof AUTH_BACKUP_EMAIL_POLICIES],
-        ...(typeof AUTH_BACKUP_EMAIL_POLICIES)[keyof typeof AUTH_BACKUP_EMAIL_POLICIES][],
-      ],
-    )
-    .optional(),
-});
+export const updateProfileSchema = z
+  .object({
+    display_name: z.string().trim().max(120).optional(),
+    recovery_email: z.string().trim().email().or(z.literal("")).optional(),
+    primary_email_address_policy: z
+      .enum(
+        Object.values(AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES) as [
+          (typeof AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES)[keyof typeof AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES],
+          ...(typeof AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES)[keyof typeof AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES][],
+        ],
+      )
+      .optional(),
+    backup_recovery_email_policy: z
+      .enum(
+        Object.values(AUTH_BACKUP_EMAIL_POLICIES) as [
+          (typeof AUTH_BACKUP_EMAIL_POLICIES)[keyof typeof AUTH_BACKUP_EMAIL_POLICIES],
+          ...(typeof AUTH_BACKUP_EMAIL_POLICIES)[keyof typeof AUTH_BACKUP_EMAIL_POLICIES][],
+        ],
+      )
+      .optional(),
+  })
+  .refine(
+    (data) =>
+      data.display_name !== undefined ||
+      data.recovery_email !== undefined ||
+      data.primary_email_address_policy !== undefined ||
+      data.backup_recovery_email_policy !== undefined,
+    {
+      message: "At least one profile field must be provided for update",
+    },
+  );
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 
 /**

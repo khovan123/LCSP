@@ -2,6 +2,7 @@ import {
   AUTH_ERROR_CODES,
   confirmPasswordRecoverySchema,
   signUpSchema,
+  updateProfileSchema,
 } from "@lcsp/contracts/auth";
 import { describe, expect, it } from "@jest/globals";
 import { HttpException, HttpStatus } from "@nestjs/common";
@@ -49,30 +50,30 @@ describe("ZodValidationPipe", () => {
   it("validates confirmPasswordRecoverySchema correctly rejecting short passwords", () => {
     const recoveryPipe = new ZodValidationPipe(confirmPasswordRecoverySchema);
 
-    // Rejects password < 8 characters
+    // Rejects password < 12 characters
     expect(() =>
-      recoveryPipe.transform({ token: "valid-tok", new_password: "short" }),
+      recoveryPipe.transform({ token: "valid-tok", new_password: "shortpass8" }),
     ).toThrow(HttpException);
 
-    // Accepts token with >= 8 characters password
+    // Accepts token with >= 12 characters password
     const validWithToken = recoveryPipe.transform({
       token: "valid-tok",
-      new_password: "password123",
+      new_password: "ValidPassword123!",
     });
     expect(validWithToken).toEqual({
       token: "valid-tok",
-      new_password: "password123",
+      new_password: "ValidPassword123!",
     });
 
     // Normalizes recovery_token to token
     const validWithRecoveryToken = recoveryPipe.transform({
       recovery_token: "rec-tok-123",
-      new_password: "password123",
+      new_password: "ValidPassword123!",
     });
     expect(validWithRecoveryToken).toEqual({
       recovery_token: "rec-tok-123",
       token: "rec-tok-123",
-      new_password: "password123",
+      new_password: "ValidPassword123!",
     });
   });
 
@@ -122,5 +123,33 @@ describe("ZodValidationPipe", () => {
     };
     const parsed = signUpPipe.transform(validPayload);
     expect(parsed).toEqual(validPayload);
+  });
+
+  it("validates updateProfileSchema rejecting empty or unknown-only updates", () => {
+    const updatePipe = new ZodValidationPipe(updateProfileSchema);
+
+    // Rejects empty payload
+    expect(() => updatePipe.transform({})).toThrow(HttpException);
+
+    // Rejects payload with only unknown fields
+    expect(() =>
+      updatePipe.transform({ unknown_field: "some_value" }),
+    ).toThrow(HttpException);
+
+    // Accepts valid display_name update
+    const validDisplayUpdate = updatePipe.transform({
+      display_name: "Updated Name",
+    });
+    expect(validDisplayUpdate).toEqual({
+      display_name: "Updated Name",
+    });
+
+    // Accepts valid recovery_email update
+    const validEmailUpdate = updatePipe.transform({
+      recovery_email: "recovery@example.com",
+    });
+    expect(validEmailUpdate).toEqual({
+      recovery_email: "recovery@example.com",
+    });
   });
 });
