@@ -125,6 +125,7 @@ export interface BillingConfig {
   maxInputTokens: string;
   maxOutputTokens: string;
   maxReasoningTokens: string;
+  maxInvocationsPerGroup: string;
 }
 
 export const NODE_ENVS = {

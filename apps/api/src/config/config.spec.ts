@@ -436,6 +436,7 @@ describe("config()", () => {
         maxInputTokens: "",
         maxOutputTokens: "",
         maxReasoningTokens: "",
+        maxInvocationsPerGroup: "",
       },
       interview: {
         guidanceVersion: "interview-context-test-v1",

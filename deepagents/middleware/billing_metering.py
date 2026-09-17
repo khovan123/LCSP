@@ -72,6 +72,10 @@ class BillingMeteringSession:
     max_input_tokens: int | None = None
     max_output_tokens: int | None = None
     max_reasoning_tokens: int | None = None
+    max_invocations: int | None = None
+    reserved_provider: str = ""
+    reserved_model: str = ""
+    _provider_invocation_count: int = field(default=0, init=False)
     _invocation_ids: set[str] = field(default_factory=set, init=False)
 
     @classmethod
@@ -89,6 +93,7 @@ class BillingMeteringSession:
         max_input_tokens: str,
         max_output_tokens: str,
         max_reasoning_tokens: str,
+        max_invocations: str,
         idempotency_key: str,
         effective_runtime_model: dict[str, str] | None = None,
         recovery_store_path: str | None = None,
@@ -108,6 +113,7 @@ class BillingMeteringSession:
                 maxInputTokens=max_input_tokens,
                 maxOutputTokens=max_output_tokens,
                 maxReasoningTokens=max_reasoning_tokens,
+                maxInvocations=max_invocations,
                 idempotencyKey=idempotency_key,
             )
         )
@@ -130,6 +136,9 @@ class BillingMeteringSession:
             max_input_tokens=_parse_limit(max_input_tokens),
             max_output_tokens=_parse_limit(max_output_tokens),
             max_reasoning_tokens=_parse_limit(max_reasoning_tokens),
+            max_invocations=_parse_limit(max_invocations),
+            reserved_provider=provider.upper(),
+            reserved_model=model,
         )
 
     def release(self) -> None:
@@ -153,6 +162,37 @@ class BillingMeteringSession:
         invocation_id = str(uuid4())
         self._invocation_ids.add(invocation_id)
         return invocation_id
+
+    def assert_invocation_capacity(self) -> None:
+        if (
+            self.max_invocations is not None
+            and self._provider_invocation_count >= self.max_invocations
+        ):
+            raise BillingReservationUnavailable(
+                "Provider invocation group capacity is exhausted"
+            )
+        if self.max_invocations is not None:
+            from tools.common.capabilities.platform.callback_schemas import (
+                BillingReservationClaimPayload,
+            )
+
+            self.api_client.claim_billing_invocation(
+                self.reservation_id,
+                BillingReservationClaimPayload(assessmentId=self.assessment_id),
+            )
+        self._provider_invocation_count += 1
+
+    def assert_model_identity(self, model: Any, response: Any | None = None) -> None:
+        provider, model_name = provider_identity(model, response)
+        if (
+            self.reserved_provider
+            and provider != self.reserved_provider
+            or self.reserved_model
+            and model_name != self.reserved_model
+        ):
+            raise BillingReservationUnavailable(
+                "Provider/model differs from the reserved pricing envelope"
+            )
 
     def assert_input_within_limit(self, request: Any) -> None:
         if self.max_input_tokens is None:
@@ -295,6 +335,8 @@ class BillingMeteringMiddleware(AgentMiddleware):
         if session is None:
             return handler(request)
         session.assert_input_within_limit(request)
+        session.assert_invocation_capacity()
+        session.assert_model_identity(request.model)
         if hasattr(request, "override"):
             request = request.override(model=session.bounded_model(request.model))
         invocation_id = session.new_invocation_id()
@@ -312,6 +354,8 @@ class BillingMeteringMiddleware(AgentMiddleware):
         if session is None:
             return await handler(request)
         session.assert_input_within_limit(request)
+        session.assert_invocation_capacity()
+        session.assert_model_identity(request.model)
         if hasattr(request, "override"):
             request = request.override(model=session.bounded_model(request.model))
         invocation_id = session.new_invocation_id()

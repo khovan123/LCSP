@@ -14,6 +14,7 @@ class CallbackPath(StrEnum):
     BILLING_USAGE = "/internal/billing/usage"
     BILLING_RESERVATION = "/internal/billing/reservations"
     BILLING_RESERVATION_RELEASE = "/internal/billing/reservations/{reservation_id}/release"
+    BILLING_RESERVATION_CLAIM = "/internal/billing/reservations/{reservation_id}/claim"
     RECONCILIATION_CONFLICT = "/internal/reconciliation/conflict-callback"
     CLASSIFICATION = "/internal/classification/result-callback"
     AUDIT_EXPORT = "/internal/callbacks/audit-export/{export_request_id}"

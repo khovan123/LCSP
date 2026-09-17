@@ -111,10 +111,16 @@ class BillingReservationPayload(BaseModel):
     maxInputTokens: str
     maxOutputTokens: str
     maxReasoningTokens: str
+    maxInvocations: str
     idempotencyKey: str
 
 
 class BillingReservationReleasePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    assessmentId: str
+
+
+class BillingReservationClaimPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     assessmentId: str
 

@@ -16,7 +16,10 @@ from tools.common.capabilities.agentic_evidence.governance.authorization import 
 from tools.common.capabilities.platform.rbac_client import RbacClient
 from tools.common.capabilities.platform.api_client import WorkerApiClient
 from tools.common.capabilities.platform.config import load_config
-from middleware.billing_recovery import drain as drain_billing_recovery
+from middleware.billing_recovery import (
+    drain as drain_billing_recovery,
+    start_background_worker,
+)
 from middleware.billing_metering import (
     BillingMeteringSession,
     BillingMeteringError,
@@ -292,6 +295,7 @@ def _billing_metering_session(
     max_input_tokens = _find_first_text(billing, ("maxInputTokens",))
     max_output_tokens = _find_first_text(billing, ("maxOutputTokens",))
     max_reasoning_tokens = _find_first_text(billing, ("maxReasoningTokens",))
+    max_invocations = _find_first_text(billing, ("maxInvocations",))
     idempotency_key = _find_first_text(billing, ("idempotencyKey",))
     # The boundary/agent owns the billing role. Never trust a role supplied inside
     # an event payload because the pricing snapshot is selected by this identity.
@@ -308,6 +312,7 @@ def _billing_metering_session(
             max_input_tokens,
             max_output_tokens,
             max_reasoning_tokens,
+            max_invocations,
             idempotency_key,
         )
     ) or (
@@ -320,6 +325,7 @@ def _billing_metering_session(
     client = WorkerApiClient(config.nestjs_api_base_url, config.worker_api_key)
     if config.billing_recovery_store_path:
         drain_billing_recovery(config.billing_recovery_store_path, client)
+        start_background_worker(config.billing_recovery_store_path, client)
     return BillingMeteringSession.reserve(
         api_client=client,
         assessment_id=assessment_id,
@@ -332,6 +338,7 @@ def _billing_metering_session(
         max_input_tokens=max_input_tokens,
         max_output_tokens=max_output_tokens,
         max_reasoning_tokens=max_reasoning_tokens,
+        max_invocations=max_invocations,
         # The outbox idempotency key identifies the billing group, not a broker
         # delivery attempt. A retry must recover/replay the same reservation;
         # deriving a new key leaves the previous reservation stranded.

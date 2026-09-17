@@ -3,7 +3,7 @@ import {
   PaymentReconciliationReason,
   PaymentReconciliationStatus,
 } from "@prisma/client";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
@@ -101,8 +101,17 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
               data: {
                 ...i,
                 remainingCredits: i.amountCredits,
+                maxInvocations: i.maxInvocations ?? 1n,
               },
             }),
+          claimInvocation: async (i) =>
+            (await tx.$executeRaw(Prisma.sql`
+                UPDATE "BillingReservation"
+                SET "invocationsStarted" = "invocationsStarted" + 1
+                WHERE "id" = ${i.reservationId}
+                  AND "status" = 'RESERVED'
+                  AND "invocationsStarted" < "maxInvocations"
+              `)) === 1,
           listReservedForWallet: (walletId) =>
             tx.billingReservation.findMany({
               where: { walletId, status: "RESERVED" },
@@ -299,6 +308,7 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
             ).count === 1,
         },
         usage: {
+          findById: (id) => tx.llmUsageEvent.findUnique({ where: { id } }),
           findByInvocation: (userId, invocationId) =>
             tx.llmUsageEvent.findUnique({
               where: { userId_invocationId: { userId, invocationId } },

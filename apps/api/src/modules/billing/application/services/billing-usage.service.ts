@@ -57,6 +57,7 @@ export class BillingUsageService {
     maxInputTokens: bigint;
     maxOutputTokens: bigint;
     maxReasoningTokens: bigint;
+    maxInvocations: bigint;
     idempotencyKey: string;
   }) {
     if (input.amountCredits < input.maxChargeCredits)
@@ -76,14 +77,19 @@ export class BillingUsageService {
           throw new BillingDomainError(
             "Pricing snapshot is required before reserving provider spend",
           );
-        return calculateCustomerChargeVnd(
+        const oneInvocation = calculateCustomerChargeVnd(
           {
             inputTokens: input.maxInputTokens,
+            // Cache dimensions are separately billable. Reserve the
+            // conservative case where the input is charged in every bucket.
+            cachedInputTokens: input.maxInputTokens,
+            cacheWriteTokens: input.maxInputTokens,
             outputTokens: input.maxOutputTokens,
             reasoningTokens: input.maxReasoningTokens,
           },
           pricing,
         );
+        return oneInvocation * input.maxInvocations;
       },
     );
     if (input.maxChargeCredits < worstCase)
@@ -96,6 +102,15 @@ export class BillingUsageService {
       runId: input.runId,
       amountCredits: input.amountCredits,
       idempotencyKey: input.idempotencyKey,
+      maxInvocations: input.maxInvocations,
+    });
+  }
+
+  async claimInvocation(input: { assessmentId: string; reservationId: string }) {
+    const userId = await this.resolveAssessmentOwner(input.assessmentId);
+    return this.accounting.claimInvocation({
+      userId,
+      reservationId: input.reservationId,
     });
   }
 

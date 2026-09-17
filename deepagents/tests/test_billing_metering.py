@@ -156,6 +156,7 @@ def test_reservation_replay_refuses_a_terminal_reservation_before_model_spend():
             max_input_tokens="1000",
             max_output_tokens="1000",
             max_reasoning_tokens="1000",
+            max_invocations="1",
             idempotency_key="outbox:1:planner",
         )
 

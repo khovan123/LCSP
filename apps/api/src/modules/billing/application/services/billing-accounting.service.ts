@@ -109,10 +109,12 @@ export class BillingAccountingService {
       const debitKey = `llm-usage:${i.usageEventId}:debit`;
       const existingDebit = await repos.ledger.findByIdempotencyKey(debitKey);
       if (existingDebit) {
+        const usage = await repos.usage.findById(i.usageEventId);
         if (
           existingDebit.userId !== i.userId ||
           existingDebit.deltaCredits !== -i.chargedCredits ||
-          existingDebit.referenceId !== i.usageEventId
+          existingDebit.referenceId !== i.usageEventId ||
+          usage?.reservationId !== i.reservationId
         )
           throw new BillingIdempotencyConflictError(
             "Usage debit replay differs",
@@ -161,6 +163,7 @@ export class BillingAccountingService {
     idempotencyKey: string;
     assessmentId?: string;
     runId?: string;
+    maxInvocations?: bigint;
   }) {
     if (i.amountCredits <= 0n)
       throw new BillingDomainError("Reservation amount must be positive");
@@ -190,6 +193,8 @@ export class BillingAccountingService {
           old.amountCredits !== i.amountCredits ||
           old.assessmentId !== (i.assessmentId ?? null) ||
           old.runId !== (i.runId ?? null)
+          || (i.maxInvocations !== undefined &&
+            old.maxInvocations !== i.maxInvocations)
         )
           throw new BillingIdempotencyConflictError(
             "Reservation replay differs",
@@ -208,6 +213,7 @@ export class BillingAccountingService {
         assessmentId: i.assessmentId,
         runId: i.runId,
         idempotencyKey: i.idempotencyKey,
+        maxInvocations: i.maxInvocations,
       });
       if (
         !(await wallet.compareAndSetProjection({
@@ -219,6 +225,23 @@ export class BillingAccountingService {
       )
         throw new BillingConcurrencyError("Wallet projection changed");
       return out;
+    });
+  }
+  claimInvocation(i: { userId: string; reservationId: string }) {
+    return this.transactions.runForUser(i.userId, async (repos) => {
+      const reservation = await repos.reservation.findForUser(
+        i.userId,
+        i.reservationId,
+      );
+      if (!reservation || reservation.status !== "RESERVED")
+        throw new InvalidReservationTransitionError(
+          "Reservation is not reservable",
+        );
+      if (!(await repos.reservation.claimInvocation(i)))
+        throw new BillingConcurrencyError(
+          "Reservation invocation capacity is exhausted",
+        );
+      return { reservationId: i.reservationId };
     });
   }
   settleReservation(i: {

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +17,9 @@ from tools.common.capabilities.platform.callback_schemas import (
     BillingReservationReleasePayload,
     SettledUsagePayload,
 )
+
+_workers: set[str] = set()
+_workers_lock = threading.Lock()
 
 
 def enqueue_usage(path: str | Path, payload: SettledUsagePayload) -> None:
@@ -53,6 +58,12 @@ def drain(path: str | Path, api_client: Any) -> int:
         ).fetchall()
         for row_id, kind, raw_payload in rows:
             payload = json.loads(raw_payload)
+            if kind == "RELEASE" and _has_pending_usage(
+                db, payload["reservationId"]
+            ):
+                # Never release a reservation while its usage debit is still
+                # pending; that would make a successful provider call unchargeable.
+                continue
             try:
                 if kind == "USAGE":
                     api_client.post_settled_usage(
@@ -66,13 +77,40 @@ def drain(path: str | Path, api_client: Any) -> int:
                         ),
                     )
             except Exception:
-                break
+                # One poisoned callback must not block unrelated users. The
+                # row remains pending for retry/quarantine by the API contract.
+                continue
             db.execute("DELETE FROM billing_callback_recovery WHERE id = ?", (row_id,))
             db.commit()
             delivered += 1
     finally:
         db.close()
     return delivered
+
+
+def start_background_worker(
+    path: str | Path, api_client: Any, interval_seconds: float = 30.0
+) -> None:
+    """Start callback recovery independently of future model traffic."""
+    key = str(Path(path).absolute())
+    with _workers_lock:
+        if key in _workers:
+            return
+        _workers.add(key)
+
+    def run() -> None:
+        while True:
+            try:
+                drain(path, api_client)
+            except Exception:
+                pass
+            time.sleep(interval_seconds)
+
+    threading.Thread(
+        target=run,
+        name="billing-callback-recovery",
+        daemon=True,
+    ).start()
 
 
 def _enqueue(path: str | Path, kind: str, key: str, payload: dict[str, Any]) -> None:
@@ -110,4 +148,11 @@ def _connect(path: str | Path) -> sqlite3.Connection:
     return db
 
 
-__all__ = ["enqueue_usage", "enqueue_release", "drain"]
+def _has_pending_usage(db: sqlite3.Connection, reservation_id: str) -> bool:
+    rows = db.execute(
+        "SELECT payload FROM billing_callback_recovery WHERE kind = 'USAGE'"
+    ).fetchall()
+    return any(json.loads(row[0]).get("reservationId") == reservation_id for row in rows)
+
+
+__all__ = ["enqueue_usage", "enqueue_release", "drain", "start_background_worker"]

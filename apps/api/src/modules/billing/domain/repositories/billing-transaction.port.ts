@@ -21,6 +21,8 @@ export type ReservationRecord = {
   walletId: string;
   amountCredits: bigint;
   remainingCredits: bigint;
+  maxInvocations: bigint;
+  invocationsStarted: bigint;
   assessmentId: string | null;
   runId: string | null;
   idempotencyKey: string | null;
@@ -145,7 +147,11 @@ export interface BillingReservationPort {
     assessmentId?: string;
     runId?: string;
     idempotencyKey: string;
+    maxInvocations?: bigint;
   }): Promise<ReservationRecord>;
+  claimInvocation(input: {
+    reservationId: string;
+  }): Promise<boolean>;
   listReservedForWallet(walletId: string): Promise<ReservationRecord[]>;
   consumeRemaining(input: {
     reservationId: string;
@@ -233,6 +239,7 @@ export interface WebhookEventPort {
   markProcessed(id: string, processedAt: Date): Promise<boolean>;
 }
 export interface LlmUsagePort {
+  findById(id: string): Promise<UsageRecord | null>;
   findByInvocation(
     userId: string,
     invocationId: string,

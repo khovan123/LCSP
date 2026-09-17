@@ -1343,6 +1343,8 @@ model BillingReservation {
   runId          String?
   amountCredits  BigInt
   remainingCredits BigInt                 @default(0)
+  maxInvocations BigInt                   @default(1)
+  invocationsStarted BigInt               @default(0)
   status         BillingReservationStatus @default(RESERVED)
   idempotencyKey String?
   settledAt      DateTime?

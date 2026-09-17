@@ -27,6 +27,7 @@ from tools.common.capabilities.platform.callback_schemas import (
     ClassificationCallbackPayload,
     AuditExportCallbackPayload,
     BillingReservationPayload,
+    BillingReservationClaimPayload,
     BillingReservationReleasePayload,
 )
 
@@ -654,6 +655,14 @@ class WorkerApiClient:
     ) -> dict:
         """Release unused credits; the API operation is idempotent."""
         path = CallbackPath.BILLING_RESERVATION_RELEASE.format(
+            reservation_id=reservation_id
+        )
+        return self._post_with_retry(path, payload.model_dump(exclude_none=True))
+
+    def claim_billing_invocation(
+        self, reservation_id: str, payload: BillingReservationClaimPayload
+    ) -> dict:
+        path = CallbackPath.BILLING_RESERVATION_CLAIM.format(
             reservation_id=reservation_id
         )
         return self._post_with_retry(path, payload.model_dump(exclude_none=True))

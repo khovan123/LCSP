@@ -27,6 +27,9 @@ from tools.common.capabilities.managed.invocation import (
     invoke_boundary,
     load_boundary,
 )
+from middleware.billing_recovery import start_background_worker
+from tools.common.capabilities.platform.api_client import WorkerApiClient
+from tools.common.capabilities.platform.config import load_config
 
 LOGGER = logging.getLogger("lcsp.mda.rabbitmq_consumer")
 DEFAULT_EXCHANGE = "lcsp.events"
@@ -84,6 +87,16 @@ def run_consumer() -> None:
     )
     install_agent_stream_log_handler()
     suppress_langgraph_heartbeat_logs()
+
+    billing_config = load_config()
+    if billing_config.billing_recovery_store_path:
+        start_background_worker(
+            billing_config.billing_recovery_store_path,
+            WorkerApiClient(
+                billing_config.nestjs_api_base_url,
+                billing_config.worker_api_key,
+            ),
+        )
 
     rabbitmq_url = os.getenv("RABBITMQ_URL")
     if not rabbitmq_url:

@@ -138,6 +138,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
         version: Math.floor(Math.random() * 1_000_000_000),
         inputPricePerMillion: "1.00000000",
         cachedInputPricePerMillion: "0.50000000",
+        cacheWritePricePerMillion: "0.50000000",
         outputPricePerMillion: "2.00000000",
         providerCurrency: "VND",
         customerCurrency: "VND",
@@ -213,6 +214,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
         maxInputTokens: 21_000_000n,
         maxOutputTokens: 0n,
         maxReasoningTokens: 0n,
+        maxInvocations: 1n,
         idempotencyKey: `bounded-reserve-${id()}`,
       }),
     ).rejects.toThrow("authoritative worst-case provider charge");

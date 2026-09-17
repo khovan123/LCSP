@@ -248,6 +248,10 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
       "billing.maxReasoningTokens",
       "",
     );
+    const maxInvocations = this.configService.get<string>(
+      "billing.maxInvocationsPerGroup",
+      "",
+    );
     if (
       !assessmentId ||
       !/^[1-9]\d*$/.test(amountCredits) ||
@@ -257,6 +261,7 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
       !/^\d+$/.test(maxInputTokens) ||
       !/^\d+$/.test(maxOutputTokens) ||
       !/^\d+$/.test(maxReasoningTokens) ||
+      !/^[1-9]\d*$/.test(maxInvocations) ||
       BigInt(amountCredits) < BigInt(maxChargeCredits)
     ) {
       throw new Error(
@@ -282,6 +287,7 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
         maxInputTokens,
         maxOutputTokens,
         maxReasoningTokens,
+        maxInvocations,
         idempotencyKey: `outbox:${message.id}:billing-reservation`,
         agentRole: `outbox:${message.eventType}`,
       },
