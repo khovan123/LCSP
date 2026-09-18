@@ -109,10 +109,7 @@ integration(
       }
       prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl!) });
       const module = await Test.createTestingModule({
-        controllers: [
-          AdminUsersController,
-          ProtectedController,
-        ],
+        controllers: [AdminUsersController, ProtectedController],
         providers: [
           { provide: PrismaService, useValue: prisma },
           {

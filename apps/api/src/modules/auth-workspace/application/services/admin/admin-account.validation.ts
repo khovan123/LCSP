@@ -79,10 +79,9 @@ export function parseListQuery(
     s === undefined || s === ADMIN_ACCOUNT_FILTERS.all ? undefined : s;
   if (
     status !== undefined &&
-    ![
-      AUTH_ACCOUNT_STATUSES.active,
-      AUTH_ACCOUNT_STATUSES.suspended,
-    ].some((v) => v === status)
+    ![AUTH_ACCOUNT_STATUSES.active, AUTH_ACCOUNT_STATUSES.suspended].some(
+      (v) => v === status,
+    )
   )
     return invalid(correlationId);
   const filterRole =
