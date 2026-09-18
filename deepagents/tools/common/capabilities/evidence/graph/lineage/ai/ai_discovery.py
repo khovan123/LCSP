@@ -646,11 +646,68 @@ def _function_context(line: str, *, python_source: bool) -> _FunctionBoolContext
     return None
 
 
-def _static_bool_facts(lines: list[str], relative: str) -> _ScopedBoolFacts:
+def _pge_callable_contexts(
+    program: SemanticProgram, relative: str
+) -> dict[int, list[_FunctionBoolContext]]:
+    node_by_key = {node.key: node for node in program.nodes}
+    params_by_symbol: dict[str, list[tuple[int, str]]] = {}
+    for edge in program.edges:
+        if edge.edge_type != "HAS_PARAMETER":
+            continue
+        param = node_by_key.get(edge.target_key)
+        if param is None or param.node_type != "PARAMETER":
+            continue
+        position = int((edge.attributes or {}).get("position", 0))
+        params_by_symbol.setdefault(edge.source_key, []).append(
+            (position, param.label)
+        )
+
+    result: dict[int, list[_FunctionBoolContext]] = {}
+    for node in program.nodes:
+        if (
+            node.file_path != relative
+            or node.node_type not in {"FUNCTION", "METHOD"}
+            or not node.start_line
+        ):
+            continue
+        body_start = (node.attributes or {}).get("bodyStartLine")
+        if not isinstance(body_start, int) or body_start < 1:
+            continue
+        params = tuple(
+            label
+            for _, label in sorted(
+                params_by_symbol.get(node.key, []),
+                key=lambda item: item[0],
+            )
+        )
+        external = str(
+            (node.attributes or {}).get("externalReachability") or ""
+        ).upper()
+        result.setdefault(body_start, []).append(
+            _FunctionBoolContext(
+                node.label,
+                params,
+                external == "POSSIBLE",
+                int(node.start_line),
+            )
+        )
+    return result
+
+
+def _static_bool_facts(
+    lines: list[str],
+    relative: str,
+    program: SemanticProgram | None = None,
+) -> _ScopedBoolFacts:
     python_source = relative.lower().endswith(".py")
     scope_paths, opened_by_line = _lexical_scope_paths(lines, python_source=python_source)
     bindings: dict[int, dict[str, list[_BoolBinding]]] = {}
     functions: dict[int, _FunctionBoolContext] = {}
+    pge_contexts = (
+        _pge_callable_contexts(program, relative)
+        if program is not None
+        else {}
+    )
 
     def add(
         scope_id: int,
@@ -715,12 +772,28 @@ def _static_bool_facts(lines: list[str], relative: str) -> _ScopedBoolFacts:
                     technical_frontier=True,
                 )
         opened = opened_by_line.get(line_no, [])
-        context = _function_context(line, python_source=python_source)
-        if opened and context:
-            function_scope = opened[0]
-            functions[function_scope] = replace(context, declaration_line=line_no)
+        contexts = pge_contexts.get(line_no, [])
+        if opened and contexts:
+            # The callable body is the innermost brace opened on its body-start line.
+            # This maps multiline signatures and class/arrow callables to the same
+            # lexical parameter scope used by guard resolution.
+            function_scope = opened[-1]
+            context = min(
+                contexts,
+                key=lambda item: abs(item.declaration_line - line_no),
+            )
+            functions[function_scope] = context
             for param in context.params:
-                add(function_scope, param, line_no, None)
+                add(function_scope, param, context.declaration_line, None)
+        elif opened:
+            context = _function_context(line, python_source=python_source)
+            if context:
+                function_scope = opened[0]
+                functions[function_scope] = replace(
+                    context, declaration_line=line_no
+                )
+                for param in context.params:
+                    add(function_scope, param, line_no, None)
     for scope in bindings.values():
         for events in scope.values():
             events.sort(key=lambda item: item.line_no)
@@ -1578,7 +1651,7 @@ class AIDiscoveryEnricher:
         invocations: list[SemanticNodeFact],
         aliases: dict[str, str],
     ) -> None:
-        bool_facts = _static_bool_facts(lines, relative)
+        bool_facts = _static_bool_facts(lines, relative, program)
         for invocation in invocations:
             if not invocation.start_line:
                 continue
@@ -1872,6 +1945,36 @@ class AIDiscoveryEnricher:
                 return unresolved()
             call_nodes.append(call)
 
+        trusted_call_targets: dict[tuple[int, str], set[str]] = {}
+        for edge in program.edges:
+            if edge.edge_type != "RESOLVES_TO" or not self._edge_is_trusted(edge):
+                continue
+            call = node_by_key.get(edge.source_key)
+            target = node_by_key.get(edge.target_key)
+            if (
+                call is None
+                or target is None
+                or call.node_type != "CALL_SITE"
+                or call.file_path != relative
+                or not call.start_line
+                or not self._node_is_trusted(call)
+                or not self._node_is_trusted(target)
+            ):
+                continue
+            trusted_call_targets.setdefault(
+                (int(call.start_line), call.label), set()
+            ).add(target.key)
+
+        for call in call_nodes:
+            if trusted_call_targets.get(
+                (int(call.start_line or 0), call.label), set()
+            ) != {symbol_key}:
+                return unresolved()
+
+        def resolves_to_foreign_callable(line_no: int, label: str) -> bool:
+            targets = trusted_call_targets.get((line_no, label), set())
+            return len(targets) == 1 and symbol_key not in targets
+
         try:
             source_text = (self.workspace / relative).read_text(
                 encoding="utf-8", errors="replace"
@@ -1879,39 +1982,88 @@ class AIDiscoveryEnricher:
         except OSError:
             return unresolved()
 
-        call_re = re.compile(rf"(?<![\w$.]){re.escape(context.name)}\s*\(")
-        declaration_re = re.compile(
-            rf"(?:\bfunction\s+|\bdef\s+){re.escape(context.name)}\s*\("
+        declaration_spans = [
+            (
+                int(candidate.start_line),
+                int(
+                    (candidate.attributes or {}).get("bodyStartLine")
+                    or candidate.start_line
+                ),
+            )
+            for candidate in program.nodes
+            if candidate.file_path == relative
+            and candidate.node_type in {"FUNCTION", "METHOD"}
+            and candidate.label == context.name
+            and candidate.start_line
+        ]
+        is_declaration_line = lambda line_no: any(
+            start <= line_no <= end for start, end in declaration_spans
+        )
+        method_call_re = re.compile(
+            rf"\b(?:[A-Za-z_$][\w$]*\.)+{re.escape(context.name)}\s*\("
+        )
+        function_call_re = re.compile(
+            rf"(?<![\w$.]){re.escape(context.name)}\s*\("
+        )
+        completeness_re = (
+            method_call_re
+            if symbol.node_type == "METHOD"
+            else function_call_re
         )
 
-        # A repository-local callable must not escape as a value. Text is used only as
-        # a conservative veto for JS/TS cases the coarse extractor cannot yet encode
-        # (for example register(summarize)); it never creates a positive call edge.
-        for raw_line in source_text.splitlines():
+        # Source text remains veto-only. Declarations are skipped using the governed
+        # symbol's declaration/body span, so arrows, methods and multiline signatures
+        # cannot be mistaken for callable escapes.
+        for source_line_no, raw_line in enumerate(
+            source_text.splitlines(), start=1
+        ):
+            if is_declaration_line(source_line_no):
+                continue
             structural = _scrub_structure(raw_line)
             for reference in re.finditer(
-                rf"(?<![\w$]){re.escape(context.name)}(?![\w$])", structural
+                rf"(?<![\w$]){re.escape(context.name)}(?![\w$])",
+                structural,
             ):
                 prefix = structural[: reference.start()]
                 suffix = structural[reference.end() :]
-                if re.search(r"(?:\bfunction|\bdef)\s*$", prefix):
+                direct_call = bool(re.match(r"\s*\(", suffix))
+                call_label: str | None = None
+                dotted = prefix.rstrip().endswith(".")
+                if direct_call:
+                    if dotted:
+                        receiver = re.search(
+                            r"([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\.$",
+                            prefix.rstrip(),
+                        )
+                        if receiver:
+                            call_label = f"{receiver.group(1)}.{context.name}"
+                    else:
+                        call_label = context.name
+                if symbol.node_type == "METHOD":
+                    if direct_call and dotted:
+                        continue
+                elif direct_call and not dotted:
                     continue
-                if re.match(r"\s*\(", suffix) and not prefix.rstrip().endswith("."):
+                if (
+                    direct_call
+                    and call_label
+                    and resolves_to_foreign_callable(source_line_no, call_label)
+                ):
                     continue
                 return unresolved()
 
         possible_lines: list[int] = []
-        for match in call_re.finditer(source_text):
-            prefix = source_text[max(0, match.start() - 64) : match.start()]
-            declaration_start = max(0, match.start() - 32)
-            if declaration_re.search(source_text[declaration_start : match.end()]):
+        for match in completeness_re.finditer(source_text):
+            line_no = source_text.count("\n", 0, match.start()) + 1
+            if is_declaration_line(line_no):
                 continue
-            if re.search(r"(?:function|def)\s*$", prefix):
+            label = match.group(0).split("(", 1)[0].strip()
+            if resolves_to_foreign_callable(line_no, label):
                 continue
-            possible_lines.append(source_text.count("\n", 0, match.start()) + 1)
+            possible_lines.append(line_no)
 
-        # Multiple calls to the same function on one source line are not distinguishable
-        # by the current line-keyed call identity, so they cannot be treated as closed.
+        # Multiple calls on one line cannot be distinguished by the line-keyed call
+        # identity. Treat that as incomplete technical closure rather than guessing.
         if len(possible_lines) != len(set(possible_lines)):
             return unresolved()
 
@@ -1926,9 +2078,14 @@ class AIDiscoveryEnricher:
             if index < 0 or index >= len(lines_for_call):
                 return unresolved()
             window = "\n".join(
-                lines_for_call[index : min(len(lines_for_call), index + 8)]
+                lines_for_call[index : min(len(lines_for_call), index + 12)]
             )
-            match = call_re.search(window)
+            call_label_re = re.compile(
+                rf"\b{re.escape(call.label)}\s*\("
+                if "." in call.label
+                else rf"(?<![\w$.]){re.escape(call.label)}\s*\("
+            )
+            match = call_label_re.search(window)
             if match is None:
                 return unresolved()
             raw_args = _call_arguments_text(window, match.end() - 1)
