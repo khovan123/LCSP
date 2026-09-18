@@ -44,11 +44,27 @@ export class RecordMfaRecoveryCodeAccessHandler implements ICommandHandler<Recor
     const correlationId =
       requestMeta?.correlationId ?? this.support.createCorrelationId();
 
-    if (!userId) {
+    if (!userId || !sessionId) {
       return createProblemResult(
         AUTH_ERROR_CODES.sessionInvalid,
         correlationId,
       );
+    }
+
+    const session = await this.repositories.sessions.findById(sessionId);
+    if (
+      !session ||
+      !session.isActive(this.support.now()) ||
+      session.userId !== userId
+    ) {
+      return createProblemResult(
+        AUTH_ERROR_CODES.sessionInvalid,
+        correlationId,
+      );
+    }
+
+    if (!session.isMfaVerified()) {
+      return createProblemResult(AUTH_ERROR_CODES.mfaRequired, correlationId);
     }
 
     const eventType = RECOVERY_CODE_ACCESS_EVENTS[action];
@@ -66,7 +82,7 @@ export class RecordMfaRecoveryCodeAccessHandler implements ICommandHandler<Recor
       resource_id: userId,
       decision: AUDIT_DECISIONS.allow,
       correlationId: correlationId,
-      session_id: sessionId ?? null,
+      session_id: sessionId,
       action,
     });
 
