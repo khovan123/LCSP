@@ -42,6 +42,32 @@ class _PyFile:
     definitions: dict[str, str] = field(default_factory=dict)
     http_clients: dict[int, dict[str, list[tuple[int, bool]]]] = field(default_factory=dict)
 
+
+@dataclass(frozen=True)
+class _TextClass:
+    name: str
+    key: str
+    start_line: int
+    end_line: int
+    body_open: int
+    body_close: int
+    exported: bool
+
+
+@dataclass(frozen=True)
+class _TextCallable:
+    name: str
+    key: str
+    node_type: str
+    start_line: int
+    end_line: int
+    body_start_line: int
+    params: tuple[str, ...]
+    declaration_scope: int
+    exported: bool
+    owner_class: str | None = None
+    is_static: bool = False
+
 class RepositorySemanticExtractor:
     """Scan every supported source file before any law/LLM-driven investigation."""
     def __init__(self, workspace_path: str | Path) -> None:
@@ -98,47 +124,341 @@ class RepositorySemanticExtractor:
 
     def _text(self, path: Path, program: SemanticProgram) -> None:
         relative = path.relative_to(self.workspace).as_posix()
-        try: text = path.read_text(encoding="utf-8", errors="replace")
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
         except OSError as exc:
-            program.coverage_notes.append(f"text_read_failed:file={relative}:reason={type(exc).__name__}"); return
+            program.coverage_notes.append(
+                f"text_read_failed:file={relative}:reason={type(exc).__name__}"
+            )
+            return
         fkey, mkey = f"file:{relative}", f"module:{relative}"
-        program.add_node(SemanticNodeFact(fkey, "FILE", relative, file_path=relative, start_line=1)); program.add_node(SemanticNodeFact(mkey, "MODULE", relative, file_path=relative, start_line=1, symbol_ref=relative)); program.add_edge(SemanticEdgeFact("CONTAINS", fkey, mkey))
-        imports = list(re.finditer(r"(?:import\s+(?:[^'\";]+?\s+from\s+)?|require\s*\()\s*['\"]([^'\"]+)['\"]", text))
+        program.add_node(
+            SemanticNodeFact(
+                fkey, "FILE", relative, file_path=relative, start_line=1
+            )
+        )
+        program.add_node(
+            SemanticNodeFact(
+                mkey,
+                "MODULE",
+                relative,
+                file_path=relative,
+                start_line=1,
+                symbol_ref=relative,
+            )
+        )
+        program.add_edge(SemanticEdgeFact("CONTAINS", fkey, mkey))
+        imports = list(
+            re.finditer(
+                r"(?:import\s+(?:[^'\";]+?\s+from\s+)?|require\s*\()\s*['\"]([^'\"]+)['\"]",
+                text,
+            )
+        )
         for match in imports:
-            package = match.group(1).split("/")[0] if not match.group(1).startswith("@") else "/".join(match.group(1).split("/")[:2]); key = f"package:{package}"
-            program.add_node(SemanticNodeFact(key, "PACKAGE", package, attributes={"import": match.group(1)})); program.add_edge(SemanticEdgeFact("IMPORTS", mkey, key))
+            package = (
+                match.group(1).split("/")[0]
+                if not match.group(1).startswith("@")
+                else "/".join(match.group(1).split("/")[:2])
+            )
+            key = f"package:{package}"
+            program.add_node(
+                SemanticNodeFact(
+                    key, "PACKAGE", package, attributes={"import": match.group(1)}
+                )
+            )
+            program.add_edge(SemanticEdgeFact("IMPORTS", mkey, key))
+
         is_js_text = path.suffix.lower() in JS_TEXT_EXTENSIONS
-        exported_names = _text_exported_callable_names(text) if is_js_text else set()
         source_lines = text.splitlines()
         scope_paths = _text_lexical_scope_paths(source_lines) if is_js_text else []
-        symbols: dict[str, list[tuple[str, int]]] = {}
-        for match in re.finditer(r"\b(class|interface|function|def|func)\s+([A-Za-z_$][\w$]*)", text):
-            kind, name = match.group(1), match.group(2); ntype = "INTERFACE" if kind == "interface" else "CLASS" if kind == "class" else "FUNCTION"; line = text.count("\n", 0, match.start()) + 1; key = _symbol_key(relative, name)
-            attrs = {}
-            if ntype == "FUNCTION" and is_js_text:
-                attrs["externalReachability"] = "POSSIBLE" if name in exported_names else "REPOSITORY_LOCAL"
-            program.add_node(SemanticNodeFact(key, ntype, name, relative, line, line, name, attributes=attrs)); program.add_edge(SemanticEdgeFact("DECLARES", mkey, key))
-            declaration_scope = scope_paths[line - 1][-1] if is_js_text else 0
-            symbols.setdefault(name, []).append((key, declaration_scope))
+        exported_names = _text_exported_callable_names(text) if is_js_text else set()
+        classes: tuple[_TextClass, ...] = ()
+        callables: tuple[_TextCallable, ...] = ()
+
+        if is_js_text:
+            classes = _text_js_classes(text, relative, exported_names)
+            callables = _text_js_callables(
+                text, relative, source_lines, scope_paths, exported_names, classes
+            )
+            for item in classes:
+                program.add_node(
+                    SemanticNodeFact(
+                        item.key,
+                        "CLASS",
+                        item.name,
+                        relative,
+                        item.start_line,
+                        item.end_line,
+                        item.name,
+                        attributes={
+                            "externalReachability": (
+                                "POSSIBLE" if item.exported else "REPOSITORY_LOCAL"
+                            )
+                        },
+                    )
+                )
+                program.add_edge(SemanticEdgeFact("DECLARES", mkey, item.key))
+            class_by_name = {item.name: item for item in classes}
+            for item in callables:
+                attrs: dict[str, object] = {
+                    "externalReachability": (
+                        "POSSIBLE" if item.exported else "REPOSITORY_LOCAL"
+                    ),
+                    "bodyStartLine": item.body_start_line,
+                    "callableKind": (
+                        "METHOD" if item.node_type == "METHOD" else "FUNCTION"
+                    ),
+                }
+                if item.owner_class:
+                    attrs["ownerClass"] = item.owner_class
+                    attrs["static"] = item.is_static
+                program.add_node(
+                    SemanticNodeFact(
+                        item.key,
+                        item.node_type,
+                        item.name,
+                        relative,
+                        item.start_line,
+                        item.end_line,
+                        (
+                            f"{item.owner_class}.{item.name}"
+                            if item.owner_class
+                            else item.name
+                        ),
+                        attributes=attrs,
+                    )
+                )
+                owner_key = (
+                    class_by_name[item.owner_class].key
+                    if item.owner_class and item.owner_class in class_by_name
+                    else mkey
+                )
+                program.add_edge(SemanticEdgeFact("DECLARES", owner_key, item.key))
+                for position, param in enumerate(item.params):
+                    pkey = f"param:{item.key}:{param}"
+                    program.add_node(
+                        SemanticNodeFact(
+                            pkey,
+                            "PARAMETER",
+                            param,
+                            relative,
+                            item.start_line,
+                            item.start_line,
+                            (
+                                f"{item.owner_class}.{item.name}:{param}"
+                                if item.owner_class
+                                else f"{item.name}:{param}"
+                            ),
+                            semantic_types=semantic_types_for_identifier(param),
+                        )
+                    )
+                    program.add_edge(
+                        SemanticEdgeFact(
+                            "HAS_PARAMETER",
+                            item.key,
+                            pkey,
+                            attributes={"position": position},
+                        )
+                    )
+        else:
+            for match in re.finditer(
+                r"\b(class|interface|function|def|func)\s+([A-Za-z_$][\w$]*)",
+                text,
+            ):
+                kind, name = match.group(1), match.group(2)
+                ntype = (
+                    "INTERFACE"
+                    if kind == "interface"
+                    else "CLASS"
+                    if kind == "class"
+                    else "FUNCTION"
+                )
+                line = text.count("\n", 0, match.start()) + 1
+                key = _symbol_key(relative, name)
+                program.add_node(
+                    SemanticNodeFact(
+                        key, ntype, name, relative, line, line, name
+                    )
+                )
+                program.add_edge(SemanticEdgeFact("DECLARES", mkey, key))
+
+        function_targets: dict[str, list[_TextCallable]] = {}
+        method_targets: dict[tuple[str, str], list[_TextCallable]] = {}
+        class_by_name = {item.name: item for item in classes}
+        for item in callables:
+            if item.node_type == "METHOD" and item.owner_class:
+                method_targets.setdefault((item.owner_class, item.name), []).append(item)
+            elif item.node_type == "FUNCTION":
+                function_targets.setdefault(item.name, []).append(item)
+
+        instance_bindings: dict[int, dict[str, list[tuple[int, str]]]] = {}
+        if is_js_text:
+            for line_no, line in enumerate(source_lines, start=1):
+                scope_id = scope_paths[line_no - 1][-1]
+                match = re.search(
+                    r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*new\s+([A-Za-z_$][\w$]*)\s*\(",
+                    line,
+                )
+                if match and match.group(2) in class_by_name:
+                    instance_bindings.setdefault(scope_id, {}).setdefault(
+                        match.group(1), []
+                    ).append((line_no, match.group(2)))
+
+        def resolve_instance(name: str, line_no: int) -> str | None:
+            if not is_js_text or line_no < 1 or line_no > len(scope_paths):
+                return None
+            for scope_id in reversed(scope_paths[line_no - 1]):
+                events = instance_bindings.get(scope_id, {}).get(name)
+                if events is None:
+                    continue
+                prior = [event for event in events if event[0] <= line_no]
+                return prior[-1][1] if prior else None
+            return None
+
+        def enclosing_class(line_no: int) -> _TextClass | None:
+            matches = [
+                item
+                for item in classes
+                if item.start_line <= line_no <= item.end_line
+            ]
+            return min(
+                matches,
+                key=lambda item: item.end_line - item.start_line,
+                default=None,
+            )
+
         http_clients = _text_http_client_aliases(text)
         for line_no, line in enumerate(source_lines, start=1):
-            assignment = re.search(r"\b(?:const|let|var)?\s*([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$.]*)", line)
+            assignment = re.search(
+                r"\b(?:const|let|var)?\s*([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$.]*)",
+                line,
+            )
             if assignment:
-                left, right = assignment.group(1), assignment.group(2); lkey, rkey = f"var:{relative}:{left}", f"var:{relative}:{right}"
-                program.add_node(SemanticNodeFact(lkey, "VARIABLE", left, relative, line_no, line_no, semantic_types=semantic_types_for_identifier(left))); program.add_node(SemanticNodeFact(rkey, "VARIABLE", right, relative, line_no, line_no, semantic_types=semantic_types_for_identifier(right))); program.add_edge(SemanticEdgeFact("ALIASES", rkey, lkey))
-            route = re.search(r"@(Get|Post|Put|Patch|Delete)\s*\(\s*['\"]([^'\"]*)['\"]", line, re.I)
+                left, right = assignment.group(1), assignment.group(2)
+                if right not in {"async", "function", "new"}:
+                    lkey = f"var:{relative}:{left}"
+                    rkey = f"var:{relative}:{right}"
+                    program.add_node(
+                        SemanticNodeFact(
+                            lkey,
+                            "VARIABLE",
+                            left,
+                            relative,
+                            line_no,
+                            line_no,
+                            semantic_types=semantic_types_for_identifier(left),
+                        )
+                    )
+                    program.add_node(
+                        SemanticNodeFact(
+                            rkey,
+                            "VARIABLE",
+                            right,
+                            relative,
+                            line_no,
+                            line_no,
+                            semantic_types=semantic_types_for_identifier(right),
+                        )
+                    )
+                    program.add_edge(SemanticEdgeFact("ALIASES", rkey, lkey))
+            route = re.search(
+                r"@(Get|Post|Put|Patch|Delete)\s*\(\s*['\"]([^'\"]*)['\"]",
+                line,
+                re.I,
+            )
             if route:
-                key = f"route:{relative}:{line_no}"; program.add_node(SemanticNodeFact(key, "HTTP_ROUTE", f"{route.group(1).upper()} {route.group(2)}", relative, line_no, line_no, attributes={"method": route.group(1).upper(), "route": route.group(2)})); program.add_edge(SemanticEdgeFact("DECLARES", mkey, key))
-            for call in re.finditer(r"\b([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\s*\(", line):
-                self._text_call(program, relative, line_no, call.group(1), line, mkey, http_clients.get(line_no, set()))
+                key = f"route:{relative}:{line_no}"
+                program.add_node(
+                    SemanticNodeFact(
+                        key,
+                        "HTTP_ROUTE",
+                        f"{route.group(1).upper()} {route.group(2)}",
+                        relative,
+                        line_no,
+                        line_no,
+                        attributes={
+                            "method": route.group(1).upper(),
+                            "route": route.group(2),
+                        },
+                    )
+                )
+                program.add_edge(SemanticEdgeFact("DECLARES", mkey, key))
+
+            for call in re.finditer(
+                r"\b([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\s*\(",
+                line,
+            ):
+                call_name = call.group(1)
+                resolves_to: str | None = None
+                if is_js_text:
+                    parts = call_name.split(".")
+                    if len(parts) == 2:
+                        receiver, method_name = parts
+                        owner_class: str | None = None
+                        if receiver == "this":
+                            owner = enclosing_class(line_no)
+                            owner_class = owner.name if owner else None
+                        else:
+                            owner_class = resolve_instance(receiver, line_no)
+                        targets = (
+                            method_targets.get((owner_class, method_name), [])
+                            if owner_class
+                            else []
+                        )
+                        if len(targets) == 1:
+                            resolves_to = targets[0].key
+                self._text_call(
+                    program,
+                    relative,
+                    line_no,
+                    call_name,
+                    line,
+                    mkey,
+                    http_clients.get(line_no, set()),
+                    resolves_to=resolves_to,
+                )
+
             if is_js_text:
-                for call in re.finditer(r"(?<![\w$.])([A-Za-z_$][\w$]*)\s*\(", line):
+                for call in re.finditer(
+                    r"(?<![\w$.])([A-Za-z_$][\w$]*)\s*\(", line
+                ):
                     name = call.group(1)
-                    targets = symbols.get(name, [])
-                    if len(targets) != 1 or _is_text_function_declaration(line, call.start(1), name):
+                    if _is_text_function_declaration(
+                        line, call.start(1), name
+                    ):
                         continue
-                    target_key, declaration_scope = targets[0]
-                    if declaration_scope not in scope_paths[line_no - 1]:
+                    method_declaration = any(
+                        item.node_type == "METHOD"
+                        and item.name == name
+                        and item.start_line == line_no
+                        for item in callables
+                    )
+                    if method_declaration and re.fullmatch(
+                        r"\s*(?:(?:public|private|protected|static|async|override|abstract)\s+)*",
+                        line[: call.start(1)],
+                    ):
+                        continue
+                    visible = [
+                        item
+                        for item in function_targets.get(name, [])
+                        if item.declaration_scope in scope_paths[line_no - 1]
+                    ]
+                    if not visible:
+                        continue
+                    nearest_scope = max(
+                        (
+                            scope_paths[line_no - 1].index(item.declaration_scope)
+                            for item in visible
+                        ),
+                        default=-1,
+                    )
+                    targets = [
+                        item
+                        for item in visible
+                        if scope_paths[line_no - 1].index(item.declaration_scope)
+                        == nearest_scope
+                    ]
+                    if len(targets) != 1:
                         continue
                     self._text_call(
                         program,
@@ -148,7 +468,7 @@ class RepositorySemanticExtractor:
                         line,
                         mkey,
                         http_clients.get(line_no, set()),
-                        resolves_to=target_key,
+                        resolves_to=targets[0].key,
                     )
 
     def _text_call(self, program: SemanticProgram, relative: str, line: int, name: str, body: str, owner: str, http_clients: set[str], *, resolves_to: str | None = None) -> None:
@@ -183,7 +503,7 @@ class _PythonVisitor(ast.NodeVisitor):
         parent_scope = self.scope_stack[-1]
         nested_callable = isinstance(parent_scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))
         key = _python_callable_key(self.item.relative, node, nested=nested_callable)
-        ntype = "METHOD" if self.owner.startswith("symbol:") else "FUNCTION"; symbol = node.name
+        ntype = "METHOD" if isinstance(parent_scope, ast.ClassDef) else "FUNCTION"; symbol = node.name
         externally_reachable = isinstance(parent_scope, (ast.Module, ast.ClassDef))
         attrs = {"externalReachability": "POSSIBLE" if externally_reachable else "REPOSITORY_LOCAL"}
         self.program.add_node(SemanticNodeFact(key, ntype, node.name, self.item.relative, node.lineno, getattr(node, "end_lineno", node.lineno), symbol, attributes=attrs)); self.program.add_edge(SemanticEdgeFact("DECLARES", self.owner, key))
@@ -308,6 +628,343 @@ def _python_callable_key(
     return f"{base}:{node.lineno}" if nested else base
 
 
+def _text_line(text: str, offset: int) -> int:
+    return text.count("\n", 0, max(0, offset)) + 1
+
+
+def _text_matching_delimiter(
+    text: str, start: int, opening: str, closing: str
+) -> int | None:
+    if start < 0 or start >= len(text) or text[start] != opening:
+        return None
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    line_comment = False
+    block_comment = False
+    index = start
+    while index < len(text):
+        char = text[index]
+        nxt = text[index + 1] if index + 1 < len(text) else ""
+        if line_comment:
+            if char == "\n":
+                line_comment = False
+            index += 1
+            continue
+        if block_comment:
+            if char == "*" and nxt == "/":
+                block_comment = False
+                index += 2
+                continue
+            index += 1
+            continue
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            index += 1
+            continue
+        if char == "/" and nxt == "/":
+            line_comment = True
+            index += 2
+            continue
+        if char == "/" and nxt == "*":
+            block_comment = True
+            index += 2
+            continue
+        if char in {'"', "'", chr(96)}:
+            quote = char
+            index += 1
+            continue
+        if char == opening:
+            depth += 1
+        elif char == closing:
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return None
+
+
+def _text_parameter_names(raw: str) -> tuple[str, ...]:
+    result: list[str] = []
+    depth = 0
+    current: list[str] = []
+    parts: list[str] = []
+    pairs = {"(": ")", "[": "]", "{": "}", "<": ">"}
+    closers: list[str] = []
+    quote: str | None = None
+    escaped = False
+    for char in raw:
+        if quote:
+            current.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in {'"', "'", chr(96)}:
+            quote = char
+            current.append(char)
+            continue
+        if char in pairs:
+            closers.append(pairs[char])
+            depth += 1
+            current.append(char)
+            continue
+        if closers and char == closers[-1]:
+            closers.pop()
+            depth -= 1
+            current.append(char)
+            continue
+        if char == "," and depth == 0:
+            parts.append("".join(current))
+            current = []
+            continue
+        current.append(char)
+    parts.append("".join(current))
+    for part in parts:
+        token = part.strip()
+        token = re.sub(r"^(?:public|private|protected|readonly)\s+", "", token)
+        token = token.lstrip(".")
+        match = re.match(r"([A-Za-z_$][\w$]*)", token)
+        if match and match.group(1) not in {"this"}:
+            result.append(match.group(1))
+    return tuple(result)
+
+
+def _text_callable_body(
+    text: str, close_paren: int, *, arrow: bool
+) -> tuple[int, int] | None:
+    limit = min(len(text), close_paren + 1000)
+    if arrow:
+        arrow_index = text.find("=>", close_paren + 1, limit)
+        if arrow_index < 0:
+            return None
+        open_brace = text.find("{", arrow_index + 2, limit)
+    else:
+        open_brace = text.find("{", close_paren + 1, limit)
+        semicolon = text.find(";", close_paren + 1, limit)
+        if semicolon >= 0 and open_brace >= 0 and semicolon < open_brace:
+            return None
+    if open_brace < 0:
+        return None
+    close_brace = _text_matching_delimiter(text, open_brace, "{", "}")
+    if close_brace is None:
+        return None
+    return open_brace, close_brace
+
+
+def _text_js_classes(
+    text: str, relative: str, exported_names: set[str]
+) -> tuple[_TextClass, ...]:
+    result: list[_TextClass] = []
+    pattern = re.compile(
+        r"\b(?P<export>export\s+)?(?:default\s+)?class\s+"
+        r"(?P<name>[A-Za-z_$][\w$]*)[^{]*\{",
+        re.MULTILINE,
+    )
+    for match in pattern.finditer(text):
+        name = match.group("name")
+        open_brace = text.find("{", match.start(), match.end())
+        close_brace = _text_matching_delimiter(text, open_brace, "{", "}")
+        if open_brace < 0 or close_brace is None:
+            continue
+        result.append(
+            _TextClass(
+                name=name,
+                key=_symbol_key(relative, name),
+                start_line=_text_line(text, match.start()),
+                end_line=_text_line(text, close_brace),
+                body_open=open_brace,
+                body_close=close_brace,
+                exported=bool(match.group("export")) or name in exported_names,
+            )
+        )
+    return tuple(result)
+
+
+def _text_js_callables(
+    text: str,
+    relative: str,
+    lines: list[str],
+    scope_paths: list[tuple[int, ...]],
+    exported_names: set[str],
+    classes: tuple[_TextClass, ...],
+) -> tuple[_TextCallable, ...]:
+    result: list[_TextCallable] = []
+    seen: set[tuple[int, str, str | None]] = set()
+
+    def declaration_scope(line_no: int) -> int:
+        if line_no < 1 or line_no > len(scope_paths):
+            return 0
+        return scope_paths[line_no - 1][-1]
+
+    def add_function(
+        name: str,
+        start: int,
+        open_paren: int,
+        close_paren: int,
+        *,
+        arrow: bool,
+        exported: bool,
+    ) -> None:
+        body = _text_callable_body(text, close_paren, arrow=arrow)
+        if body is None:
+            return
+        open_brace, close_brace = body
+        start_line = _text_line(text, start)
+        scope_id = declaration_scope(start_line)
+        key = (
+            _symbol_key(relative, name)
+            if scope_id == 0
+            else f"{_symbol_key(relative, name)}:{start_line}"
+        )
+        identity = (start_line, name, None)
+        if identity in seen:
+            return
+        seen.add(identity)
+        result.append(
+            _TextCallable(
+                name=name,
+                key=key,
+                node_type="FUNCTION",
+                start_line=start_line,
+                end_line=_text_line(text, close_brace),
+                body_start_line=_text_line(text, open_brace),
+                params=_text_parameter_names(text[open_paren + 1 : close_paren]),
+                declaration_scope=scope_id,
+                exported=exported or name in exported_names,
+            )
+        )
+
+    function_re = re.compile(
+        r"\b(?P<export>export\s+)?(?:default\s+)?(?:async\s+)?function\s+"
+        r"(?P<name>[A-Za-z_$][\w$]*)\s*\(",
+        re.MULTILINE,
+    )
+    for match in function_re.finditer(text):
+        open_paren = match.end() - 1
+        close_paren = _text_matching_delimiter(text, open_paren, "(", ")")
+        if close_paren is not None:
+            add_function(
+                match.group("name"),
+                match.start(),
+                open_paren,
+                close_paren,
+                arrow=False,
+                exported=bool(match.group("export")),
+            )
+
+    arrow_re = re.compile(
+        r"\b(?P<export>export\s+)?(?:const|let|var)\s+"
+        r"(?P<name>[A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(",
+        re.MULTILINE,
+    )
+    for match in arrow_re.finditer(text):
+        open_paren = match.end() - 1
+        close_paren = _text_matching_delimiter(text, open_paren, "(", ")")
+        if close_paren is not None:
+            tail = text[close_paren + 1 : min(len(text), close_paren + 1000)]
+            if "=>" not in tail:
+                continue
+            add_function(
+                match.group("name"),
+                match.start(),
+                open_paren,
+                close_paren,
+                arrow=True,
+                exported=bool(match.group("export")),
+            )
+
+    function_expr_re = re.compile(
+        r"\b(?P<export>export\s+)?(?:const|let|var)\s+"
+        r"(?P<name>[A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(",
+        re.MULTILINE,
+    )
+    for match in function_expr_re.finditer(text):
+        open_paren = match.end() - 1
+        close_paren = _text_matching_delimiter(text, open_paren, "(", ")")
+        if close_paren is not None:
+            add_function(
+                match.group("name"),
+                match.start(),
+                open_paren,
+                close_paren,
+                arrow=False,
+                exported=bool(match.group("export")),
+            )
+
+    method_re = re.compile(
+        r"(?m)^[ \t]*(?P<mods>(?:(?:public|private|protected|static|async|override|abstract)\s+)*)"
+        r"(?P<name>[A-Za-z_$][\w$]*)\s*\("
+    )
+    for cls in classes:
+        class_scope: int | None = None
+        open_line = _text_line(text, cls.body_open)
+        if open_line < len(scope_paths):
+            class_scope = scope_paths[open_line][-1]
+        body = text[cls.body_open + 1 : cls.body_close]
+        for match in method_re.finditer(body):
+            name = match.group("name")
+            if name in {"if", "for", "while", "switch", "catch"}:
+                continue
+            absolute_start = cls.body_open + 1 + match.start()
+            start_line = _text_line(text, absolute_start)
+            if (
+                class_scope is not None
+                and start_line <= len(scope_paths)
+                and scope_paths[start_line - 1][-1] != class_scope
+            ):
+                continue
+            open_paren = cls.body_open + 1 + match.end() - 1
+            close_paren = _text_matching_delimiter(text, open_paren, "(", ")")
+            if close_paren is None:
+                continue
+            callable_body = _text_callable_body(text, close_paren, arrow=False)
+            if callable_body is None:
+                continue
+            open_brace, close_brace = callable_body
+            if close_brace > cls.body_close:
+                continue
+            identity = (start_line, name, cls.name)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            result.append(
+                _TextCallable(
+                    name=name,
+                    key=f"symbol:{relative}:{cls.name}.{name}:{start_line}",
+                    node_type="METHOD",
+                    start_line=start_line,
+                    end_line=_text_line(text, close_brace),
+                    body_start_line=_text_line(text, open_brace),
+                    params=_text_parameter_names(
+                        text[open_paren + 1 : close_paren]
+                    ),
+                    declaration_scope=class_scope or 0,
+                    exported=cls.exported,
+                    owner_class=cls.name,
+                    is_static="static" in (match.group("mods") or "").split(),
+                )
+            )
+    return tuple(
+        sorted(
+            result,
+            key=lambda item: (
+                item.start_line,
+                item.owner_class or "",
+                item.name,
+            ),
+        )
+    )
+
+
 def _text_lexical_scope_paths(lines: list[str]) -> list[tuple[int, ...]]:
     """Return conservative brace-scope ancestry for JS/TS source lines."""
     paths: list[tuple[int, ...]] = []
@@ -343,6 +1000,20 @@ def _text_exported_callable_names(text: str) -> set[str]:
             text,
         )
     }
+    exported.update(
+        match.group(1)
+        for match in re.finditer(
+            r"\bexport\s+(?:default\s+)?class\s+([A-Za-z_$][\w$]*)",
+            text,
+        )
+    )
+    exported.update(
+        match.group(1)
+        for match in re.finditer(
+            r"\bexport\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)",
+            text,
+        )
+    )
     for match in re.finditer(r"\bexport\s*\{([^}]*)\}", text, re.S):
         for item in match.group(1).split(","):
             raw = item.strip()

@@ -1266,3 +1266,302 @@ function unrelated(api: unknown) {
         and item["clarification_owner"] == "TECHNICAL"
         for item in discovery["findings"]
     )
+
+
+def test_local_arrow_literal_false_resolves_unreachable_with_trusted_pge_closure(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+const summarize = async (text: string, aiEnabled: boolean) => {
+  if (!aiEnabled) return text;
+  return client.responses.create({ model: "gpt-5", input: text });
+};
+
+summarize("hello", false);
+""",
+    )
+
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+    assert not any(item["kind"] == "SDK_INVOCATION" for item in discovery["findings"])
+    assert not any(
+        item.get("clarification_kind") == "AI_RUNTIME_REACHABILITY"
+        for item in discovery["findings"]
+    )
+
+
+def test_local_arrow_literal_true_resolves_reachable_with_trusted_pge_closure(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+const summarize = async (text: string, aiEnabled: boolean) => {
+  if (!aiEnabled) return text;
+  return client.responses.create({ model: "gpt-5", input: text });
+};
+
+summarize("hello", true);
+""",
+    )
+
+    assert discovery["gate"] == "AI_CONFIRMED"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["runtime_guard"] == "aiEnabled"
+    assert finding["clarification_kind"] == "AI_PURPOSE_FEATURE_MAPPING"
+    assert finding["clarification_owner"] == "CUSTOMER"
+
+
+def test_local_class_method_literal_false_resolves_unreachable_before_interview(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+const service = new AiService();
+service.summarize("hello", false);
+""",
+    )
+
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+    assert not any(item["kind"] == "SDK_INVOCATION" for item in discovery["findings"])
+    assert not any(
+        item.get("clarification_kind") == "AI_RUNTIME_REACHABILITY"
+        for item in discovery["findings"]
+    )
+
+
+def test_local_class_method_literal_true_resolves_reachable_before_interview(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+const service = new AiService();
+service.summarize("hello", true);
+""",
+    )
+
+    assert discovery["gate"] == "AI_CONFIRMED"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["runtime_guard"] == "aiEnabled"
+    assert finding["clarification_kind"] == "AI_PURPOSE_FEATURE_MAPPING"
+    assert finding["clarification_owner"] == "CUSTOMER"
+
+
+def test_multiline_function_and_method_signatures_resolve_parameter_guards(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+async function summarize(
+  text: string,
+  aiEnabled: boolean,
+) {
+  if (!aiEnabled) return text;
+  return client.responses.create({ model: "gpt-5", input: text });
+}
+
+class AiService {
+  summarize(
+    text: string,
+    aiEnabled: boolean,
+  ) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+summarize("function", false);
+const service = new AiService();
+service.summarize("method", false);
+""",
+    )
+
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+    assert not any(item["kind"] == "SDK_INVOCATION" for item in discovery["findings"])
+    assert not any(
+        item.get("clarification_kind") == "AI_RUNTIME_REACHABILITY"
+        for item in discovery["findings"]
+    )
+
+
+def test_di_incomplete_method_dispatch_stays_technical_not_customer_runtime(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+function run(service: AiService) {
+  return service.summarize("hello", false);
+}
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["runtime_guard"] == "aiEnabled"
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+    assert not any(
+        item.get("clarification_kind") == "AI_RUNTIME_REACHABILITY"
+        for item in discovery["findings"]
+    )
+
+
+def test_aliased_service_receiver_dispatch_stays_technical_not_customer_runtime(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+const service = new AiService();
+const alias = service;
+alias.summarize("hello", false);
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["runtime_guard"] == "aiEnabled"
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+    assert not any(
+        item.get("clarification_kind") == "AI_RUNTIME_REACHABILITY"
+        for item in discovery["findings"]
+    )
+
+
+def test_dynamic_method_dispatch_stays_technical_not_customer_runtime(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+const service = new AiService();
+const method = "summarize";
+service[method]("hello", false);
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["runtime_guard"] == "aiEnabled"
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+    assert not any(
+        item.get("clarification_kind") == "AI_RUNTIME_REACHABILITY"
+        for item in discovery["findings"]
+    )
+
+
+
+def test_arrow_and_method_calls_have_canonical_pge_identity_and_parameters(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "app.ts").write_text(
+        """
+const summarizeArrow = async (text: string, aiEnabled: boolean) => {
+  return text;
+};
+
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    return text;
+  }
+}
+
+summarizeArrow("arrow", false);
+const service = new AiService();
+service.summarize("method", false);
+""",
+        encoding="utf-8",
+    )
+    program = RepositorySemanticExtractor(tmp_path).extract()
+    node_by_key = {node.key: node for node in program.nodes}
+
+    arrow = next(
+        node
+        for node in program.nodes
+        if node.node_type == "FUNCTION" and node.label == "summarizeArrow"
+    )
+    method = next(
+        node
+        for node in program.nodes
+        if node.node_type == "METHOD" and node.label == "summarize"
+    )
+    assert arrow.attributes["externalReachability"] == "REPOSITORY_LOCAL"
+    assert method.attributes["ownerClass"] == "AiService"
+
+    arrow_params = [
+        node_by_key[edge.target_key].label
+        for edge in program.edges
+        if edge.edge_type == "HAS_PARAMETER" and edge.source_key == arrow.key
+    ]
+    method_params = [
+        node_by_key[edge.target_key].label
+        for edge in program.edges
+        if edge.edge_type == "HAS_PARAMETER" and edge.source_key == method.key
+    ]
+    assert arrow_params == ["text", "aiEnabled"]
+    assert method_params == ["text", "aiEnabled"]
+    assert any(
+        edge.edge_type == "RESOLVES_TO"
+        and edge.target_key == arrow.key
+        and node_by_key[edge.source_key].label == "summarizeArrow"
+        for edge in program.edges
+    )
+    assert any(
+        edge.edge_type == "RESOLVES_TO"
+        and edge.target_key == method.key
+        and node_by_key[edge.source_key].label == "service.summarize"
+        for edge in program.edges
+    )
+
