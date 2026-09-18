@@ -48,11 +48,50 @@ class CrossReferenceResolver:
         resolved += count
         limitations.extend(http_limits)
         unresolved.extend(http_unresolved)
+        try:
+            count, messaging_limits, messaging_unresolved = self._messaging_boundaries(program, project_discovery)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as exc:
+            count, messaging_limits, messaging_unresolved = 0, [f"cross_messaging_resolution_failed:{type(exc).__name__}"], []
+        resolved += count
+        limitations.extend(messaging_limits)
+        unresolved.extend(messaging_unresolved)
         program.coverage_notes.extend(limitations)
         program.unresolved_frontiers.extend(unresolved)
         program.coverage_notes = sorted(set(program.coverage_notes))
         program.unresolved_frontiers = sorted(set(program.unresolved_frontiers))
         return CrossResolutionResult(resolved, tuple(sorted(set(limitations))), tuple(sorted(set(unresolved))))
+
+    def _messaging_boundaries(self, program, discovery):
+        """Converge explicitly identified producer/consumer resources.
+
+        Producers and consumers are emitted by language/framework analyzers.  This
+        pass only links distinct resources when provider, kind, and literal name are
+        all present; generic names and dynamic configuration remain unresolved.
+        """
+        resources = [node for node in program.nodes if node.node_type in {"QUEUE", "EVENT"}]
+        groups: dict[tuple[str, str, str], list] = {}
+        for node in resources:
+            attrs = node.attributes or {}
+            provider = str(attrs.get("provider") or attrs.get("messagingProvider") or "").lower()
+            name = str(attrs.get("resourceName") or attrs.get("topic") or attrs.get("queue") or "").strip()
+            kind = node.node_type
+            if not provider or not name:
+                continue
+            groups.setdefault((provider, kind, name), []).append(node)
+        resolved = 0
+        limitations: list[str] = []
+        unresolved: list[str] = []
+        for identity, candidates in sorted(groups.items()):
+            unique = sorted({node.key: node for node in candidates}.values(), key=lambda node: node.key)
+            if len(unique) < 2:
+                continue
+            for left, right in zip(unique, unique[1:]):
+                if not any(edge.edge_type == "RESOLVES_TO" and edge.source_key == left.key and edge.target_key == right.key for edge in program.edges):
+                    program.add_edge(SemanticEdgeFact("RESOLVES_TO", left.key, right.key, attributes={"resolution": "MESSAGING_RESOURCE", "provider": identity[0], "resourceType": identity[1], "resourceName": identity[2]}, resolution_state="CORROBORATED"))
+                    resolved += 1
+        return resolved, limitations, unresolved
 
     def _project_references(self, program, workspace, discovery):
         by_root = {item.relative_root: item for item in discovery.projects}

@@ -113,6 +113,21 @@ discard successful language/framework facts. Future messaging, gRPC, GraphQL,
 and workspace-package resolvers should register as additional canonical-fact
 passes rather than adding language-specific branches.
 
+## Protocol coverage
+
+Protocol evidence uses the existing canonical vocabulary and is resolved after
+language/framework extraction:
+
+| Domain | Static extraction | Resolution | Limitations |
+| --- | --- | --- | --- |
+| Messaging | queue/event/command producer and consumer facts | provider + resource kind + literal name | dynamic or ambiguous resources remain unresolved |
+| GraphQL | `.graphql`/`.gql` operations and resolver decorators | canonical operation to existing functions/methods | schema inference and endpoint association are partial |
+| gRPC | protobuf package/service/RPC/request/response facts | qualified service/package/method matching | generated clients and ambiguous implementations remain partial |
+| Command/Query/Event | framework and architecture evidence | canonical handler edges | application events remain distinct from transport resources |
+
+No protocol-specific node or edge vocabulary was added. Protocol failures are
+isolated and preserve successful language/framework facts.
+
 ## Framework adapter extension point
 
 Framework semantics are a separate, project-scoped layer over language facts.

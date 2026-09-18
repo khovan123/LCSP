@@ -51,6 +51,13 @@ class ProtocolBoundaryResolver:
         exact = [node for node in concrete if _canonical(node.label) == canonical]
         if exact:
             return exact
+        # Proto identities may include package/service qualification while source
+        # methods expose only the implementation name.  Only accept this fallback
+        # when it remains unique; never choose the first same-named method.
+        method = canonical.rsplit(".", 1)[-1]
+        qualified = [node for node in concrete if _canonical(node.label) == method]
+        if len(qualified) == 1:
+            return qualified
         # Common generated-service naming keeps the RPC identity but adds a suffix.
         return [
             node
