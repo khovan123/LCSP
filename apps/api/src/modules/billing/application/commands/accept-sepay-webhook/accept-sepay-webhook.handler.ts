@@ -3,7 +3,7 @@ import { CommandHandler } from "@nestjs/cqrs";
 import type { ICommandHandler } from "@nestjs/cqrs";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
-import { acceptSePayWebhook } from "../../cqrs/billing-cqrs.helpers.js";
+import { acceptSePayWebhook } from "../../shared/billing-application.helpers.js";
 import { AcceptSePayWebhookCommand } from "./accept-sepay-webhook.command.js";
 
 @CommandHandler(AcceptSePayWebhookCommand)

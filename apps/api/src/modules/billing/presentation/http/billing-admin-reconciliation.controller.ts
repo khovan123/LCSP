@@ -19,7 +19,7 @@ import { RejectBillingPaymentCommand } from "../../application/commands/reject-b
 import { ResolveBillingPaymentCommand } from "../../application/commands/resolve-billing-payment/resolve-billing-payment.command.js";
 import { GetBillingReconciliationQuery } from "../../application/queries/get-billing-reconciliation/get-billing-reconciliation.query.js";
 import { ListBillingReconciliationQuery } from "../../application/queries/list-billing-reconciliation/list-billing-reconciliation.query.js";
-import { toBillingAdminProblem } from "./utils/billing-admin.utils.js";
+import { toBillingAdminProblem } from "./errors/billing-admin.error-mapper.js";
 
 @Controller("admin/billing/reconciliation")
 @UseGuards(RbacGuard)

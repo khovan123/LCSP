@@ -3,7 +3,7 @@ import type { CommandBus } from "@nestjs/cqrs";
 import type { Request } from "express";
 import { BILLING_RECONCILIATION_ERROR_CODES } from "@lcsp/contracts/billing";
 
-import { SePayWebhookIngressError } from "../../application/services/sepay-webhook-ingress.service.js";
+import { SePayWebhookIngressError } from "../../infrastructure/security/sepay-webhook-ingress.js";
 import { SePayWebhookController } from "./sepay-webhook.controller.js";
 
 describe("SePayWebhookController", () => {

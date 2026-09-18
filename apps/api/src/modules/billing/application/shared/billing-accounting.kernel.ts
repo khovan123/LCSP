@@ -15,7 +15,7 @@ import type {
 import { BILLING_TRANSACTION_PORT } from "../../domain/repositories/billing-transaction.port.js";
 
 @Injectable()
-export class BillingAccountingService {
+export class BillingAccountingKernel {
   constructor(
     @Inject(BILLING_TRANSACTION_PORT)
     private readonly transactions: BillingTransactionPort,

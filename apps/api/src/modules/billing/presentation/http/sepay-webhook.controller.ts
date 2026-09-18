@@ -7,7 +7,7 @@ import { AcceptSePayWebhookCommand } from "../../application/commands/accept-sep
 import {
   mapSePayWebhookError,
   rawWebhookBody,
-} from "./utils/sepay-webhook.utils.js";
+} from "./errors/sepay-webhook.error-mapper.js";
 
 @Controller("billing/sepay")
 export class SePayWebhookController {

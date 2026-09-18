@@ -7,7 +7,10 @@ import {
   BILLING_TRANSACTION_PORT,
   type BillingTransactionPort,
 } from "../../../domain/repositories/billing-transaction.port.js";
-import { expireOrder, toOrderView } from "../../cqrs/billing-cqrs.helpers.js";
+import {
+  expireOrder,
+  toOrderView,
+} from "../../shared/billing-application.helpers.js";
 import type { AppConfig } from "../../../../../config/config.types.js";
 import { ListBillingHistoryQuery } from "./list-billing-history.query.js";
 

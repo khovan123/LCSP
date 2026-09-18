@@ -26,7 +26,7 @@ import type {
 } from "../../domain/repositories/billing-transaction.port.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { OutboxRepository } from "../../../../platform/outbox/outbox.repository.js";
-import { BillingAccountingService } from "../services/billing-accounting.service.js";
+import { BillingAccountingKernel } from "./billing-accounting.kernel.js";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type {
   BillingAdminRejectInput,
@@ -216,7 +216,7 @@ export async function resolvePayment(
   input: BillingAdminResolveInput,
   prisma: PrismaService,
   transactions: BillingTransactionPort,
-  accounting: BillingAccountingService,
+  accounting: BillingAccountingKernel,
 ) {
   assertRationale(input.rationale);
   const initial = await transactions.runForUser(

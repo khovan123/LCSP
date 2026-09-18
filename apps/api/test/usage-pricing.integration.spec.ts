@@ -9,8 +9,8 @@ import {
   it,
 } from "@jest/globals";
 import { randomUUID } from "node:crypto";
-import { BillingAccountingService } from "../src/modules/billing/application/services/billing-accounting.service.js";
-import { BillingUsageService } from "../src/modules/billing/application/services/billing-usage.service.js";
+import { BillingAccountingKernel } from "../src/modules/billing/application/shared/billing-accounting.kernel.js";
+import { BillingUsageKernel } from "../src/modules/billing/application/shared/billing-usage.kernel.js";
 import { calculateUsageChargeCredits } from "../src/modules/billing/domain/usage-pricing.js";
 import { PrismaBillingTransaction } from "../src/modules/billing/infrastructure/persistence/prisma-billing-transaction.js";
 import type {
@@ -27,16 +27,16 @@ import {
 describe("LCSP-310 usage and pricing foundation", () => {
   let prisma: PrismaClient;
   let billingPrisma: PrismaService;
-  let accounting: BillingAccountingService;
-  let governedUsage: BillingUsageService;
+  let accounting: BillingAccountingKernel;
+  let governedUsage: BillingUsageKernel;
   type LegacyUsageInput = Omit<
-    Parameters<BillingUsageService["recordAndSettleUsage"]>[0],
+    Parameters<BillingUsageKernel["recordAndSettleUsage"]>[0],
     "agentRole" | "effectiveRuntimeModel"
   >;
   let usage: {
     recordAndSettleUsage: (
       input: LegacyUsageInput,
-    ) => ReturnType<BillingUsageService["recordAndSettleUsage"]>;
+    ) => ReturnType<BillingUsageKernel["recordAndSettleUsage"]>;
   };
   const id = () => randomUUID();
   const runtimeModel: EffectiveRuntimeModel = {
@@ -63,8 +63,8 @@ describe("LCSP-310 usage and pricing foundation", () => {
     `);
     billingPrisma = new PrismaService();
     const tx = new PrismaBillingTransaction(billingPrisma);
-    accounting = new BillingAccountingService(tx);
-    const usageService = new BillingUsageService(tx, accounting, billingPrisma);
+    accounting = new BillingAccountingKernel(tx);
+    const usageService = new BillingUsageKernel(tx, accounting, billingPrisma);
     governedUsage = usageService;
     usage = {
       recordAndSettleUsage: (input) =>
@@ -490,9 +490,9 @@ describe("LCSP-310 usage and pricing foundation", () => {
       },
     });
     const tx = new PrismaBillingTransaction(new PrismaService());
-    const strictUsage = new BillingUsageService(
+    const strictUsage = new BillingUsageKernel(
       tx,
-      new BillingAccountingService(tx),
+      new BillingAccountingKernel(tx),
     );
     await expect(
       strictUsage.recordAndSettleUsage({
@@ -544,9 +544,9 @@ describe("LCSP-310 usage and pricing foundation", () => {
       },
     });
     const tx = new PrismaBillingTransaction(new PrismaService());
-    const strictUsage = new BillingUsageService(
+    const strictUsage = new BillingUsageKernel(
       tx,
-      new BillingAccountingService(tx),
+      new BillingAccountingKernel(tx),
     );
     const event = await strictUsage.recordAndSettleUsage({
       userId: f.user.id,
@@ -975,9 +975,9 @@ describe("LCSP-310 usage and pricing foundation", () => {
       }
     }
     const real = new PrismaBillingTransaction(new PrismaService());
-    const faultUsage = new BillingUsageService(
+    const faultUsage = new BillingUsageKernel(
       new FaultTransaction(real),
-      new BillingAccountingService(real),
+      new BillingAccountingKernel(real),
     );
     await expect(
       faultUsage.recordAndSettleUsage({

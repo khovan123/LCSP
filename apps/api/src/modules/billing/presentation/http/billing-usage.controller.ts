@@ -11,14 +11,14 @@ import { ResolveBillingAssessmentOwnerQuery } from "../../application/queries/re
 import {
   projectReservation,
   serializeBillingData,
-} from "./mappers/billing-http.mapper.js";
+} from "./mappers/billing-http.response.mapper.js";
 import {
   toClaimInput,
   toReleaseInput,
   toReservationInput,
   toSettlementInput,
-} from "./mappers/billing-usage.mapper.js";
-import { mapUsageError } from "./utils/billing-http.utils.js";
+} from "./mappers/billing-usage.request.mapper.js";
+import { mapUsageError } from "./errors/billing-http.error-mapper.js";
 
 @Controller("internal/billing")
 export class BillingUsageController {

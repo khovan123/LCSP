@@ -9,7 +9,7 @@ import {
   parseInteger,
   parseNonNegativeInteger,
   text,
-} from "../utils/billing-usage.utils.js";
+} from "../parsers/billing-usage.request-parser.js";
 
 export function toReservationInput(
   body: Record<string, unknown>,

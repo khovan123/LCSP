@@ -5,7 +5,7 @@ import {
   BILLING_TRANSACTION_PORT,
   type BillingTransactionPort,
 } from "../../../domain/repositories/billing-transaction.port.js";
-import { rejectPayment } from "../../cqrs/billing-cqrs.helpers.js";
+import { rejectPayment } from "../../shared/billing-application.helpers.js";
 import { RejectBillingPaymentCommand } from "./reject-billing-payment.command.js";
 
 @CommandHandler(RejectBillingPaymentCommand)

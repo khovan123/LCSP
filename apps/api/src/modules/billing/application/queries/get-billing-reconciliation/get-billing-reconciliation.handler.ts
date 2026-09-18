@@ -1,7 +1,7 @@
 import { QueryHandler } from "@nestjs/cqrs";
 import type { IQueryHandler } from "@nestjs/cqrs";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
-import { getReconciliation } from "../../cqrs/billing-cqrs.helpers.js";
+import { getReconciliation } from "../../shared/billing-application.helpers.js";
 import { GetBillingReconciliationQuery } from "./get-billing-reconciliation.query.js";
 
 @QueryHandler(GetBillingReconciliationQuery)

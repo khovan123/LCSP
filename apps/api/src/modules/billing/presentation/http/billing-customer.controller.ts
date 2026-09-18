@@ -20,7 +20,10 @@ import { EstimateBillingQuery } from "../../application/queries/estimate-billing
 import { GetBillingOrderQuery } from "../../application/queries/get-billing-order/get-billing-order.query.js";
 import { GetBillingWalletQuery } from "../../application/queries/get-billing-wallet/get-billing-wallet.query.js";
 import { ListBillingHistoryQuery } from "../../application/queries/list-billing-history/list-billing-history.query.js";
-import { mapBillingError, parseAmount } from "./utils/billing-http.utils.js";
+import {
+  mapBillingError,
+  parseAmount,
+} from "./errors/billing-http.error-mapper.js";
 
 @Controller("billing")
 @UseGuards(RbacGuard)

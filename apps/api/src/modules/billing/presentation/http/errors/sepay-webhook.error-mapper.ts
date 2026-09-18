@@ -1,7 +1,7 @@
 import { HttpStatus } from "@nestjs/common";
 import type { Request } from "express";
 import { BILLING_RECONCILIATION_ERROR_CODES } from "@lcsp/contracts/billing";
-import { SePayWebhookIngressError } from "../../../application/services/sepay-webhook-ingress.service.js";
+import { SePayWebhookIngressError } from "../../../infrastructure/security/sepay-webhook-ingress.js";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
 
 export function rawWebhookBody(request: Request): Buffer {

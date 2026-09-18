@@ -3,7 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { CommandHandler } from "@nestjs/cqrs";
 import type { ICommandHandler } from "@nestjs/cqrs";
 import type { AppConfig } from "../../../../../config/config.types.js";
-import { BillingPaymentService } from "../../services/billing-payment.service.js";
+import { BillingPaymentKernel } from "../../shared/billing-payment.kernel.js";
 import {
   BILLING_TRANSACTION_PORT,
   type BillingTransactionPort,
@@ -11,7 +11,7 @@ import {
 import {
   estimatePrepaid,
   toOrderView,
-} from "../../cqrs/billing-cqrs.helpers.js";
+} from "../../shared/billing-application.helpers.js";
 import { CreateBillingOrderCommand } from "./create-billing-order.command.js";
 
 @CommandHandler(CreateBillingOrderCommand)
@@ -19,7 +19,7 @@ export class CreateBillingOrderHandler implements ICommandHandler<CreateBillingO
   constructor(
     @Inject(BILLING_TRANSACTION_PORT)
     private readonly transactions: BillingTransactionPort,
-    private readonly payments: BillingPaymentService,
+    private readonly payments: BillingPaymentKernel,
     private readonly config: ConfigService<AppConfig, true>,
   ) {}
 
