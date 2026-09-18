@@ -2,15 +2,14 @@ import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
   AUTH_ERROR_CODES,
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
-  createProblemResult,
 } from "@lcsp/contracts/auth";
 
 import { Inject } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 
+import { problemException } from "../../../../../platform/problems/problem-factory.ts";
 import type { OAuthCallbackClaims } from "../../../infrastructure/oauth/oauth-provider.interface.ts";
 import { OAuthProviderRegistry } from "../../../infrastructure/oauth/oauth-provider.registry.ts";
-import type { AuthProblemResult } from "../../contracts/auth-workspace/common.contract.ts";
 import type { OAuthLinkCallbackSuccess } from "../../contracts/auth-workspace/oauth.contract.ts";
 import {
   AUTH_WORKSPACE_REPOSITORIES,
@@ -30,7 +29,7 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
 
   async execute(
     command: OAuthLinkCallbackCommand,
-  ): Promise<AuthProblemResult | OAuthLinkCallbackSuccess> {
+  ): Promise<OAuthLinkCallbackSuccess> {
     const { payload, requestMeta } = command;
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
@@ -40,7 +39,7 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
     const providerParam = asNonEmptyString(payload?.provider);
 
     if (!code || !stateValue || !providerParam) {
-      return createProblemResult(
+      throw problemException(
         AUTH_ERROR_CODES.validationFailed,
         correlationId,
       );
@@ -61,7 +60,7 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
         correlationId,
         AUTH_ERROR_CODES.oauthStateInvalid,
       );
-      return createProblemResult(
+      throw problemException(
         AUTH_ERROR_CODES.oauthStateInvalid,
         correlationId,
       );
@@ -74,7 +73,7 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
         correlationId,
         AUTH_ERROR_CODES.unsupportedProvider,
       );
-      return createProblemResult(
+      throw problemException(
         AUTH_ERROR_CODES.unsupportedProvider,
         correlationId,
       );
@@ -93,7 +92,7 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
         correlationId,
         AUTH_ERROR_CODES.oauthCallbackInvalid,
       );
-      return createProblemResult(
+      throw problemException(
         AUTH_ERROR_CODES.oauthCallbackInvalid,
         correlationId,
       );
@@ -114,7 +113,7 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
         correlationId,
         AUTH_ERROR_CODES.oauthCallbackInvalid,
       );
-      return createProblemResult(
+      throw problemException(
         AUTH_ERROR_CODES.oauthCallbackInvalid,
         correlationId,
       );
@@ -132,7 +131,7 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
         correlationId,
         AUTH_ERROR_CODES.oauthCallbackInvalid,
       );
-      return createProblemResult(
+      throw problemException(
         AUTH_ERROR_CODES.oauthCallbackInvalid,
         correlationId,
       );

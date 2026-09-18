@@ -2,13 +2,12 @@ import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
   AUTH_ERROR_CODES,
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
-  createProblemResult,
 } from "@lcsp/contracts/auth";
 
 import { Inject } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 
-import type { AuthProblemResult } from "../../contracts/auth-workspace/common.contract.ts";
+import { problemException } from "../../../../../platform/problems/problem-factory.ts";
 import type { WorkspaceSuccess } from "../../contracts/auth-workspace/workspace.contract.ts";
 import {
   AUTH_WORKSPACE_REPOSITORIES,
@@ -27,7 +26,7 @@ export class GetWorkspaceHandler implements IQueryHandler<GetWorkspaceQuery> {
 
   async execute(
     query: GetWorkspaceQuery,
-  ): Promise<AuthProblemResult | WorkspaceSuccess> {
+  ): Promise<WorkspaceSuccess> {
     const { context, correlationId } = query;
     const { repositories } = this;
     const cid = correlationId ?? this.support.createCorrelationId();
@@ -44,7 +43,7 @@ export class GetWorkspaceHandler implements IQueryHandler<GetWorkspaceQuery> {
         reason_code: AUTH_ERROR_CODES.sessionInvalid,
         correlationId: cid,
       });
-      return createProblemResult(AUTH_ERROR_CODES.sessionInvalid, cid);
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, cid);
     }
 
     const session = await this.repositories.sessions.findById(
@@ -62,7 +61,7 @@ export class GetWorkspaceHandler implements IQueryHandler<GetWorkspaceQuery> {
         reason_code: AUTH_ERROR_CODES.sessionInvalid,
         correlationId: cid,
       });
-      return createProblemResult(AUTH_ERROR_CODES.sessionInvalid, cid);
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, cid);
     }
 
     const authorization = await this.support.authorizeWorkspace(
@@ -70,16 +69,6 @@ export class GetWorkspaceHandler implements IQueryHandler<GetWorkspaceQuery> {
       user,
       cid,
     );
-    if (authorization.ok === false) {
-      await this.support.recordAudit(repositories, {
-        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.workspaceAccessDenied,
-        actor_id: user.id,
-        decision: AUDIT_DECISIONS.deny,
-        reason_code: authorization.problem.code,
-        correlationId: cid,
-      });
-      return authorization;
-    }
 
     await this.support.recordAudit(repositories, {
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.workspaceAccessAllowed,
