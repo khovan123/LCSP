@@ -111,7 +111,7 @@ jobs:
         env:
           CHANGED_API_FILES: ${{ needs.changes.outputs.api_files }}
         run: |
-          files="$(printf '%s\n' "$CHANGED_API_FILES" | tr ' ' '\n' | awk '/^apps\/api\/.*\.(ts|tsx)$/ { sub("^apps/api/", ""); print }' | while IFS= read -r file; do [ -f "apps/api/$file" ] && printf '%s\n' "$file"; done)"
+          files="$(printf '%s\n' "$CHANGED_API_FILES" | tr ' ' '\n' | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//' | awk '/^apps\/api\/.*\.(ts|tsx)$/ { sub("^apps/api/", ""); print }' | while IFS= read -r file; do if [ -f "apps/api/$file" ]; then printf '%s\n' "$file"; fi; done)"
           if [ -n "$files" ]; then
             pnpm --dir apps/api exec eslint $files --fix
           fi
@@ -122,7 +122,7 @@ jobs:
         env:
           CHANGED_WEB_FILES: ${{ needs.changes.outputs.web_files }}
         run: |
-          files="$(printf '%s\n' "$CHANGED_WEB_FILES" | tr ' ' '\n' | awk '/^apps\/web\/.*\.(ts|tsx)$/ { sub("^apps/web/", ""); print }' | while IFS= read -r file; do [ -f "apps/web/$file" ] && printf '%s\n' "$file"; done)"
+          files="$(printf '%s\n' "$CHANGED_WEB_FILES" | tr ' ' '\n' | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//' | awk '/^apps\/web\/.*\.(ts|tsx)$/ { sub("^apps/web/", ""); print }' | while IFS= read -r file; do if [ -f "apps/web/$file" ]; then printf '%s\n' "$file"; fi; done)"
           if [ -n "$files" ]; then
             pnpm --dir apps/web exec eslint $files --fix
           fi
@@ -188,7 +188,7 @@ jobs:
         env:
           CHANGED_API_FILES: ${{ needs.changes.outputs.api_files }}
         run: |
-          files="$(printf '%s\n' "$CHANGED_API_FILES" | tr ' ' '\n' | awk '/^apps\/api\/.*\.(ts|tsx)$/ { sub("^apps/api/", ""); print }' | while IFS= read -r file; do [ -f "apps/api/$file" ] && printf '%s\n' "$file"; done)"
+          files="$(printf '%s\n' "$CHANGED_API_FILES" | tr ' ' '\n' | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//' | awk '/^apps\/api\/.*\.(ts|tsx)$/ { sub("^apps/api/", ""); print }' | while IFS= read -r file; do if [ -f "apps/api/$file" ]; then printf '%s\n' "$file"; fi; done)"
           if [ -n "$files" ]; then
             pnpm --dir apps/api exec eslint $files
           else
@@ -233,7 +233,7 @@ jobs:
         env:
           CHANGED_WEB_FILES: ${{ needs.changes.outputs.web_files }}
         run: |
-          files="$(printf '%s\n' "$CHANGED_WEB_FILES" | tr ' ' '\n' | awk '/^apps\/web\/.*\.(ts|tsx)$/ { sub("^apps/web/", ""); print }' | while IFS= read -r file; do [ -f "apps/web/$file" ] && printf '%s\n' "$file"; done)"
+          files="$(printf '%s\n' "$CHANGED_WEB_FILES" | tr ' ' '\n' | sed -e "s/^'//" -e "s/'$//" -e 's/^"//' -e 's/"$//' | awk '/^apps\/web\/.*\.(ts|tsx)$/ { sub("^apps/web/", ""); print }' | while IFS= read -r file; do if [ -f "apps/web/$file" ]; then printf '%s\n' "$file"; fi; done)"
           if [ -n "$files" ]; then
             pnpm --dir apps/web exec eslint $files
           else
