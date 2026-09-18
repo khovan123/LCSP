@@ -294,7 +294,6 @@ class RepositorySemanticExtractor:
         instance_bindings: dict[
             int, dict[str, list[tuple[int, str | None]]]
         ] = {}
-        unstable_instance_names: set[str] = set()
         if is_js_text:
             for line_no, line in enumerate(source_lines, start=1):
                 scope_id = scope_paths[line_no - 1][-1]
@@ -323,6 +322,18 @@ class RepositorySemanticExtractor:
                         declared_name, []
                     ).append((line_no, owner_class))
 
+            # Reassignments invalidate only the concrete lexical binding they
+            # reach, and only from the reassignment line onward. Same-named
+            # bindings in unrelated scopes must not erase proven provenance.
+            for line_no, line in enumerate(source_lines, start=1):
+                structural = re.sub(
+                    r"(['\"\x60]).*?(?<!\\)\1", "", line
+                ).split("//", 1)[0]
+                declaration = re.search(
+                    r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)",
+                    structural,
+                )
+                declared_name = declaration.group(1) if declaration else None
                 for assignment in re.finditer(
                     r"(?<![\w$.])([A-Za-z_$][\w$]*)\s*=(?!=|>)",
                     structural,
@@ -330,15 +341,32 @@ class RepositorySemanticExtractor:
                     name = assignment.group(1)
                     if declared_name == name:
                         continue
-                    # Reassignment requires def-use/control-flow proof before a
-                    # receiver can remain authoritative. Until that exists, any
-                    # class identity for this binding is conservatively invalid.
-                    unstable_instance_names.add(name)
+                    enclosing_callables = [
+                        item
+                        for item in callables
+                        if item.start_line <= line_no <= item.end_line
+                    ]
+                    if any(name in item.params for item in enclosing_callables):
+                        # Parameter provenance is never inferred as a class
+                        # instance here, so its mutation needs no outer binding
+                        # invalidation.
+                        continue
+                    binding_scope = next(
+                        (
+                            candidate
+                            for candidate in reversed(scope_paths[line_no - 1])
+                            if name in instance_bindings.get(candidate, {})
+                        ),
+                        None,
+                    )
+                    if binding_scope is None:
+                        binding_scope = scope_paths[line_no - 1][-1]
+                    instance_bindings.setdefault(binding_scope, {}).setdefault(
+                        name, []
+                    ).append((line_no, None))
 
         def resolve_instance(name: str, line_no: int) -> str | None:
             if not is_js_text or line_no < 1 or line_no > len(scope_paths):
-                return None
-            if name in unstable_instance_names:
                 return None
             # Parameters are lexical bindings even though they do not appear as
             # local declaration statements. They must prevent fallback to an
@@ -348,12 +376,7 @@ class RepositorySemanticExtractor:
                 for item in callables
                 if item.start_line <= line_no <= item.end_line
             ]
-            current_callable = min(
-                enclosing_callables,
-                key=lambda item: item.end_line - item.start_line,
-                default=None,
-            )
-            if current_callable and name in current_callable.params:
+            if any(name in item.params for item in enclosing_callables):
                 return None
             for scope_id in reversed(scope_paths[line_no - 1]):
                 events = instance_bindings.get(scope_id, {}).get(name)

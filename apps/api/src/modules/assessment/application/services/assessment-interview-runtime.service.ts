@@ -1818,35 +1818,36 @@ export class AssessmentInterviewRuntimeService {
         );
       }
 
+      await this.runtimeEvents.recordToolWaitingInput(
+        {
+          assessmentId: input.assessmentId,
+          runId: workflowRunId,
+          correlationId: input.correlationId,
+          stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+          toolName: INTERVIEW_TOOL_NAME,
+          summary: "Interview Agent question is waiting for Customer response.",
+          outputSummary: {
+            assessmentInterview: publicState(computedState),
+            interviewWorkflowEvent:
+              ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
+            orchestratorAction:
+              ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.waitForCustomer,
+            interviewMode: ASSESSMENT_INTERVIEW_MODES.initialInterview,
+            partialCoveragePolicyDecision:
+              provenance.partialCoveragePolicyDecision ?? null,
+          },
+          waitingReason: ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
+          startedAt: new Date(),
+        },
+        tx,
+      );
+
       return {
         state: computedState,
         partialCoveragePolicyDecision: provenance.partialCoveragePolicyDecision,
         idempotentReplay: false,
       };
     });
-
-    if (!seedResult.idempotentReplay) {
-      await this.runtimeEvents.recordToolWaitingInput({
-        assessmentId: input.assessmentId,
-        runId: workflowRunId,
-        correlationId: input.correlationId,
-        stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
-        toolName: INTERVIEW_TOOL_NAME,
-        summary: "Interview Agent question is waiting for Customer response.",
-        outputSummary: {
-          assessmentInterview: publicState(seedResult.state),
-          interviewWorkflowEvent:
-            ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
-          orchestratorAction:
-            ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.waitForCustomer,
-          interviewMode: ASSESSMENT_INTERVIEW_MODES.initialInterview,
-          partialCoveragePolicyDecision:
-            seedResult.partialCoveragePolicyDecision ?? null,
-        },
-        waitingReason: ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
-        startedAt: new Date(),
-      });
-    }
 
     return seedResult.state;
   }

@@ -3267,6 +3267,64 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       expect(mockRuntimeEvents.recordToolWaitingInput).toHaveBeenCalledTimes(1);
     });
 
+    it("rolls back the initial seed when waiting-event persistence fails and retry completes it once", async () => {
+      const workflowRunId = "10000000-0000-4000-8000-000000000001";
+      const initialState = {
+        ...initialQuestionState(),
+        expectedContextRevision: 0,
+      } as AssessmentInterviewRuntimeState & {
+        expectedContextRevision: number;
+      };
+      let committedTransactions = 0;
+      let durableWaitingEvents = 0;
+      mockTransaction.mockImplementation(
+        async <T>(
+          cb: (tx: MockPrismaDelegates) => Promise<T>,
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          _options?: unknown,
+        ): Promise<T> => {
+          const result = await cb(mockTx);
+          committedTransactions += 1;
+          return result;
+        },
+      );
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(null);
+      mockRuntimeEvents.recordToolWaitingInput
+        .mockRejectedValueOnce(new Error("runtime waiting event write failed"))
+        .mockImplementationOnce(async (...args: unknown[]) => {
+          expect(args[1]).toBe(mockTx);
+          durableWaitingEvents += 1;
+        });
+
+      await expect(
+        service.seedInitialQuestionForWorker({
+          assessmentId: "assessment-1",
+          correlationId: "corr-seed-event-failure",
+          workflowRunId,
+          state: initialState,
+        }),
+      ).rejects.toThrow("runtime waiting event write failed");
+
+      expect(committedTransactions).toBe(0);
+      expect(durableWaitingEvents).toBe(0);
+
+      await expect(
+        service.seedInitialQuestionForWorker({
+          assessmentId: "assessment-1",
+          correlationId: "corr-seed-event-retry",
+          workflowRunId,
+          state: initialState,
+        }),
+      ).resolves.toMatchObject({
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        contextRevision: 0,
+      });
+
+      expect(committedTransactions).toBe(1);
+      expect(durableWaitingEvents).toBe(1);
+      expect(mockRuntimeEvents.recordToolWaitingInput).toHaveBeenCalledTimes(2);
+    });
+
     it("rejects a delayed initial seed after the interview revision has advanced", async () => {
       const workflowRunId = "10000000-0000-4000-8000-000000000001";
       mockTx.assessmentInterviewThread.findUnique.mockResolvedValueOnce({
@@ -3421,6 +3479,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             },
           }),
         }),
+        mockTx,
       );
     });
 
