@@ -18,6 +18,7 @@ from tools.common.capabilities.evidence.graph.lineage.sensitive.sensitive_data i
 
 EXCLUDED_PARTS = {".git", "node_modules", "dist", "build", ".next", "coverage", "vendor", ".venv", "venv", "__pycache__"}
 TEXT_EXTENSIONS = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".kt", ".go", ".cs", ".rs"}
+JS_TEXT_EXTENSIONS = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
 AI_HINTS = (("OPENAI", ("openai", "chat.completions", "responses.create", "embeddings.create")), ("ANTHROPIC", ("anthropic", "messages.create")), ("GEMINI", ("google.genai", "generatecontent", "models.generate_content")), ("AZURE_OPENAI", ("azureopenai", "azure.openai")), ("BEDROCK", ("bedrock", "invoke_model", "converse")), ("HUGGINGFACE", ("huggingface", "hfinference", "inferenceclient")), ("OPENROUTER", ("openrouter",)), ("DEEPSEEK", ("deepseek",)), ("MOONSHOT", ("moonshot", "kimi")), ("LOCAL_INFERENCE", ("ollama", "localhost:11434", "/v1/chat/completions")))
 HTTP_HINTS = ("requests.get", "requests.post", "requests.put", "requests.patch", "requests.delete", "httpx.get", "httpx.post", "httpx.put", "httpx.patch", "httpx.delete", "urllib.request", "fetch", "axios.get", "axios.post", "axios.put", "axios.patch", "axios.delete", "httpclient", "resttemplate", "okhttp")
 HTTP_INSTANCE_METHODS = {"get", "post", "put", "patch", "delete", "request"}
@@ -106,12 +107,21 @@ class RepositorySemanticExtractor:
         for match in imports:
             package = match.group(1).split("/")[0] if not match.group(1).startswith("@") else "/".join(match.group(1).split("/")[:2]); key = f"package:{package}"
             program.add_node(SemanticNodeFact(key, "PACKAGE", package, attributes={"import": match.group(1)})); program.add_edge(SemanticEdgeFact("IMPORTS", mkey, key))
-        symbols: list[tuple[str, str]] = []
+        is_js_text = path.suffix.lower() in JS_TEXT_EXTENSIONS
+        exported_names = _text_exported_callable_names(text) if is_js_text else set()
+        source_lines = text.splitlines()
+        scope_paths = _text_lexical_scope_paths(source_lines) if is_js_text else []
+        symbols: dict[str, list[tuple[str, int]]] = {}
         for match in re.finditer(r"\b(class|interface|function|def|func)\s+([A-Za-z_$][\w$]*)", text):
             kind, name = match.group(1), match.group(2); ntype = "INTERFACE" if kind == "interface" else "CLASS" if kind == "class" else "FUNCTION"; line = text.count("\n", 0, match.start()) + 1; key = _symbol_key(relative, name)
-            program.add_node(SemanticNodeFact(key, ntype, name, relative, line, line, name)); program.add_edge(SemanticEdgeFact("DECLARES", mkey, key)); symbols.append((name, key))
+            attrs = {}
+            if ntype == "FUNCTION" and is_js_text:
+                attrs["externalReachability"] = "POSSIBLE" if name in exported_names else "REPOSITORY_LOCAL"
+            program.add_node(SemanticNodeFact(key, ntype, name, relative, line, line, name, attributes=attrs)); program.add_edge(SemanticEdgeFact("DECLARES", mkey, key))
+            declaration_scope = scope_paths[line - 1][-1] if is_js_text else 0
+            symbols.setdefault(name, []).append((key, declaration_scope))
         http_clients = _text_http_client_aliases(text)
-        for line_no, line in enumerate(text.splitlines(), start=1):
+        for line_no, line in enumerate(source_lines, start=1):
             assignment = re.search(r"\b(?:const|let|var)?\s*([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$.]*)", line)
             if assignment:
                 left, right = assignment.group(1), assignment.group(2); lkey, rkey = f"var:{relative}:{left}", f"var:{relative}:{right}"
@@ -119,11 +129,33 @@ class RepositorySemanticExtractor:
             route = re.search(r"@(Get|Post|Put|Patch|Delete)\s*\(\s*['\"]([^'\"]*)['\"]", line, re.I)
             if route:
                 key = f"route:{relative}:{line_no}"; program.add_node(SemanticNodeFact(key, "HTTP_ROUTE", f"{route.group(1).upper()} {route.group(2)}", relative, line_no, line_no, attributes={"method": route.group(1).upper(), "route": route.group(2)})); program.add_edge(SemanticEdgeFact("DECLARES", mkey, key))
-            for call in re.finditer(r"\b([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\s*\(", line): self._text_call(program, relative, line_no, call.group(1), line, mkey, http_clients.get(line_no, set()))
+            for call in re.finditer(r"\b([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\s*\(", line):
+                self._text_call(program, relative, line_no, call.group(1), line, mkey, http_clients.get(line_no, set()))
+            if is_js_text:
+                for call in re.finditer(r"(?<![\w$.])([A-Za-z_$][\w$]*)\s*\(", line):
+                    name = call.group(1)
+                    targets = symbols.get(name, [])
+                    if len(targets) != 1 or _is_text_function_declaration(line, call.start(1), name):
+                        continue
+                    target_key, declaration_scope = targets[0]
+                    if declaration_scope not in scope_paths[line_no - 1]:
+                        continue
+                    self._text_call(
+                        program,
+                        relative,
+                        line_no,
+                        name,
+                        line,
+                        mkey,
+                        http_clients.get(line_no, set()),
+                        resolves_to=target_key,
+                    )
 
-    def _text_call(self, program: SemanticProgram, relative: str, line: int, name: str, body: str, owner: str, http_clients: set[str]) -> None:
+    def _text_call(self, program: SemanticProgram, relative: str, line: int, name: str, body: str, owner: str, http_clients: set[str], *, resolves_to: str | None = None) -> None:
         lower = name.lower(); ntype, attrs = _call_type(lower, http_clients); key = f"call:{relative}:{line}:{name}"
         program.add_node(SemanticNodeFact(key, ntype, name, relative, line, line, attributes=attrs)); program.add_edge(SemanticEdgeFact("CALLS", owner, key))
+        if resolves_to:
+            program.add_edge(SemanticEdgeFact("RESOLVES_TO", key, resolves_to))
         _call_edges(program, key, name, relative, line)
         urls = re.findall(r"https?://[^'\"\s)]+", body)
         for raw in urls:
@@ -148,8 +180,13 @@ class _PythonVisitor(ast.NodeVisitor):
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None: self._function(node)
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None: self._function(node)
     def _function(self, node) -> None:
-        key = _symbol_key(self.item.relative, node.name); ntype = "METHOD" if self.owner.startswith("symbol:") else "FUNCTION"; symbol = node.name
-        self.program.add_node(SemanticNodeFact(key, ntype, node.name, self.item.relative, node.lineno, getattr(node, "end_lineno", node.lineno), symbol)); self.program.add_edge(SemanticEdgeFact("DECLARES", self.owner, key))
+        parent_scope = self.scope_stack[-1]
+        nested_callable = isinstance(parent_scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))
+        key = _python_callable_key(self.item.relative, node, nested=nested_callable)
+        ntype = "METHOD" if self.owner.startswith("symbol:") else "FUNCTION"; symbol = node.name
+        externally_reachable = isinstance(parent_scope, (ast.Module, ast.ClassDef))
+        attrs = {"externalReachability": "POSSIBLE" if externally_reachable else "REPOSITORY_LOCAL"}
+        self.program.add_node(SemanticNodeFact(key, ntype, node.name, self.item.relative, node.lineno, getattr(node, "end_lineno", node.lineno), symbol, attributes=attrs)); self.program.add_edge(SemanticEdgeFact("DECLARES", self.owner, key))
         for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]:
             pkey = f"param:{key}:{arg.arg}"; self.program.add_node(SemanticNodeFact(pkey, "PARAMETER", arg.arg, self.item.relative, arg.lineno, arg.lineno, f"{symbol}:{arg.arg}", semantic_types=semantic_types_for_identifier(arg.arg))); self.program.add_edge(SemanticEdgeFact("HAS_PARAMETER", key, pkey))
         rkey = f"return:{key}"; self.program.add_node(SemanticNodeFact(rkey, "RETURN_VALUE", f"{symbol}:return", self.item.relative, node.lineno, getattr(node, "end_lineno", node.lineno), f"{symbol}:return"))
@@ -193,6 +230,10 @@ class _PythonVisitor(ast.NodeVisitor):
         if imported:
             module, symbol = imported; target = self.symbols.get((module, symbol or name.split(".")[-1]))
             if target: self.program.add_edge(SemanticEdgeFact("RESOLVES_TO", key, target))
+        elif isinstance(node.func, ast.Name):
+            target = self._local_callable_target(name)
+            if target:
+                self.program.add_edge(SemanticEdgeFact("RESOLVES_TO", key, target))
         for index, arg in enumerate(node.args):
             for source in _value_refs(arg):
                 skey = f"var:{self.item.relative}:{self.owner}:{source}"; self.program.add_node(SemanticNodeFact(skey, "VARIABLE", source, self.item.relative, line, line, semantic_types=semantic_types_for_identifier(source))); self.program.add_edge(SemanticEdgeFact("PASSES_ARGUMENT", skey, key, attributes={"position": index}))
@@ -212,6 +253,36 @@ class _PythonVisitor(ast.NodeVisitor):
                     literal = f"literal:{self.item.relative}:{line}:{metadata['literalType']}"; self.program.add_node(SemanticNodeFact(literal, "SECRET" if metadata["literalType"] == "SECRET" else "SENSITIVE_DATA", str(metadata["literalType"]), self.item.relative, line, line, attributes=metadata, semantic_types=(str(metadata["literalType"]),))); self.program.add_edge(SemanticEdgeFact("PASSES_ARGUMENT", literal, key))
         return key
 
+    def _local_callable_target(self, name: str) -> str | None:
+        """Resolve an unqualified Python call against the nearest lexical def."""
+        for scope in reversed(self.scope_stack):
+            if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)) and scope.name == name:
+                nested = any(
+                    parent is not scope
+                    and isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))
+                    for parent in self.scope_stack
+                )
+                return _python_callable_key(self.item.relative, scope, nested=nested)
+            if isinstance(scope, ast.ClassDef):
+                # Method bodies do not close over class-body names as bare identifiers.
+                continue
+            body = getattr(scope, "body", ())
+            matches = [
+                child
+                for child in body
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and child.name == name
+            ]
+            if len(matches) == 1:
+                child = matches[0]
+                nested = isinstance(
+                    scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+                )
+                return _python_callable_key(self.item.relative, child, nested=nested)
+            if len(matches) > 1:
+                return None
+        return None
+
     def _http_client_is_active(self, name: str, line: int) -> bool:
         lowered = name.lower()
         inside_function = False
@@ -229,6 +300,77 @@ class _PythonVisitor(ast.NodeVisitor):
             # If the local binding is declared only later, do not inherit provenance.
             return prior[-1] if prior else False
         return False
+
+def _python_callable_key(
+    relative: str, node: ast.FunctionDef | ast.AsyncFunctionDef, *, nested: bool
+) -> str:
+    base = _symbol_key(relative, node.name)
+    return f"{base}:{node.lineno}" if nested else base
+
+
+def _text_lexical_scope_paths(lines: list[str]) -> list[tuple[int, ...]]:
+    """Return conservative brace-scope ancestry for JS/TS source lines."""
+    paths: list[tuple[int, ...]] = []
+    stack = [0]
+    next_scope = 1
+
+    def scrub(line: str) -> str:
+        value = re.sub(r"(['\"\x60]).*?(?<!\\)\1", "", line)
+        return value.split("//", 1)[0]
+
+    for line in lines:
+        structural = scrub(line)
+        leading = len(structural) - len(structural.lstrip("}"))
+        for _ in range(min(leading, max(0, len(stack) - 1))):
+            stack.pop()
+        paths.append(tuple(stack))
+        remainder = structural.lstrip("}") if leading else structural
+        for char in remainder:
+            if char == "{":
+                stack.append(next_scope)
+                next_scope += 1
+            elif char == "}" and len(stack) > 1:
+                stack.pop()
+    return paths
+
+
+def _text_exported_callable_names(text: str) -> set[str]:
+    """Return JS/TS callable names explicitly exposed by module syntax."""
+    exported = {
+        match.group(1)
+        for match in re.finditer(
+            r"\bexport\s+(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)",
+            text,
+        )
+    }
+    for match in re.finditer(r"\bexport\s*\{([^}]*)\}", text, re.S):
+        for item in match.group(1).split(","):
+            raw = item.strip()
+            if not raw:
+                continue
+            exported.add(re.split(r"\s+as\s+", raw, maxsplit=1)[0].strip())
+    exported.update(
+        match.group(1)
+        for match in re.finditer(
+            r"\b(?:module\.)?exports\.([A-Za-z_$][\w$]*)\s*=",
+            text,
+        )
+    )
+    for match in re.finditer(r"\bmodule\.exports\s*=\s*\{([^}]*)\}", text, re.S):
+        for item in match.group(1).split(","):
+            name_match = re.match(r"\s*([A-Za-z_$][\w$]*)", item)
+            if name_match:
+                exported.add(name_match.group(1))
+    return exported
+
+
+def _is_text_function_declaration(line: str, name_start: int, name: str) -> bool:
+    prefix = line[:name_start]
+    return bool(
+        re.search(r"(?:\bfunction|\bdef|\bfunc)\s*$", prefix)
+        or re.search(rf"\b(?:const|let|var)\s+{re.escape(name)}\s*=\s*(?:async\s*)?$", prefix)
+    )
+
 
 def _is_http_call(lower: str, http_clients: set[str] | None = None) -> bool:
     if any(h in lower for h in HTTP_HINTS):
