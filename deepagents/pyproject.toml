@@ -33,6 +33,8 @@ dependencies = [
   "tree-sitter-java==0.23.5",
   "tree-sitter-kotlin==1.1.0",
   "tree-sitter-php==0.24.1",
+  "tree-sitter-go==0.25.0",
+  "tree-sitter-rust==0.24.2",
 ]
 
 [project.optional-dependencies]

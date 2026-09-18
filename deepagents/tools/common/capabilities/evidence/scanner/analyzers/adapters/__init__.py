@@ -3,5 +3,6 @@ from .ruby_adapter import RubyLanguageAdapter
 from .csharp_adapter import CSharpLanguageAdapter
 from .jvm_adapters import JavaLanguageAdapter, KotlinLanguageAdapter
 from .php_adapter import PhpLanguageAdapter
+from .systems_adapters import GoLanguageAdapter, RustLanguageAdapter
 
-__all__ = ["PythonLanguageAdapter", "TsJsLanguageAdapter", "RubyLanguageAdapter", "CSharpLanguageAdapter", "JavaLanguageAdapter", "KotlinLanguageAdapter", "PhpLanguageAdapter"]
+__all__ = ["PythonLanguageAdapter", "TsJsLanguageAdapter", "RubyLanguageAdapter", "CSharpLanguageAdapter", "JavaLanguageAdapter", "KotlinLanguageAdapter", "PhpLanguageAdapter", "GoLanguageAdapter", "RustLanguageAdapter"]

@@ -78,3 +78,15 @@ def test_dynamic_http_target_remains_unresolved(tmp_path: Path) -> None:
     assert "call" in result.unresolved
     assert any(item.startswith("cross_http_dynamic:") for item in result.limitations)
     assert not any(edge.edge_type == "CALLS_API" for edge in program.edges)
+
+
+def test_go_replace_and_cargo_path_dependencies_resolve_projects(tmp_path: Path) -> None:
+    _write(tmp_path / "go.mod", "module example.com/app\nreplace example.com/core => ./core\n")
+    _write(tmp_path / "core/go.mod", "module example.com/core\n")
+    _write(tmp_path / "rust/Cargo.toml", "[package]\nname='rust-app'\nversion='0.1.0'\n[dependencies]\ncore={path='../core-rust'}\n")
+    _write(tmp_path / "core-rust/Cargo.toml", "[package]\nname='core-rust'\nversion='0.1.0'\n")
+    discovery = ProjectDiscovery().discover(tmp_path)
+    program = SemanticProgram()
+    result = CrossReferenceResolver().enrich(program, tmp_path, discovery)
+    assert result.resolved_edges == 2
+    assert sum(edge.edge_type == "DEPENDS_ON" for edge in program.edges) == 2

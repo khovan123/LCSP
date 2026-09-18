@@ -232,6 +232,20 @@ def run_php_semantic_analysis(request: ScannerToolInput, context: ScannerToolExe
     result = adapter.analyze(_workspace_path(request), sorted(set(include_files)))
     return result.native_result
 
+def run_go_semantic_analysis(request: ScannerToolInput, context: ScannerToolExecutionContext):
+    from tools.common.capabilities.evidence.scanner.analyzers.adapters import GoLanguageAdapter
+    from tools.common.capabilities.evidence.scanner.analyzers.registry import LanguageAnalyzerRegistry
+    registry=context.language_analyzer_registry or LanguageAnalyzerRegistry.default(context.ts_js_bridge_factory); adapter=registry.resolve("go") or GoLanguageAdapter(); files=list(request.get("include_files") or [])
+    root=Path(request.get("project_root")) if request.get("project_root") else _workspace_path(request); files.extend(p.relative_to(_workspace_path(request)).as_posix() for p in root.glob("go.mod") if p.is_file())
+    return adapter.analyze(_workspace_path(request),sorted(set(files))).native_result
+
+def run_rust_semantic_analysis(request: ScannerToolInput, context: ScannerToolExecutionContext):
+    from tools.common.capabilities.evidence.scanner.analyzers.adapters import RustLanguageAdapter
+    from tools.common.capabilities.evidence.scanner.analyzers.registry import LanguageAnalyzerRegistry
+    registry=context.language_analyzer_registry or LanguageAnalyzerRegistry.default(context.ts_js_bridge_factory); adapter=registry.resolve("rust") or RustLanguageAdapter(); files=list(request.get("include_files") or [])
+    root=Path(request.get("project_root")) if request.get("project_root") else _workspace_path(request); files.extend(p.relative_to(_workspace_path(request)).as_posix() for p in root.glob("Cargo.toml") if p.is_file())
+    return adapter.analyze(_workspace_path(request),sorted(set(files))).native_result
+
 
 def run_structural_augmentation(
     request: ScannerToolInput,

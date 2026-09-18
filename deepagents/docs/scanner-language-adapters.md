@@ -3,7 +3,7 @@
 The semantic scanner keeps file classification and basic/fallback analysis
 in `inventory/language`, while semantic analyzers are exposed through
 `analyzers.registry.LanguageAnalyzerRegistry`. The default registry registers
-Python, TypeScript/JavaScript, Ruby, and C#. Ruby uses Tree-sitter
+Python, TypeScript/JavaScript, Ruby, C#, Java, Kotlin, PHP, Go, and Rust. Ruby uses Tree-sitter
 Ruby for non-executing syntax analysis.
 
 Each adapter implements the `LanguageAnalyzer` protocol and returns a
@@ -76,12 +76,19 @@ reuse PHP symbols, and emit bounded canonical route/controller, DI, ORM, job,
 and source-provenance facts. Laravel's transitive Symfony dependencies do not
 select the Symfony adapter.
 
+Go and Rust use Tree-sitter parsers in the existing worker runtime. Their
+adapters statically extract declarations, imports, calls, and module metadata
+from `go.mod`/`Cargo.toml` without invoking Go or Cargo toolchains. Reflection,
+indirect calls, generated code, and macro expansion remain explicit limitations.
+Go/Rust route and client evidence uses the same canonical HTTP vocabulary and
+repository resolver as every other language.
+
 ## Repository-wide cross-project resolution
 
 After language and framework facts are normalized, `CrossReferenceResolver`
 runs once in the graph assembly boundary. It consumes only canonical facts and
 project descriptors, never parser-specific AST nodes. It currently resolves
-strong `.csproj` `ProjectReference` relationships and evidence-bound HTTP call
+strong `.csproj`, Go `replace`, and Cargo path project relationships and evidence-bound HTTP call
 to route relationships. Route matching is method-aware and supports literal
 paths against `{id}`/`:id` templates; multiple plausible targets remain
 unresolved with coverage evidence. External or dynamic URLs are not guessed.

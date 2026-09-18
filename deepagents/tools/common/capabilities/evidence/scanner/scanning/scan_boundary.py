@@ -884,6 +884,19 @@ class ScanBoundary(AgentBoundaryBase):
                     php_dependencies.extend(native.package_dependencies)
                     project_language_results.append(self._csharp_project_language_result(unit, native))
             package_dependencies.extend(php_dependencies)
+            systems_program = SemanticProgram()
+            systems_dependencies = []
+            for unit in project_plan.units:
+                if unit.analyzer not in {"go", "rust"}: continue
+                tool_name = "run_go_semantic_analysis" if unit.analyzer == "go" else "run_rust_semantic_analysis"
+                try:
+                    native = self._run_scanner_tool(tool_name, workspace_path=result.workspace_path, include_files=list(unit.files), project_id=unit.project_id, project_root=str(unit.project_root))
+                except Exception as error:
+                    project_language_results.append(self._failed_project_language_result(unit, error)); continue
+                if native is not None:
+                    systems_program.extend(native.semantic_program); systems_dependencies.extend(native.package_dependencies)
+                    project_language_results.append(self._project_language_result(unit, native))
+            package_dependencies.extend(systems_dependencies)
             package_dependencies.extend(jvm_dependencies)
             framework_detection_limitations: list[str] = []
             for project in project_discovery.projects:
@@ -1197,7 +1210,7 @@ class ScanBoundary(AgentBoundaryBase):
                 technical_findings=technical_findings,
                 structural_facts=structural_facts,
                 semantic_program=self._merge_semantic_programs(
-                    ruby_program, csharp_program, jvm_program, php_program, framework_program
+                    ruby_program, csharp_program, jvm_program, php_program, systems_program, framework_program
                 ),
                 package_dependencies=package_dependencies,
                 coverage_notes=coverage_notes,
@@ -1591,6 +1604,8 @@ class ScanBoundary(AgentBoundaryBase):
             files=unit.files,
             coverage_limitations=native.coverage_limitations,
         )
+
+    _project_language_result = _csharp_project_language_result
 
     @staticmethod
     def _merge_python_results(results: list[PythonAnalysisResult]) -> PythonAnalysisResult:

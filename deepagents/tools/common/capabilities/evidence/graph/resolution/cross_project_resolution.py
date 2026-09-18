@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 import re
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -64,6 +65,14 @@ class CrossReferenceResolver:
         for source in sorted(discovery.projects, key=lambda item: item.project_id):
             for manifest_name in sorted(source.manifest_paths):
                 manifest = workspace / manifest_name
+                if manifest.name == "go.mod":
+                    count, refs = self._go_references(manifest, source, discovery, program, by_manifest)
+                    resolved += count; limitations.extend(refs)
+                    continue
+                if manifest.name == "Cargo.toml":
+                    count, refs = self._cargo_references(manifest, source, discovery, program, by_manifest)
+                    resolved += count; limitations.extend(refs)
+                    continue
                 if manifest.suffix.lower() not in {".csproj", ".xml", ".gradle", ".kts"} or not manifest.is_file():
                     continue
                 if manifest.suffix.lower() in {".gradle", ".kts"}:
@@ -120,6 +129,36 @@ class CrossReferenceResolver:
                             )
                         )
                         resolved += 1
+        return resolved, limitations
+
+    def _go_references(self, manifest, source, discovery, program, by_manifest):
+        if not manifest.is_file(): return 0, []
+        limitations=[]; resolved=0; source_key=self._project_node(program, source)
+        try: text=manifest.read_text(encoding="utf-8")
+        except (OSError, UnicodeError): return 0, [f"cross_project_metadata_partial:{manifest.name}"]
+        for match in re.finditer(r"^\s*replace\s+\S+\s*=>\s*([^\s]+)", text, re.M):
+            value=match.group(1); target_path=(manifest.parent/value/"go.mod").resolve(strict=False)
+            target=by_manifest.get(target_path)
+            if target is None:
+                limitations.append(f"cross_project_reference_unresolved:{manifest.name}:{value}"); continue
+            target_key=self._project_node(program,target)
+            if not self._has_edge(program,"DEPENDS_ON",source_key,target_key):
+                program.add_edge(SemanticEdgeFact("DEPENDS_ON",source_key,target_key,evidence_refs=(f"source:{manifest.name}",f"target:{target.relative_root or '.'}"),attributes={"relationship":"PROJECT_REFERENCE"})); resolved+=1
+        return resolved, limitations
+
+    def _cargo_references(self, manifest, source, discovery, program, by_manifest):
+        if not manifest.is_file(): return 0, []
+        try: payload=tomllib.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, tomllib.TOMLDecodeError): return 0, [f"cross_project_metadata_partial:{manifest.name}"]
+        limitations=[]; resolved=0; source_key=self._project_node(program,source)
+        for name,value in sorted((payload.get("dependencies") or {}).items()):
+            if not isinstance(value,dict) or not isinstance(value.get("path"),str): continue
+            target_path=(manifest.parent/value["path"])/"Cargo.toml"; target=by_manifest.get(target_path.resolve(strict=False))
+            if target is None:
+                limitations.append(f"cross_project_reference_unresolved:{manifest.name}:{name}"); continue
+            target_key=self._project_node(program,target)
+            if not self._has_edge(program,"DEPENDS_ON",source_key,target_key):
+                program.add_edge(SemanticEdgeFact("DEPENDS_ON",source_key,target_key,evidence_refs=(f"source:{manifest.name}",f"target:{target.relative_root or '.'}"),attributes={"relationship":"PROJECT_REFERENCE"})); resolved+=1
         return resolved, limitations
 
     def _http_boundaries(self, program, discovery):
