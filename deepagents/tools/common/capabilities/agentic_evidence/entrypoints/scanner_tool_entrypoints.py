@@ -12,7 +12,6 @@ scanner-owned implementations) prevents a package initialization cycle.
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -31,6 +30,7 @@ class ScannerToolExecutionContext:
     ts_js_bridge_factory: Callable[[Path], Any]
     structural_augmentor: Any
     evidence_graph_assembler: Any
+    language_analyzer_registry: Any = None
 
 
 ScannerToolInput = Mapping[str, Any]
@@ -110,12 +110,19 @@ def run_ts_js_semantic_analysis(
     context: ScannerToolExecutionContext,
 ):
     """Run the TS/JS semantic bridge for a bounded file set."""
+    from tools.common.capabilities.evidence.scanner.analyzers.adapters import TsJsLanguageAdapter
+    from tools.common.capabilities.evidence.scanner.analyzers.registry import LanguageAnalyzerRegistry
+
     include_files = request.get("include_files")
-    return asyncio.run(
-        context.ts_js_bridge_factory(_workspace_path(request)).analyze(
-            include_files=list(include_files) if include_files is not None else None
-        )
+    registry = context.language_analyzer_registry or LanguageAnalyzerRegistry.default(
+        context.ts_js_bridge_factory
     )
+    adapter = registry.resolve("typescript") or TsJsLanguageAdapter(context.ts_js_bridge_factory)
+    result = adapter.analyze(
+        _workspace_path(request),
+        list(include_files) if include_files is not None else None,
+    )
+    return result.native_result
 
 
 def run_python_semantic_analysis(
@@ -123,12 +130,19 @@ def run_python_semantic_analysis(
     context: ScannerToolExecutionContext,
 ):
     """Run Python semantic analysis for a bounded file set."""
-    from tools.common.capabilities.evidence.scanner.analyzers.python_analysis.python_analyzer import PythonAnalyzer
+    from tools.common.capabilities.evidence.scanner.analyzers.adapters import PythonLanguageAdapter
+    from tools.common.capabilities.evidence.scanner.analyzers.registry import LanguageAnalyzerRegistry
 
     include_files = request.get("include_files")
-    return PythonAnalyzer(_workspace_path(request)).analyze(
-        include_files=list(include_files) if include_files is not None else None
+    registry = context.language_analyzer_registry or LanguageAnalyzerRegistry.default(
+        context.ts_js_bridge_factory
     )
+    adapter = registry.resolve("python") or PythonLanguageAdapter()
+    result = adapter.analyze(
+        _workspace_path(request),
+        list(include_files) if include_files is not None else None,
+    )
+    return result.native_result
 
 
 def run_structural_augmentation(

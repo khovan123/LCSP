@@ -41,3 +41,4 @@ class AnalyzerDispatch:
     basic_files: list[str] = field(default_factory=list)
     skipped_files: list[str] = field(default_factory=list)
     coverage_limitations: list[dict[str, str]] = field(default_factory=list)
+    semantic_files: dict[str, list[str]] = field(default_factory=dict)

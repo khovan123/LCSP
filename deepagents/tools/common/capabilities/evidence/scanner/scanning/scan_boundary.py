@@ -69,6 +69,7 @@ from tools.common.capabilities.evidence.scanner.tools.common.tool_base import (
     ToolExecutionResult,
 )
 from tools.common.capabilities.evidence.scanner.ts_js_bridge.bridge_types import TsJsBridgeResult
+from tools.common.capabilities.evidence.scanner.analyzers.registry import LanguageAnalyzerRegistry
 from tools.common.capabilities.evidence.scanner.snapshot.workspace import (
     ArchiveMaterializationError,
     ScannerWorkspace,
@@ -215,10 +216,15 @@ class ScanBoundary(AgentBoundaryBase):
         self._knip_tool = knip_tool or KnipTool()
         self._deptry_tool = deptry_tool or DeptryTool()
         self._language_classifier = language_classifier or LanguageClassifier()
-        self._analyzer_router = analyzer_router or AnalyzerRouter()
         self._dependency_normalizer = dependency_normalizer or DependencyNormalizer()
         self._ts_js_bridge_factory = ts_js_bridge_factory or (
             lambda workspace_path: TsJsBridge(workspace=workspace_path)
+        )
+        self._language_analyzer_registry = LanguageAnalyzerRegistry.default(
+            self._ts_js_bridge_factory
+        )
+        self._analyzer_router = analyzer_router or AnalyzerRouter(
+            semantic_registry=self._language_analyzer_registry
         )
         self._ai_invocation_detector = ai_invocation_detector or AIInvocationDetector()
         self._api_client = api_client or WorkerApiClient(
@@ -239,6 +245,7 @@ class ScanBoundary(AgentBoundaryBase):
                 knip_tool=self._knip_tool,
                 deptry_tool=self._deptry_tool,
                 ts_js_bridge_factory=self._ts_js_bridge_factory,
+                language_analyzer_registry=self._language_analyzer_registry,
                 structural_augmentor=self._structural_augmentor,
                 evidence_graph_assembler=self._evidence_graph_assembler,
             )
