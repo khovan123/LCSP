@@ -80,15 +80,11 @@ class RailsFrameworkAdapter:
         )
 
     def _project_files(self, project, workspace: Path) -> list[str]:
-        # Project descriptors may carry a repository-relative root while the
-        # framework execution unit receives an absolute workspace. Normalize
-        # that boundary before enumerating files; otherwise the adapter can
-        # silently analyze an empty file set and lose all Rails semantics.
+        # ``workspace`` is the project-scoped execution unit.  Using it as the
+        # enumeration authority avoids silently dropping Rails files when a
+        # descriptor carries a repository-relative or empty root marker.
         workspace = workspace.resolve(strict=False)
-        root = Path(project.root_path)
-        if not root.is_absolute():
-            root = workspace / root
-        root = root.resolve(strict=False)
+        root = workspace
         try:
             return sorted(
                 path.relative_to(workspace).as_posix()
