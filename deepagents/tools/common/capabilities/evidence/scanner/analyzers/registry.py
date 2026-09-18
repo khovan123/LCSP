@@ -21,9 +21,9 @@ class LanguageAnalyzerRegistry:
 
     @classmethod
     def default(cls, ts_js_bridge_factory=None) -> "LanguageAnalyzerRegistry":
-        from .adapters import CSharpLanguageAdapter, DartLanguageAdapter, GoLanguageAdapter, JavaLanguageAdapter, KotlinLanguageAdapter, ObjectiveCLanguageAdapter, PhpLanguageAdapter, PythonLanguageAdapter, RubyLanguageAdapter, RustLanguageAdapter, SwiftLanguageAdapter, TsJsLanguageAdapter
+        from .adapters import CLanguageAdapter, CSharpLanguageAdapter, ClojureLanguageAdapter, CppLanguageAdapter, DartLanguageAdapter, ElixirLanguageAdapter, GoLanguageAdapter, HaskellLanguageAdapter, JavaLanguageAdapter, KotlinLanguageAdapter, LuaLanguageAdapter, ObjectiveCLanguageAdapter, PhpLanguageAdapter, PowerShellLanguageAdapter, PythonLanguageAdapter, RLanguageAdapter, RubyLanguageAdapter, RustLanguageAdapter, ScalaLanguageAdapter, ShellLanguageAdapter, SolidityLanguageAdapter, SqlLanguageAdapter, SwiftLanguageAdapter, TsJsLanguageAdapter
 
-        return cls((CSharpLanguageAdapter(), DartLanguageAdapter(), GoLanguageAdapter(), JavaLanguageAdapter(), KotlinLanguageAdapter(), ObjectiveCLanguageAdapter(), PhpLanguageAdapter(), PythonLanguageAdapter(), RubyLanguageAdapter(), RustLanguageAdapter(), SwiftLanguageAdapter(), TsJsLanguageAdapter(ts_js_bridge_factory)))
+        return cls((CSharpLanguageAdapter(), DartLanguageAdapter(), GoLanguageAdapter(), JavaLanguageAdapter(), KotlinLanguageAdapter(), ObjectiveCLanguageAdapter(), PhpLanguageAdapter(), PythonLanguageAdapter(), RubyLanguageAdapter(), RustLanguageAdapter(), SwiftLanguageAdapter(), TsJsLanguageAdapter(ts_js_bridge_factory), ScalaLanguageAdapter(), ElixirLanguageAdapter(), ClojureLanguageAdapter(), CLanguageAdapter(), CppLanguageAdapter(), ShellLanguageAdapter(), PowerShellLanguageAdapter(), SqlLanguageAdapter(), LuaLanguageAdapter(), RLanguageAdapter(), HaskellLanguageAdapter(), SolidityLanguageAdapter()))
 
     def register(self, analyzer: LanguageAnalyzer) -> None:
         if any(existing.language == analyzer.language for existing in self._analyzers):

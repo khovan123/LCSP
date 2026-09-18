@@ -307,6 +307,42 @@ class LanguageClassifier:
                 coverage_limitation=False,
             )
 
+        remaining_language = {
+            ".scala": "scala",
+            ".ex": "elixir",
+            ".exs": "elixir",
+            ".clj": "clojure",
+            ".cljs": "clojure",
+            ".cljc": "clojure",
+            ".c": "c",
+            ".h": "c",
+            ".cc": "cpp",
+            ".cpp": "cpp",
+            ".cxx": "cpp",
+            ".hpp": "cpp",
+            ".hh": "cpp",
+            ".sh": "shell",
+            ".bash": "shell",
+            ".zsh": "shell",
+            ".ps1": "powershell",
+            ".psm1": "powershell",
+            ".sql": "sql",
+            ".lua": "lua",
+            ".r": "r",
+            ".hs": "haskell",
+            ".sol": "solidity",
+        }.get(suffix)
+        if remaining_language is not None:
+            return LanguageClassification(
+                file_path=relative_path,
+                language=remaining_language,
+                support_level=SUPPORT_FULL,
+                file_size_bytes=file_size,
+                line_count=line_count,
+                skip_reason=None,
+                coverage_limitation=remaining_language not in {"c", "cpp", "shell", "powershell", "sql", "solidity"},
+            )
+
         if suffix == ".json":
             support_level = SUPPORT_BASIC
             coverage_limitation = False

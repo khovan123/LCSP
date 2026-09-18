@@ -230,3 +230,34 @@ server linking, messaging producer/consumer convergence, and command-handler
 evidence. Dedicated mobile and AI suites complete the backend/frontend/mobile/
 AI/polyglot categories. The quality matrix asserts repeatability, provenance,
 ambiguity-safe unresolved behavior, and isolated partial failures.
+
+## Remaining language coverage floor
+
+Phase 14 makes every remaining LCSP language category explicit in the
+classifier and analyzer registry. Scala, Elixir, Clojure, Lua, R, and Haskell
+are recognized-only adapters: they produce `UNSUPPORTED` with a deterministic
+coverage limitation rather than silently disappearing or being analyzed as a
+different language. C, C++, shell, PowerShell, SQL, and Solidity use bounded
+structural adapters and return `PARTIAL` with canonical facts and source
+provenance where static syntax permits.
+
+| Language | Analysis path | Symbols/imports/calls | Domain evidence | Dynamic behavior | Overall |
+| --- | --- | --- | --- | --- | --- |
+| Scala | recognized-only | unavailable | JVM project metadata only | explicit limitation | recognized-only |
+| Elixir/Phoenix | recognized-only | unavailable | project recognition only | explicit limitation | recognized-only |
+| Clojure | recognized-only | unavailable | project recognition only | explicit limitation | recognized-only |
+| C | structural adapter | bounded functions/includes/calls | none | preprocessor/dynamic partial | structural |
+| C++ | structural adapter | bounded classes/includes/calls | none | templates/macros partial | structural |
+| Bash/Shell | structural adapter | functions/source/commands | literal process/HTTP evidence | eval/dynamic commands unresolved | structural |
+| PowerShell | structural adapter | functions/modules/cmdlets | literal command evidence | dynamic invocation unresolved | structural |
+| SQL | structural adapter | migration/schema facts | tables and bounded DDL | dynamic SQL partial | structural |
+| Lua | recognized-only | unavailable | none | explicit limitation | recognized-only |
+| R | recognized-only | unavailable | none | explicit limitation | recognized-only |
+| Haskell | recognized-only | unavailable | none | explicit limitation | recognized-only |
+| Solidity | structural adapter | contracts/functions/events/calls | bounded contract metadata | low-level calls unresolved | structural |
+
+No language-specific PGE node or edge types were added. Structural outputs use
+existing `FUNCTION`, `CLASS`, `PACKAGE_DEPENDENCY`, `CALL_SITE`, `TABLE`, and
+`EVENT` vocabulary. Toolchains, compilers, interpreters, migration runners,
+and blockchain build tools are never executed. Generated/vendor/build outputs
+remain governed by existing source-role and bounded-file policies.
