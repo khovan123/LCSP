@@ -164,7 +164,7 @@ describe("RecordMfaRecoveryCodeAccessHandler", () => {
       mfaVerifiedAt: Date.now(),
     });
 
-    const recordAuditMock = jest.fn((..._args: unknown[]) => Promise.resolve());
+    const recordAuditMock = jest.fn();
     const support = {
       createCorrelationId: () => "corr-123",
       now: () => Date.now(),
