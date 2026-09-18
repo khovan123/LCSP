@@ -352,9 +352,14 @@ export class AuthWorkspaceController {
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
-        new UpdateProfileCommand(body, request.rbacContext.userId, {
-          correlationId: request.correlationId,
-        }),
+        new UpdateProfileCommand(
+          body,
+          request.rbacContext.userId,
+          request.rbacContext.sessionId,
+          {
+            correlationId: request.correlationId,
+          },
+        ),
       ),
     );
   }

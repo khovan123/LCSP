@@ -46,7 +46,11 @@ export class ReauthenticatePasswordHandler implements ICommandHandler<Reauthenti
     }
 
     const session = await this.repositories.sessions.findById(sessionId);
-    if (!session) {
+    if (
+      !session ||
+      !session.isActive(this.support.now()) ||
+      session.userId !== userId
+    ) {
       return createProblemResult(
         AUTH_ERROR_CODES.sessionInvalid,
         correlationId,
@@ -54,7 +58,7 @@ export class ReauthenticatePasswordHandler implements ICommandHandler<Reauthenti
     }
 
     const user = await this.support.resolveUserById(this.repositories, userId);
-    if (!user) {
+    if (!user || user.id !== session.userId) {
       return createProblemResult(
         AUTH_ERROR_CODES.sessionInvalid,
         correlationId,

@@ -50,7 +50,11 @@ export class GetWorkspaceHandler implements IQueryHandler<GetWorkspaceQuery> {
     const session = await this.repositories.sessions.findById(
       context.sessionId,
     );
-    if (!session || !session.isActive(this.support.now())) {
+    if (
+      !session ||
+      !session.isActive(this.support.now()) ||
+      session.userId !== user.id
+    ) {
       await this.support.recordAudit(repositories, {
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.workspaceAccessDenied,
         actor_id: user.id,

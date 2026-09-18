@@ -32,11 +32,27 @@ export class DisableMfaHandler implements ICommandHandler<DisableMfaCommand> {
     const correlationId =
       requestMeta?.correlationId ?? this.support.createCorrelationId();
 
-    if (!userId) {
+    if (!userId || !sessionId) {
       return createProblemResult(
         AUTH_ERROR_CODES.sessionInvalid,
         correlationId,
       );
+    }
+
+    const session = await this.repositories.sessions.findById(sessionId);
+    if (
+      !session ||
+      !session.isActive(this.support.now()) ||
+      session.userId !== userId
+    ) {
+      return createProblemResult(
+        AUTH_ERROR_CODES.sessionInvalid,
+        correlationId,
+      );
+    }
+
+    if (!session.isMfaVerified()) {
+      return createProblemResult(AUTH_ERROR_CODES.mfaRequired, correlationId);
     }
 
     const enrollment =
@@ -59,13 +75,8 @@ export class DisableMfaHandler implements ICommandHandler<DisableMfaCommand> {
     user.mfaRequired = false;
     await this.repositories.users.save(user);
 
-    if (sessionId) {
-      const session = await this.repositories.sessions.findById(sessionId);
-      if (session) {
-        session.mfaVerifiedAt = null;
-        await this.repositories.sessions.save(session);
-      }
-    }
+    session.mfaVerifiedAt = null;
+    await this.repositories.sessions.save(session);
 
     await this.support.recordAudit(this.repositories, {
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaDisabled,

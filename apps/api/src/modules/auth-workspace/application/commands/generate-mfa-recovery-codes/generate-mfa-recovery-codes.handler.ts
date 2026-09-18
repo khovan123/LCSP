@@ -36,11 +36,27 @@ export class GenerateMfaRecoveryCodesHandler implements ICommandHandler<Generate
     const correlationId =
       requestMeta?.correlationId ?? this.support.createCorrelationId();
 
-    if (!userId) {
+    if (!userId || !sessionId) {
       return createProblemResult(
         AUTH_ERROR_CODES.sessionInvalid,
         correlationId,
       );
+    }
+
+    const session = await this.repositories.sessions.findById(sessionId);
+    if (
+      !session ||
+      !session.isActive(this.support.now()) ||
+      session.userId !== userId
+    ) {
+      return createProblemResult(
+        AUTH_ERROR_CODES.sessionInvalid,
+        correlationId,
+      );
+    }
+
+    if (!session.isMfaVerified()) {
+      return createProblemResult(AUTH_ERROR_CODES.mfaRequired, correlationId);
     }
 
     const enrollment =

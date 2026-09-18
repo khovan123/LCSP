@@ -52,6 +52,59 @@ describe("GetWorkspaceHandler", () => {
     }
   });
 
+  it("rejects when the session belongs to a different user", async () => {
+    const expiresAt = Date.now() + 3600_000;
+    const session = Session.rehydrate({
+      id: "session-2",
+      userId: "user-2",
+      tokenHash: "hash",
+      expiresAt,
+      mfaVerifiedAt: Date.now(),
+    });
+
+    const user = User.rehydrate({
+      id: "user-1",
+      email: "test@example.com",
+      displayName: "Test User",
+      passwordHash: "hash",
+      emailVerified: true,
+      role: AUTH_USER_ROLES.customer,
+    });
+
+    const support = {
+      createCorrelationId: () => "corr-123",
+      resolveUserById: jest.fn(() => Promise.resolve(user)),
+      now: () => Date.now(),
+      recordAudit: jest.fn(() => Promise.resolve()),
+    };
+
+    const repositories = {
+      sessions: {
+        findById: jest.fn(() => Promise.resolve(session)),
+      },
+    };
+
+    const handler = new GetWorkspaceHandler(
+      support as never,
+      repositories as never,
+    );
+
+    const query = new GetWorkspaceQuery(
+      {
+        userId: "user-1",
+        sessionId: "session-2",
+      } as never,
+      "corr-123",
+    );
+
+    const result = await handler.execute(query);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.problem.code).toBe(AUTH_ERROR_CODES.sessionInvalid);
+    }
+  });
+
   it("returns authentic session expiration and MFA status when valid session exists", async () => {
     const expiresAt = Date.now() + 3600_000;
     const session = Session.rehydrate({

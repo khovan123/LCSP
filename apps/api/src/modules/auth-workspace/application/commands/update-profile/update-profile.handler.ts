@@ -36,11 +36,11 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
   async execute(
     command: UpdateProfileCommand,
   ): Promise<AuthProblemResult | UpdateProfileSuccess> {
-    const { payload, userId, requestMeta } = command;
+    const { payload, userId, sessionId, requestMeta } = command;
     const correlationId =
       requestMeta?.correlationId ?? this.support.createCorrelationId();
 
-    if (!userId) {
+    if (!userId || !sessionId) {
       return createProblemResult(AUTH_ERROR_CODES.authRequired, correlationId);
     }
 
@@ -101,6 +101,29 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
         AUTH_ERROR_CODES.sessionInvalid,
         correlationId,
       );
+    }
+
+    const session = await this.repositories.sessions.findById(sessionId);
+    if (
+      !session ||
+      !session.isActive(this.support.now()) ||
+      session.userId !== user.id
+    ) {
+      return createProblemResult(
+        AUTH_ERROR_CODES.sessionInvalid,
+        correlationId,
+      );
+    }
+
+    const mfaEnrollment = await this.support.findMfaEnrollment(
+      this.repositories,
+      user.id,
+    );
+    if (
+      this.support.isMfaRequired(user, mfaEnrollment) &&
+      !session.isMfaVerified()
+    ) {
+      return createProblemResult(AUTH_ERROR_CODES.mfaRequired, correlationId);
     }
 
     const nextRecoveryEmail =

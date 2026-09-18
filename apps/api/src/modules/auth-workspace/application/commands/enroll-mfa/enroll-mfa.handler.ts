@@ -42,20 +42,28 @@ export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
     const correlationId =
       requestMeta?.correlationId ?? this.support.createCorrelationId();
 
-    if (!userId) {
+    if (!userId || !sessionId) {
       return createProblemResult(
         AUTH_ERROR_CODES.sessionInvalid,
         correlationId,
       );
     }
 
-    const session = sessionId
-      ? await this.repositories.sessions.findById(sessionId)
-      : null;
+    const session = await this.repositories.sessions.findById(sessionId);
+    if (
+      !session ||
+      !session.isActive(this.support.now()) ||
+      session.userId !== userId
+    ) {
+      return createProblemResult(
+        AUTH_ERROR_CODES.sessionInvalid,
+        correlationId,
+      );
+    }
 
     const existingEnrollment =
       await this.repositories.mfaEnrollments.findByUserId(userId);
-    if (existingEnrollment && session && !session.isMfaVerified()) {
+    if (existingEnrollment && !session.isMfaVerified()) {
       let hasRecoverableSecretFailure = false;
       try {
         decryptMfaSecret(existingEnrollment.encryptedSecret);
