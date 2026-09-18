@@ -915,6 +915,40 @@ class ScanBoundary(AgentBoundaryBase):
                     mobile_dependencies.extend(native.package_dependencies)
                     project_language_results.append(self._project_language_result(unit, native))
             package_dependencies.extend(mobile_dependencies)
+            # Remaining-language adapters are deliberately generic: structural
+            # languages and recognized-only languages are still project-scoped
+            # execution units and must reach the same result/graph aggregation path.
+            remaining_program = SemanticProgram()
+            remaining_languages = {
+                "scala", "elixir", "clojure", "c", "cpp", "shell", "powershell",
+                "sql", "lua", "r", "haskell", "solidity",
+            }
+            for unit in project_plan.units:
+                if unit.analyzer not in remaining_languages:
+                    continue
+                try:
+                    native = self._language_analyzer_registry.analyze(
+                        unit.language,
+                        result.workspace_path,
+                        list(unit.files),
+                    )
+                except Exception as error:
+                    project_language_results.append(self._failed_project_language_result(unit, error))
+                    continue
+                for fact in native.semantic_facts:
+                    remaining_program.add_node(fact)
+                limitations = tuple(native.coverage_limitations)
+                project_language_results.append(
+                    ProjectLanguageResult(
+                        project_id=unit.project_id,
+                        language=unit.language,
+                        analyzer=unit.analyzer,
+                        status=native.status,
+                        capabilities=unit.capabilities,
+                        files=unit.files,
+                        coverage_limitations=limitations,
+                    )
+                )
             framework_detection_limitations: list[str] = []
             framework_seen: set[tuple[str, str]] = set()
             for project in project_discovery.projects:
@@ -1260,7 +1294,8 @@ class ScanBoundary(AgentBoundaryBase):
                 technical_findings=technical_findings,
                 structural_facts=structural_facts,
                 semantic_program=self._merge_semantic_programs(
-                    ruby_program, csharp_program, jvm_program, php_program, systems_program, mobile_program, framework_program
+                    ruby_program, csharp_program, jvm_program, php_program, systems_program,
+                    mobile_program, remaining_program, framework_program
                 ),
                 package_dependencies=package_dependencies,
                 coverage_notes=coverage_notes,
