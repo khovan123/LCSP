@@ -34,9 +34,9 @@ test("Admin user query filters correctly across search, status, and role", () =>
     {
       id: "usr_3",
       fullName: "Charlie Admin",
-      email: "charlie@company.com",
+      email: "charlie@enterprise.com",
       role: AUTH_USER_ROLES.admin,
-      status: AUTH_ACCOUNT_STATUSES.suspended,
+      status: AUTH_ACCOUNT_STATUSES.active,
       createdAt: "2026-03-01T00:00:00.000Z",
       lastActiveAt: null,
       assessmentCount: null,
@@ -72,7 +72,7 @@ test("Admin user query filters correctly across search, status, and role", () =>
     filterUsers("", AUTH_ACCOUNT_STATUSES.suspended, "ALL").length,
     1,
   );
-  assert.equal(filterUsers("", AUTH_ACCOUNT_STATUSES.active, "ALL").length, 1);
+  assert.equal(filterUsers("", AUTH_ACCOUNT_STATUSES.active, "ALL").length, 2);
 
   // Role filter
   assert.equal(filterUsers("", "ALL", AUTH_USER_ROLES.admin).length, 2);
