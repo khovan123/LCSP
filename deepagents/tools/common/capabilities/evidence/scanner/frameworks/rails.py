@@ -80,7 +80,15 @@ class RailsFrameworkAdapter:
         )
 
     def _project_files(self, project, workspace: Path) -> list[str]:
-        root = project.root_path
+        # Project descriptors may carry a repository-relative root while the
+        # framework execution unit receives an absolute workspace. Normalize
+        # that boundary before enumerating files; otherwise the adapter can
+        # silently analyze an empty file set and lose all Rails semantics.
+        workspace = workspace.resolve(strict=False)
+        root = Path(project.root_path)
+        if not root.is_absolute():
+            root = workspace / root
+        root = root.resolve(strict=False)
         try:
             return sorted(
                 path.relative_to(workspace).as_posix()
