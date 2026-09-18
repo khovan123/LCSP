@@ -87,10 +87,14 @@ class RailsFrameworkAdapter:
         root = workspace
         try:
             return sorted(
-                path.relative_to(workspace).as_posix()
+                relative.as_posix()
                 for path in root.rglob("*.rb")
                 if path.is_file()
-                and not any(part in {"vendor", "tmp", "coverage", "build", ".git"} for part in path.parts)
+                for relative in (path.relative_to(workspace),)
+                if not any(
+                    part in {"vendor", "tmp", "coverage", "build", ".git"}
+                    for part in relative.parts
+                )
             )
         except OSError:
             return []
