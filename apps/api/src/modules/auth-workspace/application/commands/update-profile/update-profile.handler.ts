@@ -42,20 +42,14 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
     }
 
     if (!this.hasUpdateField(payload)) {
-      throw problemException(
-        AUTH_ERROR_CODES.validationFailed,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
     if (
       typeof payload.display_name === "string" &&
       payload.display_name.trim().length > MAX_DISPLAY_NAME_LENGTH
     ) {
-      throw problemException(
-        AUTH_ERROR_CODES.validationFailed,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
     if (typeof payload.recovery_email === "string") {
@@ -74,10 +68,7 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
         payload.backup_recovery_email_policy,
       )
     ) {
-      throw problemException(
-        AUTH_ERROR_CODES.validationFailed,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
     if (
@@ -86,18 +77,12 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
         payload.primary_email_address_policy,
       )
     ) {
-      throw problemException(
-        AUTH_ERROR_CODES.validationFailed,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
     const user = await this.support.resolveUserById(this.repositories, userId);
     if (!user) {
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
     const session = await this.repositories.sessions.findById(sessionId);
@@ -106,10 +91,7 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
       !session.isActive(this.support.now()) ||
       session.userId !== user.id
     ) {
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
     const mfaEnrollment = await this.support.findMfaEnrollment(
@@ -137,10 +119,7 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
         AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES.recoveryEmail &&
       !nextRecoveryEmail
     ) {
-      throw problemException(
-        AUTH_ERROR_CODES.validationFailed,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
     if (nextRecoveryEmail) {

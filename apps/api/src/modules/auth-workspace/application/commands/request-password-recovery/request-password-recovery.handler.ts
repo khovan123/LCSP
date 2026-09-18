@@ -51,10 +51,7 @@ export class RequestPasswordRecoveryHandler implements ICommandHandler<RequestPa
       typeof payload.email !== "string" ||
       payload.email.trim().length === 0
     ) {
-      throw problemException(
-        AUTH_ERROR_CODES.validationFailed,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
     const email = payload.email.trim().toLowerCase();

@@ -20,9 +20,7 @@ import { GetAuthProfileQuery } from "./get-auth-profile.query.ts";
 export class GetAuthProfileHandler implements IQueryHandler<GetAuthProfileQuery> {
   constructor(private readonly prisma: PrismaService) {}
 
-  async execute(
-    query: GetAuthProfileQuery,
-  ): Promise<AuthProfileSuccess> {
+  async execute(query: GetAuthProfileQuery): Promise<AuthProfileSuccess> {
     const [user, session] = await Promise.all([
       this.prisma.user.findUnique({
         where: { id: query.context.userId },

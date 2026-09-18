@@ -31,9 +31,7 @@ export class OAuthStartHandler implements ICommandHandler<OAuthStartCommand> {
     private readonly configService: ConfigService,
   ) {}
 
-  async execute(
-    command: OAuthStartCommand,
-  ): Promise<OAuthStartSuccess> {
+  async execute(command: OAuthStartCommand): Promise<OAuthStartSuccess> {
     const { payload, requestMeta } = command;
     const { repositories } = this;
     const correlationId =
@@ -43,10 +41,7 @@ export class OAuthStartHandler implements ICommandHandler<OAuthStartCommand> {
     const redirectUri = asNonEmptyString(payload?.redirect_uri);
 
     if (!providerName || !redirectUri) {
-      throw problemException(
-        AUTH_ERROR_CODES.validationFailed,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
     const provider = this.providerRegistry.resolve(providerName);

@@ -39,10 +39,7 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
     const providerParam = asNonEmptyString(payload?.provider);
 
     if (!code || !stateValue || !providerParam) {
-      throw problemException(
-        AUTH_ERROR_CODES.validationFailed,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
     const oauthState =
@@ -60,10 +57,7 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
         correlationId,
         AUTH_ERROR_CODES.oauthStateInvalid,
       );
-      throw problemException(
-        AUTH_ERROR_CODES.oauthStateInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.oauthStateInvalid, correlationId);
     }
 
     const provider = this.providerRegistry.resolve(oauthState.provider);

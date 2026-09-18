@@ -46,10 +46,7 @@ export class VerifyMfaRecoveryCodeHandler implements ICommandHandler<VerifyMfaRe
       sessionToken,
     );
     if (!session) {
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
     const enrollment = await this.repositories.mfaEnrollments.findByUserId(
@@ -71,10 +68,7 @@ export class VerifyMfaRecoveryCodeHandler implements ICommandHandler<VerifyMfaRe
         reason_code: AUTH_ERROR_CODES.mfaRateLimited,
         correlationId: correlationId,
       });
-      throw problemException(
-        AUTH_ERROR_CODES.mfaRateLimited,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.mfaRateLimited, correlationId);
     }
 
     const normalizedCode = normalizeMfaRecoveryCode(code);
@@ -112,10 +106,7 @@ export class VerifyMfaRecoveryCodeHandler implements ICommandHandler<VerifyMfaRe
       session.userId,
     );
     if (!user) {
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
     user.mfaRequired = true;
     await this.repositories.users.save(user);

@@ -46,10 +46,7 @@ export class VerifyMfaOtpHandler implements ICommandHandler<VerifyMfaOtpCommand>
       sessionToken,
     );
     if (!session) {
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
     const enrollment = await this.repositories.mfaEnrollments.findByUserId(
@@ -72,10 +69,7 @@ export class VerifyMfaOtpHandler implements ICommandHandler<VerifyMfaOtpCommand>
         reason_code: AUTH_ERROR_CODES.mfaRateLimited,
         correlationId: correlationId,
       });
-      throw problemException(
-        AUTH_ERROR_CODES.mfaRateLimited,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.mfaRateLimited, correlationId);
     }
 
     const alreadyUsed = await this.repositories.mfaOtpUsed.isUsed(
@@ -145,10 +139,7 @@ export class VerifyMfaOtpHandler implements ICommandHandler<VerifyMfaOtpCommand>
       session.userId,
     );
     if (!user) {
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
     user.mfaRequired = true;
     await this.repositories.users.save(user);

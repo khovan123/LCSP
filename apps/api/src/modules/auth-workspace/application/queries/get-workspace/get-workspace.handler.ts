@@ -24,9 +24,7 @@ export class GetWorkspaceHandler implements IQueryHandler<GetWorkspaceQuery> {
     private readonly repositories: AuthWorkspaceRepositories,
   ) {}
 
-  async execute(
-    query: GetWorkspaceQuery,
-  ): Promise<WorkspaceSuccess> {
+  async execute(query: GetWorkspaceQuery): Promise<WorkspaceSuccess> {
     const { context, correlationId } = query;
     const { repositories } = this;
     const cid = correlationId ?? this.support.createCorrelationId();

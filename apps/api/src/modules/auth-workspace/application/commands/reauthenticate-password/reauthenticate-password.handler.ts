@@ -34,10 +34,7 @@ export class ReauthenticatePasswordHandler implements ICommandHandler<Reauthenti
       requestMeta?.correlationId ?? this.support.createCorrelationId();
 
     if (typeof password !== "string" || password.trim().length === 0) {
-      throw problemException(
-        AUTH_ERROR_CODES.validationFailed,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
     if (!userId || !sessionId) {
@@ -50,18 +47,12 @@ export class ReauthenticatePasswordHandler implements ICommandHandler<Reauthenti
       !session.isActive(this.support.now()) ||
       session.userId !== userId
     ) {
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
     const user = await this.support.resolveUserById(this.repositories, userId);
     if (!user || user.id !== session.userId) {
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
     if (!verifySecret(password, user.passwordHash)) {

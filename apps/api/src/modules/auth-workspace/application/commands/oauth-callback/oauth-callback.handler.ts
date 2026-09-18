@@ -28,9 +28,7 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
     private readonly providerRegistry: OAuthProviderRegistry,
   ) {}
 
-  async execute(
-    command: OAuthCallbackCommand,
-  ): Promise<OAuthCallbackSuccess> {
+  async execute(command: OAuthCallbackCommand): Promise<OAuthCallbackSuccess> {
     const { payload, requestMeta } = command;
     const { repositories } = this;
     const correlationId =
@@ -41,10 +39,7 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
     const providerParam = asNonEmptyString(payload?.provider);
 
     if (!code || !stateValue || !providerParam) {
-      throw problemException(
-        AUTH_ERROR_CODES.validationFailed,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
     // Atomic delete-and-return: a state value can only ever be consumed once,
@@ -64,10 +59,7 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
         AUTH_ERROR_CODES.oauthStateInvalid,
         null,
       );
-      throw problemException(
-        AUTH_ERROR_CODES.oauthStateInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.oauthStateInvalid, correlationId);
     }
 
     const provider = this.providerRegistry.resolve(oauthState.provider);
@@ -139,10 +131,7 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
         AUTH_ERROR_CODES.accountNotFound,
         null,
       );
-      throw problemException(
-        AUTH_ERROR_CODES.accountNotFound,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.accountNotFound, correlationId);
     }
 
     const user = await repositories.users.findById(identity.userId);
@@ -153,10 +142,7 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
         AUTH_ERROR_CODES.accountNotFound,
         identity.userId,
       );
-      throw problemException(
-        AUTH_ERROR_CODES.accountNotFound,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.accountNotFound, correlationId);
     }
 
     if (user.accessStatus !== USER_ACCESS_STATUSES.active) {
@@ -166,10 +152,7 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
         AUTH_ERROR_CODES.accountSuspended,
         user.id,
       );
-      throw problemException(
-        AUTH_ERROR_CODES.accountSuspended,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.accountSuspended, correlationId);
     }
 
     const sessionState = await this.support.createSession(

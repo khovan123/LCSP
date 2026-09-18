@@ -40,10 +40,7 @@ export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
       requestMeta?.correlationId ?? this.support.createCorrelationId();
 
     if (!userId || !sessionId) {
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
     const session = await this.repositories.sessions.findById(sessionId);
@@ -52,10 +49,7 @@ export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
       !session.isActive(this.support.now()) ||
       session.userId !== userId
     ) {
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
     const existingEnrollment =
@@ -79,10 +73,7 @@ export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
 
     const user = await this.support.resolveUserById(this.repositories, userId);
     if (!user) {
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
     const now = this.support.now();

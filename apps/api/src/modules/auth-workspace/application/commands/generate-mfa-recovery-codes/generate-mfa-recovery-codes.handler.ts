@@ -36,10 +36,7 @@ export class GenerateMfaRecoveryCodesHandler implements ICommandHandler<Generate
       requestMeta?.correlationId ?? this.support.createCorrelationId();
 
     if (!userId || !sessionId) {
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
     const session = await this.repositories.sessions.findById(sessionId);
@@ -48,10 +45,7 @@ export class GenerateMfaRecoveryCodesHandler implements ICommandHandler<Generate
       !session.isActive(this.support.now()) ||
       session.userId !== userId
     ) {
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
     if (!session.isMfaVerified()) {

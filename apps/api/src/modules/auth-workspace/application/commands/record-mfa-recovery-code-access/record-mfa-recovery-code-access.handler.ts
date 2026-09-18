@@ -44,10 +44,7 @@ export class RecordMfaRecoveryCodeAccessHandler implements ICommandHandler<Recor
       requestMeta?.correlationId ?? this.support.createCorrelationId();
 
     if (!userId || !sessionId) {
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
     const session = await this.repositories.sessions.findById(sessionId);
@@ -56,10 +53,7 @@ export class RecordMfaRecoveryCodeAccessHandler implements ICommandHandler<Recor
       !session.isActive(this.support.now()) ||
       session.userId !== userId
     ) {
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
     if (!session.isMfaVerified()) {
@@ -68,10 +62,7 @@ export class RecordMfaRecoveryCodeAccessHandler implements ICommandHandler<Recor
 
     const eventType = RECOVERY_CODE_ACCESS_EVENTS[action];
     if (!eventType) {
-      throw problemException(
-        AUTH_ERROR_CODES.validationFailed,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
     await this.support.recordAudit(this.repositories, {

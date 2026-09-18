@@ -105,10 +105,7 @@ export class SignInHandler implements ICommandHandler<SignInCommand> {
     }
 
     if (user.accessStatus !== USER_ACCESS_STATUSES.active) {
-      throw problemException(
-        AUTH_ERROR_CODES.accountSuspended,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.accountSuspended, correlationId);
     }
 
     user.clearFailedLogins();

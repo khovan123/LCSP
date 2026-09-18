@@ -42,10 +42,7 @@ export class OAuthLinkStartHandler implements ICommandHandler<OAuthLinkStartComm
     const redirectUri = asNonEmptyString(payload?.redirect_uri);
 
     if (!providerName || !redirectUri) {
-      throw problemException(
-        AUTH_ERROR_CODES.validationFailed,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
     const provider = this.providerRegistry.resolve(providerName);

@@ -43,10 +43,7 @@ export class ConfirmPasswordRecoveryHandler implements ICommandHandler<ConfirmPa
       typeof payload.new_password !== "string" ||
       payload.new_password.length === 0
     ) {
-      throw problemException(
-        AUTH_ERROR_CODES.validationFailed,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
     const now = this.support.now();
@@ -62,18 +59,12 @@ export class ConfirmPasswordRecoveryHandler implements ICommandHandler<ConfirmPa
         reason_code: AUTH_ERROR_CODES.recoveryInvalid,
         correlationId: correlationId,
       });
-      throw problemException(
-        AUTH_ERROR_CODES.recoveryInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.recoveryInvalid, correlationId);
     }
 
     const user = await repositories.users.findById(recoveryRequest.userId);
     if (!user || user.accessStatus !== USER_ACCESS_STATUSES.active) {
-      throw problemException(
-        AUTH_ERROR_CODES.recoveryInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.recoveryInvalid, correlationId);
     }
 
     user.passwordHash = hashSecret(payload.new_password);

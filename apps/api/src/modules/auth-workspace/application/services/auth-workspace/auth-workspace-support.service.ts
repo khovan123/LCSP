@@ -100,11 +100,9 @@ export class AuthWorkspaceSupportService {
       !this.requireString(payload?.email) ||
       !this.requireString(payload?.password)
     ) {
-      throw problemException(
-        AUTH_ERROR_CODES.validationFailed,
-        correlationId,
-        { status: HttpStatus.BAD_REQUEST },
-      );
+      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId, {
+        status: HttpStatus.BAD_REQUEST,
+      });
     }
   }
 
@@ -186,10 +184,7 @@ export class AuthWorkspaceSupportService {
         reason_code: AUTH_ERROR_CODES.sessionInvalid,
         correlationId: correlationId,
       });
-      throw problemException(
-        AUTH_ERROR_CODES.sessionInvalid,
-        correlationId,
-      );
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
     const allowed: AuthorizationDecision = {
