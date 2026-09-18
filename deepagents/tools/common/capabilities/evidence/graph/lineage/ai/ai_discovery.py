@@ -2019,6 +2019,15 @@ class AIDiscoveryEnricher:
         ):
             if is_declaration_line(source_line_no):
                 continue
+            if symbol.node_type == "METHOD" and re.search(
+                rf"\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*"
+                rf"\s*\[\s*(['\"]){re.escape(context.name)}\1\s*\]\s*\(",
+                raw_line.split("//", 1)[0],
+            ):
+                # Literal bracket dispatch is a real method invocation shape, but
+                # the current PGE extractor does not establish canonical identity
+                # for it. Source text can only veto closure, never authorize it.
+                return unresolved()
             structural = _scrub_structure(raw_line)
             for reference in re.finditer(
                 rf"(?<![\w$]){re.escape(context.name)}(?![\w$])",
@@ -2041,7 +2050,17 @@ class AIDiscoveryEnricher:
                         call_label = context.name
                 if symbol.node_type == "METHOD":
                     if direct_call and dotted:
-                        continue
+                        if call_label:
+                            targets = trusted_call_targets.get(
+                                (source_line_no, call_label), set()
+                            )
+                            if targets == {symbol_key} or resolves_to_foreign_callable(
+                                source_line_no, call_label
+                            ):
+                                continue
+                        # Optional chaining and any other dotted-looking method
+                        # call without canonical PGE identity must break closure.
+                        return unresolved()
                 elif direct_call and not dotted:
                     continue
                 if (

@@ -291,27 +291,78 @@ class RepositorySemanticExtractor:
             elif item.node_type == "FUNCTION":
                 function_targets.setdefault(item.name, []).append(item)
 
-        instance_bindings: dict[int, dict[str, list[tuple[int, str]]]] = {}
+        instance_bindings: dict[
+            int, dict[str, list[tuple[int, str | None]]]
+        ] = {}
+        unstable_instance_names: set[str] = set()
         if is_js_text:
             for line_no, line in enumerate(source_lines, start=1):
                 scope_id = scope_paths[line_no - 1][-1]
-                match = re.search(
-                    r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*new\s+([A-Za-z_$][\w$]*)\s*\(",
-                    line,
+                structural = re.sub(
+                    r"(['\"\x60]).*?(?<!\\)\1", "", line
+                ).split("//", 1)[0]
+                declaration = re.search(
+                    r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)"
+                    r"(?:\s*:[^=;]+)?(?:\s*=\s*(.*))?",
+                    structural,
                 )
-                if match and match.group(2) in class_by_name:
+                declared_name: str | None = None
+                if declaration:
+                    declared_name = declaration.group(1)
+                    rhs = declaration.group(2) or ""
+                    constructor = re.match(
+                        r"\s*new\s+([A-Za-z_$][\w$]*)\s*\(", rhs
+                    )
+                    owner_class = (
+                        constructor.group(1)
+                        if constructor
+                        and constructor.group(1) in class_by_name
+                        else None
+                    )
                     instance_bindings.setdefault(scope_id, {}).setdefault(
-                        match.group(1), []
-                    ).append((line_no, match.group(2)))
+                        declared_name, []
+                    ).append((line_no, owner_class))
+
+                for assignment in re.finditer(
+                    r"(?<![\w$.])([A-Za-z_$][\w$]*)\s*=(?!=|>)",
+                    structural,
+                ):
+                    name = assignment.group(1)
+                    if declared_name == name:
+                        continue
+                    # Reassignment requires def-use/control-flow proof before a
+                    # receiver can remain authoritative. Until that exists, any
+                    # class identity for this binding is conservatively invalid.
+                    unstable_instance_names.add(name)
 
         def resolve_instance(name: str, line_no: int) -> str | None:
             if not is_js_text or line_no < 1 or line_no > len(scope_paths):
+                return None
+            if name in unstable_instance_names:
+                return None
+            # Parameters are lexical bindings even though they do not appear as
+            # local declaration statements. They must prevent fallback to an
+            # outer same-named class instance.
+            enclosing_callables = [
+                item
+                for item in callables
+                if item.start_line <= line_no <= item.end_line
+            ]
+            current_callable = min(
+                enclosing_callables,
+                key=lambda item: item.end_line - item.start_line,
+                default=None,
+            )
+            if current_callable and name in current_callable.params:
                 return None
             for scope_id in reversed(scope_paths[line_no - 1]):
                 events = instance_bindings.get(scope_id, {}).get(name)
                 if events is None:
                     continue
                 prior = [event for event in events if event[0] <= line_no]
+                # A declaration in the nearest scope shadows any outer receiver
+                # provenance even before the declaration executes (TDZ / lexical
+                # binding semantics). Unknown/aliased declarations carry None.
                 return prior[-1][1] if prior else None
             return None
 
