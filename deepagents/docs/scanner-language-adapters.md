@@ -55,6 +55,22 @@ minimal API routes, and bounded DI registrations. It does not create
 ASP.NET-specific graph nodes, execute the application, or infer dynamic route
 targets. Non-web .NET projects remain C# projects without ASP.NET semantics.
 
+## Repository-wide cross-project resolution
+
+After language and framework facts are normalized, `CrossReferenceResolver`
+runs once in the graph assembly boundary. It consumes only canonical facts and
+project descriptors, never parser-specific AST nodes. It currently resolves
+strong `.csproj` `ProjectReference` relationships and evidence-bound HTTP call
+to route relationships. Route matching is method-aware and supports literal
+paths against `{id}`/`:id` templates; multiple plausible targets remain
+unresolved with coverage evidence. External or dynamic URLs are not guessed.
+
+Resolved edges retain source and target provenance and reuse existing
+`DEPENDS_ON`/`CALLS_API` vocabulary. Resolver failures and ambiguity do not
+discard successful language/framework facts. Future messaging, gRPC, GraphQL,
+and workspace-package resolvers should register as additional canonical-fact
+passes rather than adding language-specific branches.
+
 ## Framework adapter extension point
 
 Framework semantics are a separate, project-scoped layer over language facts.

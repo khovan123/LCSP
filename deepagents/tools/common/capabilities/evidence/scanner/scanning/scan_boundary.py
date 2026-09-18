@@ -1152,6 +1152,7 @@ class ScanBoundary(AgentBoundaryBase):
                 ),
                 package_dependencies=package_dependencies,
                 coverage_notes=coverage_notes,
+                project_discovery=project_discovery,
             )
             graph_ended_at = self._utc_timestamp()
             self._emit_runtime_event(

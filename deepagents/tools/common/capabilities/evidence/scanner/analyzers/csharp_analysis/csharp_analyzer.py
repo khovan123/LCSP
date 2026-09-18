@@ -180,7 +180,11 @@ class CSharpAnalyzer:
                 text = node.text.decode("utf-8", errors="replace")
                 callee = text.split("(", 1)[0].strip()
                 key = self._key(relative, node.start_point[0] + 1, "CALL_SITE", callee)
-                program.add_node(SemanticNodeFact(key, "CALL_SITE", callee, relative, node.start_point[0] + 1, node.end_point[0] + 1, attributes={"callee": callee, "resolution": "UNRESOLVED"}, resolution_state="UNRESOLVED"))
+                attributes = {"callee": callee, "resolution": "UNRESOLVED"}
+                http = re.search(r"\.(GetAsync|PostAsync|PutAsync|DeleteAsync|SendAsync)\s*\(\s*[\"']([^\"']+)", text)
+                if http:
+                    attributes.update({"integrationType": "HTTP", "method": "GET" if http.group(1) == "GetAsync" else http.group(1).replace("Async", "").upper(), "route": http.group(2)})
+                program.add_node(SemanticNodeFact(key, "CALL_SITE", callee, relative, node.start_point[0] + 1, node.end_point[0] + 1, attributes=attributes, resolution_state="UNRESOLVED"))
                 if any(token in callee for token in (".Invoke", "Activator.", "dynamic")):
                     dynamic_flows.append({"file_path": relative, "line_number": node.start_point[0] + 1, "callee": callee})
             for child in node.children:
