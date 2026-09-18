@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -63,7 +64,25 @@ class CrossReferenceResolver:
         for source in sorted(discovery.projects, key=lambda item: item.project_id):
             for manifest_name in sorted(source.manifest_paths):
                 manifest = workspace / manifest_name
-                if manifest.suffix.lower() != ".csproj" or not manifest.is_file():
+                if manifest.suffix.lower() not in {".csproj", ".xml", ".gradle", ".kts"} or not manifest.is_file():
+                    continue
+                if manifest.suffix.lower() in {".gradle", ".kts"}:
+                    try:
+                        text = manifest.read_text(encoding="utf-8")
+                    except (OSError, UnicodeError):
+                        limitations.append(f"cross_project_metadata_partial:{manifest_name}")
+                        continue
+                    for value in sorted(set(re.findall(r"project\s*\(\s*['\"](:[^'\"]+)['\"]", text))):
+                        module = value.lstrip(":").replace(":", "/")
+                        target = next((candidate for candidate in discovery.projects if candidate.relative_root.endswith(module)), None)
+                        if target is None:
+                            limitations.append(f"cross_project_reference_unresolved:{manifest_name}:{value}")
+                            continue
+                        source_key = self._project_node(program, source)
+                        target_key = self._project_node(program, target)
+                        if not self._has_edge(program, "DEPENDS_ON", source_key, target_key):
+                            program.add_edge(SemanticEdgeFact("DEPENDS_ON", source_key, target_key, evidence_refs=(f"source:{manifest_name}", f"target:{target.relative_root or '.'}"), attributes={"relationship": "PROJECT_REFERENCE"}))
+                            resolved += 1
                     continue
                 try:
                     root = ET.fromstring(manifest.read_text(encoding="utf-8"))
@@ -72,13 +91,20 @@ class CrossReferenceResolver:
                     continue
                 source_key = self._project_node(program, source)
                 for item in root.iter():
-                    if item.tag.rsplit("}", 1)[-1] != "ProjectReference":
+                    tag = item.tag.rsplit("}", 1)[-1]
+                    if tag not in {"ProjectReference", "module"}:
                         continue
-                    value = item.attrib.get("Include")
+                    value = item.attrib.get("Include") if tag == "ProjectReference" else (item.text.strip() if item.text else None)
                     if not value:
                         continue
-                    target_path = (manifest.parent / value).resolve(strict=False)
+                    if tag == "module":
+                        target_path = (manifest.parent / value / "pom.xml").resolve(strict=False)
+                    else:
+                        target_path = (manifest.parent / value).resolve(strict=False)
                     target = by_manifest.get(target_path)
+                    if target is None and manifest.name in {"build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"}:
+                        module = value.lstrip(":").replace(":", "/")
+                        target = next((candidate for candidate in discovery.projects if candidate.relative_root.endswith(module)), None)
                     if target is None:
                         limitations.append(f"cross_project_reference_unresolved:{manifest_name}:{value}")
                         continue

@@ -24,10 +24,11 @@ class FrameworkAdapterRegistry:
     def default(cls) -> "FrameworkAdapterRegistry":
         from .aspnet import AspNetCoreFrameworkAdapter, AspNetCoreFrameworkDetector
         from .rails import RailsFrameworkAdapter, RailsFrameworkDetector
+        from .spring import SpringFrameworkAdapter, SpringFrameworkDetector
 
         return cls(
-            (AspNetCoreFrameworkAdapter(), RailsFrameworkAdapter()),
-            (AspNetCoreFrameworkDetector(), RailsFrameworkDetector()),
+            (AspNetCoreFrameworkAdapter(), RailsFrameworkAdapter(), SpringFrameworkAdapter()),
+            (AspNetCoreFrameworkDetector(), RailsFrameworkDetector(), SpringFrameworkDetector()),
         )
 
     def register(self, adapter: FrameworkAdapter) -> None:
@@ -42,12 +43,12 @@ class FrameworkAdapterRegistry:
         self._detectors.append(detector)
         self._detectors.sort(key=lambda item: item.name)
 
-    def detect(self, project, workspace: Path, ruby_result: Any) -> tuple[str, ...]:
+    def detect(self, project, workspace: Path, language_result: Any) -> tuple[str, ...]:
         detected: set[str] = set()
         self.detection_limitations = []
         for detector in self._detectors:
             try:
-                detected.update(detector.detect(project, workspace, ruby_result))
+                detected.update(detector.detect(project, workspace, language_result))
             except (KeyboardInterrupt, SystemExit):
                 raise
             except Exception as error:
@@ -56,7 +57,7 @@ class FrameworkAdapterRegistry:
                 )
         return tuple(sorted(detected))
 
-    def analyze(self, framework: str, project, workspace: Path, ruby_result: Any) -> FrameworkAnalysisResult:
+    def analyze(self, framework: str, project, workspace: Path, language_result: Any) -> FrameworkAnalysisResult:
         adapter = next((item for item in self._adapters if item.supports(framework)), None)
         if adapter is None:
             from tools.common.capabilities.evidence.scanner.analyzers.protocol import ANALYZER_UNSUPPORTED
@@ -69,7 +70,7 @@ class FrameworkAdapterRegistry:
                 coverage_limitations=(f"no framework adapter registered: {framework}",),
             )
         try:
-            return adapter.analyze(project, workspace, ruby_result)
+            return adapter.analyze(project, workspace, language_result)
         except (KeyboardInterrupt, SystemExit):
             raise
         except Exception as error:

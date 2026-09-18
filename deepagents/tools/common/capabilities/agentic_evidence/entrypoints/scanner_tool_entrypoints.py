@@ -194,6 +194,32 @@ def run_csharp_semantic_analysis(
     return result.native_result
 
 
+def run_java_semantic_analysis(request: ScannerToolInput, context: ScannerToolExecutionContext):
+    """Run bounded Java syntax analysis without invoking Maven."""
+    from tools.common.capabilities.evidence.scanner.analyzers.adapters import JavaLanguageAdapter
+    from tools.common.capabilities.evidence.scanner.analyzers.registry import LanguageAnalyzerRegistry
+    registry = context.language_analyzer_registry or LanguageAnalyzerRegistry.default(context.ts_js_bridge_factory)
+    adapter = registry.resolve("java") or JavaLanguageAdapter()
+    include_files = list(request.get("include_files") or [])
+    root = Path(request.get("project_root")) if request.get("project_root") else _workspace_path(request)
+    include_files.extend(path.relative_to(_workspace_path(request)).as_posix() for pattern in ("pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts") for path in root.glob(pattern) if path.is_file())
+    result = adapter.analyze(_workspace_path(request), sorted(set(include_files)))
+    return result.native_result
+
+
+def run_kotlin_semantic_analysis(request: ScannerToolInput, context: ScannerToolExecutionContext):
+    """Run bounded Kotlin syntax analysis without invoking Gradle."""
+    from tools.common.capabilities.evidence.scanner.analyzers.adapters import KotlinLanguageAdapter
+    from tools.common.capabilities.evidence.scanner.analyzers.registry import LanguageAnalyzerRegistry
+    registry = context.language_analyzer_registry or LanguageAnalyzerRegistry.default(context.ts_js_bridge_factory)
+    adapter = registry.resolve("kotlin") or KotlinLanguageAdapter()
+    include_files = list(request.get("include_files") or [])
+    root = Path(request.get("project_root")) if request.get("project_root") else _workspace_path(request)
+    include_files.extend(path.relative_to(_workspace_path(request)).as_posix() for pattern in ("pom.xml", "build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts") for path in root.glob(pattern) if path.is_file())
+    result = adapter.analyze(_workspace_path(request), sorted(set(include_files)))
+    return result.native_result
+
+
 def run_structural_augmentation(
     request: ScannerToolInput,
     context: ScannerToolExecutionContext,

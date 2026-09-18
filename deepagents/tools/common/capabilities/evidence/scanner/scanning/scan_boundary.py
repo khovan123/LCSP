@@ -838,11 +838,36 @@ class ScanBoundary(AgentBoundaryBase):
                     project_language_results.append(
                         self._csharp_project_language_result(unit, native)
                     )
+            jvm_program = SemanticProgram()
+            jvm_dependencies = []
+            jvm_results_by_project = {}
+            for unit in project_plan.units:
+                if unit.analyzer not in {"java", "kotlin"}:
+                    continue
+                tool_name = "run_java_semantic_analysis" if unit.analyzer == "java" else "run_kotlin_semantic_analysis"
+                try:
+                    native = self._run_scanner_tool(
+                        tool_name,
+                        workspace_path=result.workspace_path,
+                        include_files=list(unit.files),
+                        project_id=unit.project_id,
+                        project_root=str(unit.project_root),
+                    )
+                except Exception as error:
+                    project_language_results.append(self._failed_project_language_result(unit, error))
+                    continue
+                if native is not None:
+                    jvm_results_by_project[(unit.project_id, unit.analyzer)] = native
+                    jvm_program.extend(native.semantic_program)
+                    jvm_dependencies.extend(native.package_dependencies)
+                    project_language_results.append(self._csharp_project_language_result(unit, native))
+            package_dependencies.extend(jvm_dependencies)
             framework_detection_limitations: list[str] = []
             for project in project_discovery.projects:
                 ruby_result = ruby_results_by_project.get(project.project_id)
                 csharp_result = csharp_results_by_project.get(project.project_id)
-                for language_result in (ruby_result, csharp_result):
+                jvm_results = [result for (project_id, _language), result in jvm_results_by_project.items() if project_id == project.project_id]
+                for language_result in (ruby_result, csharp_result, *jvm_results):
                     if language_result is None:
                         continue
                     detected_frameworks = self._framework_registry.detect(
@@ -1148,7 +1173,7 @@ class ScanBoundary(AgentBoundaryBase):
                 technical_findings=technical_findings,
                 structural_facts=structural_facts,
                 semantic_program=self._merge_semantic_programs(
-                    ruby_program, csharp_program, framework_program
+                    ruby_program, csharp_program, jvm_program, framework_program
                 ),
                 package_dependencies=package_dependencies,
                 coverage_notes=coverage_notes,

@@ -55,6 +55,18 @@ minimal API routes, and bounded DI registrations. It does not create
 ASP.NET-specific graph nodes, execute the application, or infer dynamic route
 targets. Non-web .NET projects remain C# projects without ASP.NET semantics.
 
+Java and Kotlin use the Tree-sitter Java/Kotlin grammars in the existing Python
+worker. They extract bounded package/import/declaration/inheritance/call facts
+and statically parse Maven POM or Gradle dependency declarations. Maven and
+Gradle are never executed; dynamic properties, reflection, and unresolved build
+logic remain partial evidence.
+
+Spring is a separate registered framework adapter. It detects Spring evidence
+from dependencies, enriches existing Java/Kotlin symbols with controller,
+service, repository, entity, route, and scheduled-job roles, and emits canonical
+HTTP facts. Java and Kotlin routes share the same downstream resolver and do not
+create framework-specific graph nodes.
+
 ## Repository-wide cross-project resolution
 
 After language and framework facts are normalized, `CrossReferenceResolver`
