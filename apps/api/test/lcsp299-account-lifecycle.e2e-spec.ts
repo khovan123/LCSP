@@ -33,6 +33,7 @@ import { RequireSession } from "../src/platform/rbac/decorators/require-session.
 import { RbacGuard } from "../src/platform/rbac/rbac.guard.js";
 import { RbacContextLoader } from "../src/platform/rbac/rbac-context.loader.js";
 import { RbacPreflightService } from "../src/platform/rbac/rbac-preflight.service.js";
+import { RBAC_DECISIONS } from "@lcsp/contracts/rbac";
 import { AdminUsersController } from "../src/modules/auth-workspace/presentation/http/admin-users.controller.js";
 import { AdminAccountReadService } from "../src/modules/auth-workspace/application/services/admin/admin-account-read.service.js";
 import { AdminAccountCommandService } from "../src/modules/auth-workspace/application/services/admin/admin-account-command.service.js";

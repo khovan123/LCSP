@@ -2,7 +2,6 @@ import { lockAccountLifecycle } from "../../services/admin/admin-account.transac
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   AUTH_AUDIT_EVENT_TYPES,
-  AUTH_ERROR_CODES,
   AUTH_USER_ROLES,
   SIGN_UP_ERROR_CODES,
 } from "@lcsp/contracts/auth";
