@@ -297,11 +297,14 @@ export class AssessmentRuntimeEventService {
     input: Omit<RecordRuntimeEventInput, "eventType" | "runStatus">,
     tx?: Prisma.TransactionClient,
   ): Promise<void> {
-    await this.recordEvent({
-      ...input,
-      eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolWaitingInput,
-      runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
-    }, tx);
+    await this.recordEvent(
+      {
+        ...input,
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolWaitingInput,
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
+      },
+      tx,
+    );
   }
 
   /**
