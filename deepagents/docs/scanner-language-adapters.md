@@ -3,7 +3,8 @@
 The semantic scanner keeps file classification and basic/fallback analysis
 in `inventory/language`, while semantic analyzers are exposed through
 `analyzers.registry.LanguageAnalyzerRegistry`. The default registry registers
-Python, TypeScript/JavaScript, Ruby, C#, Java, Kotlin, PHP, Go, and Rust. Ruby uses Tree-sitter
+Python, TypeScript/JavaScript, Ruby, C#, Java, Kotlin, PHP, Go, Rust, Swift,
+Objective-C, and Dart. Ruby uses Tree-sitter
 Ruby for non-executing syntax analysis.
 
 Each adapter implements the `LanguageAnalyzer` protocol and returns a
@@ -122,7 +123,10 @@ canonical `SemanticProgram`, capabilities, provenance, and explicit
 `SUCCESS`/`PARTIAL`/`FAILED`/`UNSUPPORTED` status. A framework adapter must not
 create a parallel graph or duplicate language symbols.
 
-The Rails pilot is registered by default. Detection requires a safely parsed
+The default framework registry includes Rails, ASP.NET Core, Spring, Laravel,
+Symfony, iOS, Android, React Native, and Flutter. Detection is evidence-bound;
+a source extension or directory name alone is not sufficient. The Rails pilot is
+registered by default. Detection requires a safely parsed
 `Gemfile` declaration for the `rails` gem; a `.rb` file or directory name is
 not sufficient. The static adapter reuses Ruby symbols, recognizes bounded
 controller/model/job roles, and extracts statically resolvable route
@@ -130,6 +134,23 @@ declarations without executing Rails or repository Ruby code. Dynamic routes,
 metaprogramming, and unsupported framework behavior remain explicit
 limitations. A Rails failure preserves the Ruby language result and other
 project results.
+
+## Capability and graph compatibility notes
+
+Language adapters provide bounded static coverage, not compiler or runtime
+execution. Symbols, imports/dependencies, calls, routes, framework roles, AI
+invocations, and mobile navigation are reported only where repository evidence
+supports them; reflection, dynamic dispatch, generated code, and runtime
+configuration remain partial or unresolved. Python/TypeScript framework logic
+and protocol domains such as messaging, GraphQL, and gRPC have uneven or partial
+depth and are follow-on coverage work, not an implication of language support.
+
+Mobile navigation uses the additive, language-neutral `NAVIGATES_TO` edge. The
+strict graph validator accepts it, the existing stable edge identity deduplicates
+it, and projections that only show execution paths ignore it safely. Historical
+graphs without the edge remain readable, while unknown edge types still fail
+closed. No graph node types, public API contracts, metric authority, or global
+identity rules are changed.
 
 ### Adding a future framework adapter
 
