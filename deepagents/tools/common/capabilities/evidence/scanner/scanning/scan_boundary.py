@@ -31,6 +31,9 @@ from tools.common.capabilities.evidence.scanner.analyzers.python_analysis.python
 from tools.common.capabilities.evidence.scanner.analyzers.ruby_analysis.ruby_analyzer import (
     RubyAnalysisResult,
 )
+from tools.common.capabilities.evidence.scanner.analyzers.csharp_analysis.csharp_analyzer import (
+    CSharpAnalysisResult,
+)
 from tools.common.capabilities.evidence.scanner.frameworks import (
     FrameworkAdapterRegistry,
     FrameworkAnalysisResult,
@@ -400,6 +403,7 @@ class ScanBoundary(AgentBoundaryBase):
             project_scan_results = ()
             ruby_results: list[RubyAnalysisResult] = []
             ruby_results_by_project: dict[str, RubyAnalysisResult] = {}
+            csharp_results_by_project: dict[str, CSharpAnalysisResult] = {}
             framework_results: list[FrameworkAnalysisResult] = []
             execution_plan = self._execution_planner.build(
                 [], targeted=targeted_plan is not None
@@ -807,28 +811,59 @@ class ScanBoundary(AgentBoundaryBase):
                 ruby_dependencies.extend(native.package_dependencies)
                 ruby_findings.extend(native.findings)
                 ruby_limitations.extend(native.coverage_limitations)
+            csharp_program = SemanticProgram()
+            csharp_dependencies = []
+            csharp_limitations = []
+            for unit in project_plan.units:
+                if unit.analyzer != "csharp":
+                    continue
+                try:
+                    native = self._run_scanner_tool(
+                        "run_csharp_semantic_analysis",
+                        workspace_path=result.workspace_path,
+                        include_files=list(unit.files),
+                        project_id=unit.project_id,
+                        project_root=str(unit.project_root),
+                    )
+                except Exception as error:
+                    project_language_results.append(
+                        self._failed_project_language_result(unit, error)
+                    )
+                    continue
+                if native is not None:
+                    csharp_results_by_project[unit.project_id] = native
+                    csharp_program.extend(native.semantic_program)
+                    csharp_dependencies.extend(native.package_dependencies)
+                    csharp_limitations.extend(native.coverage_limitations)
+                    project_language_results.append(
+                        self._csharp_project_language_result(unit, native)
+                    )
             framework_detection_limitations: list[str] = []
             for project in project_discovery.projects:
                 ruby_result = ruby_results_by_project.get(project.project_id)
-                if ruby_result is None:
-                    continue
-                detected_frameworks = self._framework_registry.detect(
-                    project, result.workspace_path, ruby_result
-                )
-                framework_detection_limitations.extend(
-                    self._framework_registry.detection_limitations
-                )
-                for framework in detected_frameworks:
-                    framework_results.append(
-                        self._framework_registry.analyze(
-                            framework, project, result.workspace_path, ruby_result
-                        )
+                csharp_result = csharp_results_by_project.get(project.project_id)
+                for language_result in (ruby_result, csharp_result):
+                    if language_result is None:
+                        continue
+                    detected_frameworks = self._framework_registry.detect(
+                        project, result.workspace_path, language_result
                     )
+                    framework_detection_limitations.extend(
+                        self._framework_registry.detection_limitations
+                    )
+                    for framework in detected_frameworks:
+                        framework_results.append(
+                            self._framework_registry.analyze(
+                                framework, project, result.workspace_path, language_result
+                            )
+                        )
             framework_program = SemanticProgram()
             framework_limitations: list[str] = framework_detection_limitations
             for framework_result in framework_results:
                 framework_program.extend(framework_result.semantic_program)
                 framework_limitations.extend(framework_result.coverage_limitations)
+            package_dependencies.extend(csharp_dependencies)
+            ruby_limitations.extend(csharp_limitations)
             if execution_plan.should_run(APPROVED_TOOL_NAMES["python_ast"]):
                 python_started_at = self._utc_timestamp()
                 self._emit_runtime_event(
@@ -1113,7 +1148,7 @@ class ScanBoundary(AgentBoundaryBase):
                 technical_findings=technical_findings,
                 structural_facts=structural_facts,
                 semantic_program=self._merge_semantic_programs(
-                    ruby_program, framework_program
+                    ruby_program, csharp_program, framework_program
                 ),
                 package_dependencies=package_dependencies,
                 coverage_notes=coverage_notes,
@@ -1476,6 +1511,25 @@ class ScanBoundary(AgentBoundaryBase):
         status = (
             ANALYZER_PARTIAL
             if native.files_skipped or native.coverage_limitations
+            else ANALYZER_SUCCESS
+        )
+        return ProjectLanguageResult(
+            project_id=unit.project_id,
+            language=unit.language,
+            analyzer=unit.analyzer,
+            status=status,
+            capabilities=unit.capabilities,
+            files=unit.files,
+            coverage_limitations=native.coverage_limitations,
+        )
+
+    @staticmethod
+    def _csharp_project_language_result(
+        unit: AnalyzerExecutionUnit, native: CSharpAnalysisResult
+    ) -> ProjectLanguageResult:
+        status = (
+            ANALYZER_PARTIAL
+            if native.files_skipped or native.coverage_limitations or native.unsupported_dynamic_flows
             else ANALYZER_SUCCESS
         )
         return ProjectLanguageResult(

@@ -269,6 +269,16 @@ class LanguageClassifier:
             ".rs": LANGUAGE_RUST,
         }.get(suffix)
         if basic_language is not None:
+            if basic_language == LANGUAGE_CSHARP:
+                return LanguageClassification(
+                    file_path=relative_path,
+                    language=basic_language,
+                    support_level=SUPPORT_FULL,
+                    file_size_bytes=file_size,
+                    line_count=line_count,
+                    skip_reason=None,
+                    coverage_limitation=False,
+                )
             return LanguageClassification(
                 file_path=relative_path,
                 language=basic_language,

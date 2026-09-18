@@ -29,6 +29,7 @@ dependencies = [
   "tree-sitter==0.26.0",
   "tree-sitter-ruby==0.23.1",
   "chromadb==1.5.5",
+  "tree-sitter-c-sharp==0.23.1",
 ]
 
 [project.optional-dependencies]

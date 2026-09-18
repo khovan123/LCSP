@@ -166,6 +166,34 @@ def run_ruby_semantic_analysis(
     return result.native_result
 
 
+def run_csharp_semantic_analysis(
+    request: ScannerToolInput,
+    context: ScannerToolExecutionContext,
+):
+    """Run bounded C# semantic analysis without invoking dotnet tooling."""
+    from tools.common.capabilities.evidence.scanner.analyzers.adapters import CSharpLanguageAdapter
+    from tools.common.capabilities.evidence.scanner.analyzers.registry import LanguageAnalyzerRegistry
+
+    include_files = list(request.get("include_files") or [])
+    project_root = request.get("project_root")
+    if project_root:
+        root = Path(project_root)
+        include_files.extend(
+            path.relative_to(_workspace_path(request)).as_posix()
+            for path in root.glob("*.csproj")
+            if path.is_file()
+        )
+    registry = context.language_analyzer_registry or LanguageAnalyzerRegistry.default(
+        context.ts_js_bridge_factory
+    )
+    adapter = registry.resolve("csharp") or CSharpLanguageAdapter()
+    result = adapter.analyze(
+        _workspace_path(request),
+        include_files,
+    )
+    return result.native_result
+
+
 def run_structural_augmentation(
     request: ScannerToolInput,
     context: ScannerToolExecutionContext,

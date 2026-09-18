@@ -177,17 +177,16 @@ def test_execution_plan_keeps_basic_code_projects_explicitly_unsupported(tmp_pat
     _write(tmp_path / "backend/Program.cs", "class Program {}\n")
     discovery = ProjectDiscovery().discover(tmp_path)
     classifications = [
-        LanguageClassification("backend/Program.cs", "csharp", "BASIC", 1, 1, None, True),
+        LanguageClassification("backend/Program.cs", "csharp", SUPPORT_FULL, 1, 1, None, False),
     ]
 
     plan = ProjectExecutionPlanner().build(
-        tmp_path, discovery, classifications, LanguageAnalyzerRegistry(())
+        tmp_path, discovery, classifications, LanguageAnalyzerRegistry.default()
     )
 
-    assert not plan.units
-    assert len(plan.non_semantic_results) == 1
-    assert plan.non_semantic_results[0].status == "UNSUPPORTED"
-    assert plan.non_semantic_results[0].project_id == discovery.projects[0].project_id
+    assert len(plan.units) == 1
+    assert plan.units[0].language == "csharp"
+    assert plan.units[0].project_id == discovery.projects[0].project_id
 
 
 def test_execution_plan_routes_ruby_per_project_and_unowned_file(tmp_path: Path) -> None:

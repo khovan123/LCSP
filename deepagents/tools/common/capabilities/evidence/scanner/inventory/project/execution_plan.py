@@ -19,7 +19,6 @@ from .project_types import (
 REPOSITORY_PROJECT_ID = "repository-unowned"
 _UNSUPPORTED_CODE_LANGUAGES = frozenset(
     {
-        "csharp",
         "go",
         "java",
         "kotlin",

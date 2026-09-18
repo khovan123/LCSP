@@ -22,9 +22,13 @@ class FrameworkAdapterRegistry:
 
     @classmethod
     def default(cls) -> "FrameworkAdapterRegistry":
+        from .aspnet import AspNetCoreFrameworkAdapter, AspNetCoreFrameworkDetector
         from .rails import RailsFrameworkAdapter, RailsFrameworkDetector
 
-        return cls((RailsFrameworkAdapter(),), (RailsFrameworkDetector(),))
+        return cls(
+            (AspNetCoreFrameworkAdapter(), RailsFrameworkAdapter()),
+            (AspNetCoreFrameworkDetector(), RailsFrameworkDetector()),
+        )
 
     def register(self, adapter: FrameworkAdapter) -> None:
         if any(item.framework == adapter.framework for item in self._adapters):

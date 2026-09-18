@@ -22,7 +22,7 @@ from ..entrypoints.tool_entrypoints import (
 from ..entrypoints.scanner_tool_entrypoints import (
     ScannerToolExecutionContext, build_evidence_graph, classify_workspace_languages,
     materialize_snapshot, run_deptry_usage_analysis, run_knip_usage_analysis,
-    run_python_semantic_analysis, run_ruby_semantic_analysis, run_semgrep_rules, run_structural_augmentation,
+    run_python_semantic_analysis, run_ruby_semantic_analysis, run_csharp_semantic_analysis, run_semgrep_rules, run_structural_augmentation,
     run_syft_inventory, run_ts_js_semantic_analysis, validate_evidence_report,
 )
 from ..entrypoints.legal_tool_entrypoints import (
@@ -92,6 +92,7 @@ SCANNER_TOOL_BINDINGS = (
     _binding("run_ts_js_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_ts_js_semantic_analysis, "TsJsLanguageAdapter.analyze"),
     _binding("run_python_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_python_semantic_analysis, "PythonLanguageAdapter.analyze"),
     _binding("run_ruby_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_ruby_semantic_analysis, "RubyLanguageAdapter.analyze"),
+    _binding("run_csharp_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_csharp_semantic_analysis, "CSharpLanguageAdapter.analyze"),
     _binding("run_structural_augmentation", ToolRuntimeTarget.PYTHON_LOCAL, run_structural_augmentation, "StructuralAugmentor.augment"),
     _binding("build_evidence_graph", ToolRuntimeTarget.PYTHON_LOCAL, build_evidence_graph, "ProgramGraphAssembler.assemble"),
     _binding("validate_evidence_report", ToolRuntimeTarget.PYTHON_LOCAL, validate_evidence_report, "validate_schema + assert_privacy_flags + classify_quality"),
