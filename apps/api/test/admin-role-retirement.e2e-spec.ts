@@ -2,10 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 import { Client } from "pg";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import {
-  ADMIN_ACCOUNT_OPERATIONS,
-  AUTH_USER_ROLES,
-} from "@lcsp/contracts/auth";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 const databaseUrl = process.env.LCSP299_TEST_DATABASE_URL;
 const integration = databaseUrl ? describe : describe.skip;
