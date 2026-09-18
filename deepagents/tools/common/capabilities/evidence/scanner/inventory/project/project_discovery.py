@@ -122,6 +122,7 @@ class RecognitionManifestDetector:
         "go": ("go.mod",),
         "rust": ("Cargo.toml",),
         "flutter": ("pubspec.yaml",),
+        "php": ("composer.json",),
     }
 
     def detect(self, workspace: Path) -> tuple[ProjectDescriptor, ...]:

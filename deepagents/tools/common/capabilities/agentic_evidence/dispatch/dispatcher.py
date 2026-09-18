@@ -23,7 +23,7 @@ from ..entrypoints.scanner_tool_entrypoints import (
     ScannerToolExecutionContext, build_evidence_graph, classify_workspace_languages,
     materialize_snapshot, run_deptry_usage_analysis, run_knip_usage_analysis,
     run_python_semantic_analysis, run_ruby_semantic_analysis, run_csharp_semantic_analysis, run_semgrep_rules, run_structural_augmentation,
-    run_java_semantic_analysis, run_kotlin_semantic_analysis, run_syft_inventory, run_ts_js_semantic_analysis, validate_evidence_report,
+    run_java_semantic_analysis, run_kotlin_semantic_analysis, run_php_semantic_analysis, run_syft_inventory, run_ts_js_semantic_analysis, validate_evidence_report,
 )
 from ..entrypoints.legal_tool_entrypoints import (
     LegalToolExecutionContext, activate_validated_corpus_version,
@@ -95,6 +95,7 @@ SCANNER_TOOL_BINDINGS = (
     _binding("run_csharp_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_csharp_semantic_analysis, "CSharpLanguageAdapter.analyze"),
     _binding("run_java_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_java_semantic_analysis, "JavaLanguageAdapter.analyze"),
     _binding("run_kotlin_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_kotlin_semantic_analysis, "KotlinLanguageAdapter.analyze"),
+    _binding("run_php_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_php_semantic_analysis, "PhpLanguageAdapter.analyze"),
     _binding("run_structural_augmentation", ToolRuntimeTarget.PYTHON_LOCAL, run_structural_augmentation, "StructuralAugmentor.augment"),
     _binding("build_evidence_graph", ToolRuntimeTarget.PYTHON_LOCAL, build_evidence_graph, "ProgramGraphAssembler.assemble"),
     _binding("validate_evidence_report", ToolRuntimeTarget.PYTHON_LOCAL, validate_evidence_report, "validate_schema + assert_privacy_flags + classify_quality"),

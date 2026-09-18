@@ -67,6 +67,15 @@ service, repository, entity, route, and scheduled-job roles, and emits canonical
 HTTP facts. Java and Kotlin routes share the same downstream resolver and do not
 create framework-specific graph nodes.
 
+PHP uses the Tree-sitter PHP grammar in the worker runtime and statically parses
+Composer metadata. It extracts namespaces, classes, interfaces, traits,
+functions, methods, imports, calls, attributes, and conservative dynamic-call
+limitations without executing PHP or Composer. Laravel and Symfony are separate
+registered framework adapters. They detect application-level Composer evidence,
+reuse PHP symbols, and emit bounded canonical route/controller, DI, ORM, job,
+and source-provenance facts. Laravel's transitive Symfony dependencies do not
+select the Symfony adapter.
+
 ## Repository-wide cross-project resolution
 
 After language and framework facts are normalized, `CrossReferenceResolver`
