@@ -4,7 +4,7 @@ import hashlib
 import json
 import platform
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -30,6 +30,10 @@ from tools.common.capabilities.evidence.scanner.analyzers.python_analysis.python
 )
 from tools.common.capabilities.evidence.scanner.analyzers.ruby_analysis.ruby_analyzer import (
     RubyAnalysisResult,
+)
+from tools.common.capabilities.evidence.scanner.frameworks import (
+    FrameworkAdapterRegistry,
+    FrameworkAnalysisResult,
 )
 from tools.common.capabilities.evidence.scanner.dependencies.dependency_normalizer import DependencyNormalizer
 from tools.common.capabilities.evidence.scanner.assembly.evidence_assembler import (
@@ -243,6 +247,7 @@ class ScanBoundary(AgentBoundaryBase):
         )
         self._project_discovery = ProjectDiscovery()
         self._project_execution_planner = ProjectExecutionPlanner()
+        self._framework_registry = FrameworkAdapterRegistry.default()
         self._analyzer_router = analyzer_router or AnalyzerRouter(
             semantic_registry=self._language_analyzer_registry
         )
@@ -394,6 +399,8 @@ class ScanBoundary(AgentBoundaryBase):
             project_language_results: list[ProjectLanguageResult] = []
             project_scan_results = ()
             ruby_results: list[RubyAnalysisResult] = []
+            ruby_results_by_project: dict[str, RubyAnalysisResult] = {}
+            framework_results: list[FrameworkAnalysisResult] = []
             execution_plan = self._execution_planner.build(
                 [], targeted=targeted_plan is not None
             )
@@ -787,6 +794,7 @@ class ScanBoundary(AgentBoundaryBase):
                     continue
                 if native is not None:
                     ruby_results.append(native)
+                    ruby_results_by_project[unit.project_id] = native
                     project_language_results.append(
                         self._ruby_project_language_result(unit, native)
                     )
@@ -799,6 +807,28 @@ class ScanBoundary(AgentBoundaryBase):
                 ruby_dependencies.extend(native.package_dependencies)
                 ruby_findings.extend(native.findings)
                 ruby_limitations.extend(native.coverage_limitations)
+            framework_detection_limitations: list[str] = []
+            for project in project_discovery.projects:
+                ruby_result = ruby_results_by_project.get(project.project_id)
+                if ruby_result is None:
+                    continue
+                detected_frameworks = self._framework_registry.detect(
+                    project, result.workspace_path, ruby_result
+                )
+                framework_detection_limitations.extend(
+                    self._framework_registry.detection_limitations
+                )
+                for framework in detected_frameworks:
+                    framework_results.append(
+                        self._framework_registry.analyze(
+                            framework, project, result.workspace_path, ruby_result
+                        )
+                    )
+            framework_program = SemanticProgram()
+            framework_limitations: list[str] = framework_detection_limitations
+            for framework_result in framework_results:
+                framework_program.extend(framework_result.semantic_program)
+                framework_limitations.extend(framework_result.coverage_limitations)
             if execution_plan.should_run(APPROVED_TOOL_NAMES["python_ast"]):
                 python_started_at = self._utc_timestamp()
                 self._emit_runtime_event(
@@ -967,6 +997,10 @@ class ScanBoundary(AgentBoundaryBase):
                         {"file_path": "", "reason": limitation}
                         for limitation in ruby_limitations
                     ],
+                    *[
+                        {"file_path": "", "reason": limitation}
+                        for limitation in framework_limitations
+                    ],
                 ],
             )
             if targeted_plan is not None:
@@ -1078,7 +1112,9 @@ class ScanBoundary(AgentBoundaryBase):
                 workspace_path=result.workspace_path,
                 technical_findings=technical_findings,
                 structural_facts=structural_facts,
-                semantic_program=ruby_program,
+                semantic_program=self._merge_semantic_programs(
+                    ruby_program, framework_program
+                ),
                 package_dependencies=package_dependencies,
                 coverage_notes=coverage_notes,
             )
@@ -1334,6 +1370,42 @@ class ScanBoundary(AgentBoundaryBase):
             if value not in unique:
                 unique.append(value)
         return unique
+
+    @staticmethod
+    def _merge_semantic_programs(*programs: SemanticProgram) -> SemanticProgram:
+        merged = SemanticProgram()
+        seen_nodes: set[str] = set()
+        seen_edges: set[tuple[str, str, str]] = set()
+        for program in programs:
+            for node in program.nodes:
+                if node.key not in seen_nodes:
+                    seen_nodes.add(node.key)
+                    merged.add_node(node)
+                else:
+                    # Framework adapters enrich language facts using the same
+                    # canonical key. Merge that metadata instead of dropping
+                    # the enrichment as a duplicate node.
+                    existing_index = next(
+                        index for index, item in enumerate(merged.nodes) if item.key == node.key
+                    )
+                    existing = merged.nodes[existing_index]
+                    merged.nodes[existing_index] = replace(
+                        existing,
+                        attributes={**existing.attributes, **node.attributes},
+                        semantic_types=tuple(sorted(set(existing.semantic_types + node.semantic_types))),
+                        evidence_refs=tuple(sorted(set(existing.evidence_refs + node.evidence_refs))),
+                        support_refs=tuple(sorted(set(existing.support_refs + node.support_refs))),
+                    )
+            for edge in program.edges:
+                key = (edge.edge_type, edge.source_key, edge.target_key)
+                if key not in seen_edges:
+                    seen_edges.add(key)
+                    merged.add_edge(edge)
+            merged.coverage_notes.extend(program.coverage_notes)
+            merged.unresolved_frontiers.extend(program.unresolved_frontiers)
+        merged.coverage_notes = sorted(set(merged.coverage_notes))
+        merged.unresolved_frontiers = sorted(set(merged.unresolved_frontiers))
+        return merged
 
     @staticmethod
     def _failed_project_language_result(
