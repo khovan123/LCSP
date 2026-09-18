@@ -150,8 +150,13 @@ embedded-template behavior remain partial.
 | FastAPI | supported | supported/partial | partial `Depends` | partial |
 | Express | supported | supported/partial HTTP routes | partial middleware | partial |
 | NestJS | supported | supported decorators | partial DI/CQRS | partial |
-| React / Vue / Angular | supported | partial UI navigation | framework-specific partial | partial |
-| Next / Nuxt / SvelteKit | supported | partial UI/server route split | partial | partial |
+| React | supported | partial UI navigation | partial | partial |
+| Next.js | supported | partial UI/server route split | partial | partial |
+| Vue | supported | partial UI navigation | partial | partial |
+| Nuxt | supported | partial UI/server route split | partial | partial |
+| Angular | supported | partial UI navigation | partial DI | partial |
+| Svelte | supported | partial UI navigation | partial | partial |
+| SvelteKit | supported | partial UI/server route split | partial | partial |
 | Electron | supported | partial IPC/navigation | partial main/renderer/preload | partial |
 
 ## Capability and graph compatibility notes
