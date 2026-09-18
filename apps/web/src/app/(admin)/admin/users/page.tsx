@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import type { MessageKey } from "@lcsp/i18n";
 import type { AuthAccountStatus, AuthUserRole } from "@lcsp/contracts/auth";
 
-import { AdminInviteUserDialog } from "@/features/admin/components/organisms/admin-invite-user-dialog";
 import { AdminPageHeader } from "@/features/admin/components/molecules/admin-page-header";
 import { AdminUserFilters } from "@/features/admin/components/molecules/admin-user-filters";
 import { AdminUserTable } from "@/features/admin/components/organisms/admin-user-table";
@@ -15,7 +14,6 @@ import { resolveAppMessage } from "@/lib/i18n";
 
 export default function AdminUsersPage() {
   const router = useRouter();
-  const [inviteOpen, setInviteOpen] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<AuthAccountStatus | "ALL">(
@@ -71,10 +69,6 @@ export default function AdminUsersPage() {
       {/* Page Header */}
       <AdminPageHeader title={pageTitle} description={pageDescription} />
 
-      <AdminInviteUserDialog
-        open={inviteOpen}
-        onClose={() => setInviteOpen(false)}
-      />
       {/* Filter Bar */}
       <div className="pt-2">
         <AdminUserFilters
@@ -86,7 +80,6 @@ export default function AdminUsersPage() {
           onSearchChange={handleSearchChange}
           onStatusChange={handleStatusChange}
           onRoleChange={handleRoleChange}
-          onCreateUserClick={() => setInviteOpen(true)}
         />
       </div>
 
