@@ -223,3 +223,10 @@ The protocol acceptance matrix covers backend/frontend/polyglot boundaries,
 with dedicated mobile and AI suites. Quality assertions cover deterministic
 output, source provenance, malformed/partial isolation, and ambiguity-safe
 unresolved behavior.
+
+The acceptance matrix is exercised by an integrated protocol fixture covering
+HTTP, UI navigation, GraphQL client/server association, gRPC client/contract/
+server linking, messaging producer/consumer convergence, and command-handler
+evidence. Dedicated mobile and AI suites complete the backend/frontend/mobile/
+AI/polyglot categories. The quality matrix asserts repeatability, provenance,
+ambiguity-safe unresolved behavior, and isolated partial failures.

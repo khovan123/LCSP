@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from tools.common.capabilities.evidence.graph.construction.assembly.assembler import ProgramGraphAssembler
-from tools.common.capabilities.evidence.graph.schema.semantic_ir import SemanticNodeFact, SemanticProgram
+from tools.common.capabilities.evidence.graph.schema.semantic_ir import SemanticEdgeFact, SemanticNodeFact, SemanticProgram
 from tools.common.capabilities.evidence.graph.lineage.data.data_lineage import SemanticDataLineageExtractor
 from tools.common.capabilities.evidence.graph.resolution.dispatch.protocol_resolution import ProtocolBoundaryResolver
 from tools.common.capabilities.evidence.graph.resolution.cross_project_resolution import CrossReferenceResolver
@@ -139,3 +139,41 @@ def test_grpc_client_without_service_identity_stays_unresolved() -> None:
     )
     ProtocolBoundaryResolver().enrich(program)
     assert not any(edge.source_key == "call" for edge in program.edges)
+
+
+def test_integrated_protocol_acceptance_matrix_is_deterministic_and_provenance_backed() -> None:
+    def build() -> SemanticProgram:
+        return SemanticProgram(
+            nodes=[
+                SemanticNodeFact("http-call", "CALL_SITE", "fetch", "frontend/api.ts", 4, 4, attributes={"integrationType": "HTTP", "method": "GET", "route": "/users/1"}),
+                SemanticNodeFact("http-route", "HTTP_ROUTE", "GET /users/{id}", "api/routes.ts", 8, 8, attributes={"method": "GET", "path": "/users/{id}"}),
+                SemanticNodeFact("gql-client", "GRAPHQL_OPERATION", "Query.GetUser", "frontend/query.graphql", 1, 1, attributes={"graphqlRole": "CLIENT", "operationType": "Query", "operationName": "GetUser", "endpoint": "api"}),
+                SemanticNodeFact("gql-server", "GRAPHQL_OPERATION", "Query.GetUser", "api/schema.graphql", 1, 1, attributes={"graphqlRole": "SERVER", "operationType": "Query", "operationName": "GetUser", "service": "api"}),
+                SemanticNodeFact("rpc", "GRPC_METHOD", "GetUser", "contracts/users.proto", 5, 5, attributes={"package": "users.v1", "service": "Users", "method": "GetUser"}),
+                SemanticNodeFact("rpc-server", "METHOD", "GetUser", "worker/server.py", 12, 12),
+                SemanticNodeFact("rpc-client", "CALL_SITE", "stub.GetUser", "worker/client.py", 6, 6, attributes={"protocol": "GRPC", "grpcPackage": "users.v1", "grpcService": "Users", "grpcMethod": "GetUser"}),
+                SemanticNodeFact("producer", "EVENT", "invoice-created", "api/events.ts", attributes={"provider": "kafka", "resourceName": "invoice-created"}),
+                SemanticNodeFact("consumer", "EVENT", "invoice-created", "worker/events.py", attributes={"provider": "kafka", "resourceName": "invoice-created"}),
+                SemanticNodeFact("screen", "FUNCTION", "HomeScreen", "frontend/Home.tsx"),
+                SemanticNodeFact("page", "FUNCTION", "UserPage", "frontend/User.tsx"),
+            ],
+            edges=[SemanticEdgeFact("NAVIGATES_TO", "screen", "page", evidence_refs=("frontend/Home.tsx", "frontend/User.tsx")), SemanticEdgeFact("HANDLES_COMMAND", "api-command", "api-handler")],
+        )
+
+    first = build()
+    CrossReferenceResolver().enrich(first, Path("."))
+    ProtocolBoundaryResolver().enrich(first)
+    second = build()
+    CrossReferenceResolver().enrich(second, Path("."))
+    ProtocolBoundaryResolver().enrich(second)
+    first_edges = sorted((edge.edge_type, edge.source_key, edge.target_key) for edge in first.edges)
+    second_edges = sorted((edge.edge_type, edge.source_key, edge.target_key) for edge in second.edges)
+    assert first_edges == second_edges
+    assert {"NAVIGATES_TO", "RESOLVES_TO"}.issubset({edge[0] for edge in first_edges})
+    assert any(edge.source_key == "rpc-client" and edge.target_key == "rpc" for edge in first.edges)
+    assert any(edge.source_key == "gql-client" and edge.target_key == "gql-server" for edge in first.edges)
+    assert any(
+        {edge.source_key, edge.target_key} == {"producer", "consumer"}
+        and edge.attributes.get("resolution") == "MESSAGING_RESOURCE"
+        for edge in first.edges
+    )
