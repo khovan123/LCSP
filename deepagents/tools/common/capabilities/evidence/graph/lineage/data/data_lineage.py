@@ -489,6 +489,7 @@ class SemanticDataLineageExtractor:
                             "responseType": response_type,
                             "package": package_name,
                             "service": service_name,
+                            "method": method,
                         },
                         origin="CONTRACT_ANALYSIS",
                     )

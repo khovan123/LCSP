@@ -64,3 +64,78 @@ def test_messaging_resource_resolution_requires_provider_and_literal_name() -> N
     CrossReferenceResolver().enrich(program, Path("."))
     assert any(edge.edge_type == "RESOLVES_TO" and edge.source_key == "queue:a" for edge in program.edges)
     assert not any(edge.source_key == "queue:a" and edge.target_key == "queue:c" for edge in program.edges)
+
+
+def test_graphql_client_links_only_to_explicit_unique_server_operation() -> None:
+    from tools.common.capabilities.evidence.graph.resolution.dispatch.protocol_resolution import ProtocolBoundaryResolver
+
+    program = SemanticProgram(
+        nodes=[
+            SemanticNodeFact(
+                "client:get-user", "GRAPHQL_OPERATION", "Query.GetUser", "web/query.graphql",
+                attributes={"graphqlRole": "CLIENT", "operationType": "Query", "operationName": "GetUser", "endpoint": "api"},
+            ),
+            SemanticNodeFact(
+                "server:get-user", "GRAPHQL_OPERATION", "Query.GetUser", "api/schema.graphql",
+                attributes={"graphqlRole": "SERVER", "operationType": "Query", "operationName": "GetUser", "service": "api"},
+            ),
+        ]
+    )
+    ProtocolBoundaryResolver().enrich(program)
+    assert any(edge.source_key == "client:get-user" and edge.target_key == "server:get-user" for edge in program.edges)
+
+
+def test_graphql_operation_documents_emit_client_contract_facts(tmp_path: Path) -> None:
+    document = tmp_path / "GetUser.graphql"
+    document.write_text("query GetUser($id: ID!) { user(id: $id) { id } }\n", encoding="utf-8")
+    program = SemanticProgram()
+    from tools.common.capabilities.evidence.graph.lineage.contract.contract_lineage import ContractDataLineageExtractor
+
+    ContractDataLineageExtractor(tmp_path).enrich(program)
+    operation = next(node for node in program.nodes if node.node_type == "GRAPHQL_OPERATION")
+    assert operation.attributes["graphqlRole"] == "CLIENT"
+    assert operation.attributes["operationName"] == "GetUser"
+
+
+def test_graphql_client_ambiguity_and_dynamic_endpoint_stay_unresolved() -> None:
+    from tools.common.capabilities.evidence.graph.resolution.dispatch.protocol_resolution import ProtocolBoundaryResolver
+
+    program = SemanticProgram(
+        nodes=[
+            SemanticNodeFact("client:get-user", "GRAPHQL_OPERATION", "Query.GetUser", "query.graphql", attributes={"graphqlRole": "CLIENT", "operationType": "Query", "operationName": "GetUser"}),
+            SemanticNodeFact("a:get-user", "GRAPHQL_OPERATION", "Query.GetUser", "a.graphql", attributes={"graphqlRole": "SERVER", "operationType": "Query", "operationName": "GetUser", "service": "a"}),
+            SemanticNodeFact("b:get-user", "GRAPHQL_OPERATION", "Query.GetUser", "b.graphql", attributes={"graphqlRole": "SERVER", "operationType": "Query", "operationName": "GetUser", "service": "b"}),
+        ]
+    )
+    ProtocolBoundaryResolver().enrich(program)
+    assert not any(edge.source_key == "client:get-user" for edge in program.edges)
+    assert "graphql-client:client:get-user" in program.unresolved_frontiers
+
+
+def test_grpc_client_links_by_proto_identity_and_preserves_ambiguity_safety() -> None:
+    from tools.common.capabilities.evidence.graph.resolution.dispatch.protocol_resolution import ProtocolBoundaryResolver
+
+    program = SemanticProgram(
+        nodes=[
+            SemanticNodeFact("rpc:get", "GRPC_METHOD", "Get", "users.proto", attributes={"package": "users.v1", "service": "Users", "method": "Get"}),
+            SemanticNodeFact("server:get", "METHOD", "Get", "server.py"),
+            SemanticNodeFact("client:get", "CALL_SITE", "stub.Get", "client.py", attributes={"protocol": "GRPC", "grpcPackage": "users.v1", "grpcService": "Users", "grpcMethod": "Get"}),
+        ]
+    )
+    ProtocolBoundaryResolver().enrich(program)
+    assert any(edge.source_key == "client:get" and edge.target_key == "rpc:get" for edge in program.edges)
+    assert any(edge.source_key == "rpc:get" and edge.target_key == "server:get" for edge in program.edges)
+
+
+def test_grpc_client_without_service_identity_stays_unresolved() -> None:
+    from tools.common.capabilities.evidence.graph.resolution.dispatch.protocol_resolution import ProtocolBoundaryResolver
+
+    program = SemanticProgram(
+        nodes=[
+            SemanticNodeFact("a", "GRPC_METHOD", "Get", "a.proto", attributes={"package": "a", "service": "Users", "method": "Get"}),
+            SemanticNodeFact("b", "GRPC_METHOD", "Get", "b.proto", attributes={"package": "b", "service": "Users", "method": "Get"}),
+            SemanticNodeFact("call", "CALL_SITE", "stub.Get", "client.py", attributes={"protocol": "GRPC", "grpcMethod": "Get"}),
+        ]
+    )
+    ProtocolBoundaryResolver().enrich(program)
+    assert not any(edge.source_key == "call" for edge in program.edges)

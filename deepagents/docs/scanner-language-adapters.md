@@ -203,3 +203,23 @@ identity rules are changed.
    from language facts and other projects.
 5. Add project-scoped, negative-detection, provenance, determinism, and
    failure-isolation tests before documenting capability levels.
+
+### Protocol client-linking closure
+
+GraphQL operation documents emit canonical `GRAPHQL_OPERATION` facts with a
+client role. The repository resolver links a client operation to exactly one
+server operation only when operation type/name and an explicit endpoint or
+service identity disambiguate the target; dynamic endpoints and same-name
+multi-service candidates remain unresolved. Existing resolver/function symbols
+are reused.
+
+gRPC client call facts may carry normalized `grpcPackage`, `grpcService`, and
+`grpcMethod` attributes. They resolve through the existing `GRPC_METHOD`
+contract identity (`package/service/method`) and then to the canonical server
+implementation. Generated code is supporting contract evidence, not first-party
+application symbols; no code generation or compilation is executed.
+
+The protocol acceptance matrix covers backend/frontend/polyglot boundaries,
+with dedicated mobile and AI suites. Quality assertions cover deterministic
+output, source provenance, malformed/partial isolation, and ambiguity-safe
+unresolved behavior.
