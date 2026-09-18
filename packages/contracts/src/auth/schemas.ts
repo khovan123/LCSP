@@ -79,12 +79,13 @@ export type RequestPasswordRecoveryInput = z.infer<
 /**
  * Validation schema and input type for confirming password recovery with token and new password.
  */
-export const confirmPasswordRecoverySchema = z
-  .object({
-    token: z.string().min(1).optional(),
-    recovery_token: z.string().min(1).optional(),
-    new_password: z.string().min(12),
-  })
+export const confirmPasswordRecoveryObjectSchema = z.object({
+  token: z.string().min(1).optional(),
+  recovery_token: z.string().min(1).optional(),
+  new_password: z.string().min(12),
+});
+
+export const confirmPasswordRecoverySchema = confirmPasswordRecoveryObjectSchema
   .refine((data) => Boolean(data.token || data.recovery_token), {
     message: "Either token or recovery_token must be provided",
   })
