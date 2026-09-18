@@ -28,3 +28,21 @@ Future detectors can be added by implementing `ProjectDetector`, registering
 it in `ProjectDetectorRegistry`, returning evidence-backed descriptors, and
 adding deterministic hierarchy, deduplication, malformed-manifest, and
 ownership tests.
+
+## Project-scoped analyzer execution
+
+After classification, `ProjectExecutionPlanner` creates deterministic
+`AnalyzerExecutionUnit` values containing one project, one registered semantic
+adapter language, and a sorted, de-duplicated file list. TypeScript and
+JavaScript files owned by the same project share one TS/JS invocation. Nested
+projects receive only files owned by the most-specific root; files outside all
+roots use the internal `repository-unowned` bucket and remain analyzable.
+
+The scan boundary invokes the existing canonical Python and TS/JS entrypoints
+once per unit, then merges native results for the unchanged evidence pipeline.
+Per-unit `ProjectLanguageResult` and aggregated `ProjectScanResult` values
+retain capabilities, status, skipped files, coverage limitations, and
+recoverable failures. Unsupported basic languages are explicit results and do
+not receive a semantic adapter invocation. Analyzer-local failures are isolated
+to their unit; privacy, graph-integrity, and evidence-integrity failures remain
+fatal.

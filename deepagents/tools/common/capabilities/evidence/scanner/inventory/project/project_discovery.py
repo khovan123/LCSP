@@ -214,10 +214,14 @@ class ProjectDiscovery:
     def __init__(self, registry: ProjectDetectorRegistry | None = None) -> None:
         self.registry = registry or ProjectDetectorRegistry.default()
 
-    def discover(self, workspace: str | Path) -> ProjectDiscoveryResult:
+    def discover(self, workspace: str | Path, classifications=None) -> ProjectDiscoveryResult:
         result = self.registry.discover(workspace)
         root = Path(workspace).resolve(strict=False)
-        classifications = LanguageClassifier().classify_workspace(root)
+        classifications = (
+            tuple(classifications)
+            if classifications is not None
+            else tuple(LanguageClassifier().classify_workspace(root))
+        )
         ownership: dict[str, str] = {}
         unowned: list[str] = []
         projects = sorted(result.projects, key=lambda item: len(item.relative_root), reverse=True)
@@ -242,4 +246,5 @@ class ProjectDiscovery:
             projects=updated_projects,
             file_ownership=dict(sorted(ownership.items())),
             unowned_files=tuple(sorted(unowned)),
+            classifications=classifications,
         )

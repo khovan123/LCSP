@@ -34,6 +34,7 @@ class ProjectDiscoveryResult:
     limitations: tuple[str, ...] = field(default_factory=tuple)
     file_ownership: dict[str, str] = field(default_factory=dict)
     unowned_files: tuple[str, ...] = field(default_factory=tuple)
+    classifications: tuple[Any, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -54,4 +55,22 @@ class ProjectScanResult:
     project_id: str
     language_results: tuple[ProjectLanguageResult, ...] = field(default_factory=tuple)
     limitations: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class AnalyzerExecutionUnit:
+    """One bounded project/language invocation of a registered analyzer."""
+
+    project_id: str
+    project_root: Path
+    language: str
+    files: tuple[str, ...]
+    analyzer: str | None
+    capabilities: Any = None
+
+
+@dataclass(frozen=True)
+class ProjectExecutionPlan:
+    units: tuple[AnalyzerExecutionUnit, ...] = field(default_factory=tuple)
+    non_semantic_results: tuple[ProjectLanguageResult, ...] = field(default_factory=tuple)
 

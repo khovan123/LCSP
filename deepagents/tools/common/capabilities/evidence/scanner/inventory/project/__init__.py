@@ -9,8 +9,11 @@ from .project_types import (
     ProjectDiscoveryResult,
     ProjectLanguageResult,
     ProjectScanResult,
+    AnalyzerExecutionUnit,
+    ProjectExecutionPlan,
 )
 from .project_results import aggregate_project_results
+from .execution_plan import ProjectExecutionPlanner, REPOSITORY_PROJECT_ID
 
 __all__ = [
     "PROJECT_FAILED",
@@ -24,5 +27,9 @@ __all__ = [
     "ProjectDiscoveryResult",
     "ProjectLanguageResult",
     "ProjectScanResult",
+    "AnalyzerExecutionUnit",
+    "ProjectExecutionPlan",
     "aggregate_project_results",
+    "ProjectExecutionPlanner",
+    "REPOSITORY_PROJECT_ID",
 ]

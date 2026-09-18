@@ -7,8 +7,16 @@ from tools.common.capabilities.evidence.scanner.inventory.project import (
     ProjectDetectorRegistry,
     ProjectLanguageResult,
     aggregate_project_results,
+    ProjectExecutionPlanner,
 )
 from tools.common.capabilities.evidence.scanner.analyzers.protocol import ANALYZER_SUCCESS
+from tools.common.capabilities.evidence.scanner.analyzers.registry import LanguageAnalyzerRegistry
+from tools.common.capabilities.evidence.scanner.inventory.language.language_types import (
+    LANGUAGE_PYTHON,
+    LANGUAGE_TYPESCRIPT,
+    SUPPORT_FULL,
+    LanguageClassification,
+)
 
 
 def _write(path: Path, content: str) -> None:
@@ -101,3 +109,82 @@ def test_project_results_preserve_success_and_unsupported_outcomes() -> None:
 
     assert results[0].language_results[0].status == ANALYZER_SUCCESS
     assert results[1].language_results[0].status == "UNSUPPORTED"
+
+
+def test_execution_plan_partitions_same_language_projects_without_leakage(tmp_path: Path) -> None:
+    _write(tmp_path / "a/pyproject.toml", "[project]\nname = 'a'\n")
+    _write(tmp_path / "a/app.py", "print('a')\n")
+    _write(tmp_path / "b/pyproject.toml", "[project]\nname = 'b'\n")
+    _write(tmp_path / "b/app.py", "print('b')\n")
+    discovery = ProjectDiscovery().discover(tmp_path)
+    classifications = [
+        LanguageClassification("a/app.py", LANGUAGE_PYTHON, SUPPORT_FULL, 1, 1, None, False),
+        LanguageClassification("b/app.py", LANGUAGE_PYTHON, SUPPORT_FULL, 1, 1, None, False),
+    ]
+    class Adapter:
+        language = LANGUAGE_PYTHON
+
+        def supports(self, language):
+            return language == LANGUAGE_PYTHON
+
+        def capabilities(self):
+            return None
+
+    plan = ProjectExecutionPlanner().build(
+        tmp_path, discovery, classifications, LanguageAnalyzerRegistry((Adapter(),))
+    )
+
+    assert len(plan.units) == 2
+    assert {unit.files for unit in plan.units} == {("a/app.py",), ("b/app.py",)}
+
+
+def test_execution_plan_coalesces_ts_and_js_and_keeps_unowned_file(tmp_path: Path) -> None:
+    _write(tmp_path / "web/package.json", json.dumps({"name": "web"}))
+    _write(tmp_path / "web/a.ts", "export const a = 1;\n")
+    _write(tmp_path / "web/b.js", "export const b = 1;\n")
+    _write(tmp_path / "tools.py", "print('tool')\n")
+    discovery = ProjectDiscovery().discover(tmp_path)
+    classifications = [
+        LanguageClassification("web/a.ts", LANGUAGE_TYPESCRIPT, SUPPORT_FULL, 1, 1, None, False),
+        LanguageClassification("web/b.js", "javascript", SUPPORT_FULL, 1, 1, None, False),
+        LanguageClassification("tools.py", LANGUAGE_PYTHON, SUPPORT_FULL, 1, 1, None, False),
+    ]
+    class Adapter:
+        def __init__(self, language):
+            self.language = language
+
+        def supports(self, language):
+            return language == self.language or (
+                self.language == "ts_js" and language in {"javascript", "typescript"}
+            )
+
+        def capabilities(self):
+            return None
+
+    plan = ProjectExecutionPlanner().build(
+        tmp_path,
+        discovery,
+        classifications,
+        LanguageAnalyzerRegistry((Adapter(LANGUAGE_PYTHON), Adapter("ts_js"))),
+    )
+    assert len(plan.units) == 2
+    assert any(unit.analyzer == "ts_js" and unit.files == ("web/a.ts", "web/b.js") for unit in plan.units)
+    assert any(unit.project_id == "repository-unowned" and unit.files == ("tools.py",) for unit in plan.units)
+
+
+def test_execution_plan_keeps_basic_code_projects_explicitly_unsupported(tmp_path: Path) -> None:
+    _write(tmp_path / "backend/backend.csproj", "<Project />\n")
+    _write(tmp_path / "backend/Program.cs", "class Program {}\n")
+    discovery = ProjectDiscovery().discover(tmp_path)
+    classifications = [
+        LanguageClassification("backend/Program.cs", "csharp", "BASIC", 1, 1, None, True),
+    ]
+
+    plan = ProjectExecutionPlanner().build(
+        tmp_path, discovery, classifications, LanguageAnalyzerRegistry(())
+    )
+
+    assert not plan.units
+    assert len(plan.non_semantic_results) == 1
+    assert plan.non_semantic_results[0].status == "UNSUPPORTED"
+    assert plan.non_semantic_results[0].project_id == discovery.projects[0].project_id
