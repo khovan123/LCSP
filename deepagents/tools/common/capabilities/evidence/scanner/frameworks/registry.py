@@ -27,10 +27,39 @@ class FrameworkAdapterRegistry:
         from .spring import SpringFrameworkAdapter, SpringFrameworkDetector
         from .php_frameworks import LaravelFrameworkAdapter, LaravelFrameworkDetector, SymfonyFrameworkAdapter, SymfonyFrameworkDetector
         from .mobile import AndroidFrameworkAdapter, AndroidFrameworkDetector, FlutterFrameworkAdapter, FlutterFrameworkDetector, IOSFrameworkAdapter, IOSFrameworkDetector, ReactNativeFrameworkAdapter, ReactNativeFrameworkDetector
+        from .python_ts_frontend import (
+            AngularFrameworkAdapter, AngularFrameworkDetector, DjangoFrameworkAdapter,
+            DjangoFrameworkDetector, ElectronFrameworkAdapter, ElectronFrameworkDetector,
+            ExpressFrameworkAdapter, ExpressFrameworkDetector, FastApiFrameworkAdapter,
+            FastApiFrameworkDetector, FlaskFrameworkAdapter, FlaskFrameworkDetector,
+            NestJsFrameworkAdapter, NestJsFrameworkDetector, NextJsFrameworkAdapter,
+            NextJsFrameworkDetector, NuxtFrameworkAdapter, NuxtFrameworkDetector,
+            ReactFrameworkAdapter, ReactFrameworkDetector, SvelteFrameworkAdapter,
+            SvelteFrameworkDetector, SvelteKitFrameworkAdapter, SvelteKitFrameworkDetector,
+            VueFrameworkAdapter, VueFrameworkDetector,
+        )
 
         return cls(
-            (AndroidFrameworkAdapter(), AspNetCoreFrameworkAdapter(), FlutterFrameworkAdapter(), IOSFrameworkAdapter(), LaravelFrameworkAdapter(), RailsFrameworkAdapter(), ReactNativeFrameworkAdapter(), SpringFrameworkAdapter(), SymfonyFrameworkAdapter()),
-            (AndroidFrameworkDetector(), AspNetCoreFrameworkDetector(), FlutterFrameworkDetector(), IOSFrameworkDetector(), LaravelFrameworkDetector(), RailsFrameworkDetector(), ReactNativeFrameworkDetector(), SpringFrameworkDetector(), SymfonyFrameworkDetector()),
+            (
+                AndroidFrameworkAdapter(), AspNetCoreFrameworkAdapter(), AngularFrameworkAdapter(),
+                DjangoFrameworkAdapter(), ElectronFrameworkAdapter(), ExpressFrameworkAdapter(),
+                FastApiFrameworkAdapter(), FlaskFrameworkAdapter(), FlutterFrameworkAdapter(),
+                IOSFrameworkAdapter(), LaravelFrameworkAdapter(), NestJsFrameworkAdapter(),
+                NextJsFrameworkAdapter(), NuxtFrameworkAdapter(), RailsFrameworkAdapter(),
+                ReactFrameworkAdapter(), ReactNativeFrameworkAdapter(), SpringFrameworkAdapter(),
+                SvelteFrameworkAdapter(), SvelteKitFrameworkAdapter(), SymfonyFrameworkAdapter(),
+                VueFrameworkAdapter(),
+            ),
+            (
+                AndroidFrameworkDetector(), AngularFrameworkDetector(), AspNetCoreFrameworkDetector(),
+                DjangoFrameworkDetector(), ElectronFrameworkDetector(), ExpressFrameworkDetector(),
+                FastApiFrameworkDetector(), FlaskFrameworkDetector(), FlutterFrameworkDetector(),
+                IOSFrameworkDetector(), LaravelFrameworkDetector(), NestJsFrameworkDetector(),
+                NextJsFrameworkDetector(), NuxtFrameworkDetector(), RailsFrameworkDetector(),
+                ReactFrameworkDetector(), ReactNativeFrameworkDetector(), SpringFrameworkDetector(),
+                SvelteFrameworkDetector(), SvelteKitFrameworkDetector(), SymfonyFrameworkDetector(),
+                VueFrameworkDetector(),
+            ),
         )
 
     def register(self, adapter: FrameworkAdapter) -> None:

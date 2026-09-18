@@ -135,6 +135,25 @@ metaprogramming, and unsupported framework behavior remain explicit
 limitations. A Rails failure preserves the Ruby language result and other
 project results.
 
+The Python/TypeScript framework registry now also covers Django, Flask, FastAPI,
+Express, NestJS, React, Next.js, Vue, Nuxt, Angular, Svelte, SvelteKit, and
+Electron. Backend adapters emit canonical `HTTP_ROUTE`/`HANDLED_BY` facts;
+frontend adapters emit UI route/component facts and `NAVIGATES_TO` rather than
+misclassifying browser navigation as a server endpoint. Detection is package or
+manifest based, and dynamic router mounting, runtime DI, generated pages, and
+embedded-template behavior remain partial.
+
+| Framework | Detection | Routes/navigation | DI/roles | Overall |
+| --- | --- | --- | --- | --- |
+| Django | supported | partial HTTP routes | partial ORM/commands | partial |
+| Flask | supported | partial HTTP routes | unsupported/partial | partial |
+| FastAPI | supported | supported/partial | partial `Depends` | partial |
+| Express | supported | supported/partial HTTP routes | partial middleware | partial |
+| NestJS | supported | supported decorators | partial DI/CQRS | partial |
+| React / Vue / Angular | supported | partial UI navigation | framework-specific partial | partial |
+| Next / Nuxt / SvelteKit | supported | partial UI/server route split | partial | partial |
+| Electron | supported | partial IPC/navigation | partial main/renderer/preload | partial |
+
 ## Capability and graph compatibility notes
 
 Language adapters provide bounded static coverage, not compiler or runtime

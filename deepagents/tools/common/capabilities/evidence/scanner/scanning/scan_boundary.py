@@ -941,6 +941,34 @@ class ScanBoundary(AgentBoundaryBase):
                                 framework, project, result.workspace_path, language_result
                             )
                         )
+                # Python and TS/JS language results are still owned by their
+                # established native entrypoints.  Framework detection is
+                # nevertheless routed through the shared registry so legacy
+                # architecture resolvers have one registered production
+                # authority.  Their adapters consume bounded source evidence
+                # and reuse canonical symbol keys; no second language pass is
+                # introduced here.
+                semantic_languages = {
+                    unit.analyzer
+                    for unit in project_plan.units
+                    if unit.project_id == project.project_id
+                }
+                if semantic_languages & {"python", "javascript", "typescript", "ts_js"}:
+                    detected_frameworks = self._framework_registry.detect(
+                        project, result.workspace_path, None
+                    )
+                    framework_detection_limitations.extend(
+                        self._framework_registry.detection_limitations
+                    )
+                    for framework in detected_frameworks:
+                        if (project.project_id, framework) in framework_seen:
+                            continue
+                        framework_seen.add((project.project_id, framework))
+                        framework_results.append(
+                            self._framework_registry.analyze(
+                                framework, project, result.workspace_path, None
+                            )
+                        )
             framework_program = SemanticProgram()
             framework_limitations: list[str] = framework_detection_limitations
             for framework_result in framework_results:
