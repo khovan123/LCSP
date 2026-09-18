@@ -1,25 +1,13 @@
-import { ConfigService } from "@nestjs/config";
 import { CommandHandler } from "@nestjs/cqrs";
 import type { ICommandHandler } from "@nestjs/cqrs";
-import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
-import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
-import { acceptSePayWebhook } from "../../shared/billing-application.helpers.js";
+import { SePayWebhookIngress } from "../../../infrastructure/security/sepay-webhook-ingress.js";
 import { AcceptSePayWebhookCommand } from "./accept-sepay-webhook.command.js";
 
 @CommandHandler(AcceptSePayWebhookCommand)
 export class AcceptSePayWebhookHandler implements ICommandHandler<AcceptSePayWebhookCommand> {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly outbox: OutboxRepository,
-    private readonly config: ConfigService,
-  ) {}
+  constructor(private readonly ingress: SePayWebhookIngress) {}
 
   execute(command: AcceptSePayWebhookCommand) {
-    return acceptSePayWebhook(
-      command.input,
-      this.prisma,
-      this.outbox,
-      this.config,
-    );
+    return this.ingress.accept(command.input);
   }
 }

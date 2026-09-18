@@ -12,6 +12,7 @@ import { BillingCustomerController } from "./presentation/http/billing-customer.
 import { SePayWebhookController } from "./presentation/http/sepay-webhook.controller.js";
 import { BillingAdminReconciliationController } from "./presentation/http/billing-admin-reconciliation.controller.js";
 import { SePayReconciliationConsumer } from "./infrastructure/messaging/sepay-reconciliation-consumer.js";
+import { SePayWebhookIngress } from "./infrastructure/security/sepay-webhook-ingress.js";
 import { OutboxModule } from "../../platform/outbox/outbox.module.js";
 import { AcceptSePayWebhookHandler } from "./application/commands/accept-sepay-webhook/accept-sepay-webhook.handler.js";
 import { ClaimBillingInvocationHandler } from "./application/commands/claim-billing-invocation/claim-billing-invocation.handler.js";
@@ -62,6 +63,7 @@ import {
       useClass: BillingUsageKernel,
     },
     SePayReconciliationConsumer,
+    SePayWebhookIngress,
     AcceptSePayWebhookHandler,
     ClaimBillingInvocationHandler,
     CreateBillingOrderHandler,

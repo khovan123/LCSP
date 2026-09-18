@@ -5,7 +5,7 @@ import { EstimateBillingQuery } from "./estimate-billing.query.js";
 
 @QueryHandler(EstimateBillingQuery)
 export class EstimateBillingHandler implements IQueryHandler<EstimateBillingQuery> {
-  async execute(query: EstimateBillingQuery) {
-    return estimatePrepaid(query.amountVnd);
+  execute(query: EstimateBillingQuery) {
+    return Promise.resolve().then(() => estimatePrepaid(query.amountVnd));
   }
 }

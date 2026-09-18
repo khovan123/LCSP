@@ -11,6 +11,7 @@ import {
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { BILLING_ERROR_CODES } from "@lcsp/contracts/billing";
 import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
@@ -64,7 +65,10 @@ export class BillingCustomerController {
     @Req() request: AuthenticatedRequest,
   ) {
     if (!key?.trim())
-      throw mapBillingError(new Error("IDEMPOTENCY_KEY_REQUIRED"), request);
+      throw mapBillingError(
+        new Error(BILLING_ERROR_CODES.idempotencyKeyRequired),
+        request,
+      );
     const amount =
       body && typeof body === "object" && !Array.isArray(body)
         ? (body as { amount_vnd?: unknown }).amount_vnd

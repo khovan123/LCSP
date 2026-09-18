@@ -1,7 +1,6 @@
-import { Controller, Headers, Post, Req, UseGuards } from "@nestjs/common";
+import { Controller, Headers, Post, Req } from "@nestjs/common";
 import { CommandBus } from "@nestjs/cqrs";
 import type { Request } from "express";
-import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { AcceptSePayWebhookCommand } from "../../application/commands/accept-sepay-webhook/accept-sepay-webhook.command.js";
 import {
@@ -14,7 +13,6 @@ export class SePayWebhookController {
   constructor(private readonly commandBus: CommandBus) {}
 
   @Post("webhook")
-  @UseGuards(WorkerApiKeyGuard)
   async receive(
     @Req() request: Request,
     @Headers("x-sepay-signature") signature?: string,

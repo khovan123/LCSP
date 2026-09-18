@@ -42,7 +42,10 @@ export function parseAmount(value: unknown): bigint {
 
 export function mapBillingError(error: unknown, request: AuthenticatedRequest) {
   const correlationId = request.correlationId ?? "billing-request";
-  if (error instanceof Error && error.message === "IDEMPOTENCY_KEY_REQUIRED")
+  if (
+    error instanceof Error &&
+    error.message === BILLING_ERROR_CODES.idempotencyKeyRequired
+  )
     return problemException(
       BILLING_ERROR_CODES.idempotencyKeyRequired,
       correlationId,
