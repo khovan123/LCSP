@@ -3205,7 +3205,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         },
       });
 
-      expect(mockTx.assessmentInterviewThread.findUnique).not.toHaveBeenCalled();
+      expect(
+        mockTx.assessmentInterviewThread.findUnique,
+      ).not.toHaveBeenCalled();
       expect(mockTx.assessmentInterviewThread.upsert).not.toHaveBeenCalled();
       expect(mockInterviewAudit.recordQuestionPersisted).not.toHaveBeenCalled();
       expect(mockRuntimeEvents.recordToolWaitingInput).not.toHaveBeenCalled();
