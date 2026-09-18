@@ -67,6 +67,7 @@ class ProgramGraphAssembler:
         package_dependencies: Iterable[object] = (),
         technical_findings: Iterable[object] = (),
         structural_facts: Iterable[object] = (),
+        semantic_program=None,
         coverage_notes: Iterable[str] = (),
         include_files: Iterable[str] | None = None,
         config_hash: str = "",
@@ -74,6 +75,8 @@ class ProgramGraphAssembler:
         program = RepositorySemanticExtractor(workspace_path).extract(
             include_files=include_files
         )
+        if semantic_program is not None:
+            program.extend(semantic_program)
         program.extend(FrameworkBoundaryExtractor(workspace_path).extract())
 
         # Framework identities are continuation boundaries, never silent endpoints.

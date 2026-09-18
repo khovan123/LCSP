@@ -21,9 +21,9 @@ class LanguageAnalyzerRegistry:
 
     @classmethod
     def default(cls, ts_js_bridge_factory=None) -> "LanguageAnalyzerRegistry":
-        from .adapters import PythonLanguageAdapter, TsJsLanguageAdapter
+        from .adapters import PythonLanguageAdapter, RubyLanguageAdapter, TsJsLanguageAdapter
 
-        return cls((PythonLanguageAdapter(), TsJsLanguageAdapter(ts_js_bridge_factory)))
+        return cls((PythonLanguageAdapter(), RubyLanguageAdapter(), TsJsLanguageAdapter(ts_js_bridge_factory)))
 
     def register(self, analyzer: LanguageAnalyzer) -> None:
         if any(existing.language == analyzer.language for existing in self._analyzers):

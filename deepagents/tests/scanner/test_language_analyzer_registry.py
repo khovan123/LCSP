@@ -82,6 +82,12 @@ def test_registry_resolves_registered_languages_deterministically() -> None:
     assert registry.resolve("javascript") is None
 
 
+def test_default_registry_resolves_ruby_adapter() -> None:
+    registry = LanguageAnalyzerRegistry.default()
+
+    assert registry.resolve("ruby").language == "ruby"
+
+
 def test_registry_rejects_duplicate_adapter_language() -> None:
     registry = LanguageAnalyzerRegistry((_Adapter("python"),))
 

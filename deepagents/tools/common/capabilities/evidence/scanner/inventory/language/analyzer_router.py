@@ -76,8 +76,6 @@ class AnalyzerRouter:
                         python_files.append(classification.file_path)
                     elif analyzer.language == "ts_js":
                         ts_js_files.append(classification.file_path)
-                    else:
-                        basic_files.append(classification.file_path)
                     continue
                 # Compatibility path for callers that construct a router without
                 # the production registry (keeps legacy tests/fallback behavior).
@@ -134,7 +132,11 @@ class AnalyzerRouter:
 
         # Keep the registry view aligned with bounded legacy buckets.
         if self._semantic_registry is not None:
-            semantic_files = {}
+            semantic_files = {
+                language: list(files)
+                for language, files in semantic_files.items()
+                if language not in {LANGUAGE_PYTHON, "ts_js"}
+            }
             if self._semantic_registry.resolve(LANGUAGE_PYTHON) is not None:
                 semantic_files[LANGUAGE_PYTHON] = list(python_files)
             if self._semantic_registry.resolve(LANGUAGE_TYPESCRIPT) is not None:

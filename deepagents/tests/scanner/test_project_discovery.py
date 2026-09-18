@@ -188,3 +188,99 @@ def test_execution_plan_keeps_basic_code_projects_explicitly_unsupported(tmp_pat
     assert len(plan.non_semantic_results) == 1
     assert plan.non_semantic_results[0].status == "UNSUPPORTED"
     assert plan.non_semantic_results[0].project_id == discovery.projects[0].project_id
+
+
+def test_execution_plan_routes_ruby_per_project_and_unowned_file(tmp_path: Path) -> None:
+    _write(tmp_path / "service/Gemfile", 'gem "ruby-openai"\n')
+    _write(tmp_path / "service/app.rb", "class App; end\n")
+    _write(tmp_path / "script.rb", "puts :ok\n")
+    discovery = ProjectDiscovery().discover(tmp_path)
+    classifications = [
+        LanguageClassification("service/app.rb", "ruby", SUPPORT_FULL, 1, 1, None, False),
+        LanguageClassification("script.rb", "ruby", SUPPORT_FULL, 1, 1, None, False),
+    ]
+
+    class Adapter:
+        language = "ruby"
+
+        def supports(self, language):
+            return language == "ruby"
+
+        def capabilities(self):
+            return None
+
+    plan = ProjectExecutionPlanner().build(
+        tmp_path, discovery, classifications, LanguageAnalyzerRegistry((Adapter(),))
+    )
+
+    assert len(plan.units) == 2
+    assert any(unit.project_id == "repository-unowned" and unit.files == ("script.rb",) for unit in plan.units)
+    assert any(unit.project_id != "repository-unowned" and unit.files == ("service/app.rb",) for unit in plan.units)
+
+
+def test_execution_plan_keeps_two_ruby_projects_independent(tmp_path: Path) -> None:
+    _write(tmp_path / "a/Gemfile", 'gem "ruby-openai"\n')
+    _write(tmp_path / "a/app.rb", "class A; end\n")
+    _write(tmp_path / "b/Gemfile", 'gem "anthropic"\n')
+    _write(tmp_path / "b/app.rb", "class B; end\n")
+    discovery = ProjectDiscovery().discover(tmp_path)
+    classifications = [
+        LanguageClassification("a/app.rb", "ruby", SUPPORT_FULL, 1, 1, None, False),
+        LanguageClassification("b/app.rb", "ruby", SUPPORT_FULL, 1, 1, None, False),
+    ]
+
+    class Adapter:
+        language = "ruby"
+
+        def supports(self, language):
+            return language == "ruby"
+
+        def capabilities(self):
+            return None
+
+    plan = ProjectExecutionPlanner().build(
+        tmp_path, discovery, classifications, LanguageAnalyzerRegistry((Adapter(),))
+    )
+
+    assert len(plan.units) == 2
+    assert {unit.files for unit in plan.units} == {("a/app.rb",), ("b/app.rb",)}
+
+
+def test_execution_plan_supports_ruby_python_and_tsjs_together(tmp_path: Path) -> None:
+    _write(tmp_path / "web/package.json", "{\"name\": \"web\"}\n")
+    _write(tmp_path / "web/app.ts", "export const app = 1;\n")
+    _write(tmp_path / "worker/pyproject.toml", "[project]\nname = 'worker'\n")
+    _write(tmp_path / "worker/main.py", "print('ok')\n")
+    _write(tmp_path / "billing/Gemfile", 'gem "ruby-openai"\n')
+    _write(tmp_path / "billing/billing.rb", "class Billing; end\n")
+    discovery = ProjectDiscovery().discover(tmp_path)
+    classifications = [
+        LanguageClassification("web/app.ts", "typescript", SUPPORT_FULL, 1, 1, None, False),
+        LanguageClassification("worker/main.py", "python", SUPPORT_FULL, 1, 1, None, False),
+        LanguageClassification("billing/billing.rb", "ruby", SUPPORT_FULL, 1, 1, None, False),
+    ]
+
+    class Adapter:
+        def __init__(self, language):
+            self.language = language
+
+        def supports(self, language):
+            return language == self.language or (
+                self.language == "ts_js" and language in {"typescript", "javascript"}
+            )
+
+        def capabilities(self):
+            return None
+
+    plan = ProjectExecutionPlanner().build(
+        tmp_path,
+        discovery,
+        classifications,
+        LanguageAnalyzerRegistry((Adapter("python"), Adapter("ts_js"), Adapter("ruby"))),
+    )
+
+    assert {(unit.analyzer, unit.files[0]) for unit in plan.units} == {
+        ("ts_js", "web/app.ts"),
+        ("python", "worker/main.py"),
+        ("ruby", "billing/billing.rb"),
+    }

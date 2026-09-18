@@ -13,6 +13,7 @@ from .language_types import (
     LANGUAGE_OTHER,
     LANGUAGE_PYTHON,
     LANGUAGE_RUST,
+    LANGUAGE_RUBY,
     LANGUAGE_TYPESCRIPT,
     LANGUAGE_UNKNOWN,
     LANGUAGE_YAML,
@@ -241,6 +242,17 @@ class LanguageClassifier:
             return LanguageClassification(
                 file_path=relative_path,
                 language=LANGUAGE_JAVASCRIPT,
+                support_level=SUPPORT_FULL,
+                file_size_bytes=file_size,
+                line_count=line_count,
+                skip_reason=None,
+                coverage_limitation=False,
+            )
+
+        if suffix == ".rb":
+            return LanguageClassification(
+                file_path=relative_path,
+                language=LANGUAGE_RUBY,
                 support_level=SUPPORT_FULL,
                 file_size_bytes=file_size,
                 line_count=line_count,

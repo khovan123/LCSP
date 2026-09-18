@@ -146,6 +146,26 @@ def run_python_semantic_analysis(
     return result.native_result
 
 
+def run_ruby_semantic_analysis(
+    request: ScannerToolInput,
+    context: ScannerToolExecutionContext,
+):
+    """Run Ruby semantic analysis for a bounded file set."""
+    from tools.common.capabilities.evidence.scanner.analyzers.adapters import RubyLanguageAdapter
+    from tools.common.capabilities.evidence.scanner.analyzers.registry import LanguageAnalyzerRegistry
+
+    include_files = request.get("include_files")
+    registry = context.language_analyzer_registry or LanguageAnalyzerRegistry.default(
+        context.ts_js_bridge_factory
+    )
+    adapter = registry.resolve("ruby") or RubyLanguageAdapter()
+    result = adapter.analyze(
+        _workspace_path(request),
+        list(include_files) if include_files is not None else None,
+    )
+    return result.native_result
+
+
 def run_structural_augmentation(
     request: ScannerToolInput,
     context: ScannerToolExecutionContext,
@@ -169,6 +189,7 @@ def build_evidence_graph(
         workspace_path=_workspace_path(request),
         technical_findings=list(_required(request, "technical_findings")),
         structural_facts=list(request.get("structural_facts") or []),
+        semantic_program=request.get("semantic_program"),
         package_dependencies=list(request.get("package_dependencies") or []),
         coverage_notes=list(request.get("coverage_notes") or []),
     )

@@ -28,6 +28,9 @@ from tools.common.capabilities.evidence.scanner.analyzers.ai_invocation.ai_patte
 from tools.common.capabilities.evidence.scanner.analyzers.python_analysis.python_analyzer import (
     PythonAnalysisResult,
 )
+from tools.common.capabilities.evidence.scanner.analyzers.ruby_analysis.ruby_analyzer import (
+    RubyAnalysisResult,
+)
 from tools.common.capabilities.evidence.scanner.dependencies.dependency_normalizer import DependencyNormalizer
 from tools.common.capabilities.evidence.scanner.assembly.evidence_assembler import (
     EvidenceAssembler,
@@ -38,6 +41,7 @@ from tools.common.capabilities.evidence.scanner.inventory.language.language_clas
 from tools.common.capabilities.evidence.scanner.parsers.structural.structural_augmentor import StructuralAugmentor
 from tools.common.capabilities.evidence.scanner.parsers.structural.structural_types import StructuralFact
 from tools.common.capabilities.evidence.graph.construction.assembly.assembler import ProgramGraphAssembler
+from tools.common.capabilities.evidence.graph.schema.semantic_ir import SemanticProgram
 from tools.common.capabilities.evidence.scanner.evidence.finalization.terminal_state_handler import (
     CleanupBlockedError,
     verify_workspace_cleanup_sync,
@@ -389,6 +393,7 @@ class ScanBoundary(AgentBoundaryBase):
             project_discovery = ProjectDiscoveryResult()
             project_language_results: list[ProjectLanguageResult] = []
             project_scan_results = ()
+            ruby_results: list[RubyAnalysisResult] = []
             execution_plan = self._execution_planner.build(
                 [], targeted=targeted_plan is not None
             )
@@ -764,6 +769,36 @@ class ScanBoundary(AgentBoundaryBase):
                 sbom_entries=syft_result.entries,
                 usage_facts=[*knip_result.facts, *deptry_result.facts],
             )
+            for unit in project_plan.units:
+                if unit.analyzer != "ruby":
+                    continue
+                try:
+                    native = self._run_scanner_tool(
+                        "run_ruby_semantic_analysis",
+                        workspace_path=result.workspace_path,
+                        include_files=list(unit.files),
+                        project_id=unit.project_id,
+                        project_root=str(unit.project_root),
+                    )
+                except Exception as error:
+                    project_language_results.append(
+                        self._failed_project_language_result(unit, error)
+                    )
+                    continue
+                if native is not None:
+                    ruby_results.append(native)
+                    project_language_results.append(
+                        self._ruby_project_language_result(unit, native)
+                    )
+            ruby_program = SemanticProgram()
+            ruby_dependencies = []
+            ruby_findings = []
+            ruby_limitations = []
+            for native in ruby_results:
+                ruby_program.extend(native.semantic_program)
+                ruby_dependencies.extend(native.package_dependencies)
+                ruby_findings.extend(native.findings)
+                ruby_limitations.extend(native.coverage_limitations)
             if execution_plan.should_run(APPROVED_TOOL_NAMES["python_ast"]):
                 python_started_at = self._utc_timestamp()
                 self._emit_runtime_event(
@@ -897,6 +932,8 @@ class ScanBoundary(AgentBoundaryBase):
                     *( [ts_js_analysis.execution] if ts_js_analysis is not None else [] ),
                 ],
             )
+            technical_findings.extend(ruby_findings)
+            package_dependencies.extend(ruby_dependencies)
             coverage_notes = self._coverage_notes(
                 result,
                 [
@@ -926,6 +963,10 @@ class ScanBoundary(AgentBoundaryBase):
                         if ts_js_analysis is not None
                         else []
                     ),
+                    *[
+                        {"file_path": "", "reason": limitation}
+                        for limitation in ruby_limitations
+                    ],
                 ],
             )
             if targeted_plan is not None:
@@ -1037,6 +1078,7 @@ class ScanBoundary(AgentBoundaryBase):
                 workspace_path=result.workspace_path,
                 technical_findings=technical_findings,
                 structural_facts=structural_facts,
+                semantic_program=ruby_program,
                 package_dependencies=package_dependencies,
                 coverage_notes=coverage_notes,
             )
@@ -1353,6 +1395,25 @@ class ScanBoundary(AgentBoundaryBase):
             files=unit.files,
             coverage_limitations=limitations,
             failure=native.stderr_preview if failed else None,
+        )
+
+    @staticmethod
+    def _ruby_project_language_result(
+        unit: AnalyzerExecutionUnit, native: RubyAnalysisResult
+    ) -> ProjectLanguageResult:
+        status = (
+            ANALYZER_PARTIAL
+            if native.files_skipped or native.coverage_limitations
+            else ANALYZER_SUCCESS
+        )
+        return ProjectLanguageResult(
+            project_id=unit.project_id,
+            language=unit.language,
+            analyzer=unit.analyzer,
+            status=status,
+            capabilities=unit.capabilities,
+            files=unit.files,
+            coverage_limitations=native.coverage_limitations,
         )
 
     @staticmethod

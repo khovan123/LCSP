@@ -2,8 +2,9 @@
 
 The semantic scanner keeps file classification and basic/fallback analysis
 in `inventory/language`, while semantic analyzers are exposed through
-`analyzers.registry.LanguageAnalyzerRegistry`. The default registry contains
-only the existing Python and TypeScript/JavaScript adapters.
+`analyzers.registry.LanguageAnalyzerRegistry`. The default registry registers
+Python, TypeScript/JavaScript, and the Ruby pilot adapter. Ruby uses Tree-sitter
+Ruby for non-executing syntax analysis.
 
 Each adapter implements the `LanguageAnalyzer` protocol and returns a
 `CanonicalAnalyzerResult`. The result is an execution envelope around the
@@ -29,5 +30,8 @@ canonical graph IDs and deduplication.
 4. Register the adapter in the default registry after focused contract,
    determinism, and compatibility tests are in place.
 
-Project discovery, framework adapters, cross-language resolution and new
-language support are intentionally outside this phase.
+Ruby supports modules, classes, instance/singleton methods, static requires,
+Gemfile declarations, visible calls, and conservative provider-call evidence.
+Dynamic dispatch is retained as limited/unresolved evidence. Rails semantics,
+cross-language resolution, and additional language adapters remain outside
+this phase.
