@@ -631,7 +631,9 @@ def _function_context(line: str, *, python_source: bool) -> _FunctionBoolContext
         if not match:
             return None
         params = tuple(_python_parameter_names(line))
-        return _FunctionBoolContext(match.group(1), params, not match.group(1).startswith("_"), 0)
+        # Python exportability is derived from the PGE symbol/module scope, never from
+        # an underscore naming convention.
+        return _FunctionBoolContext(match.group(1), params, False, 0)
     for pattern in (
         r"\s*(?P<export>export\s+)?(?:async\s+)?function\s+(?P<name>[A-Za-z_$][\w$]*)\s*\((?P<params>[^)]*)\)",
         r"\s*(?P<export>export\s+)?(?:const|let|var)\s+(?P<name>[A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\((?P<params>[^)]*)\)\s*=>",
@@ -851,7 +853,7 @@ class AIDiscoveryEnricher:
             if include_files is not None
             else None
         )
-        self._bool_call_cache: dict[tuple[str, int], bool | None] = {}
+        self._bool_call_cache: dict[tuple[str, int], tuple[bool | None, bool]] = {}
 
     def _in_scope(self, relative: str) -> bool:
         return self._include_files is None or relative in self._include_files
@@ -1782,34 +1784,58 @@ class AIDiscoveryEnricher:
     ) -> tuple[bool | None, bool]:
         """Resolve a boolean parameter only from a closed, trusted PGE call set.
 
-        Source-text name matching is used only as a completeness check: it may veto a
-        proof when PGE missed a possible call, but it can never establish call identity.
+        Source text may veto completeness, but it never establishes call identity.
         Positive authority comes exclusively from trusted RESOLVES_TO edges targeting
-        the exact function symbol. Alias/escape evidence degrades to UNKNOWN.
+        the exact repository-local function symbol.
         """
-        cache_key = (f"{relative}:{context.name}:pge", parameter_index)
-        if cache_key in self._bool_call_cache:
-            cached = self._bool_call_cache[cache_key]
-            return cached, False if cached is not None else not context.exported
+        cache_key = (
+            f"{relative}:{context.name}:{context.declaration_line}:pge",
+            parameter_index,
+        )
+        cached = self._bool_call_cache.get(cache_key)
+        if cached is not None:
+            return cached
 
         def unresolved(*, technical: bool = True) -> tuple[None, bool]:
-            self._bool_call_cache[cache_key] = None
-            return None, technical
+            result = (None, technical)
+            self._bool_call_cache[cache_key] = result
+            return result
 
-        # Exported/public functions can have callers outside repository evidence. That
-        # is operational/runtime uncertainty, not a Scanner defect.
-        if context.exported:
-            return unresolved(technical=False)
-
-        symbol_key = f"symbol:{relative}:{context.name}"
-        node_by_key = {node.key: node for node in program.nodes}
-        symbol = node_by_key.get(symbol_key)
-        if symbol is None or not self._node_is_trusted(symbol):
+        symbol_candidates = [
+            node
+            for node in program.nodes
+            if node.file_path == relative
+            and node.label == context.name
+            and node.start_line == context.declaration_line
+            and node.node_type in {"FUNCTION", "METHOD"}
+        ]
+        if len(symbol_candidates) != 1:
+            return unresolved()
+        symbol = symbol_candidates[0]
+        if not self._node_is_trusted(symbol):
             return unresolved()
 
-        # Any alias or value-flow use of the function identifier means direct call-site
-        # closure is not established. This catches callbacks and `const run = summarize`
-        # without pretending a textual alias name identifies the target symbol.
+        external_reachability = str(
+            (symbol.attributes or {}).get("externalReachability") or ""
+        ).upper()
+        if external_reachability == "POSSIBLE":
+            # An explicitly exported JS/TS callable or module/class-visible Python
+            # callable may have callers outside repository evidence. That is a runtime
+            # boundary, not a Scanner proof gap.
+            return unresolved(technical=False)
+        if external_reachability != "REPOSITORY_LOCAL":
+            # Older/partial graph facts cannot establish closure. JS syntax still gives
+            # a conservative fallback for explicit export, but never positive authority.
+            if context.exported:
+                return unresolved(technical=False)
+            return unresolved()
+
+        symbol_key = symbol.key
+        node_by_key = {node.key: node for node in program.nodes}
+
+        # Any alias/value-flow escape means direct call-site closure is not established.
+        # This catches local aliases, Python aliases, and callbacks represented as
+        # PASSES_ARGUMENT without pretending their eventual target is known.
         for edge in program.edges:
             if edge.edge_type not in {"ALIASES", "ASSIGNS", "PASSES_ARGUMENT"}:
                 continue
@@ -1828,7 +1854,9 @@ class AIDiscoveryEnricher:
             for edge in program.edges
             if edge.edge_type == "RESOLVES_TO" and edge.target_key == symbol_key
         ]
-        if not resolved_edges or any(not self._edge_is_trusted(edge) for edge in resolved_edges):
+        if not resolved_edges or any(
+            not self._edge_is_trusted(edge) for edge in resolved_edges
+        ):
             return unresolved()
 
         call_nodes: list[SemanticNodeFact] = []
@@ -1838,51 +1866,68 @@ class AIDiscoveryEnricher:
                 call is None
                 or call.node_type != "CALL_SITE"
                 or not self._node_is_trusted(call)
-                or not call.file_path
+                or call.file_path != relative
                 or not call.start_line
             ):
                 return unresolved()
             call_nodes.append(call)
 
-        # Detect direct textual calls only to prove that PGE did not omit one. Name
-        # matches never contribute values or target identity. A same-name call in another
-        # module therefore makes the proof incomplete instead of contaminating it.
-        possible_calls: set[tuple[str, int]] = set()
+        try:
+            source_text = (self.workspace / relative).read_text(
+                encoding="utf-8", errors="replace"
+            )
+        except OSError:
+            return unresolved()
+
         call_re = re.compile(rf"(?<![\w$.]){re.escape(context.name)}\s*\(")
         declaration_re = re.compile(
             rf"(?:\bfunction\s+|\bdef\s+){re.escape(context.name)}\s*\("
         )
-        source_text: dict[str, str] = {}
-        for path in self._source_files():
-            try:
-                text = path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                return unresolved()
-            rel = path.relative_to(self.workspace).as_posix()
-            source_text[rel] = text
-            for match in call_re.finditer(text):
-                prefix = text[max(0, match.start() - 64) : match.start()]
-                declaration_start = max(0, match.start() - 32)
-                if declaration_re.search(text[declaration_start : match.end()]):
-                    continue
-                if re.search(r"(?:function|def)\s*$", prefix):
-                    continue
-                possible_calls.add((rel, text.count("\n", 0, match.start()) + 1))
 
-        trusted_sites = {(str(node.file_path), int(node.start_line or 0)) for node in call_nodes}
-        if possible_calls != trusted_sites:
+        # A repository-local callable must not escape as a value. Text is used only as
+        # a conservative veto for JS/TS cases the coarse extractor cannot yet encode
+        # (for example register(summarize)); it never creates a positive call edge.
+        for raw_line in source_text.splitlines():
+            structural = _scrub_structure(raw_line)
+            for reference in re.finditer(
+                rf"(?<![\w$]){re.escape(context.name)}(?![\w$])", structural
+            ):
+                prefix = structural[: reference.start()]
+                suffix = structural[reference.end() :]
+                if re.search(r"(?:\bfunction|\bdef)\s*$", prefix):
+                    continue
+                if re.match(r"\s*\(", suffix) and not prefix.rstrip().endswith("."):
+                    continue
+                return unresolved()
+
+        possible_lines: list[int] = []
+        for match in call_re.finditer(source_text):
+            prefix = source_text[max(0, match.start() - 64) : match.start()]
+            declaration_start = max(0, match.start() - 32)
+            if declaration_re.search(source_text[declaration_start : match.end()]):
+                continue
+            if re.search(r"(?:function|def)\s*$", prefix):
+                continue
+            possible_lines.append(source_text.count("\n", 0, match.start()) + 1)
+
+        # Multiple calls to the same function on one source line are not distinguishable
+        # by the current line-keyed call identity, so they cannot be treated as closed.
+        if len(possible_lines) != len(set(possible_lines)):
             return unresolved()
 
+        trusted_lines = [int(node.start_line or 0) for node in call_nodes]
+        if sorted(possible_lines) != sorted(trusted_lines):
+            return unresolved()
+
+        lines_for_call = source_text.splitlines()
         values: list[bool] = []
         for call in call_nodes:
-            text = source_text.get(str(call.file_path))
-            if text is None:
-                return unresolved()
-            lines_for_call = text.splitlines()
             index = int(call.start_line or 0) - 1
             if index < 0 or index >= len(lines_for_call):
                 return unresolved()
-            window = "\n".join(lines_for_call[index : min(len(lines_for_call), index + 8)])
+            window = "\n".join(
+                lines_for_call[index : min(len(lines_for_call), index + 8)]
+            )
             match = call_re.search(window)
             if match is None:
                 return unresolved()
@@ -1898,8 +1943,9 @@ class AIDiscoveryEnricher:
             values.append(value)
 
         result = values[0] if values and len(set(values)) == 1 else None
-        self._bool_call_cache[cache_key] = result
-        return result, result is None
+        resolved = (result, result is None)
+        self._bool_call_cache[cache_key] = resolved
+        return resolved
 
     @staticmethod
     def _call_node(

@@ -903,7 +903,7 @@ summarize("x");
     )
 
 
-def test_literal_false_caller_stays_unknown_without_trusted_pge_call_closure(
+def test_local_literal_false_caller_resolves_unreachable_with_trusted_pge_closure(
     tmp_path: Path,
 ) -> None:
     discovery = _discovery(
@@ -918,14 +918,10 @@ summarize("hello", false);
 """,
     )
 
-    assert discovery["gate"] == "AI_UNKNOWN"
-    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
-    assert finding["runtime_guard"] == "aiEnabled"
-    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
-    assert finding["clarification_owner"] == "TECHNICAL"
-    assert any(
-        item["kind"] == "DYNAMIC_TARGET"
-        and item["clarification_owner"] == "TECHNICAL"
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+    assert not any(item["kind"] == "SDK_INVOCATION" for item in discovery["findings"])
+    assert not any(
+        item.get("clarification_kind") == "AI_RUNTIME_REACHABILITY"
         for item in discovery["findings"]
     )
 
@@ -957,7 +953,7 @@ run("x", true);
     )
 
 
-def test_literal_true_caller_stays_unknown_without_trusted_pge_call_closure(
+def test_local_literal_true_caller_resolves_reachable_with_trusted_pge_closure(
     tmp_path: Path,
 ) -> None:
     discovery = _discovery(
@@ -972,16 +968,12 @@ summarize("hello", true);
 """,
     )
 
-    assert discovery["gate"] == "AI_UNKNOWN"
+    assert discovery["gate"] == "AI_CONFIRMED"
     finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
     assert finding["runtime_guard"] == "aiEnabled"
-    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
-    assert finding["clarification_owner"] == "TECHNICAL"
-    assert any(
-        item["kind"] == "DYNAMIC_TARGET"
-        and item["clarification_owner"] == "TECHNICAL"
-        for item in discovery["findings"]
-    )
+    assert finding["clarification_kind"] == "AI_PURPOSE_FEATURE_MAPPING"
+    assert finding["clarification_owner"] == "CUSTOMER"
+    assert not any(item["kind"] == "DYNAMIC_TARGET" for item in discovery["findings"])
 
 
 def test_same_name_functions_across_modules_do_not_cross_contaminate_parameter_proof(
@@ -1018,16 +1010,204 @@ summarize("b", true);
     builder.add_program(program)
     discovery = summarize_ai_discovery(builder.build())
 
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+    assert not any(item["kind"] == "SDK_INVOCATION" for item in discovery["findings"])
+
+
+def test_local_js_call_is_governed_by_resolves_to_edge(tmp_path: Path) -> None:
+    (tmp_path / "app.ts").write_text(
+        """
+function summarize(text: string, aiEnabled: boolean) {
+  return text;
+}
+summarize("hello", false);
+""",
+        encoding="utf-8",
+    )
+    program = RepositorySemanticExtractor(tmp_path).extract()
+
+    symbol = next(
+        node
+        for node in program.nodes
+        if node.key == "symbol:app.ts:summarize"
+        and node.node_type == "FUNCTION"
+    )
+    call = next(
+        node
+        for node in program.nodes
+        if node.key == "call:app.ts:5:summarize"
+        and node.node_type == "CALL_SITE"
+    )
+    assert symbol.attributes["externalReachability"] == "REPOSITORY_LOCAL"
+    assert any(
+        edge.edge_type == "RESOLVES_TO"
+        and edge.source_key == call.key
+        and edge.target_key == symbol.key
+        for edge in program.edges
+    )
+
+
+def test_exported_js_function_does_not_claim_closed_repository_call_set(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+export async function summarize(text: string, aiEnabled: boolean) {
+  if (!aiEnabled) return text;
+  return client.responses.create({ model: "gpt-5", input: text });
+}
+summarize("hello", false);
+""",
+    )
+
     assert discovery["gate"] == "AI_UNKNOWN"
     finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
-    assert finding["runtime_guard"] == "aiEnabled"
+    assert finding["clarification_kind"] == "AI_RUNTIME_REACHABILITY"
+    assert finding["clarification_owner"] == "CUSTOMER"
+
+
+def test_js_local_resolution_requires_lexical_scope_access(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+function outer() {
+  async function summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+summarize("hello", false);
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
     assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
     assert finding["clarification_owner"] == "TECHNICAL"
-    assert any(
-        item["kind"] == "DYNAMIC_TARGET"
-        and item["clarification_owner"] == "TECHNICAL"
+
+
+def test_callback_escape_keeps_local_parameter_guard_unknown(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+async function summarize(text: string, aiEnabled: boolean) {
+  if (!aiEnabled) return text;
+  return client.responses.create({ model: "gpt-5", input: text });
+}
+
+registerCallback(summarize);
+summarize("hello", false);
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+
+
+def test_nested_python_literal_false_helper_resolves_statically(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+def outer():
+    def summarize(text, ai_enabled):
+        if ai_enabled:
+            return client.responses.create(model="gpt-5", input=text)
+        return text
+
+    return summarize("hello", False)
+
+outer()
+""",
+        filename="app.py",
+    )
+
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+    assert not any(item["kind"] == "SDK_INVOCATION" for item in discovery["findings"])
+    assert not any(
+        item.get("clarification_kind") == "AI_RUNTIME_REACHABILITY"
         for item in discovery["findings"]
     )
+
+
+def test_nested_python_literal_true_helper_resolves_statically(tmp_path: Path) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+def outer():
+    def summarize(text, ai_enabled):
+        if ai_enabled:
+            return client.responses.create(model="gpt-5", input=text)
+        return text
+
+    return summarize("hello", True)
+
+outer()
+""",
+        filename="app.py",
+    )
+
+    assert discovery["gate"] == "AI_CONFIRMED"
+    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
+    assert finding["runtime_guard"] == "ai_enabled"
+    assert finding["clarification_kind"] == "AI_PURPOSE_FEATURE_MAPPING"
+
+
+def test_python_nested_callable_has_local_pge_identity_independent_of_name(tmp_path: Path) -> None:
+    (tmp_path / "app.py").write_text(
+        """
+def outer():
+    def summarize(text, ai_enabled):
+        return text
+    return summarize("hello", False)
+""",
+        encoding="utf-8",
+    )
+    program = RepositorySemanticExtractor(tmp_path).extract()
+
+    symbol = next(
+        node
+        for node in program.nodes
+        if node.label == "summarize" and node.start_line == 3
+    )
+    call = next(
+        node
+        for node in program.nodes
+        if node.label == "summarize"
+        and node.node_type == "CALL_SITE"
+        and node.start_line == 5
+    )
+    assert symbol.attributes["externalReachability"] == "REPOSITORY_LOCAL"
+    assert any(
+        edge.edge_type == "RESOLVES_TO"
+        and edge.source_key == call.key
+        and edge.target_key == symbol.key
+        for edge in program.edges
+    )
+
+
+def test_python_top_level_underscore_name_is_not_treated_as_private_proof(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+def _summarize(text, ai_enabled):
+    if ai_enabled:
+        return client.responses.create(model="gpt-5", input=text)
+    return text
+
+_summarize("hello", False)
+""",
+        filename="app.py",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION")
+    assert finding["clarification_kind"] == "AI_RUNTIME_REACHABILITY"
+    assert finding["clarification_owner"] == "CUSTOMER"
 
 
 def test_immutable_scalar_const_guard_can_still_resolve_without_mutation_surface(
