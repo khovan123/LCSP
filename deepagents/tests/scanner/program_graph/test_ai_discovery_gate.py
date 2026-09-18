@@ -1368,6 +1368,148 @@ service.summarize("hello", true);
     assert finding["clarification_owner"] == "CUSTOMER"
 
 
+def test_optional_chain_true_call_breaks_false_method_call_set_closure(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+const service = new AiService();
+service.summarize("closed", false);
+service?.summarize("runtime", true);
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["runtime_guard"] == "aiEnabled"
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+
+
+def test_bracket_literal_true_call_breaks_false_method_call_set_closure(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+const service = new AiService();
+service.summarize("closed", false);
+service["summarize"]("runtime", true);
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["runtime_guard"] == "aiEnabled"
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+
+
+def test_parameter_shadow_does_not_reuse_outer_instance_receiver_identity(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+const service = new AiService();
+service.summarize("closed", false);
+
+function run(service: LocalRecorder) {
+  service.summarize("shadowed", true);
+}
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["clarification_owner"] == "TECHNICAL"
+
+
+def test_local_declaration_shadow_does_not_reuse_outer_instance_receiver_identity(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+const service = new AiService();
+service.summarize("closed", false);
+
+function run() {
+  const service = recorder;
+  service.summarize("shadowed", true);
+}
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["clarification_owner"] == "TECHNICAL"
+
+
+def test_reassignment_invalidates_instance_receiver_identity(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+let service = new AiService();
+service.summarize("closed", false);
+service = recorder;
+service.summarize("reassigned", true);
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["clarification_owner"] == "TECHNICAL"
+
+
 def test_multiline_function_and_method_signatures_resolve_parameter_guards(
     tmp_path: Path,
 ) -> None:
@@ -1501,6 +1643,69 @@ service[method]("hello", false);
         for item in discovery["findings"]
     )
 
+
+
+def test_receiver_shadowing_reassignment_and_aliases_never_fabricate_method_edges(
+    tmp_path: Path,
+) -> None:
+    source = """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    return text;
+  }
+}
+
+const service = new AiService();
+service.summarize("outer-proven", false);
+
+function parameterShadow(service: LocalRecorder) {
+  service.summarize("param-shadow", true);
+}
+
+function localShadow() {
+  const service = recorder;
+  service.summarize("local-shadow", true);
+}
+
+let mutable = new AiService();
+mutable.summarize("before-reassign", false);
+mutable = recorder;
+mutable.summarize("after-reassign", true);
+
+const alias = service;
+alias.summarize("alias-call", true);
+"""
+    (tmp_path / "app.ts").write_text(source, encoding="utf-8")
+    program = RepositorySemanticExtractor(tmp_path).extract()
+    method = next(
+        node
+        for node in program.nodes
+        if node.node_type == "METHOD" and node.label == "summarize"
+    )
+
+    def targets_for_marker(marker: str) -> set[str]:
+        line_no = next(
+            index
+            for index, line in enumerate(source.splitlines(), start=1)
+            if marker in line
+        )
+        call = next(
+            node
+            for node in program.nodes
+            if node.node_type == "CALL_SITE" and node.start_line == line_no
+        )
+        return {
+            edge.target_key
+            for edge in program.edges
+            if edge.edge_type == "RESOLVES_TO" and edge.source_key == call.key
+        }
+
+    assert targets_for_marker("outer-proven") == {method.key}
+    assert targets_for_marker("param-shadow") == set()
+    assert targets_for_marker("local-shadow") == set()
+    assert targets_for_marker("before-reassign") == set()
+    assert targets_for_marker("after-reassign") == set()
+    assert targets_for_marker("alias-call") == set()
 
 
 def test_arrow_and_method_calls_have_canonical_pge_identity_and_parameters(

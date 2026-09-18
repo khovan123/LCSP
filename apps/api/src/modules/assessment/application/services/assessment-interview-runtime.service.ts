@@ -267,6 +267,7 @@ type WorkerPrivateContext = {
 };
 
 type InterviewThreadSnapshot = {
+  exists: boolean;
   state: AssessmentInterviewRuntimeState;
   privateStore: PrivateInterviewStore;
   privateRevisions: PrivateInterviewAnswerRevision[];
@@ -1333,6 +1334,19 @@ export class AssessmentInterviewRuntimeService {
     );
   }
 
+  private async lockInitialInterviewSeed(
+    assessmentId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    // Serialize first materialization even when no thread row exists yet, then
+    // lock an existing row so a delayed retry cannot race a Customer answer.
+    const lockKey = `lcsp:assessment-interview-initial-seed:${assessmentId}`;
+    await tx.$executeRaw`
+      SELECT pg_advisory_xact_lock(hashtext(${lockKey}))
+    `;
+    await this.lockInterviewThread(assessmentId, tx);
+  }
+
   private async lockInterviewThread(
     assessmentId: string,
     tx: Prisma.TransactionClient,
@@ -1653,11 +1667,28 @@ export class AssessmentInterviewRuntimeService {
         },
       );
     }
+    const expectedContextRevision = rawState.expectedContextRevision ?? 0;
+    if (
+      typeof expectedContextRevision !== "number" ||
+      !Number.isInteger(expectedContextRevision) ||
+      expectedContextRevision !== 0 ||
+      (rawState.contextRevision !== undefined &&
+        (typeof rawState.contextRevision !== "number" ||
+          !Number.isInteger(rawState.contextRevision) ||
+          rawState.contextRevision !== 0))
+    ) {
+      throw problemException(
+        "INTERVIEW_INITIAL_SEED_STALE",
+        input.correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
+    }
     const provenance = await this.assessmentProvenance(
       input.assessmentId,
       input.technicalEvidenceReportId,
     );
     const seedResult = await this.runInterviewTransaction(async (tx) => {
+      await this.lockInitialInterviewSeed(input.assessmentId, tx);
       const existing = await this.readThread(input.assessmentId, tx);
       const guidanceVersion =
         existing.guidanceVersion ?? this.resolveGuidanceVersion();
@@ -1690,9 +1721,55 @@ export class AssessmentInterviewRuntimeService {
       const computedState: AssessmentInterviewRuntimeState = {
         ...state,
         threadId: this.threadId(input.assessmentId),
-        contextRevision: state.contextRevision ?? 0,
+        contextRevision: 0,
         orchestrationRequested: false,
       };
+
+      const unprogressedSeed =
+        existing.contextRevision === 0 &&
+        existing.processedRevision === 0 &&
+        existing.privateRevisions.length === 0 &&
+        (existing.state.answerHistory?.length ?? 0) === 0 &&
+        existing.state.outcome ===
+          ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
+        existing.activeQuestionId === activeQuestionId &&
+        stableJson(existing.state.activeQuestion ?? null) ===
+          stableJson(validatedQuestion) &&
+        existing.sourceVersion === provenance.sourceVersion &&
+        existing.pgeVersion === provenance.pgeVersion &&
+        existing.privateStore.workflowRunId === workflowRunId &&
+        stableJson(
+          existing.privateStore.partialCoveragePolicyDecision ?? null,
+        ) === stableJson(provenance.partialCoveragePolicyDecision ?? null);
+
+      const exactReplay =
+        existing.exists &&
+        unprogressedSeed &&
+        existing.guidanceVersion === guidanceVersion;
+      if (exactReplay) {
+        return {
+          state: existing.state,
+          partialCoveragePolicyDecision:
+            existing.privateStore.partialCoveragePolicyDecision,
+          idempotentReplay: true,
+        };
+      }
+
+      const legacyGuidanceBackfill =
+        existing.exists &&
+        unprogressedSeed &&
+        existing.guidanceVersion === null;
+      if (existing.exists && !legacyGuidanceBackfill) {
+        // Initial seeding is monotonic. Once a materialized thread diverges from
+        // the exact revision-0 seed (including any Customer advancement), a
+        // delayed worker retry must never reset question/revision/provenance.
+        throw problemException(
+          "INTERVIEW_INITIAL_SEED_STALE",
+          input.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
+      }
+
       await this.persistThreadState(input.assessmentId, computedState, tx, {
         contextRevision: computedState.contextRevision ?? 0,
         activeQuestionId,
@@ -1744,29 +1821,32 @@ export class AssessmentInterviewRuntimeService {
       return {
         state: computedState,
         partialCoveragePolicyDecision: provenance.partialCoveragePolicyDecision,
+        idempotentReplay: false,
       };
     });
 
-    await this.runtimeEvents.recordToolWaitingInput({
-      assessmentId: input.assessmentId,
-      runId: workflowRunId,
-      correlationId: input.correlationId,
-      stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
-      toolName: INTERVIEW_TOOL_NAME,
-      summary: "Interview Agent question is waiting for Customer response.",
-      outputSummary: {
-        assessmentInterview: publicState(seedResult.state),
-        interviewWorkflowEvent:
-          ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
-        orchestratorAction:
-          ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.waitForCustomer,
-        interviewMode: ASSESSMENT_INTERVIEW_MODES.initialInterview,
-        partialCoveragePolicyDecision:
-          seedResult.partialCoveragePolicyDecision ?? null,
-      },
-      waitingReason: ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
-      startedAt: new Date(),
-    });
+    if (!seedResult.idempotentReplay) {
+      await this.runtimeEvents.recordToolWaitingInput({
+        assessmentId: input.assessmentId,
+        runId: workflowRunId,
+        correlationId: input.correlationId,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+        toolName: INTERVIEW_TOOL_NAME,
+        summary: "Interview Agent question is waiting for Customer response.",
+        outputSummary: {
+          assessmentInterview: publicState(seedResult.state),
+          interviewWorkflowEvent:
+            ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
+          orchestratorAction:
+            ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.waitForCustomer,
+          interviewMode: ASSESSMENT_INTERVIEW_MODES.initialInterview,
+          partialCoveragePolicyDecision:
+            seedResult.partialCoveragePolicyDecision ?? null,
+        },
+        waitingReason: ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
+        startedAt: new Date(),
+      });
+    }
 
     return seedResult.state;
   }
@@ -1927,6 +2007,7 @@ export class AssessmentInterviewRuntimeService {
     if (!thread) {
       const privateStore: PrivateInterviewStore = { revisions: [] };
       return {
+        exists: false,
         state: fallbackState,
         privateStore,
         privateRevisions: privateStore.revisions,
@@ -1941,6 +2022,7 @@ export class AssessmentInterviewRuntimeService {
     const state = parseStoredInterviewState(thread.stateJson) ?? fallbackState;
     const privateStore = parsePrivateStore(thread.privateContextJson);
     return {
+      exists: true,
       state,
       privateStore,
       privateRevisions: privateStore.revisions,

@@ -288,6 +288,7 @@ function targetedNeedRegistrationPayload(
 
 type MockPrismaDelegates = {
   $queryRaw: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
+  $executeRaw: jest.Mock<(...args: unknown[]) => Promise<number>>;
   assessment: {
     findUnique: jest.Mock<() => Promise<{ id: string; ownerId: string }>>;
   };
@@ -469,6 +470,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       $queryRaw: jest
         .fn<(...args: unknown[]) => Promise<unknown>>()
         .mockResolvedValue([]),
+      $executeRaw: jest
+        .fn<(...args: unknown[]) => Promise<number>>()
+        .mockResolvedValue(1),
       assessment: {
         findUnique: jest
           .fn<() => Promise<{ id: string; ownerId: string }>>()
@@ -3181,6 +3185,139 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         }),
         mockTx,
       );
+    });
+
+    it("rejects a nonzero initial expectedContextRevision before persistence", async () => {
+      await expect(
+        service.seedInitialQuestionForWorker({
+          assessmentId: "assessment-1",
+          correlationId: "corr-seed-nonzero-revision",
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+          state: {
+            ...initialQuestionState(),
+            expectedContextRevision: 1,
+          } as AssessmentInterviewRuntimeState,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          ok: false,
+          problem: { code: "INTERVIEW_INITIAL_SEED_STALE" },
+        },
+      });
+
+      expect(mockTx.assessmentInterviewThread.findUnique).not.toHaveBeenCalled();
+      expect(mockTx.assessmentInterviewThread.upsert).not.toHaveBeenCalled();
+      expect(mockInterviewAudit.recordQuestionPersisted).not.toHaveBeenCalled();
+      expect(mockRuntimeEvents.recordToolWaitingInput).not.toHaveBeenCalled();
+    });
+
+    it("treats retry-after-commit of the same initial seed as side-effect-free replay", async () => {
+      const workflowRunId = "10000000-0000-4000-8000-000000000001";
+      const initialState = {
+        ...initialQuestionState(),
+        expectedContextRevision: 0,
+      } as AssessmentInterviewRuntimeState & {
+        expectedContextRevision: number;
+      };
+      const persistedState: AssessmentInterviewRuntimeState = {
+        ...initialState,
+        threadId: "interview:assessment-1",
+        contextRevision: 0,
+        orchestrationRequested: false,
+      };
+      const persistedThread = {
+        assessmentId: "assessment-1",
+        contextRevision: 0,
+        processedRevision: 0,
+        activeQuestionId: initialState.activeQuestion?.id,
+        stateJson: persistedState,
+        privateContextJson: {
+          revisions: [],
+          workflowRunId,
+        },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+        guidanceVersion: TEST_GUIDANCE_VERSION,
+      };
+      mockTx.assessmentInterviewThread.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(persistedThread);
+
+      const first = await service.seedInitialQuestionForWorker({
+        assessmentId: "assessment-1",
+        correlationId: "corr-seed-retry-1",
+        workflowRunId,
+        state: initialState,
+      });
+      const replay = await service.seedInitialQuestionForWorker({
+        assessmentId: "assessment-1",
+        correlationId: "corr-seed-retry-2",
+        workflowRunId,
+        state: initialState,
+      });
+
+      expect(replay).toEqual(persistedState);
+      expect(first.activeQuestion?.id).toBe(initialState.activeQuestion?.id);
+      expect(mockTx.assessmentInterviewThread.upsert).toHaveBeenCalledTimes(1);
+      expect(mockInterviewAudit.recordQuestionPersisted).toHaveBeenCalledTimes(
+        1,
+      );
+      expect(mockRuntimeEvents.recordToolWaitingInput).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejects a delayed initial seed after the interview revision has advanced", async () => {
+      const workflowRunId = "10000000-0000-4000-8000-000000000001";
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValueOnce({
+        assessmentId: "assessment-1",
+        contextRevision: 1,
+        processedRevision: 0,
+        activeQuestionId: "q-next",
+        stateJson: {
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+          contextRevision: 1,
+          activeQuestion: {
+            id: "q-next",
+            intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+            prompt: "What happens after the recommendation?",
+            control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+          },
+          answerHistory: [
+            {
+              questionId: "q-init-coverage-gate",
+              answeredAt: "2026-09-18T00:00:00.000Z",
+              summary: "Customer answered the initial question.",
+            },
+          ],
+        },
+        privateContextJson: {
+          revisions: [],
+          workflowRunId,
+        },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+        guidanceVersion: TEST_GUIDANCE_VERSION,
+      });
+
+      await expect(
+        service.seedInitialQuestionForWorker({
+          assessmentId: "assessment-1",
+          correlationId: "corr-stale-seed",
+          workflowRunId,
+          state: {
+            ...initialQuestionState(),
+            expectedContextRevision: 0,
+          } as AssessmentInterviewRuntimeState,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          ok: false,
+          problem: { code: "INTERVIEW_INITIAL_SEED_STALE" },
+        },
+      });
+
+      expect(mockTx.assessmentInterviewThread.upsert).not.toHaveBeenCalled();
+      expect(mockInterviewAudit.recordQuestionPersisted).not.toHaveBeenCalled();
+      expect(mockRuntimeEvents.recordToolWaitingInput).not.toHaveBeenCalled();
     });
 
     it("pins nested PGE PARTIAL coverage and limitations from the worker-selected report", async () => {
