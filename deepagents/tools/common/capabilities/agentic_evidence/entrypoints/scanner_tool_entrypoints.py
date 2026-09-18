@@ -31,6 +31,7 @@ class ScannerToolExecutionContext:
     structural_augmentor: Any
     evidence_graph_assembler: Any
     language_analyzer_registry: Any = None
+    project_discovery: Any = None
 
 
 ScannerToolInput = Mapping[str, Any]

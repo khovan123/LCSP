@@ -70,6 +70,7 @@ from tools.common.capabilities.evidence.scanner.tools.common.tool_base import (
 )
 from tools.common.capabilities.evidence.scanner.ts_js_bridge.bridge_types import TsJsBridgeResult
 from tools.common.capabilities.evidence.scanner.analyzers.registry import LanguageAnalyzerRegistry
+from tools.common.capabilities.evidence.scanner.inventory.project import ProjectDiscovery
 from tools.common.capabilities.evidence.scanner.snapshot.workspace import (
     ArchiveMaterializationError,
     ScannerWorkspace,
@@ -223,6 +224,7 @@ class ScanBoundary(AgentBoundaryBase):
         self._language_analyzer_registry = LanguageAnalyzerRegistry.default(
             self._ts_js_bridge_factory
         )
+        self._project_discovery = ProjectDiscovery()
         self._analyzer_router = analyzer_router or AnalyzerRouter(
             semantic_registry=self._language_analyzer_registry
         )
@@ -246,6 +248,7 @@ class ScanBoundary(AgentBoundaryBase):
                 deptry_tool=self._deptry_tool,
                 ts_js_bridge_factory=self._ts_js_bridge_factory,
                 language_analyzer_registry=self._language_analyzer_registry,
+                project_discovery=self._project_discovery,
                 structural_augmentor=self._structural_augmentor,
                 evidence_graph_assembler=self._evidence_graph_assembler,
             )
@@ -361,6 +364,14 @@ class ScanBoundary(AgentBoundaryBase):
                 extracted_files=result.extracted_files,
                 skipped_files=result.skipped_files,
                 coverage_limited=result.coverage_limited,
+            )
+
+            project_discovery = self._project_discovery.discover(result.workspace_path)
+            logger.info(
+                "SCAN_PROJECTS_DISCOVERED",
+                project_count=len(project_discovery.projects),
+                limitation_count=len(project_discovery.limitations),
+                unowned_file_count=len(project_discovery.unowned_files),
             )
 
             classification_limitations: list[dict[str, str]] = []
@@ -791,6 +802,10 @@ class ScanBoundary(AgentBoundaryBase):
                 result,
                 [
                     *classification_limitations,
+                    *[
+                        {"file_path": "", "reason": limitation}
+                        for limitation in project_discovery.limitations
+                    ],
                     *self._ts_js_coverage_limitations(
                         ts_js_analysis.coverage_limitations
                         if ts_js_analysis is not None
