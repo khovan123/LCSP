@@ -59,9 +59,11 @@ integration("LCSP-299 retired Admin operation migration", () => {
          WHERE t.typname = 'AdminAccountOperation' AND n.nspname = $1 ORDER BY e.enumlabel`,
         [schema],
       );
-      expect(values.rows.map((row) => row.value)).toEqual(
-        Object.values(ADMIN_ACCOUNT_OPERATIONS).sort(),
-      );
+      expect(values.rows.map((row) => row.value)).toEqual([
+        "INVITE",
+        "RESTORE",
+        "SUSPEND",
+      ]);
       const receipts = await client.query<{ id: string }>(
         'SELECT "id" FROM "AdminAccountCommandReceipt" ORDER BY "id"',
       );
