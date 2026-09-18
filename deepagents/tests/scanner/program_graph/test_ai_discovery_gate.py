@@ -1424,6 +1424,61 @@ service["summarize"]("runtime", true);
     assert finding["clarification_owner"] == "TECHNICAL"
 
 
+def test_optional_element_true_call_breaks_false_method_call_set_closure(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+const service = new AiService();
+service.summarize("closed", false);
+service?.["summarize"]("runtime", true);
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+
+
+def test_dynamic_optional_element_call_preserves_unresolved_method_frontier(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+const service = new AiService();
+const method = "summarize";
+service.summarize("closed", false);
+service?.[method]("runtime", true);
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+
+
 def test_parameter_shadow_does_not_reuse_outer_instance_receiver_identity(
     tmp_path: Path,
 ) -> None:
@@ -1645,7 +1700,7 @@ service[method]("hello", false);
 
 
 
-def test_receiver_shadowing_reassignment_and_aliases_never_fabricate_method_edges(
+def test_receiver_provenance_tracks_lexical_binding_and_reassignment_interval(
     tmp_path: Path,
 ) -> None:
     source = """
@@ -1665,6 +1720,12 @@ function parameterShadow(service: LocalRecorder) {
 function localShadow() {
   const service = recorder;
   service.summarize("local-shadow", true);
+}
+
+function unrelated() {
+  let service = recorder;
+  service = anotherRecorder;
+  service.summarize("unrelated-local", true);
 }
 
 let mutable = new AiService();
@@ -1703,7 +1764,8 @@ alias.summarize("alias-call", true);
     assert targets_for_marker("outer-proven") == {method.key}
     assert targets_for_marker("param-shadow") == set()
     assert targets_for_marker("local-shadow") == set()
-    assert targets_for_marker("before-reassign") == set()
+    assert targets_for_marker("unrelated-local") == set()
+    assert targets_for_marker("before-reassign") == {method.key}
     assert targets_for_marker("after-reassign") == set()
     assert targets_for_marker("alias-call") == set()
 
