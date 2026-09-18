@@ -25,6 +25,9 @@ _UNSUPPORTED_CODE_LANGUAGES = frozenset(
         "php",
         "ruby",
         "rust",
+        "swift",
+        "objc",
+        "dart",
     }
 )
 

@@ -123,6 +123,8 @@ class RecognitionManifestDetector:
         "rust": ("Cargo.toml",),
         "flutter": ("pubspec.yaml",),
         "php": ("composer.json",),
+        "ios": ("*.xcodeproj", "*.xcworkspace", "Package.swift", "Podfile"),
+        "android": ("AndroidManifest.xml",),
     }
 
     def detect(self, workspace: Path) -> tuple[ProjectDescriptor, ...]:
@@ -130,6 +132,12 @@ class RecognitionManifestDetector:
         for kind, patterns in sorted(self._patterns.items()):
             for manifest in _walk_files(workspace, patterns):
                 descriptors.append(_descriptor(workspace, manifest.parent, manifest, name=None, kind=kind, evidence=manifest.name))
+        # Xcode project/workspace bundles are directories, so they are detected
+        # separately from file manifests without traversing generated contents.
+        for pattern in ("*.xcodeproj", "*.xcworkspace"):
+            for bundle in sorted(workspace.rglob(pattern), key=lambda p: p.relative_to(workspace).as_posix()):
+                if bundle.is_dir() and not any(part in EXCLUDED_DIRS for part in bundle.relative_to(workspace).parts):
+                    descriptors.append(_descriptor(workspace, bundle.parent, bundle, name=None, kind="ios", evidence=bundle.name))
         return tuple(descriptors)
 
 

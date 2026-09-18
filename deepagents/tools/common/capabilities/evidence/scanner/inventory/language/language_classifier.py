@@ -14,6 +14,9 @@ from .language_types import (
     LANGUAGE_PYTHON,
     LANGUAGE_RUST,
     LANGUAGE_RUBY,
+    LANGUAGE_SWIFT,
+    LANGUAGE_OBJECTIVE_C,
+    LANGUAGE_DART,
     LANGUAGE_TYPESCRIPT,
     LANGUAGE_UNKNOWN,
     LANGUAGE_YAML,
@@ -267,9 +270,13 @@ class LanguageClassifier:
             ".go": LANGUAGE_GO,
             ".cs": LANGUAGE_CSHARP,
             ".rs": LANGUAGE_RUST,
+            ".swift": LANGUAGE_SWIFT,
+            ".m": LANGUAGE_OBJECTIVE_C,
+            ".mm": LANGUAGE_OBJECTIVE_C,
+            ".dart": LANGUAGE_DART,
         }.get(suffix)
         if basic_language is not None:
-            if basic_language == LANGUAGE_CSHARP:
+            if basic_language in {LANGUAGE_CSHARP, LANGUAGE_SWIFT, LANGUAGE_OBJECTIVE_C, LANGUAGE_DART}:
                 return LanguageClassification(
                     file_path=relative_path,
                     language=basic_language,

@@ -26,10 +26,11 @@ class FrameworkAdapterRegistry:
         from .rails import RailsFrameworkAdapter, RailsFrameworkDetector
         from .spring import SpringFrameworkAdapter, SpringFrameworkDetector
         from .php_frameworks import LaravelFrameworkAdapter, LaravelFrameworkDetector, SymfonyFrameworkAdapter, SymfonyFrameworkDetector
+        from .mobile import AndroidFrameworkAdapter, AndroidFrameworkDetector, FlutterFrameworkAdapter, FlutterFrameworkDetector, IOSFrameworkAdapter, IOSFrameworkDetector, ReactNativeFrameworkAdapter, ReactNativeFrameworkDetector
 
         return cls(
-            (AspNetCoreFrameworkAdapter(), LaravelFrameworkAdapter(), RailsFrameworkAdapter(), SpringFrameworkAdapter(), SymfonyFrameworkAdapter()),
-            (AspNetCoreFrameworkDetector(), LaravelFrameworkDetector(), RailsFrameworkDetector(), SpringFrameworkDetector(), SymfonyFrameworkDetector()),
+            (AndroidFrameworkAdapter(), AspNetCoreFrameworkAdapter(), FlutterFrameworkAdapter(), IOSFrameworkAdapter(), LaravelFrameworkAdapter(), RailsFrameworkAdapter(), ReactNativeFrameworkAdapter(), SpringFrameworkAdapter(), SymfonyFrameworkAdapter()),
+            (AndroidFrameworkDetector(), AspNetCoreFrameworkDetector(), FlutterFrameworkDetector(), IOSFrameworkDetector(), LaravelFrameworkDetector(), RailsFrameworkDetector(), ReactNativeFrameworkDetector(), SpringFrameworkDetector(), SymfonyFrameworkDetector()),
         )
 
     def register(self, adapter: FrameworkAdapter) -> None:

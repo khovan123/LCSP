@@ -898,13 +898,32 @@ class ScanBoundary(AgentBoundaryBase):
                     project_language_results.append(self._project_language_result(unit, native))
             package_dependencies.extend(systems_dependencies)
             package_dependencies.extend(jvm_dependencies)
+            mobile_program = SemanticProgram()
+            mobile_dependencies = []
+            mobile_results_by_project = {}
+            mobile_tools = {"swift": "run_swift_semantic_analysis", "objc": "run_objc_semantic_analysis", "dart": "run_dart_semantic_analysis"}
+            for unit in project_plan.units:
+                if unit.analyzer not in mobile_tools:
+                    continue
+                try:
+                    native = self._run_scanner_tool(mobile_tools[unit.analyzer], workspace_path=result.workspace_path, include_files=list(unit.files), project_id=unit.project_id, project_root=str(unit.project_root))
+                except Exception as error:
+                    project_language_results.append(self._failed_project_language_result(unit, error)); continue
+                if native is not None:
+                    mobile_results_by_project[(unit.project_id, unit.analyzer)] = native
+                    mobile_program.extend(native.semantic_program)
+                    mobile_dependencies.extend(native.package_dependencies)
+                    project_language_results.append(self._project_language_result(unit, native))
+            package_dependencies.extend(mobile_dependencies)
             framework_detection_limitations: list[str] = []
+            framework_seen: set[tuple[str, str]] = set()
             for project in project_discovery.projects:
                 ruby_result = ruby_results_by_project.get(project.project_id)
                 csharp_result = csharp_results_by_project.get(project.project_id)
                 jvm_results = [result for (project_id, _language), result in jvm_results_by_project.items() if project_id == project.project_id]
                 php_result = php_results_by_project.get(project.project_id)
-                for language_result in (ruby_result, csharp_result, php_result, *jvm_results):
+                mobile_results = [result for (project_id, _language), result in mobile_results_by_project.items() if project_id == project.project_id]
+                for language_result in (ruby_result, csharp_result, php_result, *jvm_results, *mobile_results):
                     if language_result is None:
                         continue
                     detected_frameworks = self._framework_registry.detect(
@@ -914,6 +933,9 @@ class ScanBoundary(AgentBoundaryBase):
                         self._framework_registry.detection_limitations
                     )
                     for framework in detected_frameworks:
+                        if (project.project_id, framework) in framework_seen:
+                            continue
+                        framework_seen.add((project.project_id, framework))
                         framework_results.append(
                             self._framework_registry.analyze(
                                 framework, project, result.workspace_path, language_result
@@ -1210,7 +1232,7 @@ class ScanBoundary(AgentBoundaryBase):
                 technical_findings=technical_findings,
                 structural_facts=structural_facts,
                 semantic_program=self._merge_semantic_programs(
-                    ruby_program, csharp_program, jvm_program, php_program, systems_program, framework_program
+                    ruby_program, csharp_program, jvm_program, php_program, systems_program, mobile_program, framework_program
                 ),
                 package_dependencies=package_dependencies,
                 coverage_notes=coverage_notes,

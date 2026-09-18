@@ -83,6 +83,19 @@ indirect calls, generated code, and macro expansion remain explicit limitations.
 Go/Rust route and client evidence uses the same canonical HTTP vocabulary and
 repository resolver as every other language.
 
+Swift, Objective-C, and Dart use Tree-sitter grammars in the same worker
+runtime. Their adapters extract bounded declarations, imports, calls, and
+static package metadata from SwiftPM/Podfiles/pubspec files without invoking
+Xcode, CocoaPods, Dart, or Flutter tooling. iOS, Android, React Native, and
+Flutter are project-scoped framework adapters that enrich existing language
+symbols with entry-point, screen/component, native-integration, permission,
+and conservative navigation evidence. Dynamic navigation, generated mobile
+code, and runtime platform behavior remain unresolved or partial.
+
+Mobile navigation uses the language-neutral `NAVIGATES_TO` edge. Permission
+declarations and dependency presence are retained as capability evidence and
+are never treated as proof of runtime usage or AI invocation.
+
 ## Repository-wide cross-project resolution
 
 After language and framework facts are normalized, `CrossReferenceResolver`

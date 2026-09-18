@@ -23,7 +23,7 @@ from ..entrypoints.scanner_tool_entrypoints import (
     ScannerToolExecutionContext, build_evidence_graph, classify_workspace_languages,
     materialize_snapshot, run_deptry_usage_analysis, run_knip_usage_analysis,
     run_python_semantic_analysis, run_ruby_semantic_analysis, run_csharp_semantic_analysis, run_semgrep_rules, run_structural_augmentation,
-    run_go_semantic_analysis, run_java_semantic_analysis, run_kotlin_semantic_analysis, run_php_semantic_analysis, run_rust_semantic_analysis, run_syft_inventory, run_ts_js_semantic_analysis, validate_evidence_report,
+    run_dart_semantic_analysis, run_go_semantic_analysis, run_java_semantic_analysis, run_kotlin_semantic_analysis, run_objc_semantic_analysis, run_php_semantic_analysis, run_rust_semantic_analysis, run_swift_semantic_analysis, run_syft_inventory, run_ts_js_semantic_analysis, validate_evidence_report,
 )
 from ..entrypoints.legal_tool_entrypoints import (
     LegalToolExecutionContext, activate_validated_corpus_version,
@@ -98,6 +98,9 @@ SCANNER_TOOL_BINDINGS = (
     _binding("run_php_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_php_semantic_analysis, "PhpLanguageAdapter.analyze"),
     _binding("run_go_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_go_semantic_analysis, "GoLanguageAdapter.analyze"),
     _binding("run_rust_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_rust_semantic_analysis, "RustLanguageAdapter.analyze"),
+    _binding("run_swift_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_swift_semantic_analysis, "SwiftLanguageAdapter.analyze"),
+    _binding("run_objc_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_objc_semantic_analysis, "ObjectiveCLanguageAdapter.analyze"),
+    _binding("run_dart_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_dart_semantic_analysis, "DartLanguageAdapter.analyze"),
     _binding("run_structural_augmentation", ToolRuntimeTarget.PYTHON_LOCAL, run_structural_augmentation, "StructuralAugmentor.augment"),
     _binding("build_evidence_graph", ToolRuntimeTarget.PYTHON_LOCAL, build_evidence_graph, "ProgramGraphAssembler.assemble"),
     _binding("validate_evidence_report", ToolRuntimeTarget.PYTHON_LOCAL, validate_evidence_report, "validate_schema + assert_privacy_flags + classify_quality"),

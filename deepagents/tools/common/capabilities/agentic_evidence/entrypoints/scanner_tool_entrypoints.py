@@ -246,6 +246,26 @@ def run_rust_semantic_analysis(request: ScannerToolInput, context: ScannerToolEx
     root=Path(request.get("project_root")) if request.get("project_root") else _workspace_path(request); files.extend(p.relative_to(_workspace_path(request)).as_posix() for p in root.glob("Cargo.toml") if p.is_file())
     return adapter.analyze(_workspace_path(request),sorted(set(files))).native_result
 
+def _run_mobile_semantic_analysis(request, context, language, manifest_names=()):
+    from tools.common.capabilities.evidence.scanner.analyzers.registry import LanguageAnalyzerRegistry
+    registry=context.language_analyzer_registry or LanguageAnalyzerRegistry.default(context.ts_js_bridge_factory)
+    files=list(request.get("include_files") or [])
+    root=Path(request.get("project_root")) if request.get("project_root") else _workspace_path(request)
+    workspace=_workspace_path(request)
+    for name in manifest_names:
+        path=root/name
+        if path.is_file(): files.append(path.relative_to(workspace).as_posix())
+    return registry.resolve(language).analyze(workspace, sorted(set(files))).native_result
+
+def run_swift_semantic_analysis(request: ScannerToolInput, context: ScannerToolExecutionContext):
+    return _run_mobile_semantic_analysis(request, context, "swift", ("Package.swift", "Podfile"))
+
+def run_objc_semantic_analysis(request: ScannerToolInput, context: ScannerToolExecutionContext):
+    return _run_mobile_semantic_analysis(request, context, "objc", ("Podfile",))
+
+def run_dart_semantic_analysis(request: ScannerToolInput, context: ScannerToolExecutionContext):
+    return _run_mobile_semantic_analysis(request, context, "dart", ("pubspec.yaml",))
+
 
 def run_structural_augmentation(
     request: ScannerToolInput,
