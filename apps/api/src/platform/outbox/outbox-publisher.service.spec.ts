@@ -642,7 +642,7 @@ describe("OutboxPublisherService", () => {
           runId: "scan-job-1",
           amountCredits: "100",
           maxChargeCredits: "100",
-          provider: "openai",
+          provider: "OPENAI",
           model: "gpt-5-nano",
           maxInputTokens: "4096",
           maxInputBytes: "16384",

@@ -2,13 +2,19 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 import {
   LLM_USAGE_AVAILABILITY_REASONS,
   LLM_USAGE_STATUSES,
-  type EffectiveRuntimeModel,
 } from "@lcsp/contracts/billing";
+import type { EffectiveRuntimeModel } from "@lcsp/contracts/billing";
 import {
   BillingDomainError,
   BillingIdempotencyConflictError,
   OwnershipMismatchError,
 } from "../../domain/billing.errors.js";
+import {
+  BILLING_TRANSACTION_PORT,
+  type BillingTransactionPort,
+} from "../../domain/repositories/billing-transaction.port.js";
+import { BillingAccountingService } from "./billing-accounting.service.js";
+import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import {
   assertEffectiveRuntimeModelAt,
   assertMatchesEffectiveRuntimeModel,
@@ -17,15 +23,59 @@ import {
   calculateCustomerChargeVnd,
   calculateUsageChargeCredits,
 } from "../../domain/usage-pricing.js";
-import {
-  BILLING_TRANSACTION_PORT,
-  type BillingTransactionPort,
-} from "../../domain/repositories/billing-transaction.port.js";
-import { BillingAccountingService } from "./billing-accounting.service.js";
-import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
+
+export const BILLING_USAGE_COMMAND_KERNEL = Symbol(
+  "BILLING_USAGE_COMMAND_KERNEL",
+);
+
+export type BillingUsageKernel = {
+  resolveAssessmentOwner(assessmentId: string): Promise<string>;
+  reserveForAssessment(input: {
+    assessmentId: string;
+    runId: string;
+    amountCredits: bigint;
+    maxChargeCredits: bigint;
+    provider: string;
+    model: string;
+    maxInputTokens: bigint;
+    maxOutputTokens: bigint;
+    maxReasoningTokens: bigint;
+    maxInvocations: bigint;
+    authorizedModels: Array<{ provider: string; model: string }>;
+    idempotencyKey: string;
+  }): Promise<unknown>;
+  releaseForAssessment(input: {
+    assessmentId: string;
+    reservationId: string;
+  }): Promise<unknown>;
+  claimInvocation(input: {
+    assessmentId: string;
+    reservationId: string;
+    invocationId: string;
+  }): Promise<unknown>;
+  recordAndSettleUsage(input: {
+    userId: string;
+    assessmentId?: string;
+    runId?: string;
+    reservationId: string;
+    invocationId: string;
+    agentRole: string;
+    provider?: string;
+    model?: string;
+    effectiveRuntimeModel?: EffectiveRuntimeModel;
+    providerResponseId?: string;
+    inputTokens?: bigint;
+    cachedInputTokens?: bigint;
+    cacheWriteTokens?: bigint;
+    outputTokens?: bigint;
+    reasoningTokens?: bigint;
+    totalTokens?: bigint;
+    occurredAt?: Date;
+  }): Promise<unknown>;
+};
 
 @Injectable()
-export class BillingUsageService {
+export class BillingUsageCommandKernel {
   constructor(
     @Inject(BILLING_TRANSACTION_PORT)
     private readonly transactions: BillingTransactionPort,

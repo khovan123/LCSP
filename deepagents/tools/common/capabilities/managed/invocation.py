@@ -342,7 +342,7 @@ def _billing_metering_session(
         agent_role=role,
         amount_credits=amount,
         max_charge_credits=max_charge,
-        provider=provider,
+        provider=provider.upper(),
         model=model,
         max_input_tokens=max_input_tokens,
         max_input_bytes=max_input_bytes,

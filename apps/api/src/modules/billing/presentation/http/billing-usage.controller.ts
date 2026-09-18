@@ -1,113 +1,39 @@
-import {
-  Body,
-  Controller,
-  HttpStatus,
-  Param,
-  Post,
-  UseGuards,
-} from "@nestjs/common";
+import { Body, Controller, Param, Post, UseGuards } from "@nestjs/common";
+import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
-import { problemException } from "../../../../platform/problems/problem-factory.js";
-import { BILLING_ERROR_CODES } from "@lcsp/contracts/billing";
-import { BillingUsageService } from "../../application/services/billing-usage.service.js";
+import { BillingDomainError } from "../../domain/billing.errors.js";
+import { ClaimBillingInvocationCommand } from "../../application/commands/claim-billing-invocation/claim-billing-invocation.command.js";
+import { ReleaseBillingReservationCommand } from "../../application/commands/release-billing-reservation/release-billing-reservation.command.js";
+import { ReserveBillingCreditsCommand } from "../../application/commands/reserve-billing-credits/reserve-billing-credits.command.js";
+import { SettleBillingUsageCommand } from "../../application/commands/settle-billing-usage/settle-billing-usage.command.js";
+import { ResolveBillingAssessmentOwnerQuery } from "../../application/queries/resolve-billing-assessment-owner/resolve-billing-assessment-owner.query.js";
 import {
-  BillingConcurrencyError,
-  BillingDomainError,
-  BillingIdempotencyConflictError,
-  InsufficientCreditError,
-  InvalidReservationTransitionError,
-  OwnershipMismatchError,
-} from "../../domain/billing.errors.js";
+  projectReservation,
+  serializeBillingData,
+} from "./mappers/billing-http.mapper.js";
+import {
+  toClaimInput,
+  toReleaseInput,
+  toReservationInput,
+  toSettlementInput,
+} from "./mappers/billing-usage.mapper.js";
+import { mapUsageError } from "./utils/billing-http.utils.js";
 
 @Controller("internal/billing")
 export class BillingUsageController {
-  constructor(private readonly usage: BillingUsageService) {}
+  constructor(
+    private readonly commandBus: CommandBus,
+    private readonly queryBus: QueryBus,
+  ) {}
 
   @Post("reservations")
   @UseGuards(WorkerApiKeyGuard)
   async reserve(@Body() body: Record<string, unknown>) {
-    const text = (value: unknown) =>
-      typeof value === "string" || typeof value === "number"
-        ? String(value).trim()
-        : "";
-    const amount = text(body.amountCredits);
-    const maxChargeCredits = text(body.maxChargeCredits);
-    const assessmentId = text(body.assessmentId);
-    const runId = text(body.runId);
-    const idempotencyKey = text(body.idempotencyKey);
-    const provider = text(body.provider);
-    const model = text(body.model);
-    const maxInputTokens = text(body.maxInputTokens);
-    const maxOutputTokens = text(body.maxOutputTokens);
-    const maxReasoningTokens = text(body.maxReasoningTokens);
-    const maxInvocations = text(body.maxInvocations);
-    const authorizedModels = body.authorizedModels;
     try {
-      if (
-        !assessmentId ||
-        !runId ||
-        !idempotencyKey ||
-        !amount ||
-        !maxChargeCredits ||
-        !provider ||
-        !model ||
-        !maxInputTokens ||
-        !maxOutputTokens ||
-        !maxReasoningTokens ||
-        !maxInvocations ||
-        !Array.isArray(authorizedModels) ||
-        authorizedModels.length === 0
-      )
-        throw new BillingDomainError("Reservation input is required");
-      const amountValue = parseInteger(amount, "amountCredits");
-      const maxChargeValue = parseInteger(maxChargeCredits, "maxChargeCredits");
-      const inputLimit = parseNonNegativeInteger(
-        maxInputTokens,
-        "maxInputTokens",
+      const result = await this.commandBus.execute(
+        new ReserveBillingCreditsCommand(toReservationInput(body)),
       );
-      const outputLimit = parseNonNegativeInteger(
-        maxOutputTokens,
-        "maxOutputTokens",
-      );
-      const reasoningLimit = parseNonNegativeInteger(
-        maxReasoningTokens,
-        "maxReasoningTokens",
-      );
-      const invocationLimit = parseNonNegativeInteger(
-        maxInvocations,
-        "maxInvocations",
-      );
-      if (invocationLimit === 0n)
-        throw new BillingDomainError("maxInvocations must be positive");
-      const modelEnvelope = authorizedModels.map((value) => {
-        if (!value || typeof value !== "object" || Array.isArray(value))
-          throw new BillingDomainError("authorizedModels is invalid");
-        const entry = value as Record<string, unknown>;
-        const entryProvider = text(entry.provider).toUpperCase();
-        const entryModel = text(entry.model);
-        if (!entryProvider || !entryModel)
-          throw new BillingDomainError("authorizedModels is invalid");
-        return { provider: entryProvider, model: entryModel };
-      });
-      if (amountValue < maxChargeValue)
-        throw new BillingDomainError(
-          "Reservation is below the maximum invocation charge",
-        );
-      const result = await this.usage.reserveForAssessment({
-        assessmentId,
-        runId,
-        amountCredits: amountValue,
-        maxChargeCredits: maxChargeValue,
-        provider,
-        model,
-        maxInputTokens: inputLimit,
-        maxOutputTokens: outputLimit,
-        maxReasoningTokens: reasoningLimit,
-        maxInvocations: invocationLimit,
-        authorizedModels: modelEnvelope,
-        idempotencyKey,
-      });
       return resultEnvelope(serializeBillingData(projectReservation(result)));
     } catch (error) {
       throw mapUsageError(error);
@@ -120,15 +46,12 @@ export class BillingUsageController {
     @Param("reservationId") reservationId: string,
     @Body() body: Record<string, unknown>,
   ) {
-    const assessmentId =
-      typeof body.assessmentId === "string" ? body.assessmentId.trim() : "";
     try {
-      if (!assessmentId || !reservationId.trim())
-        throw new BillingDomainError("Release input is required");
-      const result = await this.usage.releaseForAssessment({
-        assessmentId,
-        reservationId: reservationId.trim(),
-      });
+      const result = await this.commandBus.execute(
+        new ReleaseBillingReservationCommand(
+          toReleaseInput(reservationId, body),
+        ),
+      );
       return resultEnvelope(serializeBillingData(projectReservation(result)));
     } catch (error) {
       throw mapUsageError(error);
@@ -141,18 +64,10 @@ export class BillingUsageController {
     @Param("reservationId") reservationId: string,
     @Body() body: Record<string, unknown>,
   ) {
-    const assessmentId =
-      typeof body.assessmentId === "string" ? body.assessmentId.trim() : "";
-    const invocationId =
-      typeof body.invocationId === "string" ? body.invocationId.trim() : "";
     try {
-      if (!assessmentId || !reservationId.trim() || !invocationId)
-        throw new BillingDomainError("Claim input is required");
-      const result = await this.usage.claimInvocation({
-        assessmentId,
-        reservationId: reservationId.trim(),
-        invocationId,
-      });
+      const result = await this.commandBus.execute(
+        new ClaimBillingInvocationCommand(toClaimInput(reservationId, body)),
+      );
       return resultEnvelope(serializeBillingData(result));
     } catch (error) {
       throw mapUsageError(error);
@@ -162,167 +77,20 @@ export class BillingUsageController {
   @Post("usage")
   @UseGuards(WorkerApiKeyGuard)
   async settle(@Body() body: Record<string, unknown>) {
-    const text = (value: unknown) =>
-      typeof value === "string" || typeof value === "number"
-        ? String(value)
-        : "";
-    const bigintField = (name: string) => {
-      const value = body[name];
-      return value === undefined ? undefined : parseInteger(text(value), name);
-    };
-    const runtimeValue = body.effectiveRuntimeModel;
-    const runtime =
-      runtimeValue &&
-      typeof runtimeValue === "object" &&
-      !Array.isArray(runtimeValue)
-        ? (runtimeValue as Record<string, unknown>)
-        : undefined;
-    const provider =
-      text(body.provider) ||
-      (runtime && typeof runtime.provider === "string"
-        ? runtime.provider.trim()
-        : "");
-    const model =
-      text(body.model) ||
-      (runtime && typeof runtime.model === "string"
-        ? runtime.model.trim()
-        : "");
     try {
-      if (
-        typeof body.assessmentId !== "string" ||
-        !body.assessmentId.trim() ||
-        typeof body.runId !== "string" ||
-        !body.runId.trim() ||
-        typeof body.agentRole !== "string" ||
-        !body.agentRole.trim() ||
-        !provider ||
-        !model
-      )
+      const assessmentId =
+        typeof body.assessmentId === "string" ? body.assessmentId.trim() : "";
+      if (!assessmentId)
         throw new BillingDomainError("usage identity is required");
-      if (runtimeValue !== undefined && !runtime)
-        throw new BillingDomainError("effective runtime model is invalid");
-      if (
-        runtime &&
-        ((typeof runtime.provider === "string" &&
-          runtime.provider.trim() !== provider) ||
-          (typeof runtime.model === "string" && runtime.model.trim() !== model))
-      )
-        throw new BillingDomainError(
-          "Usage provider/model differs from effective runtime policy",
-        );
-      const assessmentId = body.assessmentId.trim();
-      const runId = body.runId.trim();
-      const userId = await this.usage.resolveAssessmentOwner(assessmentId);
-      const effectiveRuntimeModel =
-        runtime &&
-        typeof runtime.policyVersion === "string" &&
-        typeof runtime.effectiveAt === "string" &&
-        !Number.isNaN(new Date(runtime.effectiveAt).getTime())
-          ? {
-              provider,
-              model,
-              policyVersion: runtime.policyVersion,
-              effectiveAt: runtime.effectiveAt,
-            }
-          : undefined;
-      const result = await this.usage.recordAndSettleUsage({
-        userId,
-        assessmentId,
-        runId,
-        reservationId: text(body.reservationId),
-        invocationId: text(body.invocationId),
-        agentRole: body.agentRole.trim(),
-        provider,
-        model,
-        effectiveRuntimeModel,
-        providerResponseId: body.providerResponseId
-          ? text(body.providerResponseId)
-          : undefined,
-        inputTokens: bigintField("inputTokens"),
-        cachedInputTokens: bigintField("cachedInputTokens"),
-        cacheWriteTokens: bigintField("cacheWriteTokens"),
-        outputTokens: bigintField("outputTokens"),
-        reasoningTokens: bigintField("reasoningTokens"),
-        totalTokens: bigintField("totalTokens"),
-        occurredAt: body.occurredAt
-          ? new Date(text(body.occurredAt))
-          : undefined,
-      });
+      const userId = await this.queryBus.execute(
+        new ResolveBillingAssessmentOwnerQuery(assessmentId),
+      );
+      const result = await this.commandBus.execute(
+        new SettleBillingUsageCommand(toSettlementInput(body, userId)),
+      );
       return resultEnvelope(serializeBillingData(result));
     } catch (error) {
       throw mapUsageError(error);
     }
   }
-}
-
-function mapUsageError(error: unknown) {
-  const code =
-    error instanceof InsufficientCreditError
-      ? BILLING_ERROR_CODES.insufficientCredits
-      : error instanceof OwnershipMismatchError
-        ? BILLING_ERROR_CODES.ownershipMismatch
-        : error instanceof BillingIdempotencyConflictError
-          ? BILLING_ERROR_CODES.idempotencyConflict
-          : error instanceof InvalidReservationTransitionError
-            ? BILLING_ERROR_CODES.reservationTransition
-            : error instanceof BillingConcurrencyError
-              ? BILLING_ERROR_CODES.concurrencyConflict
-              : error instanceof BillingDomainError
-                ? BILLING_ERROR_CODES.validationFailed
-                : null;
-  if (!code) return error;
-  const status =
-    code === BILLING_ERROR_CODES.insufficientCredits
-      ? HttpStatus.PAYMENT_REQUIRED
-      : code === BILLING_ERROR_CODES.ownershipMismatch
-        ? HttpStatus.FORBIDDEN
-        : code === BILLING_ERROR_CODES.idempotencyConflict ||
-            code === BILLING_ERROR_CODES.reservationTransition ||
-            code === BILLING_ERROR_CODES.concurrencyConflict
-          ? HttpStatus.CONFLICT
-          : HttpStatus.BAD_REQUEST;
-  return problemException(code, "billing-usage", { status });
-}
-
-function serializeBillingData(value: unknown): unknown {
-  if (typeof value === "bigint") return value.toString();
-  if (value instanceof Date) return value.toISOString();
-  if (Array.isArray(value)) return value.map(serializeBillingData);
-  if (typeof value !== "object" || value === null) return value;
-  return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [
-      key,
-      serializeBillingData(entry),
-    ]),
-  );
-}
-
-function projectReservation(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object") return {};
-  const reservation = value as Record<string, unknown>;
-  return {
-    reservationId: reservation.id ?? reservation.reservationId,
-    assessmentId: reservation.assessmentId,
-    runId: reservation.runId,
-    amountCredits: reservation.amountCredits,
-    remainingCredits: reservation.remainingCredits,
-    status: reservation.status,
-  };
-}
-
-function parseInteger(value: string, field: string): bigint {
-  if (!/^-?\d+$/.test(value))
-    throw new BillingDomainError(`${field} must be an integer`);
-  try {
-    return BigInt(value);
-  } catch {
-    throw new BillingDomainError(`${field} is invalid`);
-  }
-}
-
-function parseNonNegativeInteger(value: string, field: string): bigint {
-  const parsed = parseInteger(value, field);
-  if (parsed < 0n)
-    throw new BillingDomainError(`${field} must be non-negative`);
-  return parsed;
 }

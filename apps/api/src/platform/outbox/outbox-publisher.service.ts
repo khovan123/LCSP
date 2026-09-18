@@ -231,10 +231,10 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
       "billing.maxInvocationChargeCredits",
       "",
     );
-    const provider = this.configService.get<string>(
-      "billing.runtimeProvider",
-      "",
-    );
+    const provider = this.configService
+      .get<string>("billing.runtimeProvider", "")
+      .trim()
+      .toUpperCase();
     const model = this.configService.get<string>("billing.runtimeModel", "");
     const maxInputTokens = this.configService.get<string>(
       "billing.maxInputTokens",

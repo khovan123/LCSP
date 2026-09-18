@@ -64,7 +64,7 @@ def test_extract_provider_usage_is_numeric_and_does_not_persist_reasoning_conten
     )
 
     assert usage == {
-        "inputTokens": "3",
+        "inputTokens": "2",
         "cachedInputTokens": "1",
         "outputTokens": "2",
         "totalTokens": "5",
@@ -106,6 +106,8 @@ def test_metering_middleware_records_one_payload_for_one_response():
     assert payload.runId == "run-1"
     assert payload.agentRole == "planner"
     assert payload.providerResponseId == "resp-1"
+    assert payload.inputTokens == "2"
+    assert payload.cachedInputTokens == "1"
     assert payload.model_dump(exclude_none=True).get("reasoningTokens") is None
 
 
@@ -213,6 +215,36 @@ def test_usage_delivery_failure_is_terminal_for_model_retry():
     assert not retry_model_error(BillingMeteringError(RuntimeError("api-down")))
 
 
+def test_recovery_store_failure_is_terminal_after_provider_success(monkeypatch):
+    import pytest
+
+    client = FailingClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-1",
+        run_id="run-1",
+        reservation_id="reservation-1",
+        agent_role="planner",
+        recovery_store_path="D:/unwritable/billing.sqlite3",
+    )
+    monkeypatch.setattr(
+        "middleware.billing_metering.enqueue_usage_and_release",
+        lambda *_args: (_ for _ in ()).throw(OSError("recovery-store-failed")),
+    )
+
+    with activate_billing_metering(session), pytest.raises(BillingMeteringError):
+        BillingMeteringMiddleware().wrap_model_call(
+            SimpleNamespace(
+                model=SimpleNamespace(provider="openai", model_name="gpt-test")
+            ),
+            lambda _: response(),
+        )
+
+    from middleware.failure_policy import retry_model_error
+
+    assert not retry_model_error(BillingMeteringError(OSError("recovery-store-failed")))
+
+
 def test_usage_failure_is_durable_and_replayed_without_provider_retry(tmp_path: Path):
     client = RecoveryClient()
     session = BillingMeteringSession(
@@ -275,6 +307,31 @@ def test_input_ceiling_fails_before_provider_handler():
         max_reasoning_tokens=0,
     )
     request = SimpleNamespace(messages=[{"role": "user", "content": "too long"}])
+    called = False
+
+    def provider_handler(_request):
+        nonlocal called
+        called = True
+        return response()
+
+    import pytest
+
+    with activate_billing_metering(session), pytest.raises(BillingUsageUnavailable):
+        BillingMeteringMiddleware().wrap_model_call(request, provider_handler)
+    assert called is False
+
+
+def test_priced_token_ceiling_is_enforced_before_provider_handler():
+    session = BillingMeteringSession(
+        api_client=FakeClient(),
+        assessment_id="assessment-1",
+        run_id="run-1",
+        reservation_id="reservation-1",
+        agent_role="planner",
+        max_input_tokens=4,
+        max_input_bytes=16_384,
+    )
+    request = SimpleNamespace(messages=[{"role": "user", "content": "12345"}])
     called = False
 
     def provider_handler(_request):

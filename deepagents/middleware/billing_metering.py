@@ -72,6 +72,7 @@ class BillingMeteringSession:
     agent_role: str
     effective_runtime_model: dict[str, str] = field(default_factory=dict)
     recovery_store_path: str | None = None
+    max_input_tokens: int | None = None
     max_input_bytes: int | None = None
     max_output_tokens: int | None = None
     max_reasoning_tokens: int | None = None
@@ -141,6 +142,7 @@ class BillingMeteringSession:
             agent_role=agent_role,
             effective_runtime_model=dict(effective_runtime_model or {}),
             recovery_store_path=recovery_store_path,
+            max_input_tokens=_parse_limit(max_input_tokens),
             max_input_bytes=_parse_limit(max_input_bytes),
             max_output_tokens=_parse_limit(max_output_tokens),
             max_reasoning_tokens=_parse_limit(max_reasoning_tokens),
@@ -212,7 +214,7 @@ class BillingMeteringSession:
             )
 
     def assert_input_within_limit(self, request: Any) -> None:
-        if self.max_input_bytes is None:
+        if self.max_input_bytes is None and self.max_input_tokens is None:
             return
         request_input = {
             "messages": getattr(request, "messages", None),
@@ -221,10 +223,21 @@ class BillingMeteringSession:
         }
         if all(value is None for value in request_input.values()):
             return
-        # UTF-8 bytes are a conservative upper bound for provider token input.
+        # A UTF-8 byte can produce at most one tokenizer byte-fallback token.
+        # Therefore bytes <= maxInputTokens is a conservative, provider-neutral
+        # token bound; the configured byte ceiling may be stricter still.
         encoded = str(request_input).encode("utf-8")
-        if len(encoded) > self.max_input_bytes:
-            raise BillingUsageUnavailable("Input exceeds the reserved byte ceiling")
+        byte_ceiling = self.max_input_bytes
+        if self.max_input_tokens is not None:
+            byte_ceiling = (
+                self.max_input_tokens
+                if byte_ceiling is None
+                else min(byte_ceiling, self.max_input_tokens)
+            )
+        if byte_ceiling is not None and len(encoded) > byte_ceiling:
+            raise BillingUsageUnavailable(
+                "Input exceeds the reserved token/byte ceiling"
+            )
 
     def bounded_model(self, model: Any) -> Any:
         output_limit = (self.max_output_tokens or 0) + (
@@ -282,13 +295,18 @@ class BillingMeteringSession:
                     BillingReservationReleasePayload,
                 )
 
-                enqueue_usage_and_release(
-                    self.recovery_store_path,
-                    payload,
-                    BillingReservationReleasePayload(
-                        assessmentId=self.assessment_id
-                    ),
-                )
+                try:
+                    enqueue_usage_and_release(
+                        self.recovery_store_path,
+                        payload,
+                        BillingReservationReleasePayload(
+                            assessmentId=self.assessment_id
+                        ),
+                    )
+                except Exception as recovery_error:
+                    # The provider already succeeded. A recovery-store failure
+                    # is still terminal: replaying the model would double-spend.
+                    raise BillingMeteringError(recovery_error) from error
             raise BillingMeteringError(error) from error
 
 
@@ -423,10 +441,7 @@ def extract_provider_usage(response: Any, model: Any) -> dict[str, Any] | None:
     if input_tokens is None or output_tokens is None:
         return None
 
-    result: dict[str, Any] = {
-        "inputTokens": str(input_tokens),
-        "outputTokens": str(output_tokens),
-    }
+    result: dict[str, Any] = {"outputTokens": str(output_tokens)}
     nested_input = metadata.get("input_token_details")
     nested_output = metadata.get("output_token_details")
     if isinstance(nested_input, dict):
@@ -466,6 +481,17 @@ def extract_provider_usage(response: Any, model: Any) -> dict[str, Any] | None:
         value = _number(metadata, *keys)
         if value is not None:
             result[target] = str(value)
+    cached_input = int(result.get("cachedInputTokens", "0"))
+    cache_write = int(result.get("cacheWriteTokens", "0"))
+    provider, _ = provider_identity(model, response)
+    # OpenAI prompt_tokens is a total that includes cached and cache-write
+    # slices. Convert it to the disjoint canonical uncached bucket. Other
+    # providers already expose input_tokens as the uncached dimension.
+    if provider in {"OPENAI", "GOOGLE_GENAI"}:
+        if cached_input + cache_write > input_tokens:
+            return None
+        input_tokens = max(input_tokens - cached_input - cache_write, 0)
+    result["inputTokens"] = str(input_tokens)
     response_id = _response_identity(response)
     if response_id:
         result["providerResponseId"] = response_id

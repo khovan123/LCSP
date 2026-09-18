@@ -209,7 +209,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
         runId: `run-${id()}`,
         amountCredits: 20n,
         maxChargeCredits: 20n,
-        provider: "OPENAI",
+        provider: "openai",
         model: "MODEL_A",
         authorizedModels: [{ provider: "OPENAI", model: "MODEL_A" }],
         maxInputTokens: 21_000_000n,
