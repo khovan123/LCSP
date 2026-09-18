@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { MessageKey } from "@lcsp/i18n";
-import type { AuthAccountStatus, AuthUserRole } from "@lcsp/contracts/auth";
+import type { AuthUserRole, UserAccessStatus } from "@lcsp/contracts/auth";
 
 import { AdminPageHeader } from "@/features/admin/components/molecules/admin-page-header";
 import { AdminUserFilters } from "@/features/admin/components/molecules/admin-user-filters";
@@ -16,7 +16,7 @@ export default function AdminUsersPage() {
   const router = useRouter();
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<AuthAccountStatus | "ALL">(
+  const [statusFilter, setStatusFilter] = useState<UserAccessStatus | "ALL">(
     "ALL",
   );
   const [roleFilter, setRoleFilter] = useState<AuthUserRole | "ALL">("ALL");
@@ -50,7 +50,7 @@ export default function AdminUsersPage() {
     setPage(1);
   };
 
-  const handleStatusChange = (status: AuthAccountStatus | "ALL") => {
+  const handleStatusChange = (status: UserAccessStatus | "ALL") => {
     setStatusFilter(status);
     setPage(1);
   };
