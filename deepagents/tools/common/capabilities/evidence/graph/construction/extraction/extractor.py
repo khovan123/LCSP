@@ -1056,7 +1056,23 @@ class RepositorySemanticExtractor:
                     receiver = re.sub(
                         r"[\s()]", "", element_call.group("receiver")
                     )
-                    receiver_key = js_binding_key(receiver, line_no)
+                    receiver_kind = "LEXICAL"
+                    receiver_key: str | None
+                    receiver_root_key: str | None = None
+                    if receiver == "this":
+                        owner_class = enclosing_class(line_no)
+                        receiver_kind = "THIS"
+                        receiver_key = (
+                            f"this:{owner_class.name}"
+                            if owner_class is not None
+                            else None
+                        )
+                    else:
+                        receiver_root = receiver.split(".", 1)[0]
+                        receiver_key = js_binding_key(receiver_root, line_no)
+                        if "." in receiver:
+                            receiver_kind = "MEMBER_PROJECTION"
+                            receiver_root_key = receiver_key
                     self._text_call(
                         program,
                         relative,
@@ -1067,14 +1083,66 @@ class RepositorySemanticExtractor:
                         http_clients.get(line_no, set()),
                         receiver_binding_key=receiver_key,
                         element_dispatch=True,
+                        receiver_kind=receiver_kind,
+                        receiver_root_binding_key=receiver_root_key,
                     )
 
-    def _text_call(self, program: SemanticProgram, relative: str, line: int, name: str, body: str, owner: str, http_clients: set[str], *, resolves_to: str | None = None, receiver_binding_key: str | None = None, element_dispatch: bool = False) -> None:
+                for result_call in re.finditer(
+                    r"(?P<expression>(?:new\s+[A-Za-z_$][\w$]*\s*"
+                    r"\([^()\n]*\)|(?:[A-Za-z_$][\w$]*\.)*"
+                    r"[A-Za-z_$][\w$]*\s*\([^()\n]*\)))"
+                    r"\s*(?:\?\.\s*)?\[[^\]\n]+\]\s*\(",
+                    line,
+                ):
+                    expression = result_call.group("expression").strip()
+                    constructor = re.match(
+                        r"new\s+([A-Za-z_$][\w$]*)", expression
+                    )
+                    if constructor:
+                        receiver_kind = "NEW_INSTANCE"
+                        receiver_key = None
+                        receiver_root_key = None
+                        receiver_call_name = None
+                        constructor_class = constructor.group(1)
+                    else:
+                        receiver_kind = "CALL_RESULT"
+                        receiver_call_name = re.sub(
+                            r"\s*\([^()\n]*\)\s*$", "", expression
+                        )
+                        receiver_root = receiver_call_name.split(".", 1)[0]
+                        receiver_key = js_binding_key(receiver_root, line_no)
+                        receiver_root_key = receiver_key
+                        constructor_class = None
+                    self._text_call(
+                        program,
+                        relative,
+                        line_no,
+                        f"{expression}[computed:{result_call.start()}]",
+                        line,
+                        mkey,
+                        http_clients.get(line_no, set()),
+                        receiver_binding_key=receiver_key,
+                        element_dispatch=True,
+                        receiver_kind=receiver_kind,
+                        receiver_call_name=receiver_call_name,
+                        receiver_root_binding_key=receiver_root_key,
+                        constructor_class=constructor_class,
+                    )
+
+    def _text_call(self, program: SemanticProgram, relative: str, line: int, name: str, body: str, owner: str, http_clients: set[str], *, resolves_to: str | None = None, receiver_binding_key: str | None = None, element_dispatch: bool = False, receiver_kind: str | None = None, receiver_call_name: str | None = None, receiver_root_binding_key: str | None = None, constructor_class: str | None = None) -> None:
         lower = name.lower(); ntype, attrs = _call_type(lower, http_clients); key = f"call:{relative}:{line}:{name}"
         if receiver_binding_key:
             attrs = {**attrs, "receiverBindingKey": receiver_binding_key}
         if element_dispatch:
             attrs = {**attrs, "elementDispatch": True}
+        for attr_name, value in (
+            ("receiverKind", receiver_kind),
+            ("receiverCallName", receiver_call_name),
+            ("receiverRootBindingKey", receiver_root_binding_key),
+            ("constructorClass", constructor_class),
+        ):
+            if value:
+                attrs = {**attrs, attr_name: value}
         program.add_node(SemanticNodeFact(key, ntype, name, relative, line, line, attributes=attrs)); program.add_edge(SemanticEdgeFact("CALLS", owner, key))
         if resolves_to:
             program.add_edge(SemanticEdgeFact("RESOLVES_TO", key, resolves_to))

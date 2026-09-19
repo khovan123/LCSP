@@ -2051,6 +2051,12 @@ class AIDiscoveryEnricher:
             # file. Seed those declaration bindings by line rather than by label
             # so unrelated lexical shadows cannot enter the closure.
             if owner_class:
+                relevant_method_receiver_keys = {
+                    f"this:{owner_class}"
+                }
+            else:
+                relevant_method_receiver_keys = set()
+            if owner_class:
                 instance_declaration_re = re.compile(
                     rf"\b([A-Za-z_$][\w$]*)\s*"
                     rf"(?:\:\s*[^=,;]+)?=\s*new\s+"
@@ -2157,13 +2163,33 @@ class AIDiscoveryEnricher:
                     if node.start_line
                 }
                 for element_dispatch in element_dispatch_nodes:
+                    attributes = element_dispatch.attributes or {}
                     receiver_key = str(
-                        (element_dispatch.attributes or {}).get(
-                            "receiverBindingKey"
-                        )
+                        attributes.get("receiverBindingKey")
                         or ""
                     )
-                    if receiver_key and receiver_key in relevant_method_receiver_keys:
+                    receiver_root_key = str(
+                        attributes.get("receiverRootBindingKey") or ""
+                    )
+                    receiver_kind = str(attributes.get("receiverKind") or "")
+                    receiver_call_name = str(
+                        attributes.get("receiverCallName") or ""
+                    )
+                    constructor_class = str(
+                        attributes.get("constructorClass") or ""
+                    )
+                    if (
+                        receiver_key in relevant_method_receiver_keys
+                        or receiver_root_key in relevant_method_receiver_keys
+                        or (
+                            receiver_kind == "CALL_RESULT"
+                            and receiver_call_name in reached_receiver_call_names
+                        )
+                        or (
+                            receiver_kind == "NEW_INSTANCE"
+                            and constructor_class == owner_class
+                        )
+                    ):
                         return unresolved()
                 for element_call in re.finditer(
                     r"(?<![\w$])(?P<receiver>\(*\s*[A-Za-z_$][\w$]*"

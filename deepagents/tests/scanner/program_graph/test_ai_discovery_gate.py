@@ -2437,5 +2437,158 @@ function unrelated() {
 }
 service.summarize("closed", false);
 unrelated();
+    """)
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+
+
+def test_this_computed_dispatch_inside_owner_class_keeps_dynamic_dispatch_technical(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+  dispatch(method: string) {
+    this[method]("runtime", true);
+  }
+}
+const service = new AiService();
+service.summarize("closed", false);
+service.dispatch("summarize");
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_member_projection_of_governed_receiver_keeps_dynamic_dispatch_technical(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const holder = { service };
+const method = "summarize";
+service.summarize("closed", false);
+holder.service[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_factory_call_result_receiver_keeps_dynamic_dispatch_technical(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+class Factory {
+  pickService() {
+    return service;
+  }
+}
+const service = new AiService();
+const factory = new Factory();
+const method = "summarize";
+service.summarize("closed", false);
+factory.pickService()[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_new_owner_class_call_result_receiver_keeps_dynamic_dispatch_technical(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const method = "summarize";
+service.summarize("closed", false);
+new AiService()[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_foreign_this_computed_dispatch_does_not_poison_closed_method(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+class OtherService {
+  dispatch(method: string) {
+    this[method]("foreign", true);
+  }
+}
+const service = new AiService();
+const other = new OtherService();
+service.summarize("closed", false);
+other.dispatch("summarize");
+""")
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+
+
+def test_foreign_member_projection_does_not_poison_closed_method(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const holder = { recorder };
+const method = "flush";
+service.summarize("closed", false);
+holder.recorder[method]();
+""")
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+
+
+def test_foreign_factory_call_result_does_not_poison_closed_method(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+class OtherService {
+  summarize(text: string, aiEnabled: boolean) {
+    return text;
+  }
+}
+class Factory {
+  pickService() {
+    return other;
+  }
+}
+const service = new AiService();
+const other = new OtherService();
+const factory = new Factory();
+const method = "summarize";
+service.summarize("closed", false);
+factory.pickService()[method]("foreign", true);
 """)
     assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
