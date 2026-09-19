@@ -464,6 +464,61 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
     ).toBe("Generic summary");
   });
 
+  it("keeps snippet provenance private while resolving it for authorized callers", async () => {
+    const snippetRef = {
+      snapshot_id: "snap-1",
+      commit_sha: "sha-123456",
+      file_path: "src/ai.ts",
+      start_line: 42,
+      end_line: 42,
+      evidence_hash: "sha256:" + "a".repeat(64),
+      snippet_policy: "PINNED_SNAPSHOT_BOUNDED_REDACTED_V1",
+    };
+    mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
+      assessmentId: "assessment-1",
+      contextRevision: 1,
+      processedRevision: 0,
+      activeQuestionId: "q-1",
+      stateJson: {
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        activeQuestion: {
+          id: "q-1",
+          prompt: "Where is AI used?",
+          intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+          control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+          whyEvidenceRefs: ["technicalEvidenceReport:report-1"],
+          snippetRef,
+        },
+      },
+      privateContextJson: { revisions: [] },
+      sourceVersion: "snap-1:sha-123456",
+      pgeVersion: "report-1:v1",
+    });
+    const actor = {
+      userId: "user-1",
+      sessionId: "session-1",
+      role: AUTH_USER_ROLES.customer,
+      scope: "assessment:assessment-1",
+    };
+
+    const publicState = await service.getState("assessment-1", actor);
+    expect(publicState.activeQuestion).not.toHaveProperty("whyEvidenceRefs");
+    expect(publicState.activeQuestion?.snippetRef).toEqual(snippetRef);
+
+    await expect(
+      service.resolveActiveQuestionSnippetContext("assessment-1", "q-1", actor),
+    ).resolves.toEqual({ evidenceReportId: "report-1", snippetRef });
+    await expect(
+      service.resolveActiveQuestionSnippetContext(
+        "assessment-1",
+        "wrong-q",
+        actor,
+      ),
+    ).rejects.toMatchObject({
+      response: { code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE" },
+    });
+  });
+
   beforeEach(() => {
     findHistoricalQuestion.mockReset().mockResolvedValue(null);
     mockTx = {

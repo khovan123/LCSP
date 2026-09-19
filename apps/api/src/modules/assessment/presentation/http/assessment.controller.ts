@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  NotFoundException,
   Param,
   Patch,
   Post,
@@ -199,36 +198,18 @@ export class AssessmentController {
     @Param("questionId") questionId: string,
     @Req() request: AuthenticatedRequest,
   ) {
-    const state = await this.interviewRuntime.getState(
-      assessmentId,
-      request.rbacContext,
-    );
-    if (
-      state.activeQuestion?.id !== questionId ||
-      !state.activeQuestion.snippetRef
-    ) {
-      throw new NotFoundException({
-        code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE",
-      });
-    }
-    const evidenceReportRef = [
-      ...(state.activeQuestion.whyEvidenceRefs ?? []),
-      ...(state.activeQuestion.frontier?.evidenceRefs ?? []),
-    ].find((ref) => ref.startsWith("technicalEvidenceReport:"));
-    const evidenceReportId = evidenceReportRef?.slice(
-      "technicalEvidenceReport:".length,
-    );
-    if (!evidenceReportId) {
-      throw new NotFoundException({
-        code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE",
-      });
-    }
+    const snippetContext =
+      await this.interviewRuntime.resolveActiveQuestionSnippetContext(
+        assessmentId,
+        questionId,
+        request.rbacContext,
+      );
     return resultEnvelope(
       await this.interviewSnippet.resolve({
         assessmentId,
         correlationId: request.correlationId ?? "interview-source-snippet",
-        evidenceReportId,
-        snippetRef: state.activeQuestion.snippetRef,
+        evidenceReportId: snippetContext.evidenceReportId,
+        snippetRef: snippetContext.snippetRef,
       }),
     );
   }

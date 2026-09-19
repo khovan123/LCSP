@@ -68,6 +68,35 @@ class _TextCallable:
     owner_class: str | None = None
     is_static: bool = False
 
+
+def _text_split_top_level(value: str, delimiter: str) -> list[str]:
+    parts: list[str] = []
+    start = 0
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    for index, char in enumerate(value):
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in {"'", '"', "`"}:
+            quote = char
+        elif char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth = max(0, depth - 1)
+        elif char == delimiter and depth == 0:
+            parts.append(value[start:index])
+            start = index + 1
+    parts.append(value[start:])
+    return parts
+
+
 class RepositorySemanticExtractor:
     """Scan every supported source file before any law/LLM-driven investigation."""
     def __init__(self, workspace_path: str | Path) -> None:
@@ -260,6 +289,21 @@ class RepositorySemanticExtractor:
                             attributes={"position": position},
                         )
                     )
+                # Keep callable return provenance in the graph so callers can
+                # follow a receiver through a helper before dispatching it.
+                return_key = f"return:{item.key}"
+                program.add_node(
+                    SemanticNodeFact(
+                        return_key,
+                        "RETURN_VALUE",
+                        f"{item.name}:return",
+                        relative,
+                        item.body_start_line,
+                        item.end_line,
+                        item.key,
+                    )
+                )
+                program.add_edge(SemanticEdgeFact("DECLARES", item.key, return_key))
         else:
             for match in re.finditer(
                 r"\b(class|interface|function|def|func)\s+([A-Za-z_$][\w$]*)",
@@ -557,6 +601,141 @@ class RepositorySemanticExtractor:
             )
 
         http_clients = _text_http_client_aliases(text)
+
+        def js_call_target(call_name: str, line_no: int) -> _TextCallable | None:
+            if "." in call_name:
+                parts = call_name.split(".")
+                if len(parts) != 2:
+                    return None
+                receiver, method_name = parts
+                owner_class: str | None = None
+                if receiver == "this":
+                    owner = enclosing_class(line_no)
+                    owner_class = owner.name if owner else None
+                else:
+                    owner_class = resolve_instance(receiver, line_no)
+                targets = (
+                    method_targets.get((owner_class, method_name), [])
+                    if owner_class
+                    else []
+                )
+            else:
+                visible = [
+                    item for item in function_targets.get(call_name, [])
+                    if item.declaration_scope in scope_paths[line_no - 1]
+                ]
+                if not visible:
+                    return None
+                nearest_scope = max(
+                    (
+                        scope_paths[line_no - 1].index(item.declaration_scope)
+                        for item in visible
+                    ),
+                    default=-1,
+                )
+                targets = [
+                    item for item in visible
+                    if scope_paths[line_no - 1].index(item.declaration_scope) == nearest_scope
+                ]
+            return targets[0] if len(targets) == 1 else None
+
+        def js_expression_references(expression: str) -> set[str]:
+            # Emit governed value-flow facts for every identifier/member-chain
+            # referenced by an assignment or return expression. The scanner uses
+            # these graph edges, rather than re-parsing alias syntax itself.
+            return {
+                re.sub(r"\s+", "", match.group(1))
+                for match in re.finditer(
+                    r"(?<![\w$])([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)",
+                    expression,
+                )
+                if match.group(1)
+                not in {
+                    "return",
+                    "new",
+                    "as",
+                    "satisfies",
+                    "true",
+                    "false",
+                    "null",
+                    "undefined",
+                }
+            }
+
+        def add_js_call_arguments(
+            call_name: str,
+            line_no: int,
+            line: str,
+            call_start: int,
+            target: _TextCallable | None,
+        ) -> None:
+            if target is None or not target.params:
+                return
+            open_paren = line.find("(", call_start)
+            close_paren = line.rfind(")")
+            if open_paren < 0 or close_paren <= open_paren:
+                return
+            args = _text_split_top_level(line[open_paren + 1 : close_paren], ",")
+            for position, argument in enumerate(args):
+                if position >= len(target.params):
+                    break
+                parameter_key = f"param:{target.key}:{target.params[position]}"
+                for source in js_expression_references(argument):
+                    source_key = f"var:{relative}:{source}"
+                    program.add_node(
+                        SemanticNodeFact(
+                            source_key,
+                            "VARIABLE",
+                            source,
+                            relative,
+                            line_no,
+                            line_no,
+                            semantic_types=semantic_types_for_identifier(source),
+                        )
+                    )
+                    program.add_edge(
+                        SemanticEdgeFact(
+                            "PASSES_ARGUMENT",
+                            source_key,
+                            parameter_key,
+                            attributes={"position": position},
+                        )
+                    )
+
+        # Return expressions are value-flow edges, not textual alias hints.
+        for item in callables:
+            return_key = f"return:{item.key}"
+            for return_line_no in range(item.body_start_line, item.end_line + 1):
+                return_line = source_lines[return_line_no - 1]
+                return_match = re.search(r"\breturn\b\s+(.+?)(?:;|$)", return_line)
+                if not return_match:
+                    continue
+                return_expression = return_match.group(1).strip()
+                # Only simple value returns participate in receiver provenance.
+                # Calls/objects/conditionals are handled as unresolved boundaries;
+                # treating their internal identifiers as returned receivers would
+                # connect unrelated AI/frontier nodes.
+                if (
+                    "(" in return_expression
+                    or "{" in return_expression
+                    or "?" in return_expression
+                ):
+                    continue
+                for source in js_expression_references(return_expression):
+                    source_key = f"var:{relative}:{source}"
+                    program.add_node(
+                        SemanticNodeFact(
+                            source_key,
+                            "VARIABLE",
+                            source,
+                            relative,
+                            return_line_no,
+                            return_line_no,
+                            semantic_types=semantic_types_for_identifier(source),
+                        )
+                    )
+                    program.add_edge(SemanticEdgeFact("RETURNS", source_key, return_key))
+
         for line_no, line in enumerate(source_lines, start=1):
             assignment = re.search(
                 r"\b(?:const|let|var)?\s*([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$.]*)",
@@ -564,7 +743,7 @@ class RepositorySemanticExtractor:
             )
             if assignment:
                 left, right = assignment.group(1), assignment.group(2)
-                if right not in {"async", "function", "new"}:
+                if right not in {"async", "function"}:
                     lkey = f"var:{relative}:{left}"
                     rkey = f"var:{relative}:{right}"
                     program.add_node(
@@ -578,18 +757,84 @@ class RepositorySemanticExtractor:
                             semantic_types=semantic_types_for_identifier(left),
                         )
                     )
+                    if right != "new":
+                        program.add_node(
+                            SemanticNodeFact(
+                                rkey,
+                                "VARIABLE",
+                                right,
+                                relative,
+                                line_no,
+                                line_no,
+                                semantic_types=semantic_types_for_identifier(right),
+                            )
+                        )
+                        program.add_edge(SemanticEdgeFact("ALIASES", rkey, lkey))
+
+            # Preserve all direct value references in conditional/coalesced and
+            # asserted RHS expressions as explicit graph aliases. The graph can
+            # then decide whether a receiver reaches a governed method without
+            # teaching the scanner every JavaScript expression form.
+            full_assignment = re.search(
+                r"\b(?:const|let|var)?\s*([A-Za-z_$][\w$]*)"
+                r"(?:\s*:\s*[^=,;]+)?\s*=\s*(.+?)(?:;|$)",
+                line,
+            )
+            if (
+                is_js_text
+                and full_assignment
+                and "=>" not in full_assignment.group(2)
+            ):
+                left_name, rhs_expression = (
+                    full_assignment.group(1),
+                    full_assignment.group(2),
+                )
+                left_key = f"var:{relative}:{left_name}"
+                for source in js_expression_references(rhs_expression):
+                    if source == left_name:
+                        continue
+                    source_key = f"var:{relative}:{source}"
                     program.add_node(
                         SemanticNodeFact(
-                            rkey,
+                            source_key,
                             "VARIABLE",
-                            right,
+                            source,
                             relative,
                             line_no,
                             line_no,
-                            semantic_types=semantic_types_for_identifier(right),
+                            semantic_types=semantic_types_for_identifier(source),
                         )
                     )
-                    program.add_edge(SemanticEdgeFact("ALIASES", rkey, lkey))
+                    program.add_edge(SemanticEdgeFact("ALIASES", source_key, left_key))
+
+            assignment_call = re.search(
+                r"\b(?:const|let|var)?\s*([A-Za-z_$][\w$]*)\s*=\s*"
+                r"([A-Za-z_$][\w$.]*)\s*\(",
+                line,
+            )
+            if is_js_text and assignment_call:
+                result_name, result_call = (
+                    assignment_call.group(1),
+                    assignment_call.group(2),
+                )
+                target = js_call_target(result_call, line_no)
+                if target is not None:
+                    call_key = f"call:{relative}:{line_no}:{result_call}"
+                    result_key = f"var:{relative}:{result_name}"
+                    program.add_node(
+                        SemanticNodeFact(
+                            result_key,
+                            "VARIABLE",
+                            result_name,
+                            relative,
+                            line_no,
+                            line_no,
+                            semantic_types=semantic_types_for_identifier(result_name),
+                        )
+                    )
+                    program.add_edge(
+                        SemanticEdgeFact("RECEIVES_RETURN", call_key, result_key)
+                    )
             route = re.search(
                 r"@(Get|Post|Put|Patch|Delete)\s*\(\s*['\"]([^'\"]*)['\"]",
                 line,
@@ -646,6 +891,13 @@ class RepositorySemanticExtractor:
                     http_clients.get(line_no, set()),
                     resolves_to=resolves_to,
                 )
+                add_js_call_arguments(
+                    call_name,
+                    line_no,
+                    line,
+                    call.start(1),
+                    js_call_target(call_name, line_no) if is_js_text else None,
+                )
 
             if is_js_text:
                 for call in re.finditer(
@@ -698,6 +950,9 @@ class RepositorySemanticExtractor:
                         mkey,
                         http_clients.get(line_no, set()),
                         resolves_to=targets[0].key,
+                    )
+                    add_js_call_arguments(
+                        name, line_no, line, call.start(1), targets[0]
                     )
 
     def _text_call(self, program: SemanticProgram, relative: str, line: int, name: str, body: str, owner: str, http_clients: set[str], *, resolves_to: str | None = None) -> None:

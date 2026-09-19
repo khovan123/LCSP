@@ -408,6 +408,42 @@ export class AssessmentInterviewRuntimeService {
     };
   }
 
+  /**
+   * Resolves private provenance needed by the source-snippet endpoint after the
+   * same assessment visibility check used by the public state projection.
+   * Evidence references stay internal and are never returned in publicState().
+   */
+  async resolveActiveQuestionSnippetContext(
+    assessmentId: string,
+    questionId: string,
+    actor: RbacRequestContext,
+  ): Promise<{
+    evidenceReportId: string;
+    snippetRef: AiDiscoverySnippetRef;
+  }> {
+    await this.assertAssessmentVisible(assessmentId, actor);
+    const thread = await this.readThread(assessmentId);
+    const question = thread.state.activeQuestion;
+    if (!question || question.id !== questionId || !question.snippetRef) {
+      throw new NotFoundException({
+        code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE",
+      });
+    }
+    const evidenceReportRef = [
+      ...(question.whyEvidenceRefs ?? []),
+      ...(question.frontier?.evidenceRefs ?? []),
+    ].find((ref) => ref.startsWith("technicalEvidenceReport:"));
+    const evidenceReportId = evidenceReportRef?.slice(
+      "technicalEvidenceReport:".length,
+    );
+    if (!evidenceReportId) {
+      throw new NotFoundException({
+        code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE",
+      });
+    }
+    return { evidenceReportId, snippetRef: question.snippetRef };
+  }
+
   async recordWorkerProgress(
     assessmentId: string,
     body: unknown,
