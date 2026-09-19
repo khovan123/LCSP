@@ -1479,6 +1479,36 @@ service[method]("runtime", true);
     assert finding["clarification_owner"] == "TECHNICAL"
 
 
+def test_same_class_receiver_alias_dynamic_call_still_breaks_closure(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+const service = new AiService();
+const secondService = new AiService();
+const alias = secondService;
+const method = "summarize";
+service.summarize("closed", false);
+alias[method]("runtime", true);
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+
+
 def test_dynamic_template_element_true_call_breaks_false_method_call_set_closure(
     tmp_path: Path,
 ) -> None:
@@ -1505,6 +1535,36 @@ service[`sum${suffix}`]("runtime", true);
     )
     assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
     assert finding["clarification_owner"] == "TECHNICAL"
+
+
+def test_unrelated_dynamic_element_call_does_not_break_closed_method_call_set(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+const service = new AiService();
+service.summarize("closed", false);
+
+function dispatch(action: string) {
+  handlers[action]();
+}
+""",
+    )
+
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+    assert not any(item["kind"] == "SDK_INVOCATION" for item in discovery["findings"])
+    assert not any(
+        item.get("clarification_kind") == "TARGETED_TECHNICAL_REANALYSIS"
+        for item in discovery["findings"]
+    )
 
 
 def test_parenthesized_computed_true_call_breaks_false_method_call_set_closure(

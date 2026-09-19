@@ -1982,6 +1982,45 @@ class AIDiscoveryEnricher:
         except OSError:
             return unresolved()
 
+        relevant_method_receivers: set[str] = set()
+        if symbol.node_type == "METHOD":
+            method_suffix = f".{context.name}"
+            relevant_method_receivers.update(
+                call.label[: -len(method_suffix)]
+                for call in call_nodes
+                if call.label.endswith(method_suffix)
+            )
+            owner_class = str((symbol.attributes or {}).get("ownerClass") or "")
+            if owner_class:
+                relevant_method_receivers.update(
+                    match.group(1)
+                    for match in re.finditer(
+                        rf"\b([A-Za-z_$][\w$]*)\s*"
+                        rf"(?:\:\s*[^=,;]+)?=\s*new\s+"
+                        rf"{re.escape(owner_class)}\s*\(",
+                        source_text,
+                    )
+                )
+
+            # A simple receiver alias can carry the same unsupported element
+            # dispatch. Expand only aliases rooted in an already relevant receiver;
+            # unrelated computed-call receivers must not poison this method's closure.
+            alias_assignments = re.findall(
+                r"\b([A-Za-z_$][\w$]*)\s*=\s*"
+                r"([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*[;,]",
+                source_text,
+            )
+            changed = True
+            while changed:
+                changed = False
+                for alias, source_receiver in alias_assignments:
+                    if (
+                        source_receiver in relevant_method_receivers
+                        and alias not in relevant_method_receivers
+                    ):
+                        relevant_method_receivers.add(alias)
+                        changed = True
+
         declaration_spans = [
             (
                 int(candidate.start_line),
@@ -2019,14 +2058,21 @@ class AIDiscoveryEnricher:
         ):
             if is_declaration_line(source_line_no):
                 continue
-            if symbol.node_type == "METHOD" and re.search(
-                r"(?:\?\.\s*)?\[[^\]\n]+\]\s*\(",
-                raw_line.split("//", 1)[0],
-            ):
-                # Element dispatch has no canonical receiver/method identity in
-                # the text PGE. Literal, dynamic, optional, template-expression,
-                # and parenthesized forms can therefore only veto closure.
-                return unresolved()
+            if symbol.node_type == "METHOD":
+                for element_call in re.finditer(
+                    r"(?<![\w$])(?P<receiver>\(*\s*[A-Za-z_$][\w$]*"
+                    r"(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*\)*)"
+                    r"\s*(?:\?\.\s*)?\[[^\]\n]+\]\s*\(",
+                    raw_line.split("//", 1)[0],
+                ):
+                    receiver = re.sub(
+                        r"[\s()]", "", element_call.group("receiver")
+                    )
+                    if receiver in relevant_method_receivers:
+                        # This receiver can reach the governed method, but element
+                        # dispatch has no canonical PGE identity. It can only veto
+                        # closure; unrelated receiver dispatch is outside this call set.
+                        return unresolved()
             structural = _scrub_structure(raw_line)
             for reference in re.finditer(
                 rf"(?<![\w$]){re.escape(context.name)}(?![\w$])",
