@@ -926,6 +926,18 @@ def _js_receiver_alias_assignments(source_text: str) -> list[tuple[str, str]]:
             source_receiver = _normalized_js_receiver_expression(rhs)
             if alias and source_receiver:
                 assignments.append((alias.group(1), source_receiver))
+
+    # A binding can be declared without an initializer and acquire the receiver
+    # later. Keep these simple lexical assignments in the same conservative alias
+    # flow; property writes are excluded because they do not rebind the identifier.
+    for assignment in re.finditer(
+        r"(?<![\w$.\]])\b([A-Za-z_$][\w$]*)\s*=(?!=|>)\s*([^;]+);",
+        source_text,
+        re.S,
+    ):
+        source_receiver = _normalized_js_receiver_expression(assignment.group(2))
+        if source_receiver:
+            assignments.append((assignment.group(1), source_receiver))
     return assignments
 
 
