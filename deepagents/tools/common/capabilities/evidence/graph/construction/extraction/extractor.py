@@ -291,26 +291,185 @@ class RepositorySemanticExtractor:
             elif item.node_type == "FUNCTION":
                 function_targets.setdefault(item.name, []).append(item)
 
+        def js_declaration_bindings(
+            structural: str,
+        ) -> list[tuple[str, str | None]]:
+            declaration = re.search(r"\b(?:const|let|var)\b(.*)", structural)
+            if not declaration:
+                return []
+            statement = declaration.group(1)
+
+            def split_top_level(value: str, delimiter: str) -> list[str]:
+                parts: list[str] = []
+                start = 0
+                bracket_depth = 0
+                angle_depth = 0
+                seen_assignment = False
+                for index, char in enumerate(value):
+                    if char in "([{":
+                        bracket_depth += 1
+                    elif char in ")]}":
+                        bracket_depth = max(0, bracket_depth - 1)
+                    elif (
+                        not seen_assignment
+                        and bracket_depth == 0
+                        and char == "<"
+                    ):
+                        angle_depth += 1
+                    elif (
+                        not seen_assignment
+                        and bracket_depth == 0
+                        and char == ">"
+                        and angle_depth > 0
+                    ):
+                        angle_depth -= 1
+                    elif (
+                        char == "="
+                        and bracket_depth == 0
+                        and angle_depth == 0
+                    ):
+                        seen_assignment = True
+                    if (
+                        char == delimiter
+                        and bracket_depth == 0
+                        and angle_depth == 0
+                    ):
+                        parts.append(value[start:index])
+                        start = index + 1
+                        seen_assignment = False
+                    if (
+                        char == ";"
+                        and bracket_depth == 0
+                        and angle_depth == 0
+                    ):
+                        parts.append(value[start:index])
+                        return parts
+                parts.append(value[start:])
+                return parts
+
+            def split_assignment(value: str) -> tuple[str, str | None]:
+                bracket_depth = 0
+                angle_depth = 0
+                for index, char in enumerate(value):
+                    if char in "([{":
+                        bracket_depth += 1
+                    elif char in ")]}":
+                        bracket_depth = max(0, bracket_depth - 1)
+                    elif bracket_depth == 0 and char == "<":
+                        angle_depth += 1
+                    elif bracket_depth == 0 and char == ">" and angle_depth > 0:
+                        angle_depth -= 1
+                    elif char == "=" and bracket_depth == 0 and angle_depth == 0:
+                        return value[:index], value[index + 1 :]
+                return value, None
+
+            bindings: list[tuple[str, str | None]] = []
+            for declarator in split_top_level(statement, ","):
+                lhs, rhs = split_assignment(declarator)
+                simple = re.fullmatch(
+                    r"\s*([A-Za-z_$][\w$]*)(?:\s*:[^=]+)?\s*",
+                    lhs,
+                )
+                if simple:
+                    bindings.append((simple.group(1), rhs))
+                    continue
+                stripped = lhs.strip()
+                if stripped.startswith(("{", "[")):
+                    # Destructuring can introduce local bindings that shadow an
+                    # outer class receiver. Record every identifier as unknown
+                    # rather than allowing outer provenance to leak through.
+                    bindings.extend(
+                        (name, None)
+                        for name in re.findall(r"[A-Za-z_$][\w$]*", stripped)
+                    )
+            return bindings
+
+        def js_declaration_needs_continuation(structural: str) -> bool:
+            declaration = re.search(r"\b(?:const|let|var)\b(.*)", structural)
+            if not declaration:
+                return False
+            tail = declaration.group(1).strip()
+            if tail.endswith(","):
+                return True
+            if tail.startswith(("{", "[")):
+                depth = 0
+                for char in tail:
+                    if char in "[{":
+                        depth += 1
+                    elif char in "]}":
+                        depth = max(0, depth - 1)
+                return depth > 0
+            return False
+
         instance_bindings: dict[
             int, dict[str, list[tuple[int, str | None]]]
         ] = {}
         if is_js_text:
+            declaration_records: list[
+                tuple[int, int, int, list[tuple[str, str | None]]]
+            ] = []
+            pending_start: int | None = None
+            pending_scope: int | None = None
+            pending_parts: list[str] = []
+
             for line_no, line in enumerate(source_lines, start=1):
-                scope_id = scope_paths[line_no - 1][-1]
                 structural = re.sub(
                     r"(['\"\x60]).*?(?<!\\)\1", "", line
                 ).split("//", 1)[0]
-                declaration = re.search(
-                    r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)"
-                    r"(?:\s*:[^=;]+)?(?:\s*=\s*(.*))?",
-                    structural,
+                if pending_start is not None:
+                    pending_parts.append(structural)
+                    combined = " ".join(pending_parts)
+                    if js_declaration_needs_continuation(combined):
+                        continue
+                    declaration_records.append(
+                        (
+                            pending_start,
+                            line_no,
+                            pending_scope or 0,
+                            js_declaration_bindings(combined),
+                        )
+                    )
+                    pending_start = None
+                    pending_scope = None
+                    pending_parts = []
+                    continue
+
+                if not re.search(r"\b(?:const|let|var)\b", structural):
+                    continue
+                scope_id = scope_paths[line_no - 1][-1]
+                if js_declaration_needs_continuation(structural):
+                    pending_start = line_no
+                    pending_scope = scope_id
+                    pending_parts = [structural]
+                    continue
+                declaration_records.append(
+                    (
+                        line_no,
+                        line_no,
+                        scope_id,
+                        js_declaration_bindings(structural),
+                    )
                 )
-                declared_name: str | None = None
-                if declaration:
-                    declared_name = declaration.group(1)
-                    rhs = declaration.group(2) or ""
+
+            if pending_start is not None:
+                declaration_records.append(
+                    (
+                        pending_start,
+                        len(source_lines),
+                        pending_scope or 0,
+                        js_declaration_bindings(" ".join(pending_parts)),
+                    )
+                )
+
+            declared_names_by_line: dict[int, set[str]] = {}
+            for start_line, end_line, scope_id, bindings in declaration_records:
+                names = {name for name, _rhs in bindings}
+                for covered_line in range(start_line, end_line + 1):
+                    declared_names_by_line.setdefault(covered_line, set()).update(names)
+                for declared_name, rhs in bindings:
+                    value = rhs or ""
                     constructor = re.match(
-                        r"\s*new\s+([A-Za-z_$][\w$]*)\s*\(", rhs
+                        r"\s*new\s+([A-Za-z_$][\w$]*)\s*\(", value
                     )
                     owner_class = (
                         constructor.group(1)
@@ -320,7 +479,7 @@ class RepositorySemanticExtractor:
                     )
                     instance_bindings.setdefault(scope_id, {}).setdefault(
                         declared_name, []
-                    ).append((line_no, owner_class))
+                    ).append((start_line, owner_class))
 
             # Reassignments invalidate only the concrete lexical binding they
             # reach, and only from the reassignment line onward. Same-named
@@ -329,17 +488,13 @@ class RepositorySemanticExtractor:
                 structural = re.sub(
                     r"(['\"\x60]).*?(?<!\\)\1", "", line
                 ).split("//", 1)[0]
-                declaration = re.search(
-                    r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)",
-                    structural,
-                )
-                declared_name = declaration.group(1) if declaration else None
+                declared_names = declared_names_by_line.get(line_no, set())
                 for assignment in re.finditer(
                     r"(?<![\w$.])([A-Za-z_$][\w$]*)\s*=(?!=|>)",
                     structural,
                 ):
                     name = assignment.group(1)
-                    if declared_name == name:
+                    if name in declared_names:
                         continue
                     enclosing_callables = [
                         item
