@@ -40,6 +40,15 @@ EXCLUDED_DIR_NAMES = {
     "dist",
     "build",
     ".tox",
+    # Dependency, generated, and build outputs are not first-party source.
+    "vendor",
+    "target",
+    "generated",
+    "artifacts",
+    "cache",
+    "Pods",
+    "DerivedData",
+    ".dart_tool",
 }
 
 BINARY_EXTENSIONS = {
@@ -70,6 +79,17 @@ BINARY_EXTENSIONS = {
     ".jar",
     ".pyc",
 }
+
+
+def is_excluded_source_path(relative_path: str) -> bool:
+    """Apply source-role governance consistently before analyzer execution."""
+    parts = relative_path.split("/")
+    for part in parts:
+        if part in EXCLUDED_DIR_NAMES:
+            return True
+        if part.endswith(".egg-info"):
+            return True
+    return False
 
 DOC_EXTENSIONS = {".md", ".rst", ".txt"}
 
@@ -404,13 +424,7 @@ class LanguageClassifier:
         )
 
     def _is_excluded(self, relative_path: str) -> bool:
-        parts = relative_path.split("/")
-        for part in parts:
-            if part in EXCLUDED_DIR_NAMES:
-                return True
-            if part.endswith(".egg-info"):
-                return True
-        return False
+        return is_excluded_source_path(relative_path)
 
     def _is_binary(self, file_path: Path) -> bool:
         try:

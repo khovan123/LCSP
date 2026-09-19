@@ -283,3 +283,22 @@ def test_execution_plan_supports_ruby_python_and_tsjs_together(tmp_path: Path) -
         ("python", "worker/main.py"),
         ("ruby", "billing/billing.rb"),
     }
+
+
+def test_vendor_source_is_excluded_before_project_execution_planning(tmp_path: Path) -> None:
+    _write(tmp_path / "Gemfile", 'gem "rails"\n')
+    _write(tmp_path / "app.rb", "class FirstParty; end\n")
+    _write(tmp_path / "vendor/acme/lib/client.rb", "class VendorSecretClient; end\n")
+
+    discovery = ProjectDiscovery().discover(tmp_path)
+    classified = {item.file_path for item in discovery.classifications}
+    assert "app.rb" in classified
+    assert "vendor/acme/lib/client.rb" not in classified
+
+    plan = ProjectExecutionPlanner().build(
+        tmp_path,
+        discovery,
+        discovery.classifications,
+        LanguageAnalyzerRegistry.default(),
+    )
+    assert all("vendor/" not in file for unit in plan.units for file in unit.files)

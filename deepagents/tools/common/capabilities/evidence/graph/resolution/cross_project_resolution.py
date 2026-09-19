@@ -122,7 +122,14 @@ class CrossReferenceResolver:
                         continue
                     for value in sorted(set(re.findall(r"project\s*\(\s*['\"](:[^'\"]+)['\"]", text))):
                         module = value.lstrip(":").replace(":", "/")
-                        target = next((candidate for candidate in discovery.projects if candidate.relative_root.endswith(module)), None)
+                        candidates = self._gradle_suffix_candidates(module, discovery)
+                        if len(candidates) != 1:
+                            if not candidates:
+                                limitations.append(f"cross_project_reference_unresolved:{manifest_name}:{value}")
+                            else:
+                                limitations.append(f"cross_project_reference_ambiguous:{manifest_name}:{value}")
+                            continue
+                        target = candidates[0]
                         if target is None:
                             limitations.append(f"cross_project_reference_unresolved:{manifest_name}:{value}")
                             continue
@@ -152,7 +159,14 @@ class CrossReferenceResolver:
                     target = by_manifest.get(target_path)
                     if target is None and manifest.name in {"build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"}:
                         module = value.lstrip(":").replace(":", "/")
-                        target = next((candidate for candidate in discovery.projects if candidate.relative_root.endswith(module)), None)
+                        candidates = self._gradle_suffix_candidates(module, discovery)
+                        if len(candidates) != 1:
+                            if not candidates:
+                                limitations.append(f"cross_project_reference_unresolved:{manifest_name}:{value}")
+                            else:
+                                limitations.append(f"cross_project_reference_ambiguous:{manifest_name}:{value}")
+                            continue
+                        target = candidates[0]
                     if target is None:
                         limitations.append(f"cross_project_reference_unresolved:{manifest_name}:{value}")
                         continue
@@ -169,6 +183,18 @@ class CrossReferenceResolver:
                         )
                         resolved += 1
         return resolved, limitations
+
+    @staticmethod
+    def _gradle_suffix_candidates(module, discovery):
+        """Return all static Gradle suffix matches; never choose by order."""
+        return sorted(
+            (
+                candidate
+                for candidate in discovery.projects
+                if candidate.relative_root.endswith(module)
+            ),
+            key=lambda candidate: candidate.project_id,
+        )
 
     def _go_references(self, manifest, source, discovery, program, by_manifest):
         if not manifest.is_file(): return 0, []
@@ -230,13 +256,11 @@ class CrossReferenceResolver:
             matching = [route for route in routes if str(route.attributes.get("method", "GET")).upper() == method and self._route_matches(path, str(route.attributes.get("route", "")))]
             if not matching:
                 continue
-            grouped = {self._project_for(route.file_path, discovery) for route in matching}
-            grouped.discard(None)
-            if len(grouped) > 1 or len(matching) > 1 and len(grouped) == 0:
+            if len(matching) > 1:
                 unresolved.append(call.key)
                 limitations.append(f"cross_http_ambiguous:{call.file_path}:{call.start_line or 0}")
                 continue
-            target = sorted(matching, key=lambda item: item.key)[0]
+            target = matching[0]
             edge_key = ("CALLS_API", call.key, target.key)
             if not any((edge.edge_type, edge.source_key, edge.target_key) == edge_key for edge in program.edges):
                 program.add_edge(

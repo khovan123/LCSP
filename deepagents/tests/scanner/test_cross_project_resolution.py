@@ -58,6 +58,48 @@ def test_ambiguous_http_targets_remain_unresolved(tmp_path: Path) -> None:
     assert not any(edge.edge_type == "CALLS_API" for edge in program.edges)
 
 
+def test_same_project_duplicate_http_targets_remain_unresolved(tmp_path: Path) -> None:
+    _write(tmp_path / "api/package.json", '{"name":"api"}')
+    _write(tmp_path / "api/routes_a.ts", "export const route = 1")
+    _write(tmp_path / "api/routes_b.ts", "export const route = 2")
+    _write(tmp_path / "web/package.json", '{"name":"web"}')
+    _write(tmp_path / "web/client.ts", "fetch('/health')")
+    discovery = ProjectDiscovery().discover(tmp_path)
+    program = SemanticProgram(
+        nodes=[
+            SemanticNodeFact("call", "CALL_SITE", "fetch", "web/client.ts", 1, 1, attributes={"integrationType": "HTTP", "method": "GET", "route": "/health"}),
+            SemanticNodeFact("r1", "HTTP_ROUTE", "GET /health", "api/routes_a.ts", 1, 1, attributes={"method": "GET", "route": "/health"}),
+            SemanticNodeFact("r2", "HTTP_ROUTE", "GET /health", "api/routes_b.ts", 1, 1, attributes={"method": "GET", "route": "/health"}),
+        ]
+    )
+    result = CrossReferenceResolver().enrich(program, tmp_path, discovery)
+    assert result.resolved_edges == 0
+    assert "call" in result.unresolved
+    assert any(item.startswith("cross_http_ambiguous:") for item in result.limitations)
+
+
+def test_unique_gradle_project_reference_resolves(tmp_path: Path) -> None:
+    _write(tmp_path / "app/build.gradle", "implementation project(':common')\n")
+    _write(tmp_path / "libs/common/build.gradle", "")
+    discovery = ProjectDiscovery().discover(tmp_path)
+    program = SemanticProgram()
+    result = CrossReferenceResolver().enrich(program, tmp_path, discovery)
+    assert result.resolved_edges == 1
+    assert any(edge.edge_type == "DEPENDS_ON" for edge in program.edges)
+
+
+def test_ambiguous_gradle_suffix_reference_remains_unresolved(tmp_path: Path) -> None:
+    _write(tmp_path / "app/build.gradle", "implementation project(':common')\n")
+    _write(tmp_path / "services/common/build.gradle", "")
+    _write(tmp_path / "libs/common/build.gradle", "")
+    discovery = ProjectDiscovery().discover(tmp_path)
+    program = SemanticProgram()
+    result = CrossReferenceResolver().enrich(program, tmp_path, discovery)
+    assert result.resolved_edges == 0
+    assert any(item.startswith("cross_project_reference_ambiguous:") for item in result.limitations)
+    assert not any(edge.edge_type == "DEPENDS_ON" for edge in program.edges)
+
+
 def test_dynamic_http_target_remains_unresolved(tmp_path: Path) -> None:
     _write(tmp_path / "web/package.json", '{"name":"web"}')
     _write(tmp_path / "web/client.ts", "fetch(baseUrl + path)")

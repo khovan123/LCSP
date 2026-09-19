@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Iterable
 
 from ..language.language_types import LanguageClassification, SUPPORT_FULL
+from ..language.language_classifier import is_excluded_source_path
 from ...analyzers.registry import LanguageAnalyzerRegistry
 from ...analyzers.protocol import ANALYZER_UNSUPPORTED
 from .project_types import (
@@ -46,6 +47,8 @@ class ProjectExecutionPlanner:
         grouped: dict[tuple[str, str], list[str]] = defaultdict(list)
         non_semantic: list[ProjectLanguageResult] = []
         for classification in classifications:
+            if is_excluded_source_path(classification.file_path):
+                continue
             if classification.support_level != SUPPORT_FULL:
                 if classification.language in _UNSUPPORTED_CODE_LANGUAGES:
                     project_id = discovery.file_ownership.get(
