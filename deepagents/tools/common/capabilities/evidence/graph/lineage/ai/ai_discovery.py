@@ -866,6 +866,69 @@ def _split_top_level_args(raw: str) -> list[str]:
     return args
 
 
+def _strip_balanced_outer_parentheses(raw: str) -> str:
+    value = raw.strip()
+    while value.startswith("(") and value.endswith(")"):
+        depth = 0
+        quote: str | None = None
+        escaped = False
+        closes_at_end = False
+        for index, char in enumerate(value):
+            if quote:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+                continue
+            if char in {"'", '"', "`"}:
+                quote = char
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    closes_at_end = index == len(value) - 1
+                    break
+        if not closes_at_end:
+            break
+        value = value[1:-1].strip()
+    return value
+
+
+def _normalized_js_receiver_expression(raw: str) -> str | None:
+    value = raw.strip()
+    previous = ""
+    while value != previous:
+        previous = value
+        value = _strip_balanced_outer_parentheses(value)
+        value = re.sub(r"\s+(?:as|satisfies)\s+.+$", "", value, flags=re.S)
+        value = re.sub(r"^<[^<>]+>\s*", "", value)
+        value = value.rstrip("!").strip()
+    if re.fullmatch(r"[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*", value):
+        return value
+    return None
+
+
+def _js_receiver_alias_assignments(source_text: str) -> list[tuple[str, str]]:
+    assignments: list[tuple[str, str]] = []
+    for declaration in re.finditer(
+        r"\b(?:const|let|var)\s+([^;]+);", source_text, re.S
+    ):
+        for declarator in _split_top_level_args(declaration.group(1)):
+            lhs, separator, rhs = declarator.partition("=")
+            if not separator:
+                continue
+            alias = re.fullmatch(
+                r"\s*([A-Za-z_$][\w$]*)(?:\s*:\s*.+)?\s*", lhs, re.S
+            )
+            source_receiver = _normalized_js_receiver_expression(rhs)
+            if alias and source_receiver:
+                assignments.append((alias.group(1), source_receiver))
+    return assignments
+
+
 def _literal_bool(raw: str) -> bool | None:
     value = raw.strip().rstrip(";")
     if value in {"true", "True"}:
@@ -2005,11 +2068,7 @@ class AIDiscoveryEnricher:
             # A simple receiver alias can carry the same unsupported element
             # dispatch. Expand only aliases rooted in an already relevant receiver;
             # unrelated computed-call receivers must not poison this method's closure.
-            alias_assignments = re.findall(
-                r"\b([A-Za-z_$][\w$]*)\s*=\s*"
-                r"([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*[;,]",
-                source_text,
-            )
+            alias_assignments = _js_receiver_alias_assignments(source_text)
             changed = True
             while changed:
                 changed = False
