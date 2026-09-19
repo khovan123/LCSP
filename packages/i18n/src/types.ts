@@ -1053,7 +1053,7 @@ export type PagesMessages = {
         confirmAdditionalOrderDescription: string;
         openExistingOrder: string;
         confirmCreateAnotherOrder: string;
-        keepExistingOrders: string;
+        cancelAdditionalOrder: string;
         estimateTitle: string;
         estimateDescription: string;
         estimatePrompt: string;

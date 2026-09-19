@@ -1147,7 +1147,7 @@ export const viPages = {
           "Đơn hiện tại vẫn có hiệu lực đến khi hết hạn. Mỗi đơn có mã riêng; thanh toán cả hai có thể cộng số dư cho cả hai đơn.",
         openExistingOrder: "Mở đơn hiện có",
         confirmCreateAnotherOrder: "Xác nhận tạo đơn khác",
-        keepExistingOrders: "Giữ các đơn hiện có",
+        cancelAdditionalOrder: "Không tạo đơn mới",
         estimateTitle: "Ước tính sử dụng",
         estimateDescription:
           "Chỉ mang tính tham khảo. Phí sử dụng thực tế được tính từ dữ liệu sử dụng do hệ thống xác thực.",

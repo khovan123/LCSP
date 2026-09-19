@@ -46,7 +46,7 @@ test("Billing top-up uses authenticated BFF requests and idempotency", async () 
     await read(
       "../src/features/billing/components/organisms/billing-settings-panel.tsx",
     ),
-    /retryRequest\?\.amountVnd === values\.amountVnd/,
+    /orderIntent\?\.amountVnd === values\.amountVnd/,
   );
   assert.match(historyRoute, /requireSessionToken/);
   assert.match(walletRoute, /requireSessionToken/);

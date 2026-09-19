@@ -1141,7 +1141,7 @@ export const enPages = {
           "The existing order remains valid until it expires. Each order has a separate payment code; paying both can credit both orders.",
         openExistingOrder: "Open existing order",
         confirmCreateAnotherOrder: "Confirm another order",
-        keepExistingOrders: "Keep existing orders",
+        cancelAdditionalOrder: "Don't create another order",
         estimateTitle: "Usage estimate",
         estimateDescription:
           "Informational guidance only. Actual usage charges are calculated from authoritative billable usage.",

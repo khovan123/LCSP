@@ -52,7 +52,7 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
   const [additionalOrderConfirmation, setAdditionalOrderConfirmation] =
     useState<BillingTopUpFormValues | null>(null);
   const paymentSectionRef = useRef<HTMLDivElement | null>(null);
-  const [retryRequest, setRetryRequest] = useState<{
+  const [orderIntent, setOrderIntent] = useState<{
     amountVnd: string;
     idempotencyKey: string;
   } | null>(null);
@@ -171,23 +171,23 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
 
   async function createOrder(values: BillingTopUpFormValues) {
     const attempt =
-      retryRequest?.amountVnd === values.amountVnd
-        ? retryRequest
+      orderIntent?.amountVnd === values.amountVnd
+        ? orderIntent
         : {
             amountVnd: values.amountVnd,
             idempotencyKey: crypto.randomUUID(),
           };
-    if (attempt !== retryRequest) setRetryRequest(attempt);
+    if (attempt !== orderIntent) setOrderIntent(attempt);
     try {
       const order = await createOrderMutation.mutateAsync({
         amountVnd: values.amountVnd,
         idempotencyKey: attempt.idempotencyKey,
       });
-      setRetryRequest(null);
+      setOrderIntent(null);
       setSelectedOrderId(order.id);
       setCopiedPaymentCode(false);
       setAdditionalOrderConfirmation(null);
-      form.reset(values);
+      form.reset();
     } catch {
       // Keep the idempotency key so a retry replays the same server operation.
     }
@@ -454,7 +454,7 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
                   >
                     {resolveMessage(
                       locale,
-                      "pages.workspace.settingsHub.billing.keepExistingOrders",
+                      "pages.workspace.settingsHub.billing.cancelAdditionalOrder",
                     )}
                   </Button>
                 </div>
