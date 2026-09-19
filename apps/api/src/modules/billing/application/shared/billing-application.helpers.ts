@@ -498,7 +498,7 @@ export function normalizeWebhookPayload(payload: Record<string, unknown>) {
     .join(" ");
   const paymentCodes = [
     ...(typeof payload.code === "string" ? [payload.code.trim()] : []),
-    ...[...content.matchAll(/\bLCSP[A-Za-z0-9_-]{4,}\b/g)].map(
+    ...[...content.matchAll(/\bLCSP[A-Za-z0-9]{4,}(?=$|[^A-Za-z0-9])/g)].map(
       (match) => match[0],
     ),
   ].filter(Boolean);

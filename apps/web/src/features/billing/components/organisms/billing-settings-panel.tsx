@@ -49,6 +49,9 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
   const queryClient = useQueryClient();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [copiedPaymentCode, setCopiedPaymentCode] = useState(false);
+  const [additionalOrderConfirmation, setAdditionalOrderConfirmation] =
+    useState<BillingTopUpFormValues | null>(null);
+  const paymentSectionRef = useRef<HTMLDivElement | null>(null);
   const [retryRequest, setRetryRequest] = useState<{
     amountVnd: string;
     idempotencyKey: string;
@@ -67,17 +70,32 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
     [amountVnd],
   );
   const estimateQuery = useBillingEstimateQuery(validAmountVnd);
-  const pendingHistoryOrder = latestHistoryQuery.data?.orders.find(
-    (order) =>
-      order.status === BILLING_ORDER_STATUSES.PENDING_PAYMENT ||
-      order.status === BILLING_ORDER_STATUSES.PENDING_RECONCILIATION,
+  const visibleHistoryOrders = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          [
+            ...(latestHistoryQuery.data?.orders ?? []),
+            ...(historyQuery.data?.orders ?? []),
+          ].map((order) => [order.id, order] as const),
+        ).values(),
+      ),
+    [historyQuery.data?.orders, latestHistoryQuery.data?.orders],
   );
+  const pendingOrders = useMemo(
+    () =>
+      visibleHistoryOrders.filter(
+        (order) =>
+          order.status === BILLING_ORDER_STATUSES.PENDING_PAYMENT ||
+          order.status === BILLING_ORDER_STATUSES.PENDING_RECONCILIATION,
+      ),
+    [visibleHistoryOrders],
+  );
+  const pendingHistoryOrder = pendingOrders[0];
   const activeOrderId = selectedOrderId ?? pendingHistoryOrder?.id ?? null;
   const orderQuery = useBillingOrderQuery(activeOrderId);
   const historyOrder = selectedOrderId
-    ? latestHistoryQuery.data?.orders.find(
-        (order) => order.id === selectedOrderId,
-      )
+    ? visibleHistoryOrders.find((order) => order.id === selectedOrderId)
     : pendingHistoryOrder;
   const displayedOrder = orderQuery.isError
     ? historyOrder
@@ -134,7 +152,24 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
     queryClient,
   ]);
 
+  useEffect(() => {
+    if (selectedOrderId && displayedOrder?.id === selectedOrderId) {
+      paymentSectionRef.current?.scrollIntoView?.({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [displayedOrder?.id, selectedOrderId]);
+
   async function handleSubmit(values: BillingTopUpFormValues) {
+    if (pendingOrders.length > 0) {
+      setAdditionalOrderConfirmation(values);
+      return;
+    }
+    await createOrder(values);
+  }
+
+  async function createOrder(values: BillingTopUpFormValues) {
     const attempt =
       retryRequest?.amountVnd === values.amountVnd
         ? retryRequest
@@ -151,10 +186,24 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
       setRetryRequest(null);
       setSelectedOrderId(order.id);
       setCopiedPaymentCode(false);
+      setAdditionalOrderConfirmation(null);
       form.reset(values);
     } catch {
       // Keep the idempotency key so a retry replays the same server operation.
     }
+  }
+
+  async function confirmAdditionalOrder() {
+    if (!additionalOrderConfirmation) return;
+    const values = additionalOrderConfirmation;
+    setAdditionalOrderConfirmation(null);
+    await createOrder(values);
+  }
+
+  function openOrder(orderId: string) {
+    setAdditionalOrderConfirmation(null);
+    setSelectedOrderId(orderId);
+    setCopiedPaymentCode(false);
   }
 
   async function copyPaymentCode(paymentCode: string) {
@@ -299,6 +348,10 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
               <Input
                 id="billing-amount-vnd"
                 inputMode="numeric"
+                disabled={
+                  createOrderMutation.isPending ||
+                  additionalOrderConfirmation !== null
+                }
                 aria-invalid={
                   form.formState.errors.amountVnd ? "true" : undefined
                 }
@@ -323,7 +376,13 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
                 )}
               </p>
             </div>
-            <Button type="submit" disabled={createOrderMutation.isPending}>
+            <Button
+              type="submit"
+              disabled={
+                createOrderMutation.isPending ||
+                additionalOrderConfirmation !== null
+              }
+            >
               {createOrderMutation.isPending
                 ? resolveMessage(
                     locale,
@@ -331,7 +390,9 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
                   )
                 : resolveMessage(
                     locale,
-                    "pages.workspace.settingsHub.billing.createOrder",
+                    pendingOrders.length > 0
+                      ? "pages.workspace.settingsHub.billing.createAnotherOrder"
+                      : "pages.workspace.settingsHub.billing.createOrder",
                   )}
             </Button>
             {createOrderMutation.isError ? (
@@ -342,35 +403,94 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
                 )}
               </p>
             ) : null}
+            {additionalOrderConfirmation ? (
+              <Alert>
+                <AlertTitle>
+                  {resolveMessage(
+                    locale,
+                    "pages.workspace.settingsHub.billing.confirmAdditionalOrderTitle",
+                  )}
+                </AlertTitle>
+                <AlertDescription>
+                  {resolveMessage(
+                    locale,
+                    "pages.workspace.settingsHub.billing.confirmAdditionalOrderDescription",
+                  )}
+                </AlertDescription>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!pendingHistoryOrder}
+                    onClick={() => {
+                      if (pendingHistoryOrder)
+                        openOrder(pendingHistoryOrder.id);
+                    }}
+                  >
+                    {resolveMessage(
+                      locale,
+                      "pages.workspace.settingsHub.billing.openExistingOrder",
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={createOrderMutation.isPending}
+                    onClick={() => void confirmAdditionalOrder()}
+                  >
+                    {createOrderMutation.isPending
+                      ? resolveMessage(
+                          locale,
+                          "pages.workspace.settingsHub.billing.creatingOrder",
+                        )
+                      : resolveMessage(
+                          locale,
+                          "pages.workspace.settingsHub.billing.confirmCreateAnotherOrder",
+                        )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setAdditionalOrderConfirmation(null)}
+                  >
+                    {resolveMessage(
+                      locale,
+                      "pages.workspace.settingsHub.billing.keepExistingOrders",
+                    )}
+                  </Button>
+                </div>
+              </Alert>
+            ) : null}
           </form>
         </section>
       </div>
 
       <EstimateSection locale={locale} query={estimateQuery} />
 
-      {displayedOrder ? (
-        <PaymentOrderSection
-          locale={locale}
-          order={displayedOrder}
-          copied={copiedPaymentCode}
-          onCopy={() => void copyPaymentCode(displayedOrder.paymentCode)}
-        />
-      ) : (
-        <section className="mt-4 rounded-xl border border-dashed border-border/70 p-5">
-          <h3 className="text-sm font-medium">
-            {resolveMessage(
-              locale,
-              "pages.workspace.settingsHub.billing.activeOrderTitle",
-            )}
-          </h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {resolveMessage(
-              locale,
-              "pages.workspace.settingsHub.billing.noActiveOrder",
-            )}
-          </p>
-        </section>
-      )}
+      <div ref={paymentSectionRef}>
+        {displayedOrder ? (
+          <PaymentOrderSection
+            locale={locale}
+            order={displayedOrder}
+            copied={copiedPaymentCode}
+            onCopy={() => void copyPaymentCode(displayedOrder.paymentCode)}
+          />
+        ) : (
+          <section className="mt-4 rounded-xl border border-dashed border-border/70 p-5">
+            <h3 className="text-sm font-medium">
+              {resolveMessage(
+                locale,
+                "pages.workspace.settingsHub.billing.activeOrderTitle",
+              )}
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {resolveMessage(
+                locale,
+                "pages.workspace.settingsHub.billing.noActiveOrder",
+              )}
+            </p>
+          </section>
+        )}
+      </div>
 
       <HistorySection
         locale={locale}
@@ -380,6 +500,7 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
         totalCount={historyQuery.data.totalCount}
         isFetching={historyQuery.isFetching}
         onPageChange={setHistoryPage}
+        onOpenOrder={openOrder}
       />
     </PanelShell>
   );
@@ -703,6 +824,7 @@ function HistorySection({
   totalCount,
   isFetching,
   onPageChange,
+  onOpenOrder,
 }: {
   locale: Locale;
   orders: BillingOrderView[];
@@ -711,6 +833,7 @@ function HistorySection({
   totalCount: number;
   isFetching: boolean;
   onPageChange: (page: number) => void;
+  onOpenOrder: (orderId: string) => void;
 }) {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   return (
@@ -763,6 +886,12 @@ function HistorySection({
                     "pages.workspace.settingsHub.billing.statusLabel",
                   )}
                 </th>
+                <th className="px-4 py-3 font-medium">
+                  {resolveMessage(
+                    locale,
+                    "pages.workspace.settingsHub.billing.historyActions",
+                  )}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -786,6 +915,37 @@ function HistorySection({
                         getBillingOrderPresentation(order.status).messageKey,
                       )}
                     </Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    {order.status ===
+                    BILLING_ORDER_STATUSES.PENDING_PAYMENT ? (
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        aria-label={`${resolveMessage(locale, "pages.workspace.settingsHub.billing.viewPayment")} ${order.paymentCode}`}
+                        onClick={() => onOpenOrder(order.id)}
+                      >
+                        {resolveMessage(
+                          locale,
+                          "pages.workspace.settingsHub.billing.viewPayment",
+                        )}
+                      </Button>
+                    ) : order.status ===
+                      BILLING_ORDER_STATUSES.PENDING_RECONCILIATION ? (
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        aria-label={`${resolveMessage(locale, "pages.workspace.settingsHub.billing.viewOrder")} ${order.paymentCode}`}
+                        onClick={() => onOpenOrder(order.id)}
+                      >
+                        {resolveMessage(
+                          locale,
+                          "pages.workspace.settingsHub.billing.viewOrder",
+                        )}
+                      </Button>
+                    ) : null}
                   </td>
                 </tr>
               ))}
