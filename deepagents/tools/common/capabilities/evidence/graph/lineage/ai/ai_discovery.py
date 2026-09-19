@@ -2020,20 +2020,12 @@ class AIDiscoveryEnricher:
             if is_declaration_line(source_line_no):
                 continue
             if symbol.node_type == "METHOD" and re.search(
-                r"\?\.\s*\[[^\]\n]+\]\s*\(",
+                r"(?:\?\.\s*)?\[[^\]\n]+\]\s*\(",
                 raw_line.split("//", 1)[0],
             ):
-                # Optional element dispatch has no canonical receiver/method
-                # identity in the text PGE. It can therefore only veto closure.
-                return unresolved()
-            if symbol.node_type == "METHOD" and re.search(
-                rf"(?:\?\.\s*)?\[\s*(['\"\x60])"
-                rf"{re.escape(context.name)}\1\s*\]\s*\(",
-                raw_line.split("//", 1)[0],
-            ):
-                # Literal computed dispatch (including template literals and
-                # parenthesized receivers) is a real invocation shape, but the
-                # current PGE extractor does not establish canonical identity.
+                # Element dispatch has no canonical receiver/method identity in
+                # the text PGE. Literal, dynamic, optional, template-expression,
+                # and parenthesized forms can therefore only veto closure.
                 return unresolved()
             structural = _scrub_structure(raw_line)
             for reference in re.finditer(
