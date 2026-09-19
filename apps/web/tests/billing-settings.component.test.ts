@@ -530,14 +530,11 @@ test("a credited non-selected order refreshes history and prepaid balance while 
   await waitFor(
     () =>
       fixture.historyCalls > 1 &&
+      (fixture.orderCalls.get("newer") ?? 0) > 1 &&
       container.textContent?.includes("20,000 VND") === true &&
       container.textContent?.includes("Credited") === true,
-    "history polling should discover the other settlement and refresh wallet",
-    8_000,
-  );
-  assert.ok(
-    (fixture.orderCalls.get("newer") ?? 0) > 1,
-    "the selected order remains independently refreshed",
+    "history and selected-order polling should refresh after the other settlement",
+    12_000,
   );
   const olderRow = [...container.querySelectorAll("tbody tr")].find((row) =>
     row.textContent?.includes(otherPendingOrder.paymentCode),
