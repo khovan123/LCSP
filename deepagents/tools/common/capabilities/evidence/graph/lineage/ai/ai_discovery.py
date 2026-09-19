@@ -911,6 +911,18 @@ def _normalized_js_receiver_expression(raw: str) -> str | None:
     return None
 
 
+def _js_receiver_expression_references(raw: str) -> set[str]:
+    normalized = _normalized_js_receiver_expression(raw)
+    scrubbed = "\n".join(_scrub_structure(line) for line in raw.splitlines())
+    references = {normalized} if normalized else set()
+    for match in re.finditer(
+        r"(?<![\w$])([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)",
+        scrubbed,
+    ):
+        references.add(re.sub(r"\s+", "", match.group(1)))
+    return references
+
+
 def _js_receiver_alias_assignments(source_text: str) -> list[tuple[str, str]]:
     assignments: list[tuple[str, str]] = []
     for declaration in re.finditer(
@@ -923,9 +935,11 @@ def _js_receiver_alias_assignments(source_text: str) -> list[tuple[str, str]]:
             alias = re.fullmatch(
                 r"\s*([A-Za-z_$][\w$]*)(?:\s*:\s*.+)?\s*", lhs, re.S
             )
-            source_receiver = _normalized_js_receiver_expression(rhs)
-            if alias and source_receiver:
-                assignments.append((alias.group(1), source_receiver))
+            if alias:
+                assignments.extend(
+                    (alias.group(1), source_receiver)
+                    for source_receiver in _js_receiver_expression_references(rhs)
+                )
 
     # A binding can be declared without an initializer and acquire the receiver
     # later. Keep these simple lexical assignments in the same conservative alias
@@ -935,9 +949,12 @@ def _js_receiver_alias_assignments(source_text: str) -> list[tuple[str, str]]:
         source_text,
         re.S,
     ):
-        source_receiver = _normalized_js_receiver_expression(assignment.group(2))
-        if source_receiver:
-            assignments.append((assignment.group(1), source_receiver))
+        assignments.extend(
+            (assignment.group(1), source_receiver)
+            for source_receiver in _js_receiver_expression_references(
+                assignment.group(2)
+            )
+        )
     return assignments
 
 

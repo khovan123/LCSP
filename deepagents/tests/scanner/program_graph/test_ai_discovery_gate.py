@@ -1586,6 +1586,45 @@ alias[method]("runtime", true);
         assert finding["clarification_owner"] == "TECHNICAL", alias_flow
 
 
+def test_conditional_receiver_alias_flows_break_closure(tmp_path: Path) -> None:
+    alias_declarations = (
+        "const alias = useAi ? service : recorder;",
+        "const alias = useAi as boolean ? recorder : service;",
+        "const alias = maybeService ?? service;",
+    )
+
+    for alias_declaration in alias_declarations:
+        discovery = _discovery(
+            tmp_path,
+            f"""
+class AiService {{
+  summarize(text: string, aiEnabled: boolean) {{
+    if (!aiEnabled) return text;
+    return client.responses.create({{ model: "gpt-5", input: text }});
+  }}
+}}
+
+const service = new AiService();
+const recorder = new LocalRecorder();
+{alias_declaration}
+const method = "summarize";
+service.summarize("closed", false);
+alias[method]("runtime", true);
+""",
+        )
+
+        assert discovery["gate"] == "AI_UNKNOWN", alias_declaration
+        finding = next(
+            item
+            for item in discovery["findings"]
+            if item["kind"] == "SDK_INVOCATION"
+        )
+        assert (
+            finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+        ), alias_declaration
+        assert finding["clarification_owner"] == "TECHNICAL", alias_declaration
+
+
 def test_dynamic_template_element_true_call_breaks_false_method_call_set_closure(
     tmp_path: Path,
 ) -> None:
