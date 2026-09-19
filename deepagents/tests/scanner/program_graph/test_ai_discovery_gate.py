@@ -2369,5 +2369,73 @@ function unrelated(service: LocalRecorder) {
 }
 service.summarize("closed", false);
 unrelated(recorder);
+    """)
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+
+
+def test_nested_same_name_parameter_receiver_flow_keeps_dynamic_dispatch_technical(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+function outer(receiver: LocalRecorder) {
+  function inner(receiver: AiService) {
+    const alias = receiver;
+    const method = "summarize";
+    alias[method]("runtime", true);
+  }
+  inner(service);
+}
+service.summarize("closed", false);
+outer(recorder);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_unrelated_same_name_parameter_direct_dispatch_does_not_poison_closed_method(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+function unrelated(service: LocalRecorder) {
+  const method = "flush";
+  service[method]();
+}
+service.summarize("closed", false);
+unrelated(recorder);
+""")
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+
+
+def test_unrelated_same_name_local_direct_dispatch_does_not_poison_closed_method(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+function unrelated() {
+  const service = recorder;
+  const method = "flush";
+  service[method]();
+}
+service.summarize("closed", false);
+unrelated();
 """)
     assert discovery["gate"] == "AI_ABSENT_CONFIRMED"

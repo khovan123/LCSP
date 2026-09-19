@@ -572,14 +572,35 @@ class RepositorySemanticExtractor:
         def js_binding_key(name: str, line_no: int) -> str:
             if not is_js_text or line_no < 1 or line_no > len(scope_paths):
                 return f"var:{relative}:unknown:{name}"
-            for item in callables:
-                if item.start_line <= line_no <= item.end_line and name in item.params:
-                    return f"param:{item.key}:{name}"
-            for scope_id in reversed(scope_paths[line_no - 1]):
+            visible_scopes = scope_paths[line_no - 1]
+            parameter_candidates = [
+                item
+                for item in callables
+                if item.start_line <= line_no <= item.end_line
+                and name in item.params
+                and item.declaration_scope in visible_scopes
+            ]
+            if parameter_candidates:
+                nearest_scope = max(
+                    visible_scopes.index(item.declaration_scope)
+                    for item in parameter_candidates
+                )
+                nearest = [
+                    item
+                    for item in parameter_candidates
+                    if visible_scopes.index(item.declaration_scope)
+                    == nearest_scope
+                ]
+                item = min(
+                    nearest,
+                    key=lambda candidate: candidate.end_line - candidate.start_line,
+                )
+                return f"param:{item.key}:{name}"
+            for scope_id in reversed(visible_scopes):
                 key = declared_binding_keys.get((scope_id, name))
                 if key:
                     return key
-            return f"var:{relative}:{scope_paths[line_no - 1][-1]}:{name}"
+            return f"var:{relative}:{visible_scopes[-1]}:{name}"
 
         def resolve_instance(name: str, line_no: int) -> str | None:
             if not is_js_text or line_no < 1 or line_no > len(scope_paths):
@@ -1026,10 +1047,34 @@ class RepositorySemanticExtractor:
                         name, line_no, line, call.start(1), targets[0]
                     )
 
-    def _text_call(self, program: SemanticProgram, relative: str, line: int, name: str, body: str, owner: str, http_clients: set[str], *, resolves_to: str | None = None, receiver_binding_key: str | None = None) -> None:
+                for element_call in re.finditer(
+                    r"(?<![\w$.])(?P<receiver>\(*\s*[A-Za-z_$][\w$]*"
+                    r"(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*\)*)"
+                    r"\s*(?:\?\.\s*)?\[[^\]\n]+\]\s*\(",
+                    line,
+                ):
+                    receiver = re.sub(
+                        r"[\s()]", "", element_call.group("receiver")
+                    )
+                    receiver_key = js_binding_key(receiver, line_no)
+                    self._text_call(
+                        program,
+                        relative,
+                        line_no,
+                        f"{receiver}[computed:{element_call.start()}]",
+                        line,
+                        mkey,
+                        http_clients.get(line_no, set()),
+                        receiver_binding_key=receiver_key,
+                        element_dispatch=True,
+                    )
+
+    def _text_call(self, program: SemanticProgram, relative: str, line: int, name: str, body: str, owner: str, http_clients: set[str], *, resolves_to: str | None = None, receiver_binding_key: str | None = None, element_dispatch: bool = False) -> None:
         lower = name.lower(); ntype, attrs = _call_type(lower, http_clients); key = f"call:{relative}:{line}:{name}"
         if receiver_binding_key:
             attrs = {**attrs, "receiverBindingKey": receiver_binding_key}
+        if element_dispatch:
+            attrs = {**attrs, "elementDispatch": True}
         program.add_node(SemanticNodeFact(key, ntype, name, relative, line, line, attributes=attrs)); program.add_edge(SemanticEdgeFact("CALLS", owner, key))
         if resolves_to:
             program.add_edge(SemanticEdgeFact("RESOLVES_TO", key, resolves_to))

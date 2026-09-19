@@ -2040,6 +2040,7 @@ class AIDiscoveryEnricher:
             seen_flow: set[str] = set()
             flow_incomplete = False
             reached_receiver_call_names: set[str] = set()
+            relevant_method_receiver_keys: set[str] = set()
             seeded_binding_keys = {
                 str((call.attributes or {}).get("receiverBindingKey"))
                 for call in call_nodes
@@ -2066,6 +2067,7 @@ class AIDiscoveryEnricher:
                         and node.label == name
                         and int(node.start_line or 0) == line_no
                     )
+            relevant_method_receiver_keys.update(seeded_binding_keys)
             if seeded_binding_keys:
                 queue.extend((key, 0) for key in seeded_binding_keys)
             else:
@@ -2098,6 +2100,7 @@ class AIDiscoveryEnricher:
                     if not next_node or next_node.file_path != relative:
                         continue
                     if next_node.node_type in {"VARIABLE", "PARAMETER"}:
+                        relevant_method_receiver_keys.add(next_key)
                         relevant_method_receivers.add(next_node.label)
                     queue.append((next_key, depth + 1))
             if flow_incomplete:
@@ -2141,6 +2144,27 @@ class AIDiscoveryEnricher:
             if is_declaration_line(source_line_no):
                 continue
             if symbol.node_type == "METHOD":
+                element_dispatch_nodes = [
+                    node
+                    for node in program.nodes
+                    if node.file_path == relative
+                    and node.node_type == "CALL_SITE"
+                    and (node.attributes or {}).get("elementDispatch") is True
+                ]
+                element_dispatch_lines = {
+                    int(node.start_line)
+                    for node in element_dispatch_nodes
+                    if node.start_line
+                }
+                for element_dispatch in element_dispatch_nodes:
+                    receiver_key = str(
+                        (element_dispatch.attributes or {}).get(
+                            "receiverBindingKey"
+                        )
+                        or ""
+                    )
+                    if receiver_key and receiver_key in relevant_method_receiver_keys:
+                        return unresolved()
                 for element_call in re.finditer(
                     r"(?<![\w$])(?P<receiver>\(*\s*[A-Za-z_$][\w$]*"
                     r"(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*\)*)"
@@ -2150,7 +2174,10 @@ class AIDiscoveryEnricher:
                     receiver = re.sub(
                         r"[\s()]", "", element_call.group("receiver")
                     )
-                    if receiver in relevant_method_receivers:
+                    if (
+                        source_line_no not in element_dispatch_lines
+                        and receiver in relevant_method_receivers
+                    ):
                         # This receiver can reach the governed method, but element
                         # dispatch has no canonical PGE identity. It can only veto
                         # closure; unrelated receiver dispatch is outside this call set.
