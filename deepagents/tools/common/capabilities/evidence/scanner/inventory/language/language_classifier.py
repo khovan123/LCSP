@@ -40,12 +40,13 @@ EXCLUDED_DIR_NAMES = {
     "dist",
     "build",
     ".tox",
-    # Dependency, generated, and build outputs are not first-party source.
+    # Dependency and tool-managed output directories with an unambiguous role
+    # are not first-party source.  Generic product-domain names such as
+    # ``artifacts`` and ``cache`` intentionally do not belong here: a path
+    # segment alone cannot establish that a directory is generated output.
     "vendor",
     "target",
     "generated",
-    "artifacts",
-    "cache",
     "Pods",
     "DerivedData",
     ".dart_tool",

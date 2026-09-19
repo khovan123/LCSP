@@ -17,6 +17,9 @@ from tools.common.capabilities.evidence.scanner.inventory.language.language_type
     SUPPORT_FULL,
     LanguageClassification,
 )
+from tools.common.capabilities.evidence.scanner.inventory.language.language_classifier import (
+    is_excluded_source_path,
+)
 
 
 def _write(path: Path, content: str) -> None:
@@ -302,3 +305,70 @@ def test_vendor_source_is_excluded_before_project_execution_planning(tmp_path: P
         LanguageAnalyzerRegistry.default(),
     )
     assert all("vendor/" not in file for unit in plan.units for file in unit.files)
+
+
+def test_first_party_artifacts_feature_is_classified_and_planned(tmp_path: Path) -> None:
+    _write(tmp_path / "apps/web/package.json", json.dumps({"name": "web"}))
+    _write(
+        tmp_path / "apps/web/src/features/artifacts/components/artifact-list.tsx",
+        "export function ArtifactList() { return null; }\n",
+    )
+    _write(
+        tmp_path / "apps/web/src/features/artifacts/utils/artifact-routes.ts",
+        "export const artifactRoutes = [];\n",
+    )
+
+    artifact_files = {
+        "apps/web/src/features/artifacts/components/artifact-list.tsx",
+        "apps/web/src/features/artifacts/utils/artifact-routes.ts",
+    }
+    assert all(not is_excluded_source_path(path) for path in artifact_files)
+
+    discovery = ProjectDiscovery().discover(tmp_path)
+    classified = {
+        item.file_path: item
+        for item in discovery.classifications
+        if item.file_path in artifact_files
+    }
+    assert set(classified) == artifact_files
+    assert classified["apps/web/src/features/artifacts/components/artifact-list.tsx"].language == LANGUAGE_TYPESCRIPT
+    assert classified["apps/web/src/features/artifacts/utils/artifact-routes.ts"].language == LANGUAGE_TYPESCRIPT
+
+    plan = ProjectExecutionPlanner().build(
+        tmp_path,
+        discovery,
+        discovery.classifications,
+        LanguageAnalyzerRegistry.default(),
+    )
+    planned_files = {file for unit in plan.units for file in unit.files}
+    assert artifact_files <= planned_files
+    web_project = next(project for project in discovery.projects if project.relative_root == "apps/web")
+    assert all(discovery.file_ownership[path] == web_project.project_id for path in artifact_files)
+
+
+def test_first_party_cache_feature_is_not_excluded_by_directory_name(tmp_path: Path) -> None:
+    _write(tmp_path / "package.json", json.dumps({"name": "web"}))
+    path = "src/cache/service.ts"
+    _write(tmp_path / path, "export const cacheService = {};\n")
+
+    assert not is_excluded_source_path(path)
+    discovery = ProjectDiscovery().discover(tmp_path)
+    assert path in {item.file_path for item in discovery.classifications}
+    plan = ProjectExecutionPlanner().build(
+        tmp_path,
+        discovery,
+        discovery.classifications,
+        LanguageAnalyzerRegistry.default(),
+    )
+    assert any(path in unit.files for unit in plan.units)
+
+
+def test_unambiguous_tool_output_remains_excluded_before_planning(tmp_path: Path) -> None:
+    _write(tmp_path / "package.json", json.dumps({"name": "web"}))
+    _write(tmp_path / "node_modules/acme/index.js", "export const generated = true;\n")
+    _write(tmp_path / ".dart_tool/package_config.json", "{}\n")
+
+    discovery = ProjectDiscovery().discover(tmp_path)
+    classified = {item.file_path for item in discovery.classifications}
+    assert "node_modules/acme/index.js" not in classified
+    assert ".dart_tool/package_config.json" not in classified
