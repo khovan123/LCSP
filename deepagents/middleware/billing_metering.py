@@ -367,14 +367,17 @@ class BillingMeteringMiddleware(AgentMiddleware):
             return handler(request)
         session.assert_input_within_limit(request)
         invocation_id = session.new_invocation_id()
-        session.assert_model_identity(request.model)
+        # Keep the authorized candidate for settlement. Applying bind() below
+        # returns a RunnableBinding that no longer exposes provider identity.
+        billing_model = request.model
+        session.assert_model_identity(billing_model)
         session.assert_invocation_capacity(invocation_id)
         if hasattr(request, "override"):
-            request = request.override(model=session.bounded_model(request.model))
+            request = request.override(model=session.bounded_model(billing_model))
         response = handler(request)
         session.record(
             response,
-            request.model,
+            billing_model,
             invocation_id,
             agent_role=active_billing_agent_role(),
         )
@@ -386,14 +389,15 @@ class BillingMeteringMiddleware(AgentMiddleware):
             return await handler(request)
         session.assert_input_within_limit(request)
         invocation_id = session.new_invocation_id()
-        session.assert_model_identity(request.model)
+        billing_model = request.model
+        session.assert_model_identity(billing_model)
         session.assert_invocation_capacity(invocation_id)
         if hasattr(request, "override"):
-            request = request.override(model=session.bounded_model(request.model))
+            request = request.override(model=session.bounded_model(billing_model))
         response = await handler(request)
         session.record(
             response,
-            request.model,
+            billing_model,
             invocation_id,
             agent_role=active_billing_agent_role(),
         )

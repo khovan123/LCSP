@@ -111,6 +111,69 @@ def test_metering_middleware_records_one_payload_for_one_response():
     assert payload.model_dump(exclude_none=True).get("reasoningTokens") is None
 
 
+def test_output_cap_preserves_authorized_identity_for_settlement():
+    class BindCapableModel:
+        provider = "openai"
+        model_name = "gpt-test"
+
+        def bind(self, **kwargs):
+            self.bind_kwargs = kwargs
+            # Matches LangChain's wrapper behavior: provider/model attrs are on
+            # the original model, not on the RunnableBinding passed downstream.
+            return SimpleNamespace(bound=self, kwargs=kwargs)
+
+    class Request:
+        messages = []
+        model = BindCapableModel()
+
+        def override(self, *, model):
+            return SimpleNamespace(model=model, messages=self.messages)
+
+    class PolicyCheckingClient(FakeClient):
+        def post_settled_usage(self, payload):
+            assert (payload.provider, payload.model) == ("OPENAI", "gpt-test")
+            assert payload.effectiveRuntimeModel["provider"] == "OPENAI"
+            assert payload.effectiveRuntimeModel["model"] == "gpt-test"
+            super().post_settled_usage(payload)
+
+    client = PolicyCheckingClient()
+    model = Request.model
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-1",
+        run_id="run-1",
+        reservation_id="reservation-1",
+        agent_role="planner",
+        effective_runtime_model={"policyVersion": "policy-1"},
+        max_output_tokens=7,
+        max_reasoning_tokens=3,
+        reserved_provider="OPENAI",
+        reserved_model="gpt-test",
+        authorized_models={("OPENAI", "gpt-test")},
+    )
+    downstream_models = []
+
+    def provider_handler(request):
+        downstream_models.append(request.model)
+        return SimpleNamespace(
+            usage_metadata={"input_tokens": 3, "output_tokens": 2},
+            # OpenAI response metadata commonly omits provider.
+            response_metadata={"model_name": "gpt-test", "id": "resp-1"},
+        )
+
+    with activate_billing_metering(session):
+        BillingMeteringMiddleware().wrap_model_call(Request(), provider_handler)
+
+    assert model.bind_kwargs == {"max_output_tokens": 10}
+    assert downstream_models[0].bound is model
+    assert len(client.payloads) == 1
+    payload = client.payloads[0]
+    assert payload.provider == "OPENAI"
+    assert payload.model == "gpt-test"
+    assert payload.inputTokens == "3"
+    assert payload.outputTokens == "2"
+
+
 def test_metering_middleware_records_missing_usage_for_terminal_release():
     client = FakeClient()
     session = BillingMeteringSession(
