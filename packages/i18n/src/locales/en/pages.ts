@@ -1132,8 +1132,16 @@ export const enPages = {
           "Minimum 10,000 VND; maximum 10,000,000 VND; increments of 1,000 VND.",
         creatingOrder: "Creating payment order",
         createOrder: "Create payment order",
+        createAnotherOrder: "Create another order",
         createOrderError:
           "We could not create the payment order. Retry to safely replay the request.",
+        confirmAdditionalOrderTitle:
+          "You already have an order awaiting payment or reconciliation.",
+        confirmAdditionalOrderDescription:
+          "The existing order remains valid until it expires. Each order has a separate payment code; paying both can credit both orders.",
+        openExistingOrder: "Open existing order",
+        confirmCreateAnotherOrder: "Confirm another order",
+        keepExistingOrders: "Keep existing orders",
         estimateTitle: "Usage estimate",
         estimateDescription:
           "Informational guidance only. Actual usage charges are calculated from authoritative billable usage.",
@@ -1171,6 +1179,9 @@ export const enPages = {
           "Payment was received for review but could not be settled automatically. We will update the order after reconciliation.",
         historyTitle: "Top-up history",
         historyEmpty: "No top-up history yet.",
+        historyActions: "Actions",
+        viewPayment: "Open payment",
+        viewOrder: "View order",
         historyPage: "Page",
         previousPage: "Previous page",
         nextPage: "Next page",

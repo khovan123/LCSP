@@ -1138,8 +1138,16 @@ export const viPages = {
           "Tối thiểu 10.000 VND; tối đa 10.000.000 VND; bội số của 1.000 VND.",
         creatingOrder: "Đang tạo đơn thanh toán",
         createOrder: "Tạo đơn thanh toán",
+        createAnotherOrder: "Tạo đơn khác",
         createOrderError:
           "Không thể tạo đơn thanh toán. Bạn có thể thử lại an toàn với cùng yêu cầu.",
+        confirmAdditionalOrderTitle:
+          "Bạn đã có đơn đang chờ thanh toán hoặc đối soát.",
+        confirmAdditionalOrderDescription:
+          "Đơn hiện tại vẫn có hiệu lực đến khi hết hạn. Mỗi đơn có mã riêng; thanh toán cả hai có thể cộng số dư cho cả hai đơn.",
+        openExistingOrder: "Mở đơn hiện có",
+        confirmCreateAnotherOrder: "Xác nhận tạo đơn khác",
+        keepExistingOrders: "Giữ các đơn hiện có",
         estimateTitle: "Ước tính sử dụng",
         estimateDescription:
           "Chỉ mang tính tham khảo. Phí sử dụng thực tế được tính từ dữ liệu sử dụng do hệ thống xác thực.",
@@ -1177,6 +1185,9 @@ export const viPages = {
           "Khoản thanh toán đã được nhận để kiểm tra nhưng chưa thể tự động ghi có. Đơn hàng sẽ được cập nhật sau khi đối soát.",
         historyTitle: "Lịch sử nạp tiền",
         historyEmpty: "Chưa có lịch sử nạp tiền.",
+        historyActions: "Thao tác",
+        viewPayment: "Mở thanh toán",
+        viewOrder: "Xem đơn",
         historyPage: "Trang",
         previousPage: "Trang trước",
         nextPage: "Trang sau",

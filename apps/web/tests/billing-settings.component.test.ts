@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { JSDOM } from "jsdom";
 import { act, createElement } from "react";
 import {
+  BILLING_ESTIMATE_AVAILABILITY,
   BILLING_ORDER_STATUSES,
   BILLING_PAYMENT_PROVIDERS,
   PREPAID_BILLING_CONFIG,
@@ -73,17 +74,19 @@ type BillingFixture = {
   historyCalls: number;
   orderCalls: Map<string, number>;
   missingOrderDetails: Set<string>;
+  createRequests: Array<{ amountVnd: string; idempotencyKey: string }>;
 };
 
 function order(
   id: string,
   status: BillingOrderView["status"],
   createdAt: string,
+  amountVnd = "10000",
 ): BillingOrderView {
   return {
     id,
-    amountVnd: "10000",
-    creditUnits: "10000",
+    amountVnd,
+    creditUnits: amountVnd,
     paymentCode: `LCSP${id.toUpperCase()}`,
     status,
     expiresAt: "2026-09-20T00:00:00.000Z",
@@ -97,7 +100,7 @@ function order(
       provider: BILLING_PAYMENT_PROVIDERS.sepay,
       currency: PREPAID_BILLING_CONFIG.currency,
       paymentCode: `LCSP${id.toUpperCase()}`,
-      amountVnd: "10000",
+      amountVnd,
       bankName: "Example Bank",
       bankAccountNumber: "0123456789",
       accountHolder: "LCSP",
@@ -126,12 +129,45 @@ function historyView(orders: BillingOrderView[]): BillingHistoryView {
 }
 
 function mockBillingApi(fixture: BillingFixture) {
-  return async (input: RequestInfo | URL) => {
+  return async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
     if (path === "/api/billing/wallet") return success(fixture.wallet);
     if (path.startsWith("/api/billing/history")) {
       fixture.historyCalls += 1;
       return success(historyView(fixture.orders));
+    }
+    if (path.startsWith("/api/billing/estimate?")) {
+      const amountVnd = new URL(path, "http://localhost").searchParams.get(
+        "amount_vnd",
+      );
+      assert.ok(amountVnd);
+      return success({
+        currency: PREPAID_BILLING_CONFIG.currency,
+        amountVnd,
+        creditUnits: amountVnd,
+        expiresInHours: PREPAID_BILLING_CONFIG.orderExpiryHours,
+        availability:
+          BILLING_ESTIMATE_AVAILABILITY.insufficientPricingConfiguration,
+        effectiveRuntimeModel: null,
+        estimatedUsageChargeVnd: null,
+      });
+    }
+    if (path === "/api/billing/orders" && init?.method === "POST") {
+      const payload = JSON.parse(String(init.body)) as { amount_vnd: string };
+      const idempotencyKey = new Headers(init.headers).get("idempotency-key");
+      assert.ok(idempotencyKey);
+      fixture.createRequests.push({
+        amountVnd: payload.amount_vnd,
+        idempotencyKey,
+      });
+      const createdOrder = order(
+        `created-${fixture.createRequests.length}`,
+        BILLING_ORDER_STATUSES.PENDING_PAYMENT,
+        "2026-09-19T04:00:00.000Z",
+        payload.amount_vnd,
+      );
+      fixture.orders = [createdOrder, ...fixture.orders];
+      return success(createdOrder);
     }
     const orderId = path.match(/^\/api\/billing\/orders\/([^/?]+)/)?.[1];
     if (orderId) {
@@ -211,6 +247,31 @@ async function waitFor(
   }
 }
 
+async function setAmount(container: HTMLElement, amount: string) {
+  const input = container.querySelector<HTMLInputElement>(
+    "#billing-amount-vnd",
+  );
+  assert.ok(input);
+  const setValue = Object.getOwnPropertyDescriptor(
+    testWindow.HTMLInputElement.prototype,
+    "value",
+  )?.set;
+  assert.ok(setValue);
+  await act(async () => {
+    setValue.call(input, amount);
+    input.dispatchEvent(new testWindow.Event("input", { bubbles: true }));
+    input.dispatchEvent(new testWindow.Event("change", { bubbles: true }));
+  });
+}
+
+async function clickButton(container: HTMLElement, label: string) {
+  const button = [...container.querySelectorAll("button")].find(
+    (candidate) => candidate.textContent?.trim() === label,
+  );
+  assert.ok(button, `expected button: ${label}`);
+  await act(async () => button.click());
+}
+
 function fixtureFor(
   orders: BillingOrderView[],
   balance = "10000",
@@ -221,6 +282,7 @@ function fixtureFor(
     historyCalls: 0,
     orderCalls: new Map(),
     missingOrderDetails: new Set(),
+    createRequests: [],
   };
 }
 
@@ -310,6 +372,75 @@ test("order-detail 404 falls back to authenticated history and stops retry polli
     container.textContent ?? "",
     new RegExp(currentOrder.paymentCode),
   );
+});
+
+test("a pending history order can be reopened to show its own payment instructions", async (context) => {
+  const newestOrder = order(
+    "newest-order",
+    BILLING_ORDER_STATUSES.PENDING_PAYMENT,
+    "2026-09-19T02:00:00.000Z",
+  );
+  const olderOrder = order(
+    "older-order",
+    BILLING_ORDER_STATUSES.PENDING_PAYMENT,
+    "2026-09-19T01:00:00.000Z",
+  );
+  const fixture = fixtureFor([newestOrder, olderOrder]);
+  const container = await renderBilling(fixture, context);
+  await waitFor(
+    () => container.querySelectorAll("tbody tr").length === 2,
+    "expected both pending orders to appear in history",
+  );
+  const olderRow = [...container.querySelectorAll("tbody tr")].find((row) =>
+    row.textContent?.includes(olderOrder.paymentCode),
+  );
+  const openButton = olderRow?.querySelector("button");
+  assert.ok(openButton, "pending history row should expose an open action");
+
+  await act(async () => openButton.click());
+  await waitFor(
+    () =>
+      (fixture.orderCalls.get(olderOrder.id) ?? 0) > 0 &&
+      (container
+        .querySelector('[aria-labelledby="billing-order-heading"]')
+        ?.textContent?.includes(olderOrder.paymentCode) ??
+        false),
+    "expected the selected history order payment details to reopen",
+  );
+});
+
+test("creating another order requires confirmation while an order is pending", async (context) => {
+  const existingOrder = order(
+    "existing-order",
+    BILLING_ORDER_STATUSES.PENDING_PAYMENT,
+    "2026-09-19T01:00:00.000Z",
+  );
+  const fixture = fixtureFor([existingOrder]);
+  const container = await renderBilling(fixture, context);
+  await waitFor(
+    () => container.querySelector("#billing-amount-vnd") !== null,
+    "expected the top-up form to finish loading",
+  );
+
+  await setAmount(container, "20000");
+  await clickButton(container, "Create another order");
+  assert.equal(fixture.createRequests.length, 0);
+  assert.match(
+    container.textContent ?? "",
+    /You already have an order awaiting payment or reconciliation/,
+  );
+  assert.match(
+    container.textContent ?? "",
+    /paying both can credit both orders/,
+  );
+
+  await clickButton(container, "Confirm another order");
+  await waitFor(
+    () => fixture.createRequests.length === 1,
+    "expected explicit confirmation to create a new order",
+  );
+  assert.equal(fixture.createRequests[0]?.amountVnd, "20000");
+  assert.ok(fixture.createRequests[0]?.idempotencyKey);
 });
 
 test("a credited non-selected order refreshes history and prepaid balance while the selected order stays pending", async (context) => {

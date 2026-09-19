@@ -1047,7 +1047,13 @@ export type PagesMessages = {
         amountHint: string;
         creatingOrder: string;
         createOrder: string;
+        createAnotherOrder: string;
         createOrderError: string;
+        confirmAdditionalOrderTitle: string;
+        confirmAdditionalOrderDescription: string;
+        openExistingOrder: string;
+        confirmCreateAnotherOrder: string;
+        keepExistingOrders: string;
         estimateTitle: string;
         estimateDescription: string;
         estimatePrompt: string;
@@ -1080,6 +1086,9 @@ export type PagesMessages = {
         pendingReconciliationDescription: string;
         historyTitle: string;
         historyEmpty: string;
+        historyActions: string;
+        viewPayment: string;
+        viewOrder: string;
         historyPage: string;
         previousPage: string;
         nextPage: string;
