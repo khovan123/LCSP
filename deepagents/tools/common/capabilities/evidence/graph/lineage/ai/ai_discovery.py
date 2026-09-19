@@ -2181,13 +2181,33 @@ class AIDiscoveryEnricher:
                     receiver_projection_key = str(
                         attributes.get("receiverProjectionKey") or ""
                     )
+                    receiver_reference_keys = {
+                        str(value)
+                        for value in (
+                            attributes.get("receiverReferenceBindingKeys")
+                            or []
+                        )
+                        if value
+                    }
                     binding_relevant = (
                         receiver_key in relevant_method_receiver_keys
                         or receiver_root_key in relevant_method_receiver_keys
+                        or bool(
+                            receiver_reference_keys
+                            & relevant_method_receiver_keys
+                        )
                     )
                     if receiver_kind == "MEMBER_PROJECTION":
+                        wildcard_projection_key = ""
+                        if receiver_projection_key:
+                            wildcard_projection_key = (
+                                receiver_projection_key.rsplit(":", 1)[0]
+                                + ":*"
+                            )
                         binding_relevant = (
                             receiver_projection_key
+                            in relevant_method_receiver_keys
+                            or wildcard_projection_key
                             in relevant_method_receiver_keys
                         )
                     if (

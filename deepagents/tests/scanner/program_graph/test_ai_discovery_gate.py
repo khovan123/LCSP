@@ -2710,3 +2710,145 @@ service.summarize("closed", false);
 holder.service[method]("runtime", true);
 """)
     assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_conditional_unresolved_receiver_containing_service_breaks_closure(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const recorder = new LocalRecorder();
+const flag = runtimeFlag();
+const method = "summarize";
+service.summarize("closed", false);
+(flag ? service : recorder)[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_logical_unresolved_receiver_containing_service_breaks_closure(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const recorder = new LocalRecorder();
+const enabled = runtimeFlag();
+const method = "summarize";
+service.summarize("closed", false);
+(enabled && service || recorder)[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_multiline_asserted_receiver_breaks_closure(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const method = "summarize";
+service.summarize("closed", false);
+(service as AiService)
+  [method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_unresolved_foreign_receiver_does_not_poison_closed_method(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const recorder = new LocalRecorder();
+const foreign = new LocalRecorder();
+const flag = runtimeFlag();
+const method = "flush";
+service.summarize("closed", false);
+(flag ? foreign : recorder)[method]();
+""")
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+
+
+def test_property_write_preserves_governed_member_projection(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const holder = {};
+const method = "summarize";
+holder.service = service;
+service.summarize("closed", false);
+holder.service[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_foreign_property_write_does_not_poison_closed_method(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const recorder = new LocalRecorder();
+const holder = {};
+const method = "flush";
+holder.recorder = recorder;
+service.summarize("closed", false);
+holder.recorder[method]();
+""")
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+
+
+def test_dynamic_property_write_preserves_receiver_uncertainty(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const holder = {};
+const property = runtimeProperty();
+const method = "summarize";
+holder[property] = service;
+service.summarize("closed", false);
+holder.service[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"

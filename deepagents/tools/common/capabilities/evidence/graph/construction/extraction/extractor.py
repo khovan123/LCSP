@@ -1191,13 +1191,27 @@ class RepositorySemanticExtractor:
                     )
 
                 for dispatch_start, receiver, receiver_kind in (
-                    _text_computed_receiver_candidates(line)
+                    _text_computed_receiver_candidates(
+                        " ".join(
+                            source_lines[max(0, line_no - 3) : line_no]
+                        )
+                        if re.match(r"\s*(?:\?\.\s*)?\[", line)
+                        else line
+                    )
                 ):
                     receiver_key: str | None
                     receiver_root_key: str | None = None
                     receiver_call_name: str | None = None
                     constructor_class: str | None = None
                     receiver_projection_key: str | None = None
+                    receiver_reference_keys: list[str] = []
+                    for reference in js_expression_references(receiver):
+                        if reference == "this":
+                            continue
+                        reference_root = reference.split(".", 1)[0]
+                        reference_key = js_binding_key(reference_root, line_no)
+                        if reference_key not in receiver_reference_keys:
+                            receiver_reference_keys.append(reference_key)
                     if receiver_kind == "THIS":
                         owner_class = enclosing_class(line_no)
                         receiver_key = (
@@ -1250,10 +1264,79 @@ class RepositorySemanticExtractor:
                         receiver_root_binding_key=receiver_root_key,
                         receiver_call_name=receiver_call_name,
                         receiver_projection_key=receiver_projection_key,
+                        receiver_reference_binding_keys=receiver_reference_keys,
                         constructor_class=constructor_class,
                     )
 
-    def _text_call(self, program: SemanticProgram, relative: str, line: int, name: str, body: str, owner: str, http_clients: set[str], *, resolves_to: str | None = None, receiver_binding_key: str | None = None, element_dispatch: bool = False, receiver_kind: str | None = None, receiver_call_name: str | None = None, receiver_root_binding_key: str | None = None, receiver_projection_key: str | None = None, constructor_class: str | None = None) -> None:
+                property_assignment = re.search(
+                    r"(?<![\w$.])(?P<holder>[A-Za-z_$][\w$]*)\s*"
+                    r"(?:\.\s*(?P<dot_property>[A-Za-z_$][\w$]*)|"
+                    r"\[\s*(?P<bracket_property>[^\]\n]+)\s*\])\s*"
+                    r"=(?!=|>)\s*(?P<rhs>.+?)(?:;|$)",
+                    line,
+                )
+                if is_js_text and property_assignment:
+                    holder_name = property_assignment.group("holder")
+                    property_expression = (
+                        property_assignment.group("dot_property")
+                        or property_assignment.group("bracket_property")
+                        or ""
+                    ).strip()
+                    literal_property = re.fullmatch(
+                        r"(['\"`])([A-Za-z_$][\w$]*)\1",
+                        property_expression,
+                    )
+                    property_name = (
+                        property_expression
+                        if property_assignment.group("dot_property")
+                        else (
+                            literal_property.group(2)
+                            if literal_property
+                            else "*"
+                        )
+                    )
+                    rhs_expression = property_assignment.group("rhs")
+                    holder_key = js_binding_key(holder_name, line_no)
+                    projection_key = (
+                        f"projection:{holder_key}:{property_name}"
+                    )
+                    program.add_node(
+                        SemanticNodeFact(
+                            projection_key,
+                            "VARIABLE",
+                            f"{holder_name}.{property_name}",
+                            relative,
+                            line_no,
+                            line_no,
+                            attributes={"memberProjection": True},
+                        )
+                    )
+                    for source in js_expression_references(rhs_expression):
+                        source_key = js_binding_key(source, line_no)
+                        if not source_key.startswith("param:"):
+                            program.add_node(
+                                SemanticNodeFact(
+                                    source_key,
+                                    "VARIABLE",
+                                    source,
+                                    relative,
+                                    line_no,
+                                    line_no,
+                                    semantic_types=semantic_types_for_identifier(
+                                        source
+                                    ),
+                                )
+                            )
+                        program.add_edge(
+                            SemanticEdgeFact(
+                                "ALIASES",
+                                source_key,
+                                projection_key,
+                                attributes={"property": property_name},
+                            )
+                        )
+
+    def _text_call(self, program: SemanticProgram, relative: str, line: int, name: str, body: str, owner: str, http_clients: set[str], *, resolves_to: str | None = None, receiver_binding_key: str | None = None, element_dispatch: bool = False, receiver_kind: str | None = None, receiver_call_name: str | None = None, receiver_root_binding_key: str | None = None, receiver_projection_key: str | None = None, receiver_reference_binding_keys: list[str] | None = None, constructor_class: str | None = None) -> None:
         lower = name.lower(); ntype, attrs = _call_type(lower, http_clients); key = f"call:{relative}:{line}:{name}"
         if receiver_binding_key:
             attrs = {**attrs, "receiverBindingKey": receiver_binding_key}
@@ -1268,6 +1351,11 @@ class RepositorySemanticExtractor:
         ):
             if value:
                 attrs = {**attrs, attr_name: value}
+        if receiver_reference_binding_keys:
+            attrs = {
+                **attrs,
+                "receiverReferenceBindingKeys": receiver_reference_binding_keys,
+            }
         program.add_node(SemanticNodeFact(key, ntype, name, relative, line, line, attributes=attrs)); program.add_edge(SemanticEdgeFact("CALLS", owner, key))
         if resolves_to:
             program.add_edge(SemanticEdgeFact("RESOLVES_TO", key, resolves_to))
