@@ -578,14 +578,36 @@ def _has_authoritative_customer_ai_context(state: dict[str, Any]) -> bool:
     statements = confirmed.get("statements")
     if not isinstance(statements, list):
         return False
-    ai_terms = re.compile(
-        r"(?:^|[^a-z0-9])(?:ai|artificial intelligence|llm|model|openai|anthropic|claude|gemini|genai|bedrock|copilot)(?:[^a-z0-9]|$)",
-        re.I,
-    )
     negative = re.compile(
-        r"(?:no|not|without|does(?:n['’]?t| not)|do(?:n['’]?t| not))\s+(?:use|using|usage of\s+)?(?:external\s+|off[- ]repository\s+)?(?:ai|artificial intelligence|llm|model)",
+        r"(?:\b(?:no|not|without|never)\b|\b(?:does|do|we|our)\s+n['’]?t\b)"
+        r"(?:\s+currently)?\s+(?:use|uses|using|usage(?:\s+of)?)?\s*"
+        r"(?:external\s+|off[- ]repository\s+|generative\s+)?"
+        r"(?:ai|artificial intelligence|llm|large language model|openai|anthropic|claude|gemini|genai|bedrock|copilot)",
         re.I,
     )
+    positive_text = re.compile(
+        r"\b(?:external|off[- ]repository|third[- ]party|hosted)\b.{0,80}\b"
+        r"(?:ai|artificial intelligence|llm|large language model|openai|anthropic|"
+        r"claude|gemini|genai|bedrock|copilot)\b|\b(?:ai|artificial intelligence|"
+        r"llm|large language model|openai|anthropic|claude|gemini|genai|bedrock|"
+        r"copilot)\b.{0,80}\b(?:external|off[- ]repository|third[- ]party|hosted)\b",
+        re.I,
+    )
+    positive_topics = {
+        "ai_usage",
+        "ai_use",
+        "external_ai_usage",
+        "off_repository_ai_usage",
+    }
+    negative_values = {
+        "false",
+        "no",
+        "none",
+        "absent",
+        "not_used",
+        "no_ai",
+        "ai_absent",
+    }
     for item in statements:
         if not isinstance(item, dict):
             continue
@@ -600,7 +622,12 @@ def _has_authoritative_customer_ai_context(state: dict[str, Any]) -> bool:
         topic = str(item.get("topic") or "").strip().lower()
         if negative.search(text):
             continue
-        if topic in {"ai_usage", "ai_use", "external_ai_usage", "off_repository_ai_usage"} or ai_terms.search(text):
+        normalized = item.get("normalizedValue")
+        if isinstance(normalized, bool) and not normalized:
+            continue
+        if isinstance(normalized, str) and normalized.strip().lower() in negative_values:
+            continue
+        if topic in positive_topics or positive_text.search(text):
             return True
     return False
 

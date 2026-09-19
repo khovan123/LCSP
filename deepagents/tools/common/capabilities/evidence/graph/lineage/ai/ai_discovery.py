@@ -866,98 +866,6 @@ def _split_top_level_args(raw: str) -> list[str]:
     return args
 
 
-def _strip_balanced_outer_parentheses(raw: str) -> str:
-    value = raw.strip()
-    while value.startswith("(") and value.endswith(")"):
-        depth = 0
-        quote: str | None = None
-        escaped = False
-        closes_at_end = False
-        for index, char in enumerate(value):
-            if quote:
-                if escaped:
-                    escaped = False
-                elif char == "\\":
-                    escaped = True
-                elif char == quote:
-                    quote = None
-                continue
-            if char in {"'", '"', "`"}:
-                quote = char
-            elif char == "(":
-                depth += 1
-            elif char == ")":
-                depth -= 1
-                if depth == 0:
-                    closes_at_end = index == len(value) - 1
-                    break
-        if not closes_at_end:
-            break
-        value = value[1:-1].strip()
-    return value
-
-
-def _normalized_js_receiver_expression(raw: str) -> str | None:
-    value = raw.strip()
-    previous = ""
-    while value != previous:
-        previous = value
-        value = _strip_balanced_outer_parentheses(value)
-        value = re.sub(r"\s+(?:as|satisfies)\s+.+$", "", value, flags=re.S)
-        value = re.sub(r"^<[^<>]+>\s*", "", value)
-        value = value.rstrip("!").strip()
-    if re.fullmatch(r"[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*", value):
-        return value
-    return None
-
-
-def _js_receiver_expression_references(raw: str) -> set[str]:
-    normalized = _normalized_js_receiver_expression(raw)
-    scrubbed = "\n".join(_scrub_structure(line) for line in raw.splitlines())
-    references = {normalized} if normalized else set()
-    for match in re.finditer(
-        r"(?<![\w$])([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)",
-        scrubbed,
-    ):
-        references.add(re.sub(r"\s+", "", match.group(1)))
-    return references
-
-
-def _js_receiver_alias_assignments(source_text: str) -> list[tuple[str, str]]:
-    assignments: list[tuple[str, str]] = []
-    for declaration in re.finditer(
-        r"\b(?:const|let|var)\s+([^;]+);", source_text, re.S
-    ):
-        for declarator in _split_top_level_args(declaration.group(1)):
-            lhs, separator, rhs = declarator.partition("=")
-            if not separator:
-                continue
-            alias = re.fullmatch(
-                r"\s*([A-Za-z_$][\w$]*)(?:\s*:\s*.+)?\s*", lhs, re.S
-            )
-            if alias:
-                assignments.extend(
-                    (alias.group(1), source_receiver)
-                    for source_receiver in _js_receiver_expression_references(rhs)
-                )
-
-    # A binding can be declared without an initializer and acquire the receiver
-    # later. Keep these simple lexical assignments in the same conservative alias
-    # flow; property writes are excluded because they do not rebind the identifier.
-    for assignment in re.finditer(
-        r"(?<![\w$.\]])\b([A-Za-z_$][\w$]*)\s*=(?!=|>)\s*([^;]+);",
-        source_text,
-        re.S,
-    ):
-        assignments.extend(
-            (assignment.group(1), source_receiver)
-            for source_receiver in _js_receiver_expression_references(
-                assignment.group(2)
-            )
-        )
-    return assignments
-
-
 def _literal_bool(raw: str) -> bool | None:
     value = raw.strip().rstrip(";")
     if value in {"true", "True"}:
@@ -2094,20 +2002,68 @@ class AIDiscoveryEnricher:
                     )
                 )
 
-            # A simple receiver alias can carry the same unsupported element
-            # dispatch. Expand only aliases rooted in an already relevant receiver;
-            # unrelated computed-call receivers must not poison this method's closure.
-            alias_assignments = _js_receiver_alias_assignments(source_text)
-            changed = True
-            while changed:
-                changed = False
-                for alias, source_receiver in alias_assignments:
-                    if (
-                        source_receiver in relevant_method_receivers
-                        and alias not in relevant_method_receivers
-                    ):
-                        relevant_method_receivers.add(alias)
-                        changed = True
+            # Receiver escape/alias closure is graph-owned. Follow only trusted
+            # value-flow facts emitted by the semantic extractor, including
+            # assignment, parameter, return and call-result provenance. This keeps
+            # unrelated computed calls out of the target method's frontier while
+            # preserving uncertainty for unresolved helper boundaries.
+            flow_edges = {
+                "ALIASES",
+                "ASSIGNS",
+                "PASSES_ARGUMENT",
+                "RETURNS",
+                "RECEIVES_RETURN",
+                "DECLARES",
+                "RESOLVES_TO",
+            }
+            node_by_key = {node.key: node for node in program.nodes}
+            outgoing: dict[str, list[SemanticEdgeFact]] = {}
+            for edge in program.edges:
+                if edge.edge_type not in flow_edges or not self._edge_is_trusted(edge):
+                    continue
+                source_node = node_by_key.get(edge.source_key)
+                target_node = node_by_key.get(edge.target_key)
+                if not source_node or not target_node:
+                    continue
+                if source_node.file_path != relative and target_node.file_path != relative:
+                    continue
+                if edge.edge_type == "DECLARES" and target_node.node_type == "RETURN_VALUE":
+                    # return value -> callable owner (reverse declaration edge)
+                    outgoing.setdefault(edge.target_key, []).append(edge)
+                elif edge.edge_type == "RESOLVES_TO" and target_node.node_type in {"FUNCTION", "METHOD"}:
+                    # callable -> call site (reverse target identity)
+                    outgoing.setdefault(edge.target_key, []).append(edge)
+                elif edge.edge_type != "DECLARES":
+                    outgoing.setdefault(edge.source_key, []).append(edge)
+
+            queue: list[tuple[str, int]] = []
+            seen_flow: set[str] = set()
+            flow_incomplete = False
+            for receiver in relevant_method_receivers:
+                for node in node_by_key.values():
+                    if node.file_path == relative and node.label == receiver:
+                        queue.append((node.key, 0))
+            while queue:
+                current, depth = queue.pop()
+                if current in seen_flow:
+                    continue
+                seen_flow.add(current)
+                if depth >= _MAX_GRAPH_HOPS:
+                    flow_incomplete = flow_incomplete or bool(outgoing.get(current))
+                    continue
+                for edge in outgoing.get(current, []):
+                    next_key = edge.source_key if (
+                        edge.edge_type in {"DECLARES", "RESOLVES_TO"}
+                        and edge.target_key == current
+                    ) else edge.target_key
+                    next_node = node_by_key.get(next_key)
+                    if not next_node or next_node.file_path != relative:
+                        continue
+                    if next_node.node_type in {"VARIABLE", "PARAMETER"}:
+                        relevant_method_receivers.add(next_node.label)
+                    queue.append((next_key, depth + 1))
+            if flow_incomplete:
+                return unresolved()
 
         declaration_spans = [
             (

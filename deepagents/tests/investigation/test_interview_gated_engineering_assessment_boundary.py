@@ -5,6 +5,7 @@ import pytest
 
 from tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary import (
     InterviewGatedEngineeringAssessmentBoundary,
+    _has_authoritative_customer_ai_context,
 )
 from tools.common.capabilities.assessment.investigation.engineering_rule.managed_targeted_investigator import (
     ManagedTargetedInvestigatorPipeline,
@@ -321,6 +322,89 @@ def test_ready_no_ai_gate_short_circuits_before_interview_dispatch() -> None:
     assert dispatcher.calls == []
     assert api.seeded == []
     assert root.calls == []
+
+
+def test_unrelated_customer_business_model_does_not_block_no_ai_gate() -> None:
+    assert not _has_authoritative_customer_ai_context(
+        {
+            "confirmedContext": {
+                "statements": [
+                    {
+                        "topic": "pricing",
+                        "statement": "Our subscription business model charges monthly.",
+                        "normalizedValue": "subscription business model",
+                        "source": "CUSTOMER_CONFIRMED",
+                        "resolutionState": "CONFIRMED",
+                    }
+                ]
+            }
+        }
+    )
+
+
+def test_ready_no_ai_gate_early_stops_with_unrelated_customer_business_model() -> None:
+    api = FakeApi(
+        {
+            "outcome": "CONTEXT_READY",
+            "contextRevision": 1,
+            "confirmedContext": {
+                "statements": [
+                    {
+                        "topic": "pricing",
+                        "statement": "Our subscription business model charges monthly.",
+                        "normalizedValue": "subscription business model",
+                        "source": "CUSTOMER_CONFIRMED",
+                        "resolutionState": "CONFIRMED",
+                    }
+                ]
+            },
+        }
+    )
+    dispatcher = FakeDispatcher()
+    result = _boundary(api, dispatcher)._prepare_interview(
+        evidence_report=_ai_report("AI_ABSENT_CONFIRMED", []),
+        evidence_report_id="ter-business-model",
+        assessment_id="assessment-1",
+        correlation_id="corr-business-model",
+    )
+    assert result is None
+    assert dispatcher.calls == []
+
+
+def test_explicit_customer_external_ai_context_blocks_no_ai_gate() -> None:
+    assert _has_authoritative_customer_ai_context(
+        {
+            "confirmedContext": {
+                "statements": [
+                    {
+                        "topic": "external_ai_usage",
+                        "statement": "A hosted external AI service is used.",
+                        "normalizedValue": "true",
+                        "source": "CUSTOMER_CONFIRMED",
+                        "resolutionState": "CONFIRMED",
+                    }
+                ]
+            }
+        }
+    )
+
+
+def test_customer_negative_ai_statement_does_not_block_no_ai_gate() -> None:
+    assert not _has_authoritative_customer_ai_context(
+        {
+            "confirmedContext": {
+                "statements": [
+                    {
+                        "topic": "ai_usage",
+                        "statement": "We do not use generative AI.",
+                        "normalizedValue": "false",
+                        "source": "CUSTOMER_CONFIRMED",
+                        "resolutionState": "CONFIRMED",
+                    }
+                ]
+            }
+        }
+    )
 
 
 

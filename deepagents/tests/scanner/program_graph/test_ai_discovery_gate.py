@@ -2169,3 +2169,75 @@ service.summarize("method", false);
         and node_by_key[edge.source_key].label == "service.summarize"
         for edge in program.edges
     )
+
+
+def test_function_return_receiver_flow_keeps_dynamic_dispatch_technical(tmp_path: Path) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+function pickService() { return service; }
+const alias = pickService();
+const method = "summarize";
+service.summarize("closed", false);
+alias[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_parameter_receiver_flow_keeps_dynamic_dispatch_technical(tmp_path: Path) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+function dispatch(receiver: AiService) {
+  const method = "summarize";
+  receiver[method]("runtime", true);
+}
+service.summarize("closed", false);
+dispatch(service);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_unrelated_helper_receiver_flow_does_not_poison_closed_method(tmp_path: Path) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+function pickRecorder() { return recorder; }
+const unrelated = pickRecorder();
+service.summarize("closed", false);
+""")
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+
+
+def test_resolved_foreign_class_method_does_not_poison_target_closure(tmp_path: Path) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+class OtherService {
+  summarize(text: string, aiEnabled: boolean) { return text; }
+}
+const service = new AiService();
+const other = new OtherService();
+service.summarize("closed", false);
+other.summarize("other", true);
+""")
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
