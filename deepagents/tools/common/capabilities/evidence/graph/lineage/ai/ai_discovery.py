@@ -1905,8 +1905,98 @@ class AIDiscoveryEnricher:
 
         symbol_key = symbol.key
         node_by_key = {node.key: node for node in program.nodes}
+        element_dispatch_nodes = [
+            node
+            for node in program.nodes
+            if node.file_path == relative
+            and node.node_type == "CALL_SITE"
+            and (node.attributes or {}).get("elementDispatch") is True
+        ]
 
-        # Any alias/value-flow escape means direct call-site closure is not established.
+        # Object projections belong to the abstract object, not to one lexical
+        # variable spelling. Build equivalence classes for holder bindings that
+        # share an ALIASES/ASSIGNS value, then lift the same property across that
+        # class. This keeps unrelated objects with the same property isolated.
+        projection_keys: set[str] = {
+            node.key
+            for node in node_by_key.values()
+            if node.file_path == relative
+            and (node.attributes or {}).get("memberProjection") is True
+        }
+        projection_keys.update(
+            str((node.attributes or {}).get("receiverProjectionKey"))
+            for node in element_dispatch_nodes
+            if (node.attributes or {}).get("receiverProjectionKey")
+        )
+        projection_holders = {}
+        for key in projection_keys:
+            if not key.startswith("projection:"):
+                continue
+            holder_key, property_name = key[len("projection:") :].rsplit(
+                ":", 1
+            )
+            projection_holders[holder_key] = property_name
+        projection_parent = {holder: holder for holder in projection_holders}
+
+        def projection_find(key: str) -> str:
+            parent = projection_parent.setdefault(key, key)
+            if parent != key:
+                projection_parent[key] = projection_find(parent)
+            return projection_parent[key]
+
+        def projection_union(left: str, right: str) -> None:
+            left_root = projection_find(left)
+            right_root = projection_find(right)
+            if left_root != right_root:
+                projection_parent[right_root] = left_root
+
+        for edge in program.edges:
+            if edge.edge_type not in {"ALIASES", "ASSIGNS"}:
+                continue
+            if not self._edge_is_trusted(edge):
+                continue
+            source_node = node_by_key.get(edge.source_key)
+            target_node = node_by_key.get(edge.target_key)
+            if (
+                source_node is None
+                or target_node is None
+                or source_node.file_path != relative
+                or target_node.file_path != relative
+                or source_node.node_type not in {"VARIABLE", "PARAMETER"}
+                or target_node.node_type not in {"VARIABLE", "PARAMETER"}
+                or (source_node.attributes or {}).get("memberProjection")
+                or (target_node.attributes or {}).get("memberProjection")
+            ):
+                continue
+            projection_union(source_node.key, target_node.key)
+
+        projection_equivalents: dict[str, set[str]] = {}
+        for projection_key in projection_keys:
+            if not projection_key.startswith("projection:"):
+                continue
+            holder_key, property_name = projection_key[len("projection:") :].rsplit(
+                ":", 1
+            )
+            component = projection_find(holder_key)
+            for candidate in projection_keys:
+                if not candidate.startswith("projection:"):
+                    continue
+                candidate_holder, candidate_property = candidate[
+                    len("projection:") :
+                ].rsplit(":", 1)
+                if (
+                    (
+                        candidate_property == property_name
+                        or candidate_property == "*"
+                        or property_name == "*"
+                    )
+                    and projection_find(candidate_holder) == component
+                ):
+                    projection_equivalents.setdefault(
+                        projection_key, set()
+                    ).add(candidate)
+
+            # Any alias/value-flow escape means direct call-site closure is not established.
         # This catches local aliases, Python aliases, and callbacks represented as
         # PASSES_ARGUMENT without pretending their eventual target is known.
         for edge in program.edges:
@@ -2150,13 +2240,6 @@ class AIDiscoveryEnricher:
             if is_declaration_line(source_line_no):
                 continue
             if symbol.node_type == "METHOD":
-                element_dispatch_nodes = [
-                    node
-                    for node in program.nodes
-                    if node.file_path == relative
-                    and node.node_type == "CALL_SITE"
-                    and (node.attributes or {}).get("elementDispatch") is True
-                ]
                 element_dispatch_lines = {
                     int(node.start_line)
                     for node in element_dispatch_nodes
@@ -2204,11 +2287,18 @@ class AIDiscoveryEnricher:
                                 receiver_projection_key.rsplit(":", 1)[0]
                                 + ":*"
                             )
+                        equivalent_projection_keys = projection_equivalents.get(
+                            receiver_projection_key, set()
+                        )
                         binding_relevant = (
                             receiver_projection_key
                             in relevant_method_receiver_keys
                             or wildcard_projection_key
                             in relevant_method_receiver_keys
+                            or bool(
+                                equivalent_projection_keys
+                                & relevant_method_receiver_keys
+                            )
                         )
                     if (
                         binding_relevant

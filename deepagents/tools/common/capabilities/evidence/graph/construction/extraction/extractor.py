@@ -164,13 +164,36 @@ def _text_normalize_js_receiver(expression: str) -> tuple[str, str]:
 
 
 def _text_computed_receiver_candidates(
-    line: str,
-) -> list[tuple[int, str, str]]:
-    candidates: list[tuple[int, str, str]] = []
-    for dispatch in re.finditer(
-        r"(?:\?\.\s*)?\[[^\]\n]+\]\s*\(", line
-    ):
-        segment = line[: dispatch.start()].rsplit(";", 1)[-1]
+    source: str,
+) -> list[tuple[int, int, str, str]]:
+    """Extract computed dispatch receivers over a bounded source span.
+
+    The scanner needs the complete receiver/key/call shape, not a physical-line
+    approximation. Keep the bracket expression bounded so malformed source cannot
+    make this pass consume the rest of a file; callers treat an unparsed escape as
+    technical uncertainty through the surrounding coverage rules.
+    """
+    candidates: list[tuple[int, int, str, str]] = []
+    dispatch_matches = list(
+        re.finditer(
+            r"(?:\?\.\s*)?\[[^\]]{0,256}\]\s*\(",
+            source,
+            re.DOTALL,
+        )
+    )
+    # A long but balanced computed key is still a real dispatch. Mark it as an
+    # unresolved receiver rather than silently dropping it at the normalizer's
+    # budget boundary.
+    dispatch_matches.extend(
+        re.finditer(
+            r"(?:\?\.\s*)?\[[^\]]{257,4096}\]\s*\(",
+            source,
+            re.DOTALL,
+        )
+    )
+    matched_brackets = {match.start() for match in dispatch_matches}
+    for dispatch in dispatch_matches:
+        segment = re.split(r"[;{}]", source[: dispatch.start()])[-1]
         assignment = re.search(r"(?<![=!<>])=(?!=|>)", segment)
         if assignment:
             segment = segment[assignment.end() :]
@@ -181,7 +204,34 @@ def _text_computed_receiver_candidates(
                 segment = segment[close + 1 :]
         normalized, kind = _text_normalize_js_receiver(segment)
         if normalized:
-            candidates.append((dispatch.start(), normalized, kind))
+            line_no = source.count("\n", 0, dispatch.start()) + 1
+            candidates.append((line_no, dispatch.start(), normalized, kind))
+
+    # Preserve a bounded unresolved frontier for malformed or truncated source
+    # where the closing bracket is absent but the token after it is visibly being
+    # called. This is deliberately limited to lexical/member roots so ordinary
+    # array indexing remains outside the computed-dispatch boundary.
+    for opener in re.finditer(
+        r"(?<![\w$])(?:this|[A-Za-z_$][\w$]*"
+        r"(?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*\[",
+        source,
+    ):
+        bracket_start = opener.end() - 1
+        if bracket_start in matched_brackets:
+            continue
+        tail = source[opener.end() : opener.end() + 4096]
+        if not re.search(
+            r"(?:[A-Za-z_$][\w$]*|['\"`])\s*\(", tail, re.DOTALL
+        ):
+            continue
+        receiver, _kind = _text_normalize_js_receiver(
+            opener.group(0)[:-1].strip()
+        )
+        if receiver:
+            line_no = source.count("\n", 0, bracket_start) + 1
+            candidates.append(
+                (line_no, bracket_start, receiver, "UNRESOLVED_RECEIVER")
+            )
     return candidates
 
 
@@ -900,6 +950,20 @@ class RepositorySemanticExtractor:
                         )
                     )
 
+        computed_dispatches_by_line: dict[
+            int, list[tuple[int, str, str]]
+        ] = {}
+        if is_js_text:
+            for (
+                dispatch_line_no,
+                dispatch_start,
+                receiver,
+                receiver_kind,
+            ) in _text_computed_receiver_candidates(text):
+                computed_dispatches_by_line.setdefault(
+                    dispatch_line_no, []
+                ).append((dispatch_start, receiver, receiver_kind))
+
         for line_no, line in enumerate(source_lines, start=1):
             assignment = re.search(
                 r"\b(?:const|let|var)?\s*([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$.]*)",
@@ -1191,13 +1255,7 @@ class RepositorySemanticExtractor:
                     )
 
                 for dispatch_start, receiver, receiver_kind in (
-                    _text_computed_receiver_candidates(
-                        " ".join(
-                            source_lines[max(0, line_no - 3) : line_no]
-                        )
-                        if re.match(r"\s*(?:\?\.\s*)?\[", line)
-                        else line
-                    )
+                    computed_dispatches_by_line.get(line_no, [])
                 ):
                     receiver_key: str | None
                     receiver_root_key: str | None = None
