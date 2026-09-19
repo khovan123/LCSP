@@ -3291,9 +3291,10 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(null);
       mockRuntimeEvents.recordToolWaitingInput
         .mockRejectedValueOnce(new Error("runtime waiting event write failed"))
-        .mockImplementationOnce(async (...args: unknown[]) => {
+        .mockImplementationOnce((...args: unknown[]) => {
           expect(args[1]).toBe(mockTx);
           durableWaitingEvents += 1;
+          return Promise.resolve();
         });
 
       await expect(

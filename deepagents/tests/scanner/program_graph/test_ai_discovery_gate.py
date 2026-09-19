@@ -1424,6 +1424,60 @@ service["summarize"]("runtime", true);
     assert finding["clarification_owner"] == "TECHNICAL"
 
 
+def test_template_literal_computed_true_call_breaks_false_method_call_set_closure(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+const service = new AiService();
+service.summarize("closed", false);
+service[`summarize`]("runtime", true);
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+
+
+def test_parenthesized_computed_true_call_breaks_false_method_call_set_closure(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+const service = new AiService();
+service.summarize("closed", false);
+(service)["summarize"]("runtime", true);
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
+    assert finding["clarification_owner"] == "TECHNICAL"
+
+
 def test_optional_element_true_call_breaks_false_method_call_set_closure(
     tmp_path: Path,
 ) -> None:
@@ -1535,6 +1589,36 @@ function run() {
     finding = next(
         item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
     )
+    assert finding["clarification_owner"] == "TECHNICAL"
+
+
+def test_second_declarator_shadow_does_not_fabricate_class_method_identity(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(
+        tmp_path,
+        """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+
+const service = new AiService();
+
+function run() {
+  const marker = 1, service = recorder;
+  service.summarize("local-only", true);
+}
+""",
+    )
+
+    assert discovery["gate"] == "AI_UNKNOWN"
+    finding = next(
+        item for item in discovery["findings"] if item["kind"] == "SDK_INVOCATION"
+    )
+    assert finding["clarification_kind"] == "TARGETED_TECHNICAL_REANALYSIS"
     assert finding["clarification_owner"] == "TECHNICAL"
 
 
@@ -1728,6 +1812,24 @@ function unrelated() {
   service.summarize("unrelated-local", true);
 }
 
+function multiDeclaratorShadow() {
+  const marker = 1, service = recorder;
+  service.summarize("multi-shadow", true);
+}
+
+function multilineDeclaratorShadow() {
+  const marker = 1,
+    service = recorder;
+  service.summarize("multiline-shadow", true);
+}
+
+function destructuredShadow() {
+  const { service } = recorder;
+  service.summarize("destructure-shadow", true);
+}
+
+service.summarize("outer-after-shadows", false);
+
 let mutable = new AiService();
 mutable.summarize("before-reassign", false);
 mutable = recorder;
@@ -1765,6 +1867,10 @@ alias.summarize("alias-call", true);
     assert targets_for_marker("param-shadow") == set()
     assert targets_for_marker("local-shadow") == set()
     assert targets_for_marker("unrelated-local") == set()
+    assert targets_for_marker("multi-shadow") == set()
+    assert targets_for_marker("multiline-shadow") == set()
+    assert targets_for_marker("destructure-shadow") == set()
+    assert targets_for_marker("outer-after-shadows") == {method.key}
     assert targets_for_marker("before-reassign") == {method.key}
     assert targets_for_marker("after-reassign") == set()
     assert targets_for_marker("alias-call") == set()
