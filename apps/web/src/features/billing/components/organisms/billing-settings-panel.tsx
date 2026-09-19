@@ -3,14 +3,13 @@
 import {
   BILLING_ESTIMATE_AVAILABILITY,
   BILLING_ORDER_STATUSES,
-  type BillingOrderStatus,
   type BillingOrderView,
 } from "@lcsp/contracts/billing";
 import type { Locale } from "@lcsp/contracts/shared";
-import type { MessageKey } from "@lcsp/i18n";
 import { resolveMessage } from "@lcsp/i18n";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
+import Image from "next/image";
 import {
   CheckIcon,
   Clock3Icon,
@@ -20,7 +19,7 @@ import {
   WalletCardsIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -35,66 +34,92 @@ import {
 } from "@/lib/api/billing-queries";
 import { apiQueryKeys } from "@/lib/api/query-keys";
 
+import { getBillingOrderPresentation } from "../../utils/billing-order-presentation";
 import {
   billingTopUpSchema,
   type BillingTopUpFormValues,
 } from "../../schemas/billing-top-up.schema";
 
-const orderStatusKeys = {
-  [BILLING_ORDER_STATUSES.PENDING_PAYMENT]:
-    "pages.workspace.settingsHub.billing.statuses.pendingPayment",
-  [BILLING_ORDER_STATUSES.CREDITED]:
-    "pages.workspace.settingsHub.billing.statuses.credited",
-  [BILLING_ORDER_STATUSES.EXPIRED]:
-    "pages.workspace.settingsHub.billing.statuses.expired",
-  [BILLING_ORDER_STATUSES.CANCELLED]:
-    "pages.workspace.settingsHub.billing.statuses.cancelled",
-  [BILLING_ORDER_STATUSES.PENDING_RECONCILIATION]:
-    "pages.workspace.settingsHub.billing.statuses.pendingReconciliation",
-} satisfies Record<BillingOrderStatus, MessageKey>;
-
 export function BillingSettingsPanel({ locale }: { locale: Locale }) {
   const walletQuery = useBillingWalletQuery();
-  const historyQuery = useBillingHistoryQuery();
+  const [historyPage, setHistoryPage] = useState(1);
+  const historyQuery = useBillingHistoryQuery(historyPage);
+  const latestHistoryQuery = useBillingHistoryQuery(1);
   const createOrderMutation = useCreateBillingOrderMutation();
   const queryClient = useQueryClient();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [copiedPaymentCode, setCopiedPaymentCode] = useState(false);
-  const retryKey = useRef<string | null>(null);
+  const [retryRequest, setRetryRequest] = useState<{
+    amountVnd: string;
+    idempotencyKey: string;
+  } | null>(null);
   const form = useForm<BillingTopUpFormValues>({
     resolver: zodResolver(billingTopUpSchema),
     defaultValues: { amountVnd: "" },
   });
-  const amountVnd = form.watch("amountVnd");
+  const amountVnd = useWatch({
+    control: form.control,
+    name: "amountVnd",
+  });
   const validAmountVnd = useMemo(
     () =>
       billingTopUpSchema.safeParse({ amountVnd }).success ? amountVnd : "",
     [amountVnd],
   );
   const estimateQuery = useBillingEstimateQuery(validAmountVnd);
-  const pendingHistoryOrder = historyQuery.data?.orders.find(
+  const pendingHistoryOrder = latestHistoryQuery.data?.orders.find(
     (order) =>
       order.status === BILLING_ORDER_STATUSES.PENDING_PAYMENT ||
       order.status === BILLING_ORDER_STATUSES.PENDING_RECONCILIATION,
   );
   const activeOrderId = selectedOrderId ?? pendingHistoryOrder?.id ?? null;
   const orderQuery = useBillingOrderQuery(activeOrderId);
-  const displayedOrder =
-    orderQuery.data ??
-    (selectedOrderId
-      ? historyQuery.data?.orders.find((order) => order.id === selectedOrderId)
-      : pendingHistoryOrder);
+  const historyOrder = selectedOrderId
+    ? latestHistoryQuery.data?.orders.find(
+        (order) => order.id === selectedOrderId,
+      )
+    : pendingHistoryOrder;
+  const displayedOrder = orderQuery.isError
+    ? historyOrder
+    : (orderQuery.data ?? historyOrder);
   const lastSettledOrder = useRef<string | null>(null);
+  const observedHistoryStatuses = useRef(
+    new Map<BillingOrderView["id"], BillingOrderView["status"]>(),
+  );
+
+  useEffect(() => {
+    const orders = [
+      ...(latestHistoryQuery.data?.orders ?? []),
+      ...(historyQuery.data?.orders ?? []),
+    ];
+    let anyOrderSettled = false;
+    for (const order of orders) {
+      const previousStatus = observedHistoryStatuses.current.get(order.id);
+      if (
+        previousStatus &&
+        !getBillingOrderPresentation(previousStatus).isTerminal &&
+        getBillingOrderPresentation(order.status).isTerminal
+      ) {
+        anyOrderSettled = true;
+      }
+      observedHistoryStatuses.current.set(order.id, order.status);
+    }
+    if (anyOrderSettled) {
+      void queryClient.invalidateQueries({
+        queryKey: apiQueryKeys.billing.wallet(),
+      });
+    }
+  }, [historyQuery.data, latestHistoryQuery.data, queryClient]);
 
   useEffect(() => {
     const order = orderQuery.data;
     if (!order) return;
-    const terminal =
-      order.status === BILLING_ORDER_STATUSES.CREDITED ||
-      order.status === BILLING_ORDER_STATUSES.EXPIRED ||
-      order.status === BILLING_ORDER_STATUSES.CANCELLED;
     const settlementKey = `${order.id}:${order.status}`;
-    if (!terminal || lastSettledOrder.current === settlementKey) return;
+    if (
+      !getBillingOrderPresentation(order.status).isTerminal ||
+      lastSettledOrder.current === settlementKey
+    )
+      return;
     lastSettledOrder.current = settlementKey;
     void Promise.all([
       queryClient.invalidateQueries({
@@ -110,14 +135,20 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
   ]);
 
   async function handleSubmit(values: BillingTopUpFormValues) {
-    const idempotencyKey = retryKey.current ?? crypto.randomUUID();
-    retryKey.current = idempotencyKey;
+    const attempt =
+      retryRequest?.amountVnd === values.amountVnd
+        ? retryRequest
+        : {
+            amountVnd: values.amountVnd,
+            idempotencyKey: crypto.randomUUID(),
+          };
+    if (attempt !== retryRequest) setRetryRequest(attempt);
     try {
       const order = await createOrderMutation.mutateAsync({
         amountVnd: values.amountVnd,
-        idempotencyKey,
+        idempotencyKey: attempt.idempotencyKey,
       });
-      retryKey.current = null;
+      setRetryRequest(null);
       setSelectedOrderId(order.id);
       setCopiedPaymentCode(false);
       form.reset(values);
@@ -132,8 +163,13 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
     setCopiedPaymentCode(true);
   }
 
-  const hasLoadError = walletQuery.isError || historyQuery.isError;
-  if (walletQuery.isLoading || historyQuery.isLoading) {
+  const hasLoadError =
+    walletQuery.isError || historyQuery.isError || latestHistoryQuery.isError;
+  if (
+    walletQuery.isLoading ||
+    historyQuery.isLoading ||
+    latestHistoryQuery.isLoading
+  ) {
     return (
       <PanelShell locale={locale}>
         <p role="status" className="text-sm text-muted-foreground">
@@ -168,6 +204,7 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
               onClick={() => {
                 void walletQuery.refetch();
                 void historyQuery.refetch();
+                void latestHistoryQuery.refetch();
               }}
             >
               <RefreshCwIcon aria-hidden="true" data-icon="inline-start" />
@@ -335,7 +372,15 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
         </section>
       )}
 
-      <HistorySection locale={locale} orders={historyQuery.data.orders} />
+      <HistorySection
+        locale={locale}
+        orders={historyQuery.data.orders}
+        page={historyQuery.data.page}
+        pageSize={historyQuery.data.pageSize}
+        totalCount={historyQuery.data.totalCount}
+        isFetching={historyQuery.isFetching}
+        onPageChange={setHistoryPage}
+      />
     </PanelShell>
   );
 }
@@ -485,6 +530,7 @@ function PaymentOrderSection({
   copied: boolean;
   onCopy: () => void;
 }) {
+  const presentation = getBillingOrderPresentation(order.status);
   return (
     <section
       aria-labelledby="billing-order-heading"
@@ -505,8 +551,8 @@ function PaymentOrderSection({
             )}
           </p>
         </div>
-        <Badge variant={statusVariant(order.status)}>
-          {resolveMessage(locale, orderStatusKeys[order.status])}
+        <Badge variant={presentation.badgeVariant}>
+          {resolveMessage(locale, presentation.messageKey)}
         </Badge>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_auto]">
@@ -549,12 +595,15 @@ function PaymentOrderSection({
         </div>
         <div className="flex items-center justify-center rounded-lg border border-border/70 bg-background p-3">
           {order.paymentInstructions.qrCodeUrl ? (
-            <img
+            <Image
               src={order.paymentInstructions.qrCodeUrl}
               alt={resolveMessage(
                 locale,
                 "pages.workspace.settingsHub.billing.qrAlt",
               )}
+              width={160}
+              height={160}
+              unoptimized
               className="size-40 rounded-md bg-white p-2"
             />
           ) : (
@@ -617,7 +666,7 @@ function PaymentOrderSection({
           )}
         </Button>
       </div>
-      {order.status === BILLING_ORDER_STATUSES.PENDING_PAYMENT ? (
+      {presentation.showPendingPaymentHint ? (
         <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
           <Clock3Icon aria-hidden="true" className="size-3.5" />
           {resolveMessage(
@@ -626,7 +675,7 @@ function PaymentOrderSection({
           )}
         </p>
       ) : null}
-      {order.status === BILLING_ORDER_STATUSES.PENDING_RECONCILIATION ? (
+      {presentation.showPendingReconciliationAlert ? (
         <Alert className="mt-4">
           <AlertTitle>
             {resolveMessage(
@@ -649,10 +698,21 @@ function PaymentOrderSection({
 function HistorySection({
   locale,
   orders,
+  page,
+  pageSize,
+  totalCount,
+  isFetching,
+  onPageChange,
 }: {
   locale: Locale;
   orders: BillingOrderView[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  isFetching: boolean;
+  onPageChange: (page: number) => void;
 }) {
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   return (
     <section aria-labelledby="billing-history-heading" className="mt-4">
       <h3 id="billing-history-heading" className="text-sm font-medium">
@@ -716,8 +776,15 @@ function HistorySection({
                   </td>
                   <td className="px-4 py-3 font-mono">{order.paymentCode}</td>
                   <td className="px-4 py-3">
-                    <Badge variant={statusVariant(order.status)}>
-                      {resolveMessage(locale, orderStatusKeys[order.status])}
+                    <Badge
+                      variant={
+                        getBillingOrderPresentation(order.status).badgeVariant
+                      }
+                    >
+                      {resolveMessage(
+                        locale,
+                        getBillingOrderPresentation(order.status).messageKey,
+                      )}
                     </Badge>
                   </td>
                 </tr>
@@ -726,6 +793,47 @@ function HistorySection({
           </table>
         </div>
       )}
+      {totalCount > 0 ? (
+        <nav
+          aria-label={resolveMessage(
+            locale,
+            "pages.workspace.settingsHub.billing.historyTitle",
+          )}
+          className="mt-3 flex flex-wrap items-center justify-end gap-3"
+        >
+          <span aria-live="polite" className="text-xs text-muted-foreground">
+            {resolveMessage(
+              locale,
+              "pages.workspace.settingsHub.billing.historyPage",
+            )}{" "}
+            {page} / {totalPages}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={page <= 1 || isFetching}
+            onClick={() => onPageChange(page - 1)}
+          >
+            {resolveMessage(
+              locale,
+              "pages.workspace.settingsHub.billing.previousPage",
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={page >= totalPages || isFetching}
+            onClick={() => onPageChange(page + 1)}
+          >
+            {resolveMessage(
+              locale,
+              "pages.workspace.settingsHub.billing.nextPage",
+            )}
+          </Button>
+        </nav>
+      ) : null}
     </section>
   );
 }
@@ -746,18 +854,6 @@ function Instruction({ label, value }: { label: string; value: string }) {
       <p className="mt-1 break-words font-medium">{value || "—"}</p>
     </div>
   );
-}
-
-function statusVariant(
-  status: BillingOrderStatus,
-): "default" | "secondary" | "destructive" {
-  if (status === BILLING_ORDER_STATUSES.CREDITED) return "default";
-  if (
-    status === BILLING_ORDER_STATUSES.EXPIRED ||
-    status === BILLING_ORDER_STATUSES.CANCELLED
-  )
-    return "destructive";
-  return "secondary";
 }
 
 function formatVnd(value: string, locale: Locale) {

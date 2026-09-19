@@ -1171,6 +1171,9 @@ export const enPages = {
           "Payment was received for review but could not be settled automatically. We will update the order after reconciliation.",
         historyTitle: "Top-up history",
         historyEmpty: "No top-up history yet.",
+        historyPage: "Page",
+        previousPage: "Previous page",
+        nextPage: "Next page",
         statusLabel: "Status",
         statuses: {
           pendingPayment: "Pending payment",

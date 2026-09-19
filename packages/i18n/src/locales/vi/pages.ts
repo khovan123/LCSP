@@ -1177,6 +1177,9 @@ export const viPages = {
           "Khoản thanh toán đã được nhận để kiểm tra nhưng chưa thể tự động ghi có. Đơn hàng sẽ được cập nhật sau khi đối soát.",
         historyTitle: "Lịch sử nạp tiền",
         historyEmpty: "Chưa có lịch sử nạp tiền.",
+        historyPage: "Trang",
+        previousPage: "Trang trước",
+        nextPage: "Trang sau",
         statusLabel: "Trạng thái",
         statuses: {
           pendingPayment: "Chờ thanh toán",

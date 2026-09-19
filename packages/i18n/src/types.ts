@@ -1080,6 +1080,9 @@ export type PagesMessages = {
         pendingReconciliationDescription: string;
         historyTitle: string;
         historyEmpty: string;
+        historyPage: string;
+        previousPage: string;
+        nextPage: string;
         statusLabel: string;
         statuses: {
           pendingPayment: string;

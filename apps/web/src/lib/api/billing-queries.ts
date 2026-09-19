@@ -23,6 +23,14 @@ export function useBillingHistoryQuery(page = 1, pageSize = 20) {
   return useQuery({
     queryKey: apiQueryKeys.billing.history(page, pageSize),
     queryFn: () => getBillingHistory({ page, pageSize }),
+    refetchInterval: (query) =>
+      query.state.data?.orders.some(
+        (order) =>
+          order.status === BILLING_ORDER_STATUSES.PENDING_PAYMENT ||
+          order.status === BILLING_ORDER_STATUSES.PENDING_RECONCILIATION,
+      )
+        ? 5_000
+        : false,
   });
 }
 
@@ -39,11 +47,16 @@ export function useBillingOrderQuery(orderId: string | null) {
     queryKey: apiQueryKeys.billing.order(orderId ?? ""),
     queryFn: () => getBillingOrder(orderId as string),
     enabled: Boolean(orderId),
-    refetchInterval: (query) =>
-      query.state.data?.status === BILLING_ORDER_STATUSES.PENDING_PAYMENT ||
-      query.state.data?.status === BILLING_ORDER_STATUSES.PENDING_RECONCILIATION
+    retry: false,
+    refetchInterval: (query) => {
+      if (query.state.error) return false;
+      return query.state.data?.status ===
+        BILLING_ORDER_STATUSES.PENDING_PAYMENT ||
+        query.state.data?.status ===
+          BILLING_ORDER_STATUSES.PENDING_RECONCILIATION
         ? 5_000
-        : false,
+        : false;
+    },
   });
 }
 
