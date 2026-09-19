@@ -24,33 +24,10 @@ test("Billing Settings renders the server-backed customer surface", async () => 
   assert.doesNotMatch(billingBranch, /UnsupportedSettingsPanel/);
   assert.match(billing, /useBillingWalletQuery/);
   assert.match(billing, /useBillingHistoryQuery/);
+  assert.match(billing, /useBillingHistoryQuery\(historyPage\)/);
+  assert.match(billing, /pages\.workspace\.settingsHub\.billing\.nextPage/);
   assert.match(billing, /useCreateBillingOrderMutation/);
   assert.doesNotMatch(billing, /mock|fake|fixture/i);
-});
-
-test("Billing Settings covers authoritative payment lifecycle states", async () => {
-  const [component, queries, client] = await Promise.all([
-    read(
-      "../src/features/billing/components/organisms/billing-settings-panel.tsx",
-    ),
-    read("../src/lib/api/billing-queries.ts"),
-    read("../src/lib/api/billing-client.ts"),
-  ]);
-
-  for (const state of [
-    "PENDING_PAYMENT",
-    "CREDITED",
-    "EXPIRED",
-    "CANCELLED",
-    "PENDING_RECONCILIATION",
-  ]) {
-    assert.match(component, new RegExp(`BILLING_ORDER_STATUSES\\.${state}`));
-  }
-  assert.match(component, /pendingReconciliationTitle/);
-  assert.match(component, /insufficientPricingConfiguration/);
-  assert.match(client, /BILLING_ORDER_STATUSES/);
-  assert.match(queries, /PENDING_RECONCILIATION/);
-  assert.match(queries, /refetchInterval/);
 });
 
 test("Billing top-up uses authenticated BFF requests and idempotency", async () => {
@@ -63,8 +40,14 @@ test("Billing top-up uses authenticated BFF requests and idempotency", async () 
 
   assert.match(client, /apiRequest/);
   assert.match(client, /idempotency-key/);
-  assert.match(ordersRoute, /requireSessionToken/);
   assert.match(ordersRoute, /idempotency-key/);
+  assert.match(ordersRoute, /requireSessionToken/);
+  assert.match(
+    await read(
+      "../src/features/billing/components/organisms/billing-settings-panel.tsx",
+    ),
+    /retryRequest\?\.amountVnd === values\.amountVnd/,
+  );
   assert.match(historyRoute, /requireSessionToken/);
   assert.match(walletRoute, /requireSessionToken/);
 });

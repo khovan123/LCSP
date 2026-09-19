@@ -3,10 +3,10 @@ import type { EffectiveRuntimeModel } from "./runtime-model.ts";
 
 export const PREPAID_BILLING_CONFIG = {
   currency: "VND",
-  minimumAmountVnd: 10_000n,
-  maximumAmountVnd: 10_000_000n,
-  amountStepVnd: 1_000n,
-  creditUnitsPerVnd: 1n,
+  minimumAmountVnd: "10000",
+  maximumAmountVnd: "10000000",
+  amountStepVnd: "1000",
+  creditUnitsPerVnd: "1",
   orderExpiryHours: 24,
   paymentCodePrefix: "LCSP",
 } as const;
