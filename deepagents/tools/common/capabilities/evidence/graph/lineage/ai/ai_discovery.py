@@ -2039,15 +2039,53 @@ class AIDiscoveryEnricher:
             queue: list[tuple[str, int]] = []
             seen_flow: set[str] = set()
             flow_incomplete = False
-            for receiver in relevant_method_receivers:
-                for node in node_by_key.values():
-                    if node.file_path == relative and node.label == receiver:
-                        queue.append((node.key, 0))
+            reached_receiver_call_names: set[str] = set()
+            seeded_binding_keys = {
+                str((call.attributes or {}).get("receiverBindingKey"))
+                for call in call_nodes
+                if (call.attributes or {}).get("receiverBindingKey")
+            }
+            # Every concrete instance of the owning class is a governed receiver
+            # for the method, including a sibling instance created in the same
+            # file. Seed those declaration bindings by line rather than by label
+            # so unrelated lexical shadows cannot enter the closure.
+            if owner_class:
+                instance_declaration_re = re.compile(
+                    rf"\b([A-Za-z_$][\w$]*)\s*"
+                    rf"(?:\:\s*[^=,;]+)?=\s*new\s+"
+                    rf"{re.escape(owner_class)}\s*\("
+                )
+                for match in instance_declaration_re.finditer(source_text):
+                    line_no = source_text.count("\n", 0, match.start()) + 1
+                    name = match.group(1)
+                    seeded_binding_keys.update(
+                        node.key
+                        for node in program.nodes
+                        if node.file_path == relative
+                        and node.node_type == "VARIABLE"
+                        and node.label == name
+                        and int(node.start_line or 0) == line_no
+                    )
+            if seeded_binding_keys:
+                queue.extend((key, 0) for key in seeded_binding_keys)
+            else:
+                for receiver in relevant_method_receivers:
+                    for node in node_by_key.values():
+                        if node.file_path == relative and node.label == receiver:
+                            queue.append((node.key, 0))
             while queue:
                 current, depth = queue.pop()
                 if current in seen_flow:
                     continue
                 seen_flow.add(current)
+                current_node = node_by_key.get(current)
+                if current_node is not None and not self._node_is_trusted(current_node):
+                    if current_node.node_type == "RETURN_VALUE":
+                        flow_incomplete = True
+                    else:
+                        continue
+                if current_node is not None and current_node.node_type == "CALL_SITE":
+                    reached_receiver_call_names.add(current_node.label)
                 if depth >= _MAX_GRAPH_HOPS:
                     flow_incomplete = flow_incomplete or bool(outgoing.get(current))
                     continue
@@ -2116,6 +2154,13 @@ class AIDiscoveryEnricher:
                         # This receiver can reach the governed method, but element
                         # dispatch has no canonical PGE identity. It can only veto
                         # closure; unrelated receiver dispatch is outside this call set.
+                        return unresolved()
+                for result_call in re.finditer(
+                    r"(?<![\w$.])(?P<call>[A-Za-z_$][\w$]*)\s*\([^\n]*\)"
+                    r"\s*(?:\?\.\s*)?\[[^\]\n]+\]\s*\(",
+                    raw_line.split("//", 1)[0],
+                ):
+                    if result_call.group("call") in reached_receiver_call_names:
                         return unresolved()
             structural = _scrub_structure(raw_line)
             for reference in re.finditer(
