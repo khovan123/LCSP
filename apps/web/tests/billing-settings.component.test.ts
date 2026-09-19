@@ -160,6 +160,16 @@ function mockBillingApi(fixture: BillingFixture) {
         amountVnd: payload.amount_vnd,
         idempotencyKey,
       });
+      const existingRequest = fixture.createRequests
+        .slice(0, -1)
+        .find((request) => request.idempotencyKey === idempotencyKey);
+      if (existingRequest) {
+        const existingOrder = fixture.orders.find(
+          (candidate) => candidate.amountVnd === existingRequest.amountVnd,
+        );
+        assert.ok(existingOrder, "idempotent replay should find its order");
+        return success(existingOrder);
+      }
       const createdOrder = order(
         `created-${fixture.createRequests.length}`,
         BILLING_ORDER_STATUSES.PENDING_PAYMENT,
@@ -441,6 +451,49 @@ test("creating another order requires confirmation while an order is pending", a
   );
   assert.equal(fixture.createRequests[0]?.amountVnd, "20000");
   assert.ok(fixture.createRequests[0]?.idempotencyKey);
+});
+
+test("successful top-up clears the amount and a new submission starts a new intent", async (context) => {
+  const fixture = fixtureFor([]);
+  const container = await renderBilling(fixture, context);
+  await waitFor(
+    () => container.querySelector("#billing-amount-vnd") !== null,
+    "expected the top-up form to finish loading",
+  );
+
+  await setAmount(container, "20000");
+  await clickButton(container, "Create payment order");
+  await waitFor(
+    () => fixture.createRequests.length === 1 && fixture.orders.length === 1,
+    "expected the first submit to create one server order",
+  );
+  await waitFor(
+    () =>
+      container.querySelector<HTMLInputElement>("#billing-amount-vnd")
+        ?.value === "",
+    "successful order creation should clear the amount input",
+  );
+
+  await clickButton(container, "Create another order");
+  assert.equal(
+    fixture.createRequests.length,
+    1,
+    "submitting the reset empty form must not create another order",
+  );
+
+  await setAmount(container, "20000");
+  await clickButton(container, "Create another order");
+  await clickButton(container, "Confirm another order");
+  await waitFor(
+    () => fixture.createRequests.length === 2 && fixture.orders.length === 2,
+    "expected a deliberately entered new amount to create another order",
+  );
+
+  assert.notEqual(
+    fixture.createRequests[1]?.idempotencyKey,
+    fixture.createRequests[0]?.idempotencyKey,
+    "a new top-up intent should use a fresh idempotency key",
+  );
 });
 
 test("a credited non-selected order refreshes history and prepaid balance while the selected order stays pending", async (context) => {
