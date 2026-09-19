@@ -2178,9 +2178,20 @@ class AIDiscoveryEnricher:
                     constructor_class = str(
                         attributes.get("constructorClass") or ""
                     )
-                    if (
+                    receiver_projection_key = str(
+                        attributes.get("receiverProjectionKey") or ""
+                    )
+                    binding_relevant = (
                         receiver_key in relevant_method_receiver_keys
                         or receiver_root_key in relevant_method_receiver_keys
+                    )
+                    if receiver_kind == "MEMBER_PROJECTION":
+                        binding_relevant = (
+                            receiver_projection_key
+                            in relevant_method_receiver_keys
+                        )
+                    if (
+                        binding_relevant
                         or (
                             receiver_kind == "CALL_RESULT"
                             and receiver_call_name in reached_receiver_call_names

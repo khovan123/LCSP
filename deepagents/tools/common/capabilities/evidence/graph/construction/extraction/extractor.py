@@ -97,6 +97,94 @@ def _text_split_top_level(value: str, delimiter: str) -> list[str]:
     return parts
 
 
+def _text_strip_js_outer_parentheses(expression: str) -> str:
+    value = expression.strip()
+    while value.startswith("(") and value.endswith(")"):
+        depth = 0
+        closes_at_end = True
+        quote: str | None = None
+        escaped = False
+        for index, char in enumerate(value):
+            if quote is not None:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+                continue
+            if char in {"'", '"', "`"}:
+                quote = char
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0 and index != len(value) - 1:
+                    closes_at_end = False
+                    break
+        if depth != 0 or not closes_at_end:
+            break
+        value = value[1:-1].strip()
+    return value
+
+
+def _text_normalize_js_receiver(expression: str) -> tuple[str, str]:
+    value = expression.strip()
+    for _ in range(4):
+        previous = value
+        value = _text_strip_js_outer_parentheses(value)
+        value = re.sub(r"^<[^>\n]+>\s*", "", value)
+        value = re.sub(
+            r"\s+(?:as|satisfies)\s+"
+            r"[A-Za-z_$][\w$<>,.\[\]\s|&?]*$",
+            "",
+            value,
+        ).strip()
+        value = re.sub(r"!\s*$", "", value).strip()
+        value = _text_strip_js_outer_parentheses(value)
+        if value == previous:
+            break
+    if value == "this":
+        return value, "THIS"
+    if re.fullmatch(
+        r"(?:this|[A-Za-z_$][\w$]*)(?:\s*\.\s*[A-Za-z_$][\w$]*)*",
+        value,
+    ):
+        return value, "MEMBER_PROJECTION" if "." in value else "LEXICAL"
+    if re.fullmatch(
+        r"new\s+[A-Za-z_$][\w$]*\s*\([^()\n]*\)", value
+    ):
+        return value, "NEW_INSTANCE"
+    if re.fullmatch(
+        r"(?:[A-Za-z_$][\w$]*\.)*[A-Za-z_$][\w$]*\s*\([^()\n]*\)",
+        value,
+    ):
+        return value, "CALL_RESULT"
+    return value, "UNRESOLVED_RECEIVER"
+
+
+def _text_computed_receiver_candidates(
+    line: str,
+) -> list[tuple[int, str, str]]:
+    candidates: list[tuple[int, str, str]] = []
+    for dispatch in re.finditer(
+        r"(?:\?\.\s*)?\[[^\]\n]+\]\s*\(", line
+    ):
+        segment = line[: dispatch.start()].rsplit(";", 1)[-1]
+        assignment = re.search(r"(?<![=!<>])=(?!=|>)", segment)
+        if assignment:
+            segment = segment[assignment.end() :]
+        segment = re.sub(r"^\s*(?:return|throw)\s+", "", segment)
+        if re.match(r"\s*(?:if|while|for|switch)\b", segment):
+            close = segment.rfind(")")
+            if close >= 0:
+                segment = segment[close + 1 :]
+        normalized, kind = _text_normalize_js_receiver(segment)
+        if normalized:
+            candidates.append((dispatch.start(), normalized, kind))
+    return candidates
+
+
 class RepositorySemanticExtractor:
     """Scan every supported source file before any law/LLM-driven investigation."""
     def __init__(self, workspace_path: str | Path) -> None:
@@ -877,6 +965,61 @@ class RepositorySemanticExtractor:
                         semantic_types=semantic_types_for_identifier(left_name),
                     )
                 )
+                object_literal = re.fullmatch(
+                    r"\s*\{(.*)\}\s*", rhs_expression
+                )
+                if object_literal:
+                    for property_part in _text_split_top_level(
+                        object_literal.group(1), ","
+                    ):
+                        property_match = re.fullmatch(
+                            r"\s*([A-Za-z_$][\w$]*)\s*(?::\s*(.+))?\s*",
+                            property_part,
+                        )
+                        if not property_match:
+                            continue
+                        property_name = property_match.group(1)
+                        property_value = (
+                            property_match.group(2) or property_name
+                        )
+                        projection_key = (
+                            f"projection:{left_key}:{property_name}"
+                        )
+                        program.add_node(
+                            SemanticNodeFact(
+                                projection_key,
+                                "VARIABLE",
+                                f"{left_name}.{property_name}",
+                                relative,
+                                line_no,
+                                line_no,
+                                attributes={"memberProjection": True},
+                            )
+                        )
+                        for source in js_expression_references(property_value):
+                            source_key = js_binding_key(source, line_no)
+                            if not source_key.startswith("param:"):
+                                program.add_node(
+                                    SemanticNodeFact(
+                                        source_key,
+                                        "VARIABLE",
+                                        source,
+                                        relative,
+                                        line_no,
+                                        line_no,
+                                        semantic_types=semantic_types_for_identifier(
+                                            source
+                                        ),
+                                    )
+                                )
+                            program.add_edge(
+                                SemanticEdgeFact(
+                                    "ALIASES",
+                                    source_key,
+                                    projection_key,
+                                    attributes={"property": property_name},
+                                )
+                            )
                 for source in js_expression_references(rhs_expression):
                     if source == left_name:
                         continue
@@ -1047,89 +1190,70 @@ class RepositorySemanticExtractor:
                         name, line_no, line, call.start(1), targets[0]
                     )
 
-                for element_call in re.finditer(
-                    r"(?<![\w$.])(?P<receiver>\(*\s*[A-Za-z_$][\w$]*"
-                    r"(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*\)*)"
-                    r"\s*(?:\?\.\s*)?\[[^\]\n]+\]\s*\(",
-                    line,
+                for dispatch_start, receiver, receiver_kind in (
+                    _text_computed_receiver_candidates(line)
                 ):
-                    receiver = re.sub(
-                        r"[\s()]", "", element_call.group("receiver")
-                    )
-                    receiver_kind = "LEXICAL"
                     receiver_key: str | None
                     receiver_root_key: str | None = None
-                    if receiver == "this":
+                    receiver_call_name: str | None = None
+                    constructor_class: str | None = None
+                    receiver_projection_key: str | None = None
+                    if receiver_kind == "THIS":
                         owner_class = enclosing_class(line_no)
-                        receiver_kind = "THIS"
                         receiver_key = (
                             f"this:{owner_class.name}"
                             if owner_class is not None
                             else None
                         )
-                    else:
+                    elif receiver_kind == "MEMBER_PROJECTION":
                         receiver_root = receiver.split(".", 1)[0]
                         receiver_key = js_binding_key(receiver_root, line_no)
-                        if "." in receiver:
-                            receiver_kind = "MEMBER_PROJECTION"
-                            receiver_root_key = receiver_key
-                    self._text_call(
-                        program,
-                        relative,
-                        line_no,
-                        f"{receiver}[computed:{element_call.start()}]",
-                        line,
-                        mkey,
-                        http_clients.get(line_no, set()),
-                        receiver_binding_key=receiver_key,
-                        element_dispatch=True,
-                        receiver_kind=receiver_kind,
-                        receiver_root_binding_key=receiver_root_key,
-                    )
-
-                for result_call in re.finditer(
-                    r"(?P<expression>(?:new\s+[A-Za-z_$][\w$]*\s*"
-                    r"\([^()\n]*\)|(?:[A-Za-z_$][\w$]*\.)*"
-                    r"[A-Za-z_$][\w$]*\s*\([^()\n]*\)))"
-                    r"\s*(?:\?\.\s*)?\[[^\]\n]+\]\s*\(",
-                    line,
-                ):
-                    expression = result_call.group("expression").strip()
-                    constructor = re.match(
-                        r"new\s+([A-Za-z_$][\w$]*)", expression
-                    )
-                    if constructor:
-                        receiver_kind = "NEW_INSTANCE"
-                        receiver_key = None
-                        receiver_root_key = None
-                        receiver_call_name = None
-                        constructor_class = constructor.group(1)
-                    else:
-                        receiver_kind = "CALL_RESULT"
+                        receiver_root_key = receiver_key
+                        receiver_projection_key = (
+                            f"projection:{receiver_key}:{receiver.split('.', 1)[1]}"
+                        )
+                    elif receiver_kind == "LEXICAL":
+                        receiver_key = js_binding_key(receiver, line_no)
+                    elif receiver_kind == "CALL_RESULT":
                         receiver_call_name = re.sub(
-                            r"\s*\([^()\n]*\)\s*$", "", expression
+                            r"\s*\([^()\n]*\)\s*$", "", receiver
                         )
                         receiver_root = receiver_call_name.split(".", 1)[0]
                         receiver_key = js_binding_key(receiver_root, line_no)
                         receiver_root_key = receiver_key
-                        constructor_class = None
+                    elif receiver_kind == "NEW_INSTANCE":
+                        receiver_key = None
+                        constructor = re.match(
+                            r"new\s+([A-Za-z_$][\w$]*)", receiver
+                        )
+                        constructor_class = (
+                            constructor.group(1) if constructor else None
+                        )
+                    else:
+                        receiver_key = None
+                        root = re.match(r"(?:this|[A-Za-z_$][\w$]*)", receiver)
+                        if root:
+                            receiver_root_key = js_binding_key(
+                                root.group(0), line_no
+                            )
                     self._text_call(
                         program,
                         relative,
                         line_no,
-                        f"{expression}[computed:{result_call.start()}]",
+                        f"{receiver}[computed:{dispatch_start}]",
                         line,
                         mkey,
                         http_clients.get(line_no, set()),
                         receiver_binding_key=receiver_key,
                         element_dispatch=True,
                         receiver_kind=receiver_kind,
-                        receiver_call_name=receiver_call_name,
                         receiver_root_binding_key=receiver_root_key,
+                        receiver_call_name=receiver_call_name,
+                        receiver_projection_key=receiver_projection_key,
                         constructor_class=constructor_class,
                     )
 
-    def _text_call(self, program: SemanticProgram, relative: str, line: int, name: str, body: str, owner: str, http_clients: set[str], *, resolves_to: str | None = None, receiver_binding_key: str | None = None, element_dispatch: bool = False, receiver_kind: str | None = None, receiver_call_name: str | None = None, receiver_root_binding_key: str | None = None, constructor_class: str | None = None) -> None:
+    def _text_call(self, program: SemanticProgram, relative: str, line: int, name: str, body: str, owner: str, http_clients: set[str], *, resolves_to: str | None = None, receiver_binding_key: str | None = None, element_dispatch: bool = False, receiver_kind: str | None = None, receiver_call_name: str | None = None, receiver_root_binding_key: str | None = None, receiver_projection_key: str | None = None, constructor_class: str | None = None) -> None:
         lower = name.lower(); ntype, attrs = _call_type(lower, http_clients); key = f"call:{relative}:{line}:{name}"
         if receiver_binding_key:
             attrs = {**attrs, "receiverBindingKey": receiver_binding_key}
@@ -1139,6 +1263,7 @@ class RepositorySemanticExtractor:
             ("receiverKind", receiver_kind),
             ("receiverCallName", receiver_call_name),
             ("receiverRootBindingKey", receiver_root_binding_key),
+            ("receiverProjectionKey", receiver_projection_key),
             ("constructorClass", constructor_class),
         ):
             if value:

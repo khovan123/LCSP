@@ -2590,5 +2590,123 @@ const factory = new Factory();
 const method = "summarize";
 service.summarize("closed", false);
 factory.pickService()[method]("foreign", true);
+    """)
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+
+
+def test_asserted_receiver_wrapper_keeps_dynamic_dispatch_technical(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const method = "summarize";
+service.summarize("closed", false);
+(service as AiService)[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_nonnull_receiver_wrapper_keeps_dynamic_dispatch_technical(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const method = "summarize";
+service.summarize("closed", false);
+service![method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_grouped_factory_call_result_keeps_dynamic_dispatch_technical(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+class Factory {
+  pickService() {
+    return service;
+  }
+}
+const service = new AiService();
+const factory = new Factory();
+const method = "summarize";
+service.summarize("closed", false);
+(factory.pickService())[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_grouped_owner_constructor_result_keeps_dynamic_dispatch_technical(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const method = "summarize";
+service.summarize("closed", false);
+(new AiService())[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_mixed_object_foreign_member_projection_does_not_poison_closed_method(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const recorder = new LocalRecorder();
+const holder = { service, recorder };
+const method = "flush";
+service.summarize("closed", false);
+holder.recorder[method]();
 """)
     assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+
+
+def test_mixed_object_governed_member_projection_keeps_dynamic_dispatch_technical(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const recorder = new LocalRecorder();
+const holder = { service: service, recorder: recorder };
+const method = "summarize";
+service.summarize("closed", false);
+holder.service[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
