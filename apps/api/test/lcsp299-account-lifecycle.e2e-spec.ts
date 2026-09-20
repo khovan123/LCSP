@@ -34,9 +34,9 @@ import { RbacGuard } from "../src/platform/rbac/rbac.guard.js";
 import { RbacContextLoader } from "../src/platform/rbac/rbac-context.loader.js";
 import { RbacPreflightService } from "../src/platform/rbac/rbac-preflight.service.js";
 import { RBAC_DECISIONS } from "@lcsp/contracts/rbac";
-import { AdminUsersController } from "../src/modules/auth/presentation/http/admin-users.controller.js";
-import { AdminAccountReadService } from "../src/modules/auth/application/services/admin/admin-account-read.service.js";
-import { AdminAccountCommandService } from "../src/modules/auth/application/services/admin/admin-account-command.service.js";
+import { AdminUsersController } from "../src/modules/admin/presentation/http/admin-users.controller.js";
+import { AdminAccountReadService } from "../src/modules/admin/application/services/admin-account-read.service.js";
+import { AdminAccountCommandService } from "../src/modules/admin/application/services/admin-account-command.service.js";
 import { AuthAuditService } from "../src/modules/auth/application/services/auth/auth-audit.service.js";
 import { PrismaAuthorizationDecisionRepository } from "../src/platform/rbac/prisma-authorization-decision.repository.js";
 import {

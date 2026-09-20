@@ -18,8 +18,8 @@ import {
   LEGAL_RULE_LIFECYCLE_STATUSES,
 } from "@lcsp/contracts/legal-rule-catalog";
 
-import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
-import { toPrismaLegalRuleLifecycleStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
+import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
+import { toPrismaLegalRuleLifecycleStatus } from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
 
 const ADMIN_AUDIT_EVENT_TYPES_LIST = [
   AUTH_AUDIT_EVENT_TYPES.authAdminUserSuspended,

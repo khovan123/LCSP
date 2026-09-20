@@ -11,9 +11,9 @@ import {
   type AuthUserRole,
   type AuthAccountStatus,
 } from "@lcsp/contracts/auth";
-import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
-import { problemException } from "../../../../../platform/problems/problem-factory.js";
-import { AUTH_RECORD_TYPES } from "../../../infrastructure/persistence/auth-record.persistence.js";
+import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../platform/problems/problem-factory.js";
+import { AUTH_RECORD_TYPES } from "../../../auth/infrastructure/persistence/auth-record.persistence.js";
 import { parseListQuery } from "./admin-account.validation.js";
 
 const IDENTITY_SELECT = {
