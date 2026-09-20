@@ -449,6 +449,79 @@ test("renders AI usage roles and unresolved evidence states", async () => {
 });
 
 test("renders omitted AI usage metadata when the projection reports overflow", async () => {
+  const container = await renderGraphFirstDetailWithPaths({
+    omitted_usage_flow_count: 3,
+    usage_group_count: 10,
+    rendered_usage_group_count: 4,
+    omitted_usage_group_count: 6,
+    usage_flow_groups: [
+      renderedOverflowGroup(0),
+      ...Array.from({ length: 4 }, (_, index) => omittedGroupPreview(index)),
+    ],
+  });
+
+  assert.match(
+    container.textContent ?? "",
+    /Additional governed AI usage paths|Có thêm đường dẫn sử dụng AI/,
+  );
+  assert.match(container.textContent ?? "", /Module B -> AI_MODEL_INVOCATION/);
+  assert.match(container.textContent ?? "", /5 hidden flows|5 luồng đang ẩn/);
+  assert.match(
+    container.textContent ?? "",
+    /3 more hidden groups|3 nhóm ẩn khác/,
+  );
+});
+
+test("counts all omitted groups when rendered overflow consumes every visible preview slot", async () => {
+  const container = await renderGraphFirstDetailWithPaths({
+    omitted_usage_flow_count: 10,
+    usage_group_count: 14,
+    rendered_usage_group_count: 4,
+    omitted_usage_group_count: 6,
+    usage_flow_groups: [
+      ...Array.from({ length: 4 }, (_, index) => renderedOverflowGroup(index)),
+      ...Array.from({ length: 4 }, (_, index) => omittedGroupPreview(index)),
+    ],
+  });
+
+  assert.match(
+    container.textContent ?? "",
+    /Module B 3 -> AI_MODEL_INVOCATION/,
+  );
+  assert.doesNotMatch(
+    container.textContent ?? "",
+    /Hidden module 0 -> AI_MODEL_INVOCATION/,
+  );
+  assert.match(
+    container.textContent ?? "",
+    /6 more hidden groups|6 nhóm ẩn khác/,
+  );
+});
+
+test("subtracts only visible fully omitted group previews from the remaining group count", async () => {
+  const container = await renderGraphFirstDetailWithPaths({
+    omitted_usage_flow_count: 10,
+    usage_group_count: 10,
+    rendered_usage_group_count: 0,
+    omitted_usage_group_count: 6,
+    usage_flow_groups: Array.from({ length: 4 }, (_, index) =>
+      omittedGroupPreview(index),
+    ),
+  });
+
+  assert.match(
+    container.textContent ?? "",
+    /Hidden module 3 -> AI_MODEL_INVOCATION/,
+  );
+  assert.match(
+    container.textContent ?? "",
+    /2 more hidden groups|2 nhóm ẩn khác/,
+  );
+});
+
+async function renderGraphFirstDetailWithPaths(
+  paths: Partial<(typeof detail)["paths"]>,
+) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -461,51 +534,45 @@ test("renders omitted AI usage metadata when the projection reports overflow", a
           ...detail,
           paths: {
             ...detail.paths,
-            omitted_usage_flow_count: 3,
-            usage_group_count: 10,
-            rendered_usage_group_count: 4,
-            omitted_usage_group_count: 6,
-            usage_flow_groups: [
-              {
-                key: "module-b",
-                label: "Module B -> AI_MODEL_INVOCATION",
-                source_node_id: "module:b",
-                source_label: "Module B",
-                provider_label: null,
-                gateway_label: null,
-                usage_flow_count: 6,
-                rendered_usage_flow_count: 1,
-                omitted_usage_flow_count: 5,
-              },
-              ...Array.from({ length: 4 }, (_, index) => ({
-                key: `hidden-${index}`,
-                label: `Hidden module ${index} -> AI_MODEL_INVOCATION`,
-                source_node_id: `module:hidden-${index}`,
-                source_label: `Hidden module ${index}`,
-                provider_label: null,
-                gateway_label: null,
-                usage_flow_count: 1,
-                rendered_usage_flow_count: 0,
-                omitted_usage_flow_count: 1,
-              })),
-            ],
+            ...paths,
           },
         },
       }),
     ),
   );
+  return container;
+}
 
-  assert.match(
-    container.textContent ?? "",
-    /Additional governed AI usage paths|Có thêm đường dẫn sử dụng AI/,
-  );
-  assert.match(container.textContent ?? "", /Module B -> AI_MODEL_INVOCATION/);
-  assert.match(container.textContent ?? "", /5 hidden flows|5 luồng đang ẩn/);
-  assert.match(
-    container.textContent ?? "",
-    /2 more hidden groups|2 nhóm ẩn khác/,
-  );
-});
+function renderedOverflowGroup(index: number) {
+  return {
+    key: `module-b-${index}`,
+    label:
+      index === 0
+        ? "Module B -> AI_MODEL_INVOCATION"
+        : `Module B ${index} -> AI_MODEL_INVOCATION`,
+    source_node_id: `module:b-${index}`,
+    source_label: index === 0 ? "Module B" : `Module B ${index}`,
+    provider_label: null,
+    gateway_label: null,
+    usage_flow_count: 6,
+    rendered_usage_flow_count: 1,
+    omitted_usage_flow_count: 5,
+  };
+}
+
+function omittedGroupPreview(index: number) {
+  return {
+    key: `hidden-${index}`,
+    label: `Hidden module ${index} -> AI_MODEL_INVOCATION`,
+    source_node_id: `module:hidden-${index}`,
+    source_label: `Hidden module ${index}`,
+    provider_label: null,
+    gateway_label: null,
+    usage_flow_count: 1,
+    rendered_usage_flow_count: 0,
+    omitted_usage_flow_count: 1,
+  };
+}
 
 test("formats evidence scope as a percentage in both graph detail renderers", async () => {
   const container = document.createElement("div");

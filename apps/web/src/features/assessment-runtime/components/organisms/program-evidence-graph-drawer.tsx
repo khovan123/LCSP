@@ -441,13 +441,14 @@ export function GraphFirstDetail({
   const overflowingUsageGroups = (detail.paths.usage_flow_groups ?? []).filter(
     (group) => group.omitted_usage_flow_count > 0,
   );
-  const omittedUsageGroupSummaries = overflowingUsageGroups.filter(
+  const visibleOverflowingUsageGroups = overflowingUsageGroups.slice(0, 4);
+  const visibleOmittedUsageGroupCount = visibleOverflowingUsageGroups.filter(
     (group) => group.rendered_usage_flow_count === 0,
-  );
+  ).length;
   const remainingOmittedUsageGroupCount = Math.max(
     0,
     (detail.paths.omitted_usage_group_count ?? 0) -
-      omittedUsageGroupSummaries.length,
+      visibleOmittedUsageGroupCount,
   );
   const nodeObstacles = topology.nodes.flatMap((node) => {
     const point = topology.positions.get(node.id);
@@ -523,7 +524,7 @@ export function GraphFirstDetail({
                   )}
                 </p>
                 <div className="mt-1 flex flex-wrap gap-1">
-                  {overflowingUsageGroups.slice(0, 4).map((group) => (
+                  {visibleOverflowingUsageGroups.map((group) => (
                     <span
                       className="max-w-60 truncate rounded-full border border-amber-500/40 px-2 py-0.5 text-[0.6875rem] text-amber-700"
                       key={group.key}
