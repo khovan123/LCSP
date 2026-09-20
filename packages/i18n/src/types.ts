@@ -2120,6 +2120,7 @@ export type PagesMessages = {
       navOverview: string;
       navUserAccounts: string;
       navCorpusVersions: string;
+      navBilling: string;
       administrationLabel: string;
       administrationDescription: string;
       roleAdminLabel: string;
@@ -2212,6 +2213,43 @@ export type PagesMessages = {
       loading: string;
       error: string;
       retry: string;
+    };
+    billing: {
+      title: string;
+      description: string;
+      periodAria: string;
+      statusAria: string;
+      filters: { all: string };
+      periods: { d7: string; d30: string; d90: string };
+      metrics: {
+        settledTopUps: string;
+        usageRevenue: string;
+        pendingReconciliation: string;
+        duplicates: string;
+      };
+      columns: {
+        payment: string;
+        customer: string;
+        amount: string;
+        status: string;
+        received: string;
+      };
+      tableAria: string;
+      unknownAccount: string;
+      emptyTitle: string;
+      emptyDescription: string;
+      errorTitle: string;
+      errorDescription: string;
+      retry: string;
+      loading: string;
+      status: {
+        matched: string;
+        unmatched: string;
+        amountMismatch: string;
+        duplicate: string;
+        rejected: string;
+        needsReview: string;
+      };
     };
     usersList: {
       title: string;

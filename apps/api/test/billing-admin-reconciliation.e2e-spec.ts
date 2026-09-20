@@ -545,4 +545,83 @@ describe("Admin billing reconciliation (e2e)", () => {
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(malformedCursor.status, 400);
   });
+
+  it("serves domain-backed revenue metrics and account rows only to admins", async () => {
+    const creditedAt = new Date();
+    await prisma.billingOrder.update({
+      where: { id: orderId },
+      data: { status: BILLING_ORDER_STATUSES.CREDITED, creditedAt },
+    });
+    await prisma.llmUsageEvent.create({
+      data: {
+        userId: "user-1",
+        provider: "OPENAI",
+        model: "MODEL_A",
+        invocationId: "admin-billing-fixture-usage",
+        status: LLM_USAGE_STATUSES.SETTLED,
+        customerChargeVnd: 2500n,
+        chargedCredits: 25n,
+        occurredAt: creditedAt,
+      },
+    });
+    for (const providerTransactionId of [
+      "TX-ADMIN-DUPLICATE-A",
+      "TX-ADMIN-DUPLICATE-B",
+    ]) {
+      await prisma.paymentTransaction.create({
+        data: {
+          provider: "SEPAY",
+          providerTransactionId,
+          amountMinorUnits: 1000n,
+          userId: "user-1",
+          billingOrderId: orderId,
+          reconciliationStatus: PAYMENT_RECONCILIATION_STATUSES.DUPLICATE,
+          reconciliationReason:
+            PAYMENT_RECONCILIATION_REASONS.DUPLICATE_PROVIDER_TRANSACTION,
+        },
+      });
+    }
+
+    const response = await httpRequest(app)
+      .get("/admin/billing?period=30D&status=DUPLICATE&page=1&pageSize=1")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+    const dashboard = successBody<{
+      summary: {
+        settledTopUpVnd: string;
+        usageRevenueVnd: string;
+        pendingReconciliationCount: number;
+        duplicatePaymentCount: number;
+      };
+      items: Array<{
+        account: { userId: string; email: string } | null;
+        order: { paymentCode: string } | null;
+      }>;
+      page: number;
+      pageSize: number;
+      totalCount: number;
+    }>(response);
+    assert.deepEqual(dashboard.summary, {
+      settledTopUpVnd: "100000",
+      usageRevenueVnd: "2500",
+      pendingReconciliationCount: 1,
+      duplicatePaymentCount: 2,
+    });
+    assert.equal(dashboard.items.length, 1);
+    assert.equal(dashboard.items[0]?.account?.userId, "user-1");
+    assert.equal(dashboard.items[0]?.account?.email, "manager@acme.test");
+    assert.equal(dashboard.items[0]?.order?.paymentCode, "LCSP-ADMIN-ORDER");
+    assert.equal(dashboard.page, 1);
+    assert.equal(dashboard.pageSize, 1);
+    assert.equal(dashboard.totalCount, 2);
+    assert.doesNotMatch(
+      JSON.stringify(response.body),
+      /rawBody|signature|webhookSecret|sanitizedPayload|bankAccountNumber/i,
+    );
+
+    await httpRequest(app)
+      .get("/admin/billing")
+      .set("Authorization", `Bearer ${customerToken}`)
+      .expect(403);
+  });
 });

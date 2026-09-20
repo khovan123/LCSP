@@ -1,4 +1,5 @@
 export * from "./statuses.ts";
+export * from "./admin.ts";
 export * from "./runtime-model.ts";
 export * from "./usage.ts";
 export * from "./prepaid.ts";
