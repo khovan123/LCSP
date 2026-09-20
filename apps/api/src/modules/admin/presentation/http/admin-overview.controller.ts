@@ -12,10 +12,16 @@ import { resultEnvelope } from "../../../../platform/problems/result-envelope.js
 import { ZodValidationPipe } from "../../../../common/pipes/zod-validation.pipe.js";
 import { GetAdminOverviewQuery } from "../../application/queries/index.js";
 
+/**
+ * Administrative HTTP controller for aggregating system overview metrics.
+ */
 @Controller("admin/overview")
 export class AdminOverviewController {
   constructor(private readonly queryBus: QueryBus) {}
 
+  /**
+   * Retrieves high-level dashboard metrics across accounts, assessments, legal rule corpus, and audit activity.
+   */
   @Get()
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.admin)

@@ -1,7 +1,7 @@
 import {
   ADMIN_ACCOUNT_FILTERS,
-  ADMIN_ACCOUNT_QUERY_LIMITS as L,
-  ADMIN_ACCOUNT_REFERENCE_TYPES as R,
+  ADMIN_ACCOUNT_QUERY_LIMITS,
+  ADMIN_ACCOUNT_REFERENCE_TYPES,
   type AdminUserListResponse,
   type AdminUserSummary,
   type AuthAccountStatus,
@@ -21,9 +21,13 @@ type ListRow = {
   status: AuthAccountStatus;
   createdAt: Date;
   version: number;
-  referenceType: typeof R.user;
+  referenceType: typeof ADMIN_ACCOUNT_REFERENCE_TYPES.user;
 };
 
+/**
+ * Handles administrative query to list users with pagination, text filtering,
+ * role filtering, status filtering, and aggregated statistics (assessment counts, last active session).
+ */
 @QueryHandler(ListAdminUsersQuery)
 export class ListAdminUsersHandler implements IQueryHandler<ListAdminUsersQuery> {
   constructor(private readonly prisma: PrismaService) {}
@@ -31,8 +35,10 @@ export class ListAdminUsersHandler implements IQueryHandler<ListAdminUsersQuery>
   async execute(query: ListAdminUsersQuery): Promise<AdminUserListResponse> {
     const page = query.params.page ?? 1;
     const pageSize =
-      query.params.pageSize ?? query.params.page_size ?? L.defaultPageSize;
-    const searchQuery = (query.params.query ?? query.params.q)?.trim() ?? "";
+      query.params.pageSize ??
+      query.params.page_size ??
+      ADMIN_ACCOUNT_QUERY_LIMITS.defaultPageSize;
+    const rawSearchQuery = (query.params.query ?? query.params.q)?.trim() ?? "";
     const filterStatus =
       query.params.status === ADMIN_ACCOUNT_FILTERS.all
         ? undefined
@@ -42,57 +48,84 @@ export class ListAdminUsersHandler implements IQueryHandler<ListAdminUsersQuery>
         ? undefined
         : (query.params.role as AuthUserRole | undefined);
 
-    const accounts = Prisma.sql`
+    // Step 1: Base CTE query to project User entity into normalized account columns
+    const userAccountsCte = Prisma.sql`
       SELECT "id", COALESCE(NULLIF("displayName", ''), "email") AS "fullName", "email",
-             "role"::text AS "role", "accessStatus"::text AS "status", "createdAt", "accessVersion" AS "version", ${R.user}::text AS "referenceType"
+             "role"::text AS "role", "accessStatus"::text AS "status", "createdAt", "accessVersion" AS "version", ${ADMIN_ACCOUNT_REFERENCE_TYPES.user}::text AS "referenceType"
       FROM "User"`;
-    const escaped = searchQuery.replace(
+
+    // Step 2: Escape SQL LIKE wildcard characters (%, _, \) to prevent query injection / unintended matching
+    const escapedSearchQuery = rawSearchQuery.replace(
       /[\\%_]/g,
       (character) => `\\${character}`,
     );
-    const predicates = [Prisma.sql`TRUE`];
-    if (searchQuery)
-      predicates.push(
-        Prisma.sql`("email" ILIKE ${`%${escaped}%`} OR "fullName" ILIKE ${`%${escaped}%`})`,
+
+    // Step 3: Build dynamic WHERE conditions
+    const wherePredicates = [Prisma.sql`TRUE`];
+    if (rawSearchQuery) {
+      wherePredicates.push(
+        Prisma.sql`("email" ILIKE ${`%${escapedSearchQuery}%`} OR "fullName" ILIKE ${`%${escapedSearchQuery}%`})`,
       );
-    if (filterStatus) predicates.push(Prisma.sql`"status" = ${filterStatus}`);
-    if (filterRole) predicates.push(Prisma.sql`"role" = ${filterRole}`);
-    const filter = Prisma.join(predicates, " AND ");
+    }
+    if (filterStatus) {
+      wherePredicates.push(Prisma.sql`"status" = ${filterStatus}`);
+    }
+    if (filterRole) {
+      wherePredicates.push(Prisma.sql`"role" = ${filterRole}`);
+    }
+    const whereClause = Prisma.join(wherePredicates, " AND ");
+
+    // Step 4: Execute query with RepeatableRead isolation to guarantee consistent snapshot
     return this.prisma.$transaction(
-      async (tx: Prisma.TransactionClient) => {
-        const counts = await tx.$queryRaw<Array<{ count: bigint }>>(
-          Prisma.sql`WITH accounts AS (${accounts}) SELECT count(*) AS count FROM accounts WHERE ${filter}`,
+      async (transactionClient: Prisma.TransactionClient) => {
+        // Query total count matching filter
+        const totalCountRows = await transactionClient.$queryRaw<
+          Array<{ count: bigint }>
+        >(
+          Prisma.sql`WITH accounts AS (${userAccountsCte}) SELECT count(*) AS count FROM accounts WHERE ${whereClause}`,
         );
-        const rows = await tx.$queryRaw<ListRow[]>(
-          Prisma.sql`WITH accounts AS (${accounts}) SELECT * FROM accounts WHERE ${filter} ORDER BY "createdAt" DESC, "id" ASC LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
+
+        // Query paginated rows matching filter
+        const userListRows = await transactionClient.$queryRaw<ListRow[]>(
+          Prisma.sql`WITH accounts AS (${userAccountsCte}) SELECT * FROM accounts WHERE ${whereClause} ORDER BY "createdAt" DESC, "id" ASC LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
         );
-        const ids = rows.map((row) => row.id);
-        const assessmentCounts = ids.length
-          ? await tx.assessment.groupBy({
+
+        const targetUserIds = userListRows.map((row) => row.id);
+
+        // Step 5: Aggregate assessment counts and latest session activity in parallel for page rows
+        const assessmentCountGroups = targetUserIds.length
+          ? await transactionClient.assessment.groupBy({
               by: ["ownerId"],
-              where: { ownerId: { in: ids } },
+              where: { ownerId: { in: targetUserIds } },
               _count: { _all: true },
             })
           : [];
-        const activity = ids.length
-          ? await tx.authRecord.groupBy({
+
+        const latestSessionActivityGroups = targetUserIds.length
+          ? await transactionClient.authRecord.groupBy({
               by: ["userId"],
-              where: { userId: { in: ids }, type: AUTH_RECORD_TYPES.session },
+              where: {
+                userId: { in: targetUserIds },
+                type: AUTH_RECORD_TYPES.session,
+              },
               _max: { createdAt: true },
             })
           : [];
-        const users: AdminUserSummary[] = rows.map((row) => ({
+
+        // Step 6: Map raw database rows and aggregations to domain response DTO
+        const users: AdminUserSummary[] = userListRows.map((row) => ({
           ...row,
           createdAt: row.createdAt.toISOString(),
           assessmentCount:
-            assessmentCounts.find((entry) => entry.ownerId === row.id)?._count
-              ._all ?? 0,
+            assessmentCountGroups.find((entry) => entry.ownerId === row.id)
+              ?._count._all ?? 0,
           lastActiveAt:
-            activity
+            latestSessionActivityGroups
               .find((entry) => entry.userId === row.id)
               ?._max.createdAt?.toISOString() ?? null,
         }));
-        const totalCount = Number(counts[0]?.count ?? 0);
+
+        const totalCount = Number(totalCountRows[0]?.count ?? 0);
         return {
           users,
           totalCount,

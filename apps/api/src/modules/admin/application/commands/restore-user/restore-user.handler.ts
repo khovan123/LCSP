@@ -1,16 +1,15 @@
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
+  ADMIN_ACCOUNT_ERRORS,
+  ADMIN_ACCOUNT_OPERATIONS,
   ADMIN_ERROR_CODES,
   AUTH_AUDIT_EVENT_TYPES,
-  ADMIN_ACCOUNT_ERRORS as E,
-  ADMIN_ACCOUNT_OPERATIONS as O,
-  USER_ACCESS_STATUSES as S,
+  USER_ACCESS_STATUSES,
   type AdminUserDetail,
 } from "@lcsp/contracts/auth";
 import { HttpStatus } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { Prisma } from "@prisma/client";
-import { isRecord } from "../../../../../common/utils/index.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { AuthAuditService } from "../../../../auth/application/services/auth/auth-audit.service.js";
@@ -24,6 +23,18 @@ import {
 import { fetchAdminUserDetail } from "../../queries/get-admin-user-detail/get-admin-user-detail.handler.js";
 import { RestoreUserCommand } from "./restore-user.command.js";
 
+/**
+ * Handles the administrative restoration of a suspended user account.
+ *
+ * Enforces:
+ * 1. Admin actor authentication and permission verification inside transaction.
+ * 2. Idempotency replay detection using SHA-256 request payload hash.
+ * 3. Pessimistic row locking (SELECT FOR UPDATE) to prevent concurrent state changes.
+ * 4. Optimistic concurrency version check (expectedVersion vs accessVersion).
+ * 5. Suspended state check (account must currently be in SUSPENDED status to be restored).
+ * 6. Atomic status transition to ACTIVE and accessVersion increment.
+ * 7. Audit logging and receipt recording.
+ */
 @CommandHandler(RestoreUserCommand)
 export class RestoreUserHandler implements ICommandHandler<RestoreUserCommand> {
   constructor(
@@ -32,105 +43,145 @@ export class RestoreUserHandler implements ICommandHandler<RestoreUserCommand> {
   ) {}
 
   async execute(command: RestoreUserCommand): Promise<AdminUserDetail> {
-    const { targetId: id, body, actor } = command;
-    const { expectedVersion, reason: safeReason } = body;
-    const hash = requestHash(O.restore, {
-      id,
+    const { targetId: targetUserId, body, actor } = command;
+    const { expectedVersion, reason } = body;
+
+    // Generate deterministic request hash for idempotency checking
+    const payloadHash = requestHash(ADMIN_ACCOUNT_OPERATIONS.restore, {
+      id: targetUserId,
       expectedVersion,
-      reason: safeReason,
+      reason,
     });
 
-    return accountTransaction(this.prisma, actor.correlationId, async (tx) => {
-      await assertCurrentAdmin(tx, actor);
-      const previous = await replay(tx, actor, O.restore, hash);
-      if (previous) {
+    return accountTransaction(
+      this.prisma,
+      actor.correlationId,
+      async (transactionClient) => {
+        // Step 1: Re-verify that the acting admin is currently active, verified, and not revoked
+        await assertCurrentAdmin(transactionClient, actor);
+
+        // Step 2: Check if this exact idempotent request was already processed
+        const previousReceipt = await replay(
+          transactionClient,
+          actor,
+          ADMIN_ACCOUNT_OPERATIONS.restore,
+          payloadHash,
+        );
+        if (previousReceipt) {
+          return {
+            ...(await fetchAdminUserDetail(
+              transactionClient,
+              previousReceipt.resourceId,
+              actor.correlationId,
+            )),
+            replayed: true,
+          };
+        }
+
+        // Step 3: Lock target user row with SELECT ... FOR UPDATE to serialize concurrent mutations
+        await transactionClient.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "User" WHERE "id" = ${targetUserId} FOR UPDATE`,
+        );
+
+        const targetUser = await transactionClient.user.findUnique({
+          where: { id: targetUserId },
+          select: {
+            id: true,
+            role: true,
+            accessStatus: true,
+            accessVersion: true,
+          },
+        });
+
+        if (!targetUser) {
+          throw problemException(
+            ADMIN_ERROR_CODES.userNotFound,
+            actor.correlationId,
+            { status: HttpStatus.NOT_FOUND },
+          );
+        }
+
+        // Step 4: Validate optimistic concurrency version
+        if (targetUser.accessVersion !== expectedVersion) {
+          throw problemException(
+            ADMIN_ACCOUNT_ERRORS.staleVersion,
+            actor.correlationId,
+            { status: HttpStatus.CONFLICT },
+          );
+        }
+
+        // Step 5: Verify account is currently suspended before restoring
+        if (targetUser.accessStatus !== USER_ACCESS_STATUSES.suspended) {
+          throw problemException(
+            ADMIN_ACCOUNT_ERRORS.invalidState,
+            actor.correlationId,
+            { status: HttpStatus.CONFLICT },
+          );
+        }
+
+        // Step 6: Update target status to ACTIVE and increment accessVersion atomically
+        const updateResult = await transactionClient.user.updateMany({
+          where: {
+            id: targetUserId,
+            accessVersion: expectedVersion,
+            accessStatus: targetUser.accessStatus,
+          },
+          data: {
+            accessVersion: { increment: 1 },
+            accessStatus: USER_ACCESS_STATUSES.active,
+          },
+        });
+        if (updateResult.count !== 1) {
+          throw problemException(
+            ADMIN_ACCOUNT_ERRORS.staleVersion,
+            actor.correlationId,
+            { status: HttpStatus.CONFLICT },
+          );
+        }
+
+        // Step 7: Record audit event in transaction
+        await this.audit.writeInTx(
+          {
+            eventType: AUTH_AUDIT_EVENT_TYPES.authAdminUserRestored,
+            actorId: actor.userId,
+            sessionId: actor.sessionId,
+            correlationId: actor.correlationId,
+            resourceType: AUDIT_RESOURCE_TYPES.authAccount,
+            resourceId: targetUserId,
+            decision: AUDIT_DECISIONS.allow,
+            payload: {
+              targetUserId,
+              previousStatus: targetUser.accessStatus,
+              newStatus: USER_ACCESS_STATUSES.active,
+              previousVersion: expectedVersion,
+              newVersion: expectedVersion + 1,
+              reason,
+              changed: true,
+              timestamp: new Date().toISOString(),
+            },
+          },
+          transactionClient,
+        );
+
+        // Step 8: Save command receipt for future idempotent replays
+        await receipt(
+          transactionClient,
+          actor,
+          ADMIN_ACCOUNT_OPERATIONS.restore,
+          payloadHash,
+          targetUserId,
+        );
+
+        // Step 9: Return updated detail view
         return {
           ...(await fetchAdminUserDetail(
-            tx,
-            previous.resourceId,
+            transactionClient,
+            targetUserId,
             actor.correlationId,
           )),
-          replayed: true,
+          replayed: false,
         };
-      }
-
-      // Lock target row to serialize against concurrent session issuance
-      await tx.$queryRaw(
-        Prisma.sql`SELECT "id" FROM "User" WHERE "id" = ${id} FOR UPDATE`,
-      );
-      const target = await tx.user.findUnique({
-        where: { id },
-        select: {
-          id: true,
-          role: true,
-          accessStatus: true,
-          accessVersion: true,
-        },
-      });
-
-      if (!target) {
-        throw problemException(
-          ADMIN_ERROR_CODES.userNotFound,
-          actor.correlationId,
-          { status: HttpStatus.NOT_FOUND },
-        );
-      }
-      if (target.accessVersion !== expectedVersion) {
-        throw problemException(E.staleVersion, actor.correlationId, {
-          status: HttpStatus.CONFLICT,
-        });
-      }
-      if (target.accessStatus !== S.suspended) {
-        throw problemException(E.invalidState, actor.correlationId, {
-          status: HttpStatus.CONFLICT,
-        });
-      }
-
-      const result = await tx.user.updateMany({
-        where: {
-          id,
-          accessVersion: expectedVersion,
-          accessStatus: target.accessStatus,
-        },
-        data: {
-          accessVersion: { increment: 1 },
-          accessStatus: S.active,
-        },
-      });
-      if (result.count !== 1) {
-        throw problemException(E.staleVersion, actor.correlationId, {
-          status: HttpStatus.CONFLICT,
-        });
-      }
-
-      await this.audit.writeInTx(
-        {
-          eventType: AUTH_AUDIT_EVENT_TYPES.authAdminUserRestored,
-          actorId: actor.userId,
-          sessionId: actor.sessionId,
-          correlationId: actor.correlationId,
-          resourceType: AUDIT_RESOURCE_TYPES.authAccount,
-          resourceId: id,
-          decision: AUDIT_DECISIONS.allow,
-          payload: {
-            targetUserId: id,
-            previousStatus: target.accessStatus,
-            newStatus: S.active,
-            previousVersion: expectedVersion,
-            newVersion: expectedVersion + 1,
-            reason: safeReason,
-            changed: true,
-            timestamp: new Date().toISOString(),
-          },
-        },
-        tx,
-      );
-
-      await receipt(tx, actor, O.restore, hash, id);
-      return {
-        ...(await fetchAdminUserDetail(tx, id, actor.correlationId)),
-        replayed: false,
-      };
-    });
+      },
+    );
   }
 }

@@ -1,7 +1,7 @@
 import {
   adminListUsersQuerySchema,
   adminUserActionSchema,
-  ADMIN_ACCOUNT_ERRORS as E,
+  ADMIN_ACCOUNT_ERRORS,
   AUTH_USER_ROLES,
   type AdminListUsersQueryInput,
   type AdminUserActionInput,
@@ -36,15 +36,36 @@ import {
 } from "../../application/queries/index.js";
 import type { AdminActor } from "../../infrastructure/persistence/admin-account.transaction.js";
 
-function assertIdempotencyKey(key: unknown, correlationId: string): string {
-  if (typeof key !== "string" || !key.trim() || key.length > 200) {
-    throw problemException(E.idempotencyRequired, correlationId, {
-      status: HttpStatus.BAD_REQUEST,
-    });
+/**
+ * Validates that an Idempotency-Key header is present, non-empty, and within acceptable length.
+ */
+function assertIdempotencyKey(
+  idempotencyKeyHeader: unknown,
+  correlationId: string,
+): string {
+  if (
+    typeof idempotencyKeyHeader !== "string" ||
+    !idempotencyKeyHeader.trim() ||
+    idempotencyKeyHeader.length > 200
+  ) {
+    throw problemException(
+      ADMIN_ACCOUNT_ERRORS.idempotencyRequired,
+      correlationId,
+      {
+        status: HttpStatus.BAD_REQUEST,
+      },
+    );
   }
-  return key.trim();
+  return idempotencyKeyHeader.trim();
 }
 
+/**
+ * Administrative HTTP controller for managing user accounts:
+ * - List users with filtering, search, and pagination.
+ * - Get user detail with usage metrics.
+ * - Suspend user accounts idempotently with optimistic concurrency.
+ * - Restore user accounts idempotently with optimistic concurrency.
+ */
 @Controller("admin/users")
 export class AdminUsersController {
   constructor(
@@ -52,6 +73,9 @@ export class AdminUsersController {
     private readonly commandBus: CommandBus,
   ) {}
 
+  /**
+   * Lists users with optional text search, status filter, role filter, and pagination.
+   */
   @Get()
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.admin)
@@ -67,61 +91,87 @@ export class AdminUsersController {
     );
   }
 
+  /**
+   * Retrieves detailed profile and usage metrics for a specific user.
+   */
   @Get(":id")
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.admin)
   async getUserDetail(
-    @Param("id") id: string,
+    @Param("id") targetUserId: string,
     @Req() request: AuthenticatedRequest,
   ) {
     return resultEnvelope(
       await this.queryBus.execute(
-        new GetAdminUserDetailQuery(id, request.correlationId!),
+        new GetAdminUserDetailQuery(targetUserId, request.correlationId!),
       ),
     );
   }
 
+  /**
+   * Suspends a user account idempotently.
+   */
   @Post(":id/suspend")
   @HttpCode(HttpStatus.OK)
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.admin)
   async suspendUser(
-    @Param("id") id: string,
+    @Param("id") targetUserId: string,
     @Body(new ZodValidationPipe(adminUserActionSchema))
     body: AdminUserActionInput,
-    @Headers("idempotency-key") key: unknown,
+    @Headers("idempotency-key") idempotencyKeyHeader: unknown,
     @Req() request: AuthenticatedRequest,
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
-        new SuspendUserCommand(id, body, this.actor(request, key)),
+        new SuspendUserCommand(
+          targetUserId,
+          body,
+          this.buildAdminActor(request, idempotencyKeyHeader),
+        ),
       ),
     );
   }
 
+  /**
+   * Restores a suspended user account idempotently.
+   */
   @Post(":id/restore")
   @HttpCode(HttpStatus.OK)
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.admin)
   async restoreUser(
-    @Param("id") id: string,
+    @Param("id") targetUserId: string,
     @Body(new ZodValidationPipe(adminUserActionSchema))
     body: AdminUserActionInput,
-    @Headers("idempotency-key") key: unknown,
+    @Headers("idempotency-key") idempotencyKeyHeader: unknown,
     @Req() request: AuthenticatedRequest,
   ) {
     return resultEnvelope(
       await this.commandBus.execute(
-        new RestoreUserCommand(id, body, this.actor(request, key)),
+        new RestoreUserCommand(
+          targetUserId,
+          body,
+          this.buildAdminActor(request, idempotencyKeyHeader),
+        ),
       ),
     );
   }
 
-  private actor(request: AuthenticatedRequest, key: unknown): AdminActor {
+  /**
+   * Constructs the authenticated admin actor context including correlationId and validated idempotencyKey.
+   */
+  private buildAdminActor(
+    request: AuthenticatedRequest,
+    idempotencyKeyHeader: unknown,
+  ): AdminActor {
     return {
       ...request.rbacContext,
       correlationId: request.correlationId!,
-      idempotencyKey: assertIdempotencyKey(key, request.correlationId!),
+      idempotencyKey: assertIdempotencyKey(
+        idempotencyKeyHeader,
+        request.correlationId!,
+      ),
     };
   }
 }

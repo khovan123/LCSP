@@ -1,7 +1,7 @@
 import {
   ADMIN_ERROR_CODES,
   AUTH_ACCOUNT_STATUSES,
-  ADMIN_ACCOUNT_REFERENCE_TYPES as R,
+  ADMIN_ACCOUNT_REFERENCE_TYPES,
   USER_ACCESS_STATUSES,
   type AdminUserDetail,
 } from "@lcsp/contracts/auth";
@@ -23,15 +23,24 @@ const IDENTITY_SELECT = {
   createdAt: true,
 } satisfies Prisma.UserSelect;
 
-const WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
 
+/**
+ * Fetches complete administrative detail view for a specific user.
+ *
+ * Gathers:
+ * 1. User identity, role, access status, and optimistic version.
+ * 2. Assessment usage count within the last 30 days.
+ * 3. Most recent assessment creation timestamp.
+ * 4. Most recent active session timestamp.
+ */
 export async function fetchAdminUserDetail(
-  client: Prisma.TransactionClient | PrismaService,
-  id: string,
+  prismaClient: Prisma.TransactionClient | PrismaService,
+  targetUserId: string,
   correlationId: string,
 ): Promise<AdminUserDetail> {
-  const user = await client.user.findUnique({
-    where: { id },
+  const user = await prismaClient.user.findUnique({
+    where: { id: targetUserId },
     select: IDENTITY_SELECT,
   });
   if (!user) {
@@ -39,23 +48,31 @@ export async function fetchAdminUserDetail(
       status: HttpStatus.NOT_FOUND,
     });
   }
-  const now = new Date();
-  const [assessments30d, lastAssessment, activity] = await Promise.all([
-    client.assessment.count({
+
+  const currentTime = new Date();
+  const windowStart = new Date(currentTime.getTime() - THIRTY_DAYS_IN_MS);
+
+  const [
+    assessmentsIn30DaysCount,
+    latestAssessmentRecord,
+    latestSessionRecord,
+  ] = await Promise.all([
+    prismaClient.assessment.count({
       where: {
-        ownerId: id,
-        createdAt: { gte: new Date(now.getTime() - WINDOW_MS), lte: now },
+        ownerId: targetUserId,
+        createdAt: { gte: windowStart, lte: currentTime },
       },
     }),
-    client.assessment.aggregate({
-      where: { ownerId: id },
+    prismaClient.assessment.aggregate({
+      where: { ownerId: targetUserId },
       _max: { createdAt: true },
     }),
-    client.authRecord.aggregate({
-      where: { userId: id, type: AUTH_RECORD_TYPES.session },
+    prismaClient.authRecord.aggregate({
+      where: { userId: targetUserId, type: AUTH_RECORD_TYPES.session },
       _max: { createdAt: true },
     }),
   ]);
+
   return {
     id: user.id,
     fullName: user.displayName || user.email,
@@ -65,19 +82,23 @@ export async function fetchAdminUserDetail(
       user.accessStatus === USER_ACCESS_STATUSES.suspended
         ? AUTH_ACCOUNT_STATUSES.suspended
         : AUTH_ACCOUNT_STATUSES.active,
-    referenceType: R.user,
+    referenceType: ADMIN_ACCOUNT_REFERENCE_TYPES.user,
     version: user.accessVersion,
     createdAt: user.createdAt.toISOString(),
-    lastActiveAt: activity._max.createdAt?.toISOString() ?? null,
+    lastActiveAt: latestSessionRecord._max.createdAt?.toISOString() ?? null,
     usageSummary: {
-      assessments30d,
-      lastAssessmentAt: lastAssessment._max.createdAt?.toISOString() ?? null,
+      assessments30d: assessmentsIn30DaysCount,
+      lastAssessmentAt:
+        latestAssessmentRecord._max.createdAt?.toISOString() ?? null,
       creditSpend30d: null,
       openFindingsCount: null,
     },
   };
 }
 
+/**
+ * CQRS Query Handler for fetching administrative user details.
+ */
 @QueryHandler(GetAdminUserDetailQuery)
 export class GetAdminUserDetailHandler implements IQueryHandler<GetAdminUserDetailQuery> {
   constructor(private readonly prisma: PrismaService) {}

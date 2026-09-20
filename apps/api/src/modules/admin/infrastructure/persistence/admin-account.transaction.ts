@@ -2,7 +2,7 @@ import { HttpStatus } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import {
-  ADMIN_ACCOUNT_ERRORS as E,
+  ADMIN_ACCOUNT_ERRORS,
   AUTH_ERROR_CODES,
   AUTH_USER_ROLES,
   USER_ACCESS_STATUSES,
@@ -18,23 +18,35 @@ export type AdminActor = RbacRequestContext & {
   correlationId: string;
   idempotencyKey: string;
 };
-/** Shared by provisioning and lifecycle commands. ReadCommitted re-reads after lock acquisition. */
+
+/**
+ * Acquires a PostgreSQL transaction-scoped advisory lock for administrative account mutations.
+ * Enforces a 3-second lock timeout to fail fast on deadlocks.
+ */
 export async function lockAccountLifecycle(
-  tx: Prisma.TransactionClient,
+  transactionClient: Prisma.TransactionClient,
 ): Promise<void> {
-  await tx.$executeRaw`SET LOCAL lock_timeout = '3000ms'`;
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(299, 1)`;
+  await transactionClient.$executeRaw`SET LOCAL lock_timeout = '3000ms'`;
+  await transactionClient.$executeRaw`SELECT pg_advisory_xact_lock(299, 1)`;
 }
+
+/**
+ * Runs an administrative database transaction wrapped with advisory locks and error mapping.
+ * Catches Postgres concurrency errors (P2034, 55P03 lock_not_available, 40P01 deadlock_detected)
+ * and maps them into an HTTP 409 Conflict problem exception.
+ */
 export async function accountTransaction<T>(
   prisma: PrismaService,
   correlationId: string,
-  execute: (tx: Prisma.TransactionClient) => Promise<T>,
+  transactionCallback: (
+    transactionClient: Prisma.TransactionClient,
+  ) => Promise<T>,
 ): Promise<T> {
   try {
     return await prisma.$transaction(
-      async (tx) => {
-        await lockAccountLifecycle(tx);
-        return execute(tx);
+      async (transactionClient) => {
+        await lockAccountLifecycle(transactionClient);
+        return transactionCallback(transactionClient);
       },
       {
         isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
@@ -42,26 +54,38 @@ export async function accountTransaction<T>(
       },
     );
   } catch (error) {
-    const e = error as { code?: string; meta?: { code?: string } };
+    const errorDetails = error as { code?: string; meta?: { code?: string } };
     if (
-      e.code === "P2034" ||
-      e.code === "55P03" ||
-      e.code === "40P01" ||
-      e.meta?.code === "55P03" ||
-      e.meta?.code === "40P01"
+      errorDetails.code === "P2034" ||
+      errorDetails.code === "55P03" ||
+      errorDetails.code === "40P01" ||
+      errorDetails.meta?.code === "55P03" ||
+      errorDetails.meta?.code === "40P01"
     ) {
-      throw problemException(E.concurrentChange, correlationId, {
-        status: HttpStatus.CONFLICT,
-      });
+      throw problemException(
+        ADMIN_ACCOUNT_ERRORS.concurrentChange,
+        correlationId,
+        {
+          status: HttpStatus.CONFLICT,
+        },
+      );
     }
     throw error;
   }
 }
+
+/**
+ * Re-verifies inside the active transaction that the acting administrator:
+ * 1. Has role = ADMIN.
+ * 2. Has accessStatus = ACTIVE.
+ * 3. Has emailVerified = TRUE.
+ * 4. Has an active, non-revoked session matching the user's current accessVersion.
+ */
 export async function assertCurrentAdmin(
-  tx: Prisma.TransactionClient,
+  transactionClient: Prisma.TransactionClient,
   actor: AdminActor,
 ): Promise<void> {
-  const user = await tx.user.findUnique({
+  const user = await transactionClient.user.findUnique({
     where: { id: actor.userId },
     select: {
       role: true,
@@ -80,7 +104,7 @@ export async function assertCurrentAdmin(
       status: HttpStatus.FORBIDDEN,
     });
   }
-  const session = await tx.authRecord.findFirst({
+  const session = await transactionClient.authRecord.findFirst({
     where: {
       id: actor.sessionId,
       userId: actor.userId,
@@ -103,61 +127,90 @@ export async function assertCurrentAdmin(
     );
   }
 }
+
+/**
+ * Creates a deterministic SHA-256 hash of the administrative operation name and canonical JSON payload.
+ */
 export function requestHash(
   operation: AdminAccountOperation,
   input: unknown,
 ): string {
-  const serialized = JSON.stringify(input, Object.keys(input || {}).sort());
+  const sortedPayloadString = JSON.stringify(
+    input,
+    Object.keys(input || {}).sort(),
+  );
   return createHash("sha256")
-    .update(`${operation}:${serialized}`)
+    .update(`${operation}:${sortedPayloadString}`)
     .digest("hex");
 }
+
+/**
+ * Checks for a previously processed idempotent command receipt.
+ * If the idempotency key matches with identical payload hash, returns the cached resource ID.
+ * If the payload or operation differs, throws a 409 Conflict exception.
+ */
 export async function replay(
-  tx: Prisma.TransactionClient,
+  transactionClient: Prisma.TransactionClient,
   actor: AdminActor,
   operation: AdminAccountOperation,
-  hash: string,
+  payloadHash: string,
 ): Promise<{ resourceId: string } | null> {
-  const existing = await tx.adminAccountCommandReceipt.findUnique({
-    where: {
-      actorId_idempotencyKey: {
-        actorId: actor.userId,
-        idempotencyKey: actor.idempotencyKey,
+  const existingReceipt =
+    await transactionClient.adminAccountCommandReceipt.findUnique({
+      where: {
+        actorId_idempotencyKey: {
+          actorId: actor.userId,
+          idempotencyKey: actor.idempotencyKey,
+        },
       },
-    },
-  });
-  if (!existing) return null;
-  if (existing.operation !== operation || existing.requestHash !== hash) {
-    throw problemException(E.idempotencyConflict, actor.correlationId, {
-      status: HttpStatus.CONFLICT,
     });
+  if (!existingReceipt) return null;
+  if (
+    existingReceipt.operation !== operation ||
+    existingReceipt.requestHash !== payloadHash
+  ) {
+    throw problemException(
+      ADMIN_ACCOUNT_ERRORS.idempotencyConflict,
+      actor.correlationId,
+      {
+        status: HttpStatus.CONFLICT,
+      },
+    );
   }
-  return { resourceId: existing.resourceId };
+  return { resourceId: existingReceipt.resourceId };
 }
+
+/**
+ * Saves an execution receipt for an idempotent administrative mutation.
+ */
 export async function receipt(
-  tx: Prisma.TransactionClient,
+  transactionClient: Prisma.TransactionClient,
   actor: AdminActor,
   operation: AdminAccountOperation,
-  hash: string,
+  payloadHash: string,
   resourceId: string,
 ): Promise<void> {
   try {
-    await tx.adminAccountCommandReceipt.create({
+    await transactionClient.adminAccountCommandReceipt.create({
       data: {
         id: randomUUID(),
         actorId: actor.userId,
         idempotencyKey: actor.idempotencyKey,
         operation,
-        requestHash: hash,
+        requestHash: payloadHash,
         resourceId,
       },
     });
   } catch (error) {
-    const e = error as { code?: string };
-    if (e.code === "P2002") {
-      throw problemException(E.idempotencyConflict, actor.correlationId, {
-        status: HttpStatus.CONFLICT,
-      });
+    const prismaError = error as { code?: string };
+    if (prismaError.code === "P2002") {
+      throw problemException(
+        ADMIN_ACCOUNT_ERRORS.idempotencyConflict,
+        actor.correlationId,
+        {
+          status: HttpStatus.CONFLICT,
+        },
+      );
     }
     throw error;
   }
