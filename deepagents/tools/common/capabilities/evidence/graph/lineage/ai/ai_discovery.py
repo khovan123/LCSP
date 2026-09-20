@@ -1904,6 +1904,13 @@ class AIDiscoveryEnricher:
             return unresolved()
 
         symbol_key = symbol.key
+        owner_class = str((symbol.attributes or {}).get("ownerClass") or "")
+        try:
+            source_text = (self.workspace / relative).read_text(
+                encoding="utf-8", errors="replace"
+            )
+        except OSError:
+            return unresolved()
         node_by_key = {node.key: node for node in program.nodes}
         element_dispatch_nodes = [
             node
@@ -1938,6 +1945,59 @@ class AIDiscoveryEnricher:
             projection_holders[holder_key] = property_name
         projection_parent = {holder: holder for holder in projection_holders}
 
+        # A mutable alias is equivalent only until its next binding assignment.
+        # Literal containers/values and non-governed constructors are foreign;
+        # other writes remain uncertain at the dispatch site.
+        holder_reassignments: dict[str, list[tuple[int, bool]]] = {}
+        projection_holder_nodes = {
+            holder_key: node_by_key.get(holder_key)
+            for holder_key in projection_holders
+        }
+        for holder_key, holder_node in projection_holder_nodes.items():
+            if holder_node is None or not holder_node.label:
+                continue
+            declaration_re = re.compile(
+                rf"\b(?:const|let|var)\b[^;\n]*\b"
+                rf"{re.escape(holder_node.label)}\b"
+            )
+            declaration_lines = [
+                line_no
+                for line_no, source_line in enumerate(
+                    source_text.splitlines(), start=1
+                )
+                if declaration_re.search(source_line)
+            ]
+            declaration_line = min(
+                declaration_lines,
+                default=int(holder_node.start_line or 0),
+            )
+            assignment_re = re.compile(
+                rf"(?<![\w$.]){re.escape(holder_node.label)}\s*"
+                rf"=(?!=|>)\s*(.+?)(?:;|$)"
+            )
+            for line_no, source_line in enumerate(
+                source_text.splitlines(), start=1
+            ):
+                if line_no <= declaration_line:
+                    continue
+                assignment = assignment_re.search(source_line)
+                if not assignment:
+                    continue
+                rhs = assignment.group(1).strip()
+                constructor = re.match(
+                    r"^new\s+([A-Za-z_$][\w$]*)", rhs
+                )
+                foreign = bool(
+                    re.match(
+                        r"^(?:\{|\[|['\"`]|[-+]?\d|true\b|false\b|null\b)",
+                        rhs,
+                    )
+                    or (constructor and constructor.group(1) != owner_class)
+                )
+                holder_reassignments.setdefault(holder_key, []).append(
+                    (line_no, foreign)
+                )
+
         def projection_find(key: str) -> str:
             parent = projection_parent.setdefault(key, key)
             if parent != key:
@@ -1951,15 +2011,16 @@ class AIDiscoveryEnricher:
                 projection_parent[right_root] = left_root
 
         def projection_paths_overlap(left: str, right: str) -> bool:
-            if left == right:
-                return True
-            if left == "*" or right == "*":
-                return True
-            if left.endswith(".*"):
-                return right.startswith(left[:-1])
-            if right.endswith(".*"):
-                return left.startswith(right[:-1])
-            return False
+            left_segments = left.split(".")
+            right_segments = right.split(".")
+            return len(left_segments) == len(right_segments) and all(
+                left_segment == right_segment
+                or left_segment == "*"
+                or right_segment == "*"
+                for left_segment, right_segment in zip(
+                    left_segments, right_segments
+                )
+            )
 
         for edge in program.edges:
             if edge.edge_type not in {"ALIASES", "ASSIGNS"}:
@@ -1977,6 +2038,11 @@ class AIDiscoveryEnricher:
                 or target_node.node_type not in {"VARIABLE", "PARAMETER"}
                 or (source_node.attributes or {}).get("memberProjection")
                 or (target_node.attributes or {}).get("memberProjection")
+            ):
+                continue
+            if any(
+                holder_reassignments.get(holder_key)
+                for holder_key in (source_node.key, target_node.key)
             ):
                 continue
             projection_union(source_node.key, target_node.key)
@@ -2072,13 +2138,6 @@ class AIDiscoveryEnricher:
             targets = trusted_call_targets.get((line_no, label), set())
             return len(targets) == 1 and symbol_key not in targets
 
-        try:
-            source_text = (self.workspace / relative).read_text(
-                encoding="utf-8", errors="replace"
-            )
-        except OSError:
-            return unresolved()
-
         relevant_method_receivers: set[str] = set()
         if symbol.node_type == "METHOD":
             method_suffix = f".{context.name}"
@@ -2087,7 +2146,6 @@ class AIDiscoveryEnricher:
                 for call in call_nodes
                 if call.label.endswith(method_suffix)
             )
-            owner_class = str((symbol.attributes or {}).get("ownerClass") or "")
             if owner_class:
                 relevant_method_receivers.update(
                     match.group(1)
@@ -2297,6 +2355,22 @@ class AIDiscoveryEnricher:
                         equivalent_projection_keys = projection_equivalents.get(
                             receiver_projection_key, set()
                         )
+                        receiver_holder_key = ""
+                        if receiver_projection_key.startswith("projection:"):
+                            receiver_holder_key = receiver_projection_key[
+                                len("projection:") :
+                            ].rsplit(":", 1)[0]
+                        prior_reassignments = [
+                            item
+                            for item in holder_reassignments.get(
+                                receiver_holder_key, []
+                            )
+                            if item[0] < int(element_dispatch.start_line or 0)
+                        ]
+                        unresolved_reassignment = bool(
+                            prior_reassignments
+                            and not prior_reassignments[-1][1]
+                        )
                         binding_relevant = (
                             receiver_projection_key
                             in relevant_method_receiver_keys
@@ -2306,6 +2380,7 @@ class AIDiscoveryEnricher:
                                 equivalent_projection_keys
                                 & relevant_method_receiver_keys
                             )
+                            or unresolved_reassignment
                         )
                     if (
                         binding_relevant

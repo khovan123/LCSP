@@ -220,12 +220,38 @@ def _text_computed_receiver_candidates(
         if bracket_start in matched_brackets:
             continue
         tail = source[opener.end() : opener.end() + 4096]
-        # A completed index/member read is not a dispatch. Only inspect the
-        # current semicolon-delimited expression when the bracket is genuinely
-        # unbalanced, so a later unrelated call cannot claim this opener.
-        if "]" in tail:
+        # Determine ownership of the opener's closing bracket instead of
+        # looking for any `]` in a broad look-ahead window. A later array or
+        # object literal must not make a malformed receiver appear complete.
+        depth = 1
+        quote: str | None = None
+        escaped = False
+        statement_tail = tail
+        completed = False
+        for index, character in enumerate(tail):
+            if quote is not None:
+                if escaped:
+                    escaped = False
+                elif character == "\\":
+                    escaped = True
+                elif character == quote:
+                    quote = None
+                continue
+            if character in {'"', "'", "`"}:
+                quote = character
+                continue
+            if character == "[":
+                depth += 1
+            elif character == "]":
+                depth -= 1
+                if depth == 0:
+                    completed = True
+                    break
+            elif character == ";" and depth == 1:
+                statement_tail = tail[:index]
+                break
+        if completed:
             continue
-        statement_tail = tail.split(";", 1)[0]
         if not re.search(
             r"(?:[A-Za-z_$][\w$]*|['\"`])\s*\(",
             statement_tail,
@@ -958,6 +984,31 @@ class RepositorySemanticExtractor:
                         )
                     )
 
+        def parse_object_property_part(
+            property_part: str,
+        ) -> tuple[str, str] | None:
+            property_match = re.fullmatch(
+                r"\s*(?:(?P<name>[A-Za-z_$][\w$]*)|"
+                r"\[\s*(?P<dynamic>[^\]\n]+)\s*\])"
+                r"\s*(?::\s*(?P<value>.+))?\s*",
+                property_part,
+                re.DOTALL,
+            )
+            if not property_match:
+                return None
+            name = property_match.group("name")
+            dynamic = (property_match.group("dynamic") or "").strip()
+            literal = re.fullmatch(
+                r"(['\"`])([A-Za-z_$][\w$]*)\1", dynamic
+            )
+            property_name = name or (literal.group(2) if literal else "*")
+            property_value = property_match.group("value")
+            if property_value is None:
+                if not name:
+                    return None
+                property_value = name
+            return property_name, property_value
+
         def add_projection_value_flow(
             holder_key: str,
             holder_name: str,
@@ -985,14 +1036,10 @@ class RepositorySemanticExtractor:
                 for nested_part in _text_split_top_level(
                     nested_object.group(1), ","
                 ):
-                    nested_match = re.fullmatch(
-                        r"\s*([A-Za-z_$][\w$]*)\s*(?::\s*(.+))?\s*",
-                        nested_part,
-                    )
-                    if not nested_match:
+                    nested_property = parse_object_property_part(nested_part)
+                    if nested_property is None:
                         continue
-                    nested_name = nested_match.group(1)
-                    nested_value = nested_match.group(2) or nested_name
+                    nested_name, nested_value = nested_property
                     add_projection_value_flow(
                         holder_key,
                         holder_name,
@@ -1112,16 +1159,10 @@ class RepositorySemanticExtractor:
                     for property_part in _text_split_top_level(
                         object_literal.group(1), ","
                     ):
-                        property_match = re.fullmatch(
-                            r"\s*([A-Za-z_$][\w$]*)\s*(?::\s*(.+))?\s*",
-                            property_part,
-                        )
-                        if not property_match:
+                        property = parse_object_property_part(property_part)
+                        if property is None:
                             continue
-                        property_name = property_match.group(1)
-                        property_value = (
-                            property_match.group(2) or property_name
-                        )
+                        property_name, property_value = property
                         add_projection_value_flow(
                             left_key,
                             left_name,
