@@ -3129,9 +3129,10 @@ class AiService {
   }
 }
 const service = new AiService();
-const holder = { nested: { service } };
+let holder = { nested: { service } };
 const firstAlias = holder;
 const secondAlias = firstAlias;
+holder = {};
 const method = "summarize";
 service.summarize("closed", false);
 secondAlias.nested.service[method]("runtime", true);
@@ -3313,12 +3314,116 @@ class AiService {
 const service = new AiService();
 const holder = { service };
 let alias = holder;
-// alias = {};
+// alias = recorder;
 const method = "summarize";
 service.summarize("closed", false);
 alias.service[method]("runtime", true);
 """)
     assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_block_comment_assignment_does_not_break_holder_alias_flow(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const holder = { service };
+let alias = holder;
+/* alias = recorder; */
+const method = "summarize";
+service.summarize("closed", false);
+alias.service[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_source_rebinding_after_alias_capture_preserves_snapshot(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+let holder = { service };
+const alias = holder;
+holder = {};
+const method = "summarize";
+service.summarize("closed", false);
+alias.service[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_unresolved_source_value_at_alias_capture_stays_technical(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+let holder = { service };
+holder = maybeHolder();
+const alias = holder;
+const method = "summarize";
+service.summarize("closed", false);
+alias.service[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_source_rebinding_before_alias_capture_uses_new_value(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+let holder = { service };
+holder = {};
+const alias = holder;
+const method = "summarize";
+service.summarize("closed", false);
+alias.service[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+
+
+def test_foreign_constructor_reassignment_can_close_projection_dispatch(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+let alias = null;
+alias = new LocalRecorder();
+const method = "flush";
+service.summarize("closed", false);
+alias.service[method]();
+""")
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
 
 
 def test_same_name_reassignment_in_nested_scope_does_not_cross_bindings(

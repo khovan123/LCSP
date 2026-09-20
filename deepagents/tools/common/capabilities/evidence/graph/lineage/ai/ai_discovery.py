@@ -1972,6 +1972,8 @@ class AIDiscoveryEnricher:
             constructor = re.match(
                 r"^new\s+([A-Za-z_$][\w$]*)\b", rhs
             )
+            if constructor:
+                rhs_references.discard(constructor.group(1))
             complete_object = rhs.startswith("{") and rhs.endswith("}")
             complete_array = rhs.startswith("[") and rhs.endswith("]")
             primitive = bool(
@@ -2009,6 +2011,31 @@ class AIDiscoveryEnricher:
                 if source_key is None and not declaration:
                     holder_reassignments.setdefault(holder_key, []).append(
                         (line_no, foreign)
+                    )
+                    continue
+                if source_key is None:
+                    continue
+                source_events = holder_assignment_events.get(source_key, [])
+                source_event = next(
+                    (
+                        event
+                        for event in reversed(source_events)
+                        if event[0] <= line_no
+                    ),
+                    None,
+                )
+                if (
+                    source_event is not None
+                    and source_event[1] is None
+                    and not source_event[2]
+                    and not source_event[3]
+                ):
+                    # The target captured an unresolved source value at this
+                    # assignment, so its later projection dispatch stays
+                    # technical even if the source binding is subsequently
+                    # rebound.
+                    holder_reassignments.setdefault(holder_key, []).append(
+                        (line_no, False)
                     )
 
         def projection_paths_overlap(left: str, right: str) -> bool:
@@ -2049,11 +2076,12 @@ class AIDiscoveryEnricher:
 
             def latest_event(
                 key: str,
+                at_line: int = dispatch_line,
             ) -> tuple[int, str | None, bool, bool] | None:
                 prior = [
                     event
                     for event in holder_assignment_events.get(key, [])
-                    if event[0] <= dispatch_line
+                    if event[0] <= at_line
                 ]
                 return prior[-1] if prior else None
 
@@ -2064,7 +2092,9 @@ class AIDiscoveryEnricher:
                 )
                 if event is None or event[1] is None:
                     continue
-                source_event = latest_event(event[1])
+                # An alias captures the source value at this assignment. A
+                # later write to the source binding must not change it.
+                source_event = latest_event(event[1], event[0])
                 if (
                     source_event is not None
                     and source_event[1] is None

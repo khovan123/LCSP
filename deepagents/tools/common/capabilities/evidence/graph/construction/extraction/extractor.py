@@ -399,6 +399,7 @@ class RepositorySemanticExtractor:
 
         is_js_text = path.suffix.lower() in JS_TEXT_EXTENSIONS
         source_lines = text.splitlines()
+        code_lines = _text_strip_comments(text).splitlines()
         scope_paths = _text_lexical_scope_paths(source_lines) if is_js_text else []
         exported_names = _text_exported_callable_names(text) if is_js_text else set()
         classes: tuple[_TextClass, ...] = ()
@@ -656,7 +657,7 @@ class RepositorySemanticExtractor:
             pending_scope: int | None = None
             pending_parts: list[str] = []
 
-            for line_no, line in enumerate(source_lines, start=1):
+            for line_no, line in enumerate(code_lines, start=1):
                 structural = re.sub(
                     r"(['\"\x60]).*?(?<!\\)\1", "", line
                 ).split("//", 1)[0]
@@ -733,7 +734,7 @@ class RepositorySemanticExtractor:
             # Reassignments invalidate only the concrete lexical binding they
             # reach, and only from the reassignment line onward. Same-named
             # bindings in unrelated scopes must not erase proven provenance.
-            for line_no, line in enumerate(source_lines, start=1):
+            for line_no, line in enumerate(code_lines, start=1):
                 structural = re.sub(
                     r"(['\"\x60]).*?(?<!\\)\1", "", line
                 ).split("//", 1)[0]
@@ -1116,9 +1117,12 @@ class RepositorySemanticExtractor:
                 ).append((dispatch_start, receiver, receiver_kind))
 
         for line_no, line in enumerate(source_lines, start=1):
+            assignment_source = (
+                code_lines[line_no - 1] if line_no <= len(code_lines) else ""
+            )
             assignment = re.search(
                 r"\b(?:const|let|var)?\s*([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$.]*)",
-                line,
+                assignment_source,
             )
             if assignment:
                 left, right = assignment.group(1), assignment.group(2)
@@ -1169,8 +1173,6 @@ class RepositorySemanticExtractor:
             # asserted RHS expressions as explicit graph aliases. The graph can
             # then decide whether a receiver reaches a governed method without
             # teaching the scanner every JavaScript expression form.
-            assignment_source = re.sub(r"/\*.*?\*/", "", line)
-            assignment_source = assignment_source.split("//", 1)[0]
             full_assignment = re.search(
                 r"\b(?:const|let|var)?\s*([A-Za-z_$][\w$]*)"
                 r"(?:\s*:\s*[^=,;]+)?\s*=\s*(.+?)(?:;|$)",
@@ -1787,6 +1789,64 @@ def _text_matching_delimiter(
                 return index
         index += 1
     return None
+
+
+def _text_strip_comments(source: str) -> str:
+    """Remove JS comments while preserving strings and line positions."""
+    result: list[str] = []
+    quote: str | None = None
+    escaped = False
+    line_comment = False
+    block_comment = False
+    index = 0
+    while index < len(source):
+        character = source[index]
+        next_character = source[index + 1] if index + 1 < len(source) else ""
+        if line_comment:
+            if character == "\n":
+                line_comment = False
+                result.append(character)
+            else:
+                result.append(" ")
+            index += 1
+            continue
+        if block_comment:
+            if character == "*" and next_character == "/":
+                block_comment = False
+                result.extend((" ", " "))
+                index += 2
+            elif character == "\n":
+                result.append(character)
+                index += 1
+            else:
+                result.append(" ")
+                index += 1
+            continue
+        if quote is not None:
+            result.append(character)
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+            index += 1
+            continue
+        if character == "/" and next_character == "/":
+            line_comment = True
+            result.extend((" ", " "))
+            index += 2
+            continue
+        if character == "/" and next_character == "*":
+            block_comment = True
+            result.extend((" ", " "))
+            index += 2
+            continue
+        result.append(character)
+        if character in {'"', "'", "`"}:
+            quote = character
+        index += 1
+    return "".join(result)
 
 
 def _text_parameter_names(raw: str) -> tuple[str, ...]:
