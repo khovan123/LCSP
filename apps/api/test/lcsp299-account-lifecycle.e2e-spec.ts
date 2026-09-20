@@ -33,9 +33,12 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { PrismaService } from "../src/infrastructure/prisma/prisma.service.js";
-import { ADMIN_COMMAND_HANDLERS } from "../src/modules/admin/application/commands/index.js";
+import {
+  ADMIN_COMMAND_HANDLERS,
+  SuspendUserCommand,
+  SuspendUserHandler,
+} from "../src/modules/admin/application/commands/index.js";
 import { ADMIN_QUERY_HANDLERS } from "../src/modules/admin/application/queries/index.js";
-import { executeAdminAccountMutation } from "../src/modules/admin/application/commands/admin-mutation.helper.js";
 import { AdminUsersController } from "../src/modules/admin/presentation/http/admin-users.controller.js";
 import { AuthAuditService } from "../src/modules/auth/application/services/auth/auth-audit.service.js";
 import { Session } from "../src/modules/auth/domain/entities/session.entity.js";
@@ -388,20 +391,19 @@ integration(
         data: { revokedAt: new Date() },
       });
       await expect(
-        executeAdminAccountMutation(
-          app.get(PrismaService),
-          app.get(AuthAuditService),
-          target.id,
-          ADMIN_ACCOUNT_OPERATIONS.suspend,
-          { expectedVersion: 0 },
-          {
-            userId: admin.id,
-            sessionId: record.id,
-            role: AUTH_USER_ROLES.admin,
-            scope: target.id,
-            correlationId: randomUUID(),
-            idempotencyKey: randomUUID(),
-          },
+        app.get(SuspendUserHandler).execute(
+          new SuspendUserCommand(
+            target.id,
+            { expectedVersion: 0 },
+            {
+              userId: admin.id,
+              sessionId: record.id,
+              role: AUTH_USER_ROLES.admin,
+              scope: target.id,
+              correlationId: randomUUID(),
+              idempotencyKey: randomUUID(),
+            },
+          ),
         ),
       ).rejects.toThrow();
       expect(
@@ -531,20 +533,19 @@ integration(
       });
       const auditCount = await prisma.auditEvent.count();
       await expect(
-        executeAdminAccountMutation(
-          app.get(PrismaService),
-          app.get(AuthAuditService),
-          target.id,
-          "ROLE_CHANGE" as AdminAccountOperation,
-          { role: AUTH_USER_ROLES.admin, expectedVersion: 0 },
-          {
-            userId: admin.id,
-            sessionId: record.id,
-            role: AUTH_USER_ROLES.admin,
-            scope: target.id,
-            correlationId: randomUUID(),
-            idempotencyKey: randomUUID(),
-          },
+        app.get(SuspendUserHandler).execute(
+          new SuspendUserCommand(
+            target.id,
+            { role: AUTH_USER_ROLES.admin, expectedVersion: 0 },
+            {
+              userId: admin.id,
+              sessionId: record.id,
+              role: AUTH_USER_ROLES.admin,
+              scope: target.id,
+              correlationId: randomUUID(),
+              idempotencyKey: randomUUID(),
+            },
+          ),
         ),
       ).rejects.toThrow();
       expect(await prisma.auditEvent.count()).toBe(auditCount);
