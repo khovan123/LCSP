@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
 
   const session = requireSessionToken(request);
   if (!session.ok) return session.response;
-  const upstream = await upstreamRequest("/workspace", {
+  const upstream = await upstreamRequest("/auth/profile", {
     bearerToken: session.token,
   });
   return upstreamJson(upstream);

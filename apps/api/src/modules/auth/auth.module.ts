@@ -40,7 +40,6 @@ import {
 import {
   CheckSensitiveRouteHandler,
   GetAuthProfileHandler,
-  ListAuthRepositoriesHandler,
   ListAuthSessionsHandler,
 } from "./application/queries/index.ts";
 import { AdminAccountCommandService } from "./application/services/admin/admin-account-command.service.js";
@@ -147,7 +146,6 @@ const REPOSITORY_PROVIDERS = [
     RevokeOwnedSessionHandler,
     GetAuthProfileHandler,
     ListAuthSessionsHandler,
-    ListAuthRepositoriesHandler,
     CheckSensitiveRouteHandler,
     DisableMfaHandler,
     EnrollMfaHandler,
@@ -166,9 +164,6 @@ const REPOSITORY_PROVIDERS = [
   ],
   exports: [
     AuthAuditService,
-    PrismaSessionRepository,
-    PrismaUserRepository,
-    PrismaMfaEnrollmentRepository,
     AUTH_USER_REPOSITORY,
     AUTH_SESSION_REPOSITORY,
     AUTH_MFA_ENROLLMENT_REPOSITORY,

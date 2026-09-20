@@ -3,10 +3,6 @@ import type {
   AuthPrimaryEmailAddressPolicy,
   AuthUserRole,
 } from "@lcsp/contracts/auth";
-import type {
-  CredentialProvider,
-  RepositoryAuthenticationMode,
-} from "@lcsp/contracts/github-integration";
 
 export type AuthProfileSuccess = {
   ok: true;
@@ -43,31 +39,10 @@ export type AuthSessionsSuccess = {
   }>;
 };
 
-export type AuthRepositoriesSuccess = {
-  ok: true;
-  repositories: Array<{
-    id: string;
-    provider: CredentialProvider;
-    authentication_mode: RepositoryAuthenticationMode;
-    installation_id: string | null;
-    repository_name: string;
-    repository_full_name: string;
-    default_branch: string;
-    status: string;
-    connected_at: string;
-    revoked_at: string | null;
-    assessment_id: string | null;
-    assessment_name: string | null;
-  }>;
-};
-
 export type RevokeOwnedSessionSuccess = {
   ok: true;
   revoked_session_id: string;
 };
 
 export type AuthSettingsResponse =
-  | AuthProfileSuccess
-  | AuthSessionsSuccess
-  | AuthRepositoriesSuccess
-  | RevokeOwnedSessionSuccess;
+  AuthProfileSuccess | AuthSessionsSuccess | RevokeOwnedSessionSuccess;

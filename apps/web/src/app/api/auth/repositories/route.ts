@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const upstream = await upstreamRequest("/auth/repositories", {
+  const upstream = await upstreamRequest("/github/repositories", {
     bearerToken: session.token,
   });
   return validatedUpstreamJson(upstream, sanitizeRepositoriesPayload);

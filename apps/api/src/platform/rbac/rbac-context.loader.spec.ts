@@ -7,7 +7,7 @@ import type { UserRepository } from "../../modules/auth/application/ports/persis
 import { MfaEnrollment } from "../../modules/auth/domain/entities/mfa-enrollment.entity.js";
 import { Session } from "../../modules/auth/domain/entities/session.entity.js";
 import { User } from "../../modules/auth/domain/entities/user.entity.js";
-import { hashSecret } from "../../modules/auth/infrastructure/security/security.utils.js";
+import { hashSecret } from "../security/crypto.utils.js";
 import { RbacContextLoader } from "./rbac-context.loader.js";
 import { RBAC_REASON_CODES } from "@lcsp/contracts/rbac";
 

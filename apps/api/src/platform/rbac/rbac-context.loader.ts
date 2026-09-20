@@ -12,10 +12,7 @@ import type {
   Session,
   User,
 } from "../../modules/auth/domain/models/auth.models.js";
-import {
-  fingerprintToken,
-  verifySecret,
-} from "../../modules/auth/infrastructure/security/security.utils.js";
+import { fingerprintToken, verifySecret } from "../security/crypto.utils.js";
 import {
   RBAC_REASON_CODES,
   type RbacContextDenialReason,

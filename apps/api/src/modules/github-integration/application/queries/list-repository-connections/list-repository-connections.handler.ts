@@ -1,8 +1,8 @@
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
-import type { AuthRepositoriesSuccess } from "../../contracts/auth/settings.contract.ts";
-import { ListAuthRepositoriesQuery } from "./list-auth-repositories.query.ts";
+import type { RepositoryConnectionsSuccess } from "../../contracts/github-integration/list-repository-connections.contract.js";
+import { ListRepositoryConnectionsQuery } from "./list-repository-connections.query.js";
 import {
   CredentialProvider as PrismaCredentialProvider,
   RepositoryAuthenticationMode,
@@ -12,13 +12,13 @@ import {
   REPOSITORY_AUTHENTICATION_MODES,
 } from "@lcsp/contracts/github-integration";
 
-@QueryHandler(ListAuthRepositoriesQuery)
-export class ListAuthRepositoriesHandler implements IQueryHandler<ListAuthRepositoriesQuery> {
+@QueryHandler(ListRepositoryConnectionsQuery)
+export class ListRepositoryConnectionsHandler implements IQueryHandler<ListRepositoryConnectionsQuery> {
   constructor(private readonly prisma: PrismaService) {}
 
   async execute(
-    query: ListAuthRepositoriesQuery,
-  ): Promise<AuthRepositoriesSuccess> {
+    query: ListRepositoryConnectionsQuery,
+  ): Promise<RepositoryConnectionsSuccess> {
     const connections = await this.prisma.repositoryConnection.findMany({
       where: {
         userId: query.context.userId,

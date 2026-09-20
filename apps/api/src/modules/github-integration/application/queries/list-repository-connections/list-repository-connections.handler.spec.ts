@@ -5,10 +5,10 @@ import {
   REPOSITORY_CONNECTION_STATUSES,
 } from "@lcsp/contracts/github-integration";
 
-import { ListAuthRepositoriesHandler } from "./list-auth-repositories.handler.js";
-import { ListAuthRepositoriesQuery } from "./list-auth-repositories.query.js";
+import { ListRepositoryConnectionsHandler } from "./list-repository-connections.handler.js";
+import { ListRepositoryConnectionsQuery } from "./list-repository-connections.query.js";
 
-describe("ListAuthRepositoriesHandler authentication coexistence", () => {
+describe("ListRepositoryConnectionsHandler authentication coexistence", () => {
   it("returns App and CLI connections without exposing credential internals", async () => {
     const base = {
       userId: "manager",
@@ -42,10 +42,10 @@ describe("ListAuthRepositoriesHandler authentication coexistence", () => {
       },
       assessment: { findMany: jest.fn(() => Promise.resolve([])) },
     };
-    const result = await new ListAuthRepositoriesHandler(
+    const result = await new ListRepositoryConnectionsHandler(
       prisma as never,
     ).execute(
-      new ListAuthRepositoriesQuery({
+      new ListRepositoryConnectionsQuery({
         userId: "manager",
       } as never),
     );

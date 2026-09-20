@@ -80,7 +80,6 @@ import type { SensitiveRouteCheckDto } from "../../application/contracts/auth/in
 import {
   CheckSensitiveRouteQuery,
   GetAuthProfileQuery,
-  ListAuthRepositoriesQuery,
   ListAuthSessionsQuery,
 } from "../../application/queries/index.ts";
 
@@ -391,20 +390,6 @@ export class AuthController {
         new RevokeOwnedSessionCommand(sessionId, request.rbacContext, {
           correlationId: request.correlationId,
         }),
-      ),
-    );
-  }
-
-  /**
-   * Guarded repositories list endpoint for the user.
-   */
-  @Get("auth/repositories")
-  @UseGuards(RbacGuard)
-  @RequireSession()
-  async listRepositories(@Req() request: AuthenticatedRequest) {
-    return resultEnvelope(
-      await this.queryBus.execute(
-        new ListAuthRepositoriesQuery(request.rbacContext),
       ),
     );
   }
