@@ -1921,32 +1921,33 @@ class AIDiscoveryEnricher:
         ]
 
         # Object projections belong to the abstract object, not to one lexical
-        # variable spelling. Build equivalence classes for holder bindings that
-        # share an ALIASES/ASSIGNS value, then lift the same property across that
-        # class. This keeps unrelated objects with the same property isolated.
-        projection_keys: set[str] = {
-            node.key
-            for node in node_by_key.values()
-            if node.file_path == relative
-            and (node.attributes or {}).get("memberProjection") is True
-        }
-        projection_keys.update(
-            str((node.attributes or {}).get("receiverProjectionKey"))
-            for node in element_dispatch_nodes
-            if (node.attributes or {}).get("receiverProjectionKey")
-        )
-        projection_holders = {}
-        projection_source_lines: dict[str, int] = {}
-        for key in projection_keys:
+        # variable spelling. Preserve every occurrence because the same binding
+        # can be rebound and later write the same property on a different object.
+        projection_occurrences: list[tuple[str, str, str, int]] = []
+        for node in program.nodes:
+            if (
+                node.file_path != relative
+                or (node.attributes or {}).get("memberProjection") is not True
+                or not node.key.startswith("projection:")
+            ):
+                continue
+            holder_key, property_name = node.key[len("projection:") :].rsplit(
+                ":", 1
+            )
+            projection_occurrences.append(
+                (node.key, holder_key, property_name, int(node.start_line or 0))
+            )
+        for node in element_dispatch_nodes:
+            key = str((node.attributes or {}).get("receiverProjectionKey") or "")
             if not key.startswith("projection:"):
                 continue
             holder_key, property_name = key[len("projection:") :].rsplit(
                 ":", 1
             )
-            projection_holders[holder_key] = property_name
-            projection_node = node_by_key.get(key)
-            if projection_node is not None and projection_node.start_line:
-                projection_source_lines[key] = int(projection_node.start_line)
+            projection_occurrences.append(
+                (key, holder_key, property_name, int(node.start_line or 0))
+            )
+        projection_keys = {item[0] for item in projection_occurrences}
         # Keep alias state at the binding and source position. A variable key
         # can be assigned several times, so a file-wide union would let a
         # future write erase an alias that was valid at an earlier dispatch.
@@ -2092,27 +2093,44 @@ class AIDiscoveryEnricher:
             receiver_state, receiver_component = value_component_at(
                 receiver_holder_key, dispatch_line
             )
-            if receiver_state != "known":
+            if receiver_state == "unresolved":
                 return set()
+
+            def occurrence_is_relevant(
+                candidate_key: str,
+                candidate_line: int,
+            ) -> bool:
+                for edge in program.edges:
+                    if (
+                        edge.edge_type != "ALIASES"
+                        or edge.target_key != candidate_key
+                        or edge.source_key not in relevant_method_receiver_keys
+                    ):
+                        continue
+                    edge_line = int(
+                        (edge.attributes or {}).get("projectionLine") or 0
+                    )
+                    if edge_line == candidate_line:
+                        return True
+                return False
+
             result: set[str] = set()
-            for candidate in projection_keys:
-                if not candidate.startswith("projection:"):
-                    continue
-                candidate_holder, candidate_property = candidate[
-                    len("projection:") :
-                ].rsplit(":", 1)
-                candidate_line = projection_source_lines.get(
-                    candidate, dispatch_line
-                )
+            for (
+                candidate_key,
+                candidate_holder,
+                candidate_property,
+                candidate_line,
+            ) in projection_occurrences:
                 candidate_state, candidate_component = value_component_at(
-                    candidate_holder, candidate_line
+                    candidate_holder, candidate_line or dispatch_line
                 )
                 if (
                     projection_paths_overlap(candidate_property, receiver_property)
-                    and candidate_state == "known"
+                    and candidate_state != "unresolved"
                     and candidate_component == receiver_component
+                    and occurrence_is_relevant(candidate_key, candidate_line)
                 ):
-                    result.add(candidate)
+                    result.add(candidate_key)
             return result
 
         # This catches local aliases, Python aliases, and callbacks represented as
@@ -2391,12 +2409,6 @@ class AIDiscoveryEnricher:
                         )
                     )
                     if receiver_kind == "MEMBER_PROJECTION":
-                        wildcard_projection_key = ""
-                        if receiver_projection_key:
-                            wildcard_projection_key = (
-                                receiver_projection_key.rsplit(":", 1)[0]
-                                + ":*"
-                            )
                         receiver_holder_key = ""
                         receiver_property = ""
                         if receiver_projection_key.startswith("projection:"):
@@ -2436,14 +2448,7 @@ class AIDiscoveryEnricher:
                                 == "unresolved"
                             )
                         binding_relevant = (
-                            receiver_projection_key
-                            in relevant_method_receiver_keys
-                            or wildcard_projection_key
-                            in relevant_method_receiver_keys
-                            or bool(
-                                equivalent_projection_keys
-                                & relevant_method_receiver_keys
-                            )
+                            bool(equivalent_projection_keys)
                             or unresolved_reassignment
                             or receiver_value_unresolved
                         )

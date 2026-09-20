@@ -1098,7 +1098,10 @@ class RepositorySemanticExtractor:
                         "ALIASES",
                         source_key,
                         projection_key,
-                        attributes={"property": property_path},
+                        attributes={
+                            "property": property_path,
+                            "projectionLine": line_no,
+                        },
                     )
                 )
 
@@ -1551,7 +1554,10 @@ class RepositorySemanticExtractor:
                                 "ALIASES",
                                 source_key,
                                 projection_key,
-                                attributes={"property": property_name},
+                                attributes={
+                                    "property": property_name,
+                                    "projectionLine": line_no,
+                                },
                             )
                         )
 
