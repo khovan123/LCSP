@@ -1,5 +1,11 @@
 import { BillingDomainError } from "../../../domain/billing.errors.js";
 import type {
+  BillingUsageClaimRequest,
+  BillingUsageReleaseRequest,
+  BillingUsageReservationRequest,
+  BillingUsageSettlementRequest,
+} from "@lcsp/contracts/billing";
+import type {
   BillingUsageClaimInput,
   BillingUsageReleaseInput,
   BillingUsageReservationInput,
@@ -12,7 +18,7 @@ import {
 } from "../parsers/billing-usage.request-parser.js";
 
 export function toReservationInput(
-  body: Record<string, unknown>,
+  body: BillingUsageReservationRequest,
 ): BillingUsageReservationInput {
   const assessmentId = text(body.assessmentId);
   const runId = text(body.runId);
@@ -82,7 +88,7 @@ export function toReservationInput(
 
 export function toReleaseInput(
   reservationId: string,
-  body: Record<string, unknown>,
+  body: BillingUsageReleaseRequest,
 ): BillingUsageReleaseInput {
   const assessmentId = text(body.assessmentId);
   if (!assessmentId || !reservationId.trim())
@@ -92,7 +98,7 @@ export function toReleaseInput(
 
 export function toClaimInput(
   reservationId: string,
-  body: Record<string, unknown>,
+  body: BillingUsageClaimRequest,
 ): BillingUsageClaimInput {
   const assessmentId = text(body.assessmentId);
   const invocationId = text(body.invocationId);
@@ -102,7 +108,7 @@ export function toClaimInput(
 }
 
 export function toSettlementInput(
-  body: Record<string, unknown>,
+  body: BillingUsageSettlementRequest,
   userId: string,
 ): BillingUsageSettlementInput {
   const runtimeValue = body.effectiveRuntimeModel;
@@ -176,10 +182,7 @@ export function toSettlementInput(
   };
 }
 
-function optionalBigInt(
-  body: Record<string, unknown>,
-  name: string,
-): bigint | undefined {
-  const value = body[name];
+function optionalBigInt(body: object, name: string): bigint | undefined {
+  const value = (body as Record<string, unknown>)[name];
   return value === undefined ? undefined : parseInteger(text(value), name);
 }

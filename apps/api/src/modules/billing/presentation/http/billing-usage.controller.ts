@@ -1,5 +1,18 @@
 import { Body, Controller, Param, Post, UseGuards } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
+import {
+  BILLING_ERROR_CODES,
+  billingResourceIdSchema,
+  billingUsageClaimSchema,
+  billingUsageReleaseSchema,
+  billingUsageReservationSchema,
+  billingUsageSettlementSchema,
+  type BillingUsageClaimRequest,
+  type BillingUsageReleaseRequest,
+  type BillingUsageReservationRequest,
+  type BillingUsageSettlementRequest,
+} from "@lcsp/contracts/billing";
+import { ZodValidationPipe } from "../../../../common/pipes/zod-validation.pipe.ts";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { BillingDomainError } from "../../domain/billing.errors.js";
@@ -29,7 +42,15 @@ export class BillingUsageController {
 
   @Post("reservations")
   @UseGuards(WorkerApiKeyGuard)
-  async reserve(@Body() body: Record<string, unknown>) {
+  async reserve(
+    @Body(
+      new ZodValidationPipe(
+        billingUsageReservationSchema,
+        BILLING_ERROR_CODES.validationFailed,
+      ),
+    )
+    body: BillingUsageReservationRequest,
+  ) {
     try {
       const result = await this.commandBus.execute(
         new ReserveBillingCreditsCommand(toReservationInput(body)),
@@ -43,8 +64,21 @@ export class BillingUsageController {
   @Post("reservations/:reservationId/release")
   @UseGuards(WorkerApiKeyGuard)
   async release(
-    @Param("reservationId") reservationId: string,
-    @Body() body: Record<string, unknown>,
+    @Param(
+      "reservationId",
+      new ZodValidationPipe(
+        billingResourceIdSchema,
+        BILLING_ERROR_CODES.validationFailed,
+      ),
+    )
+    reservationId: string,
+    @Body(
+      new ZodValidationPipe(
+        billingUsageReleaseSchema,
+        BILLING_ERROR_CODES.validationFailed,
+      ),
+    )
+    body: BillingUsageReleaseRequest,
   ) {
     try {
       const result = await this.commandBus.execute(
@@ -61,8 +95,21 @@ export class BillingUsageController {
   @Post("reservations/:reservationId/claim")
   @UseGuards(WorkerApiKeyGuard)
   async claim(
-    @Param("reservationId") reservationId: string,
-    @Body() body: Record<string, unknown>,
+    @Param(
+      "reservationId",
+      new ZodValidationPipe(
+        billingResourceIdSchema,
+        BILLING_ERROR_CODES.validationFailed,
+      ),
+    )
+    reservationId: string,
+    @Body(
+      new ZodValidationPipe(
+        billingUsageClaimSchema,
+        BILLING_ERROR_CODES.validationFailed,
+      ),
+    )
+    body: BillingUsageClaimRequest,
   ) {
     try {
       const result = await this.commandBus.execute(
@@ -76,7 +123,15 @@ export class BillingUsageController {
 
   @Post("usage")
   @UseGuards(WorkerApiKeyGuard)
-  async settle(@Body() body: Record<string, unknown>) {
+  async settle(
+    @Body(
+      new ZodValidationPipe(
+        billingUsageSettlementSchema,
+        BILLING_ERROR_CODES.validationFailed,
+      ),
+    )
+    body: BillingUsageSettlementRequest,
+  ) {
     try {
       const assessmentId =
         typeof body.assessmentId === "string" ? body.assessmentId.trim() : "";

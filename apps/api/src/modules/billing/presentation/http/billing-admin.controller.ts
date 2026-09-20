@@ -1,14 +1,15 @@
 import { Controller, Get, Query, UseGuards } from "@nestjs/common";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import {
+  BILLING_ERROR_CODES,
+  billingAdminDashboardQuerySchema,
+  type BillingAdminDashboardQuery,
+} from "@lcsp/contracts/billing";
+import { ZodValidationPipe } from "../../../../common/pipes/zod-validation.pipe.ts";
 import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
-import {
-  BillingAdminRevenueService,
-  normalizeBillingAdminGateway,
-  normalizeBillingAdminFilter,
-  normalizeBillingAdminPeriod,
-} from "../../application/services/billing-admin-revenue.service.js";
+import { BillingAdminRevenueService } from "../../application/services/billing-admin-revenue.service.js";
 
 @Controller("admin/billing")
 @UseGuards(RbacGuard)
@@ -18,30 +19,14 @@ export class BillingAdminController {
 
   @Get()
   async getDashboard(
-    @Query("period") period?: string,
-    @Query("status") status?: string,
-    @Query("gateway") gateway?: string,
-    @Query("page") rawPage?: string,
-    @Query("pageSize") rawPageSize?: string,
+    @Query(
+      new ZodValidationPipe(
+        billingAdminDashboardQuerySchema,
+        BILLING_ERROR_CODES.validationFailed,
+      ),
+    )
+    query: BillingAdminDashboardQuery,
   ) {
-    const normalizedPeriod = normalizeBillingAdminPeriod(period);
-    const normalizedStatus = normalizeBillingAdminFilter(status);
-    const page = parsePositiveInteger(rawPage, 1);
-    const pageSize = Math.min(parsePositiveInteger(rawPageSize, 20), 100);
-    return resultEnvelope(
-      await this.revenue.getDashboard({
-        period: normalizedPeriod,
-        status: normalizedStatus,
-        gateway: normalizeBillingAdminGateway(gateway),
-        page,
-        pageSize,
-      }),
-    );
+    return resultEnvelope(await this.revenue.getDashboard(query));
   }
-}
-
-function parsePositiveInteger(value: string | undefined, fallback: number) {
-  if (!value) return fallback;
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
