@@ -5,7 +5,7 @@ import type {
   AssessmentPostFindingRuntimeState,
 } from "@lcsp/contracts/evidence";
 import type { MessageEvent } from "@nestjs/common";
-import { Controller, Logger, Req, Sse, UseGuards } from "@nestjs/common";
+import { Controller, Logger, Query, Req, Sse, UseGuards } from "@nestjs/common";
 import {
   EMPTY,
   catchError,
@@ -45,7 +45,10 @@ export class WorkspaceRuntimeEventsController {
   @Sse()
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
-  stream(@Req() request: AuthenticatedRequest) {
+  stream(
+    @Req() request: AuthenticatedRequest,
+    @Query("assessment_id") assessmentId?: string,
+  ) {
     const rbacContext = request.rbacContext;
     const ownerId =
       rbacContext.role === AUTH_USER_ROLES.customer
@@ -144,13 +147,17 @@ export class WorkspaceRuntimeEventsController {
       ),
     );
     const agentStream =
-      this.runtimeEvents.observeAgentStreamEvents?.(ownerId).pipe(
-        map((event): MessageEvent => ({
-          id: event.eventId,
-          type: "workspace.agent-stream",
-          data: toAgentStreamPayload(event),
-        })),
-      ) ?? EMPTY;
+      this.runtimeEvents
+        .observeAgentStreamEvents?.(ownerId, {
+          assessmentId: assessmentId?.trim() ? assessmentId : null,
+        })
+        .pipe(
+          map((event): MessageEvent => ({
+            id: event.eventId,
+            type: "workspace.agent-stream",
+            data: toAgentStreamPayload(event),
+          })),
+        ) ?? EMPTY;
     return merge(snapshots, agentStream);
   }
 }

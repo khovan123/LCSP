@@ -147,6 +147,51 @@ describe("AssessmentRuntimeEventService", () => {
     ownerBSubscription.unsubscribe();
   });
 
+  it("filters assessment-scoped live agent events", async () => {
+    const prisma = {
+      assessment: {
+        findUnique: jest.fn(({ where }: { where: { id: string } }) =>
+          Promise.resolve(
+            where.id === "assessment-a" || where.id === "assessment-b"
+              ? { ownerId: "user-a" }
+              : null,
+          ),
+        ),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([]),
+      },
+      assessmentRuntimeEvent: {
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([]),
+      },
+    };
+    const service = new AssessmentRuntimeEventService(prisma as never);
+    const events: string[] = [];
+    const subscription = service
+      .observeAgentStreamEvents("user-a", { assessmentId: "assessment-b" })
+      .subscribe((event) => events.push(event.assessmentId));
+
+    await service.publishAgentStreamEvent({
+      assessmentId: "assessment-a",
+      runId: "run-a",
+      correlationId: "corr-a",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
+      text: "A",
+    });
+    await service.publishAgentStreamEvent({
+      assessmentId: "assessment-b",
+      runId: "run-b",
+      correlationId: "corr-b",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
+      text: "B",
+    });
+
+    expect(events).toEqual(["assessment-b"]);
+    subscription.unsubscribe();
+  });
+
   it("persists durable semantic agent stream events for replay after service recreation", async () => {
     const persistedRows: unknown[] = [];
     const prisma = {
@@ -406,6 +451,64 @@ describe("AssessmentRuntimeEventService", () => {
     expect(maxInFlightQueries).toBeLessThanOrEqual(4);
     expect(replay).toHaveLength(5_000);
     expect(new Set(replay.map((event) => event.assessmentId)).size).toBe(20);
+  });
+
+  it("replays explicitly requested durable history beyond the owner-wide assessment cap", async () => {
+    const assessmentIds = Array.from(
+      { length: 101 },
+      (_, index) => `assessment-${index + 1}`,
+    );
+    const prisma = {
+      assessment: {
+        findUnique: jest.fn(({ where }: { where: { id: string } }) =>
+          Promise.resolve(
+            assessmentIds.includes(where.id) ? { ownerId: "user-a" } : null,
+          ),
+        ),
+        findMany: jest.fn(({ take }: { take?: number }) =>
+          Promise.resolve(assessmentIds.slice(0, take).map((id) => ({ id }))),
+        ),
+      },
+      assessmentRuntimeEvent: {
+        findMany: jest.fn(({ where }: { where?: { assessmentId?: string } }) =>
+          Promise.resolve(
+            where?.assessmentId
+              ? [durableAgentStreamRow(1, where.assessmentId)]
+              : [],
+          ),
+        ),
+      },
+    };
+    const service = new AssessmentRuntimeEventService(prisma as never);
+    const serviceAccess = service as unknown as {
+      getDurableAgentStreamEvents: (
+        ownerId: string,
+        assessmentId?: string | null,
+      ) => Promise<Array<{ assessmentId: string; eventId: string }>>;
+    };
+
+    const ownerWideReplay =
+      await serviceAccess.getDurableAgentStreamEvents("user-a");
+    const scopedReplay = await serviceAccess.getDurableAgentStreamEvents(
+      "user-a",
+      "assessment-101",
+    );
+
+    expect(prisma.assessment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: { updatedAt: "desc" },
+        take: 100,
+      }),
+    );
+    expect(
+      ownerWideReplay.some((event) => event.assessmentId === "assessment-101"),
+    ).toBe(false);
+    expect(scopedReplay).toEqual([
+      expect.objectContaining({
+        assessmentId: "assessment-101",
+        eventId: "assessment-101-semantic-1",
+      }),
+    ]);
   });
 
   it("deduplicates durable replay and live-buffer overlap by event id", async () => {

@@ -69,6 +69,7 @@ const AGENT_STREAM_DURABLE_REPLAY_ASSESSMENT_LIMIT = 100;
 const AGENT_STREAM_DURABLE_REPLAY_QUERY_CONCURRENCY = 4;
 const AGENT_STREAM_EVENT_DEDUPE_SEEN_LIMIT =
   AGENT_STREAM_DURABLE_REPLAY_TOTAL_LIMIT + 1_000;
+const INVALID_ASSESSMENT_STREAM_SCOPE = "__invalid_assessment_stream_scope__";
 const AGENT_STREAM_SEMANTIC_SCHEMA_VERSION = "AGENT_STREAM_SEMANTIC_V1";
 const AGENT_STREAM_DURABILITY_DURABLE = "DURABLE";
 
@@ -179,6 +180,10 @@ type RuntimeRepositorySnapshot = {
 type OwnedAssessmentAgentStreamEvent = {
   ownerId: string;
   event: AssessmentAgentStreamEvent;
+};
+
+type ObserveAgentStreamEventsOptions = {
+  assessmentId?: string | null;
 };
 
 type RuntimeEvidenceReportSnapshot = {
@@ -491,15 +496,22 @@ export class AssessmentRuntimeEventService {
   /** Observe live events belonging only to assessments owned by one customer. */
   observeAgentStreamEvents(
     ownerId: string,
+    options?: ObserveAgentStreamEventsOptions,
   ): Observable<AssessmentAgentStreamEvent> {
+    const assessmentId = normalizeAssessmentStreamScope(options?.assessmentId);
     return merge(
       defer(() =>
-        from(this.getDurableAgentStreamEvents(ownerId)).pipe(
+        from(this.getDurableAgentStreamEvents(ownerId, assessmentId)).pipe(
           mergeMap((events) => from(events)),
         ),
       ),
       this.agentStreamEvents.pipe(
-        filter((entry) => entry.ownerId === ownerId),
+        filter(
+          (entry) =>
+            entry.ownerId === ownerId &&
+            (assessmentId === null ||
+              entry.event.assessmentId === assessmentId),
+        ),
         map((entry) => entry.event),
       ),
     ).pipe(
@@ -551,8 +563,12 @@ export class AssessmentRuntimeEventService {
 
   private async getDurableAgentStreamEvents(
     ownerId: string,
+    assessmentId: string | null = null,
   ): Promise<AssessmentAgentStreamEvent[]> {
-    const assessmentIds = await this.getOwnedAssessmentIds(ownerId);
+    const assessmentIds =
+      assessmentId === null
+        ? await this.getOwnedAssessmentIds(ownerId)
+        : await this.getOwnedAssessmentId(ownerId, assessmentId);
     const rowsByAssessment = await mapWithConcurrency(
       assessmentIds,
       AGENT_STREAM_DURABLE_REPLAY_QUERY_CONCURRENCY,
@@ -595,6 +611,14 @@ export class AssessmentRuntimeEventService {
     return assessments.flatMap((assessment) =>
       typeof assessment.id === "string" ? [assessment.id] : [],
     );
+  }
+
+  private async getOwnedAssessmentId(
+    ownerId: string,
+    assessmentId: string,
+  ): Promise<string[]> {
+    const assessmentOwnerId = await this.resolveAssessmentOwnerId(assessmentId);
+    return assessmentOwnerId === ownerId ? [assessmentId] : [];
   }
 
   /**
@@ -1860,6 +1884,18 @@ function compareAgentStreamEvents(
   const emittedAt = left.emittedAt.localeCompare(right.emittedAt);
   if (emittedAt !== 0) return emittedAt;
   return left.eventId.localeCompare(right.eventId);
+}
+
+function normalizeAssessmentStreamScope(
+  assessmentId: string | null | undefined,
+): string | null {
+  if (assessmentId === null || assessmentId === undefined) {
+    return null;
+  }
+  return (
+    sanitizeAgentStreamIdentifier(assessmentId) ??
+    INVALID_ASSESSMENT_STREAM_SCOPE
+  );
 }
 
 function durableReplayLimitForAssessment(
