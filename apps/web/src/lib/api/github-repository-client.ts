@@ -233,6 +233,9 @@ function isRepositoryConnectionsPayload(
       const candidate = repository as Record<string, unknown>;
       return (
         typeof candidate.id === "string" &&
+        Object.values(CREDENTIAL_PROVIDERS).includes(
+          candidate.provider as CredentialProvider,
+        ) &&
         Object.values(REPOSITORY_AUTHENTICATION_MODES).includes(
           candidate.authentication_mode as RepositoryAuthenticationMode,
         ) &&
