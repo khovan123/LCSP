@@ -25,8 +25,8 @@ import {
   SuspendUserCommand,
   RestoreUserCommand,
 } from "../../application/commands/index.js";
-import { idempotency } from "../../application/services/admin-account.validation.js";
-import type { AdminActor } from "../../application/services/admin-account.transaction.js";
+import { idempotency } from "../../application/support/admin-account.validation.js";
+import type { AdminActor } from "../../infrastructure/persistence/admin-account.transaction.js";
 
 @Controller("admin/users")
 export class AdminUsersController {

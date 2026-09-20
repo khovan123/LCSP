@@ -9,7 +9,7 @@ import {
 } from "@lcsp/contracts/auth";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AUTH_RECORD_TYPES } from "../../../../auth/infrastructure/persistence/auth-record.persistence.js";
-import { parseListQuery } from "../../services/admin-account.validation.js";
+import { parseListQuery } from "../../support/admin-account.validation.js";
 import { ListAdminUsersQuery } from "./list-admin-users.query.js";
 
 type ListRow = {

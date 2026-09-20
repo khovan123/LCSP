@@ -5,7 +5,7 @@ import {
 } from "@lcsp/contracts/auth";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuthAuditService } from "../../../../auth/application/services/auth/auth-audit.service.js";
-import { mutateAdminAccount } from "../../services/admin-account.mutator.js";
+import { mutateAdminAccount } from "../../support/admin-account.mutator.js";
 import { RestoreUserCommand } from "./restore-user.command.js";
 
 @CommandHandler(RestoreUserCommand)

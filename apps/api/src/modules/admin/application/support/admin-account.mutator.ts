@@ -23,7 +23,7 @@ import {
   replay,
   requestHash,
   type AdminActor,
-} from "./admin-account.transaction.js";
+} from "../../infrastructure/persistence/admin-account.transaction.js";
 import {
   invalid,
   record,

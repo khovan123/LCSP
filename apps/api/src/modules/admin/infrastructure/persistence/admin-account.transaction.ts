@@ -38,14 +38,14 @@ export async function accountTransaction<T>(
       {
         isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
         timeout: 15000,
-        maxWait: 5000,
       },
     );
   } catch (error) {
     const e = error as { code?: string; meta?: { code?: string } };
     if (
       e.code === "P2034" ||
-      e.code === "P2028" ||
+      e.code === "55P03" ||
+      e.code === "40P01" ||
       e.meta?.code === "55P03" ||
       e.meta?.code === "40P01"
     ) {
@@ -109,8 +109,9 @@ export function requestHash(
   operation: AdminAccountOperation,
   input: unknown,
 ): string {
+  const serialized = JSON.stringify(input, Object.keys(input || {}).sort());
   return createHash("sha256")
-    .update(JSON.stringify({ operation, input }))
+    .update(`${operation}:${serialized}`)
     .digest("hex");
 }
 export async function replay(
@@ -118,8 +119,8 @@ export async function replay(
   actor: AdminActor,
   operation: AdminAccountOperation,
   hash: string,
-): Promise<{ resourceId: string; resourceGeneration: number | null } | null> {
-  const prior = await tx.adminAccountCommandReceipt.findUnique({
+): Promise<{ resourceId: string } | null> {
+  const existing = await tx.adminAccountCommandReceipt.findUnique({
     where: {
       actorId_idempotencyKey: {
         actorId: actor.userId,
@@ -127,15 +128,13 @@ export async function replay(
       },
     },
   });
-  if (!prior) return null;
-  if (prior.operation !== operation || prior.requestHash !== hash)
+  if (!existing) return null;
+  if (existing.operation !== operation || existing.requestHash !== hash) {
     throw problemException(E.idempotencyConflict, actor.correlationId, {
       status: HttpStatus.CONFLICT,
     });
-  return {
-    resourceId: prior.resourceId,
-    resourceGeneration: prior.resourceGeneration,
-  };
+  }
+  return { resourceId: existing.resourceId };
 }
 export async function receipt(
   tx: Prisma.TransactionClient,
@@ -143,17 +142,25 @@ export async function receipt(
   operation: AdminAccountOperation,
   hash: string,
   resourceId: string,
-  resourceGeneration: number | null = null,
 ): Promise<void> {
-  await tx.adminAccountCommandReceipt.create({
-    data: {
-      id: randomUUID(),
-      actorId: actor.userId,
-      idempotencyKey: actor.idempotencyKey,
-      operation,
-      requestHash: hash,
-      resourceId,
-      resourceGeneration,
-    },
-  });
+  try {
+    await tx.adminAccountCommandReceipt.create({
+      data: {
+        id: randomUUID(),
+        actorId: actor.userId,
+        idempotencyKey: actor.idempotencyKey,
+        operation,
+        requestHash: hash,
+        resourceId,
+      },
+    });
+  } catch (error) {
+    const e = error as { code?: string };
+    if (e.code === "P2002") {
+      throw problemException(E.idempotencyConflict, actor.correlationId, {
+        status: HttpStatus.CONFLICT,
+      });
+    }
+    throw error;
+  }
 }

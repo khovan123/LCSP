@@ -1,4 +1,4 @@
-import type { AdminActor } from "../../services/admin-account.transaction.js";
+import type { AdminActor } from "../../../infrastructure/persistence/admin-account.transaction.js";
 
 export class SuspendUserCommand {
   constructor(

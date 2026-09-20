@@ -38,7 +38,7 @@ import { CqrsModule } from "@nestjs/cqrs";
 import { ADMIN_COMMAND_HANDLERS } from "../src/modules/admin/application/commands/index.js";
 import { ADMIN_QUERY_HANDLERS } from "../src/modules/admin/application/queries/index.js";
 import { AdminUsersController } from "../src/modules/admin/presentation/http/admin-users.controller.js";
-import { mutateAdminAccount } from "../src/modules/admin/application/services/admin-account.mutator.js";
+import { mutateAdminAccount } from "../src/modules/admin/application/support/admin-account.mutator.js";
 import { AuthAuditService } from "../src/modules/auth/application/services/auth/auth-audit.service.js";
 import { PrismaAuthorizationDecisionRepository } from "../src/platform/rbac/prisma-authorization-decision.repository.js";
 import {

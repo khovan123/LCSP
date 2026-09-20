@@ -1,16 +1,12 @@
 import { describe, expect, it, jest } from "@jest/globals";
-import {
-  ADMIN_ACCOUNT_OPERATIONS as O,
-  AUTH_ACCOUNT_STATUSES,
-  AUTH_USER_ROLES,
-} from "@lcsp/contracts/auth";
+import { AUTH_ACCOUNT_STATUSES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import type { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import type { AuthAuditService } from "../../../auth/application/services/auth/auth-audit.service.js";
 import { SuspendUserCommand } from "./suspend-user/suspend-user.command.js";
 import { SuspendUserHandler } from "./suspend-user/suspend-user.handler.js";
 import { RestoreUserCommand } from "./restore-user/restore-user.command.js";
 import { RestoreUserHandler } from "./restore-user/restore-user.handler.js";
-import type { AdminActor } from "../services/admin-account.transaction.js";
+import type { AdminActor } from "../../infrastructure/persistence/admin-account.transaction.js";
 
 describe("Admin CQRS Commands", () => {
   const mockActor: AdminActor = {
