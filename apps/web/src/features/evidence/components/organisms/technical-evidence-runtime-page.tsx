@@ -82,6 +82,14 @@ type SemanticRuntimePayload = SummaryValueRecord & {
   provider?: string;
   model?: string;
   goalSummary?: string;
+  parameters?: WorkspaceRuntimeSummaryValue;
+  resultSummary?: WorkspaceRuntimeSummaryValue;
+  availableToolNames?: WorkspaceRuntimeSummaryValue;
+  inputArtifactRefs?: WorkspaceRuntimeSummaryValue;
+  outputRefs?: WorkspaceRuntimeSummaryValue;
+  usage?: WorkspaceRuntimeSummaryValue;
+  finishReason?: string;
+  promptVersion?: string;
   evidenceRefs?: WorkspaceRuntimeSummaryValue;
   investigationGoals?: WorkspaceRuntimeSummaryValue;
   requiredEvidence?: WorkspaceRuntimeSummaryValue;
@@ -424,10 +432,18 @@ function semanticFields(payload: SemanticRuntimePayload) {
     ["claimCount", payload.claimCount],
     ["skillName", payload.skillName],
     ["skillVersionOrHash", payload.skillVersionOrHash],
+    ["promptVersion", payload.promptVersion],
     ["ruleSetVersionOrHash", payload.ruleSetVersionOrHash],
     ["provider", payload.provider],
     ["model", payload.model],
     ["goalSummary", payload.goalSummary],
+    ["parameters", payload.parameters],
+    ["resultSummary", payload.resultSummary],
+    ["availableToolNames", payload.availableToolNames],
+    ["inputArtifactRefs", payload.inputArtifactRefs],
+    ["outputRefs", payload.outputRefs],
+    ["usage", payload.usage],
+    ["finishReason", payload.finishReason],
     ["evidenceRefs", payload.evidenceRefs],
     ["investigationGoals", payload.investigationGoals],
     ["requiredEvidence", payload.requiredEvidence],

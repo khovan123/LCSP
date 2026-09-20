@@ -136,7 +136,7 @@ def test_invoke_with_stream_forwards_visible_events_and_returns_root_values():
 
     model_request = next(event for event in events if event["event_type"] == "MODEL_REQUEST")
     assert model_request["data"]["kind"] == "MODEL_REQUEST"
-    assert model_request["data"]["durability"] == "DURABLE"
+    assert model_request["data"]["durability"] == "BEST_EFFORT"
     assert model_request["data"]["provider"] == "openai"
     assert model_request["data"]["model"] == "gpt-test"
     assert model_request["data"]["nodeName"] == "model"
@@ -145,11 +145,13 @@ def test_invoke_with_stream_forwards_visible_events_and_returns_root_values():
         event for event in events if event["event_type"] == "SEMANTIC_TOOL_CALL"
     )
     assert semantic_tool_call["data"]["kind"] == "TOOL_CALL"
+    assert semantic_tool_call["data"]["durability"] == "BEST_EFFORT"
     assert semantic_tool_call["data"]["toolName"] == "lookup_rule"
     assert semantic_tool_call["data"]["parameters"]["api_key"] != "super-secret-value"
 
     model_result = next(event for event in events if event["event_type"] == "MODEL_RESULT")
     assert model_result["data"]["kind"] == "MODEL_OUTPUT"
+    assert model_result["data"]["durability"] == "BEST_EFFORT"
     assert model_result["data"]["finishReason"] == "stop"
 
     update = next(event for event in events if event["event_type"] == "GRAPH_UPDATE")

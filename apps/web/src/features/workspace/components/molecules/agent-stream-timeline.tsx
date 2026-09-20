@@ -321,7 +321,19 @@ function semanticDetail(semantic: SemanticRecord): string | null {
     semantic.goalSummary,
     semantic.status,
   ].filter((value): value is string => typeof value === "string" && value.length > 0);
-  return refs.length > 0 ? refs.join(" · ") : null;
+  const structured = semanticDisplayFields(semantic, [
+    "parameters",
+    "resultSummary",
+    "availableToolNames",
+    "inputArtifactRefs",
+    "outputRefs",
+    "usage",
+    "finishReason",
+    "skillVersionOrHash",
+    "promptVersion",
+  ]);
+  const detail = [...refs, ...structured];
+  return detail.length > 0 ? detail.join("\n") : null;
 }
 
 function semanticMeta(
@@ -351,6 +363,35 @@ function firstString(
     if (typeof value === "string" && value.length > 0) return value;
   }
   return "runtime";
+}
+
+function semanticDisplayFields(
+  semantic: SemanticRecord,
+  keys: string[],
+): string[] {
+  return keys.flatMap((key) => {
+    const value = semantic[key];
+    if (value === undefined || value === null || value === "") return [];
+    if (Array.isArray(value) && value.length === 0) return [];
+    return [`${humanizeSemanticKey(key)}: ${formatSemanticValue(value)}`];
+  });
+}
+
+function formatSemanticValue(value: AssessmentRuntimeSummaryValue): string {
+  if (Array.isArray(value)) {
+    return value.map((item) => formatSemanticValue(item)).join(", ");
+  }
+  if (value !== null && typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+function humanizeSemanticKey(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .trim();
 }
 
 function streamLabels() {

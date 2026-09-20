@@ -29,7 +29,6 @@ MAX_STREAM_DEPTH = 6
 STREAM_MODES = ("messages", "updates", "custom", "values")
 GRAPH_STREAM_MODES = ("updates", "custom", "values")
 SEMANTIC_SCHEMA_VERSION = "AGENT_STREAM_SEMANTIC_V1"
-DURABLE = "DURABLE"
 BEST_EFFORT = "BEST_EFFORT"
 PRIVATE_GRAPH_KEYS = frozenset(
     {
@@ -401,7 +400,7 @@ def _emit_message_event(
             text="tool result completed",
             data=_semantic_payload(
                 "TOOL_RESULT",
-                durability=DURABLE,
+                durability=BEST_EFFORT,
                 toolName=tool_name,
                 toolCallId=tool_call_id,
                 resultSummary={"text": result_text} if result_text else {},
@@ -426,7 +425,7 @@ def _emit_message_event(
             text="model request summary",
             data=_semantic_payload(
                 "MODEL_REQUEST",
-                durability=DURABLE,
+                durability=BEST_EFFORT,
                 agentName=agent_name,
                 agentRole=agent_name,
                 requestId=message_id,
@@ -467,7 +466,7 @@ def _emit_message_event(
             text="tool call started",
             data=_semantic_payload(
                 "TOOL_CALL",
-                durability=DURABLE,
+                durability=BEST_EFFORT,
                 toolName=tool_name,
                 toolCallId=tool_call_id,
                 parameters=_safe_tool_parameters(tool_call.get("args", "")),
@@ -519,7 +518,7 @@ def _emit_message_event(
             text="model result summary",
             data=_semantic_payload(
                 "MODEL_OUTPUT",
-                durability=DURABLE,
+                durability=BEST_EFFORT,
                 requestId=message_id,
                 messageId=message_id,
                 finishReason=finish_reason,

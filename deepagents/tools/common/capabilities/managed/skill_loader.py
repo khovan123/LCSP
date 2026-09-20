@@ -29,12 +29,18 @@ def _read_required_text(path: Path, label: str) -> str:
     return content
 
 
-@lru_cache(maxsize=16)
 def load_project_skill(name: str) -> str:
     """Return one checked-in skill body by canonical project skill name."""
     normalized = _normalize_project_skill_name(name)
-    body = _read_required_text(SKILLS_ROOT / normalized / "SKILL.md", normalized)
+    body = _load_project_skill_body(normalized)
     _emit_skill_usage(normalized, body, status="COMPLETED")
+    return body
+
+
+@lru_cache(maxsize=16)
+def _load_project_skill_body(normalized: str) -> str:
+    """Read and cache checked-in skill body content without stream side effects."""
+    body = _read_required_text(SKILLS_ROOT / normalized / "SKILL.md", normalized)
     return body
 
 
@@ -54,7 +60,6 @@ def _normalize_reference_path(reference: str) -> Path:
     return rel
 
 
-@lru_cache(maxsize=16)
 def load_project_skill_package(
     name: str,
     references: tuple[str, ...] = (),
@@ -66,8 +71,19 @@ def load_project_skill_package(
     bounded to the same skill package and deterministic markdown files.
     """
     normalized = _normalize_project_skill_name(name)
+    package = _load_project_skill_package_body(normalized, references)
+    _emit_skill_usage(normalized, package, status="COMPLETED")
+    return package
+
+
+@lru_cache(maxsize=16)
+def _load_project_skill_package_body(
+    normalized: str,
+    references: tuple[str, ...] = (),
+) -> str:
+    """Read and cache package content without stream side effects."""
     package_root = SKILLS_ROOT / normalized
-    sections = [load_project_skill(normalized)]
+    sections = [_load_project_skill_body(normalized)]
     seen: set[str] = set()
     for reference in references:
         rel = _normalize_reference_path(reference)
@@ -79,9 +95,7 @@ def load_project_skill_package(
         sections.append(
             f"## Checked-in skill reference: `{rel_key}`\n\n{body}"
         )
-    package = "\n\n---\n\n".join(sections)
-    _emit_skill_usage(normalized, package, status="COMPLETED")
-    return package
+    return "\n\n---\n\n".join(sections)
 
 
 def _emit_skill_usage(name: str, body: str, *, status: str) -> None:
@@ -92,7 +106,7 @@ def _emit_skill_usage(name: str, body: str, *, status: str) -> None:
         data={
             "schemaVersion": "AGENT_STREAM_SEMANTIC_V1",
             "kind": "SKILL_USAGE",
-            "durability": "DURABLE",
+            "durability": "BEST_EFFORT",
             "skillName": name,
             "skillVersionOrHash": hashlib.sha256(
                 body.encode("utf-8")
