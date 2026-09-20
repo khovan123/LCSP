@@ -438,6 +438,9 @@ export function GraphFirstDetail({
             (selected.line === null || claim.line === selected.line)),
       )
     : [];
+  const overflowingUsageGroups = (detail.paths.usage_flow_groups ?? []).filter(
+    (group) => group.omitted_usage_flow_count > 0,
+  );
   const nodeObstacles = topology.nodes.flatMap((node) => {
     const point = topology.positions.get(node.id);
     return point
@@ -504,6 +507,28 @@ export function GraphFirstDetail({
                 "pages.assessmentFlow.graph.aiUsageTopologyDescription" as never,
               )}
             </p>
+            {overflowingUsageGroups.length ? (
+              <div className="mt-2 min-w-0">
+                <p className="text-[0.6875rem] font-medium text-muted-foreground">
+                  {resolveAppMessage(
+                    "pages.assessmentFlow.graph.omittedAiUsageGroups" as never,
+                  )}
+                </p>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {overflowingUsageGroups.slice(0, 4).map((group) => (
+                    <span
+                      className="max-w-60 truncate rounded-full border border-amber-500/40 px-2 py-0.5 text-[0.6875rem] text-amber-700"
+                      key={group.key}
+                    >
+                      {group.label}: {group.omitted_usage_flow_count}{" "}
+                      {resolveAppMessage(
+                        "pages.assessmentFlow.graph.hiddenAiUsageGroupFlows" as never,
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="col-start-1 row-start-1 mb-2 flex items-start justify-end text-[0.6875rem] text-muted-foreground">
             <div className="flex items-center gap-3">

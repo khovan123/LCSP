@@ -138,6 +138,7 @@ const detail = {
     usage_flow_count: 2,
     rendered_usage_flow_count: 2,
     omitted_usage_flow_count: 0,
+    usage_flow_groups: [],
   },
   claims: [],
   provenance: {
@@ -458,6 +459,19 @@ test("renders omitted AI usage metadata when the projection reports overflow", a
           paths: {
             ...detail.paths,
             omitted_usage_flow_count: 3,
+            usage_flow_groups: [
+              {
+                key: "module-b",
+                label: "Module B -> AI_MODEL_INVOCATION",
+                source_node_id: "module:b",
+                source_label: "Module B",
+                provider_label: null,
+                gateway_label: null,
+                usage_flow_count: 6,
+                rendered_usage_flow_count: 1,
+                omitted_usage_flow_count: 5,
+              },
+            ],
           },
         },
       }),
@@ -468,6 +482,8 @@ test("renders omitted AI usage metadata when the projection reports overflow", a
     container.textContent ?? "",
     /Additional governed AI usage paths|Có thêm đường dẫn sử dụng AI/,
   );
+  assert.match(container.textContent ?? "", /Module B -> AI_MODEL_INVOCATION/);
+  assert.match(container.textContent ?? "", /5 hidden flows|5 luồng đang ẩn/);
 });
 
 test("formats evidence scope as a percentage in both graph detail renderers", async () => {

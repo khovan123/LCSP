@@ -45,6 +45,17 @@ export type ProgramEvidenceGraphDetail = {
     usage_flow_count?: number;
     rendered_usage_flow_count?: number;
     omitted_usage_flow_count?: number;
+    usage_flow_groups?: Array<{
+      key: string;
+      label: string;
+      source_node_id: string | null;
+      source_label: string | null;
+      provider_label: string | null;
+      gateway_label: string | null;
+      usage_flow_count: number;
+      rendered_usage_flow_count: number;
+      omitted_usage_flow_count: number;
+    }>;
   };
   claims: Array<{
     id: string;
@@ -139,8 +150,49 @@ export function normalizeProgramEvidenceGraphDetail(
       omitted_usage_flow_count: normalizeCount(
         detail.paths?.omitted_usage_flow_count,
       ),
+      usage_flow_groups: normalizeUsageFlowGroups(
+        detail.paths?.usage_flow_groups,
+      ),
     },
   };
+}
+
+function normalizeUsageFlowGroups(
+  value: unknown,
+): NonNullable<ProgramEvidenceGraphDetail["paths"]["usage_flow_groups"]> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const group = entry as Record<string, unknown>;
+    const key = typeof group.key === "string" ? group.key : null;
+    const label = typeof group.label === "string" ? group.label : null;
+    if (!key || !label) return [];
+    return [
+      {
+        key,
+        label,
+        source_node_id:
+          typeof group.source_node_id === "string"
+            ? group.source_node_id
+            : null,
+        source_label:
+          typeof group.source_label === "string" ? group.source_label : null,
+        provider_label:
+          typeof group.provider_label === "string"
+            ? group.provider_label
+            : null,
+        gateway_label:
+          typeof group.gateway_label === "string" ? group.gateway_label : null,
+        usage_flow_count: normalizeCount(group.usage_flow_count),
+        rendered_usage_flow_count: normalizeCount(
+          group.rendered_usage_flow_count,
+        ),
+        omitted_usage_flow_count: normalizeCount(
+          group.omitted_usage_flow_count,
+        ),
+      },
+    ];
+  });
 }
 
 function normalizeMetric(value: unknown): number | null {

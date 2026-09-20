@@ -1647,6 +1647,8 @@ export const enPages = {
         "No governed AI usage path is available for this accepted evidence snapshot.",
       omittedAiUsagePaths:
         "Additional governed AI usage paths exist outside this rendered view.",
+      omittedAiUsageGroups: "Hidden AI usage groups",
+      hiddenAiUsageGroupFlows: "hidden flows",
       aiUsageRoles: {
         moduleFeature: "Module / feature",
         routeHandlerFeature: "Route / handler",

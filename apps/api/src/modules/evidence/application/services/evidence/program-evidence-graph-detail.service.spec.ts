@@ -456,6 +456,7 @@ describe("ProgramEvidenceGraphDetailService", () => {
       usage_flow_count: 0,
       rendered_usage_flow_count: 0,
       omitted_usage_flow_count: 0,
+      usage_flow_groups: [],
     });
   });
 
@@ -488,6 +489,7 @@ describe("ProgramEvidenceGraphDetailService", () => {
       usage_flow_count: 0,
       rendered_usage_flow_count: 0,
       omitted_usage_flow_count: 0,
+      usage_flow_groups: [],
     });
   });
 
@@ -673,6 +675,113 @@ describe("ProgramEvidenceGraphDetailService", () => {
         (node) =>
           node.kind === "AI_MODEL_INVOCATION" &&
           node.resolution_state === AI_DISCOVERY_RESOLUTION_STATES.observed,
+      ),
+    ).toBe(true);
+    expect(result.paths.usage_flow_groups).toEqual([
+      expect.objectContaining({
+        usage_flow_count: 1_000,
+        rendered_usage_flow_count: 64,
+        omitted_usage_flow_count: 936,
+      }),
+    ]);
+  });
+
+  it("keeps every module usage group represented before filling overflow slots", async () => {
+    const moduleASeeds = Array.from({ length: 64 }, (_, index) => ({
+      node_id: `ai:a-${String(index).padStart(2, "0")}`,
+      node_type: "AI_MODEL_INVOCATION",
+      label: `A invocation ${index}`,
+      resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+    }));
+    const moduleBSeeds = Array.from({ length: 6 }, (_, index) => ({
+      node_id: `ai:z-${String(index).padStart(2, "0")}`,
+      node_type: "AI_MODEL_INVOCATION",
+      label: `B invocation ${index}`,
+      resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+    }));
+    const nodes = [
+      { node_id: "module:a", node_type: "MODULE", label: "Module A" },
+      { node_id: "module:b", node_type: "MODULE", label: "Module B" },
+      ...moduleASeeds,
+      ...moduleBSeeds,
+    ];
+    const edges = [
+      ...moduleASeeds.map((seed) => ({
+        edge_id: `edge:${seed.node_id}`,
+        source_node_id: "module:a",
+        target_node_id: seed.node_id,
+        edge_type: "CALLS",
+        resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+      })),
+      ...moduleBSeeds.map((seed) => ({
+        edge_id: `edge:${seed.node_id}`,
+        source_node_id: "module:b",
+        target_node_id: seed.node_id,
+        edge_type: "CALLS",
+        resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+      })),
+    ];
+
+    const result = await projectGraph({ nodes, edges });
+    const renderedIds = result.paths.nodes.map((node) => node.id);
+    const moduleBGroup = result.paths.usage_flow_groups.find(
+      (group) => group.source_node_id === "module:b",
+    );
+
+    expect(result.paths.usage_flow_count).toBe(70);
+    expect(result.paths.rendered_usage_flow_count).toBe(64);
+    expect(result.paths.omitted_usage_flow_count).toBe(6);
+    expect(renderedIds).toContain("module:a");
+    expect(renderedIds).toContain("module:b");
+    expect(renderedIds.some((id) => id.startsWith("ai:z-"))).toBe(true);
+    expect(moduleBGroup).toMatchObject({
+      label: "Module B -> AI_MODEL_INVOCATION",
+      usage_flow_count: 6,
+      rendered_usage_flow_count: 1,
+      omitted_usage_flow_count: 5,
+    });
+  });
+
+  it("keeps provider groups represented before lower-priority same-group overflow", async () => {
+    const openAiSeeds = Array.from({ length: 40 }, (_, index) => ({
+      node_id: `ai:a-openai-${String(index).padStart(2, "0")}`,
+      node_type: "AI_MODEL_INVOCATION",
+      label: `OpenAI invocation ${index}`,
+      attributes: { provider: "OPENAI" },
+      resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+    }));
+    const anthropicSeeds = Array.from({ length: 40 }, (_, index) => ({
+      node_id: `ai:z-anthropic-${String(index).padStart(2, "0")}`,
+      node_type: "AI_MODEL_INVOCATION",
+      label: `Anthropic invocation ${index}`,
+      attributes: { provider: "ANTHROPIC" },
+      resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+    }));
+    const nodes = [
+      { node_id: "module:shared", node_type: "MODULE", label: "AI module" },
+      ...openAiSeeds,
+      ...anthropicSeeds,
+    ];
+    const edges = [...openAiSeeds, ...anthropicSeeds].map((seed) => ({
+      edge_id: `edge:${seed.node_id}`,
+      source_node_id: "module:shared",
+      target_node_id: seed.node_id,
+      edge_type: "CALLS",
+      resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+    }));
+
+    const result = await projectGraph({ nodes, edges });
+    const providers = result.paths.usage_flow_groups.map(
+      (group) => group.provider_label,
+    );
+
+    expect(result.paths.usage_flow_count).toBe(80);
+    expect(result.paths.rendered_usage_flow_count).toBe(64);
+    expect(result.paths.omitted_usage_flow_count).toBe(16);
+    expect(providers).toEqual(expect.arrayContaining(["OPENAI", "ANTHROPIC"]));
+    expect(
+      result.paths.usage_flow_groups.every(
+        (group) => group.rendered_usage_flow_count > 0,
       ),
     ).toBe(true);
   });

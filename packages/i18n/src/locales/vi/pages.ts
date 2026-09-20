@@ -1650,6 +1650,8 @@ export const viPages = {
         "Snapshot bằng chứng đã chấp nhận này chưa có đường dẫn sử dụng AI được quản trị.",
       omittedAiUsagePaths:
         "Có thêm đường dẫn sử dụng AI đã được quản trị nằm ngoài phần đang hiển thị.",
+      omittedAiUsageGroups: "Nhóm sử dụng AI đang ẩn",
+      hiddenAiUsageGroupFlows: "luồng đang ẩn",
       aiUsageRoles: {
         moduleFeature: "Mô-đun / tính năng",
         routeHandlerFeature: "Route / handler",

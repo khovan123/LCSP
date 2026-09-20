@@ -13,6 +13,7 @@ import type {
   ProgramEvidenceGraphFindingDto,
   ProgramEvidenceGraphOverviewDto,
   ProgramEvidenceGraphSourceDto,
+  ProgramEvidenceGraphUsageFlowGroupDto,
 } from "../../contracts/evidence/program-evidence-graph-detail.contract.js";
 import { ArtifactStorageService } from "../../../../../platform/storage/artifact-storage.service.js";
 
@@ -401,6 +402,28 @@ type InternalProgramEvidenceGraphEdge = ProgramEvidenceGraphEdgeDto & {
   origin: string | null;
 };
 
+type AiUsageFlowProjection = {
+  seed: InternalProgramEvidenceGraphNode;
+  path: {
+    nodes: InternalProgramEvidenceGraphNode[];
+    edges: InternalProgramEvidenceGraphEdge[];
+  };
+  groupKey: string;
+  groupLabel: string;
+  source: InternalProgramEvidenceGraphNode | null;
+  providerLabel: string | null;
+  gatewayLabel: string | null;
+};
+
+type AiUsageFlowGroup = {
+  key: string;
+  label: string;
+  source: InternalProgramEvidenceGraphNode | null;
+  providerLabel: string | null;
+  gatewayLabel: string | null;
+  flows: AiUsageFlowProjection[];
+};
+
 function compareSourceCandidates(
   left: SourceCandidate,
   right: SourceCandidate,
@@ -433,18 +456,25 @@ function projectAiUsageGraph(
       usage_flow_count: 0,
       rendered_usage_flow_count: 0,
       omitted_usage_flow_count: 0,
+      usage_flow_groups: [],
     };
   }
 
-  const renderedSeedNodes = seedNodes.slice(0, MAX_RENDERED_AI_USAGE_FLOWS);
+  const flows = seedNodes.map((seed) => {
+    const path = strongestPathToAiSeed(seed, incoming, nodeById);
+    return buildAiUsageFlowProjection(seed, path, nodeById);
+  });
+  const groups = groupAiUsageFlows(flows);
+  const renderedFlows = selectRenderedAiUsageFlows(groups);
+  const renderedSeedNodes = renderedFlows.map((flow) => flow.seed);
+  const renderedSeedIds = new Set(renderedSeedNodes.map((seed) => seed.id));
   const selectedNodes = new Map<string, InternalProgramEvidenceGraphNode>();
   const selectedEdges = new Map<string, InternalProgramEvidenceGraphEdge>();
-  for (const seed of renderedSeedNodes) {
-    const path = strongestPathToAiSeed(seed, incoming, nodeById);
-    for (const node of path.nodes) selectedNodes.set(node.id, node);
-    for (const edge of path.edges) selectedEdges.set(edge.id, edge);
-    selectedNodes.set(seed.id, seed);
-    appendGovernedProviderProjection(seed, selectedNodes, selectedEdges);
+  for (const flow of renderedFlows) {
+    for (const node of flow.path.nodes) selectedNodes.set(node.id, node);
+    for (const edge of flow.path.edges) selectedEdges.set(edge.id, edge);
+    selectedNodes.set(flow.seed.id, flow.seed);
+    appendGovernedProviderProjection(flow.seed, selectedNodes, selectedEdges);
   }
 
   const projectedNodes = sortAiUsageNodes(
@@ -467,6 +497,181 @@ function projectAiUsageGraph(
     usage_flow_count: seedNodes.length,
     rendered_usage_flow_count: renderedSeedNodes.length,
     omitted_usage_flow_count: seedNodes.length - renderedSeedNodes.length,
+    usage_flow_groups: groups.map((group) =>
+      toUsageFlowGroupDto(group, renderedSeedIds),
+    ),
+  };
+}
+
+function buildAiUsageFlowProjection(
+  seed: InternalProgramEvidenceGraphNode,
+  path: {
+    nodes: InternalProgramEvidenceGraphNode[];
+    edges: InternalProgramEvidenceGraphEdge[];
+  },
+  nodeById: Map<string, InternalProgramEvidenceGraphNode>,
+): AiUsageFlowProjection {
+  const source = aiUsageSourceNode(path, nodeById);
+  const providerLabel = governedProviderLabel(seed);
+  const gatewayLabel = aiUsageGatewayLabel(seed, providerLabel);
+  const sourceKey = source ? `${source.kind}:${source.id}` : "UNRESOLVED";
+  const targetKey = providerLabel
+    ? `PROVIDER:${providerLabel}`
+    : gatewayLabel
+      ? `GATEWAY:${gatewayLabel}`
+      : `USAGE:${seed.kind}`;
+  const sourceLabel = source?.label ?? "Unresolved source";
+  const targetLabel = providerLabel ?? gatewayLabel ?? seed.kind;
+  return {
+    seed,
+    path,
+    groupKey: `${sourceKey}|${targetKey}`,
+    groupLabel: `${sourceLabel} -> ${targetLabel}`,
+    source,
+    providerLabel,
+    gatewayLabel,
+  };
+}
+
+function aiUsageSourceNode(
+  path: {
+    nodes: InternalProgramEvidenceGraphNode[];
+    edges: InternalProgramEvidenceGraphEdge[];
+  },
+  nodeById: Map<string, InternalProgramEvidenceGraphNode>,
+): InternalProgramEvidenceGraphNode | null {
+  const edgeSource = path.edges[0]?.source;
+  if (edgeSource) {
+    const source = nodeById.get(edgeSource);
+    if (source && AI_PATH_SOURCE_KINDS.has(source.kind.toUpperCase())) {
+      return source;
+    }
+  }
+  return (
+    path.nodes.find(
+      (node) =>
+        node.kind.toUpperCase() !== "AI_MODEL_INVOCATION" &&
+        AI_PATH_SOURCE_KINDS.has(node.kind.toUpperCase()),
+    ) ?? null
+  );
+}
+
+function governedProviderLabel(
+  seed: InternalProgramEvidenceGraphNode,
+): string | null {
+  const provider = text(seed.attributes?.provider);
+  const isObservedSdkInvocation =
+    seed.kind.toUpperCase() === "AI_MODEL_INVOCATION" &&
+    (seed.resolution_state === PROGRAM_GRAPH_RESOLUTION_STATES.observed ||
+      seed.resolution_state === PROGRAM_GRAPH_RESOLUTION_STATES.corroborated);
+  if (
+    !provider ||
+    (seed.evidence_state !== AI_DISCOVERY_EVIDENCE_STATES.confirmedAiCall &&
+      !isObservedSdkInvocation) ||
+    seed.resolution_state === PROGRAM_GRAPH_RESOLUTION_STATES.unresolved
+  ) {
+    return null;
+  }
+  return provider;
+}
+
+function aiUsageGatewayLabel(
+  seed: InternalProgramEvidenceGraphNode,
+  providerLabel: string | null,
+): string | null {
+  if (providerLabel) return null;
+  const kind = seed.kind.toUpperCase();
+  if (kind === "AI_GATEWAY" || kind === "AI_API_CANDIDATE") {
+    return seed.label;
+  }
+  if (kind === "UNRESOLVED_DYNAMIC_TARGET") {
+    return seed.label;
+  }
+  return null;
+}
+
+function groupAiUsageFlows(flows: AiUsageFlowProjection[]): AiUsageFlowGroup[] {
+  const groups = new Map<string, AiUsageFlowGroup>();
+  for (const flow of flows) {
+    const existing = groups.get(flow.groupKey);
+    if (existing) {
+      existing.flows.push(flow);
+      continue;
+    }
+    groups.set(flow.groupKey, {
+      key: flow.groupKey,
+      label: flow.groupLabel,
+      source: flow.source,
+      providerLabel: flow.providerLabel,
+      gatewayLabel: flow.gatewayLabel,
+      flows: [flow],
+    });
+  }
+  const sortedGroups = [...groups.values()].sort(compareAiUsageFlowGroups);
+  for (const group of sortedGroups) {
+    group.flows.sort((left, right) =>
+      compareAiSeedNodes(left.seed, right.seed),
+    );
+  }
+  return sortedGroups;
+}
+
+function selectRenderedAiUsageFlows(
+  groups: AiUsageFlowGroup[],
+): AiUsageFlowProjection[] {
+  const selected = new Map<string, AiUsageFlowProjection>();
+  for (const group of groups) {
+    const representative = group.flows[0];
+    if (!representative) continue;
+    selected.set(representative.seed.id, representative);
+    if (selected.size >= MAX_RENDERED_AI_USAGE_FLOWS) {
+      return [...selected.values()];
+    }
+  }
+  const remaining = groups
+    .flatMap((group) => group.flows.slice(1))
+    .sort((left, right) => compareAiSeedNodes(left.seed, right.seed));
+  for (const flow of remaining) {
+    selected.set(flow.seed.id, flow);
+    if (selected.size >= MAX_RENDERED_AI_USAGE_FLOWS) break;
+  }
+  return [...selected.values()].sort((left, right) =>
+    compareAiSeedNodes(left.seed, right.seed),
+  );
+}
+
+function compareAiUsageFlowGroups(
+  left: AiUsageFlowGroup,
+  right: AiUsageFlowGroup,
+): number {
+  const leftRepresentative = left.flows[0]?.seed;
+  const rightRepresentative = right.flows[0]?.seed;
+  return (
+    (leftRepresentative && rightRepresentative
+      ? compareAiSeedNodes(leftRepresentative, rightRepresentative)
+      : 0) ||
+    collator.compare(left.label, right.label) ||
+    collator.compare(left.key, right.key)
+  );
+}
+
+function toUsageFlowGroupDto(
+  group: AiUsageFlowGroup,
+  renderedSeedIds: Set<string>,
+): ProgramEvidenceGraphUsageFlowGroupDto {
+  const renderedCount = group.flows.filter((flow) =>
+    renderedSeedIds.has(flow.seed.id),
+  ).length;
+  return {
+    key: group.key,
+    label: group.label,
+    source_node_id: group.source?.id ?? null,
+    source_label: group.source?.label ?? null,
+    provider_label: group.providerLabel,
+    gateway_label: group.gatewayLabel,
+    usage_flow_count: group.flows.length,
+    rendered_usage_flow_count: renderedCount,
+    omitted_usage_flow_count: group.flows.length - renderedCount,
   };
 }
 

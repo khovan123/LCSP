@@ -36,6 +36,18 @@ export interface ProgramEvidenceGraphEdgeDto {
   resolution_state?: string | null;
 }
 
+export interface ProgramEvidenceGraphUsageFlowGroupDto {
+  key: string;
+  label: string;
+  source_node_id: string | null;
+  source_label: string | null;
+  provider_label: string | null;
+  gateway_label: string | null;
+  usage_flow_count: number;
+  rendered_usage_flow_count: number;
+  omitted_usage_flow_count: number;
+}
+
 export interface ProgramEvidenceGraphClaimDto {
   id: string;
   meaning: string;
@@ -68,6 +80,7 @@ export interface ProgramEvidenceGraphDetailDto {
     usage_flow_count: number;
     rendered_usage_flow_count: number;
     omitted_usage_flow_count: number;
+    usage_flow_groups: ProgramEvidenceGraphUsageFlowGroupDto[];
   };
   claims: ProgramEvidenceGraphClaimDto[];
   provenance: {
