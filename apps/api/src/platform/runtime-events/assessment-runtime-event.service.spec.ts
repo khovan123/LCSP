@@ -314,7 +314,7 @@ describe("AssessmentRuntimeEventService", () => {
             take?: number;
             where?: { assessmentId?: string };
           }) => {
-            expect(take).toBe(5_000);
+            expect(take).toBe(2_500);
             const rows =
               where?.assessmentId === "assessment-a"
                 ? [assessmentARow]
@@ -348,7 +348,64 @@ describe("AssessmentRuntimeEventService", () => {
     );
     expect(
       replay.filter((event) => event.assessmentId === "assessment-b"),
-    ).toHaveLength(5_000);
+    ).toHaveLength(2_500);
+    expect(replay).toHaveLength(2_501);
+  });
+
+  it("caps durable replay work across many assessments and bounds query concurrency", async () => {
+    const assessmentIds = Array.from(
+      { length: 20 },
+      (_, index) => `assessment-${index + 1}`,
+    );
+    const queryTakes: number[] = [];
+    let inFlightQueries = 0;
+    let maxInFlightQueries = 0;
+    const prisma = {
+      assessment: {
+        findMany: jest
+          .fn<(args?: unknown) => Promise<Array<{ id: string }>>>()
+          .mockResolvedValue(assessmentIds.map((id) => ({ id }))),
+      },
+      assessmentRuntimeEvent: {
+        findMany: jest.fn(
+          async ({
+            take,
+            where,
+          }: {
+            take?: number;
+            where?: { assessmentId?: string };
+          }) => {
+            inFlightQueries += 1;
+            maxInFlightQueries = Math.max(maxInFlightQueries, inFlightQueries);
+            queryTakes.push(take ?? 0);
+            await Promise.resolve();
+            inFlightQueries -= 1;
+            return Array.from({ length: take ?? 0 }, (_, index) =>
+              durableAgentStreamRow(
+                index + 1,
+                where?.assessmentId ?? "assessment-unknown",
+                `${where?.assessmentId ?? "assessment-unknown"}-run`,
+              ),
+            );
+          },
+        ),
+      },
+    };
+    const service = new AssessmentRuntimeEventService(prisma as never);
+
+    const replay = await (
+      service as unknown as {
+        getDurableAgentStreamEvents: (
+          ownerId: string,
+        ) => Promise<Array<{ assessmentId: string; eventId: string }>>;
+      }
+    ).getDurableAgentStreamEvents("user-a");
+
+    expect(prisma.assessmentRuntimeEvent.findMany).toHaveBeenCalledTimes(20);
+    expect(queryTakes).toEqual(Array.from({ length: 20 }, () => 250));
+    expect(maxInFlightQueries).toBeLessThanOrEqual(4);
+    expect(replay).toHaveLength(5_000);
+    expect(new Set(replay.map((event) => event.assessmentId)).size).toBe(20);
   });
 
   it("deduplicates durable replay and live-buffer overlap by event id", async () => {
@@ -404,6 +461,65 @@ describe("AssessmentRuntimeEventService", () => {
     await Promise.resolve();
 
     expect(events).toEqual(["assessment-a-semantic-100"]);
+    subscription.unsubscribe();
+  });
+
+  it("bounds long-lived stream dedup state", async () => {
+    const prisma = {
+      assessment: {
+        findUnique: jest
+          .fn<
+            (args: { where: { id: string } }) => Promise<{ ownerId: string }>
+          >()
+          .mockResolvedValue({ ownerId: "user-a" }),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<Array<{ id: string }>>>()
+          .mockResolvedValue([]),
+      },
+      assessmentRuntimeEvent: {
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([]),
+      },
+    };
+    const service = new AssessmentRuntimeEventService(prisma as never);
+    let duplicateDeliveryCount = 0;
+    const subscription = service
+      .observeAgentStreamEvents("user-a")
+      .subscribe((event) => {
+        if (event.eventId === "bounded-duplicate") {
+          duplicateDeliveryCount += 1;
+        }
+      });
+
+    await service.publishAgentStreamEvent({
+      eventId: "bounded-duplicate",
+      assessmentId: "assessment-a",
+      runId: "run-a",
+      correlationId: "corr-a",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
+      text: "first duplicate",
+    });
+    for (let index = 0; index < 6_000; index += 1) {
+      await service.publishAgentStreamEvent({
+        eventId: `bounded-unique-${index}`,
+        assessmentId: "assessment-a",
+        runId: "run-a",
+        correlationId: "corr-a",
+        eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
+        text: "unique event",
+      });
+    }
+    await service.publishAgentStreamEvent({
+      eventId: "bounded-duplicate",
+      assessmentId: "assessment-a",
+      runId: "run-a",
+      correlationId: "corr-a",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
+      text: "duplicate after eviction",
+    });
+
+    expect(duplicateDeliveryCount).toBe(2);
     subscription.unsubscribe();
   });
 

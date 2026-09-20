@@ -34,7 +34,6 @@ import {
   Observable,
   ReplaySubject,
   defer,
-  distinct,
   filter,
   from,
   map,
@@ -65,7 +64,11 @@ const ENGINEERING_PROGRESS_DURABLE_MAX_RUNS = 10;
 const ENGINEERING_PROGRESS_SUMMARY_SCAN_LIMIT = 40;
 const ENGINEERING_PROGRESS_INVESTIGATION_SCAN_LIMIT = 1_000;
 const AGENT_STREAM_DURABLE_TOOL_NAME = "agent_stream_semantic";
-const AGENT_STREAM_DURABLE_REPLAY_LIMIT = 5_000;
+const AGENT_STREAM_DURABLE_REPLAY_TOTAL_LIMIT = 5_000;
+const AGENT_STREAM_DURABLE_REPLAY_ASSESSMENT_LIMIT = 100;
+const AGENT_STREAM_DURABLE_REPLAY_QUERY_CONCURRENCY = 4;
+const AGENT_STREAM_EVENT_DEDUPE_SEEN_LIMIT =
+  AGENT_STREAM_DURABLE_REPLAY_TOTAL_LIMIT + 1_000;
 const AGENT_STREAM_SEMANTIC_SCHEMA_VERSION = "AGENT_STREAM_SEMANTIC_V1";
 const AGENT_STREAM_DURABILITY_DURABLE = "DURABLE";
 
@@ -499,7 +502,13 @@ export class AssessmentRuntimeEventService {
         filter((entry) => entry.ownerId === ownerId),
         map((entry) => entry.event),
       ),
-    ).pipe(distinct((event) => event.eventId));
+    ).pipe(
+      filter(
+        createBoundedAgentStreamEventDedupe(
+          AGENT_STREAM_EVENT_DEDUPE_SEEN_LIMIT,
+        ),
+      ),
+    );
   }
 
   private async resolveAssessmentOwnerId(
@@ -544,8 +553,10 @@ export class AssessmentRuntimeEventService {
     ownerId: string,
   ): Promise<AssessmentAgentStreamEvent[]> {
     const assessmentIds = await this.getOwnedAssessmentIds(ownerId);
-    const rowsByAssessment = await Promise.all(
-      assessmentIds.map((assessmentId) =>
+    const rowsByAssessment = await mapWithConcurrency(
+      assessmentIds,
+      AGENT_STREAM_DURABLE_REPLAY_QUERY_CONCURRENCY,
+      async (assessmentId, index) =>
         this.safeFindMany({
           where: {
             assessmentId,
@@ -553,9 +564,8 @@ export class AssessmentRuntimeEventService {
             toolName: AGENT_STREAM_DURABLE_TOOL_NAME,
           },
           orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
-          take: AGENT_STREAM_DURABLE_REPLAY_LIMIT,
+          take: durableReplayLimitForAssessment(index, assessmentIds.length),
         }),
-      ),
     );
     return rowsByAssessment
       .flatMap((rows) => [...rows].reverse())
@@ -578,6 +588,8 @@ export class AssessmentRuntimeEventService {
   private async getOwnedAssessmentIds(ownerId: string): Promise<string[]> {
     const assessments = await this.prisma.assessment.findMany({
       where: { ownerId },
+      orderBy: { updatedAt: "desc" },
+      take: AGENT_STREAM_DURABLE_REPLAY_ASSESSMENT_LIMIT,
       select: { id: true },
     });
     return assessments.flatMap((assessment) =>
@@ -1848,6 +1860,65 @@ function compareAgentStreamEvents(
   const emittedAt = left.emittedAt.localeCompare(right.emittedAt);
   if (emittedAt !== 0) return emittedAt;
   return left.eventId.localeCompare(right.eventId);
+}
+
+function durableReplayLimitForAssessment(
+  index: number,
+  assessmentCount: number,
+): number {
+  if (assessmentCount <= 0) return 0;
+  const eligibleAssessmentCount = Math.min(
+    assessmentCount,
+    AGENT_STREAM_DURABLE_REPLAY_TOTAL_LIMIT,
+  );
+  const baseLimit = Math.floor(
+    AGENT_STREAM_DURABLE_REPLAY_TOTAL_LIMIT / eligibleAssessmentCount,
+  );
+  const remainder =
+    AGENT_STREAM_DURABLE_REPLAY_TOTAL_LIMIT % eligibleAssessmentCount;
+  return baseLimit + (index < remainder ? 1 : 0);
+}
+
+async function mapWithConcurrency<TInput, TOutput>(
+  items: TInput[],
+  concurrency: number,
+  mapper: (item: TInput, index: number) => Promise<TOutput>,
+): Promise<TOutput[]> {
+  const results = new Array<TOutput>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), items.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) return;
+      results[index] = await mapper(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+function createBoundedAgentStreamEventDedupe(
+  maxSeen: number,
+): (event: AssessmentAgentStreamEvent) => boolean {
+  const seen = new Set<string>();
+  const orderedIds: string[] = [];
+  const limit = Math.max(1, maxSeen);
+  return (event) => {
+    if (seen.has(event.eventId)) {
+      return false;
+    }
+    seen.add(event.eventId);
+    orderedIds.push(event.eventId);
+    while (orderedIds.length > limit) {
+      const expiredId = orderedIds.shift();
+      if (expiredId) {
+        seen.delete(expiredId);
+      }
+    }
+    return true;
+  };
 }
 
 function durableAgentStreamSummary(event: AssessmentAgentStreamEvent): string {
