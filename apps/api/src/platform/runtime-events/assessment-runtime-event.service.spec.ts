@@ -94,7 +94,9 @@ describe("AssessmentRuntimeEventService", () => {
       ),
       assessment: {
         findUnique: jest
-          .fn<(args: { where: { id: string } }) => Promise<{ ownerId: string }>>()
+          .fn<
+            (args: { where: { id: string } }) => Promise<{ ownerId: string }>
+          >()
           .mockResolvedValue({ ownerId: "user-a" }),
       },
       assessmentRuntimeEvent: {
@@ -146,9 +148,7 @@ describe("AssessmentRuntimeEventService", () => {
     const replayService = new AssessmentRuntimeEventService(prisma as never);
     const directReplay = await (
       replayService as unknown as {
-        getDurableAgentStreamEvents: (
-          ownerId: string,
-        ) => Promise<unknown[]>;
+        getDurableAgentStreamEvents: (ownerId: string) => Promise<unknown[]>;
       }
     ).getDurableAgentStreamEvents("user-a");
     expect(directReplay).toHaveLength(1);
