@@ -37,7 +37,7 @@ export class BillingAdminReportingController {
     @Query("email") email?: string,
     @Query("paymentCode") paymentCode?: string,
     @Query("orderId") orderId?: string,
-    @Query("page") page?: string,
+    @Query("cursor") cursor?: string,
     @Query("pageSize") pageSize?: string,
     @Query("page_size") pageSizeAlias?: string,
   ) {
@@ -53,7 +53,7 @@ export class BillingAdminReportingController {
             email,
             paymentCode,
             orderId,
-            page: page ? Number(page) : undefined,
+            cursor,
             pageSize: Number(pageSize ?? pageSizeAlias) || undefined,
           }),
         ),

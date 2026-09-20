@@ -112,7 +112,13 @@ describe("billing admin reporting", () => {
         email: "user@example.com",
         paymentCode: "LCSP-1",
         orderId: "order-1",
-        page: 2,
+        cursor: Buffer.from(
+          JSON.stringify({
+            receivedAt: "2026-01-01T00:01:00.000Z",
+            id: "payment-2",
+          }),
+          "utf8",
+        ).toString("base64url"),
         pageSize: 10,
       },
     );
@@ -137,14 +143,12 @@ describe("billing admin reporting", () => {
     });
     const findManyCall = prisma.paymentTransaction.findMany.mock
       .calls[0]?.[0] as {
-      skip: number;
       take: number;
       orderBy: unknown;
       select: unknown;
     };
     expect(findManyCall).toMatchObject({
-      skip: 10,
-      take: 10,
+      take: 11,
       orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
     });
     expect(findManyCall.select).not.toHaveProperty("webhookEvent");
@@ -163,5 +167,25 @@ describe("billing admin reporting", () => {
         to: "2026-01-01T00:00:00.000Z",
       }),
     ).rejects.toThrow("BILLING_REPORTING_INVALID_INPUT");
+  });
+
+  it("requires timezone-explicit reporting instants", async () => {
+    const prisma = prismaStub();
+    await expect(
+      getRevenueSummary(prisma as unknown as PrismaService, {
+        from: "2026-01-01T00:00:00",
+        to: "2026-01-02T00:00:00",
+      }),
+    ).rejects.toThrow("BILLING_REPORTING_INVALID_INPUT");
+
+    const utc = await getRevenueSummary(prisma as unknown as PrismaService, {
+      from: "2026-01-01T00:00:00Z",
+      to: "2026-01-02T00:00:00Z",
+    });
+    const offset = await getRevenueSummary(prisma as unknown as PrismaService, {
+      from: "2026-01-01T07:00:00+07:00",
+      to: "2026-01-02T07:00:00+07:00",
+    });
+    expect(offset.period).toEqual(utc.period);
   });
 });

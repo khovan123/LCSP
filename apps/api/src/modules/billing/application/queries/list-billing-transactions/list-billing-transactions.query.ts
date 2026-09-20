@@ -11,7 +11,7 @@ export class ListBillingTransactionsQuery extends Query<unknown> {
       email?: string;
       paymentCode?: string;
       orderId?: string;
-      page?: number;
+      cursor?: string;
       pageSize?: number;
     },
   ) {

@@ -224,6 +224,21 @@ describe("Admin billing reconciliation (e2e)", () => {
       "DURABLE_PAYMENT_TRANSACTIONS",
     );
 
+    for (const path of [
+      "/admin/billing/revenue-summary",
+      "/admin/billing/transactions",
+      "/admin/billing/reconciliation",
+    ]) {
+      const invalidPeriod = await httpRequest(app)
+        .get(path)
+        .query({
+          from: "2026-09-20T00:00:00",
+          to: "2026-09-21T00:00:00",
+        })
+        .set("Authorization", `Bearer ${adminToken}`);
+      assert.equal(invalidPeriod.status, 400);
+    }
+
     const transactions = await httpRequest(app)
       .get("/admin/billing/transactions")
       .query({ status: "UNMATCHED", pageSize: 10 })
@@ -461,16 +476,73 @@ describe("Admin billing reconciliation (e2e)", () => {
       const filteredBody = successBody<{ items: unknown[] }>(filtered);
       assert.equal(filteredBody.items.length, filter.expected);
     }
-    const beyondPage = await httpRequest(app)
+    const firstPage = await httpRequest(app)
+      .get("/admin/billing/transactions")
+      .query({ from: from.toISOString(), to: to.toISOString(), pageSize: 2 })
+      .set("Authorization", `Bearer ${adminToken}`);
+    assert.equal(firstPage.status, 200);
+    const firstPageBody = successBody<{
+      items: Array<{ paymentId: string }>;
+      nextCursor: string | null;
+      hasNext: boolean;
+    }>(firstPage);
+    assert.equal(firstPageBody.items.length, 2);
+    assert.equal(firstPageBody.hasNext, true);
+    assert.ok(firstPageBody.nextCursor);
+
+    const cursorOrder = await prisma.billingOrder.create({
+      data: {
+        userId: "user-1",
+        paymentCode: "LCSP-REPORT-G",
+        idempotencyKey: "report-order-G",
+        amountMinorUnits: 100n,
+        creditUnits: 100n,
+        status: BILLING_ORDER_STATUSES.PENDING_RECONCILIATION,
+      },
+    });
+    await prisma.paymentTransaction.create({
+      data: {
+        provider: "SEPAY",
+        providerTransactionId: "REPORT-TX-G",
+        amountMinorUnits: 100n,
+        reconciliationStatus: PAYMENT_RECONCILIATION_STATUSES.UNMATCHED,
+        reconciliationReason:
+          PAYMENT_RECONCILIATION_REASONS.UNMATCHED_PAYMENT_CODE,
+        userId: "user-1",
+        billingOrderId: cursorOrder.id,
+        receivedAt: new Date("2026-09-15T11:30:00.000Z"),
+      },
+    });
+    const secondPage = await httpRequest(app)
       .get("/admin/billing/transactions")
       .query({
         from: from.toISOString(),
         to: to.toISOString(),
-        page: 4,
         pageSize: 2,
+        cursor: firstPageBody.nextCursor,
       })
       .set("Authorization", `Bearer ${adminToken}`);
-    assert.equal(beyondPage.status, 200);
-    assert.deepEqual(successBody<{ items: unknown[] }>(beyondPage).items, []);
+    assert.equal(secondPage.status, 200);
+    const secondPageBody = successBody<{
+      items: Array<{ paymentId: string }>;
+    }>(secondPage);
+    assert.equal(secondPageBody.items.length, 2);
+    assert.equal(
+      new Set([
+        ...firstPageBody.items.map((item) => item.paymentId),
+        ...secondPageBody.items.map((item) => item.paymentId),
+      ]).size,
+      4,
+    );
+    const malformedCursor = await httpRequest(app)
+      .get("/admin/billing/transactions")
+      .query({
+        from: from.toISOString(),
+        to: to.toISOString(),
+        pageSize: 2,
+        cursor: "not-a-cursor",
+      })
+      .set("Authorization", `Bearer ${adminToken}`);
+    assert.equal(malformedCursor.status, 400);
   });
 });

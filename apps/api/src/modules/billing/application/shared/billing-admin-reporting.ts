@@ -26,7 +26,7 @@ export type BillingAdminTransactionInput = BillingAdminPeriodInput & {
   email?: string;
   paymentCode?: string;
   orderId?: string;
-  page?: number;
+  cursor?: string;
   pageSize?: number;
 };
 
@@ -133,7 +133,6 @@ export async function listAdminTransactions(
   input: BillingAdminTransactionInput,
 ): Promise<BillingAdminTransactionPage> {
   const period = parseBillingAdminPeriod(input);
-  const page = normalizePositiveInteger(input.page, 1);
   const pageSize = Math.min(
     normalizePositiveInteger(
       input.pageSize,
@@ -156,10 +155,15 @@ export async function listAdminTransactions(
       : {}),
     ...(input.orderId ? { billingOrderId: input.orderId } : {}),
   };
+  const queryWhere: Prisma.PaymentTransactionWhereInput = input.cursor
+    ? { ...where, AND: [cursorWhere(input.cursor)] }
+    : where;
+
+  const cursorLimit = pageSize + 1;
 
   const [rows, total] = await Promise.all([
     prisma.paymentTransaction.findMany({
-      where,
+      where: queryWhere,
       select: {
         id: true,
         provider: true,
@@ -181,14 +185,17 @@ export async function listAdminTransactions(
         reconciledAt: true,
       },
       orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
+      take: cursorLimit,
     }),
     prisma.paymentTransaction.count({ where }),
   ]);
 
+  const hasNext = rows.length > pageSize;
+  const pageRows = hasNext ? rows.slice(0, pageSize) : rows;
+  const lastRow = pageRows[pageRows.length - 1];
+
   return {
-    items: rows.map((row) => ({
+    items: pageRows.map((row) => ({
       paymentId: row.id,
       provider: row.provider,
       providerTransactionId: row.providerTransactionId,
@@ -208,14 +215,63 @@ export async function listAdminTransactions(
       receivedAt: row.receivedAt.toISOString(),
       reconciledAt: row.reconciledAt?.toISOString() ?? null,
     })),
-    page,
     pageSize,
     total,
-    hasNext: page * pageSize < total,
+    hasNext,
+    nextCursor: lastRow
+      ? encodeBillingTransactionCursor(lastRow.receivedAt, lastRow.id)
+      : null,
+  };
+}
+
+type BillingTransactionCursor = { receivedAt: string; id: string };
+
+function encodeBillingTransactionCursor(receivedAt: Date, id: string): string {
+  return Buffer.from(
+    JSON.stringify({ receivedAt: receivedAt.toISOString(), id }),
+    "utf8",
+  ).toString("base64url");
+}
+
+function cursorWhere(value: string): Prisma.PaymentTransactionWhereInput {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+  } catch {
+    throw new InvalidBillingInputError(
+      "BILLING_REPORTING_INVALID_INPUT:cursor",
+    );
+  }
+  if (
+    !decoded ||
+    typeof decoded !== "object" ||
+    typeof (decoded as Partial<BillingTransactionCursor>).id !== "string" ||
+    !(decoded as Partial<BillingTransactionCursor>).id
+  ) {
+    throw new InvalidBillingInputError(
+      "BILLING_REPORTING_INVALID_INPUT:cursor",
+    );
+  }
+  const receivedAt = parseDate(
+    (decoded as Partial<BillingTransactionCursor>).receivedAt ?? "",
+    "cursor",
+  );
+  const id = (decoded as BillingTransactionCursor).id;
+  return {
+    OR: [{ receivedAt: { lt: receivedAt } }, { receivedAt, id: { lt: id } }],
   };
 }
 
 function parseDate(value: string, field: string): Date {
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
+      value,
+    )
+  ) {
+    throw new InvalidBillingInputError(
+      `BILLING_REPORTING_INVALID_INPUT:${field}`,
+    );
+  }
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
     throw new InvalidBillingInputError(

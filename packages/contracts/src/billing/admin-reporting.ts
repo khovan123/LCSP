@@ -73,8 +73,8 @@ export type BillingAdminTransactionItem = {
 
 export type BillingAdminTransactionPage = {
   items: BillingAdminTransactionItem[];
-  page: number;
   pageSize: number;
   total: number;
   hasNext: boolean;
+  nextCursor: string | null;
 };
