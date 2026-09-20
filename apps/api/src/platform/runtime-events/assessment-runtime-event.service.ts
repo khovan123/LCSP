@@ -34,6 +34,7 @@ import {
   Observable,
   ReplaySubject,
   defer,
+  distinct,
   filter,
   from,
   map,
@@ -498,7 +499,7 @@ export class AssessmentRuntimeEventService {
         filter((entry) => entry.ownerId === ownerId),
         map((entry) => entry.event),
       ),
-    );
+    ).pipe(distinct((event) => event.eventId));
   }
 
   private async resolveAssessmentOwnerId(
@@ -542,18 +543,27 @@ export class AssessmentRuntimeEventService {
   private async getDurableAgentStreamEvents(
     ownerId: string,
   ): Promise<AssessmentAgentStreamEvent[]> {
-    const rows = await this.safeFindMany({
-      where: {
-        assessment: { ownerId },
-        toolName: AGENT_STREAM_DURABLE_TOOL_NAME,
-      },
-      orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
-      take: AGENT_STREAM_DURABLE_REPLAY_LIMIT,
-    });
-    return [...rows].reverse().flatMap((row) => {
-      const event = durableAgentStreamEventFromRow(row);
-      return event === null ? [] : [event];
-    });
+    const assessmentIds = await this.getOwnedAssessmentIds(ownerId);
+    const rowsByAssessment = await Promise.all(
+      assessmentIds.map((assessmentId) =>
+        this.safeFindMany({
+          where: {
+            assessmentId,
+            assessment: { ownerId },
+            toolName: AGENT_STREAM_DURABLE_TOOL_NAME,
+          },
+          orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
+          take: AGENT_STREAM_DURABLE_REPLAY_LIMIT,
+        }),
+      ),
+    );
+    return rowsByAssessment
+      .flatMap((rows) => [...rows].reverse())
+      .flatMap((row) => {
+        const event = durableAgentStreamEventFromRow(row);
+        return event === null ? [] : [event];
+      })
+      .sort(compareAgentStreamEvents);
   }
 
   private nextAgentStreamSequence(): number {
@@ -563,6 +573,16 @@ export class AssessmentRuntimeEventService {
       timestampSequence,
     );
     return this.agentStreamSequence;
+  }
+
+  private async getOwnedAssessmentIds(ownerId: string): Promise<string[]> {
+    const assessments = await this.prisma.assessment.findMany({
+      where: { ownerId },
+      select: { id: true },
+    });
+    return assessments.flatMap((assessment) =>
+      typeof assessment.id === "string" ? [assessment.id] : [],
+    );
   }
 
   /**
@@ -1818,6 +1838,16 @@ function isDurableSemanticAgentStreamEvent(
     data.durability === AGENT_STREAM_DURABILITY_DURABLE &&
     typeof data.kind === "string"
   );
+}
+
+function compareAgentStreamEvents(
+  left: AssessmentAgentStreamEvent,
+  right: AssessmentAgentStreamEvent,
+): number {
+  if (left.sequence !== right.sequence) return left.sequence - right.sequence;
+  const emittedAt = left.emittedAt.localeCompare(right.emittedAt);
+  if (emittedAt !== 0) return emittedAt;
+  return left.eventId.localeCompare(right.eventId);
 }
 
 function durableAgentStreamSummary(event: AssessmentAgentStreamEvent): string {

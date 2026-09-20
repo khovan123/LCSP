@@ -30,12 +30,16 @@ const assessmentOwner = () => ({
     .mockResolvedValue({ ownerId: "user-1" }),
 });
 
-function durableAgentStreamRow(sequence: number) {
+function durableAgentStreamRow(
+  sequence: number,
+  assessmentId = "assessment-a",
+  runId = "run-a",
+) {
   const emittedAt = new Date(1_800_000_000_000 + sequence).toISOString();
   return {
     id: `runtime-${sequence}`,
-    assessmentId: "assessment-a",
-    runId: "run-a",
+    assessmentId,
+    runId,
     correlationId: "corr-a",
     sequence,
     eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
@@ -46,12 +50,12 @@ function durableAgentStreamRow(sequence: number) {
     inputSummaryJson: null,
     outputSummaryJson: {
       agentStreamEvent: {
-        eventId: `semantic-${sequence}`,
+        eventId: `${assessmentId}-semantic-${sequence}`,
         sequence,
         clientSequence: null,
         emittedAt,
-        assessmentId: "assessment-a",
-        runId: "run-a",
+        assessmentId,
+        runId,
         correlationId: "corr-a",
         eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
         source: "engineering",
@@ -59,9 +63,9 @@ function durableAgentStreamRow(sequence: number) {
         subagentName: null,
         namespace: [],
         nodeName: "model",
-        messageId: `message-${sequence}`,
+        messageId: `${assessmentId}-message-${sequence}`,
         toolName: "search_nodes",
-        toolCallId: `call-${sequence}`,
+        toolCallId: `${assessmentId}-call-${sequence}`,
         status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
         text: null,
         data: {
@@ -69,7 +73,7 @@ function durableAgentStreamRow(sequence: number) {
           kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall,
           durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
           toolName: "search_nodes",
-          toolCallId: `call-${sequence}`,
+          toolCallId: `${assessmentId}-call-${sequence}`,
           parameters: { index: sequence },
         },
       },
@@ -101,6 +105,9 @@ describe("AssessmentRuntimeEventService", () => {
                 : null,
           ),
         ),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([]),
       },
       assessmentRuntimeEvent: {
         findMany: jest
@@ -152,6 +159,9 @@ describe("AssessmentRuntimeEventService", () => {
             (args: { where: { id: string } }) => Promise<{ ownerId: string }>
           >()
           .mockResolvedValue({ ownerId: "user-a" }),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<Array<{ id: string }>>>()
+          .mockResolvedValue([{ id: "assessment-a" }]),
       },
       assessmentRuntimeEvent: {
         findFirst: jest
@@ -168,6 +178,7 @@ describe("AssessmentRuntimeEventService", () => {
         }),
         findMany: jest.fn(({ where }: { where?: unknown }) => {
           expect(where).toMatchObject({
+            assessmentId: "assessment-a",
             assessment: { ownerId: "user-a" },
             toolName: "agent_stream_semantic",
           });
@@ -227,9 +238,27 @@ describe("AssessmentRuntimeEventService", () => {
       durableAgentStreamRow(index + 1),
     );
     const prisma = {
+      assessment: {
+        findMany: jest
+          .fn<(args?: unknown) => Promise<Array<{ id: string }>>>()
+          .mockResolvedValue([{ id: "assessment-a" }]),
+      },
       assessmentRuntimeEvent: {
         findMany: jest.fn(
-          ({ orderBy, take }: { orderBy?: unknown; take?: number }) => {
+          ({
+            orderBy,
+            take,
+            where,
+          }: {
+            orderBy?: unknown;
+            take?: number;
+            where?: { assessmentId?: string };
+          }) => {
+            expect(where).toMatchObject({
+              assessmentId: "assessment-a",
+              assessment: { ownerId: "user-a" },
+              toolName: "agent_stream_semantic",
+            });
             expect(orderBy).toEqual([
               { createdAt: "desc" },
               { sequence: "desc" },
@@ -256,13 +285,126 @@ describe("AssessmentRuntimeEventService", () => {
 
     expect(replay).toHaveLength(5_000);
     expect(replay[0]).toMatchObject({
-      eventId: "semantic-1002",
+      eventId: "assessment-a-semantic-1002",
       sequence: 1002,
     });
     expect(replay.at(-1)).toMatchObject({
-      eventId: "semantic-6001",
+      eventId: "assessment-a-semantic-6001",
       sequence: 6001,
     });
+  });
+
+  it("keeps independent durable replay windows per assessment", async () => {
+    const assessmentARow = durableAgentStreamRow(1, "assessment-a", "run-a");
+    const assessmentBRows = Array.from({ length: 5_001 }, (_, index) =>
+      durableAgentStreamRow(index + 1, "assessment-b", "run-b"),
+    );
+    const prisma = {
+      assessment: {
+        findMany: jest
+          .fn<(args?: unknown) => Promise<Array<{ id: string }>>>()
+          .mockResolvedValue([{ id: "assessment-a" }, { id: "assessment-b" }]),
+      },
+      assessmentRuntimeEvent: {
+        findMany: jest.fn(
+          ({
+            take,
+            where,
+          }: {
+            take?: number;
+            where?: { assessmentId?: string };
+          }) => {
+            expect(take).toBe(5_000);
+            const rows =
+              where?.assessmentId === "assessment-a"
+                ? [assessmentARow]
+                : assessmentBRows;
+            return Promise.resolve(
+              [...rows]
+                .sort((left, right) => right.sequence - left.sequence)
+                .slice(0, take),
+            );
+          },
+        ),
+      },
+    };
+    const service = new AssessmentRuntimeEventService(prisma as never);
+
+    const replay = await (
+      service as unknown as {
+        getDurableAgentStreamEvents: (
+          ownerId: string,
+        ) => Promise<Array<{ assessmentId: string; eventId: string }>>;
+      }
+    ).getDurableAgentStreamEvents("user-a");
+
+    expect(replay).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          assessmentId: "assessment-a",
+          eventId: "assessment-a-semantic-1",
+        }),
+      ]),
+    );
+    expect(
+      replay.filter((event) => event.assessmentId === "assessment-b"),
+    ).toHaveLength(5_000);
+  });
+
+  it("deduplicates durable replay and live-buffer overlap by event id", async () => {
+    const persisted = durableAgentStreamRow(100);
+    const prisma = {
+      $transaction: jest.fn((callback: (tx: unknown) => Promise<void>) =>
+        callback(prisma),
+      ),
+      assessment: {
+        findUnique: jest
+          .fn<
+            (args: { where: { id: string } }) => Promise<{ ownerId: string }>
+          >()
+          .mockResolvedValue({ ownerId: "user-a" }),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<Array<{ id: string }>>>()
+          .mockResolvedValue([{ id: "assessment-a" }]),
+      },
+      assessmentRuntimeEvent: {
+        findFirst: jest
+          .fn<(args?: unknown) => Promise<{ sequence: number } | null>>()
+          .mockResolvedValue({ sequence: 99 }),
+        create: jest.fn(({ data }: { data: Record<string, unknown> }) =>
+          Promise.resolve({
+            id: "runtime-agent-overlap",
+            ...data,
+            createdAt: new Date("2026-09-20T00:00:00.000Z"),
+          }),
+        ),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([persisted]),
+      },
+    };
+    const service = new AssessmentRuntimeEventService(prisma as never);
+    const events: string[] = [];
+
+    await service.publishAgentStreamEvent({
+      eventId: "assessment-a-semantic-100",
+      assessmentId: "assessment-a",
+      runId: "run-a",
+      correlationId: "corr-a",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
+      agentName: "investigator",
+      toolName: "search_nodes",
+      toolCallId: "assessment-a-call-100",
+      status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+      data: persisted.outputSummaryJson.agentStreamEvent.data,
+    });
+    const subscription = service
+      .observeAgentStreamEvents("user-a")
+      .subscribe((event) => events.push(event.eventId));
+    await Promise.resolve();
+
+    expect(events).toEqual(["assessment-a-semantic-100"]);
+    subscription.unsubscribe();
   });
 
   it("uses restart-stable live sequence values after persisted replay", async () => {
@@ -273,6 +415,9 @@ describe("AssessmentRuntimeEventService", () => {
             (args: { where: { id: string } }) => Promise<{ ownerId: string }>
           >()
           .mockResolvedValue({ ownerId: "user-a" }),
+        findMany: jest
+          .fn<(args?: unknown) => Promise<Array<{ id: string }>>>()
+          .mockResolvedValue([{ id: "assessment-a" }]),
       },
       assessmentRuntimeEvent: {
         findMany: jest
