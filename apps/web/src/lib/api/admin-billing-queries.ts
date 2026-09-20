@@ -12,6 +12,7 @@ export function useAdminBillingQuery(query: AdminBillingQuery) {
     queryKey: apiQueryKeys.admin.billing(
       query.period,
       query.status,
+      query.gateway,
       query.page,
       query.pageSize,
     ),

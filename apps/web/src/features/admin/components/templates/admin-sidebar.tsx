@@ -31,6 +31,9 @@ export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
   const fallbackEmail = resolveAppMessage(
     "pages.admin.sidebar.identityFallbackEmail" as MessageKey,
   );
+  const adminRole = resolveAppMessage(
+    "pages.admin.sidebar.roleAdminLabel" as MessageKey,
+  );
   const resolvedAdminName = adminName ?? fallbackName;
   const resolvedAdminEmail = adminEmail ?? fallbackEmail;
 
@@ -59,31 +62,34 @@ export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
       disabled: false,
     },
     {
-      labelKey: "pages.admin.sidebar.navCorpusVersions" as MessageKey,
-      href: "/admin/corpus-versions",
-      icon: BookOpenIcon,
-      isActive: isCorpusActive,
-      disabled: false,
-    },
-    {
       labelKey: "pages.admin.sidebar.navBilling" as MessageKey,
       href: "/admin/billing",
       icon: WalletCardsIcon,
       isActive: isBillingActive,
       disabled: false,
     },
+    {
+      labelKey: "pages.admin.sidebar.navCorpusVersions" as MessageKey,
+      href: "/admin/corpus-versions",
+      icon: BookOpenIcon,
+      isActive: isCorpusActive,
+      disabled: false,
+    },
   ];
 
   return (
     <aside
-      className="flex h-screen w-62 shrink-0 flex-col justify-between border-r border-sidebar-border bg-sidebar text-sidebar-foreground select-none"
+      className={cn(
+        "flex h-screen w-62 shrink-0 flex-col justify-between border-r border-sidebar-border bg-sidebar text-sidebar-foreground select-none",
+        isBillingActive && "2xl:w-70",
+      )}
       aria-label={resolveAppMessage(
         "pages.admin.sidebar.navigationAria" as MessageKey,
       )}
     >
       <div className="flex flex-col">
         {/* Brand Lockup & ADMIN Tag */}
-        <div className="px-5 pt-5 pb-3">
+        <div className={cn("px-5 pt-5 pb-3", isBillingActive && "2xl:px-6")}>
           <div className="flex items-center gap-2.5">
             <LCSPLogo
               variant={LCSP_LOGO_VARIANTS.lockup}
@@ -93,8 +99,13 @@ export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
               )}
             />
           </div>
-          <div className="mt-2.5 flex items-center">
-            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase bg-sidebar-accent border border-sidebar-border">
+          <div
+            className={cn(
+              "mt-2.5 flex items-center",
+              isBillingActive && "2xl:mt-0",
+            )}
+          >
+            <span className="text-[10.5px] font-medium tracking-wider text-muted-foreground uppercase">
               {resolveAppMessage(
                 "pages.admin.sidebar.adminBadge" as MessageKey,
               )}
@@ -104,7 +115,10 @@ export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
 
         {/* Navigation Rows */}
         <nav
-          className="mt-4 flex flex-col gap-1 px-3"
+          className={cn(
+            "mt-4 flex flex-col gap-1 px-3",
+            isBillingActive && "2xl:mt-12 2xl:gap-2 2xl:px-4",
+          )}
           aria-label={resolveAppMessage(
             "pages.admin.sidebar.sectionsAria" as MessageKey,
           )}
@@ -117,7 +131,7 @@ export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
               return (
                 <div
                   key={item.href}
-                  className="flex h-10 w-56 cursor-not-allowed items-center justify-between rounded-[10px] px-3 text-[13px] font-medium text-muted-foreground/50 opacity-60"
+                  className="flex h-10 w-56 cursor-not-allowed items-center justify-between rounded-lg px-3 text-[13px] font-medium text-muted-foreground/50 opacity-60"
                   aria-disabled="true"
                 >
                   <div className="flex items-center gap-3">
@@ -138,7 +152,8 @@ export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex h-10 w-56 items-center gap-3 rounded-[10px] px-3 text-[13px] font-medium transition-colors",
+                  "flex h-10 w-56 items-center gap-3 rounded-lg px-3 text-[13px] font-medium transition-colors",
+                  isBillingActive && "2xl:h-11 2xl:w-60 2xl:gap-0 2xl:px-4",
                   item.isActive
                     ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground shadow-xs"
                     : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
@@ -148,6 +163,7 @@ export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
                 <Icon
                   className={cn(
                     "size-4 shrink-0",
+                    isBillingActive && "2xl:hidden",
                     item.isActive
                       ? "text-sidebar-accent-foreground"
                       : "text-muted-foreground",
@@ -160,10 +176,16 @@ export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
         </nav>
 
         {/* Divider */}
-        <div className="mx-5 my-5 h-px bg-sidebar-border/60" />
+        <div
+          className={cn(
+            "mx-5 my-5 h-px bg-sidebar-border/60",
+            isBillingActive && "2xl:my-6.5",
+            isBillingActive && "2xl:mx-6",
+          )}
+        />
 
         {/* Administration Section Note */}
-        <div className="px-5">
+        <div className={cn("px-5", isBillingActive && "2xl:px-6")}>
           <p className="text-[10.5px] font-semibold tracking-wider text-sidebar-foreground/70 uppercase">
             {resolveAppMessage(
               "pages.admin.sidebar.administrationLabel" as MessageKey,
@@ -178,17 +200,33 @@ export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
       </div>
 
       {/* Bottom Authenticated Admin Identity */}
-      <div className="p-3">
-        <div className="flex h-14 w-56 items-center gap-3 rounded-xl border border-sidebar-border bg-sidebar-accent/50 px-3 py-2">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-admin-status-active-surface text-xs font-semibold text-admin-status-active-foreground">
-            {resolvedAdminName.charAt(0).toUpperCase()}
+      <div
+        className={cn("p-3", isBillingActive && "2xl:px-4 2xl:pt-4 2xl:pb-5")}
+      >
+        <div
+          className={cn(
+            "flex h-14 w-56 items-center gap-3 rounded-xl border border-sidebar-border bg-sidebar-accent/50 px-3 py-2",
+            isBillingActive && "2xl:h-16 2xl:w-64 2xl:bg-sidebar-accent",
+          )}
+        >
+          <div
+            className={cn(
+              "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+              isBillingActive
+                ? "bg-sidebar-accent text-sidebar-foreground"
+                : "bg-admin-status-active-surface text-admin-status-active-foreground",
+            )}
+          >
+            {isBillingActive
+              ? adminRole.charAt(0).toUpperCase()
+              : resolvedAdminName.charAt(0).toUpperCase()}
           </div>
           <div className="flex min-w-0 flex-1 flex-col justify-center">
             <span className="truncate text-[12.5px] font-medium text-sidebar-foreground">
-              {resolvedAdminName}
+              {isBillingActive ? resolvedAdminEmail : resolvedAdminName}
             </span>
             <span className="truncate text-[10.5px] text-muted-foreground">
-              {resolvedAdminEmail}
+              {isBillingActive ? adminRole : resolvedAdminEmail}
             </span>
           </div>
         </div>

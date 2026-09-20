@@ -9,6 +9,7 @@ import { parseBillingAdminDashboard } from "@/features/admin/schemas/billing-adm
 const BILLING_ADMIN_QUERY_KEYS = [
   "period",
   "status",
+  "gateway",
   "page",
   "pageSize",
 ] as const;

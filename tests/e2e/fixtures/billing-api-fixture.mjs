@@ -103,13 +103,16 @@ const server = createServer(async (request, response) => {
       return problem(response, 503, "BILLING_REPORT_UNAVAILABLE");
     }
     const status = url.searchParams.get("status") ?? "ALL";
+    const gateway = url.searchParams.get("gateway") ?? "ALL";
     const page = positiveInteger(url.searchParams.get("page"), 1);
     const pageSize = Math.min(
       positiveInteger(url.searchParams.get("pageSize"), 20),
       100,
     );
     const filtered = fixture.adminBilling.items.filter(
-      (item) => status === "ALL" || item.reconciliationStatus === status,
+      (item) =>
+        (status === "ALL" || item.reconciliationStatus === status) &&
+        (gateway === "ALL" || item.provider === gateway),
     );
     const start = (page - 1) * pageSize;
     return success(response, {
@@ -236,5 +239,5 @@ function positiveInteger(value, fallback) {
 }
 
 function normalizePeriod(period) {
-  return ["7D", "30D", "90D"].includes(period) ? period : "30D";
+  return ["MTD", "7D", "30D", "90D"].includes(period) ? period : "MTD";
 }

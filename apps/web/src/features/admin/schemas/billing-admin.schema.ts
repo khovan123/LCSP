@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  BILLING_ADMIN_GATEWAYS,
   BILLING_ADMIN_PERIODS,
   BILLING_ORDER_STATUSES,
   PAYMENT_RECONCILIATION_REASONS,
@@ -27,6 +28,7 @@ const billingAdminPaymentRowSchema = z.object({
       id: z.string().min(1),
       paymentCode: z.string().min(1),
       status: z.enum(BILLING_ORDER_STATUSES),
+      creditUnits: z.string().regex(/^\d+$/).nullable(),
     })
     .nullable(),
 });
@@ -38,12 +40,22 @@ export const billingAdminDashboardSchema = z.object({
     usageRevenueVnd: z.string().regex(/^\d+$/),
     pendingReconciliationCount: z.number().int().nonnegative(),
     duplicatePaymentCount: z.number().int().nonnegative(),
+    settledTopUpTrend: z
+      .array(
+        z.object({
+          day: z.string().date(),
+          amountVnd: z.string().regex(/^\d+$/),
+        }),
+      )
+      .length(7),
   }),
   items: z.array(billingAdminPaymentRowSchema),
   page: z.number().int().positive(),
   pageSize: z.number().int().positive(),
   totalCount: z.number().int().nonnegative(),
 });
+
+export const billingAdminGatewaySchema = z.enum(BILLING_ADMIN_GATEWAYS);
 
 export function parseBillingAdminDashboard(value: unknown) {
   const parsed = billingAdminDashboardSchema.safeParse(value);

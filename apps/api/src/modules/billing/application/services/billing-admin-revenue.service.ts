@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import {
+  BILLING_ADMIN_GATEWAYS,
   BILLING_ADMIN_PAYMENT_FILTERS,
   BILLING_ADMIN_PERIODS,
   BILLING_ORDER_STATUSES,
@@ -8,6 +9,7 @@ import {
 } from "@lcsp/contracts/billing";
 import type {
   BillingAdminDashboard,
+  BillingAdminGateway,
   BillingAdminPeriod,
   BillingAdminPaymentFilter,
 } from "@lcsp/contracts/billing";
@@ -27,17 +29,23 @@ export class BillingAdminRevenueService {
   async getDashboard(input: {
     period: BillingAdminPeriod;
     status: BillingAdminPaymentFilter;
+    gateway: BillingAdminGateway;
     page: number;
     pageSize: number;
     now?: Date;
   }): Promise<BillingAdminDashboard> {
     const now = input.now ?? new Date();
-    const days = periodDays(input.period);
-    const from = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    const from = periodStart(now, input.period);
+    const trendFrom = new Date(now);
+    trendFrom.setUTCHours(0, 0, 0, 0);
+    trendFrom.setUTCDate(trendFrom.getUTCDate() - 6);
     const paymentWhere: Prisma.PaymentTransactionWhereInput = {
       receivedAt: { gte: from, lte: now },
       ...(input.status !== BILLING_ADMIN_PAYMENT_FILTERS.all
         ? { reconciliationStatus: input.status }
+        : {}),
+      ...(input.gateway !== BILLING_ADMIN_GATEWAYS.all
+        ? { provider: input.gateway }
         : {}),
     };
 
@@ -46,6 +54,7 @@ export class BillingAdminRevenueService {
       usage,
       pendingReconciliationCount,
       duplicatePaymentCount,
+      settledTopUpTrend,
       items,
       totalCount,
     ] = await Promise.all([
@@ -66,6 +75,7 @@ export class BillingAdminRevenueService {
       this.prisma.paymentTransaction.count({
         where: {
           reconciliationStatus: { in: [...OPEN_RECONCILIATION_STATUSES] },
+          receivedAt: { gte: from, lte: now },
         },
       }),
       this.prisma.paymentTransaction.count({
@@ -74,6 +84,7 @@ export class BillingAdminRevenueService {
           receivedAt: { gte: from, lte: now },
         },
       }),
+      this.getSettledTopUpTrend(trendFrom, now),
       this.prisma.paymentTransaction.findMany({
         where: paymentWhere,
         include: {
@@ -83,6 +94,7 @@ export class BillingAdminRevenueService {
               id: true,
               paymentCode: true,
               status: true,
+              creditUnits: true,
               user: { select: { id: true, email: true, displayName: true } },
             },
           },
@@ -101,6 +113,7 @@ export class BillingAdminRevenueService {
         usageRevenueVnd: (usage._sum.customerChargeVnd ?? 0n).toString(),
         pendingReconciliationCount,
         duplicatePaymentCount,
+        settledTopUpTrend,
       },
       items: items.map((payment) => {
         const account = payment.billingOrder?.user ?? payment.user ?? null;
@@ -125,6 +138,7 @@ export class BillingAdminRevenueService {
                 id: payment.billingOrder.id,
                 paymentCode: payment.billingOrder.paymentCode,
                 status: payment.billingOrder.status,
+                creditUnits: payment.billingOrder.creditUnits.toString(),
               }
             : null,
         };
@@ -134,14 +148,51 @@ export class BillingAdminRevenueService {
       totalCount,
     };
   }
+
+  private async getSettledTopUpTrend(from: Date, through: Date) {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ day: Date; amountMinorUnits: bigint }>
+    >`
+      SELECT date_trunc('day', "creditedAt" AT TIME ZONE 'UTC') AS "day",
+        COALESCE(SUM("amountMinorUnits"), 0)::bigint AS "amountMinorUnits"
+      FROM "BillingOrder"
+      WHERE "status" = ${BILLING_ORDER_STATUSES.CREDITED}::"BillingOrderStatus"
+        AND "creditedAt" >= ${from}
+        AND "creditedAt" <= ${through}
+      GROUP BY 1
+      ORDER BY 1
+    `;
+    const byDay = new Map(
+      rows.map((row) => [
+        row.day.toISOString().slice(0, 10),
+        row.amountMinorUnits,
+      ]),
+    );
+
+    return Array.from({ length: 7 }, (_, index) => {
+      const day = new Date(from);
+      day.setUTCDate(day.getUTCDate() + index);
+      const key = day.toISOString().slice(0, 10);
+      return { day: key, amountVnd: (byDay.get(key) ?? 0n).toString() };
+    });
+  }
 }
 
 export function normalizeBillingAdminPeriod(
   value?: string,
 ): BillingAdminPeriod {
+  if (value === BILLING_ADMIN_PERIODS.mtd) return BILLING_ADMIN_PERIODS.mtd;
   if (value === BILLING_ADMIN_PERIODS.d7) return BILLING_ADMIN_PERIODS.d7;
   if (value === BILLING_ADMIN_PERIODS.d90) return BILLING_ADMIN_PERIODS.d90;
   return BILLING_ADMIN_PERIODS.d30;
+}
+
+export function normalizeBillingAdminGateway(
+  value?: string,
+): BillingAdminGateway {
+  if (value === BILLING_ADMIN_GATEWAYS.sepay)
+    return BILLING_ADMIN_GATEWAYS.sepay;
+  return BILLING_ADMIN_GATEWAYS.all;
 }
 
 export function normalizeBillingAdminFilter(
@@ -158,8 +209,15 @@ export function normalizeBillingAdminFilter(
   return BILLING_ADMIN_PAYMENT_FILTERS.all;
 }
 
-function periodDays(period: BillingAdminPeriod): number {
-  if (period === BILLING_ADMIN_PERIODS.d7) return 7;
-  if (period === BILLING_ADMIN_PERIODS.d90) return 90;
-  return 30;
+function periodStart(now: Date, period: BillingAdminPeriod): Date {
+  if (period === BILLING_ADMIN_PERIODS.mtd) {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  }
+  const days =
+    period === BILLING_ADMIN_PERIODS.d7
+      ? 7
+      : period === BILLING_ADMIN_PERIODS.d90
+        ? 90
+        : 30;
+  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 }

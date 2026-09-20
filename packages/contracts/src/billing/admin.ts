@@ -5,6 +5,7 @@ import {
 } from "./statuses.ts";
 
 export const BILLING_ADMIN_PERIODS = {
+  mtd: "MTD",
   d7: "7D",
   d30: "30D",
   d90: "90D",
@@ -26,11 +27,20 @@ export const BILLING_ADMIN_PAYMENT_FILTERS = {
 export type BillingAdminPaymentFilter =
   (typeof BILLING_ADMIN_PAYMENT_FILTERS)[keyof typeof BILLING_ADMIN_PAYMENT_FILTERS];
 
+export const BILLING_ADMIN_GATEWAYS = {
+  all: "ALL",
+  sepay: "SEPAY",
+} as const;
+
+export type BillingAdminGateway =
+  (typeof BILLING_ADMIN_GATEWAYS)[keyof typeof BILLING_ADMIN_GATEWAYS];
+
 export type BillingAdminSummary = {
   settledTopUpVnd: string;
   usageRevenueVnd: string;
   pendingReconciliationCount: number;
   duplicatePaymentCount: number;
+  settledTopUpTrend: Array<{ day: string; amountVnd: string }>;
 };
 
 export type BillingAdminPaymentRow = {
@@ -49,6 +59,7 @@ export type BillingAdminPaymentRow = {
     id: string;
     paymentCode: string;
     status: (typeof BILLING_ORDER_STATUSES)[keyof typeof BILLING_ORDER_STATUSES];
+    creditUnits: string | null;
   } | null;
 };
 

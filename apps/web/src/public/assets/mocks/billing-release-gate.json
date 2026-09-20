@@ -2,7 +2,7 @@
   "profiles": {
     "admin": {
       "user_id": "admin-e2e-1",
-      "email": "admin@example.test",
+      "email": "admin@example.com",
       "email_verified": true,
       "display_name": "Billing Admin",
       "recovery_email": null,
@@ -87,70 +87,103 @@
   "adminBilling": {
     "period": "30D",
     "summary": {
-      "settledTopUpVnd": "100000",
-      "usageRevenueVnd": "12500",
-      "pendingReconciliationCount": 12,
-      "duplicatePaymentCount": 4
+      "settledTopUpVnd": "124500000",
+      "usageRevenueVnd": "96800000",
+      "pendingReconciliationCount": 3,
+      "duplicatePaymentCount": 12,
+      "settledTopUpTrend": [
+        {
+          "day": "2026-09-14",
+          "amountVnd": "8550000"
+        },
+        {
+          "day": "2026-09-15",
+          "amountVnd": "5800000"
+        },
+        {
+          "day": "2026-09-16",
+          "amountVnd": "10700000"
+        },
+        {
+          "day": "2026-09-17",
+          "amountVnd": "4350000"
+        },
+        {
+          "day": "2026-09-18",
+          "amountVnd": "13050000"
+        },
+        {
+          "day": "2026-09-19",
+          "amountVnd": "9280000"
+        },
+        {
+          "day": "2026-09-20",
+          "amountVnd": "14500000"
+        }
+      ]
     },
     "items": [
       {
         "id": "payment-e2e-01",
         "provider": "SEPAY",
         "providerTransactionId": "TX-BILLING-E2E-01",
-        "amountVnd": "10000",
+        "amountVnd": "1500000",
         "reconciliationStatus": "MATCHED",
         "reconciliationReason": null,
         "receivedAt": "2026-09-20T12:00:00.000Z",
         "reconciledAt": "2026-09-20T12:30:00.000Z",
         "account": {
           "userId": "user-e2e-1",
-          "email": "customer1@example.test",
-          "displayName": "Customer 1"
+          "email": "min@example.com",
+          "displayName": "Min"
         },
         "order": {
           "id": "order-e2e-01",
-          "paymentCode": "LCSP-E2E-01",
-          "status": "CREDITED"
+          "paymentCode": "LCSP260917K2M4",
+          "status": "CREDITED",
+          "creditUnits": "1500000"
         }
       },
       {
         "id": "payment-e2e-02",
         "provider": "SEPAY",
         "providerTransactionId": "TX-BILLING-E2E-02",
-        "amountVnd": "11000",
+        "amountVnd": "500000",
         "reconciliationStatus": "UNMATCHED",
         "reconciliationReason": "UNMATCHED_PAYMENT_CODE",
         "receivedAt": "2026-09-19T12:00:00.000Z",
         "reconciledAt": null,
         "account": {
           "userId": "user-e2e-1",
-          "email": "customer2@example.test",
-          "displayName": "Customer 2"
+          "email": "bao@example.com",
+          "displayName": "Bao"
         },
         "order": {
           "id": "order-e2e-02",
-          "paymentCode": "LCSP-E2E-02",
-          "status": "PENDING_RECONCILIATION"
+          "paymentCode": "LCSP260919P7X3D",
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": "2000000"
         }
       },
       {
         "id": "payment-e2e-03",
         "provider": "SEPAY",
         "providerTransactionId": "TX-BILLING-E2E-03",
-        "amountVnd": "12000",
-        "reconciliationStatus": "AMOUNT_MISMATCH",
-        "reconciliationReason": "UNDERPAYMENT",
+        "amountVnd": "1000000",
+        "reconciliationStatus": "DUPLICATE",
+        "reconciliationReason": "DUPLICATE_PROVIDER_TRANSACTION",
         "receivedAt": "2026-09-18T12:00:00.000Z",
         "reconciledAt": null,
         "account": {
           "userId": "user-e2e-1",
-          "email": "customer3@example.test",
-          "displayName": "Customer 3"
+          "email": "linh@example.com",
+          "displayName": "Linh"
         },
         "order": {
           "id": "order-e2e-03",
-          "paymentCode": "LCSP-E2E-03",
-          "status": "PENDING_RECONCILIATION"
+          "paymentCode": "LCSP260914R8N6V",
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": null
         }
       },
       {
@@ -170,7 +203,8 @@
         "order": {
           "id": "order-e2e-04",
           "paymentCode": "LCSP-E2E-04",
-          "status": "PENDING_RECONCILIATION"
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": "13000"
         }
       },
       {
@@ -190,7 +224,8 @@
         "order": {
           "id": "order-e2e-05",
           "paymentCode": "LCSP-E2E-05",
-          "status": "PENDING_RECONCILIATION"
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": "14000"
         }
       },
       {
@@ -210,7 +245,8 @@
         "order": {
           "id": "order-e2e-06",
           "paymentCode": "LCSP-E2E-06",
-          "status": "CREDITED"
+          "status": "CREDITED",
+          "creditUnits": "15000"
         }
       },
       {
@@ -230,7 +266,8 @@
         "order": {
           "id": "order-e2e-07",
           "paymentCode": "LCSP-E2E-07",
-          "status": "PENDING_RECONCILIATION"
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": "16000"
         }
       },
       {
@@ -250,7 +287,8 @@
         "order": {
           "id": "order-e2e-08",
           "paymentCode": "LCSP-E2E-08",
-          "status": "PENDING_RECONCILIATION"
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": "17000"
         }
       },
       {
@@ -270,7 +308,8 @@
         "order": {
           "id": "order-e2e-09",
           "paymentCode": "LCSP-E2E-09",
-          "status": "PENDING_RECONCILIATION"
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": "18000"
         }
       },
       {
@@ -290,7 +329,8 @@
         "order": {
           "id": "order-e2e-10",
           "paymentCode": "LCSP-E2E-10",
-          "status": "PENDING_RECONCILIATION"
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": "19000"
         }
       },
       {
@@ -310,7 +350,8 @@
         "order": {
           "id": "order-e2e-11",
           "paymentCode": "LCSP-E2E-11",
-          "status": "CREDITED"
+          "status": "CREDITED",
+          "creditUnits": "20000"
         }
       },
       {
@@ -330,7 +371,8 @@
         "order": {
           "id": "order-e2e-12",
           "paymentCode": "LCSP-E2E-12",
-          "status": "PENDING_RECONCILIATION"
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": "21000"
         }
       },
       {
@@ -350,7 +392,8 @@
         "order": {
           "id": "order-e2e-13",
           "paymentCode": "LCSP-E2E-13",
-          "status": "PENDING_RECONCILIATION"
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": "22000"
         }
       },
       {
@@ -370,7 +413,8 @@
         "order": {
           "id": "order-e2e-14",
           "paymentCode": "LCSP-E2E-14",
-          "status": "PENDING_RECONCILIATION"
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": "23000"
         }
       },
       {
@@ -390,7 +434,8 @@
         "order": {
           "id": "order-e2e-15",
           "paymentCode": "LCSP-E2E-15",
-          "status": "PENDING_RECONCILIATION"
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": "24000"
         }
       },
       {
@@ -410,7 +455,8 @@
         "order": {
           "id": "order-e2e-16",
           "paymentCode": "LCSP-E2E-16",
-          "status": "CREDITED"
+          "status": "CREDITED",
+          "creditUnits": "25000"
         }
       },
       {
@@ -430,7 +476,8 @@
         "order": {
           "id": "order-e2e-17",
           "paymentCode": "LCSP-E2E-17",
-          "status": "PENDING_RECONCILIATION"
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": "26000"
         }
       },
       {
@@ -450,7 +497,8 @@
         "order": {
           "id": "order-e2e-18",
           "paymentCode": "LCSP-E2E-18",
-          "status": "PENDING_RECONCILIATION"
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": "27000"
         }
       },
       {
@@ -470,7 +518,8 @@
         "order": {
           "id": "order-e2e-19",
           "paymentCode": "LCSP-E2E-19",
-          "status": "PENDING_RECONCILIATION"
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": "28000"
         }
       },
       {
@@ -490,7 +539,8 @@
         "order": {
           "id": "order-e2e-20",
           "paymentCode": "LCSP-E2E-20",
-          "status": "PENDING_RECONCILIATION"
+          "status": "PENDING_RECONCILIATION",
+          "creditUnits": "29000"
         }
       },
       {
@@ -510,7 +560,8 @@
         "order": {
           "id": "order-e2e-21",
           "paymentCode": "LCSP-E2E-21",
-          "status": "CREDITED"
+          "status": "CREDITED",
+          "creditUnits": "30000"
         }
       }
     ],

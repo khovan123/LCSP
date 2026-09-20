@@ -5,6 +5,7 @@ import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import {
   BillingAdminRevenueService,
+  normalizeBillingAdminGateway,
   normalizeBillingAdminFilter,
   normalizeBillingAdminPeriod,
 } from "../../application/services/billing-admin-revenue.service.js";
@@ -19,6 +20,7 @@ export class BillingAdminController {
   async getDashboard(
     @Query("period") period?: string,
     @Query("status") status?: string,
+    @Query("gateway") gateway?: string,
     @Query("page") rawPage?: string,
     @Query("pageSize") rawPageSize?: string,
   ) {
@@ -30,6 +32,7 @@ export class BillingAdminController {
       await this.revenue.getDashboard({
         period: normalizedPeriod,
         status: normalizedStatus,
+        gateway: normalizeBillingAdminGateway(gateway),
         page,
         pageSize,
       }),

@@ -2219,23 +2219,58 @@ export type PagesMessages = {
       description: string;
       periodAria: string;
       statusAria: string;
+      gatewayAria: string;
+      exportReport: string;
+      exporting: string;
+      exportError: string;
       filters: { all: string };
-      periods: { d7: string; d30: string; d90: string };
+      gateways: { all: string; sepay: string; sepayName: string };
+      periods: { mtd: string; d7: string; d30: string; d90: string };
       metrics: {
         settledTopUps: string;
         usageRevenue: string;
         pendingReconciliation: string;
         duplicates: string;
+        topUpSubtitle: string;
+        usageSubtitle: string;
+        eventSuffix: string;
+      };
+      trend: {
+        title: string;
+        description: string;
+        dayAria: string;
+      };
+      pricing: {
+        title: string;
+        providerCost: string;
+        customerCharge: string;
+        prepaidCredits: string;
+        missingSnapshot: string;
       };
       columns: {
-        payment: string;
+        order: string;
         customer: string;
         amount: string;
+        credits: string;
+        gateway: string;
+        webhook: string;
         status: string;
         received: string;
+        action: string;
       };
+      actions: { view: string; review: string; close: string };
+      orderStatus: {
+        credited: string;
+        awaiting: string;
+        blocked: string;
+        expired: string;
+        cancelled: string;
+        pending: string;
+      };
+      footer: string;
       tableAria: string;
       unknownAccount: string;
+      unknownOrder: string;
       emptyTitle: string;
       emptyDescription: string;
       errorTitle: string;

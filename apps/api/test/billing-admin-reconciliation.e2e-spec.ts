@@ -583,7 +583,9 @@ describe("Admin billing reconciliation (e2e)", () => {
     }
 
     const response = await httpRequest(app)
-      .get("/admin/billing?period=30D&status=DUPLICATE&page=1&pageSize=1")
+      .get(
+        "/admin/billing?period=MTD&status=DUPLICATE&gateway=SEPAY&page=1&pageSize=1",
+      )
       .set("Authorization", `Bearer ${adminToken}`)
       .expect(200);
     const dashboard = successBody<{
@@ -592,25 +594,33 @@ describe("Admin billing reconciliation (e2e)", () => {
         usageRevenueVnd: string;
         pendingReconciliationCount: number;
         duplicatePaymentCount: number;
+        settledTopUpTrend: Array<{ day: string; amountVnd: string }>;
       };
       items: Array<{
         account: { userId: string; email: string } | null;
-        order: { paymentCode: string } | null;
+        order: { paymentCode: string; creditUnits: string } | null;
       }>;
       page: number;
       pageSize: number;
       totalCount: number;
     }>(response);
-    assert.deepEqual(dashboard.summary, {
+    const { settledTopUpTrend, ...summary } = dashboard.summary;
+    assert.deepEqual(summary, {
       settledTopUpVnd: "100000",
       usageRevenueVnd: "2500",
       pendingReconciliationCount: 1,
       duplicatePaymentCount: 2,
     });
+    assert.equal(settledTopUpTrend.length, 7);
+    assert.equal(
+      settledTopUpTrend.reduce((sum, day) => sum + BigInt(day.amountVnd), 0n),
+      100000n,
+    );
     assert.equal(dashboard.items.length, 1);
     assert.equal(dashboard.items[0]?.account?.userId, "user-1");
     assert.equal(dashboard.items[0]?.account?.email, "manager@acme.test");
     assert.equal(dashboard.items[0]?.order?.paymentCode, "LCSP-ADMIN-ORDER");
+    assert.equal(dashboard.items[0]?.order?.creditUnits, "100000");
     assert.equal(dashboard.page, 1);
     assert.equal(dashboard.pageSize, 1);
     assert.equal(dashboard.totalCount, 2);

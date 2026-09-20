@@ -1,5 +1,6 @@
 import type {
   BillingAdminDashboard,
+  BillingAdminGateway,
   BillingAdminPeriod,
   BillingAdminPaymentFilter,
 } from "@lcsp/contracts/billing";
@@ -8,6 +9,7 @@ import { apiRequest } from "./api-request";
 export type AdminBillingQuery = {
   period: BillingAdminPeriod;
   status: BillingAdminPaymentFilter;
+  gateway: BillingAdminGateway;
   page: number;
   pageSize: number;
 };
@@ -18,6 +20,7 @@ export async function fetchAdminBilling(
   const params = new URLSearchParams({
     period: query.period,
     status: query.status,
+    gateway: query.gateway,
     page: String(query.page),
     pageSize: String(query.pageSize),
   });
