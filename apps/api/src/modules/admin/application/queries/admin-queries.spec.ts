@@ -81,7 +81,7 @@ describe("Admin CQRS Queries", () => {
       $transaction: txSpy,
     } as unknown as PrismaService);
 
-    const query = new ListAdminUsersQuery({ page: "1" }, "corr-1");
+    const query = new ListAdminUsersQuery({ page: 1 }, "corr-1");
     const result = await handler.execute(query);
 
     expect(result.totalCount).toBe(1);

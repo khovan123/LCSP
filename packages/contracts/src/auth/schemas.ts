@@ -1,8 +1,15 @@
 import { z } from "zod";
 
+import {
+  ADMIN_ACCOUNT_FILTERS,
+  ADMIN_ACCOUNT_QUERY_LIMITS,
+} from "./admin-accounts.ts";
+import { ADMIN_OVERVIEW_PERIODS } from "./admin-overview.ts";
 import { AUTH_BACKUP_EMAIL_POLICIES } from "./backup-email-policy.ts";
 import { MFA_RECOVERY_CODE_ACCESS_ACTIONS } from "./mfa.ts";
 import { AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES } from "./primary-email-address-policy.ts";
+import { AUTH_USER_ROLES } from "./roles.ts";
+import { AUTH_ACCOUNT_STATUSES } from "./states.ts";
 
 /**
  * Validation schema and input type for user sign-in.
@@ -101,9 +108,12 @@ export type ConfirmPasswordRecoveryInput = z.infer<
  * Validation schema and input type for step-up password re-authentication on sensitive actions.
  */
 export const passwordReauthSchema = z.object({
-  password: z.string().min(1).refine((val) => val.trim().length > 0, {
-    message: "Password cannot be empty or whitespace only",
-  }),
+  password: z
+    .string()
+    .min(1)
+    .refine((val) => val.trim().length > 0, {
+      message: "Password cannot be empty or whitespace only",
+    }),
 });
 export type PasswordReauthInput = z.infer<typeof passwordReauthSchema>;
 
@@ -156,13 +166,15 @@ export const checkSensitiveRouteSchema = z
     (data) =>
       Boolean(
         (data.path && data.path.trim().length > 0) ||
-          (data.route && data.route.trim().length > 0),
+        (data.route && data.route.trim().length > 0),
       ),
     {
       message: "Either path or route must be provided",
     },
   );
-export type CheckSensitiveRouteInput = z.infer<typeof checkSensitiveRouteSchema>;
+export type CheckSensitiveRouteInput = z.infer<
+  typeof checkSensitiveRouteSchema
+>;
 
 /**
  * Validation schema and input type for starting an OAuth authentication flow.
@@ -201,3 +213,72 @@ export const oauthLinkCallbackSchema = z.object({
   provider: z.string().min(1),
 });
 export type OAuthLinkCallbackInput = z.infer<typeof oauthLinkCallbackSchema>;
+
+/**
+ * Validation schema and input type for Admin user account actions (suspend / restore).
+ */
+export const adminUserActionSchema = z
+  .object({
+    expectedVersion: z.number().int().nonnegative(),
+    reason: z.string().trim().min(1).max(500).optional(),
+  })
+  .strict();
+export type AdminUserActionInput = z.infer<typeof adminUserActionSchema>;
+
+/**
+ * Validation schema and input type for Admin user list query parameters.
+ */
+export const adminListUsersQuerySchema = z.object({
+  query: z.string().max(ADMIN_ACCOUNT_QUERY_LIMITS.maxQueryLength).optional(),
+  q: z.string().max(ADMIN_ACCOUNT_QUERY_LIMITS.maxQueryLength).optional(),
+  status: z
+    .enum([
+      AUTH_ACCOUNT_STATUSES.active,
+      AUTH_ACCOUNT_STATUSES.suspended,
+      ADMIN_ACCOUNT_FILTERS.all,
+    ] as [string, ...string[]])
+    .optional(),
+  role: z
+    .enum([
+      AUTH_USER_ROLES.admin,
+      AUTH_USER_ROLES.customer,
+      ADMIN_ACCOUNT_FILTERS.all,
+    ] as [string, ...string[]])
+    .optional(),
+  page: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(ADMIN_ACCOUNT_QUERY_LIMITS.maxPage)
+    .default(1),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(ADMIN_ACCOUNT_QUERY_LIMITS.maxPageSize)
+    .optional(),
+  page_size: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(ADMIN_ACCOUNT_QUERY_LIMITS.maxPageSize)
+    .optional(),
+});
+export type AdminListUsersQueryInput = z.infer<
+  typeof adminListUsersQuerySchema
+>;
+
+/**
+ * Validation schema and input type for Admin overview metrics query parameters.
+ */
+export const adminOverviewQuerySchema = z.object({
+  period: z
+    .enum(
+      Object.values(ADMIN_OVERVIEW_PERIODS) as [
+        (typeof ADMIN_OVERVIEW_PERIODS)[keyof typeof ADMIN_OVERVIEW_PERIODS],
+        ...(typeof ADMIN_OVERVIEW_PERIODS)[keyof typeof ADMIN_OVERVIEW_PERIODS][],
+      ],
+    )
+    .default(ADMIN_OVERVIEW_PERIODS.p30d),
+});
+export type AdminOverviewQueryInput = z.infer<typeof adminOverviewQuerySchema>;

@@ -24,43 +24,6 @@ import {
 import { fetchAdminUserDetail } from "../../queries/get-admin-user-detail/get-admin-user-detail.handler.js";
 import { RestoreUserCommand } from "./restore-user.command.js";
 
-function parseInput(
-  raw: unknown,
-  correlationId: string,
-): { expectedVersion: number; reason?: string } {
-  if (!isRecord(raw)) {
-    throw problemException(E.invalidInput, correlationId, {
-      status: HttpStatus.BAD_REQUEST,
-    });
-  }
-  const keys = Object.keys(raw);
-  if (keys.some((key) => key !== "expectedVersion" && key !== "reason")) {
-    throw problemException(E.invalidInput, correlationId, {
-      status: HttpStatus.BAD_REQUEST,
-    });
-  }
-  const v = raw.expectedVersion;
-  if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
-    throw problemException(E.invalidInput, correlationId, {
-      status: HttpStatus.BAD_REQUEST,
-    });
-  }
-  let safeReason: string | undefined;
-  if (raw.reason !== undefined) {
-    if (
-      typeof raw.reason !== "string" ||
-      !raw.reason.trim() ||
-      raw.reason.length > 500
-    ) {
-      throw problemException(E.invalidInput, correlationId, {
-        status: HttpStatus.BAD_REQUEST,
-      });
-    }
-    safeReason = raw.reason.trim();
-  }
-  return { expectedVersion: v, reason: safeReason };
-}
-
 @CommandHandler(RestoreUserCommand)
 export class RestoreUserHandler implements ICommandHandler<RestoreUserCommand> {
   constructor(
@@ -70,10 +33,7 @@ export class RestoreUserHandler implements ICommandHandler<RestoreUserCommand> {
 
   async execute(command: RestoreUserCommand): Promise<AdminUserDetail> {
     const { targetId: id, body, actor } = command;
-    const { expectedVersion, reason: safeReason } = parseInput(
-      body,
-      actor.correlationId,
-    );
+    const { expectedVersion, reason: safeReason } = body;
     const hash = requestHash(O.restore, {
       id,
       expectedVersion,

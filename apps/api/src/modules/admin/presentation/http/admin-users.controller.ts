@@ -1,6 +1,10 @@
 import {
+  adminListUsersQuerySchema,
+  adminUserActionSchema,
   ADMIN_ACCOUNT_ERRORS as E,
   AUTH_USER_ROLES,
+  type AdminListUsersQueryInput,
+  type AdminUserActionInput,
 } from "@lcsp/contracts/auth";
 import {
   Body,
@@ -17,6 +21,7 @@ import {
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
+import { ZodValidationPipe } from "../../../../common/pipes/zod-validation.pipe.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
@@ -51,7 +56,8 @@ export class AdminUsersController {
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.admin)
   async listUsers(
-    @Query() query: Record<string, unknown>,
+    @Query(new ZodValidationPipe(adminListUsersQuerySchema))
+    query: AdminListUsersQueryInput,
     @Req() request: AuthenticatedRequest,
   ) {
     return resultEnvelope(
@@ -81,7 +87,8 @@ export class AdminUsersController {
   @RequireRoles(AUTH_USER_ROLES.admin)
   async suspendUser(
     @Param("id") id: string,
-    @Body() body: unknown,
+    @Body(new ZodValidationPipe(adminUserActionSchema))
+    body: AdminUserActionInput,
     @Headers("idempotency-key") key: unknown,
     @Req() request: AuthenticatedRequest,
   ) {
@@ -98,7 +105,8 @@ export class AdminUsersController {
   @RequireRoles(AUTH_USER_ROLES.admin)
   async restoreUser(
     @Param("id") id: string,
-    @Body() body: unknown,
+    @Body(new ZodValidationPipe(adminUserActionSchema))
+    body: AdminUserActionInput,
     @Headers("idempotency-key") key: unknown,
     @Req() request: AuthenticatedRequest,
   ) {

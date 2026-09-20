@@ -9,6 +9,7 @@ import {
 } from "@jest/globals";
 import type {
   AdminAccountOperation,
+  AdminUserActionInput,
   AdminUserDetail,
   AdminUserListResponse,
 } from "@lcsp/contracts/auth";
@@ -536,7 +537,10 @@ integration(
         app.get(SuspendUserHandler).execute(
           new SuspendUserCommand(
             target.id,
-            { role: AUTH_USER_ROLES.admin, expectedVersion: 0 },
+            {
+              role: AUTH_USER_ROLES.admin,
+              expectedVersion: 0,
+            } as unknown as AdminUserActionInput,
             {
               userId: admin.id,
               sessionId: record.id,
