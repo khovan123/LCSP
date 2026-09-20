@@ -127,6 +127,7 @@ export type WorkspaceRuntimeContextValue = WorkspaceRuntimeSnapshot & {
   getAssessmentRuntime: (
     assessmentId: string,
   ) => WorkspaceRuntimeAssessmentTimeline;
+  subscribeAssessmentRuntime: (assessmentId: string) => () => void;
 };
 
 export const RUNTIME_THINKING_PHASES = {

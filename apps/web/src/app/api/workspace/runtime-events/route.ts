@@ -17,6 +17,9 @@ export async function GET(request: NextRequest) {
   if (assessmentId) {
     target.searchParams.set("assessment_id", assessmentId);
   }
+  if (request.nextUrl.searchParams.get("agent_stream_only") === "1") {
+    target.searchParams.set("agent_stream_only", "1");
+  }
 
   return proxyEventStream(
     target,

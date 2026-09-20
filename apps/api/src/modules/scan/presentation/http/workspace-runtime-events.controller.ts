@@ -48,6 +48,7 @@ export class WorkspaceRuntimeEventsController {
   stream(
     @Req() request: AuthenticatedRequest,
     @Query("assessment_id") assessmentId?: string,
+    @Query("agent_stream_only") agentStreamOnly?: string,
   ) {
     const rbacContext = request.rbacContext;
     const ownerId =
@@ -158,7 +159,9 @@ export class WorkspaceRuntimeEventsController {
             data: toAgentStreamPayload(event),
           })),
         ) ?? EMPTY;
-    return merge(snapshots, agentStream);
+    return agentStreamOnly === "1"
+      ? agentStream
+      : merge(snapshots, agentStream);
   }
 }
 

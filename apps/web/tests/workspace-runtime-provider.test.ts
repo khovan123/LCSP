@@ -17,7 +17,87 @@ import {
   buildRuntimeConsoleModel,
   selectRuntimeConsoleActivity,
 } from "../src/features/evidence/utils/runtime-console.ts";
+import {
+  subscribeScopedAssessmentRuntimeStream,
+  workspaceRuntimeEventsUrl,
+  type ScopedAgentStreamEntry,
+} from "../src/features/workspace/components/organisms/workspace-runtime-provider.tsx";
 
+test("workspace runtime provider builds scoped semantic replay stream URLs", () => {
+  assert.equal(workspaceRuntimeEventsUrl(), "/api/workspace/runtime-events");
+  assert.equal(
+    workspaceRuntimeEventsUrl("assessment-101", true),
+    "/api/workspace/runtime-events?assessment_id=assessment-101&agent_stream_only=1",
+  );
+});
+
+test("workspace runtime provider opens and cleans up scoped semantic replay streams", () => {
+  class FakeEventSource {
+    closeCount = 0;
+    readonly listeners = new Map<
+      string,
+      Array<(event: MessageEvent<string>) => void>
+    >();
+
+    constructor(readonly url: string) {}
+
+    addEventListener(
+      type: "workspace.agent-stream",
+      listener: (event: MessageEvent<string>) => void,
+    ) {
+      this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+    }
+
+    removeEventListener(
+      type: "workspace.agent-stream",
+      listener: (event: MessageEvent<string>) => void,
+    ) {
+      this.listeners.set(
+        type,
+        (this.listeners.get(type) ?? []).filter((item) => item !== listener),
+      );
+    }
+
+    close() {
+      this.closeCount += 1;
+    }
+  }
+  const opened: FakeEventSource[] = [];
+  const scopedAgentStreams = new Map<string, ScopedAgentStreamEntry>();
+  const subscribe = (assessmentId: string) =>
+    subscribeScopedAssessmentRuntimeStream({
+      assessmentId,
+      appendAgentStreamEvent: () => true,
+      scopedAgentStreams,
+      createEventSource: (url) => {
+        const source = new FakeEventSource(url);
+        opened.push(source);
+        return source;
+      },
+    });
+
+  const unsubscribeFirst = subscribe("assessment-101");
+  const unsubscribeSecond = subscribe("assessment-101");
+
+  assert.equal(opened.length, 1);
+  assert.equal(
+    opened[0]?.url,
+    "/api/workspace/runtime-events?assessment_id=assessment-101&agent_stream_only=1",
+  );
+  unsubscribeFirst();
+  assert.equal(opened[0]?.closeCount, 0);
+  unsubscribeSecond();
+  assert.equal(opened[0]?.closeCount, 1);
+  assert.equal(scopedAgentStreams.size, 0);
+
+  const unsubscribeThird = subscribe("assessment-202");
+  assert.equal(
+    opened[1]?.url,
+    "/api/workspace/runtime-events?assessment_id=assessment-202&agent_stream_only=1",
+  );
+  unsubscribeThird();
+  assert.equal(opened[1]?.closeCount, 1);
+});
 
 test("agent stream parser preserves streamed whitespace and structured metadata", () => {
   const parsed = parseAgentStreamEvent(

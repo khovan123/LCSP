@@ -3,6 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -49,10 +50,29 @@ const initialRuntime: WorkspaceRuntimeContextValue = {
     lastEmittedAt: null,
     postFinding: null,
   }),
+  subscribeAssessmentRuntime: () => () => undefined,
 };
 
 const WorkspaceRuntimeContext =
   createContext<WorkspaceRuntimeContextValue>(initialRuntime);
+
+export type ScopedAgentStreamSource = {
+  addEventListener: (
+    type: "workspace.agent-stream",
+    listener: (event: MessageEvent<string>) => void,
+  ) => void;
+  removeEventListener: (
+    type: "workspace.agent-stream",
+    listener: (event: MessageEvent<string>) => void,
+  ) => void;
+  close: () => void;
+};
+
+export type ScopedAgentStreamEntry = {
+  source: ScopedAgentStreamSource;
+  subscribers: number;
+  onAgentStream: (event: MessageEvent<string>) => void;
+};
 
 export function WorkspaceRuntimeProvider({
   children,
@@ -62,6 +82,38 @@ export function WorkspaceRuntimeProvider({
   const [runtime, setRuntime] = useState(initialRuntime);
   const queryClient = useQueryClient();
   const latestFingerprint = useRef<string | null>(null);
+  const scopedAgentStreams = useRef<Map<string, ScopedAgentStreamEntry>>(
+    new Map(),
+  );
+
+  const appendAgentStreamEvent = useCallback((event: MessageEvent<string>) => {
+    const parsed = parseAgentStreamEvent(event.data);
+    if (parsed === null) return false;
+    setRuntime((current) => {
+      const previous =
+        current.agentStreamEventsByAssessmentId[parsed.assessmentId] ?? [];
+      if (previous.some((item) => item.eventId === parsed.eventId)) {
+        return current;
+      }
+      const nextEvents = [...previous, parsed].slice(-1000);
+      return withAgentStreamEvents(current, {
+        ...current.agentStreamEventsByAssessmentId,
+        [parsed.assessmentId]: nextEvents,
+      });
+    });
+    return true;
+  }, []);
+
+  const subscribeAssessmentRuntime = useCallback(
+    (assessmentId: string) => {
+      return subscribeScopedAssessmentRuntimeStream({
+        assessmentId,
+        appendAgentStreamEvent,
+        scopedAgentStreams: scopedAgentStreams.current,
+      });
+    },
+    [appendAgentStreamEvent],
+  );
 
   useEffect(() => {
     let source: EventSource;
@@ -69,12 +121,16 @@ export function WorkspaceRuntimeProvider({
     let attempts = 0;
     let stopped = false;
     let needsResync = false;
+    const activeScopedAgentStreams = scopedAgentStreams.current;
     const onRuntime = (event: MessageEvent<string>) => {
       const parsed = parseRuntimeEvent(event.data);
       if (parsed !== null) {
         attempts = 0;
         setRuntime((current) =>
-          withAgentStreamEvents(parsed, current.agentStreamEventsByAssessmentId),
+          withAgentStreamEvents(
+            parsed,
+            current.agentStreamEventsByAssessmentId,
+          ),
         );
         const fingerprint = runtimeFingerprint(parsed);
         if (latestFingerprint.current !== fingerprint) {
@@ -90,7 +146,8 @@ export function WorkspaceRuntimeProvider({
               queryKey: apiQueryKeys.assessment.evidence(assessmentId),
             });
             void queryClient.invalidateQueries({
-              queryKey: apiQueryKeys.assessment.evidenceGraphOverview(assessmentId),
+              queryKey:
+                apiQueryKeys.assessment.evidenceGraphOverview(assessmentId),
             });
             void queryClient.invalidateQueries({
               queryKey: apiQueryKeys.assessment.classification(assessmentId),
@@ -101,23 +158,14 @@ export function WorkspaceRuntimeProvider({
     };
 
     const onAgentStream = (event: MessageEvent<string>) => {
-      const parsed = parseAgentStreamEvent(event.data);
-      if (parsed === null) return;
-      attempts = 0;
-      setRuntime((current) => {
-        const previous = current.agentStreamEventsByAssessmentId[parsed.assessmentId] ?? [];
-        if (previous.some((item) => item.eventId === parsed.eventId)) return current;
-        const nextEvents = [...previous, parsed].slice(-1000);
-        return withAgentStreamEvents(current, {
-          ...current.agentStreamEventsByAssessmentId,
-          [parsed.assessmentId]: nextEvents,
-        });
-      });
+      if (appendAgentStreamEvent(event)) {
+        attempts = 0;
+      }
     };
 
     const connect = () => {
       if (stopped) return;
-      source = new EventSource("/api/workspace/runtime-events");
+      source = new EventSource(workspaceRuntimeEventsUrl());
       source.addEventListener("workspace.runtime", onRuntime);
       source.addEventListener("workspace.agent-stream", onAgentStream);
       source.onopen = () => {
@@ -159,19 +207,109 @@ export function WorkspaceRuntimeProvider({
     return () => {
       stopped = true;
       clearTimeout(retryTimer);
+      for (const entry of activeScopedAgentStreams.values()) {
+        entry.source.removeEventListener(
+          "workspace.agent-stream",
+          entry.onAgentStream,
+        );
+        entry.source.close();
+      }
+      activeScopedAgentStreams.clear();
       source.removeEventListener("workspace.runtime", onRuntime);
       source.removeEventListener("workspace.agent-stream", onAgentStream);
       source.onopen = null;
       source.onerror = null;
       source.close();
     };
-  }, [queryClient]);
+  }, [appendAgentStreamEvent, queryClient]);
 
   return (
-    <WorkspaceRuntimeContext.Provider value={runtime}>
+    <WorkspaceRuntimeContext.Provider
+      value={{ ...runtime, subscribeAssessmentRuntime }}
+    >
       {children}
     </WorkspaceRuntimeContext.Provider>
   );
+}
+
+export function workspaceRuntimeEventsUrl(
+  assessmentId?: string,
+  agentStreamOnly = false,
+): string {
+  const params = new URLSearchParams();
+  if (assessmentId) {
+    params.set("assessment_id", assessmentId);
+  }
+  if (agentStreamOnly) {
+    params.set("agent_stream_only", "1");
+  }
+  const query = params.toString();
+  return query
+    ? `/api/workspace/runtime-events?${query}`
+    : "/api/workspace/runtime-events";
+}
+
+export function subscribeScopedAssessmentRuntimeStream({
+  assessmentId,
+  appendAgentStreamEvent,
+  scopedAgentStreams,
+  createEventSource = (url) => new EventSource(url),
+}: {
+  assessmentId: string;
+  appendAgentStreamEvent: (event: MessageEvent<string>) => boolean;
+  scopedAgentStreams: Map<string, ScopedAgentStreamEntry>;
+  createEventSource?: (url: string) => ScopedAgentStreamSource;
+}): () => void {
+  const scopedAssessmentId = assessmentId.trim();
+  if (!scopedAssessmentId) {
+    return () => undefined;
+  }
+  const existing = scopedAgentStreams.get(scopedAssessmentId);
+  if (existing) {
+    existing.subscribers += 1;
+    return () => {
+      releaseScopedAssessmentRuntimeStream(
+        scopedAgentStreams,
+        scopedAssessmentId,
+      );
+    };
+  }
+
+  const source = createEventSource(
+    workspaceRuntimeEventsUrl(scopedAssessmentId, true),
+  );
+  const onAgentStream = (event: MessageEvent<string>) => {
+    appendAgentStreamEvent(event);
+  };
+  source.addEventListener("workspace.agent-stream", onAgentStream);
+  scopedAgentStreams.set(scopedAssessmentId, {
+    source,
+    subscribers: 1,
+    onAgentStream,
+  });
+
+  return () => {
+    releaseScopedAssessmentRuntimeStream(
+      scopedAgentStreams,
+      scopedAssessmentId,
+    );
+  };
+}
+
+function releaseScopedAssessmentRuntimeStream(
+  scopedAgentStreams: Map<string, ScopedAgentStreamEntry>,
+  scopedAssessmentId: string,
+) {
+  const current = scopedAgentStreams.get(scopedAssessmentId);
+  if (!current) return;
+  current.subscribers -= 1;
+  if (current.subscribers > 0) return;
+  current.source.removeEventListener(
+    "workspace.agent-stream",
+    current.onAgentStream,
+  );
+  current.source.close();
+  scopedAgentStreams.delete(scopedAssessmentId);
 }
 
 function withAgentStreamEvents(
