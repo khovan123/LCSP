@@ -71,6 +71,8 @@ const { BillingSettingsPanel } =
 type BillingFixture = {
   orders: BillingOrderView[];
   wallet: BillingWalletView;
+  walletCalls: number;
+  walletResponses: BillingWalletView[];
   historyCalls: number;
   orderCalls: Map<string, number>;
   missingOrderDetails: Set<string>;
@@ -131,7 +133,12 @@ function historyView(orders: BillingOrderView[]): BillingHistoryView {
 function mockBillingApi(fixture: BillingFixture) {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
-    if (path === "/api/billing/wallet") return success(fixture.wallet);
+    if (path === "/api/billing/wallet") {
+      fixture.walletCalls += 1;
+      return success(
+        fixture.walletResponses[fixture.walletCalls - 1] ?? fixture.wallet,
+      );
+    }
     if (path.startsWith("/api/billing/history")) {
       fixture.historyCalls += 1;
       return success(historyView(fixture.orders));
@@ -289,6 +296,8 @@ function fixtureFor(
   return {
     orders,
     wallet: wallet(balance),
+    walletCalls: 0,
+    walletResponses: [],
     historyCalls: 0,
     orderCalls: new Map(),
     missingOrderDetails: new Set(),
@@ -541,4 +550,29 @@ test("a credited non-selected order refreshes history and prepaid balance while 
   );
   assert.match(olderRow?.textContent ?? "", /Credited/);
   assert.match(container.textContent ?? "", /Pending payment/);
+});
+
+test("initial history showing a credited order refreshes an older wallet snapshot once", async (context) => {
+  const creditedOrder = order(
+    "credited-before-first-history",
+    BILLING_ORDER_STATUSES.CREDITED,
+    "2026-09-19T01:00:00.000Z",
+  );
+  const fixture = fixtureFor([creditedOrder], "10000");
+  fixture.walletResponses = [wallet("10000"), wallet("20000")];
+  const container = await renderBilling(fixture, context);
+
+  await waitFor(
+    () =>
+      fixture.historyCalls > 0 &&
+      fixture.walletCalls === 2 &&
+      container.textContent?.includes("Credited") === true &&
+      container.textContent?.includes("20,000 VND") === true,
+    "initial credited history should trigger a wallet refresh",
+  );
+  assert.equal(
+    fixture.walletCalls,
+    2,
+    "initial history synchronization should refresh the wallet only once",
+  );
 });

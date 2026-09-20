@@ -42,6 +42,7 @@ import {
 
 export function BillingSettingsPanel({ locale }: { locale: Locale }) {
   const walletQuery = useBillingWalletQuery();
+  const refetchWallet = walletQuery.refetch;
   const [historyPage, setHistoryPage] = useState(1);
   const historyQuery = useBillingHistoryQuery(historyPage);
   const latestHistoryQuery = useBillingHistoryQuery(1);
@@ -104,6 +105,14 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
   const observedHistoryStatuses = useRef(
     new Map<BillingOrderView["id"], BillingOrderView["status"]>(),
   );
+  const initialHistoryWalletSync = useRef(false);
+
+  useEffect(() => {
+    if (!latestHistoryQuery.isSuccess || initialHistoryWalletSync.current)
+      return;
+    initialHistoryWalletSync.current = true;
+    void refetchWallet();
+  }, [latestHistoryQuery.isSuccess, refetchWallet]);
 
   useEffect(() => {
     const orders = [
@@ -917,8 +926,7 @@ function HistorySection({
                     </Badge>
                   </td>
                   <td className="px-4 py-3">
-                    {order.status ===
-                    BILLING_ORDER_STATUSES.PENDING_PAYMENT ? (
+                    {order.status === BILLING_ORDER_STATUSES.PENDING_PAYMENT ? (
                       <Button
                         type="button"
                         variant="link"
