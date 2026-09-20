@@ -202,6 +202,9 @@ export type AuthSessionSummary = {
   is_current: boolean;
 };
 
+/**
+ * @deprecated Use `RepositoryConnectionSummary` from `./github-repository-client` instead.
+ */
 export type AuthRepositorySummary = {
   id: string;
   provider: CredentialProvider;
@@ -768,6 +771,9 @@ export async function revokeAuthSession(sessionId: string): Promise<void> {
   }
 }
 
+/**
+ * @deprecated Use `getRepositoryConnections` from `./github-repository-client` instead.
+ */
 export async function getAuthRepositories(): Promise<AuthRepositorySummary[]> {
   const { payload, ok } = await apiRequest("/api/auth/repositories");
   if (!ok || !isAuthRepositoriesPayload(payload)) {
