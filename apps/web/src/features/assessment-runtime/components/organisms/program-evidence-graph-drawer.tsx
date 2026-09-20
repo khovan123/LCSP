@@ -441,6 +441,14 @@ export function GraphFirstDetail({
   const overflowingUsageGroups = (detail.paths.usage_flow_groups ?? []).filter(
     (group) => group.omitted_usage_flow_count > 0,
   );
+  const omittedUsageGroupSummaries = overflowingUsageGroups.filter(
+    (group) => group.rendered_usage_flow_count === 0,
+  );
+  const remainingOmittedUsageGroupCount = Math.max(
+    0,
+    (detail.paths.omitted_usage_group_count ?? 0) -
+      omittedUsageGroupSummaries.length,
+  );
   const nodeObstacles = topology.nodes.flatMap((node) => {
     const point = topology.positions.get(node.id);
     return point
@@ -526,6 +534,14 @@ export function GraphFirstDetail({
                       )}
                     </span>
                   ))}
+                  {remainingOmittedUsageGroupCount ? (
+                    <span className="max-w-60 truncate rounded-full border border-amber-500/40 px-2 py-0.5 text-[0.6875rem] text-amber-700">
+                      {remainingOmittedUsageGroupCount}{" "}
+                      {resolveAppMessage(
+                        "pages.assessmentFlow.graph.additionalOmittedAiUsageGroups" as never,
+                      )}
+                    </span>
+                  ) : null}
                 </div>
               </div>
             ) : null}

@@ -456,6 +456,9 @@ describe("ProgramEvidenceGraphDetailService", () => {
       usage_flow_count: 0,
       rendered_usage_flow_count: 0,
       omitted_usage_flow_count: 0,
+      usage_group_count: 0,
+      rendered_usage_group_count: 0,
+      omitted_usage_group_count: 0,
       usage_flow_groups: [],
     });
   });
@@ -489,6 +492,9 @@ describe("ProgramEvidenceGraphDetailService", () => {
       usage_flow_count: 0,
       rendered_usage_flow_count: 0,
       omitted_usage_flow_count: 0,
+      usage_group_count: 0,
+      rendered_usage_group_count: 0,
+      omitted_usage_group_count: 0,
       usage_flow_groups: [],
     });
   });
@@ -664,6 +670,9 @@ describe("ProgramEvidenceGraphDetailService", () => {
     expect(result.paths.usage_flow_count).toBe(1_000);
     expect(result.paths.rendered_usage_flow_count).toBe(64);
     expect(result.paths.omitted_usage_flow_count).toBe(936);
+    expect(result.paths.usage_group_count).toBe(1);
+    expect(result.paths.rendered_usage_group_count).toBe(1);
+    expect(result.paths.omitted_usage_group_count).toBe(0);
     expect(result.paths.nodes).toHaveLength(64);
     expect(result.paths.edges).toHaveLength(0);
     expect(result.paths.nodes.map((node) => node.id)).toContain("flow-0063");
@@ -684,6 +693,47 @@ describe("ProgramEvidenceGraphDetailService", () => {
         omitted_usage_flow_count: 936,
       }),
     ]);
+  });
+
+  it("bounds group metadata for high-cardinality distinct AI usage groups", async () => {
+    const flowCount = 20_000;
+    const nodes = Array.from({ length: flowCount }, (_, index) => [
+      {
+        node_id: `module:${String(index).padStart(5, "0")}`,
+        node_type: "MODULE",
+        label: `Module ${index}`,
+      },
+      {
+        node_id: `ai:${String(index).padStart(5, "0")}`,
+        node_type: "AI_MODEL_INVOCATION",
+        label: `Invocation ${index}`,
+        resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+      },
+    ]).flat();
+    const edges = Array.from({ length: flowCount }, (_, index) => ({
+      edge_id: `edge:${String(index).padStart(5, "0")}`,
+      source_node_id: `module:${String(index).padStart(5, "0")}`,
+      target_node_id: `ai:${String(index).padStart(5, "0")}`,
+      edge_type: "CALLS",
+      resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+    }));
+
+    const result = await projectGraph({ nodes, edges });
+    const payloadBytes = Buffer.byteLength(JSON.stringify(result.paths));
+    const omittedGroupSummaries = result.paths.usage_flow_groups.filter(
+      (group) => group.rendered_usage_flow_count === 0,
+    );
+
+    expect(result.paths.usage_flow_count).toBe(flowCount);
+    expect(result.paths.rendered_usage_flow_count).toBe(64);
+    expect(result.paths.omitted_usage_flow_count).toBe(flowCount - 64);
+    expect(result.paths.usage_group_count).toBe(flowCount);
+    expect(result.paths.rendered_usage_group_count).toBe(64);
+    expect(result.paths.omitted_usage_group_count).toBe(flowCount - 64);
+    expect(result.paths.usage_flow_groups).toHaveLength(68);
+    expect(omittedGroupSummaries).toHaveLength(4);
+    expect(result.paths.nodes.length).toBeLessThanOrEqual(128);
+    expect(payloadBytes).toBeLessThan(80_000);
   });
 
   it("keeps every module usage group represented before filling overflow slots", async () => {
@@ -731,6 +781,9 @@ describe("ProgramEvidenceGraphDetailService", () => {
     expect(result.paths.usage_flow_count).toBe(70);
     expect(result.paths.rendered_usage_flow_count).toBe(64);
     expect(result.paths.omitted_usage_flow_count).toBe(6);
+    expect(result.paths.usage_group_count).toBe(2);
+    expect(result.paths.rendered_usage_group_count).toBe(2);
+    expect(result.paths.omitted_usage_group_count).toBe(0);
     expect(renderedIds).toContain("module:a");
     expect(renderedIds).toContain("module:b");
     expect(renderedIds.some((id) => id.startsWith("ai:z-"))).toBe(true);
@@ -778,6 +831,9 @@ describe("ProgramEvidenceGraphDetailService", () => {
     expect(result.paths.usage_flow_count).toBe(80);
     expect(result.paths.rendered_usage_flow_count).toBe(64);
     expect(result.paths.omitted_usage_flow_count).toBe(16);
+    expect(result.paths.usage_group_count).toBe(2);
+    expect(result.paths.rendered_usage_group_count).toBe(2);
+    expect(result.paths.omitted_usage_group_count).toBe(0);
     expect(providers).toEqual(expect.arrayContaining(["OPENAI", "ANTHROPIC"]));
     expect(
       result.paths.usage_flow_groups.every(

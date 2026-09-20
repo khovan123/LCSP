@@ -1652,6 +1652,7 @@ export const viPages = {
         "Có thêm đường dẫn sử dụng AI đã được quản trị nằm ngoài phần đang hiển thị.",
       omittedAiUsageGroups: "Nhóm sử dụng AI đang ẩn",
       hiddenAiUsageGroupFlows: "luồng đang ẩn",
+      additionalOmittedAiUsageGroups: "nhóm ẩn khác",
       aiUsageRoles: {
         moduleFeature: "Mô-đun / tính năng",
         routeHandlerFeature: "Route / handler",

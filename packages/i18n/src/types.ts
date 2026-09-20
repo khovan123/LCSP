@@ -1587,6 +1587,7 @@ export type PagesMessages = {
       omittedAiUsagePaths: string;
       omittedAiUsageGroups: string;
       hiddenAiUsageGroupFlows: string;
+      additionalOmittedAiUsageGroups: string;
       aiUsageRoles: {
         moduleFeature: string;
         routeHandlerFeature: string;

@@ -20,6 +20,7 @@ import { ArtifactStorageService } from "../../../../../platform/storage/artifact
 const MAX_CACHED_PROJECTIONS = 8;
 const MAX_AI_USAGE_PATH_DEPTH = 10;
 const MAX_RENDERED_AI_USAGE_FLOWS = 64;
+const MAX_OMITTED_AI_USAGE_GROUP_SUMMARIES = 4;
 // Same ordering as String.prototype.localeCompare without arguments, without
 // re-resolving locale data for each of the ~10^6 comparisons on large graphs.
 const collator = new Intl.Collator();
@@ -456,6 +457,9 @@ function projectAiUsageGraph(
       usage_flow_count: 0,
       rendered_usage_flow_count: 0,
       omitted_usage_flow_count: 0,
+      usage_group_count: 0,
+      rendered_usage_group_count: 0,
+      omitted_usage_group_count: 0,
       usage_flow_groups: [],
     };
   }
@@ -468,6 +472,9 @@ function projectAiUsageGraph(
   const renderedFlows = selectRenderedAiUsageFlows(groups);
   const renderedSeedNodes = renderedFlows.map((flow) => flow.seed);
   const renderedSeedIds = new Set(renderedSeedNodes.map((seed) => seed.id));
+  const renderedGroupCount = groups.filter((group) =>
+    group.flows.some((flow) => renderedSeedIds.has(flow.seed.id)),
+  ).length;
   const selectedNodes = new Map<string, InternalProgramEvidenceGraphNode>();
   const selectedEdges = new Map<string, InternalProgramEvidenceGraphEdge>();
   for (const flow of renderedFlows) {
@@ -497,9 +504,10 @@ function projectAiUsageGraph(
     usage_flow_count: seedNodes.length,
     rendered_usage_flow_count: renderedSeedNodes.length,
     omitted_usage_flow_count: seedNodes.length - renderedSeedNodes.length,
-    usage_flow_groups: groups.map((group) =>
-      toUsageFlowGroupDto(group, renderedSeedIds),
-    ),
+    usage_group_count: groups.length,
+    rendered_usage_group_count: renderedGroupCount,
+    omitted_usage_group_count: groups.length - renderedGroupCount,
+    usage_flow_groups: selectUsageFlowGroupSummaries(groups, renderedSeedIds),
   };
 }
 
@@ -653,6 +661,26 @@ function compareAiUsageFlowGroups(
     collator.compare(left.label, right.label) ||
     collator.compare(left.key, right.key)
   );
+}
+
+function selectUsageFlowGroupSummaries(
+  groups: AiUsageFlowGroup[],
+  renderedSeedIds: Set<string>,
+): ProgramEvidenceGraphUsageFlowGroupDto[] {
+  const renderedGroups: ProgramEvidenceGraphUsageFlowGroupDto[] = [];
+  const omittedGroups: ProgramEvidenceGraphUsageFlowGroupDto[] = [];
+  for (const group of groups) {
+    const dto = toUsageFlowGroupDto(group, renderedSeedIds);
+    if (dto.rendered_usage_flow_count > 0) {
+      renderedGroups.push(dto);
+    } else if (dto.omitted_usage_flow_count > 0) {
+      omittedGroups.push(dto);
+    }
+  }
+  return [
+    ...renderedGroups,
+    ...omittedGroups.slice(0, MAX_OMITTED_AI_USAGE_GROUP_SUMMARIES),
+  ];
 }
 
 function toUsageFlowGroupDto(

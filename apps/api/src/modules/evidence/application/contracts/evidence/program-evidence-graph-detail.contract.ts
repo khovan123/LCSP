@@ -80,6 +80,9 @@ export interface ProgramEvidenceGraphDetailDto {
     usage_flow_count: number;
     rendered_usage_flow_count: number;
     omitted_usage_flow_count: number;
+    usage_group_count: number;
+    rendered_usage_group_count: number;
+    omitted_usage_group_count: number;
     usage_flow_groups: ProgramEvidenceGraphUsageFlowGroupDto[];
   };
   claims: ProgramEvidenceGraphClaimDto[];

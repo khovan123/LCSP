@@ -1649,6 +1649,7 @@ export const enPages = {
         "Additional governed AI usage paths exist outside this rendered view.",
       omittedAiUsageGroups: "Hidden AI usage groups",
       hiddenAiUsageGroupFlows: "hidden flows",
+      additionalOmittedAiUsageGroups: "more hidden groups",
       aiUsageRoles: {
         moduleFeature: "Module / feature",
         routeHandlerFeature: "Route / handler",

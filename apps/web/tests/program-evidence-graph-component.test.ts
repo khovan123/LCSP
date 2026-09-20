@@ -138,6 +138,9 @@ const detail = {
     usage_flow_count: 2,
     rendered_usage_flow_count: 2,
     omitted_usage_flow_count: 0,
+    usage_group_count: 0,
+    rendered_usage_group_count: 0,
+    omitted_usage_group_count: 0,
     usage_flow_groups: [],
   },
   claims: [],
@@ -459,6 +462,9 @@ test("renders omitted AI usage metadata when the projection reports overflow", a
           paths: {
             ...detail.paths,
             omitted_usage_flow_count: 3,
+            usage_group_count: 10,
+            rendered_usage_group_count: 4,
+            omitted_usage_group_count: 6,
             usage_flow_groups: [
               {
                 key: "module-b",
@@ -471,6 +477,17 @@ test("renders omitted AI usage metadata when the projection reports overflow", a
                 rendered_usage_flow_count: 1,
                 omitted_usage_flow_count: 5,
               },
+              ...Array.from({ length: 4 }, (_, index) => ({
+                key: `hidden-${index}`,
+                label: `Hidden module ${index} -> AI_MODEL_INVOCATION`,
+                source_node_id: `module:hidden-${index}`,
+                source_label: `Hidden module ${index}`,
+                provider_label: null,
+                gateway_label: null,
+                usage_flow_count: 1,
+                rendered_usage_flow_count: 0,
+                omitted_usage_flow_count: 1,
+              })),
             ],
           },
         },
@@ -484,6 +501,10 @@ test("renders omitted AI usage metadata when the projection reports overflow", a
   );
   assert.match(container.textContent ?? "", /Module B -> AI_MODEL_INVOCATION/);
   assert.match(container.textContent ?? "", /5 hidden flows|5 luồng đang ẩn/);
+  assert.match(
+    container.textContent ?? "",
+    /2 more hidden groups|2 nhóm ẩn khác/,
+  );
 });
 
 test("formats evidence scope as a percentage in both graph detail renderers", async () => {

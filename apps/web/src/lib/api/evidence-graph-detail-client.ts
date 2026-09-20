@@ -45,6 +45,9 @@ export type ProgramEvidenceGraphDetail = {
     usage_flow_count?: number;
     rendered_usage_flow_count?: number;
     omitted_usage_flow_count?: number;
+    usage_group_count?: number;
+    rendered_usage_group_count?: number;
+    omitted_usage_group_count?: number;
     usage_flow_groups?: Array<{
       key: string;
       label: string;
@@ -149,6 +152,13 @@ export function normalizeProgramEvidenceGraphDetail(
       ),
       omitted_usage_flow_count: normalizeCount(
         detail.paths?.omitted_usage_flow_count,
+      ),
+      usage_group_count: normalizeCount(detail.paths?.usage_group_count),
+      rendered_usage_group_count: normalizeCount(
+        detail.paths?.rendered_usage_group_count,
+      ),
+      omitted_usage_group_count: normalizeCount(
+        detail.paths?.omitted_usage_group_count,
       ),
       usage_flow_groups: normalizeUsageFlowGroups(
         detail.paths?.usage_flow_groups,
