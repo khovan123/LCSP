@@ -12,7 +12,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
 
-import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
   AUTH_ERROR_CODES,
   REQUIRED_ACTIONS,
@@ -269,20 +269,18 @@ describe("Auth workspace (e2e)", () => {
     assert.equal(body.user.subject_attributes.role, AUTH_USER_ROLES.admin);
   });
 
-  it("protected workspace endpoint fails closed without authentication", async () => {
+  it("protected profile endpoint fails closed without authentication", async () => {
     const result = await httpRequest(app)
-      .get("/workspace")
-      .query({ organization_id: fixture.organizationId })
-      .set("x-correlation-id", "corr-workspace-no-session")
+      .get("/auth/profile")
+      .set("x-correlation-id", "corr-profile-no-session")
       .expect(401);
 
     assert.equal(problemCode(result), AUTH_ERROR_CODES.sessionInvalid);
-    assert.equal("workspace" in result.body, false);
 
     const decision = await prisma.auditEvent.findFirstOrThrow({
       where: {
         eventType: "AUTHORIZATION_DECISION",
-        correlationId: "corr-workspace-no-session",
+        correlationId: "corr-profile-no-session",
       },
     });
     assert.equal(decision.decision, AUDIT_DECISIONS.deny);
@@ -324,16 +322,15 @@ describe("Auth workspace (e2e)", () => {
     const signIn = await signInAndVerifyApprovedUser();
 
     await httpRequest(app)
-      .get("/workspace")
-      .query({ organization_id: fixture.organizationId })
+      .get("/auth/profile")
       .set("Authorization", `Bearer ${signIn.session_token}`)
-      .set("x-correlation-id", "corr-workspace-allow")
+      .set("x-correlation-id", "corr-profile-allow")
       .expect(200);
 
     const allowDecision = await prisma.auditEvent.findFirstOrThrow({
       where: {
         eventType: "AUTHORIZATION_DECISION",
-        correlationId: "corr-workspace-allow",
+        correlationId: "corr-profile-allow",
       },
     });
     assert.equal(allowDecision.decision, AUDIT_DECISIONS.allow);
@@ -351,7 +348,6 @@ describe("Auth workspace (e2e)", () => {
     );
 
     assert.match(serializedAudit, /auth\.login\.succeeded/);
-    assert.match(serializedAudit, /workspace\.access\.allowed/);
     assert.match(serializedAudit, /auth\.session\.revoked/);
     assert.doesNotMatch(serializedAudit, /CorrectHorseBatteryStaple!/);
     assert.doesNotMatch(serializedAudit, new RegExp(signIn.session_token));
@@ -669,15 +665,14 @@ describe("Auth workspace (e2e)", () => {
     });
 
     const result = await httpRequest(app)
-      .get("/workspace")
-      .query({ organization_id: fixture.organizationId })
+      .get("/auth/profile")
       .set("Authorization", `Bearer ${expiredToken}`)
       .expect(401);
 
     assert.equal(problemCode(result), AUTH_ERROR_CODES.sessionInvalid);
   });
 
-  it("revoke-session records audit event and blocks subsequent workspace access", async () => {
+  it("revoke-session records audit event and blocks subsequent profile access", async () => {
     const signIn = await signInApprovedUser();
 
     await httpRequest(app)
@@ -685,13 +680,12 @@ describe("Auth workspace (e2e)", () => {
       .send({ session_token: signIn.session_token })
       .expect(201);
 
-    const workspace = await httpRequest(app)
-      .get("/workspace")
-      .query({ organization_id: fixture.organizationId })
+    const profile = await httpRequest(app)
+      .get("/auth/profile")
       .set("Authorization", `Bearer ${signIn.session_token}`)
       .expect(401);
 
-    assert.equal(problemCode(workspace), AUTH_ERROR_CODES.sessionInvalid);
+    assert.equal(problemCode(profile), AUTH_ERROR_CODES.sessionInvalid);
 
     const auditEvents = await prisma.auditEvent.findMany();
     const revoked = auditEvents.find(
@@ -993,8 +987,7 @@ describe("Auth workspace (e2e)", () => {
     assert.equal(successBody<ConfirmRecoverySuccess>(confirm).ok, true);
 
     const oldSessionCheck = await httpRequest(app)
-      .get("/workspace")
-      .query({ organization_id: fixture.organizationId })
+      .get("/auth/profile")
       .set("Authorization", `Bearer ${signIn.session_token}`)
       .expect(401);
     assert.equal(problemCode(oldSessionCheck), AUTH_ERROR_CODES.sessionInvalid);

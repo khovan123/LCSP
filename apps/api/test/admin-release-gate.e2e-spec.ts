@@ -232,7 +232,7 @@ describe("Admin Release Gate & Security Integrity (e2e)", () => {
     it("revoking session via /auth/revoke-session invalidates protected access immediately", async () => {
       // 1. Verify session works initially
       const initialRes = await httpRequest(app)
-        .get("/workspace")
+        .get("/auth/profile")
         .set("Authorization", `Bearer ${customerSessionToken}`)
         .set("Accept", "application/json");
       assert.equal(initialRes.status, 200);
@@ -246,7 +246,7 @@ describe("Admin Release Gate & Security Integrity (e2e)", () => {
 
       // 3. Verify revoked session token cannot access any protected endpoints
       const postRevokeRes = await httpRequest(app)
-        .get("/workspace")
+        .get("/auth/profile")
         .set("Authorization", `Bearer ${customerSessionToken}`)
         .set("Accept", "application/json");
 

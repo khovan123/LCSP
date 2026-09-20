@@ -87,7 +87,7 @@ describe("Redaction boundary (e2e) [AC-022]", () => {
   it("AC-022: User profile response does not include password hash", async () => {
     if (!managerToken) return;
     const result = await httpRequest(app)
-      .get("/workspace/profile")
+      .get("/auth/profile")
       .set("Authorization", `Bearer ${managerToken}`);
 
     if (result.status !== 200) return;
@@ -107,7 +107,7 @@ describe("Redaction boundary (e2e) [AC-022]", () => {
   it("AC-022: Error responses do not include secret tokens in body", async () => {
     // Attempt auth with a fake token — error body must not echo it back
     const result = await httpRequest(app)
-      .get("/workspace/profile")
+      .get("/auth/profile")
       .set("Authorization", "Bearer ghp_fakesecrettoken12345");
 
     assert.doesNotMatch(

@@ -132,13 +132,10 @@ function buildRepositories(input: {
     },
 
     auditEvents: {
-      append: (event) => {
+      append: (event: Record<string, unknown>): Promise<void> => {
         auditRecords.push(event);
         return Promise.resolve();
       },
-    },
-    authorizationDecisions: {
-      append: () => Promise.resolve(),
     },
     mfaEnrollments: {
       findByUserId: () => Promise.resolve(null),
@@ -183,7 +180,11 @@ function buildRepositories(input: {
     },
     oauthIdentities: {
       findByProviderAccount: () => Promise.resolve(input.identity),
-      linkToUser: (provider, providerAccountId, userId) =>
+      linkToUser: (
+        provider: string,
+        providerAccountId: string,
+        userId: string,
+      ): Promise<OAuthIdentity> =>
         Promise.resolve(
           OAuthIdentity.rehydrate({
             id: "linked-identity-1",

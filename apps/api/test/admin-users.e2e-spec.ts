@@ -317,7 +317,7 @@ describe("Admin User Management API (e2e)", () => {
 
       // 2. Verify target user can access protected route initially
       const initRes = await httpRequest(app)
-        .get("/workspace")
+        .get("/auth/profile")
         .set("Authorization", `Bearer ${targetSessionToken}`)
         .set("Accept", "application/json");
       assert.equal(initRes.status, 200);
@@ -336,7 +336,7 @@ describe("Admin User Management API (e2e)", () => {
 
       // 4. Verify target user's session is revoked and protected access returns 401
       const postSuspendRes = await httpRequest(app)
-        .get("/workspace")
+        .get("/auth/profile")
         .set("Authorization", `Bearer ${targetSessionToken}`)
         .set("Accept", "application/json");
 
