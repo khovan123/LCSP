@@ -185,7 +185,10 @@ describe("WorkspaceRuntimeEventsController", () => {
   it("forwards only the owner-scoped live agent stream", () => {
     const live = new Subject<Record<string, unknown>>();
     const observeAgentStreamEvents = jest.fn<
-      (_ownerId: string) => ReturnType<typeof live.asObservable>
+      (
+        _ownerId: string,
+        _options?: { assessmentId?: string | null },
+      ) => ReturnType<typeof live.asObservable>
     >(() => live.asObservable());
     const controller = new WorkspaceRuntimeEventsController({
       buildWorkspaceSnapshot: () =>
@@ -206,39 +209,105 @@ describe("WorkspaceRuntimeEventsController", () => {
       .stream(customerRequest)
       .subscribe((event) => events.push(event));
 
-    expect(observeAgentStreamEvents).toHaveBeenCalledWith("user-1");
+    try {
+      expect(observeAgentStreamEvents).toHaveBeenCalledWith("user-1", {
+        assessmentId: null,
+      });
 
-    live.next({
-      eventId: "agent-event-1",
-      sequence: 4,
-      clientSequence: 2,
-      emittedAt: "2026-09-16T00:00:01.000Z",
-      assessmentId: "assessment-1",
-      runId: "run-1",
-      correlationId: "corr-1",
-      eventType: "TOOL_RESULT",
-      source: "engineering",
-      agentName: "investigator",
-      subagentName: null,
-      namespace: [],
-      nodeName: "tools",
-      messageId: "message-1",
-      toolName: "lookup_rule",
-      toolCallId: "call-1",
-      status: "COMPLETED",
-      text: "tool output",
-      data: { count: 1 },
-    });
-
-    expect(events.at(-1)).toMatchObject({
-      type: "workspace.agent-stream",
-      data: {
-        event_id: "agent-event-1",
-        event_type: "TOOL_RESULT",
+      live.next({
+        eventId: "agent-event-1",
+        sequence: 4,
+        clientSequence: 2,
+        emittedAt: "2026-09-16T00:00:01.000Z",
+        assessmentId: "assessment-1",
+        runId: "run-1",
+        correlationId: "corr-1",
+        eventType: "TOOL_RESULT",
+        source: "engineering",
+        agentName: "investigator",
+        subagentName: null,
+        namespace: [],
+        nodeName: "tools",
+        messageId: "message-1",
+        toolName: "lookup_rule",
+        toolCallId: "call-1",
+        status: "COMPLETED",
         text: "tool output",
-      },
-    });
-    subscription.unsubscribe();
+        data: { count: 1 },
+      });
+
+      expect(events.at(-1)).toMatchObject({
+        type: "workspace.agent-stream",
+        data: {
+          event_id: "agent-event-1",
+          event_type: "TOOL_RESULT",
+          text: "tool output",
+        },
+      });
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
+  it("supports assessment-scoped agent-stream-only subscriptions", () => {
+    const live = new Subject<Record<string, unknown>>();
+    const observeAgentStreamEvents = jest.fn<
+      (
+        _ownerId: string,
+        _options?: { assessmentId?: string | null },
+      ) => ReturnType<typeof live.asObservable>
+    >(() => live.asObservable());
+    const buildWorkspaceSnapshot = jest.fn<() => Promise<unknown>>();
+    const controller = new WorkspaceRuntimeEventsController({
+      buildWorkspaceSnapshot,
+      observeAgentStreamEvents,
+    } as unknown as AssessmentRuntimeEventService);
+    const events: Array<{ type?: string; data?: unknown }> = [];
+    const subscription = controller
+      .stream(customerRequest, " assessment-101 ", "1")
+      .subscribe((event) => events.push(event));
+
+    try {
+      expect(observeAgentStreamEvents).toHaveBeenCalledWith("user-1", {
+        assessmentId: " assessment-101 ",
+      });
+      expect(buildWorkspaceSnapshot).not.toHaveBeenCalled();
+
+      live.next({
+        eventId: "agent-event-101",
+        sequence: 5,
+        clientSequence: null,
+        emittedAt: "2026-09-16T00:00:02.000Z",
+        assessmentId: "assessment-101",
+        runId: "run-101",
+        correlationId: "corr-101",
+        eventType: "SEMANTIC_TOOL_CALL",
+        source: "engineering",
+        agentName: "investigator",
+        subagentName: null,
+        namespace: [],
+        nodeName: "tools",
+        messageId: "message-101",
+        toolName: "search_nodes",
+        toolCallId: "call-101",
+        status: "RUNNING",
+        text: "tool call started",
+        data: { kind: "TOOL_CALL" },
+      });
+
+      expect(events).toEqual([
+        expect.objectContaining({
+          type: "workspace.agent-stream",
+          data: expect.objectContaining({
+            assessment_id: "assessment-101",
+            event_id: "agent-event-101",
+            event_type: "SEMANTIC_TOOL_CALL",
+          }),
+        }),
+      ]);
+    } finally {
+      subscription.unsubscribe();
+    }
   });
 
   it("does not cancel an in-flight runtime snapshot when the polling interval ticks again", async () => {
@@ -263,33 +332,35 @@ describe("WorkspaceRuntimeEventsController", () => {
         events.push(event);
       });
 
-    expect(buildWorkspaceSnapshot).toHaveBeenCalledTimes(1);
+    try {
+      expect(buildWorkspaceSnapshot).toHaveBeenCalledTimes(1);
 
-    await jest.advanceTimersByTimeAsync(2_000);
+      await jest.advanceTimersByTimeAsync(2_000);
 
-    expect(buildWorkspaceSnapshot).toHaveBeenCalledTimes(1);
+      expect(buildWorkspaceSnapshot).toHaveBeenCalledTimes(1);
 
-    resolveSnapshot({
-      emittedAt: "2026-08-09T14:05:00.000Z",
-      runs: [],
-      recentActivity: [],
-      engineeringProgress: [],
-      repositorySnapshots: [],
-      scanJobs: [],
-      evidenceReports: [],
-      postFindingStates: [],
-    });
-    await Promise.resolve();
+      resolveSnapshot({
+        emittedAt: "2026-08-09T14:05:00.000Z",
+        runs: [],
+        recentActivity: [],
+        engineeringProgress: [],
+        repositorySnapshots: [],
+        scanJobs: [],
+        evidenceReports: [],
+        postFindingStates: [],
+      });
+      await Promise.resolve();
 
-    expect(events).toEqual([
-      expect.objectContaining({
-        type: "workspace.runtime",
-        data: expect.objectContaining({
-          emitted_at: "2026-08-09T14:05:00.000Z",
+      expect(events).toEqual([
+        expect.objectContaining({
+          type: "workspace.runtime",
+          data: expect.objectContaining({
+            emitted_at: "2026-08-09T14:05:00.000Z",
+          }),
         }),
-      }),
-    ]);
-
-    subscription.unsubscribe();
+      ]);
+    } finally {
+      subscription.unsubscribe();
+    }
   });
 });
