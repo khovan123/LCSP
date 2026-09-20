@@ -19,7 +19,7 @@ import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
 import type { Response } from "express";
 
-import { createCorrelationId } from "../../../auth-workspace/infrastructure/security/security.utils.js";
+import { createCorrelationId } from "../../../auth/infrastructure/security/security.utils.js";
 import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";

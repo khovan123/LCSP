@@ -20,9 +20,9 @@ import {
 import { Reflector } from "@nestjs/core";
 
 import type { AuthenticatedRequest } from "../../common/interfaces/authenticated-request.interface.js";
-import type { AuthorizationDecisionRepository } from "../../modules/auth-workspace/application/ports/persistence/authorization-decision.repository.js";
-import { PrismaAuthorizationDecisionRepository } from "../../modules/auth-workspace/infrastructure/persistence/prisma-auth-workspace.repositories.js";
-import { createCorrelationId } from "../../modules/auth-workspace/infrastructure/security/security.utils.js";
+import type { AuthorizationDecisionRepository } from "./authorization-decision.repository.js";
+import { PrismaAuthorizationDecisionRepository } from "./prisma-authorization-decision.repository.js";
+import { createCorrelationId } from "../../modules/auth/infrastructure/security/security.utils.js";
 import { problemException } from "../problems/problem-factory.js";
 import { RE_AUTH_FOR_SENSITIVE_ROUTE_METADATA_KEY } from "../security/decorators/re-auth-for-sensitive-route.decorator.js";
 import { isSensitiveActionVerificationFresh } from "../security/sensitive-route-policy.js";

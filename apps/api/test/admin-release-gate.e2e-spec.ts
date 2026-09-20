@@ -23,7 +23,7 @@ import {
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
 } from "./support/auth-workspace-test-helpers.js";
-import { hashSecret } from "../src/modules/auth-workspace/infrastructure/security/security.utils.js";
+import { hashSecret } from "../src/modules/auth/infrastructure/security/security.utils.js";
 import {
   toPrismaAuditResourceType,
   toPrismaAuthDecision,

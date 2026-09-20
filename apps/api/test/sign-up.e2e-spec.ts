@@ -11,7 +11,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 import { AppModule } from "../src/app.module.js";
-import type { SignUpResponse } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-up.contract.js";
+import type { SignUpResponse } from "../src/modules/auth/application/contracts/auth/sign-up.contract.js";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
 import {
   TEST_DATABASE_URL,
