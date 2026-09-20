@@ -546,14 +546,20 @@ export function selectEvidenceTopology(
     .filter((edge) => ids.has(edge.source) && ids.has(edge.target))
     .sort((a, b) => a.id.localeCompare(b.id));
   const outgoing = new Map<string, string[]>();
+  const outgoingEdges = new Map<string, Edge[]>();
   const indegree = new Map<string, number>();
   for (const node of projectedNodes) {
     outgoing.set(node.id, []);
+    outgoingEdges.set(node.id, []);
     indegree.set(node.id, 0);
   }
   for (const edge of projectedEdges) {
     outgoing.get(edge.source)?.push(edge.target);
+    outgoingEdges.get(edge.source)?.push(edge);
     indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
+  }
+  for (const edgesForSource of outgoingEdges.values()) {
+    edgesForSource.sort((a, b) => a.id.localeCompare(b.id));
   }
   const layers = new Map<string, number>();
   const queue = projectedNodes
@@ -595,9 +601,7 @@ export function selectEvidenceTopology(
         pathByNode.set(current, lane % 4);
         pathStepByNode.set(current, step);
       }
-      const nextEdge = projectedEdges
-        .filter((edge) => edge.source === current)
-        .sort((a, b) => a.id.localeCompare(b.id))[0];
+      const nextEdge: Edge | undefined = outgoingEdges.get(current)?.[0];
       const next: string | undefined = nextEdge?.target;
       if (nextEdge) edgeIds.push(nextEdge.id);
       current = next;

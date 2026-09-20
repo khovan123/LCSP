@@ -599,7 +599,7 @@ describe("ProgramEvidenceGraphDetailService", () => {
     expect(result.paths.nodes.map((node) => node.id)).toContain("node-016");
   });
 
-  it("represents every governed AI usage regardless of deterministic ordering", async () => {
+  it("bounds rendered AI usage flows while preserving total governed counts", async () => {
     const ids = ["é-1", "E-1", "a-10", "a-2", "Z-1", "ä-3", "b_1", "B-1"];
     const nodes = Array.from({ length: 400 }, (_, index) => ({
       node_id: `${ids[index % ids.length]}-${index}`,
@@ -644,8 +644,37 @@ describe("ProgramEvidenceGraphDetailService", () => {
       ),
     ).toBe(true);
     expect(result.paths.usage_flow_count).toBe(80);
-    expect(result.paths.rendered_usage_flow_count).toBe(80);
-    expect(result.paths.omitted_usage_flow_count).toBe(0);
+    expect(result.paths.rendered_usage_flow_count).toBe(64);
+    expect(result.paths.omitted_usage_flow_count).toBe(16);
+    expect(result.paths.nodes.length).toBeLessThanOrEqual(704);
+    expect(result.paths.edges.length).toBeLessThanOrEqual(640);
+  });
+
+  it("returns deterministic overflow metadata for large independent AI graphs", async () => {
+    const nodes = Array.from({ length: 1_000 }, (_, index) => ({
+      node_id: `flow-${String(index).padStart(4, "0")}`,
+      node_type: "AI_MODEL_INVOCATION",
+      label: `flow-${index}`,
+      resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+    }));
+    const result = await projectGraph({ nodes, edges: [] });
+
+    expect(result.paths.usage_flow_count).toBe(1_000);
+    expect(result.paths.rendered_usage_flow_count).toBe(64);
+    expect(result.paths.omitted_usage_flow_count).toBe(936);
+    expect(result.paths.nodes).toHaveLength(64);
+    expect(result.paths.edges).toHaveLength(0);
+    expect(result.paths.nodes.map((node) => node.id)).toContain("flow-0063");
+    expect(result.paths.nodes.map((node) => node.id)).not.toContain(
+      "flow-0064",
+    );
+    expect(
+      result.paths.nodes.every(
+        (node) =>
+          node.kind === "AI_MODEL_INVOCATION" &&
+          node.resolution_state === AI_DISCOVERY_RESOLUTION_STATES.observed,
+      ),
+    ).toBe(true);
   });
 
   it("keeps the first minimal provenance source like a stable sort", async () => {

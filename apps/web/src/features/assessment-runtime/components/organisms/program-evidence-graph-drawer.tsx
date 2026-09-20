@@ -438,6 +438,19 @@ export function GraphFirstDetail({
             (selected.line === null || claim.line === selected.line)),
       )
     : [];
+  const nodeObstacles = topology.nodes.flatMap((node) => {
+    const point = topology.positions.get(node.id);
+    return point
+      ? [
+          {
+            x: point.x,
+            y: point.y - GRAPH_NODE_HEIGHT / 2,
+            width: GRAPH_NODE_WIDTH,
+            height: GRAPH_NODE_HEIGHT,
+          },
+        ]
+      : [];
+  });
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       <div className="shrink-0 px-6 py-3">
@@ -749,23 +762,7 @@ export function GraphFirstDetail({
                     const from = topology.positions.get(edge.source);
                     const to = topology.positions.get(edge.target);
                     if (!from || !to) return null;
-                    const points = routeGraphEdge(
-                      from,
-                      to,
-                      topology.nodes.flatMap((node) => {
-                        const point = topology.positions.get(node.id);
-                        return point
-                          ? [
-                              {
-                                x: point.x,
-                                y: point.y - GRAPH_NODE_HEIGHT / 2,
-                                width: GRAPH_NODE_WIDTH,
-                                height: GRAPH_NODE_HEIGHT,
-                              },
-                            ]
-                          : [];
-                      }),
-                    );
+                    const points = routeGraphEdge(from, to, nodeObstacles);
                     const path = points
                       .map(
                         (point, index) =>
@@ -782,19 +779,7 @@ export function GraphFirstDetail({
                     const labelPoint = findLabelPlacement(
                       points,
                       labelWidth,
-                      topology.nodes.flatMap((node) => {
-                        const point = topology.positions.get(node.id);
-                        return point
-                          ? [
-                              {
-                                x: point.x,
-                                y: point.y - GRAPH_NODE_HEIGHT / 2,
-                                width: GRAPH_NODE_WIDTH,
-                                height: GRAPH_NODE_HEIGHT,
-                              },
-                            ]
-                          : [];
-                      }),
+                      nodeObstacles,
                       16,
                       placedLabelRects,
                     );

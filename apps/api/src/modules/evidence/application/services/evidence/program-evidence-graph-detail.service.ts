@@ -18,6 +18,7 @@ import { ArtifactStorageService } from "../../../../../platform/storage/artifact
 
 const MAX_CACHED_PROJECTIONS = 8;
 const MAX_AI_USAGE_PATH_DEPTH = 10;
+const MAX_RENDERED_AI_USAGE_FLOWS = 64;
 // Same ordering as String.prototype.localeCompare without arguments, without
 // re-resolving locale data for each of the ~10^6 comparisons on large graphs.
 const collator = new Intl.Collator();
@@ -435,9 +436,10 @@ function projectAiUsageGraph(
     };
   }
 
+  const renderedSeedNodes = seedNodes.slice(0, MAX_RENDERED_AI_USAGE_FLOWS);
   const selectedNodes = new Map<string, InternalProgramEvidenceGraphNode>();
   const selectedEdges = new Map<string, InternalProgramEvidenceGraphEdge>();
-  for (const seed of seedNodes) {
+  for (const seed of renderedSeedNodes) {
     const path = strongestPathToAiSeed(seed, incoming, nodeById);
     for (const node of path.nodes) selectedNodes.set(node.id, node);
     for (const edge of path.edges) selectedEdges.set(edge.id, edge);
@@ -449,7 +451,7 @@ function projectAiUsageGraph(
     [...selectedNodes.values()]
       .filter((node) => AI_CONTEXT_NODE_KINDS.has(node.kind.toUpperCase()))
       .map(toPublicNode),
-    seedNodes,
+    renderedSeedNodes,
   );
   const projectedNodeIds = new Set(projectedNodes.map((node) => node.id));
   const projectedEdges = [...selectedEdges.values()]
@@ -459,17 +461,12 @@ function projectAiUsageGraph(
     )
     .map(toPublicEdge)
     .sort((left, right) => collator.compare(left.id, right.id));
-  const renderedSeedIds = new Set(
-    projectedNodes
-      .filter((node) => seedNodes.some((seed) => seed.id === node.id))
-      .map((node) => node.id),
-  );
   return {
     nodes: projectedNodes,
     edges: projectedEdges,
     usage_flow_count: seedNodes.length,
-    rendered_usage_flow_count: renderedSeedIds.size,
-    omitted_usage_flow_count: seedNodes.length - renderedSeedIds.size,
+    rendered_usage_flow_count: renderedSeedNodes.length,
+    omitted_usage_flow_count: seedNodes.length - renderedSeedNodes.length,
   };
 }
 
