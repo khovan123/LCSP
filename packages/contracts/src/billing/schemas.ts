@@ -22,9 +22,9 @@ const nonNegativeIntegerText = z
   .transform((value) => String(value).trim())
   .pipe(z.string().regex(/^\d+$/));
 
-const minimumAmountVnd = BigInt(PREPAID_BILLING_CONFIG.minimumAmountVnd);
-const maximumAmountVnd = BigInt(PREPAID_BILLING_CONFIG.maximumAmountVnd);
-const amountStepVnd = BigInt(PREPAID_BILLING_CONFIG.amountStepVnd);
+const minimumAmountVnd = Number(PREPAID_BILLING_CONFIG.minimumAmountVnd);
+const maximumAmountVnd = Number(PREPAID_BILLING_CONFIG.maximumAmountVnd);
+const amountStepVnd = Number(PREPAID_BILLING_CONFIG.amountStepVnd);
 
 /** Canonical validation for prepaid amounts accepted by Billing HTTP requests. */
 export const billingAmountVndSchema = z
@@ -35,11 +35,12 @@ export const billingAmountVndSchema = z
     const normalized = value.replace(/^0+(?=\d)/, "");
     if (normalized.length > PREPAID_BILLING_CONFIG.maximumAmountVnd.length)
       return false;
-    const amount = BigInt(normalized);
+    const amount = Number(normalized);
     return (
+      Number.isSafeInteger(amount) &&
       amount >= minimumAmountVnd &&
       amount <= maximumAmountVnd &&
-      amount % amountStepVnd === 0n
+      amount % amountStepVnd === 0
     );
   });
 
