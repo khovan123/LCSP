@@ -41,4 +41,3 @@ export function cleanString(value: unknown): string | null {
     ? value.trim()
     : null;
 }
-
