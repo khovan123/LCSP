@@ -13,9 +13,13 @@ import { problemException } from "../../../../../platform/problems/problem-facto
 import { EmailAddress } from "../../../domain/value-objects/email-address.value-object.ts";
 import type { UpdateProfileSuccess } from "../../contracts/auth-workspace/profile.contract.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY,
+  AUTH_WORKSPACE_SESSION_REPOSITORY,
+  AUTH_WORKSPACE_USER_REPOSITORY,
+  type MfaEnrollmentRepository,
+  type SessionRepository,
+  type UserRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import {
   type UpdateProfilePayload,
@@ -28,12 +32,17 @@ const MAX_DISPLAY_NAME_LENGTH = 120;
 export class UpdateProfileHandler implements ICommandHandler<UpdateProfileCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_USER_REPOSITORY)
+    private readonly users: UserRepository,
+    @Inject(AUTH_WORKSPACE_SESSION_REPOSITORY)
+    private readonly sessions: SessionRepository,
+    @Inject(AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY)
+    private readonly mfaEnrollments: MfaEnrollmentRepository,
   ) {}
 
   async execute(command: UpdateProfileCommand): Promise<UpdateProfileSuccess> {
     const { payload, userId, sessionId, requestMeta } = command;
+    const { users, sessions, mfaEnrollments } = this;
     const correlationId =
       requestMeta?.correlationId ?? this.support.createCorrelationId();
 
@@ -80,12 +89,12 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
       throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
-    const user = await this.support.resolveUserById(this.repositories, userId);
+    const user = await users.findById(userId);
     if (!user) {
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
-    const session = await this.repositories.sessions.findById(sessionId);
+    const session = await sessions.findById(sessionId);
     if (
       !session ||
       !session.isActive(this.support.now()) ||
@@ -95,7 +104,7 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
     }
 
     const mfaEnrollment = await this.support.findMfaEnrollment(
-      this.repositories,
+      mfaEnrollments,
       user.id,
     );
     if (
@@ -123,8 +132,7 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
     }
 
     if (nextRecoveryEmail) {
-      const userByEmail =
-        await this.repositories.users.findByEmail(nextRecoveryEmail);
+      const userByEmail = await users.findByEmail(nextRecoveryEmail);
       if (userByEmail && userByEmail.id !== user.id) {
         throw problemException(
           AUTH_ERROR_CODES.validationFailed,
@@ -133,7 +141,7 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
       }
 
       const userByRecoveryEmail =
-        await this.repositories.users.findByRecoveryEmail(nextRecoveryEmail);
+        await users.findByRecoveryEmail(nextRecoveryEmail);
       if (userByRecoveryEmail && userByRecoveryEmail.id !== user.id) {
         throw problemException(
           AUTH_ERROR_CODES.validationFailed,
@@ -164,9 +172,9 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
       updatedFields.push("backup_recovery_email_policy");
     }
 
-    await this.repositories.users.save(user);
+    await users.save(user);
 
-    await this.support.recordAudit(this.repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.profileUpdated,
       actor_id: user.id,
       decision: AUDIT_DECISIONS.allow,

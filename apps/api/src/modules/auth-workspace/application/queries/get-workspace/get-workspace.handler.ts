@@ -10,9 +10,13 @@ import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import { problemException } from "../../../../../platform/problems/problem-factory.ts";
 import type { WorkspaceSuccess } from "../../contracts/auth-workspace/workspace.contract.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_AUTHORIZATION_DECISION_REPOSITORY,
+  AUTH_WORKSPACE_SESSION_REPOSITORY,
+  AUTH_WORKSPACE_USER_REPOSITORY,
+  type AuthorizationDecisionRepository,
+  type SessionRepository,
+  type UserRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { GetWorkspaceQuery } from "./get-workspace.query.ts";
 
@@ -20,21 +24,22 @@ import { GetWorkspaceQuery } from "./get-workspace.query.ts";
 export class GetWorkspaceHandler implements IQueryHandler<GetWorkspaceQuery> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_USER_REPOSITORY)
+    private readonly users: UserRepository,
+    @Inject(AUTH_WORKSPACE_SESSION_REPOSITORY)
+    private readonly sessions: SessionRepository,
+    @Inject(AUTH_WORKSPACE_AUTHORIZATION_DECISION_REPOSITORY)
+    private readonly authorizationDecisions: AuthorizationDecisionRepository,
   ) {}
 
   async execute(query: GetWorkspaceQuery): Promise<WorkspaceSuccess> {
     const { context, correlationId } = query;
-    const { repositories } = this;
+    const { users, sessions, authorizationDecisions } = this;
     const cid = correlationId ?? this.support.createCorrelationId();
 
-    const user = await this.support.resolveUserById(
-      repositories,
-      context.userId,
-    );
+    const user = await users.findById(context.userId);
     if (!user) {
-      await this.support.recordAudit(repositories, {
+      await this.support.recordAudit({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.workspaceAccessDenied,
         actor_id: context.userId,
         decision: AUDIT_DECISIONS.deny,
@@ -44,15 +49,13 @@ export class GetWorkspaceHandler implements IQueryHandler<GetWorkspaceQuery> {
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, cid);
     }
 
-    const session = await this.repositories.sessions.findById(
-      context.sessionId,
-    );
+    const session = await sessions.findById(context.sessionId);
     if (
       !session ||
       !session.isActive(this.support.now()) ||
       session.userId !== user.id
     ) {
-      await this.support.recordAudit(repositories, {
+      await this.support.recordAudit({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.workspaceAccessDenied,
         actor_id: user.id,
         decision: AUDIT_DECISIONS.deny,
@@ -63,12 +66,12 @@ export class GetWorkspaceHandler implements IQueryHandler<GetWorkspaceQuery> {
     }
 
     const authorization = await this.support.authorizeWorkspace(
-      repositories,
+      authorizationDecisions,
       user,
       cid,
     );
 
-    await this.support.recordAudit(repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.workspaceAccessAllowed,
       actor_id: user.id,
       decision: AUDIT_DECISIONS.allow,

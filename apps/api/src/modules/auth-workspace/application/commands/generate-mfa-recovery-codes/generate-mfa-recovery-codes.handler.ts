@@ -14,9 +14,13 @@ import {
 } from "../../../infrastructure/security/mfa-recovery-code.utils.ts";
 import type { GenerateMfaRecoveryCodesSuccess } from "../../contracts/auth-workspace/mfa.contract.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY,
+  AUTH_WORKSPACE_MFA_RECOVERY_CODE_REPOSITORY,
+  AUTH_WORKSPACE_SESSION_REPOSITORY,
+  type MfaEnrollmentRepository,
+  type MfaRecoveryCodeRepository,
+  type SessionRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { GenerateMfaRecoveryCodesCommand } from "./generate-mfa-recovery-codes.command.ts";
 
@@ -24,14 +28,19 @@ import { GenerateMfaRecoveryCodesCommand } from "./generate-mfa-recovery-codes.c
 export class GenerateMfaRecoveryCodesHandler implements ICommandHandler<GenerateMfaRecoveryCodesCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_SESSION_REPOSITORY)
+    private readonly sessions: SessionRepository,
+    @Inject(AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY)
+    private readonly mfaEnrollments: MfaEnrollmentRepository,
+    @Inject(AUTH_WORKSPACE_MFA_RECOVERY_CODE_REPOSITORY)
+    private readonly mfaRecoveryCodes: MfaRecoveryCodeRepository,
   ) {}
 
   async execute(
     command: GenerateMfaRecoveryCodesCommand,
   ): Promise<GenerateMfaRecoveryCodesSuccess> {
     const { userId, sessionId, requestMeta } = command;
+    const { sessions, mfaEnrollments, mfaRecoveryCodes } = this;
     const correlationId =
       requestMeta?.correlationId ?? this.support.createCorrelationId();
 
@@ -39,7 +48,7 @@ export class GenerateMfaRecoveryCodesHandler implements ICommandHandler<Generate
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
-    const session = await this.repositories.sessions.findById(sessionId);
+    const session = await sessions.findById(sessionId);
     if (
       !session ||
       !session.isActive(this.support.now()) ||
@@ -52,26 +61,25 @@ export class GenerateMfaRecoveryCodesHandler implements ICommandHandler<Generate
       throw problemException(AUTH_ERROR_CODES.mfaRequired, correlationId);
     }
 
-    const enrollment =
-      await this.repositories.mfaEnrollments.findByUserId(userId);
+    const enrollment = await mfaEnrollments.findByUserId(userId);
     if (!enrollment) {
       throw problemException(AUTH_ERROR_CODES.mfaRequired, correlationId);
     }
 
     const now = this.support.now();
     const recoveryCodes = generateMfaRecoveryCodes();
-    const batchId = this.repositories.mfaRecoveryCodes.nextBatchId();
-    await this.repositories.mfaRecoveryCodes.replaceForUser(
+    const batchId = mfaRecoveryCodes.nextBatchId();
+    await mfaRecoveryCodes.replaceForUser(
       userId,
       recoveryCodes.map((code) => ({
-        id: this.repositories.mfaRecoveryCodes.nextId(),
+        id: mfaRecoveryCodes.nextId(),
         codeHash: hashMfaRecoveryCode(code),
       })),
       batchId,
       now,
     );
 
-    await this.support.recordAudit(this.repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodesGenerated,
       actor_id: userId,
       resource_type: AUDIT_RESOURCE_TYPES.authMfaRecoveryCode,
@@ -82,7 +90,7 @@ export class GenerateMfaRecoveryCodesHandler implements ICommandHandler<Generate
       batch_id: batchId,
       code_count: recoveryCodes.length,
     });
-    await this.support.recordAudit(this.repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodeViewed,
       actor_id: userId,
       resource_type: AUDIT_RESOURCE_TYPES.authMfaRecoveryCode,

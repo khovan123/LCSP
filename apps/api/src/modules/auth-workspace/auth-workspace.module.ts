@@ -26,9 +26,20 @@ import {
 } from "./application/commands/index.ts";
 import { AUTH_WORKSPACE_RECOVERY_NOTIFIER } from "./application/ports/notification/recovery-notifier.ts";
 import {
+  AUTH_WORKSPACE_AUDIT_EVENT_REPOSITORY,
+  AUTH_WORKSPACE_AUTHORIZATION_DECISION_REPOSITORY,
+  AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY,
+  AUTH_WORKSPACE_MFA_OTP_USED_REPOSITORY,
+  AUTH_WORKSPACE_MFA_RATE_LIMIT_REPOSITORY,
+  AUTH_WORKSPACE_MFA_RECOVERY_CODE_REPOSITORY,
+  AUTH_WORKSPACE_OAUTH_IDENTITY_REPOSITORY,
+  AUTH_WORKSPACE_OAUTH_STATE_REPOSITORY,
+  AUTH_WORKSPACE_RECOVERY_REQUEST_REPOSITORY,
   AUTH_WORKSPACE_REPOSITORIES,
+  AUTH_WORKSPACE_SESSION_REPOSITORY,
+  AUTH_WORKSPACE_USER_REPOSITORY,
   type AuthWorkspaceRepositories,
-} from "./application/ports/persistence/auth-workspace-repositories.ts";
+} from "./application/ports/persistence/index.ts";
 import {
   CheckSensitiveRouteHandler,
   GetAuthProfileHandler,
@@ -73,6 +84,50 @@ const REPOSITORY_PROVIDERS = [
   PrismaRecoveryRequestRepository,
   PrismaOAuthStateRepository,
   PrismaOAuthIdentityRepository,
+  {
+    provide: AUTH_WORKSPACE_USER_REPOSITORY,
+    useExisting: PrismaUserRepository,
+  },
+  {
+    provide: AUTH_WORKSPACE_SESSION_REPOSITORY,
+    useExisting: PrismaSessionRepository,
+  },
+  {
+    provide: AUTH_WORKSPACE_AUDIT_EVENT_REPOSITORY,
+    useExisting: PrismaAuditEventRepository,
+  },
+  {
+    provide: AUTH_WORKSPACE_AUTHORIZATION_DECISION_REPOSITORY,
+    useExisting: PrismaAuthorizationDecisionRepository,
+  },
+  {
+    provide: AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY,
+    useExisting: PrismaMfaEnrollmentRepository,
+  },
+  {
+    provide: AUTH_WORKSPACE_MFA_RATE_LIMIT_REPOSITORY,
+    useExisting: PrismaMfaRateLimitRepository,
+  },
+  {
+    provide: AUTH_WORKSPACE_MFA_OTP_USED_REPOSITORY,
+    useExisting: PrismaMfaOtpUsedRepository,
+  },
+  {
+    provide: AUTH_WORKSPACE_MFA_RECOVERY_CODE_REPOSITORY,
+    useExisting: PrismaMfaRecoveryCodeRepository,
+  },
+  {
+    provide: AUTH_WORKSPACE_RECOVERY_REQUEST_REPOSITORY,
+    useExisting: PrismaRecoveryRequestRepository,
+  },
+  {
+    provide: AUTH_WORKSPACE_OAUTH_STATE_REPOSITORY,
+    useExisting: PrismaOAuthStateRepository,
+  },
+  {
+    provide: AUTH_WORKSPACE_OAUTH_IDENTITY_REPOSITORY,
+    useExisting: PrismaOAuthIdentityRepository,
+  },
 ];
 
 @Module({
@@ -89,7 +144,19 @@ const REPOSITORY_PROVIDERS = [
     ...REPOSITORY_PROVIDERS,
     {
       provide: AUTH_WORKSPACE_REPOSITORIES,
-      inject: REPOSITORY_PROVIDERS,
+      inject: [
+        PrismaUserRepository,
+        PrismaSessionRepository,
+        PrismaAuditEventRepository,
+        PrismaAuthorizationDecisionRepository,
+        PrismaMfaEnrollmentRepository,
+        PrismaMfaRateLimitRepository,
+        PrismaMfaOtpUsedRepository,
+        PrismaMfaRecoveryCodeRepository,
+        PrismaRecoveryRequestRepository,
+        PrismaOAuthStateRepository,
+        PrismaOAuthIdentityRepository,
+      ],
       useFactory: (
         users: PrismaUserRepository,
         sessions: PrismaSessionRepository,
@@ -162,6 +229,10 @@ const REPOSITORY_PROVIDERS = [
     PrismaUserRepository,
     PrismaMfaEnrollmentRepository,
     PrismaAuthorizationDecisionRepository,
+    AUTH_WORKSPACE_USER_REPOSITORY,
+    AUTH_WORKSPACE_SESSION_REPOSITORY,
+    AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY,
+    AUTH_WORKSPACE_AUTHORIZATION_DECISION_REPOSITORY,
   ],
 })
 export class AuthWorkspaceModule {}

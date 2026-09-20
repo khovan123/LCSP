@@ -11,9 +11,9 @@ import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import type { RecordMfaRecoveryCodeAccessSuccess } from "../../contracts/auth-workspace/mfa.contract.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_SESSION_REPOSITORY,
+  type SessionRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { RecordMfaRecoveryCodeAccessCommand } from "./record-mfa-recovery-code-access.command.ts";
 
@@ -32,14 +32,15 @@ const RECOVERY_CODE_ACCESS_EVENTS = {
 export class RecordMfaRecoveryCodeAccessHandler implements ICommandHandler<RecordMfaRecoveryCodeAccessCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_SESSION_REPOSITORY)
+    private readonly sessions: SessionRepository,
   ) {}
 
   async execute(
     command: RecordMfaRecoveryCodeAccessCommand,
   ): Promise<RecordMfaRecoveryCodeAccessSuccess> {
     const { userId, action, sessionId, requestMeta } = command;
+    const { sessions } = this;
     const correlationId =
       requestMeta?.correlationId ?? this.support.createCorrelationId();
 
@@ -47,7 +48,7 @@ export class RecordMfaRecoveryCodeAccessHandler implements ICommandHandler<Recor
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
-    const session = await this.repositories.sessions.findById(sessionId);
+    const session = await sessions.findById(sessionId);
     if (
       !session ||
       !session.isActive(this.support.now()) ||
@@ -65,7 +66,7 @@ export class RecordMfaRecoveryCodeAccessHandler implements ICommandHandler<Recor
       throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
-    await this.support.recordAudit(this.repositories, {
+    await this.support.recordAudit({
       event_type: eventType,
       actor_id: userId,
       resource_type: AUDIT_RESOURCE_TYPES.authMfaRecoveryCode,

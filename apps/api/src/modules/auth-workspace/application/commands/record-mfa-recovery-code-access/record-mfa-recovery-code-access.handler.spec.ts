@@ -26,7 +26,7 @@ describe("RecordMfaRecoveryCodeAccessHandler", () => {
 
     const handler = new RecordMfaRecoveryCodeAccessHandler(
       support as never,
-      repositories as never,
+      repositories.sessions as never,
     );
 
     let thrown: unknown;
@@ -62,7 +62,7 @@ describe("RecordMfaRecoveryCodeAccessHandler", () => {
 
     const handler = new RecordMfaRecoveryCodeAccessHandler(
       support as never,
-      repositories as never,
+      repositories.sessions as never,
     );
 
     let thrown: unknown;
@@ -106,7 +106,7 @@ describe("RecordMfaRecoveryCodeAccessHandler", () => {
 
     const handler = new RecordMfaRecoveryCodeAccessHandler(
       support as never,
-      repositories as never,
+      repositories.sessions as never,
     );
 
     let thrown: unknown;
@@ -150,7 +150,7 @@ describe("RecordMfaRecoveryCodeAccessHandler", () => {
 
     const handler = new RecordMfaRecoveryCodeAccessHandler(
       support as never,
-      repositories as never,
+      repositories.sessions as never,
     );
 
     let thrown: unknown;
@@ -195,7 +195,7 @@ describe("RecordMfaRecoveryCodeAccessHandler", () => {
 
     const handler = new RecordMfaRecoveryCodeAccessHandler(
       support as never,
-      repositories as never,
+      repositories.sessions as never,
     );
 
     const result = await handler.execute(
@@ -212,7 +212,6 @@ describe("RecordMfaRecoveryCodeAccessHandler", () => {
       expect(result.correlationId).toBe("corr-123");
     }
     expect(recordAuditMock).toHaveBeenCalledWith(
-      repositories,
       expect.objectContaining({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodeCopied,
         actor_id: "user-1",

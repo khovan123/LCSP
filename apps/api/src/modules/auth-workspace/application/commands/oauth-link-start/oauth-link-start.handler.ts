@@ -13,9 +13,9 @@ import { OAuthProviderRegistry } from "../../../infrastructure/oauth/oauth-provi
 import { issueOAuthStateToken } from "../../../infrastructure/security/security.utils.ts";
 import type { OAuthLinkStartSuccess } from "../../contracts/auth-workspace/oauth.contract.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_OAUTH_STATE_REPOSITORY,
+  type OAuthStateRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { OAuthLinkStartCommand } from "./oauth-link-start.command.ts";
 
@@ -25,8 +25,8 @@ const OAUTH_STATE_TTL_MS = 10 * 60_000;
 export class OAuthLinkStartHandler implements ICommandHandler<OAuthLinkStartCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_OAUTH_STATE_REPOSITORY)
+    private readonly oauthStates: OAuthStateRepository,
     private readonly providerRegistry: OAuthProviderRegistry,
     private readonly configService: ConfigService,
   ) {}
@@ -76,7 +76,7 @@ export class OAuthLinkStartHandler implements ICommandHandler<OAuthLinkStartComm
 
     const state = issueOAuthStateToken();
     const nonce = issueOAuthStateToken();
-    await this.repositories.oauthStates.save(
+    await this.oauthStates.save(
       new OAuthState({
         state,
         nonce,
@@ -94,7 +94,7 @@ export class OAuthLinkStartHandler implements ICommandHandler<OAuthLinkStartComm
       redirectUri,
     });
 
-    await this.support.recordAudit(this.repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartSucceeded,
       actor_id: command.userId,
       decision: AUDIT_DECISIONS.allow,
@@ -115,7 +115,7 @@ export class OAuthLinkStartHandler implements ICommandHandler<OAuthLinkStartComm
     reasonCode: string,
     actorId: string,
   ): Promise<void> {
-    await this.support.recordAudit(this.repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartFailed,
       actor_id: actorId,
       decision: AUDIT_DECISIONS.deny,

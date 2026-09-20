@@ -20,9 +20,19 @@ import {
 } from "../../../infrastructure/security/security.utils.ts";
 import type { EnrollMfaSuccess } from "../../contracts/auth-workspace/mfa.contract.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY,
+  AUTH_WORKSPACE_MFA_OTP_USED_REPOSITORY,
+  AUTH_WORKSPACE_MFA_RATE_LIMIT_REPOSITORY,
+  AUTH_WORKSPACE_MFA_RECOVERY_CODE_REPOSITORY,
+  AUTH_WORKSPACE_SESSION_REPOSITORY,
+  AUTH_WORKSPACE_USER_REPOSITORY,
+  type MfaEnrollmentRepository,
+  type MfaOtpUsedRepository,
+  type MfaRateLimitRepository,
+  type MfaRecoveryCodeRepository,
+  type SessionRepository,
+  type UserRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { EnrollMfaCommand } from "./enroll-mfa.command.ts";
 
@@ -30,12 +40,30 @@ import { EnrollMfaCommand } from "./enroll-mfa.command.ts";
 export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_SESSION_REPOSITORY)
+    private readonly sessions: SessionRepository,
+    @Inject(AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY)
+    private readonly mfaEnrollments: MfaEnrollmentRepository,
+    @Inject(AUTH_WORKSPACE_MFA_OTP_USED_REPOSITORY)
+    private readonly mfaOtpUsed: MfaOtpUsedRepository,
+    @Inject(AUTH_WORKSPACE_MFA_RATE_LIMIT_REPOSITORY)
+    private readonly mfaRateLimits: MfaRateLimitRepository,
+    @Inject(AUTH_WORKSPACE_MFA_RECOVERY_CODE_REPOSITORY)
+    private readonly mfaRecoveryCodes: MfaRecoveryCodeRepository,
+    @Inject(AUTH_WORKSPACE_USER_REPOSITORY)
+    private readonly users: UserRepository,
   ) {}
 
   async execute(command: EnrollMfaCommand): Promise<EnrollMfaSuccess> {
     const { userId, sessionId, requestMeta } = command;
+    const {
+      sessions,
+      mfaEnrollments,
+      mfaOtpUsed,
+      mfaRateLimits,
+      mfaRecoveryCodes,
+      users,
+    } = this;
     const correlationId =
       requestMeta?.correlationId ?? this.support.createCorrelationId();
 
@@ -43,7 +71,7 @@ export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
-    const session = await this.repositories.sessions.findById(sessionId);
+    const session = await sessions.findById(sessionId);
     if (
       !session ||
       !session.isActive(this.support.now()) ||
@@ -52,8 +80,7 @@ export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
-    const existingEnrollment =
-      await this.repositories.mfaEnrollments.findByUserId(userId);
+    const existingEnrollment = await mfaEnrollments.findByUserId(userId);
     if (existingEnrollment && !session.isMfaVerified()) {
       let hasRecoverableSecretFailure = false;
       try {
@@ -71,7 +98,7 @@ export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
       }
     }
 
-    const user = await this.support.resolveUserById(this.repositories, userId);
+    const user = await users.findById(userId);
     if (!user) {
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
@@ -85,27 +112,27 @@ export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
       enrolledAt: now,
       verifiedAt: null,
     });
-    await this.repositories.mfaEnrollments.save(enrollment);
-    await this.repositories.mfaOtpUsed.deleteByUserId(userId);
-    await this.repositories.mfaRateLimits.resetByUserId(userId);
+    await mfaEnrollments.save(enrollment);
+    await mfaOtpUsed.deleteByUserId(userId);
+    await mfaRateLimits.resetByUserId(userId);
 
     let recoveryCodes: string[] = [];
     const hasActiveRecoveryCodes =
-      await this.repositories.mfaRecoveryCodes.hasActiveForUser(userId);
+      await mfaRecoveryCodes.hasActiveForUser(userId);
     if (!hasActiveRecoveryCodes) {
       recoveryCodes = generateMfaRecoveryCodes();
-      const batchId = this.repositories.mfaRecoveryCodes.nextBatchId();
-      await this.repositories.mfaRecoveryCodes.replaceForUser(
+      const batchId = mfaRecoveryCodes.nextBatchId();
+      await mfaRecoveryCodes.replaceForUser(
         userId,
         recoveryCodes.map((code) => ({
-          id: this.repositories.mfaRecoveryCodes.nextId(),
+          id: mfaRecoveryCodes.nextId(),
           codeHash: hashMfaRecoveryCode(code),
         })),
         batchId,
         now,
       );
 
-      await this.support.recordAudit(this.repositories, {
+      await this.support.recordAudit({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodesGenerated,
         actor_id: userId,
         resource_type: AUDIT_RESOURCE_TYPES.authMfaRecoveryCode,
@@ -116,7 +143,7 @@ export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
         batch_id: batchId,
         code_count: recoveryCodes.length,
       });
-      await this.support.recordAudit(this.repositories, {
+      await this.support.recordAudit({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodeViewed,
         actor_id: userId,
         resource_type: AUDIT_RESOURCE_TYPES.authMfaRecoveryCode,
@@ -128,7 +155,7 @@ export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
       });
     }
 
-    await this.support.recordAudit(this.repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaEnrolled,
       actor_id: userId,
       decision: AUDIT_DECISIONS.allow,

@@ -12,9 +12,11 @@ import type { OAuthCallbackClaims } from "../../../infrastructure/oauth/oauth-pr
 import { OAuthProviderRegistry } from "../../../infrastructure/oauth/oauth-provider.registry.ts";
 import type { OAuthLinkCallbackSuccess } from "../../contracts/auth-workspace/oauth.contract.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_OAUTH_IDENTITY_REPOSITORY,
+  AUTH_WORKSPACE_OAUTH_STATE_REPOSITORY,
+  type OAuthIdentityRepository,
+  type OAuthStateRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { OAuthLinkCallbackCommand } from "./oauth-link-callback.command.ts";
 
@@ -22,8 +24,10 @@ import { OAuthLinkCallbackCommand } from "./oauth-link-callback.command.ts";
 export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallbackCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_OAUTH_STATE_REPOSITORY)
+    private readonly oauthStates: OAuthStateRepository,
+    @Inject(AUTH_WORKSPACE_OAUTH_IDENTITY_REPOSITORY)
+    private readonly oauthIdentities: OAuthIdentityRepository,
     private readonly providerRegistry: OAuthProviderRegistry,
   ) {}
 
@@ -31,6 +35,7 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
     command: OAuthLinkCallbackCommand,
   ): Promise<OAuthLinkCallbackSuccess> {
     const { payload, requestMeta } = command;
+    const { oauthStates, oauthIdentities } = this;
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
 
@@ -42,8 +47,7 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
       throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
-    const oauthState =
-      await this.repositories.oauthStates.consumeByState(stateValue);
+    const oauthState = await oauthStates.consumeByState(stateValue);
 
     if (
       !oauthState ||
@@ -113,11 +117,10 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
       );
     }
 
-    const existingIdentity =
-      await this.repositories.oauthIdentities.findByProviderAccount(
-        oauthState.provider,
-        claims.providerAccountId,
-      );
+    const existingIdentity = await oauthIdentities.findByProviderAccount(
+      oauthState.provider,
+      claims.providerAccountId,
+    );
 
     if (existingIdentity && existingIdentity.userId !== command.userId) {
       await this.recordFailure(
@@ -134,14 +137,14 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
     const linked = existingIdentity
       ? false
       : Boolean(
-          await this.repositories.oauthIdentities.linkToUser(
+          await oauthIdentities.linkToUser(
             oauthState.provider,
             claims.providerAccountId,
             command.userId,
           ),
         );
 
-    await this.support.recordAudit(this.repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLinkSucceeded,
       actor_id: command.userId,
       decision: AUDIT_DECISIONS.allow,
@@ -163,7 +166,7 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
     correlationId: string,
     reasonCode: string,
   ): Promise<void> {
-    await this.support.recordAudit(this.repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLinkFailed,
       actor_id: command.userId,
       decision: AUDIT_DECISIONS.deny,

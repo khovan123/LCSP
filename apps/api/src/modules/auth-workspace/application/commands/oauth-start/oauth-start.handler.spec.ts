@@ -10,7 +10,7 @@ import { HttpException } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
 import type { OAuthProvider } from "../../../infrastructure/oauth/oauth-provider.interface.ts";
 import type { OAuthProviderRegistry } from "../../../infrastructure/oauth/oauth-provider.registry.ts";
-import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-workspace-repositories.ts";
+import type { OAuthStateRepository } from "../../ports/persistence/index.ts";
 import type { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { OAuthStartCommand } from "./oauth-start.command.ts";
 import { OAuthStartHandler } from "./oauth-start.handler.ts";
@@ -18,7 +18,7 @@ import { OAuthStartHandler } from "./oauth-start.handler.ts";
 describe("OAuthStartHandler", () => {
   let handler: OAuthStartHandler;
   let mockSupportService: jest.Mocked<AuthWorkspaceSupportService>;
-  let mockRepositories: jest.Mocked<AuthWorkspaceRepositories>;
+  let mockOAuthStates: jest.Mocked<OAuthStateRepository>;
   let mockProviderRegistry: jest.Mocked<OAuthProviderRegistry>;
   let mockConfigService: jest.Mocked<ConfigService>;
   let mockProvider: jest.Mocked<OAuthProvider>;
@@ -30,19 +30,15 @@ describe("OAuthStartHandler", () => {
       recordAudit: jest.fn().mockImplementation(async () => {}),
     } as unknown as jest.Mocked<AuthWorkspaceSupportService>;
 
-    mockRepositories = {
-      oauthStates: {
-        nextId: jest
-          .fn<AuthWorkspaceRepositories["oauthStates"]["nextId"]>()
-          .mockReturnValue("mock-state-id"),
-        save: jest
-          .fn<AuthWorkspaceRepositories["oauthStates"]["save"]>()
-          .mockImplementation(async () => {}),
-      },
-      auditEvents: {
-        append: jest.fn<AuthWorkspaceRepositories["auditEvents"]["append"]>(),
-      },
-    } as unknown as jest.Mocked<AuthWorkspaceRepositories>;
+    mockOAuthStates = {
+      nextId: jest
+        .fn<OAuthStateRepository["nextId"]>()
+        .mockReturnValue("mock-state-id"),
+      save: jest
+        .fn<OAuthStateRepository["save"]>()
+        .mockImplementation(async () => {}),
+      consumeByState: jest.fn<OAuthStateRepository["consumeByState"]>(),
+    };
 
     mockProvider = {
       buildAuthorizationUrl: jest
@@ -68,7 +64,7 @@ describe("OAuthStartHandler", () => {
 
     handler = new OAuthStartHandler(
       mockSupportService,
-      mockRepositories,
+      mockOAuthStates,
       mockProviderRegistry,
       mockConfigService,
     );
@@ -129,7 +125,6 @@ describe("OAuthStartHandler", () => {
       problem: { code: AUTH_ERROR_CODES.unsupportedProvider },
     });
     expect(mockSupportService.recordAudit).toHaveBeenCalledWith(
-      mockRepositories,
       expect.objectContaining({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartFailed,
         decision: AUDIT_DECISIONS.deny,
@@ -155,7 +150,6 @@ describe("OAuthStartHandler", () => {
       problem: { code: AUTH_ERROR_CODES.invalidRedirectUri },
     });
     expect(mockSupportService.recordAudit).toHaveBeenCalledWith(
-      mockRepositories,
       expect.objectContaining({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartFailed,
         decision: AUDIT_DECISIONS.deny,
@@ -179,15 +173,14 @@ describe("OAuthStartHandler", () => {
       expect(result.correlationId).toBe("corr-1");
     }
 
-    expect(mockRepositories.oauthStates.save).toHaveBeenCalledTimes(1);
-    const savedState = mockRepositories.oauthStates.save.mock.calls[0][0];
+    expect(mockOAuthStates.save).toHaveBeenCalledTimes(1);
+    const savedState = mockOAuthStates.save.mock.calls[0][0];
     expect(savedState.provider).toBe("google");
     expect(savedState.redirectUri).toBe("http://localhost:3000/callback");
     expect(savedState.state).toBeDefined();
     expect(savedState.nonce).toBeDefined();
 
     expect(mockSupportService.recordAudit).toHaveBeenCalledWith(
-      mockRepositories,
       expect.objectContaining({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartSucceeded,
         decision: AUDIT_DECISIONS.allow,
@@ -204,8 +197,8 @@ describe("OAuthStartHandler", () => {
     );
     await handler.execute(command);
 
-    const savedState = mockRepositories.oauthStates.save.mock.calls[0][0];
-    const auditPayload = mockSupportService.recordAudit.mock.calls[0][1];
+    const savedState = mockOAuthStates.save.mock.calls[0][0];
+    const auditPayload = mockSupportService.recordAudit.mock.calls[0][0];
     const auditStr = JSON.stringify(auditPayload);
     expect(auditStr).not.toContain(savedState.state);
     expect(auditStr).not.toContain(savedState.nonce);

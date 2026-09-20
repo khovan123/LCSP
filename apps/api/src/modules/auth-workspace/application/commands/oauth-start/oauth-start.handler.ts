@@ -13,9 +13,9 @@ import { OAuthProviderRegistry } from "../../../infrastructure/oauth/oauth-provi
 import { issueOAuthStateToken } from "../../../infrastructure/security/security.utils.ts";
 import type { OAuthStartSuccess } from "../../contracts/auth-workspace/oauth.contract.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_OAUTH_STATE_REPOSITORY,
+  type OAuthStateRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { OAuthStartCommand } from "./oauth-start.command.ts";
 
@@ -25,15 +25,15 @@ const OAUTH_STATE_TTL_MS = 10 * 60_000;
 export class OAuthStartHandler implements ICommandHandler<OAuthStartCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_OAUTH_STATE_REPOSITORY)
+    private readonly oauthStates: OAuthStateRepository,
     private readonly providerRegistry: OAuthProviderRegistry,
     private readonly configService: ConfigService,
   ) {}
 
   async execute(command: OAuthStartCommand): Promise<OAuthStartSuccess> {
     const { payload, requestMeta } = command;
-    const { repositories } = this;
+    const { oauthStates } = this;
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
 
@@ -47,7 +47,6 @@ export class OAuthStartHandler implements ICommandHandler<OAuthStartCommand> {
     const provider = this.providerRegistry.resolve(providerName);
     if (!provider) {
       await this.recordFailure(
-        repositories,
         correlationId,
         AUTH_ERROR_CODES.unsupportedProvider,
       );
@@ -63,7 +62,6 @@ export class OAuthStartHandler implements ICommandHandler<OAuthStartCommand> {
     );
     if (!isAllowedRedirectOrigin(redirectUri, allowedRedirectOrigins)) {
       await this.recordFailure(
-        repositories,
         correlationId,
         AUTH_ERROR_CODES.invalidRedirectUri,
       );
@@ -82,7 +80,7 @@ export class OAuthStartHandler implements ICommandHandler<OAuthStartCommand> {
       redirectUri,
       expiresAt: this.support.now() + OAUTH_STATE_TTL_MS,
     });
-    await repositories.oauthStates.save(oauthState);
+    await oauthStates.save(oauthState);
 
     const authorizationUrl = provider.buildAuthorizationUrl({
       state,
@@ -90,7 +88,7 @@ export class OAuthStartHandler implements ICommandHandler<OAuthStartCommand> {
       redirectUri,
     });
 
-    await this.support.recordAudit(repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartSucceeded,
       actor_id: null,
       decision: AUDIT_DECISIONS.allow,
@@ -106,11 +104,10 @@ export class OAuthStartHandler implements ICommandHandler<OAuthStartCommand> {
   }
 
   private async recordFailure(
-    repositories: AuthWorkspaceRepositories,
     correlationId: string,
     reasonCode: string,
   ): Promise<void> {
-    await this.support.recordAudit(repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartFailed,
       actor_id: null,
       decision: AUDIT_DECISIONS.deny,

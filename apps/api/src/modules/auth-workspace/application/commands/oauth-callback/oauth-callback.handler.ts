@@ -13,9 +13,17 @@ import type { OAuthCallbackClaims } from "../../../infrastructure/oauth/oauth-pr
 import { OAuthProviderRegistry } from "../../../infrastructure/oauth/oauth-provider.registry.ts";
 import type { OAuthCallbackSuccess } from "../../contracts/auth-workspace/oauth.contract.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY,
+  AUTH_WORKSPACE_OAUTH_IDENTITY_REPOSITORY,
+  AUTH_WORKSPACE_OAUTH_STATE_REPOSITORY,
+  AUTH_WORKSPACE_SESSION_REPOSITORY,
+  AUTH_WORKSPACE_USER_REPOSITORY,
+  type MfaEnrollmentRepository,
+  type OAuthIdentityRepository,
+  type OAuthStateRepository,
+  type SessionRepository,
+  type UserRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { OAuthCallbackCommand } from "./oauth-callback.command.ts";
 
@@ -23,14 +31,23 @@ import { OAuthCallbackCommand } from "./oauth-callback.command.ts";
 export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_OAUTH_STATE_REPOSITORY)
+    private readonly oauthStates: OAuthStateRepository,
+    @Inject(AUTH_WORKSPACE_OAUTH_IDENTITY_REPOSITORY)
+    private readonly oauthIdentities: OAuthIdentityRepository,
+    @Inject(AUTH_WORKSPACE_USER_REPOSITORY)
+    private readonly users: UserRepository,
+    @Inject(AUTH_WORKSPACE_SESSION_REPOSITORY)
+    private readonly sessions: SessionRepository,
+    @Inject(AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY)
+    private readonly mfaEnrollments: MfaEnrollmentRepository,
     private readonly providerRegistry: OAuthProviderRegistry,
   ) {}
 
   async execute(command: OAuthCallbackCommand): Promise<OAuthCallbackSuccess> {
     const { payload, requestMeta } = command;
-    const { repositories } = this;
+    const { oauthStates, oauthIdentities, users, sessions, mfaEnrollments } =
+      this;
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
 
@@ -44,8 +61,7 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
 
     // Atomic delete-and-return: a state value can only ever be consumed once,
     // closing the replay window even under concurrent callback requests.
-    const oauthState =
-      await repositories.oauthStates.consumeByState(stateValue);
+    const oauthState = await oauthStates.consumeByState(stateValue);
 
     if (
       !oauthState ||
@@ -54,7 +70,6 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
       oauthState.isLinkState()
     ) {
       await this.recordFailure(
-        repositories,
         correlationId,
         AUTH_ERROR_CODES.oauthStateInvalid,
         null,
@@ -65,7 +80,6 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
     const provider = this.providerRegistry.resolve(oauthState.provider);
     if (!provider) {
       await this.recordFailure(
-        repositories,
         correlationId,
         AUTH_ERROR_CODES.unsupportedProvider,
         null,
@@ -87,7 +101,6 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
       // Never leak provider-specific error detail (token exchange failure
       // reason, network error, etc.) to the caller or the audit trail.
       await this.recordFailure(
-        repositories,
         correlationId,
         AUTH_ERROR_CODES.oauthCallbackInvalid,
         null,
@@ -109,7 +122,6 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
 
     if (!claimsValid) {
       await this.recordFailure(
-        repositories,
         correlationId,
         AUTH_ERROR_CODES.oauthCallbackInvalid,
         null,
@@ -120,13 +132,12 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
       );
     }
 
-    const identity = await repositories.oauthIdentities.findByProviderAccount(
+    const identity = await oauthIdentities.findByProviderAccount(
       oauthState.provider,
       claims.providerAccountId,
     );
     if (!identity) {
       await this.recordFailure(
-        repositories,
         correlationId,
         AUTH_ERROR_CODES.accountNotFound,
         null,
@@ -134,10 +145,9 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
       throw problemException(AUTH_ERROR_CODES.accountNotFound, correlationId);
     }
 
-    const user = await repositories.users.findById(identity.userId);
+    const user = await users.findById(identity.userId);
     if (!user || !user.emailVerified) {
       await this.recordFailure(
-        repositories,
         correlationId,
         AUTH_ERROR_CODES.accountNotFound,
         identity.userId,
@@ -147,7 +157,6 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
 
     if (user.accessStatus !== USER_ACCESS_STATUSES.active) {
       await this.recordFailure(
-        repositories,
         correlationId,
         AUTH_ERROR_CODES.accountSuspended,
         user.id,
@@ -156,12 +165,12 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
     }
 
     const sessionState = await this.support.createSession(
-      repositories,
+      sessions,
       user,
       correlationId,
     );
 
-    await this.support.recordAudit(repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginSucceeded,
       actor_id: user.id,
       decision: AUDIT_DECISIONS.allow,
@@ -170,7 +179,7 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
     });
 
     const mfaEnrollment = await this.support.findMfaEnrollment(
-      repositories,
+      mfaEnrollments,
       user.id,
     );
     const mfaRequired = this.support.isMfaRequired(user, mfaEnrollment);
@@ -186,12 +195,11 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
   }
 
   private async recordFailure(
-    repositories: AuthWorkspaceRepositories,
     correlationId: string,
     reasonCode: string,
     actorId: string | null,
   ): Promise<void> {
-    await this.support.recordAudit(repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed,
       actor_id: actorId,
       decision: AUDIT_DECISIONS.deny,

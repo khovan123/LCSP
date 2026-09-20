@@ -15,9 +15,17 @@ import {
 } from "../../../infrastructure/security/security.utils.ts";
 import type { VerifyMfaOtpSuccess } from "../../contracts/auth-workspace/mfa.contract.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY,
+  AUTH_WORKSPACE_MFA_OTP_USED_REPOSITORY,
+  AUTH_WORKSPACE_MFA_RATE_LIMIT_REPOSITORY,
+  AUTH_WORKSPACE_SESSION_REPOSITORY,
+  AUTH_WORKSPACE_USER_REPOSITORY,
+  type MfaEnrollmentRepository,
+  type MfaOtpUsedRepository,
+  type MfaRateLimitRepository,
+  type SessionRepository,
+  type UserRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { VerifyMfaOtpCommand } from "./verify-mfa-otp.command.ts";
 
@@ -32,37 +40,43 @@ export class VerifyMfaOtpHandler implements ICommandHandler<VerifyMfaOtpCommand>
 
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_SESSION_REPOSITORY)
+    private readonly sessions: SessionRepository,
+    @Inject(AUTH_WORKSPACE_USER_REPOSITORY)
+    private readonly users: UserRepository,
+    @Inject(AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY)
+    private readonly mfaEnrollments: MfaEnrollmentRepository,
+    @Inject(AUTH_WORKSPACE_MFA_RATE_LIMIT_REPOSITORY)
+    private readonly mfaRateLimits: MfaRateLimitRepository,
+    @Inject(AUTH_WORKSPACE_MFA_OTP_USED_REPOSITORY)
+    private readonly mfaOtpUsed: MfaOtpUsedRepository,
   ) {}
 
   async execute(command: VerifyMfaOtpCommand): Promise<VerifyMfaOtpSuccess> {
     const { sessionToken, otp, requestMeta } = command;
+    const { sessions, users, mfaEnrollments, mfaRateLimits, mfaOtpUsed } = this;
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
 
     const session = await this.support.findValidSession(
-      this.repositories,
+      sessions,
+      users,
       sessionToken,
     );
     if (!session) {
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
-    const enrollment = await this.repositories.mfaEnrollments.findByUserId(
-      session.userId,
-    );
+    const enrollment = await mfaEnrollments.findByUserId(session.userId);
     if (!enrollment) {
       throw problemException(AUTH_ERROR_CODES.mfaInvalid, correlationId);
     }
 
     const now = this.support.now();
 
-    const rateLimit = await this.repositories.mfaRateLimits.findByUserId(
-      session.userId,
-    );
+    const rateLimit = await mfaRateLimits.findByUserId(session.userId);
     if (rateLimit?.isLocked(now)) {
-      await this.support.recordAudit(this.repositories, {
+      await this.support.recordAudit({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRateLimited,
         actor_id: session.userId,
         decision: AUDIT_DECISIONS.deny,
@@ -72,10 +86,7 @@ export class VerifyMfaOtpHandler implements ICommandHandler<VerifyMfaOtpCommand>
       throw problemException(AUTH_ERROR_CODES.mfaRateLimited, correlationId);
     }
 
-    const alreadyUsed = await this.repositories.mfaOtpUsed.isUsed(
-      session.userId,
-      otp,
-    );
+    const alreadyUsed = await mfaOtpUsed.isUsed(session.userId, otp);
     if (alreadyUsed) {
       await this.recordFailedAttempt(
         session.userId,
@@ -110,10 +121,7 @@ export class VerifyMfaOtpHandler implements ICommandHandler<VerifyMfaOtpCommand>
       throw problemException(AUTH_ERROR_CODES.mfaInvalid, correlationId);
     }
 
-    const claimed = await this.repositories.mfaOtpUsed.tryMarkUsed(
-      session.userId,
-      otp,
-    );
+    const claimed = await mfaOtpUsed.tryMarkUsed(session.userId, otp);
     if (!claimed) {
       // Lost a concurrent race to consume this exact code — treat as replay.
       await this.recordFailedAttempt(
@@ -124,32 +132,27 @@ export class VerifyMfaOtpHandler implements ICommandHandler<VerifyMfaOtpCommand>
       );
       throw problemException(AUTH_ERROR_CODES.mfaInvalid, correlationId);
     }
-    await this.repositories.mfaOtpUsed.pruneOlderThan(
-      now - OTP_USED_RETENTION_MS,
-    );
+    await mfaOtpUsed.pruneOlderThan(now - OTP_USED_RETENTION_MS);
 
     enrollment.verifiedAt = now;
-    await this.repositories.mfaEnrollments.save(enrollment);
+    await mfaEnrollments.save(enrollment);
     session.markMfaVerified(now);
     session.markSensitiveActionVerified(now);
-    await this.repositories.sessions.save(session);
+    await sessions.save(session);
 
-    const user = await this.support.resolveUserById(
-      this.repositories,
-      session.userId,
-    );
+    const user = await users.findById(session.userId);
     if (!user) {
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
     user.mfaRequired = true;
-    await this.repositories.users.save(user);
+    await users.save(user);
 
     const existingRateLimit =
       rateLimit ?? new MfaRateLimit({ userId: session.userId });
     existingRateLimit.clearOnSuccess();
-    await this.repositories.mfaRateLimits.save(existingRateLimit);
+    await mfaRateLimits.save(existingRateLimit);
 
-    await this.support.recordAudit(this.repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaVerified,
       actor_id: session.userId,
       decision: AUDIT_DECISIONS.allow,
@@ -165,14 +168,14 @@ export class VerifyMfaOtpHandler implements ICommandHandler<VerifyMfaOtpCommand>
     correlationId: string,
     reason: string,
   ): Promise<void> {
-    await this.repositories.mfaRateLimits.recordFailedAttempt(
+    await this.mfaRateLimits.recordFailedAttempt(
       userId,
       now,
       MFA_RATE_LIMIT,
       MFA_LOCK_WINDOW_MS,
     );
 
-    await this.support.recordAudit(this.repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaFailed,
       actor_id: userId,
       decision: AUDIT_DECISIONS.deny,

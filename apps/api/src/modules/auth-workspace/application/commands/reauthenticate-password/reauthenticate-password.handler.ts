@@ -12,9 +12,11 @@ import { problemException } from "../../../../../platform/problems/problem-facto
 import { verifySecret } from "../../../infrastructure/security/security.utils.ts";
 import type { PasswordReauthSuccess } from "../../contracts/auth-workspace/password-reauth.contract.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_SESSION_REPOSITORY,
+  AUTH_WORKSPACE_USER_REPOSITORY,
+  type SessionRepository,
+  type UserRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { ReauthenticatePasswordCommand } from "./reauthenticate-password.command.ts";
 
@@ -22,14 +24,17 @@ import { ReauthenticatePasswordCommand } from "./reauthenticate-password.command
 export class ReauthenticatePasswordHandler implements ICommandHandler<ReauthenticatePasswordCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_SESSION_REPOSITORY)
+    private readonly sessions: SessionRepository,
+    @Inject(AUTH_WORKSPACE_USER_REPOSITORY)
+    private readonly users: UserRepository,
   ) {}
 
   async execute(
     command: ReauthenticatePasswordCommand,
   ): Promise<PasswordReauthSuccess> {
     const { password, userId, sessionId, requestMeta } = command;
+    const { sessions, users } = this;
     const correlationId =
       requestMeta?.correlationId ?? this.support.createCorrelationId();
 
@@ -41,7 +46,7 @@ export class ReauthenticatePasswordHandler implements ICommandHandler<Reauthenti
       throw problemException(AUTH_ERROR_CODES.authRequired, correlationId);
     }
 
-    const session = await this.repositories.sessions.findById(sessionId);
+    const session = await sessions.findById(sessionId);
     if (
       !session ||
       !session.isActive(this.support.now()) ||
@@ -50,13 +55,13 @@ export class ReauthenticatePasswordHandler implements ICommandHandler<Reauthenti
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
-    const user = await this.support.resolveUserById(this.repositories, userId);
+    const user = await users.findById(userId);
     if (!user || user.id !== session.userId) {
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
     if (!verifySecret(password, user.passwordHash)) {
-      await this.support.recordAudit(this.repositories, {
+      await this.support.recordAudit({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginFailed,
         actor_id: user.id,
         decision: AUDIT_DECISIONS.deny,
@@ -72,9 +77,9 @@ export class ReauthenticatePasswordHandler implements ICommandHandler<Reauthenti
     }
 
     session.markSensitiveActionVerified(this.support.now());
-    await this.repositories.sessions.save(session);
+    await sessions.save(session);
 
-    await this.support.recordAudit(this.repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginSucceeded,
       actor_id: user.id,
       decision: AUDIT_DECISIONS.allow,

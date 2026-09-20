@@ -15,9 +15,13 @@ import {
 } from "../../../infrastructure/security/security.utils.ts";
 import type { SignInSuccess } from "../../contracts/auth-workspace/sign-in.contract.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY,
+  AUTH_WORKSPACE_SESSION_REPOSITORY,
+  AUTH_WORKSPACE_USER_REPOSITORY,
+  type MfaEnrollmentRepository,
+  type SessionRepository,
+  type UserRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { SignInCommand } from "./sign-in.command.ts";
 
@@ -29,27 +33,29 @@ const DECOY_PASSWORD_HASH = hashSecret(
 export class SignInHandler implements ICommandHandler<SignInCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_USER_REPOSITORY)
+    private readonly users: UserRepository,
+    @Inject(AUTH_WORKSPACE_SESSION_REPOSITORY)
+    private readonly sessions: SessionRepository,
+    @Inject(AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY)
+    private readonly mfaEnrollments: MfaEnrollmentRepository,
   ) {}
 
   async execute(command: SignInCommand): Promise<SignInSuccess> {
     const { payload, requestMeta } = command;
-    const { repositories } = this;
+    const { users, sessions, mfaEnrollments } = this;
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
     this.support.validateCredentialPayload(payload, correlationId);
 
     const email = payload.email as string;
     const password = payload.password as string;
-    const user = await repositories.users.findByPrimaryEmail(
-      email.toLowerCase(),
-    );
+    const user = await users.findByPrimaryEmail(email.toLowerCase());
     if (!user) {
       // Run the same scrypt-based comparison as the found-user path so the
       // response latency doesn't reveal whether the email is registered.
       verifySecret(password, DECOY_PASSWORD_HASH);
-      await this.support.recordAudit(repositories, {
+      await this.support.recordAudit({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginFailed,
         actor_id: null,
         decision: AUDIT_DECISIONS.deny,
@@ -63,7 +69,7 @@ export class SignInHandler implements ICommandHandler<SignInCommand> {
     }
 
     if (user.isLocked(this.support.now())) {
-      await this.support.recordAudit(repositories, {
+      await this.support.recordAudit({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginFailed,
         actor_id: user.id,
         decision: AUDIT_DECISIONS.deny,
@@ -83,8 +89,8 @@ export class SignInHandler implements ICommandHandler<SignInCommand> {
         this.support.failedLoginLimit,
         this.support.lockWindowMs,
       );
-      await repositories.users.save(user);
-      await this.support.recordAudit(repositories, {
+      await users.save(user);
+      await this.support.recordAudit({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginFailed,
         actor_id: user.id,
         decision: AUDIT_DECISIONS.deny,
@@ -109,10 +115,10 @@ export class SignInHandler implements ICommandHandler<SignInCommand> {
     }
 
     user.clearFailedLogins();
-    await repositories.users.save(user);
+    await users.save(user);
 
     if (!user.emailVerified) {
-      await this.support.recordAudit(repositories, {
+      await this.support.recordAudit({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginFailed,
         actor_id: user.id,
         decision: AUDIT_DECISIONS.deny,
@@ -126,11 +132,11 @@ export class SignInHandler implements ICommandHandler<SignInCommand> {
     }
 
     const sessionState = await this.support.createSession(
-      repositories,
+      sessions,
       user,
       correlationId,
     );
-    await this.support.recordAudit(repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginSucceeded,
       actor_id: user.id,
       decision: AUDIT_DECISIONS.allow,
@@ -138,7 +144,7 @@ export class SignInHandler implements ICommandHandler<SignInCommand> {
     });
 
     const mfaEnrollment = await this.support.findMfaEnrollment(
-      repositories,
+      mfaEnrollments,
       user.id,
     );
     const mfaRequired = this.support.isMfaRequired(user, mfaEnrollment);

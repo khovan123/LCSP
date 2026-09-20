@@ -212,7 +212,11 @@ function buildLoginHarness(
   } as never);
   const handler = new OAuthCallbackHandler(
     support,
-    repositories,
+    repositories.oauthStates,
+    repositories.oauthIdentities,
+    repositories.users,
+    repositories.sessions,
+    repositories.mfaEnrollments,
     buildProviderRegistry(provider),
   );
 
@@ -449,7 +453,8 @@ describe("OAuthLinkCallbackHandler", () => {
     } as never);
     const handler = new OAuthLinkCallbackHandler(
       support,
-      repositories,
+      repositories.oauthStates,
+      repositories.oauthIdentities,
       buildProviderRegistry(provider),
     );
     return { handler, repositories };

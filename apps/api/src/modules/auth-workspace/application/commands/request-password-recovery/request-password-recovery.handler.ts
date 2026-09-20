@@ -21,9 +21,11 @@ import {
   type RecoveryNotifier,
 } from "../../ports/notification/recovery-notifier.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_RECOVERY_REQUEST_REPOSITORY,
+  AUTH_WORKSPACE_USER_REPOSITORY,
+  type RecoveryRequestRepository,
+  type UserRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { RequestPasswordRecoveryCommand } from "./request-password-recovery.command.ts";
 
@@ -33,8 +35,10 @@ const RECOVERY_TOKEN_TTL_MS = 30 * 60_000;
 export class RequestPasswordRecoveryHandler implements ICommandHandler<RequestPasswordRecoveryCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_USER_REPOSITORY)
+    private readonly users: UserRepository,
+    @Inject(AUTH_WORKSPACE_RECOVERY_REQUEST_REPOSITORY)
+    private readonly recoveryRequests: RecoveryRequestRepository,
     @Inject(AUTH_WORKSPACE_RECOVERY_NOTIFIER)
     private readonly notifier: RecoveryNotifier,
   ) {}
@@ -43,7 +47,7 @@ export class RequestPasswordRecoveryHandler implements ICommandHandler<RequestPa
     command: RequestPasswordRecoveryCommand,
   ): Promise<RequestRecoverySuccess> {
     const { payload, requestMeta } = command;
-    const { repositories } = this;
+    const { users, recoveryRequests } = this;
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
 
@@ -55,13 +59,13 @@ export class RequestPasswordRecoveryHandler implements ICommandHandler<RequestPa
     }
 
     const email = payload.email.trim().toLowerCase();
-    const user = await repositories.users.findByPrimaryEmail(email);
+    const user = await users.findByPrimaryEmail(email);
 
     if (!user) {
       // Do the same shape of work as the found-user path so response
       // latency doesn't reveal whether the email is registered.
       hashSecret("decoy-recovery-lookup-for-constant-time-compare");
-      await this.support.recordAudit(repositories, {
+      await this.support.recordAudit({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.recoveryRequested,
         actor_id: null,
         decision: AUDIT_DECISIONS.allow,
@@ -77,10 +81,7 @@ export class RequestPasswordRecoveryHandler implements ICommandHandler<RequestPa
       tokenHash: hashSecret(token),
       expiresAt: now + RECOVERY_TOKEN_TTL_MS,
     });
-    await repositories.recoveryRequests.save(
-      recoveryRequest,
-      fingerprintToken(token),
-    );
+    await recoveryRequests.save(recoveryRequest, fingerprintToken(token));
 
     await this.notifier.notify({
       userId: user.id,
@@ -90,7 +91,7 @@ export class RequestPasswordRecoveryHandler implements ICommandHandler<RequestPa
       appOrigin: requestMeta.app_origin,
     });
 
-    await this.support.recordAudit(repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.recoveryRequested,
       actor_id: user.id,
       decision: AUDIT_DECISIONS.allow,

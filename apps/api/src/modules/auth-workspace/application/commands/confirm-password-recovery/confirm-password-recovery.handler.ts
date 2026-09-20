@@ -15,9 +15,13 @@ import {
 } from "../../../infrastructure/security/security.utils.ts";
 import type { ConfirmRecoverySuccess } from "../../contracts/auth-workspace/recovery.contract.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_RECOVERY_REQUEST_REPOSITORY,
+  AUTH_WORKSPACE_SESSION_REPOSITORY,
+  AUTH_WORKSPACE_USER_REPOSITORY,
+  type RecoveryRequestRepository,
+  type SessionRepository,
+  type UserRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { ConfirmPasswordRecoveryCommand } from "./confirm-password-recovery.command.ts";
 
@@ -25,15 +29,19 @@ import { ConfirmPasswordRecoveryCommand } from "./confirm-password-recovery.comm
 export class ConfirmPasswordRecoveryHandler implements ICommandHandler<ConfirmPasswordRecoveryCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_RECOVERY_REQUEST_REPOSITORY)
+    private readonly recoveryRequests: RecoveryRequestRepository,
+    @Inject(AUTH_WORKSPACE_USER_REPOSITORY)
+    private readonly users: UserRepository,
+    @Inject(AUTH_WORKSPACE_SESSION_REPOSITORY)
+    private readonly sessions: SessionRepository,
   ) {}
 
   async execute(
     command: ConfirmPasswordRecoveryCommand,
   ): Promise<ConfirmRecoverySuccess> {
     const { payload, requestMeta } = command;
-    const { repositories } = this;
+    const { recoveryRequests, users, sessions } = this;
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
 
@@ -47,12 +55,11 @@ export class ConfirmPasswordRecoveryHandler implements ICommandHandler<ConfirmPa
     }
 
     const now = this.support.now();
-    const recoveryRequest =
-      await repositories.recoveryRequests.findByFingerprint(
-        fingerprintToken(payload.token),
-      );
+    const recoveryRequest = await recoveryRequests.findByFingerprint(
+      fingerprintToken(payload.token),
+    );
     if (!recoveryRequest || !recoveryRequest.isValid(now)) {
-      await this.support.recordAudit(repositories, {
+      await this.support.recordAudit({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.recoveryConfirmFailed,
         actor_id: recoveryRequest?.userId ?? null,
         decision: AUDIT_DECISIONS.deny,
@@ -62,21 +69,21 @@ export class ConfirmPasswordRecoveryHandler implements ICommandHandler<ConfirmPa
       throw problemException(AUTH_ERROR_CODES.recoveryInvalid, correlationId);
     }
 
-    const user = await repositories.users.findById(recoveryRequest.userId);
+    const user = await users.findById(recoveryRequest.userId);
     if (!user || user.accessStatus !== USER_ACCESS_STATUSES.active) {
       throw problemException(AUTH_ERROR_CODES.recoveryInvalid, correlationId);
     }
 
     user.passwordHash = hashSecret(payload.new_password);
     user.clearFailedLogins();
-    await repositories.users.save(user);
+    await users.save(user);
 
     recoveryRequest.consume(now);
-    await repositories.recoveryRequests.save(recoveryRequest);
+    await recoveryRequests.save(recoveryRequest);
 
-    await repositories.sessions.revokeAllForUser(user.id, now);
+    await sessions.revokeAllForUser(user.id, now);
 
-    await this.support.recordAudit(repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.recoveryConfirmed,
       actor_id: user.id,
       decision: AUDIT_DECISIONS.allow,

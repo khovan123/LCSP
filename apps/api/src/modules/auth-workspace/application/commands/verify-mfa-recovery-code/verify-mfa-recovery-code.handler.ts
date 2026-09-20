@@ -15,9 +15,17 @@ import {
 } from "../../../infrastructure/security/mfa-recovery-code.utils.ts";
 import type { VerifyMfaRecoveryCodeSuccess } from "../../contracts/auth-workspace/mfa.contract.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY,
+  AUTH_WORKSPACE_MFA_RATE_LIMIT_REPOSITORY,
+  AUTH_WORKSPACE_MFA_RECOVERY_CODE_REPOSITORY,
+  AUTH_WORKSPACE_SESSION_REPOSITORY,
+  AUTH_WORKSPACE_USER_REPOSITORY,
+  type MfaEnrollmentRepository,
+  type MfaRateLimitRepository,
+  type MfaRecoveryCodeRepository,
+  type SessionRepository,
+  type UserRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { VerifyMfaRecoveryCodeCommand } from "./verify-mfa-recovery-code.command.ts";
 
@@ -30,38 +38,45 @@ export class VerifyMfaRecoveryCodeHandler implements ICommandHandler<VerifyMfaRe
 
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_SESSION_REPOSITORY)
+    private readonly sessions: SessionRepository,
+    @Inject(AUTH_WORKSPACE_USER_REPOSITORY)
+    private readonly users: UserRepository,
+    @Inject(AUTH_WORKSPACE_MFA_ENROLLMENT_REPOSITORY)
+    private readonly mfaEnrollments: MfaEnrollmentRepository,
+    @Inject(AUTH_WORKSPACE_MFA_RATE_LIMIT_REPOSITORY)
+    private readonly mfaRateLimits: MfaRateLimitRepository,
+    @Inject(AUTH_WORKSPACE_MFA_RECOVERY_CODE_REPOSITORY)
+    private readonly mfaRecoveryCodes: MfaRecoveryCodeRepository,
   ) {}
 
   async execute(
     command: VerifyMfaRecoveryCodeCommand,
   ): Promise<VerifyMfaRecoveryCodeSuccess> {
     const { sessionToken, code, requestMeta } = command;
+    const { sessions, users, mfaEnrollments, mfaRateLimits, mfaRecoveryCodes } =
+      this;
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
 
     const session = await this.support.findValidSession(
-      this.repositories,
+      sessions,
+      users,
       sessionToken,
     );
     if (!session) {
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
-    const enrollment = await this.repositories.mfaEnrollments.findByUserId(
-      session.userId,
-    );
+    const enrollment = await mfaEnrollments.findByUserId(session.userId);
     if (!enrollment) {
       throw problemException(AUTH_ERROR_CODES.mfaInvalid, correlationId);
     }
 
     const now = this.support.now();
-    const rateLimit = await this.repositories.mfaRateLimits.findByUserId(
-      session.userId,
-    );
+    const rateLimit = await mfaRateLimits.findByUserId(session.userId);
     if (rateLimit?.isLocked(now)) {
-      await this.support.recordAudit(this.repositories, {
+      await this.support.recordAudit({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRateLimited,
         actor_id: session.userId,
         decision: AUDIT_DECISIONS.deny,
@@ -82,7 +97,7 @@ export class VerifyMfaRecoveryCodeHandler implements ICommandHandler<VerifyMfaRe
       throw problemException(AUTH_ERROR_CODES.mfaInvalid, correlationId);
     }
 
-    const consumed = await this.repositories.mfaRecoveryCodes.tryConsume(
+    const consumed = await mfaRecoveryCodes.tryConsume(
       session.userId,
       hashMfaRecoveryCode(normalizedCode),
       now,
@@ -99,24 +114,21 @@ export class VerifyMfaRecoveryCodeHandler implements ICommandHandler<VerifyMfaRe
 
     session.markMfaVerified(now);
     session.markSensitiveActionVerified(now);
-    await this.repositories.sessions.save(session);
+    await sessions.save(session);
 
-    const user = await this.support.resolveUserById(
-      this.repositories,
-      session.userId,
-    );
+    const user = await users.findById(session.userId);
     if (!user) {
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
     user.mfaRequired = true;
-    await this.repositories.users.save(user);
+    await users.save(user);
 
     const existingRateLimit =
       rateLimit ?? new MfaRateLimit({ userId: session.userId });
     existingRateLimit.clearOnSuccess();
-    await this.repositories.mfaRateLimits.save(existingRateLimit);
+    await mfaRateLimits.save(existingRateLimit);
 
-    await this.support.recordAudit(this.repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodeUsed,
       actor_id: session.userId,
       resource_type: AUDIT_RESOURCE_TYPES.authMfaRecoveryCode,
@@ -135,14 +147,14 @@ export class VerifyMfaRecoveryCodeHandler implements ICommandHandler<VerifyMfaRe
     correlationId: string,
     reason: string,
   ): Promise<void> {
-    await this.repositories.mfaRateLimits.recordFailedAttempt(
+    await this.mfaRateLimits.recordFailedAttempt(
       userId,
       now,
       MFA_RECOVERY_RATE_LIMIT,
       MFA_RECOVERY_LOCK_WINDOW_MS,
     );
 
-    await this.support.recordAudit(this.repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaFailed,
       actor_id: userId,
       decision: AUDIT_DECISIONS.deny,

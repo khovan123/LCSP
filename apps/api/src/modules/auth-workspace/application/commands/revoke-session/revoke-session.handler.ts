@@ -7,9 +7,9 @@ import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { fingerprintToken } from "../../../infrastructure/security/security.utils.ts";
 import type { RevokeSessionSuccess } from "../../contracts/auth-workspace/revoke-session.contract.ts";
 import {
-  AUTH_WORKSPACE_REPOSITORIES,
-  type AuthWorkspaceRepositories,
-} from "../../ports/persistence/auth-workspace-repositories.ts";
+  AUTH_WORKSPACE_SESSION_REPOSITORY,
+  type SessionRepository,
+} from "../../ports/persistence/index.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { RevokeSessionCommand } from "./revoke-session.command.ts";
 
@@ -17,23 +17,23 @@ import { RevokeSessionCommand } from "./revoke-session.command.ts";
 export class RevokeSessionHandler implements ICommandHandler<RevokeSessionCommand> {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
-    @Inject(AUTH_WORKSPACE_REPOSITORIES)
-    private readonly repositories: AuthWorkspaceRepositories,
+    @Inject(AUTH_WORKSPACE_SESSION_REPOSITORY)
+    private readonly sessions: SessionRepository,
   ) {}
 
   async execute(command: RevokeSessionCommand): Promise<RevokeSessionSuccess> {
     const { sessionToken, requestMeta } = command;
-    const { repositories } = this;
+    const { sessions } = this;
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
-    const session = await repositories.sessions.findByFingerprint(
+    const session = await sessions.findByFingerprint(
       fingerprintToken(sessionToken),
     );
     if (session) {
       session.revoke(this.support.now());
-      await repositories.sessions.save(session);
+      await sessions.save(session);
     }
-    await this.support.recordAudit(repositories, {
+    await this.support.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.sessionRevoked,
       actor_id: session?.userId ?? null,
       decision: AUDIT_DECISIONS.allow,

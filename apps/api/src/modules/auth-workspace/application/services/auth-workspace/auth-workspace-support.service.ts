@@ -25,7 +25,12 @@ import {
 import type { SafeUserProjection } from "../../contracts/auth-workspace/common.contract.ts";
 import type { CredentialPayload } from "../../contracts/auth-workspace/sign-in.contract.ts";
 import type { WorkspaceAuthorization } from "../../contracts/auth-workspace/workspace.contract.ts";
-import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-workspace-repositories.ts";
+import type {
+  AuthorizationDecisionRepository,
+  MfaEnrollmentRepository,
+  SessionRepository,
+  UserRepository,
+} from "../../ports/persistence/index.ts";
 import type { AuthAuditService } from "./auth-audit.service.ts";
 
 const FAILED_LOGIN_LIMIT = 3;
@@ -70,8 +75,11 @@ export class AuthWorkspaceSupportService {
     return mfaEnrollment !== null && mfaEnrollment.verifiedAt !== null;
   }
 
-  recordAudit(repositories: unknown, event: AuditEvent): Promise<void> {
-    void repositories;
+  recordAudit(
+    repositoriesOrEvent: unknown,
+    maybeEvent?: AuditEvent,
+  ): Promise<void> {
+    const event = (maybeEvent ?? repositoriesOrEvent) as AuditEvent;
     if (!this.authAudit) {
       return Promise.resolve();
     }
@@ -79,17 +87,27 @@ export class AuthWorkspaceSupportService {
   }
 
   recordDecision(
-    repositories: AuthWorkspaceRepositories,
+    repositoriesOrDecisions:
+      | { authorizationDecisions: AuthorizationDecisionRepository }
+      | AuthorizationDecisionRepository,
     decision: AuthorizationDecision,
   ): Promise<void> {
-    return repositories.authorizationDecisions.append(decision);
+    const repo =
+      "authorizationDecisions" in repositoriesOrDecisions
+        ? repositoriesOrDecisions.authorizationDecisions
+        : repositoriesOrDecisions;
+    return repo.append(decision);
   }
 
   resolveUserById(
-    repositories: AuthWorkspaceRepositories,
+    repositoriesOrUsers: { users: UserRepository } | UserRepository,
     userId: string,
   ): Promise<User | null> {
-    return repositories.users.findById(userId);
+    const repo =
+      "users" in repositoriesOrUsers
+        ? repositoriesOrUsers.users
+        : repositoriesOrUsers;
+    return repo.findById(userId);
   }
 
   validateCredentialPayload(
@@ -107,10 +125,14 @@ export class AuthWorkspaceSupportService {
   }
 
   async createSession(
-    repositories: AuthWorkspaceRepositories,
+    repositoriesOrSessions: { sessions: SessionRepository } | SessionRepository,
     user: User,
     correlationId: string,
   ): Promise<{ token: string; session: Session }> {
+    const sessions =
+      "sessions" in repositoriesOrSessions
+        ? repositoriesOrSessions.sessions
+        : repositoriesOrSessions;
     if (user.accessStatus !== USER_ACCESS_STATUSES.active)
       throw problemException(AUTH_ERROR_CODES.accountSuspended, correlationId, {
         status: HttpStatus.FORBIDDEN,
@@ -124,8 +146,8 @@ export class AuthWorkspaceSupportService {
       expiresAt: this.now() + SESSION_TTL_MS,
       revokedAt: null,
     });
-    await repositories.sessions.save(session, fingerprint);
-    await this.recordAudit(repositories, {
+    await sessions.save(session, fingerprint);
+    await this.recordAudit({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.sessionCreated,
       actor_id: user.id,
       decision: AUDIT_DECISIONS.allow,
@@ -136,12 +158,24 @@ export class AuthWorkspaceSupportService {
   }
 
   async findValidSession(
-    repositories: AuthWorkspaceRepositories,
-    token: string,
+    repositoriesOrSessions:
+      | { sessions: SessionRepository; users: UserRepository }
+      | SessionRepository,
+    usersOrToken: UserRepository | string,
+    maybeToken?: string,
   ): Promise<Session | null> {
-    const session = await repositories.sessions.findByFingerprint(
-      fingerprintToken(token),
-    );
+    const sessions =
+      "sessions" in repositoriesOrSessions
+        ? repositoriesOrSessions.sessions
+        : repositoriesOrSessions;
+    const users =
+      "users" in repositoriesOrSessions
+        ? repositoriesOrSessions.users
+        : (usersOrToken as UserRepository);
+    const token =
+      typeof usersOrToken === "string" ? usersOrToken : (maybeToken as string);
+
+    const session = await sessions.findByFingerprint(fingerprintToken(token));
 
     if (!session) {
       return null;
@@ -151,7 +185,7 @@ export class AuthWorkspaceSupportService {
       return null;
     }
 
-    const user = await repositories.users.findById(session.userId);
+    const user = await users.findById(session.userId);
     if (
       !user ||
       user.accessStatus !== USER_ACCESS_STATUSES.active ||
@@ -162,20 +196,32 @@ export class AuthWorkspaceSupportService {
   }
 
   findMfaEnrollment(
-    repositories: AuthWorkspaceRepositories,
+    repositoriesOrMfa:
+      { mfaEnrollments: MfaEnrollmentRepository } | MfaEnrollmentRepository,
     userId: string,
   ): Promise<MfaEnrollment | null> {
-    return repositories.mfaEnrollments.findByUserId(userId);
+    const repo =
+      "mfaEnrollments" in repositoriesOrMfa
+        ? repositoriesOrMfa.mfaEnrollments
+        : repositoriesOrMfa;
+    return repo.findByUserId(userId);
   }
 
   async authorizeWorkspace(
-    repositories: AuthWorkspaceRepositories,
+    repositoriesOrDecisions:
+      | { authorizationDecisions: AuthorizationDecisionRepository }
+      | AuthorizationDecisionRepository,
     user: User | null | undefined,
     correlationId: string,
     resourceId = "workspace-home",
   ): Promise<WorkspaceAuthorization> {
+    const decisions =
+      "authorizationDecisions" in repositoriesOrDecisions
+        ? repositoriesOrDecisions.authorizationDecisions
+        : repositoriesOrDecisions;
+
     if (!user || user.accessStatus !== USER_ACCESS_STATUSES.active) {
-      await this.recordDecision(repositories, {
+      await this.recordDecision(decisions, {
         actor_id: null,
         session_id: null,
         resource_type: AUDIT_RESOURCE_TYPES.workspace,
@@ -196,7 +242,7 @@ export class AuthWorkspaceSupportService {
       reason_code: RBAC_REASON_CODES.authorized,
       correlationId: correlationId,
     };
-    await this.recordDecision(repositories, allowed);
+    await this.recordDecision(decisions, allowed);
     return {
       ok: true,
       decision: allowed,

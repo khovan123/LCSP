@@ -26,15 +26,21 @@ describe("GetWorkspaceHandler", () => {
       recordAudit: jest.fn(() => Promise.resolve()),
     };
 
-    const repositories = {
-      sessions: {
-        findById: jest.fn(() => Promise.resolve(null)),
-      },
+    const users = {
+      findById: jest.fn(() => Promise.resolve(null)),
+    };
+    const sessions = {
+      findById: jest.fn(() => Promise.resolve(null)),
+    };
+    const authorizationDecisions = {
+      append: jest.fn(() => Promise.resolve()),
     };
 
     const handler = new GetWorkspaceHandler(
       support as never,
-      repositories as never,
+      users as never,
+      sessions as never,
+      authorizationDecisions,
     );
 
     const query = new GetWorkspaceQuery(
@@ -78,20 +84,25 @@ describe("GetWorkspaceHandler", () => {
 
     const support = {
       createCorrelationId: () => "corr-123",
-      resolveUserById: jest.fn(() => Promise.resolve(user)),
       now: () => Date.now(),
       recordAudit: jest.fn(() => Promise.resolve()),
     };
 
-    const repositories = {
-      sessions: {
-        findById: jest.fn(() => Promise.resolve(session)),
-      },
+    const users = {
+      findById: jest.fn(() => Promise.resolve(user)),
+    };
+    const sessions = {
+      findById: jest.fn(() => Promise.resolve(session)),
+    };
+    const authorizationDecisions = {
+      append: jest.fn(() => Promise.resolve()),
     };
 
     const handler = new GetWorkspaceHandler(
       support as never,
-      repositories as never,
+      users as never,
+      sessions as never,
+      authorizationDecisions,
     );
 
     const query = new GetWorkspaceQuery(
@@ -135,7 +146,6 @@ describe("GetWorkspaceHandler", () => {
 
     const support = {
       createCorrelationId: () => "corr-123",
-      resolveUserById: jest.fn(() => Promise.resolve(user)),
       now: () => Date.now(),
       authorizeWorkspace: jest.fn(() =>
         Promise.resolve({
@@ -147,15 +157,21 @@ describe("GetWorkspaceHandler", () => {
       recordAudit: jest.fn(() => Promise.resolve()),
     };
 
-    const repositories = {
-      sessions: {
-        findById: jest.fn(() => Promise.resolve(session)),
-      },
+    const users = {
+      findById: jest.fn(() => Promise.resolve(user)),
+    };
+    const sessions = {
+      findById: jest.fn(() => Promise.resolve(session)),
+    };
+    const authorizationDecisions = {
+      append: jest.fn(() => Promise.resolve()),
     };
 
     const handler = new GetWorkspaceHandler(
       support as never,
-      repositories as never,
+      users as never,
+      sessions as never,
+      authorizationDecisions,
     );
 
     const query = new GetWorkspaceQuery(
