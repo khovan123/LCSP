@@ -7,7 +7,7 @@ import {
   AUTH_USER_ROLES,
   type AuthUserRole,
 } from "@lcsp/contracts/auth";
-import { problemException } from "../../../../../platform/problems/problem-factory.js";
+import { problemException } from "../../../../platform/problems/problem-factory.js";
 
 export function invalid(correlationId: string): never {
   throw problemException(E.invalidInput, correlationId, {

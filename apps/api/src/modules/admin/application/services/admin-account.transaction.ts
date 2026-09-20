@@ -1,4 +1,3 @@
-import { AUTH_RECORD_TYPES } from "../../../infrastructure/persistence/auth-record.persistence.js";
 import { HttpStatus } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
@@ -9,9 +8,10 @@ import {
   USER_ACCESS_STATUSES,
   type AdminAccountOperation,
 } from "@lcsp/contracts/auth";
-import type { RbacRequestContext } from "../../../../../platform/rbac/interfaces/rbac-request.interface.js";
-import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
-import { problemException } from "../../../../../platform/problems/problem-factory.js";
+import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
+import type { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../platform/problems/problem-factory.js";
+import { AUTH_RECORD_TYPES } from "../../../auth/infrastructure/persistence/auth-record.persistence.js";
 
 export type AdminActor = RbacRequestContext & {
   correlationId: string;

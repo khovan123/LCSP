@@ -11,10 +11,10 @@ import {
   type AdminUserDetail,
 } from "@lcsp/contracts/auth";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
-import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
-import { problemException } from "../../../../../platform/problems/problem-factory.js";
-import { AUTH_RECORD_TYPES } from "../../../infrastructure/persistence/auth-record.persistence.js";
-import { AuthAuditService } from "../auth/auth-audit.service.js";
+import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../platform/problems/problem-factory.js";
+import { AUTH_RECORD_TYPES } from "../../../auth/infrastructure/persistence/auth-record.persistence.js";
+import { AuthAuditService } from "../../../auth/application/services/auth/auth-audit.service.js";
 import { AdminAccountReadService } from "./admin-account-read.service.js";
 import {
   accountTransaction,

@@ -5,7 +5,7 @@ import {
   AUTH_AUDIT_EVENT_TYPES,
 } from "@lcsp/contracts/auth";
 
-import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import type { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { AdminOverviewService } from "./admin-overview.service.js";
 
 describe("AdminOverviewService", () => {

@@ -19,10 +19,10 @@ import type { AuthenticatedRequest } from "../../../../common/interfaces/authent
 import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
-import { AdminAccountReadService } from "../../application/services/admin/admin-account-read.service.js";
-import { AdminAccountCommandService } from "../../application/services/admin/admin-account-command.service.js";
-import { idempotency } from "../../application/services/admin/admin-account.validation.js";
-import type { AdminActor } from "../../application/services/admin/admin-account.transaction.js";
+import { AdminAccountReadService } from "../../application/services/admin-account-read.service.js";
+import { AdminAccountCommandService } from "../../application/services/admin-account-command.service.js";
+import { idempotency } from "../../application/services/admin-account.validation.js";
+import type { AdminActor } from "../../application/services/admin-account.transaction.js";
 
 @Controller("admin/users")
 export class AdminUsersController {
