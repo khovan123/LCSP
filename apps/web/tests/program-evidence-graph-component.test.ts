@@ -4,6 +4,7 @@ import { REQUIRED_ACTIONS } from "@lcsp/contracts/auth";
 import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
+import type { ProgramEvidenceGraphDetail } from "../src/lib/api/evidence-graph-detail-client";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "http://localhost/",
@@ -40,7 +41,7 @@ const {
 } = await import("../src/lib/api/evidence-graph-detail-client");
 const roots: ReturnType<typeof createRoot>[] = [];
 
-const detail = {
+const detail: ProgramEvidenceGraphDetail = {
   repository: {
     repository_full_name: "acme/repo",
     branch: "main",
@@ -520,7 +521,7 @@ test("subtracts only visible fully omitted group previews from the remaining gro
 });
 
 async function renderGraphFirstDetailWithPaths(
-  paths: Partial<(typeof detail)["paths"]>,
+  paths: Partial<ProgramEvidenceGraphDetail["paths"]>,
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -543,7 +544,11 @@ async function renderGraphFirstDetailWithPaths(
   return container;
 }
 
-function renderedOverflowGroup(index: number) {
+function renderedOverflowGroup(
+  index: number,
+): NonNullable<
+  ProgramEvidenceGraphDetail["paths"]["usage_flow_groups"]
+>[number] {
   return {
     key: `module-b-${index}`,
     label:
@@ -560,7 +565,11 @@ function renderedOverflowGroup(index: number) {
   };
 }
 
-function omittedGroupPreview(index: number) {
+function omittedGroupPreview(
+  index: number,
+): NonNullable<
+  ProgramEvidenceGraphDetail["paths"]["usage_flow_groups"]
+>[number] {
   return {
     key: `hidden-${index}`,
     label: `Hidden module ${index} -> AI_MODEL_INVOCATION`,
