@@ -3,120 +3,135 @@ import {
   ADMIN_OVERVIEW_PERIODS,
   AUTH_ACCOUNT_STATUSES,
   AUTH_USER_ROLES,
-  type AdminOverviewStats,
-  type AdminUserDetail,
-  type AdminUserListResponse,
 } from "@lcsp/contracts/auth";
+import type { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { ListAdminUsersQuery } from "./list-admin-users/list-admin-users.query.js";
 import { ListAdminUsersHandler } from "./list-admin-users/list-admin-users.handler.js";
 import { GetAdminUserDetailQuery } from "./get-admin-user-detail/get-admin-user-detail.query.js";
 import { GetAdminUserDetailHandler } from "./get-admin-user-detail/get-admin-user-detail.handler.js";
 import { GetAdminOverviewQuery } from "./get-admin-overview/get-admin-overview.query.js";
 import { GetAdminOverviewHandler } from "./get-admin-overview/get-admin-overview.handler.js";
-import type { AdminAccountReadService } from "../services/admin-account-read.service.js";
-import type { AdminOverviewService } from "../services/admin-overview.service.js";
 
 describe("Admin CQRS Queries", () => {
-  it("ListAdminUsersHandler delegates to readService.list", async () => {
-    const listResponse: AdminUserListResponse = {
-      users: [],
-      totalCount: 0,
-      page: 1,
-      pageSize: 20,
-      totalPages: 0,
-    };
-    const listMock = jest.fn<AdminAccountReadService["list"]>();
-    listMock.mockResolvedValue(listResponse);
-    const readService = {
-      list: listMock,
-    } as unknown as AdminAccountReadService;
-
-    const handler = new ListAdminUsersHandler(readService);
-    const query = new ListAdminUsersQuery({ page: 1 }, "corr-1");
-    const result = await handler.execute(query);
-
-    expect(result).toEqual(listResponse);
-    expect(listMock).toHaveBeenCalledWith({ page: 1 }, "corr-1");
-  });
-
-  it("GetAdminUserDetailHandler delegates to readService.detail", async () => {
-    const detailResponse: AdminUserDetail = {
-      id: "u-1",
-      email: "u1@example.com",
-      fullName: "U One",
-      role: AUTH_USER_ROLES.customer,
-      status: AUTH_ACCOUNT_STATUSES.active,
-      version: 1,
-      createdAt: new Date().toISOString(),
-      lastActiveAt: null,
-      usageSummary: {
-        assessments30d: 0,
-        lastAssessmentAt: null,
-        creditSpend30d: 0,
-        openFindingsCount: 0,
+  it("GetAdminUserDetailHandler queries user detail directly from prisma", async () => {
+    const mockPrisma = {
+      user: {
+        findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValueOnce({
+          id: "u-1",
+          displayName: "U One",
+          email: "u1@example.com",
+          role: AUTH_USER_ROLES.customer,
+          accessStatus: "ACTIVE",
+          accessVersion: 1,
+          createdAt: new Date(),
+        }),
       },
-    };
-    const detailMock = jest.fn<AdminAccountReadService["detail"]>();
-    detailMock.mockResolvedValue(detailResponse);
-    const readService = {
-      detail: detailMock,
-    } as unknown as AdminAccountReadService;
+      assessment: {
+        count: jest.fn<() => Promise<number>>().mockResolvedValueOnce(0),
+        aggregate: jest
+          .fn<() => Promise<{ _max: { createdAt: Date | null } }>>()
+          .mockResolvedValueOnce({ _max: { createdAt: null } }),
+      },
+      authRecord: {
+        aggregate: jest
+          .fn<() => Promise<{ _max: { createdAt: Date | null } }>>()
+          .mockResolvedValueOnce({ _max: { createdAt: null } }),
+      },
+    } as unknown as PrismaService;
 
-    const handler = new GetAdminUserDetailHandler(readService);
+    const handler = new GetAdminUserDetailHandler(mockPrisma);
     const query = new GetAdminUserDetailQuery("u-1", "corr-2");
     const result = await handler.execute(query);
 
-    expect(result).toEqual(detailResponse);
-    expect(detailMock).toHaveBeenCalledWith("u-1", "corr-2");
+    expect(result.id).toBe("u-1");
+    expect(result.fullName).toBe("U One");
+    expect(result.status).toBe(AUTH_ACCOUNT_STATUSES.active);
   });
 
-  it("GetAdminOverviewHandler delegates to overviewService.getOverview", async () => {
-    const overviewResponse: AdminOverviewStats = {
-      period: ADMIN_OVERVIEW_PERIODS.p30d,
-      periodDays: 30,
-      summary: {
-        totalUsers: { count: 12, periodChange: 2 },
-        activeUsers: { count: 10, percentageOfTotal: 83.3 },
-        assessments: { totalCount: 20, periodCompletedCount: 8 },
-        currentCorpus: { version: "v1", sourceCount: 5, ruleCount: 10 },
+  it("ListAdminUsersHandler executes $transaction", async () => {
+    const txMock = {
+      $queryRaw: jest
+        .fn<() => Promise<unknown>>()
+        .mockResolvedValueOnce([{ count: 1n }])
+        .mockResolvedValueOnce([
+          {
+            id: "u-1",
+            fullName: "User 1",
+            email: "u1@example.com",
+            role: "CUSTOMER",
+            status: "ACTIVE",
+            createdAt: new Date(),
+            version: 1,
+            referenceType: "USER",
+          },
+        ]),
+      assessment: {
+        groupBy: jest.fn<() => Promise<unknown>>().mockResolvedValueOnce([]),
       },
-      assessmentActivity: {
-        points: [],
-        totalStarted: 20,
-        totalCompleted: 8,
-        startDate: new Date().toISOString(),
-        endDate: new Date().toISOString(),
-      },
-      accountDistribution: {
-        activeCount: 10,
-        invitedCount: 0,
-        suspendedCount: 2,
-        deactivatedCount: 0,
-        totalCount: 12,
-      },
-      recentActivity: [],
-      corpusStatus: {
-        current: {
-          version: "v1",
-          sourceCount: 5,
-          ruleCount: 10,
-          publishedAt: new Date().toISOString(),
-        },
-        draft: null,
+      authRecord: {
+        groupBy: jest.fn<() => Promise<unknown>>().mockResolvedValueOnce([]),
       },
     };
 
-    const overviewMock = jest.fn<AdminOverviewService["getOverview"]>();
-    overviewMock.mockResolvedValue(overviewResponse);
-    const overviewService = {
-      getOverview: overviewMock,
-    } as unknown as AdminOverviewService;
+    const txSpy = jest.fn().mockImplementationOnce(async (callback) => {
+      return (callback as (tx: unknown) => Promise<unknown>)(txMock);
+    });
 
-    const handler = new GetAdminOverviewHandler(overviewService);
-    const query = new GetAdminOverviewQuery("30D");
+    const handler = new ListAdminUsersHandler({
+      $transaction: txSpy,
+    } as unknown as PrismaService);
+
+    const query = new ListAdminUsersQuery({ page: "1" }, "corr-1");
     const result = await handler.execute(query);
 
-    expect(result).toEqual(overviewResponse);
-    expect(overviewMock).toHaveBeenCalledWith("30D");
+    expect(result.totalCount).toBe(1);
+    expect(result.users).toHaveLength(1);
+    expect(result.users[0]?.id).toBe("u-1");
+  });
+
+  it("GetAdminOverviewHandler queries counts and returns AdminOverviewStats", async () => {
+    const mockPrisma = {
+      user: {
+        count: jest
+          .fn<() => Promise<number>>()
+          .mockResolvedValueOnce(10) // active
+          .mockResolvedValueOnce(2) // suspended
+          .mockResolvedValueOnce(5), // period new
+        findMany: jest.fn<() => Promise<unknown>>().mockResolvedValueOnce([]),
+      },
+      assessment: {
+        count: jest
+          .fn<() => Promise<number>>()
+          .mockResolvedValueOnce(20) // total
+          .mockResolvedValueOnce(8), // period completed
+        findMany: jest.fn<() => Promise<unknown>>().mockResolvedValueOnce([]),
+      },
+      legalCorpusVersion: {
+        findFirst: jest
+          .fn<() => Promise<unknown>>()
+          .mockResolvedValueOnce({
+            version: "v1",
+            approvedAt: new Date(),
+            _count: { documents: 5 },
+          })
+          .mockResolvedValueOnce(null),
+      },
+      auditEvent: {
+        findMany: jest.fn<() => Promise<unknown>>().mockResolvedValueOnce([]),
+      },
+    } as unknown as PrismaService;
+
+    const handler = new GetAdminOverviewHandler(mockPrisma);
+    const query = new GetAdminOverviewQuery(ADMIN_OVERVIEW_PERIODS.p30d);
+    const result = await handler.execute(
+      query,
+      new Date("2026-09-20T00:00:00.000Z"),
+    );
+
+    expect(result.period).toBe(ADMIN_OVERVIEW_PERIODS.p30d);
+    expect(result.summary.totalUsers.count).toBe(12);
+    expect(result.summary.activeUsers.count).toBe(10);
+    expect(result.summary.assessments.totalCount).toBe(20);
+    expect(result.summary.currentCorpus.version).toBe("v1");
   });
 });

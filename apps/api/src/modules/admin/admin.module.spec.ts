@@ -9,12 +9,18 @@ import { AuthModule } from "../auth/auth.module.js";
 import { AdminModule } from "./admin.module.js";
 import { AdminUsersController } from "./presentation/http/admin-users.controller.js";
 import { AdminOverviewController } from "./presentation/http/admin-overview.controller.js";
-import { AdminAccountCommandService } from "./application/services/admin-account-command.service.js";
-import { AdminAccountReadService } from "./application/services/admin-account-read.service.js";
-import { AdminOverviewService } from "./application/services/admin-overview.service.js";
+import {
+  SuspendUserHandler,
+  RestoreUserHandler,
+} from "./application/commands/index.js";
+import {
+  ListAdminUsersHandler,
+  GetAdminUserDetailHandler,
+  GetAdminOverviewHandler,
+} from "./application/queries/index.js";
 
 describe("AdminModule", () => {
-  it("compiles and resolves all admin controllers and services", async () => {
+  it("compiles and resolves all admin controllers and CQRS handlers", async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({ isGlobal: true }),
@@ -28,8 +34,10 @@ describe("AdminModule", () => {
 
     expect(moduleRef.get(AdminUsersController)).toBeDefined();
     expect(moduleRef.get(AdminOverviewController)).toBeDefined();
-    expect(moduleRef.get(AdminAccountCommandService)).toBeDefined();
-    expect(moduleRef.get(AdminAccountReadService)).toBeDefined();
-    expect(moduleRef.get(AdminOverviewService)).toBeDefined();
+    expect(moduleRef.get(SuspendUserHandler)).toBeDefined();
+    expect(moduleRef.get(RestoreUserHandler)).toBeDefined();
+    expect(moduleRef.get(ListAdminUsersHandler)).toBeDefined();
+    expect(moduleRef.get(GetAdminUserDetailHandler)).toBeDefined();
+    expect(moduleRef.get(GetAdminOverviewHandler)).toBeDefined();
   });
 });

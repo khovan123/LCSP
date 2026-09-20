@@ -3,15 +3,22 @@ import {
   ADMIN_ACCOUNT_OPERATIONS as O,
   type AdminUserDetail,
 } from "@lcsp/contracts/auth";
-import { AdminAccountCommandService } from "../../services/admin-account-command.service.js";
+import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { AuthAuditService } from "../../../../auth/application/services/auth/auth-audit.service.js";
+import { mutateAdminAccount } from "../../services/admin-account.mutator.js";
 import { RestoreUserCommand } from "./restore-user.command.js";
 
 @CommandHandler(RestoreUserCommand)
 export class RestoreUserHandler implements ICommandHandler<RestoreUserCommand> {
-  constructor(private readonly commandService: AdminAccountCommandService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuthAuditService,
+  ) {}
 
   async execute(command: RestoreUserCommand): Promise<AdminUserDetail> {
-    return this.commandService.mutate(
+    return mutateAdminAccount(
+      this.prisma,
+      this.audit,
       command.targetId,
       O.restore,
       command.body,

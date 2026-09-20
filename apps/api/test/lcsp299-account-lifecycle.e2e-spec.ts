@@ -38,8 +38,7 @@ import { CqrsModule } from "@nestjs/cqrs";
 import { ADMIN_COMMAND_HANDLERS } from "../src/modules/admin/application/commands/index.js";
 import { ADMIN_QUERY_HANDLERS } from "../src/modules/admin/application/queries/index.js";
 import { AdminUsersController } from "../src/modules/admin/presentation/http/admin-users.controller.js";
-import { AdminAccountReadService } from "../src/modules/admin/application/services/admin-account-read.service.js";
-import { AdminAccountCommandService } from "../src/modules/admin/application/services/admin-account-command.service.js";
+import { mutateAdminAccount } from "../src/modules/admin/application/services/admin-account.mutator.js";
 import { AuthAuditService } from "../src/modules/auth/application/services/auth/auth-audit.service.js";
 import { PrismaAuthorizationDecisionRepository } from "../src/platform/rbac/prisma-authorization-decision.repository.js";
 import {
@@ -128,8 +127,6 @@ integration(
               },
             },
           },
-          AdminAccountReadService,
-          AdminAccountCommandService,
           ...ADMIN_COMMAND_HANDLERS,
           ...ADMIN_QUERY_HANDLERS,
           AuthAuditService,
@@ -391,7 +388,9 @@ integration(
         data: { revokedAt: new Date() },
       });
       await expect(
-        app.get(AdminAccountCommandService).mutate(
+        mutateAdminAccount(
+          app.get(PrismaService),
+          app.get(AuthAuditService),
           target.id,
           ADMIN_ACCOUNT_OPERATIONS.suspend,
           { expectedVersion: 0 },
@@ -532,7 +531,9 @@ integration(
       });
       const auditCount = await prisma.auditEvent.count();
       await expect(
-        app.get(AdminAccountCommandService).mutate(
+        mutateAdminAccount(
+          app.get(PrismaService),
+          app.get(AuthAuditService),
           target.id,
           "ROLE_CHANGE" as AdminAccountOperation,
           { role: AUTH_USER_ROLES.admin, expectedVersion: 0 },

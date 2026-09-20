@@ -3,15 +3,22 @@ import {
   ADMIN_ACCOUNT_OPERATIONS as O,
   type AdminUserDetail,
 } from "@lcsp/contracts/auth";
-import { AdminAccountCommandService } from "../../services/admin-account-command.service.js";
+import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { AuthAuditService } from "../../../../auth/application/services/auth/auth-audit.service.js";
+import { mutateAdminAccount } from "../../services/admin-account.mutator.js";
 import { SuspendUserCommand } from "./suspend-user.command.js";
 
 @CommandHandler(SuspendUserCommand)
 export class SuspendUserHandler implements ICommandHandler<SuspendUserCommand> {
-  constructor(private readonly commandService: AdminAccountCommandService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuthAuditService,
+  ) {}
 
   async execute(command: SuspendUserCommand): Promise<AdminUserDetail> {
-    return this.commandService.mutate(
+    return mutateAdminAccount(
+      this.prisma,
+      this.audit,
       command.targetId,
       O.suspend,
       command.body,

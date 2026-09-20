@@ -3,13 +3,13 @@ import {
   ADMIN_ACCOUNT_OPERATIONS as O,
   AUTH_ACCOUNT_STATUSES,
   AUTH_USER_ROLES,
-  type AdminUserDetail,
 } from "@lcsp/contracts/auth";
+import type { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
+import type { AuthAuditService } from "../../../auth/application/services/auth/auth-audit.service.js";
 import { SuspendUserCommand } from "./suspend-user/suspend-user.command.js";
 import { SuspendUserHandler } from "./suspend-user/suspend-user.handler.js";
 import { RestoreUserCommand } from "./restore-user/restore-user.command.js";
 import { RestoreUserHandler } from "./restore-user/restore-user.handler.js";
-import type { AdminAccountCommandService } from "../services/admin-account-command.service.js";
 import type { AdminActor } from "../services/admin-account.transaction.js";
 
 describe("Admin CQRS Commands", () => {
@@ -22,31 +22,90 @@ describe("Admin CQRS Commands", () => {
     idempotencyKey: "idem-1",
   };
 
-  const dummyResult: AdminUserDetail = {
-    id: "user-1",
-    email: "user@example.com",
-    fullName: "Test User",
-    role: AUTH_USER_ROLES.customer,
-    status: AUTH_ACCOUNT_STATUSES.suspended,
-    version: 2,
-    createdAt: new Date().toISOString(),
-    lastActiveAt: null,
-    usageSummary: {
-      assessments30d: 0,
-      lastAssessmentAt: null,
-      creditSpend30d: 0,
-      openFindingsCount: 0,
-    },
+  const createMockPrisma = (initialStatus = "ACTIVE") => {
+    const txMock = {
+      user: {
+        findUnique: jest
+          .fn<() => Promise<unknown>>()
+          .mockResolvedValueOnce({
+            id: "admin-1",
+            role: AUTH_USER_ROLES.admin,
+            accessStatus: "ACTIVE",
+            emailVerified: true,
+            accessVersion: 0,
+          })
+          .mockResolvedValueOnce({
+            id: "user-1",
+            role: AUTH_USER_ROLES.customer,
+            accessStatus: initialStatus,
+            accessVersion: 1,
+            email: "user@example.com",
+            displayName: "Test User",
+            createdAt: new Date(),
+          })
+          .mockResolvedValueOnce({
+            id: "user-1",
+            role: AUTH_USER_ROLES.customer,
+            accessStatus: initialStatus === "ACTIVE" ? "SUSPENDED" : "ACTIVE",
+            accessVersion: 2,
+            email: "user@example.com",
+            displayName: "Test User",
+            createdAt: new Date(),
+          }),
+        count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+        updateMany: jest
+          .fn<() => Promise<{ count: number }>>()
+          .mockResolvedValue({ count: 1 }),
+      },
+      authRecord: {
+        findFirst: jest.fn<() => Promise<unknown>>().mockResolvedValueOnce({
+          id: "sess-1",
+          userId: "admin-1",
+          type: "SESSION",
+          revokedAt: null,
+          expiresAt: new Date(Date.now() + 10000),
+        }),
+        updateMany: jest
+          .fn<() => Promise<{ count: number }>>()
+          .mockResolvedValue({ count: 1 }),
+        aggregate: jest
+          .fn<() => Promise<{ _max: { createdAt: Date | null } }>>()
+          .mockResolvedValue({
+            _max: { createdAt: null },
+          }),
+      },
+      adminAccountCommandReceipt: {
+        findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue(null),
+        create: jest
+          .fn<() => Promise<unknown>>()
+          .mockResolvedValue({ id: "rec-1" }),
+      },
+      assessment: {
+        count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+        aggregate: jest
+          .fn<() => Promise<{ _max: { createdAt: Date | null } }>>()
+          .mockResolvedValue({
+            _max: { createdAt: null },
+          }),
+      },
+      $queryRaw: jest.fn<() => Promise<unknown>>().mockResolvedValue([]),
+      $executeRaw: jest.fn<() => Promise<unknown>>().mockResolvedValue(1),
+    };
+
+    return {
+      $transaction: jest.fn().mockImplementation(async (callback) => {
+        return (callback as (tx: unknown) => Promise<unknown>)(txMock);
+      }),
+    } as unknown as PrismaService;
   };
 
-  it("SuspendUserHandler dispatches mutate with O.suspend", async () => {
-    const mutateMock = jest.fn<AdminAccountCommandService["mutate"]>();
-    mutateMock.mockResolvedValue(dummyResult);
-    const commandService = {
-      mutate: mutateMock,
-    } as unknown as AdminAccountCommandService;
+  const audit = {
+    writeInTx: jest.fn<() => Promise<unknown>>().mockResolvedValue(undefined),
+  } as unknown as AuthAuditService;
 
-    const handler = new SuspendUserHandler(commandService);
+  it("SuspendUserHandler executes suspend mutation", async () => {
+    const prisma = createMockPrisma("ACTIVE");
+    const handler = new SuspendUserHandler(prisma, audit);
     const command = new SuspendUserCommand(
       "user-1",
       { expectedVersion: 1 },
@@ -54,39 +113,21 @@ describe("Admin CQRS Commands", () => {
     );
     const result = await handler.execute(command);
 
-    expect(result).toEqual(dummyResult);
-    expect(mutateMock).toHaveBeenCalledWith(
-      "user-1",
-      O.suspend,
-      { expectedVersion: 1 },
-      mockActor,
-    );
+    expect(result.id).toBe("user-1");
+    expect(result.status).toBe(AUTH_ACCOUNT_STATUSES.suspended);
   });
 
-  it("RestoreUserHandler dispatches mutate with O.restore", async () => {
-    const mutateMock = jest.fn<AdminAccountCommandService["mutate"]>();
-    mutateMock.mockResolvedValue({
-      ...dummyResult,
-      status: AUTH_ACCOUNT_STATUSES.active,
-    });
-    const commandService = {
-      mutate: mutateMock,
-    } as unknown as AdminAccountCommandService;
-
-    const handler = new RestoreUserHandler(commandService);
+  it("RestoreUserHandler executes restore mutation", async () => {
+    const prisma = createMockPrisma("SUSPENDED");
+    const handler = new RestoreUserHandler(prisma, audit);
     const command = new RestoreUserCommand(
       "user-1",
-      { expectedVersion: 2 },
+      { expectedVersion: 1 },
       mockActor,
     );
     const result = await handler.execute(command);
 
+    expect(result.id).toBe("user-1");
     expect(result.status).toBe(AUTH_ACCOUNT_STATUSES.active);
-    expect(mutateMock).toHaveBeenCalledWith(
-      "user-1",
-      O.restore,
-      { expectedVersion: 2 },
-      mockActor,
-    );
   });
 });
