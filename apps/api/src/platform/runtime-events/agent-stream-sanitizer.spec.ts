@@ -25,11 +25,15 @@ describe("agent stream sanitizer", () => {
     expect(
       sanitizeAgentStreamValue({
         api_key: "hidden",
+        input_tokens: 11,
+        output_tokens: 13,
         selectedRuleId: "ER-42",
         toolCallId: "call-1",
       }),
     ).toEqual({
       api_key: "[REDACTED]",
+      input_tokens: 11,
+      output_tokens: 13,
       selectedRuleId: "ER-42",
       toolCallId: "call-1",
     });

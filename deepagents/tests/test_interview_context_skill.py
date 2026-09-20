@@ -129,5 +129,5 @@ def test_skill_package_usage_provenance_emits_once_per_cached_run() -> None:
     first_payload = skill_events_by_run[0][0]["data"]
     second_payload = skill_events_by_run[1][0]["data"]
     assert first_payload["skillName"] == "interview-context"
-    assert first_payload["durability"] == "BEST_EFFORT"
+    assert first_payload["durability"] == "DURABLE"
     assert first_payload["skillVersionOrHash"] == second_payload["skillVersionOrHash"]

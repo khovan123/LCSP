@@ -73,7 +73,7 @@ test("agent stream parser preserves semantic runtime payloads", () => {
       data: {
         schemaVersion: "AGENT_STREAM_SEMANTIC_V1",
         kind: "TOOL_CALL",
-        durability: "BEST_EFFORT",
+        durability: "DURABLE",
         toolName: "search_nodes",
         toolCallId: "call-2",
         parameters: {
@@ -90,7 +90,7 @@ test("agent stream parser preserves semantic runtime payloads", () => {
   assert.deepEqual(parsed?.data, {
     schemaVersion: "AGENT_STREAM_SEMANTIC_V1",
     kind: "TOOL_CALL",
-    durability: "BEST_EFFORT",
+    durability: "DURABLE",
     toolName: "search_nodes",
     toolCallId: "call-2",
     parameters: {

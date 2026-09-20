@@ -106,7 +106,7 @@ def _emit_skill_usage(name: str, body: str, *, status: str) -> None:
         data={
             "schemaVersion": "AGENT_STREAM_SEMANTIC_V1",
             "kind": "SKILL_USAGE",
-            "durability": "BEST_EFFORT",
+            "durability": "DURABLE",
             "skillName": name,
             "skillVersionOrHash": hashlib.sha256(
                 body.encode("utf-8")

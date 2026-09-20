@@ -1,5 +1,9 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import {
+  ASSESSMENT_AGENT_STREAM_DURABILITY,
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES,
+  ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS,
+  ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS,
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   ASSESSMENT_RUNTIME_STAGE_CODES,
@@ -7,6 +11,7 @@ import {
   REMEDIATION_APPROVAL_STATUSES,
   REMEDIATION_DECISIONS,
 } from "@lcsp/contracts/evidence";
+import { firstValueFrom } from "rxjs";
 
 import { AssessmentRuntimeEventService } from "./assessment-runtime-event.service.js";
 
@@ -43,6 +48,11 @@ describe("AssessmentRuntimeEventService", () => {
           ),
         ),
       },
+      assessmentRuntimeEvent: {
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([]),
+      },
     };
     const service = new AssessmentRuntimeEventService(prisma as never);
     const ownerAEvents: string[] = [];
@@ -74,6 +84,88 @@ describe("AssessmentRuntimeEventService", () => {
     expect(prisma.assessment.findUnique).toHaveBeenCalledTimes(2);
     ownerASubscription.unsubscribe();
     ownerBSubscription.unsubscribe();
+  });
+
+  it("persists durable semantic agent stream events for replay after service recreation", async () => {
+    const persistedRows: unknown[] = [];
+    const prisma = {
+      $transaction: jest.fn(async (callback: (tx: unknown) => Promise<void>) =>
+        callback(prisma),
+      ),
+      assessment: {
+        findUnique: jest
+          .fn<(args: { where: { id: string } }) => Promise<{ ownerId: string }>>()
+          .mockResolvedValue({ ownerId: "user-a" }),
+      },
+      assessmentRuntimeEvent: {
+        findFirst: jest
+          .fn<(args?: unknown) => Promise<{ sequence: number } | null>>()
+          .mockResolvedValue(null),
+        create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
+          const row = {
+            id: "runtime-agent-1",
+            ...data,
+            createdAt: new Date("2026-09-20T00:00:00.000Z"),
+          };
+          persistedRows.push(row);
+          return row;
+        }),
+        findMany: jest.fn(({ where }: { where?: unknown }) => {
+          expect(where).toMatchObject({
+            assessment: { ownerId: "user-a" },
+            toolName: "agent_stream_semantic",
+          });
+          return Promise.resolve(persistedRows);
+        }),
+      },
+    };
+    const firstService = new AssessmentRuntimeEventService(prisma as never);
+
+    await firstService.publishAgentStreamEvent({
+      eventId: "semantic-event-1",
+      assessmentId: "assessment-a",
+      runId: "run-a",
+      correlationId: "corr-a",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
+      agentName: "investigator",
+      toolName: "search_nodes",
+      toolCallId: "call-1",
+      status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+      data: {
+        schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+        kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall,
+        durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+        toolName: "search_nodes",
+        toolCallId: "call-1",
+        parameters: { nodeType: "AI_MODEL_INVOCATION" },
+      },
+    });
+
+    expect(prisma.assessmentRuntimeEvent.create).toHaveBeenCalledTimes(1);
+    expect(persistedRows).toHaveLength(1);
+    const replayService = new AssessmentRuntimeEventService(prisma as never);
+    const directReplay = await (
+      replayService as unknown as {
+        getDurableAgentStreamEvents: (
+          ownerId: string,
+        ) => Promise<unknown[]>;
+      }
+    ).getDurableAgentStreamEvents("user-a");
+    expect(directReplay).toHaveLength(1);
+    const replayed = await firstValueFrom(
+      replayService.observeAgentStreamEvents("user-a"),
+    );
+
+    expect(replayed).toMatchObject({
+      eventId: "semantic-event-1",
+      assessmentId: "assessment-a",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
+      data: {
+        kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall,
+        durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+        parameters: { nodeType: "AI_MODEL_INVOCATION" },
+      },
+    });
   });
 
   it("builds orchestration activity from scan jobs and evidence reports when runtime events are absent", async () => {

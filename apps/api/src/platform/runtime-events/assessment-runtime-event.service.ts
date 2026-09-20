@@ -30,7 +30,16 @@ import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import type { Prisma } from "@prisma/client";
 import { Injectable, Logger } from "@nestjs/common";
-import { Observable, ReplaySubject, filter, map } from "rxjs";
+import {
+  Observable,
+  ReplaySubject,
+  concat,
+  defer,
+  filter,
+  from,
+  map,
+  mergeMap,
+} from "rxjs";
 
 import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
 import {
@@ -54,6 +63,10 @@ const RUNTIME_EVENT_SEQUENCE_RETRY_DELAY_MS = 5;
 const ENGINEERING_PROGRESS_DURABLE_MAX_RUNS = 10;
 const ENGINEERING_PROGRESS_SUMMARY_SCAN_LIMIT = 40;
 const ENGINEERING_PROGRESS_INVESTIGATION_SCAN_LIMIT = 1_000;
+const AGENT_STREAM_DURABLE_TOOL_NAME = "agent_stream_semantic";
+const AGENT_STREAM_DURABLE_REPLAY_LIMIT = 5_000;
+const AGENT_STREAM_SEMANTIC_SCHEMA_VERSION = "AGENT_STREAM_SEMANTIC_V1";
+const AGENT_STREAM_DURABILITY_DURABLE = "DURABLE";
 
 export type PublishAgentStreamEventInput = {
   eventId?: string | null;
@@ -92,6 +105,8 @@ type RecordRuntimeEventInput = {
   durationMs?: number | null;
   attempt?: number | null;
   waitingReason?: string | null;
+  summaryMaxDepth?: number;
+  summaryMaxItems?: number;
 };
 
 type EnsureRunInput = {
@@ -462,6 +477,9 @@ export class AssessmentRuntimeEventService {
       text: sanitizeAgentStreamText(input.text),
       data: sanitizeAgentStreamValue(input.data),
     };
+    if (isDurableSemanticAgentStreamEvent(event)) {
+      await this.persistDurableAgentStreamEvent(event);
+    }
     this.agentStreamEvents.next({ ownerId, event });
     return event;
   }
@@ -470,9 +488,16 @@ export class AssessmentRuntimeEventService {
   observeAgentStreamEvents(
     ownerId: string,
   ): Observable<AssessmentAgentStreamEvent> {
-    return this.agentStreamEvents.pipe(
-      filter((entry) => entry.ownerId === ownerId),
-      map((entry) => entry.event),
+    return concat(
+      defer(() =>
+        from(this.getDurableAgentStreamEvents(ownerId)).pipe(
+          mergeMap((events) => from(events)),
+        ),
+      ),
+      this.agentStreamEvents.pipe(
+        filter((entry) => entry.ownerId === ownerId),
+        map((entry) => entry.event),
+      ),
     );
   }
 
@@ -488,6 +513,47 @@ export class AssessmentRuntimeEventService {
     if (!assessment) return null;
     this.assessmentOwnerIds.set(assessmentId, assessment.ownerId);
     return assessment.ownerId;
+  }
+
+  private async persistDurableAgentStreamEvent(
+    event: AssessmentAgentStreamEvent,
+  ): Promise<void> {
+    await this.recordEvent({
+      assessmentId: event.assessmentId,
+      runId: event.runId,
+      correlationId: event.correlationId,
+      eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+      runStatus:
+        event.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed
+          ? ASSESSMENT_RUNTIME_RUN_STATUSES.failed
+          : ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+      stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+      toolName: AGENT_STREAM_DURABLE_TOOL_NAME,
+      summary: durableAgentStreamSummary(event),
+      outputSummary: {
+        agentStreamEvent: event,
+        semanticPayloads: event.data === null ? [] : [event.data],
+      },
+      summaryMaxDepth: 8,
+      summaryMaxItems: 100,
+    });
+  }
+
+  private async getDurableAgentStreamEvents(
+    ownerId: string,
+  ): Promise<AssessmentAgentStreamEvent[]> {
+    const rows = await this.safeFindMany({
+      where: {
+        assessment: { ownerId },
+        toolName: AGENT_STREAM_DURABLE_TOOL_NAME,
+      },
+      orderBy: [{ createdAt: "asc" }, { sequence: "asc" }],
+      take: AGENT_STREAM_DURABLE_REPLAY_LIMIT,
+    });
+    return rows.flatMap((row) => {
+      const event = durableAgentStreamEventFromRow(row);
+      return event === null ? [] : [event];
+    });
   }
 
   /**
@@ -705,8 +771,18 @@ export class AssessmentRuntimeEventService {
     const startedAt = input.startedAt ?? null;
     const completedAt = input.completedAt ?? null;
     const summary = sanitizeRuntimeSummaryText(input.summary);
-    const inputSummary = sanitizeRuntimeSummaryValue(input.inputSummary);
-    const outputSummary = sanitizeRuntimeSummaryValue(input.outputSummary);
+    const summaryOptions = {
+      maxDepth: input.summaryMaxDepth,
+      maxItems: input.summaryMaxItems,
+    };
+    const inputSummary = sanitizeRuntimeSummaryValue(
+      input.inputSummary,
+      summaryOptions,
+    );
+    const outputSummary = sanitizeRuntimeSummaryValue(
+      input.outputSummary,
+      summaryOptions,
+    );
     const errorSummary =
       input.errorSummary === null || input.errorSummary === undefined
         ? null
@@ -1722,6 +1798,88 @@ function stringValue(value: unknown): string | null {
 
 function booleanValue(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
+}
+
+function isDurableSemanticAgentStreamEvent(
+  event: AssessmentAgentStreamEvent,
+): boolean {
+  const data = objectRecord(event.data);
+  return (
+    data?.schemaVersion === AGENT_STREAM_SEMANTIC_SCHEMA_VERSION &&
+    data.durability === AGENT_STREAM_DURABILITY_DURABLE &&
+    typeof data.kind === "string"
+  );
+}
+
+function durableAgentStreamSummary(event: AssessmentAgentStreamEvent): string {
+  const data = objectRecord(event.data);
+  const name =
+    event.toolName ??
+    stringValue(data?.toolName) ??
+    stringValue(data?.skillName) ??
+    stringValue(data?.model) ??
+    event.nodeName ??
+    event.agentName ??
+    "runtime";
+  return `Agent stream ${event.eventType} ${name}`;
+}
+
+function durableAgentStreamEventFromRow(
+  row: PersistedAssessmentRuntimeEvent,
+): AssessmentAgentStreamEvent | null {
+  const output = objectRecord(row.outputSummaryJson);
+  const event = objectRecord(output?.agentStreamEvent);
+  if (event === null) return null;
+  const data = isRuntimeSummaryValue(event.data) ? event.data : null;
+  const candidate: AssessmentAgentStreamEvent = {
+    eventId: stringValue(event.eventId) ?? row.id,
+    sequence: numberValue(event.sequence) ?? row.sequence,
+    clientSequence: numberValue(event.clientSequence),
+    emittedAt: stringValue(event.emittedAt) ?? row.createdAt.toISOString(),
+    assessmentId: stringValue(event.assessmentId) ?? row.assessmentId,
+    runId: stringValue(event.runId) ?? row.runId,
+    correlationId: stringValue(event.correlationId) ?? row.correlationId,
+    eventType: event.eventType as AssessmentAgentStreamEventType,
+    source: stringValue(event.source),
+    agentName: stringValue(event.agentName),
+    subagentName: stringValue(event.subagentName),
+    namespace: Array.isArray(event.namespace)
+      ? event.namespace.flatMap((item) => {
+          const value = stringValue(item);
+          return value === null ? [] : [value];
+        })
+      : [],
+    nodeName: stringValue(event.nodeName),
+    messageId: stringValue(event.messageId),
+    toolName: stringValue(event.toolName),
+    toolCallId: stringValue(event.toolCallId),
+    status: stringValue(event.status),
+    text: stringValue(event.text),
+    data,
+  };
+  return isDurableSemanticAgentStreamEvent(candidate) ? candidate : null;
+}
+
+function isRuntimeSummaryValue(
+  value: unknown,
+): value is AssessmentRuntimeSummaryValue {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return value.every(isRuntimeSummaryValue);
+  }
+  if (typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).every(
+      isRuntimeSummaryValue,
+    );
+  }
+  return false;
 }
 
 async function delayRuntimeEventSequenceRetry(index: number): Promise<void> {

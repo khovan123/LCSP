@@ -30,6 +30,7 @@ STREAM_MODES = ("messages", "updates", "custom", "values")
 GRAPH_STREAM_MODES = ("updates", "custom", "values")
 SEMANTIC_SCHEMA_VERSION = "AGENT_STREAM_SEMANTIC_V1"
 BEST_EFFORT = "BEST_EFFORT"
+DURABLE = "DURABLE"
 PRIVATE_GRAPH_KEYS = frozenset(
     {
         "messages",
@@ -77,6 +78,16 @@ class BufferedAgentStreamEmitter:
         try:
             self._queue.put_nowait(payload)
         except Full:
+            if _is_durable_stream_payload(payload):
+                try:
+                    self._queue.put(payload, timeout=self._close_timeout_seconds)
+                    return
+                except Full:
+                    try:
+                        self._deliver(payload)
+                    except Exception:
+                        return
+                    return
             # Live telemetry must never backpressure model/tool execution. If the
             # local API cannot keep up, drop the excess event instead of blocking
             # the governed assessment workflow.
@@ -123,6 +134,12 @@ class AgentStreamSession:
     boundary_name: str
     emit_payload: Callable[[dict[str, Any]], None]
     sequence: int = field(default=0, init=False)
+    emitted_model_requests: set[str] = field(default_factory=set, init=False)
+    pending_tool_calls: dict[str, "PendingToolCall"] = field(
+        default_factory=dict,
+        init=False,
+    )
+    emitted_tool_calls: set[str] = field(default_factory=set, init=False)
 
     def emit(self, event_type: str, **fields: Any) -> None:
         self.sequence += 1
@@ -138,6 +155,19 @@ class AgentStreamSession:
             **fields,
         }
         self.emit_payload(_sanitize_payload(payload))
+
+
+@dataclass
+class PendingToolCall:
+    key: str
+    agent_name: str
+    namespace: tuple[str, ...]
+    message_id: str
+    tool_name: str = ""
+    tool_call_id: str = ""
+    args: str = ""
+    request_id: str = ""
+    model_context: dict[str, Any] = field(default_factory=dict)
 
 
 active_agent_stream: ContextVar[AgentStreamSession | None] = ContextVar(
@@ -374,6 +404,7 @@ def _emit_message_event(
     metadata = data[1] if len(data) > 1 and isinstance(data[1], dict) else {}
     message_id = _text(getattr(message, "id", None))
     safe_metadata = _message_metadata(metadata)
+    session = active_agent_stream.get()
 
     if isinstance(message, ToolMessage):
         tool_name = _text(getattr(message, "name", None))
@@ -400,7 +431,7 @@ def _emit_message_event(
             text="tool result completed",
             data=_semantic_payload(
                 "TOOL_RESULT",
-                durability=BEST_EFFORT,
+                durability=DURABLE,
                 toolName=tool_name,
                 toolCallId=tool_call_id,
                 resultSummary={"text": result_text} if result_text else {},
@@ -415,7 +446,17 @@ def _emit_message_event(
         return
 
     model_context = _model_context_from_metadata(safe_metadata)
-    if model_context:
+    model_request_key = _model_request_key(
+        message_id=message_id,
+        namespace=namespace,
+        agent_name=agent_name,
+        model_context=model_context,
+    )
+    if model_context and (
+        session is None or model_request_key not in session.emitted_model_requests
+    ):
+        if session is not None:
+            session.emitted_model_requests.add(model_request_key)
         publish_agent_stream_event(
             "MODEL_REQUEST",
             agent_name=agent_name,
@@ -425,12 +466,21 @@ def _emit_message_event(
             text="model request summary",
             data=_semantic_payload(
                 "MODEL_REQUEST",
-                durability=BEST_EFFORT,
+                durability=DURABLE,
                 agentName=agent_name,
                 agentRole=agent_name,
                 requestId=message_id,
                 messageId=message_id,
-                availableToolNames=_bound_tool_names(getattr(message, "tool_call_chunks", None)),
+                availableToolNames=_available_tool_names(
+                    safe_metadata,
+                    getattr(message, "tool_call_chunks", None),
+                ),
+                inputArtifactRefs=_input_artifact_refs(
+                    safe_metadata,
+                    message_id=message_id,
+                    model_context=model_context,
+                ),
+                promptVersion=_text(safe_metadata.get("prompt_version")),
                 **model_context,
             ),
             status="RUNNING",
@@ -456,26 +506,15 @@ def _emit_message_event(
             },
             status="RUNNING",
         )
-        publish_agent_stream_event(
-            "SEMANTIC_TOOL_CALL",
+        _record_tool_call_chunk(
             agent_name=agent_name,
-            namespace=list(namespace),
+            namespace=namespace,
             message_id=message_id,
             tool_name=tool_name,
             tool_call_id=tool_call_id,
-            text="tool call started",
-            data=_semantic_payload(
-                "TOOL_CALL",
-                durability=BEST_EFFORT,
-                toolName=tool_name,
-                toolCallId=tool_call_id,
-                parameters=_safe_tool_parameters(tool_call.get("args", "")),
-                status="RUNNING",
-                requestId=message_id,
-                messageId=message_id,
-                **model_context,
-            ),
-            status="RUNNING",
+            index=tool_call.get("index"),
+            args=tool_call.get("args", ""),
+            model_context=model_context,
         )
 
     for kind, text in _content_deltas(message):
@@ -509,6 +548,11 @@ def _emit_message_event(
 
     finish_reason = _text(safe_metadata.get("finish_reason"))
     if finish_reason:
+        _flush_pending_tool_calls_for_message(
+            message_id=message_id,
+            namespace=namespace,
+            agent_name=agent_name,
+        )
         publish_agent_stream_event(
             "MODEL_RESULT",
             agent_name=agent_name,
@@ -518,10 +562,13 @@ def _emit_message_event(
             text="model result summary",
             data=_semantic_payload(
                 "MODEL_OUTPUT",
-                durability=BEST_EFFORT,
+                durability=DURABLE,
                 requestId=message_id,
                 messageId=message_id,
                 finishReason=finish_reason,
+                usage=_usage_metadata(message, safe_metadata),
+                outputRefs=_output_refs(safe_metadata, message_id=message_id),
+                resultSummary=_model_result_summary(message),
                 status="COMPLETED",
                 **model_context,
             ),
@@ -617,10 +664,167 @@ def _message_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         "ls_provider",
         "ls_model_name",
         "finish_reason",
+        "lcsp_available_tool_names",
+        "available_tool_names",
+        "tool_names",
+        "lcsp_input_artifact_refs",
+        "input_artifact_refs",
+        "lcsp_output_refs",
+        "output_refs",
+        "usage",
+        "usage_metadata",
+        "token_usage",
+        "prompt_version",
+        "promptVersion",
     }
     return _sanitize_payload(
         {str(key): value for key, value in metadata.items() if str(key) in allowed}
     )
+
+
+def _record_tool_call_chunk(
+    *,
+    agent_name: str,
+    namespace: tuple[str, ...],
+    message_id: str,
+    tool_name: str,
+    tool_call_id: str,
+    index: Any,
+    args: Any,
+    model_context: dict[str, Any],
+) -> None:
+    session = active_agent_stream.get()
+    if session is None:
+        parsed, _complete = _structured_tool_parameters(args)
+        publish_agent_stream_event(
+            "SEMANTIC_TOOL_CALL",
+            agent_name=agent_name,
+            namespace=list(namespace),
+            message_id=message_id,
+            tool_name=tool_name,
+            tool_call_id=tool_call_id,
+            text="tool call started",
+            data=_semantic_payload(
+                "TOOL_CALL",
+                durability=DURABLE,
+                toolName=tool_name,
+                toolCallId=tool_call_id,
+                parameters=parsed,
+                status="RUNNING",
+                requestId=message_id,
+                messageId=message_id,
+                **model_context,
+            ),
+            status="RUNNING",
+        )
+        return
+
+    key = _tool_call_key(
+        message_id=message_id,
+        namespace=namespace,
+        agent_name=agent_name,
+        tool_call_id=tool_call_id,
+        index=index,
+    )
+    pending = session.pending_tool_calls.get(key)
+    if pending is None:
+        pending = PendingToolCall(
+            key=key,
+            agent_name=agent_name,
+            namespace=namespace,
+            message_id=message_id,
+            tool_name=tool_name,
+            tool_call_id=tool_call_id,
+            request_id=message_id,
+            model_context=model_context,
+        )
+        session.pending_tool_calls[key] = pending
+    if tool_name:
+        pending.tool_name = tool_name
+    if tool_call_id:
+        pending.tool_call_id = tool_call_id
+    if model_context:
+        pending.model_context = model_context
+    if isinstance(args, str):
+        pending.args += args
+    elif args is not None:
+        pending.args += str(args)
+
+    parameters, complete = _structured_tool_parameters(pending.args)
+    if complete:
+        _emit_completed_tool_call(pending, parameters)
+
+
+def _flush_pending_tool_calls_for_message(
+    *,
+    message_id: str,
+    namespace: tuple[str, ...],
+    agent_name: str,
+) -> None:
+    session = active_agent_stream.get()
+    if session is None:
+        return
+    message_key = _model_request_key(
+        message_id=message_id,
+        namespace=namespace,
+        agent_name=agent_name,
+        model_context={},
+    )
+    for key, pending in list(session.pending_tool_calls.items()):
+        pending_message_key = _model_request_key(
+            message_id=pending.message_id,
+            namespace=pending.namespace,
+            agent_name=pending.agent_name,
+            model_context={},
+        )
+        if pending_message_key != message_key:
+            continue
+        parameters, _complete = _structured_tool_parameters(pending.args)
+        _emit_completed_tool_call(pending, parameters)
+
+
+def _emit_completed_tool_call(
+    pending: PendingToolCall,
+    parameters: Any,
+) -> None:
+    session = active_agent_stream.get()
+    if session is not None:
+        if pending.key in session.emitted_tool_calls:
+            return
+        session.emitted_tool_calls.add(pending.key)
+        session.pending_tool_calls.pop(pending.key, None)
+    publish_agent_stream_event(
+        "SEMANTIC_TOOL_CALL",
+        agent_name=pending.agent_name,
+        namespace=list(pending.namespace),
+        message_id=pending.message_id,
+        tool_name=pending.tool_name,
+        tool_call_id=pending.tool_call_id,
+        text="tool call started",
+        data=_semantic_payload(
+            "TOOL_CALL",
+            durability=DURABLE,
+            toolName=pending.tool_name,
+            toolCallId=pending.tool_call_id,
+            parameters=parameters,
+            status="RUNNING",
+            requestId=pending.request_id,
+            messageId=pending.message_id,
+            **pending.model_context,
+        ),
+        status="RUNNING",
+    )
+
+
+def _structured_tool_parameters(value: Any) -> tuple[Any, bool]:
+    if not isinstance(value, str):
+        return _safe_value(value), True
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        return {"arguments": _safe_tool_arguments(value)}, False
+    return _safe_value(parsed), True
+
 
 def _semantic_payload(kind: str, *, durability: str, **fields: Any) -> dict[str, Any]:
     payload = {
@@ -650,6 +854,52 @@ def _model_context_from_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     return context
 
 
+def _model_request_key(
+    *,
+    message_id: str,
+    namespace: tuple[str, ...],
+    agent_name: str,
+    model_context: dict[str, Any],
+) -> str:
+    return ":".join(
+        [
+            agent_name,
+            "/".join(namespace),
+            message_id,
+            _text(model_context.get("nodeName")),
+            _text(model_context.get("model")),
+        ]
+    )
+
+
+def _tool_call_key(
+    *,
+    message_id: str,
+    namespace: tuple[str, ...],
+    agent_name: str,
+    tool_call_id: str,
+    index: Any,
+) -> str:
+    index_text = (
+        str(index)
+        if isinstance(index, int) and not isinstance(index, bool)
+        else _text(index)
+    )
+    identity = index_text or tool_call_id or "0"
+    return ":".join([agent_name, "/".join(namespace), message_id, identity])
+
+
+def _available_tool_names(
+    metadata: dict[str, Any],
+    tool_call_chunks: Any,
+) -> list[str]:
+    for key in ("lcsp_available_tool_names", "available_tool_names", "tool_names"):
+        names = _string_list(metadata.get(key))
+        if names:
+            return names
+    return _bound_tool_names(tool_call_chunks)
+
+
 def _bound_tool_names(tool_call_chunks: Any) -> list[str]:
     if not isinstance(tool_call_chunks, list):
         return []
@@ -662,15 +912,78 @@ def _bound_tool_names(tool_call_chunks: Any) -> list[str]:
     return names
 
 
-def _safe_tool_parameters(value: Any) -> Any:
-    if isinstance(value, str):
-        try:
-            parsed = json.loads(value)
-        except Exception:
-            return {"arguments": _safe_tool_arguments(value)}
-        return _safe_value(parsed)
-    return _safe_value(value)
+def _input_artifact_refs(
+    metadata: dict[str, Any],
+    *,
+    message_id: str,
+    model_context: dict[str, Any],
+) -> list[str]:
+    for key in ("lcsp_input_artifact_refs", "input_artifact_refs"):
+        refs = _string_list(metadata.get(key))
+        if refs:
+            return refs
+    node_name = _text(model_context.get("nodeName"))
+    if node_name:
+        return [f"langgraph-node:{node_name}"]
+    if message_id:
+        return [f"message:{message_id}:input"]
+    return []
 
+
+def _output_refs(metadata: dict[str, Any], *, message_id: str) -> list[str]:
+    for key in ("lcsp_output_refs", "output_refs"):
+        refs = _string_list(metadata.get(key))
+        if refs:
+            return refs
+    return [f"message:{message_id}:output"] if message_id else []
+
+
+def _usage_metadata(message: Any, metadata: dict[str, Any]) -> Any:
+    candidates = [
+        getattr(message, "usage_metadata", None),
+        metadata.get("usage_metadata"),
+        metadata.get("usage"),
+        metadata.get("token_usage"),
+    ]
+    response_metadata = getattr(message, "response_metadata", None)
+    if isinstance(response_metadata, dict):
+        candidates.extend(
+            [
+                response_metadata.get("usage_metadata"),
+                response_metadata.get("usage"),
+                response_metadata.get("token_usage"),
+            ]
+        )
+    for candidate in candidates:
+        if candidate:
+            return _safe_value(candidate)
+    return {}
+
+
+def _model_result_summary(message: AIMessageChunk) -> Any:
+    content = getattr(message, "content", None)
+    if isinstance(content, str):
+        text = _safe_text(content)
+        return {"text": text} if text else {}
+    if isinstance(content, list):
+        text_parts: list[str] = []
+        for kind, text in _content_deltas(message):
+            if kind == "MODEL_CONTENT_DELTA" and text:
+                text_parts.append(text)
+        if text_parts:
+            return {"text": _safe_text("".join(text_parts))}
+    return {}
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    output: list[str] = []
+    for item in value[:MAX_STREAM_COLLECTION_ITEMS]:
+        item_text = _text(item)
+        if item_text and item_text not in output:
+            output.append(item_text)
+    return output
 
 
 def _safe_graph_update(value: Any, *, depth: int = MAX_STREAM_DEPTH) -> Any:
@@ -731,6 +1044,11 @@ def _safe_value(value: Any, *, depth: int = MAX_STREAM_DEPTH) -> Any:
 
 def _sanitize_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return redact_dict(_safe_value(payload))
+
+
+def _is_durable_stream_payload(payload: dict[str, Any]) -> bool:
+    data = payload.get("data")
+    return isinstance(data, dict) and data.get("durability") == DURABLE
 
 
 def _safe_tool_arguments(value: Any) -> str:

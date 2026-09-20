@@ -9,6 +9,14 @@ const REDACTED_VALUE = "[REDACTED]";
 
 const SENSITIVE_KEY_PATTERN =
   /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|authorization|credential|client[_-]?secret|password|passwd|private[_-]?key|secret)/i;
+const SAFE_AGENT_STREAM_KEY_NAMES = new Set([
+  "inputtokens",
+  "outputtokens",
+  "totaltokens",
+  "tokencount",
+  "usage",
+  "usagemetadata",
+]);
 const PRIVATE_RUNTIME_KEY_NAMES = new Set([
   "messages",
   "prompt",
@@ -116,7 +124,10 @@ export function sanitizeAgentStreamValue(
       output[key] = PRIVATE_RUNTIME_VALUE;
       continue;
     }
-    if (SENSITIVE_KEY_PATTERN.test(key)) {
+    if (
+      !SAFE_AGENT_STREAM_KEY_NAMES.has(normalizeKey(key)) &&
+      SENSITIVE_KEY_PATTERN.test(key)
+    ) {
       output[key] = REDACTED_VALUE;
       continue;
     }
