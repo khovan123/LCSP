@@ -157,6 +157,59 @@ class FragmentedToolCallAgent:
         yield {"type": "values", "ns": (), "data": {"result": "done"}}
 
 
+class StreamingFinalEmptyAgent:
+    name = "planner"
+
+    def stream(self, input_value, **kwargs):
+        yield {
+            "type": "messages",
+            "ns": (),
+            "data": (
+                AIMessageChunk(id="msg-streaming", content="Hello "),
+                {
+                    "langgraph_node": "model",
+                    "ls_provider": "openai",
+                    "ls_model_name": "gpt-test",
+                },
+            ),
+        }
+        yield {
+            "type": "messages",
+            "ns": (),
+            "data": (
+                AIMessageChunk(
+                    id="msg-streaming",
+                    content=[
+                        {
+                            "type": "reasoning",
+                            "summary": "provider summary",
+                            "text": "hidden raw reasoning",
+                        }
+                    ],
+                ),
+                {
+                    "langgraph_node": "model",
+                    "ls_provider": "openai",
+                    "ls_model_name": "gpt-test",
+                },
+            ),
+        }
+        yield {
+            "type": "messages",
+            "ns": (),
+            "data": (
+                AIMessageChunk(id="msg-streaming", content="",),
+                {
+                    "langgraph_node": "model",
+                    "ls_provider": "openai",
+                    "ls_model_name": "gpt-test",
+                    "finish_reason": "stop",
+                },
+            ),
+        }
+        yield {"type": "values", "ns": (), "data": {"result": "done"}}
+
+
 def stream_session(events):
     return AgentStreamSession(
         assessment_id="assessment-1",
@@ -256,6 +309,17 @@ def test_invoke_with_stream_reconstructs_fragmented_semantic_tool_call_once():
     assert model_result["data"]["usage"] == {"input_tokens": 11, "output_tokens": 13}
     assert model_result["data"]["outputRefs"] == ["artifact:output"]
     assert model_result["data"]["resultSummary"] == {"text": "done"}
+
+
+def test_model_result_summary_accumulates_prior_content_chunks_without_reasoning():
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        invoke_with_stream(StreamingFinalEmptyAgent(), {"messages": []})
+
+    model_result = next(event for event in events if event["event_type"] == "MODEL_RESULT")
+
+    assert model_result["data"]["resultSummary"] == {"text": "Hello "}
+    assert "hidden raw reasoning" not in str(events)
 
 
 def test_invoke_with_stream_falls_back_to_invoke_without_active_session():

@@ -135,6 +135,10 @@ class AgentStreamSession:
     emit_payload: Callable[[dict[str, Any]], None]
     sequence: int = field(default=0, init=False)
     emitted_model_requests: set[str] = field(default_factory=set, init=False)
+    model_output_chunks: dict[str, list[str]] = field(
+        default_factory=dict,
+        init=False,
+    )
     pending_tool_calls: dict[str, "PendingToolCall"] = field(
         default_factory=dict,
         init=False,
@@ -518,6 +522,13 @@ def _emit_message_event(
         )
 
     for kind, text in _content_deltas(message):
+        if kind == "MODEL_CONTENT_DELTA":
+            _record_model_output_delta(
+                message_id=message_id,
+                namespace=namespace,
+                agent_name=agent_name,
+                text=text,
+            )
         publish_agent_stream_event(
             kind,
             agent_name=agent_name,
@@ -568,7 +579,12 @@ def _emit_message_event(
                 finishReason=finish_reason,
                 usage=_usage_metadata(message, safe_metadata),
                 outputRefs=_output_refs(safe_metadata, message_id=message_id),
-                resultSummary=_model_result_summary(message),
+                resultSummary=_model_result_summary(
+                    message,
+                    message_id=message_id,
+                    namespace=namespace,
+                    agent_name=agent_name,
+                ),
                 status="COMPLETED",
                 **model_context,
             ),
@@ -872,6 +888,15 @@ def _model_request_key(
     )
 
 
+def _model_message_key(
+    *,
+    message_id: str,
+    namespace: tuple[str, ...],
+    agent_name: str,
+) -> str:
+    return ":".join([agent_name, "/".join(namespace), message_id])
+
+
 def _tool_call_key(
     *,
     message_id: str,
@@ -887,6 +912,31 @@ def _tool_call_key(
     )
     identity = index_text or tool_call_id or "0"
     return ":".join([agent_name, "/".join(namespace), message_id, identity])
+
+
+def _record_model_output_delta(
+    *,
+    message_id: str,
+    namespace: tuple[str, ...],
+    agent_name: str,
+    text: str,
+) -> None:
+    if not text:
+        return
+    session = active_agent_stream.get()
+    if session is None:
+        return
+    key = _model_message_key(
+        message_id=message_id,
+        namespace=namespace,
+        agent_name=agent_name,
+    )
+    chunks = session.model_output_chunks.setdefault(key, [])
+    current_length = sum(len(chunk) for chunk in chunks)
+    remaining = MAX_STREAM_TEXT_CHARS - current_length
+    if remaining <= 0:
+        return
+    chunks.append(text[:remaining])
 
 
 def _available_tool_names(
@@ -960,7 +1010,23 @@ def _usage_metadata(message: Any, metadata: dict[str, Any]) -> Any:
     return {}
 
 
-def _model_result_summary(message: AIMessageChunk) -> Any:
+def _model_result_summary(
+    message: AIMessageChunk,
+    *,
+    message_id: str,
+    namespace: tuple[str, ...],
+    agent_name: str,
+) -> Any:
+    session = active_agent_stream.get()
+    if session is not None:
+        key = _model_message_key(
+            message_id=message_id,
+            namespace=namespace,
+            agent_name=agent_name,
+        )
+        chunks = session.model_output_chunks.pop(key, [])
+        if chunks:
+            return {"text": _safe_text("".join(chunks))}
     content = getattr(message, "content", None)
     if isinstance(content, str):
         text = _safe_text(content)

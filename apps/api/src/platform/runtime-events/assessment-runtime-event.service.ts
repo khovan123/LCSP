@@ -33,11 +33,11 @@ import { Injectable, Logger } from "@nestjs/common";
 import {
   Observable,
   ReplaySubject,
-  concat,
   defer,
   filter,
   from,
   map,
+  merge,
   mergeMap,
 } from "rxjs";
 
@@ -452,7 +452,7 @@ export class AssessmentRuntimeEventService {
     }
     const event: AssessmentAgentStreamEvent = {
       eventId: sanitizeAgentStreamIdentifier(input.eventId) ?? randomUUID(),
-      sequence: ++this.agentStreamSequence,
+      sequence: this.nextAgentStreamSequence(),
       clientSequence: input.clientSequence ?? null,
       emittedAt: new Date().toISOString(),
       assessmentId:
@@ -488,7 +488,7 @@ export class AssessmentRuntimeEventService {
   observeAgentStreamEvents(
     ownerId: string,
   ): Observable<AssessmentAgentStreamEvent> {
-    return concat(
+    return merge(
       defer(() =>
         from(this.getDurableAgentStreamEvents(ownerId)).pipe(
           mergeMap((events) => from(events)),
@@ -547,13 +547,22 @@ export class AssessmentRuntimeEventService {
         assessment: { ownerId },
         toolName: AGENT_STREAM_DURABLE_TOOL_NAME,
       },
-      orderBy: [{ createdAt: "asc" }, { sequence: "asc" }],
+      orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
       take: AGENT_STREAM_DURABLE_REPLAY_LIMIT,
     });
-    return rows.flatMap((row) => {
+    return [...rows].reverse().flatMap((row) => {
       const event = durableAgentStreamEventFromRow(row);
       return event === null ? [] : [event];
     });
+  }
+
+  private nextAgentStreamSequence(): number {
+    const timestampSequence = Date.now() * 1_000;
+    this.agentStreamSequence = Math.max(
+      this.agentStreamSequence + 1,
+      timestampSequence,
+    );
+    return this.agentStreamSequence;
   }
 
   /**

@@ -30,6 +30,60 @@ const assessmentOwner = () => ({
     .mockResolvedValue({ ownerId: "user-1" }),
 });
 
+function durableAgentStreamRow(sequence: number) {
+  const emittedAt = new Date(1_800_000_000_000 + sequence).toISOString();
+  return {
+    id: `runtime-${sequence}`,
+    assessmentId: "assessment-a",
+    runId: "run-a",
+    correlationId: "corr-a",
+    sequence,
+    eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+    runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+    stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+    toolName: "agent_stream_semantic",
+    summary: `Agent stream semantic-${sequence}`,
+    inputSummaryJson: null,
+    outputSummaryJson: {
+      agentStreamEvent: {
+        eventId: `semantic-${sequence}`,
+        sequence,
+        clientSequence: null,
+        emittedAt,
+        assessmentId: "assessment-a",
+        runId: "run-a",
+        correlationId: "corr-a",
+        eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
+        source: "engineering",
+        agentName: "investigator",
+        subagentName: null,
+        namespace: [],
+        nodeName: "model",
+        messageId: `message-${sequence}`,
+        toolName: "search_nodes",
+        toolCallId: `call-${sequence}`,
+        status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+        text: null,
+        data: {
+          schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+          kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall,
+          durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+          toolName: "search_nodes",
+          toolCallId: `call-${sequence}`,
+          parameters: { index: sequence },
+        },
+      },
+    },
+    errorSummary: null,
+    startedAt: null,
+    completedAt: null,
+    durationMs: null,
+    attempt: null,
+    waitingReason: null,
+    createdAt: new Date(emittedAt),
+  };
+}
+
 describe("AssessmentRuntimeEventService", () => {
   afterEach(() => {
     jest.useRealTimers();
@@ -89,7 +143,7 @@ describe("AssessmentRuntimeEventService", () => {
   it("persists durable semantic agent stream events for replay after service recreation", async () => {
     const persistedRows: unknown[] = [];
     const prisma = {
-      $transaction: jest.fn(async (callback: (tx: unknown) => Promise<void>) =>
+      $transaction: jest.fn((callback: (tx: unknown) => Promise<void>) =>
         callback(prisma),
       ),
       assessment: {
@@ -103,14 +157,14 @@ describe("AssessmentRuntimeEventService", () => {
         findFirst: jest
           .fn<(args?: unknown) => Promise<{ sequence: number } | null>>()
           .mockResolvedValue(null),
-        create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        create: jest.fn(({ data }: { data: Record<string, unknown> }) => {
           const row = {
             id: "runtime-agent-1",
             ...data,
             createdAt: new Date("2026-09-20T00:00:00.000Z"),
           };
           persistedRows.push(row);
-          return row;
+          return Promise.resolve(row);
         }),
         findMany: jest.fn(({ where }: { where?: unknown }) => {
           expect(where).toMatchObject({
@@ -166,6 +220,84 @@ describe("AssessmentRuntimeEventService", () => {
         parameters: { nodeType: "AI_MODEL_INVOCATION" },
       },
     });
+  });
+
+  it("replays the newest durable semantic history in chronological order", async () => {
+    const persistedRows = Array.from({ length: 6_001 }, (_, index) =>
+      durableAgentStreamRow(index + 1),
+    );
+    const prisma = {
+      assessmentRuntimeEvent: {
+        findMany: jest.fn(
+          ({ orderBy, take }: { orderBy?: unknown; take?: number }) => {
+            expect(orderBy).toEqual([
+              { createdAt: "desc" },
+              { sequence: "desc" },
+            ]);
+            expect(take).toBe(5_000);
+            return Promise.resolve(
+              [...persistedRows]
+                .sort((left, right) => right.sequence - left.sequence)
+                .slice(0, take),
+            );
+          },
+        ),
+      },
+    };
+    const service = new AssessmentRuntimeEventService(prisma as never);
+
+    const replay = await (
+      service as unknown as {
+        getDurableAgentStreamEvents: (
+          ownerId: string,
+        ) => Promise<Array<{ eventId: string; sequence: number }>>;
+      }
+    ).getDurableAgentStreamEvents("user-a");
+
+    expect(replay).toHaveLength(5_000);
+    expect(replay[0]).toMatchObject({
+      eventId: "semantic-1002",
+      sequence: 1002,
+    });
+    expect(replay.at(-1)).toMatchObject({
+      eventId: "semantic-6001",
+      sequence: 6001,
+    });
+  });
+
+  it("uses restart-stable live sequence values after persisted replay", async () => {
+    const prisma = {
+      assessment: {
+        findUnique: jest
+          .fn<
+            (args: { where: { id: string } }) => Promise<{ ownerId: string }>
+          >()
+          .mockResolvedValue({ ownerId: "user-a" }),
+      },
+      assessmentRuntimeEvent: {
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([durableAgentStreamRow(100)]),
+      },
+    };
+    const service = new AssessmentRuntimeEventService(prisma as never);
+    const replay = await (
+      service as unknown as {
+        getDurableAgentStreamEvents: (
+          ownerId: string,
+        ) => Promise<Array<{ sequence: number }>>;
+      }
+    ).getDurableAgentStreamEvents("user-a");
+
+    const live = await service.publishAgentStreamEvent({
+      assessmentId: "assessment-a",
+      runId: "run-a",
+      correlationId: "corr-a",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
+      text: "after restart",
+    });
+
+    expect(live?.sequence).toBeGreaterThan(replay[0]?.sequence ?? 0);
   });
 
   it("builds orchestration activity from scan jobs and evidence reports when runtime events are absent", async () => {
