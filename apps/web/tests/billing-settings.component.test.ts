@@ -73,6 +73,8 @@ type BillingFixture = {
   wallet: BillingWalletView;
   walletCalls: number;
   walletResponses: BillingWalletView[];
+  deferWalletResponses: boolean;
+  pendingWalletResolvers: Array<(response: BillingWalletView) => void>;
   historyCalls: number;
   orderCalls: Map<string, number>;
   missingOrderDetails: Set<string>;
@@ -135,6 +137,13 @@ function mockBillingApi(fixture: BillingFixture) {
     const path = String(input);
     if (path === "/api/billing/wallet") {
       fixture.walletCalls += 1;
+      if (fixture.deferWalletResponses) {
+        return new Promise<Response>((resolve) => {
+          fixture.pendingWalletResolvers.push((response) =>
+            resolve(success(response)),
+          );
+        });
+      }
       return success(
         fixture.walletResponses[fixture.walletCalls - 1] ?? fixture.wallet,
       );
@@ -298,6 +307,8 @@ function fixtureFor(
     wallet: wallet(balance),
     walletCalls: 0,
     walletResponses: [],
+    deferWalletResponses: false,
+    pendingWalletResolvers: [],
     historyCalls: 0,
     orderCalls: new Map(),
     missingOrderDetails: new Set(),
@@ -574,5 +585,48 @@ test("initial history showing a credited order refreshes an older wallet snapsho
     fixture.walletCalls,
     2,
     "initial history synchronization should refresh the wallet only once",
+  );
+});
+
+test("history completing before the initial wallet triggers a fresh wallet request after that snapshot", async (context) => {
+  const creditedOrder = order(
+    "history-first-credit",
+    BILLING_ORDER_STATUSES.CREDITED,
+    "2026-09-19T01:00:00.000Z",
+  );
+  const fixture = fixtureFor([creditedOrder], "10000");
+  fixture.deferWalletResponses = true;
+  const container = await renderBilling(fixture, context);
+
+  await waitFor(
+    () => fixture.walletCalls === 1 && fixture.historyCalls === 1,
+    "expected the initial wallet and history requests to start",
+  );
+
+  const resolveInitialWallet = fixture.pendingWalletResolvers[0];
+  assert.ok(resolveInitialWallet, "initial wallet request should be pending");
+  await act(async () => resolveInitialWallet(wallet("10000")));
+
+  await waitFor(
+    () => fixture.walletCalls === 2,
+    "history-first ordering should start a second wallet request after the initial response",
+  );
+  const resolveSynchronizedWallet = fixture.pendingWalletResolvers[1];
+  assert.ok(
+    resolveSynchronizedWallet,
+    "synchronization request should be pending",
+  );
+  await act(async () => resolveSynchronizedWallet(wallet("20000")));
+
+  await waitFor(
+    () =>
+      container.textContent?.includes("Credited") === true &&
+      container.textContent?.includes("20,000 VND") === true,
+    "the panel should show the authoritative credited balance",
+  );
+  assert.equal(
+    fixture.walletCalls,
+    2,
+    "only one synchronization fetch is needed",
   );
 });

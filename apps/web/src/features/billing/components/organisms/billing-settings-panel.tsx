@@ -108,11 +108,23 @@ export function BillingSettingsPanel({ locale }: { locale: Locale }) {
   const initialHistoryWalletSync = useRef(false);
 
   useEffect(() => {
-    if (!latestHistoryQuery.isSuccess || initialHistoryWalletSync.current)
+    if (
+      !latestHistoryQuery.isSuccess ||
+      latestHistoryQuery.isFetching ||
+      !walletQuery.isSuccess ||
+      walletQuery.isFetching ||
+      initialHistoryWalletSync.current
+    )
       return;
     initialHistoryWalletSync.current = true;
     void refetchWallet();
-  }, [latestHistoryQuery.isSuccess, refetchWallet]);
+  }, [
+    latestHistoryQuery.isFetching,
+    latestHistoryQuery.isSuccess,
+    refetchWallet,
+    walletQuery.isFetching,
+    walletQuery.isSuccess,
+  ]);
 
   useEffect(() => {
     const orders = [
