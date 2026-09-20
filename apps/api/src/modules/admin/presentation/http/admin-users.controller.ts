@@ -1,4 +1,8 @@
 import {
+  ADMIN_ACCOUNT_ERRORS as E,
+  AUTH_USER_ROLES,
+} from "@lcsp/contracts/auth";
+import {
   Body,
   Controller,
   Get,
@@ -12,21 +16,29 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
+import { problemException } from "../../../../platform/problems/problem-factory.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
-import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import {
-  ListAdminUsersQuery,
-  GetAdminUserDetailQuery,
-} from "../../application/queries/index.js";
-import {
-  SuspendUserCommand,
   RestoreUserCommand,
+  SuspendUserCommand,
 } from "../../application/commands/index.js";
-import { idempotency } from "../../application/support/admin-account.validation.js";
+import {
+  GetAdminUserDetailQuery,
+  ListAdminUsersQuery,
+} from "../../application/queries/index.js";
 import type { AdminActor } from "../../infrastructure/persistence/admin-account.transaction.js";
+
+function assertIdempotencyKey(key: unknown, correlationId: string): string {
+  if (typeof key !== "string" || !key.trim() || key.length > 200) {
+    throw problemException(E.idempotencyRequired, correlationId, {
+      status: HttpStatus.BAD_REQUEST,
+    });
+  }
+  return key.trim();
+}
 
 @Controller("admin/users")
 export class AdminUsersController {
@@ -101,7 +113,7 @@ export class AdminUsersController {
     return {
       ...request.rbacContext,
       correlationId: request.correlationId!,
-      idempotencyKey: idempotency(key, request.correlationId!),
+      idempotencyKey: assertIdempotencyKey(key, request.correlationId!),
     };
   }
 }

@@ -7,59 +7,59 @@ import {
   it,
   jest,
 } from "@jest/globals";
+import type {
+  AdminAccountOperation,
+  AdminUserDetail,
+  AdminUserListResponse,
+} from "@lcsp/contracts/auth";
+import {
+  ADMIN_ACCOUNT_OPERATIONS,
+  AUTH_ACCOUNT_STATUSES,
+  AUTH_AUDIT_EVENT_TYPES,
+  AUTH_USER_ROLES,
+  ADMIN_ACCOUNT_ERRORS as E,
+  USER_ACCESS_STATUSES,
+} from "@lcsp/contracts/auth";
+import { RBAC_DECISIONS } from "@lcsp/contracts/rbac";
 import {
   Controller,
   Get,
   UseGuards,
   type INestApplication,
 } from "@nestjs/common";
+import { CqrsModule } from "@nestjs/cqrs";
 import { Test } from "@nestjs/testing";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
-import {
-  ADMIN_ACCOUNT_ERRORS as E,
-  ADMIN_ACCOUNT_OPERATIONS,
-  AUTH_ACCOUNT_STATUSES,
-  AUTH_AUDIT_EVENT_TYPES,
-  AUTH_USER_ROLES,
-  USER_ACCESS_STATUSES,
-} from "@lcsp/contracts/auth";
 import { PrismaService } from "../src/infrastructure/prisma/prisma.service.js";
-import { AuditWriterService } from "../src/platform/audit/audit-writer.service.js";
-import { MailService } from "../src/platform/mail/mail.service.js";
-import { ProblemExceptionFilter } from "../src/platform/problems/problem-exception.filter.js";
-import { RequireSession } from "../src/platform/rbac/decorators/require-session.decorator.js";
-import { RbacGuard } from "../src/platform/rbac/rbac.guard.js";
-import { RbacContextLoader } from "../src/platform/rbac/rbac-context.loader.js";
-import { RbacPreflightService } from "../src/platform/rbac/rbac-preflight.service.js";
-import { RBAC_DECISIONS } from "@lcsp/contracts/rbac";
-import { CqrsModule } from "@nestjs/cqrs";
 import { ADMIN_COMMAND_HANDLERS } from "../src/modules/admin/application/commands/index.js";
 import { ADMIN_QUERY_HANDLERS } from "../src/modules/admin/application/queries/index.js";
+import { executeAdminAccountMutation } from "../src/modules/admin/application/commands/admin-mutation.helper.js";
 import { AdminUsersController } from "../src/modules/admin/presentation/http/admin-users.controller.js";
-import { mutateAdminAccount } from "../src/modules/admin/application/support/admin-account.mutator.js";
 import { AuthAuditService } from "../src/modules/auth/application/services/auth/auth-audit.service.js";
-import { PrismaAuthorizationDecisionRepository } from "../src/platform/rbac/prisma-authorization-decision.repository.js";
+import { Session } from "../src/modules/auth/domain/entities/session.entity.js";
+import {
+  AUTH_RECORD_TYPES,
+  authRecordLookupKey,
+} from "../src/modules/auth/infrastructure/persistence/auth-record.persistence.js";
 import {
   PrismaMfaEnrollmentRepository,
   PrismaSessionRepository,
   PrismaUserRepository,
 } from "../src/modules/auth/infrastructure/persistence/prisma-auth.repositories.js";
 import {
-  hashSecret,
   fingerprintToken,
+  hashSecret,
 } from "../src/modules/auth/infrastructure/security/security.utils.js";
-import {
-  AUTH_RECORD_TYPES,
-  authRecordLookupKey,
-} from "../src/modules/auth/infrastructure/persistence/auth-record.persistence.js";
-import { Session } from "../src/modules/auth/domain/entities/session.entity.js";
-import type {
-  AdminUserDetail,
-  AdminAccountOperation,
-  AdminUserListResponse,
-} from "@lcsp/contracts/auth";
+import { AuditWriterService } from "../src/platform/audit/audit-writer.service.js";
+import { MailService } from "../src/platform/mail/mail.service.js";
+import { ProblemExceptionFilter } from "../src/platform/problems/problem-exception.filter.js";
+import { RequireSession } from "../src/platform/rbac/decorators/require-session.decorator.js";
+import { PrismaAuthorizationDecisionRepository } from "../src/platform/rbac/prisma-authorization-decision.repository.js";
+import { RbacContextLoader } from "../src/platform/rbac/rbac-context.loader.js";
+import { RbacPreflightService } from "../src/platform/rbac/rbac-preflight.service.js";
+import { RbacGuard } from "../src/platform/rbac/rbac.guard.js";
 import { httpRequest, successBody } from "./support/http.js";
 const databaseUrl = process.env.LCSP299_TEST_DATABASE_URL;
 const integration = databaseUrl ? describe : describe.skip;
@@ -388,7 +388,7 @@ integration(
         data: { revokedAt: new Date() },
       });
       await expect(
-        mutateAdminAccount(
+        executeAdminAccountMutation(
           app.get(PrismaService),
           app.get(AuthAuditService),
           target.id,
@@ -531,7 +531,7 @@ integration(
       });
       const auditCount = await prisma.auditEvent.count();
       await expect(
-        mutateAdminAccount(
+        executeAdminAccountMutation(
           app.get(PrismaService),
           app.get(AuthAuditService),
           target.id,

@@ -126,4 +126,15 @@ describe("Admin CQRS Commands", () => {
     expect(result.id).toBe("user-1");
     expect(result.status).toBe(AUTH_ACCOUNT_STATUSES.active);
   });
+
+  it("fails when expectedVersion is missing or invalid", async () => {
+    const prisma = createMockPrisma("ACTIVE");
+    const handler = new SuspendUserHandler(prisma, audit);
+    const command = new SuspendUserCommand(
+      "user-1",
+      { expectedVersion: -1 },
+      mockActor,
+    );
+    await expect(handler.execute(command)).rejects.toThrow();
+  });
 });
