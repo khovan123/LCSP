@@ -8,6 +8,7 @@ and credential-redacted before they leave the worker process.
 from __future__ import annotations
 
 import logging
+import json
 from queue import Full, Queue
 from threading import Event, Thread
 from contextlib import contextmanager
@@ -27,6 +28,9 @@ MAX_STREAM_COLLECTION_ITEMS = 50
 MAX_STREAM_DEPTH = 6
 STREAM_MODES = ("messages", "updates", "custom", "values")
 GRAPH_STREAM_MODES = ("updates", "custom", "values")
+SEMANTIC_SCHEMA_VERSION = "AGENT_STREAM_SEMANTIC_V1"
+DURABLE = "DURABLE"
+BEST_EFFORT = "BEST_EFFORT"
 PRIVATE_GRAPH_KEYS = frozenset(
     {
         "messages",
@@ -373,15 +377,37 @@ def _emit_message_event(
     safe_metadata = _message_metadata(metadata)
 
     if isinstance(message, ToolMessage):
+        tool_name = _text(getattr(message, "name", None))
+        tool_call_id = _text(getattr(message, "tool_call_id", None))
+        result_text = _safe_text(getattr(message, "content", ""))
         publish_agent_stream_event(
             "TOOL_RESULT",
             agent_name=agent_name,
             namespace=list(namespace),
             message_id=message_id,
-            tool_name=_text(getattr(message, "name", None)),
-            tool_call_id=_text(getattr(message, "tool_call_id", None)),
-            text=_safe_text(getattr(message, "content", "")),
+            tool_name=tool_name,
+            tool_call_id=tool_call_id,
+            text=result_text,
             data=safe_metadata,
+            status="COMPLETED",
+        )
+        publish_agent_stream_event(
+            "SEMANTIC_TOOL_RESULT",
+            agent_name=agent_name,
+            namespace=list(namespace),
+            message_id=message_id,
+            tool_name=tool_name,
+            tool_call_id=tool_call_id,
+            text="tool result completed",
+            data=_semantic_payload(
+                "TOOL_RESULT",
+                durability=DURABLE,
+                toolName=tool_name,
+                toolCallId=tool_call_id,
+                resultSummary={"text": result_text} if result_text else {},
+                status="COMPLETED",
+                **_model_context_from_metadata(safe_metadata),
+            ),
             status="COMPLETED",
         )
         return
@@ -389,21 +415,67 @@ def _emit_message_event(
     if not isinstance(message, AIMessageChunk):
         return
 
+    model_context = _model_context_from_metadata(safe_metadata)
+    if model_context:
+        publish_agent_stream_event(
+            "MODEL_REQUEST",
+            agent_name=agent_name,
+            namespace=list(namespace),
+            node_name=model_context.get("nodeName"),
+            message_id=message_id,
+            text="model request summary",
+            data=_semantic_payload(
+                "MODEL_REQUEST",
+                durability=DURABLE,
+                agentName=agent_name,
+                agentRole=agent_name,
+                requestId=message_id,
+                messageId=message_id,
+                availableToolNames=_bound_tool_names(getattr(message, "tool_call_chunks", None)),
+                **model_context,
+            ),
+            status="RUNNING",
+        )
+
     for tool_call in message.tool_call_chunks or []:
         if not isinstance(tool_call, dict):
             continue
+        tool_name = _text(tool_call.get("name"))
+        tool_call_id = _text(tool_call.get("id"))
+        safe_arguments = _safe_tool_arguments(tool_call.get("args", ""))
         publish_agent_stream_event(
             "TOOL_CALL_DELTA",
             agent_name=agent_name,
             namespace=list(namespace),
             message_id=message_id,
-            tool_name=_text(tool_call.get("name")),
-            tool_call_id=_text(tool_call.get("id")),
-            text=_safe_tool_arguments(tool_call.get("args", "")),
+            tool_name=tool_name,
+            tool_call_id=tool_call_id,
+            text=safe_arguments,
             data={
                 **safe_metadata,
                 "index": tool_call.get("index"),
             },
+            status="RUNNING",
+        )
+        publish_agent_stream_event(
+            "SEMANTIC_TOOL_CALL",
+            agent_name=agent_name,
+            namespace=list(namespace),
+            message_id=message_id,
+            tool_name=tool_name,
+            tool_call_id=tool_call_id,
+            text="tool call started",
+            data=_semantic_payload(
+                "TOOL_CALL",
+                durability=DURABLE,
+                toolName=tool_name,
+                toolCallId=tool_call_id,
+                parameters=_safe_tool_parameters(tool_call.get("args", "")),
+                status="RUNNING",
+                requestId=message_id,
+                messageId=message_id,
+                **model_context,
+            ),
             status="RUNNING",
         )
 
@@ -416,6 +488,45 @@ def _emit_message_event(
             text=text,
             data=safe_metadata,
             status="RUNNING",
+        )
+        if kind == "MODEL_REASONING_DELTA":
+            publish_agent_stream_event(
+                "CUSTOM_PROGRESS",
+                agent_name=agent_name,
+                namespace=list(namespace),
+                message_id=message_id,
+                text="provider reasoning summary",
+                data=_semantic_payload(
+                    "REASONING_SUMMARY",
+                    durability=BEST_EFFORT,
+                    resultSummary={"summary": text},
+                    status="RUNNING",
+                    requestId=message_id,
+                    messageId=message_id,
+                    **model_context,
+                ),
+                status="RUNNING",
+            )
+
+    finish_reason = _text(safe_metadata.get("finish_reason"))
+    if finish_reason:
+        publish_agent_stream_event(
+            "MODEL_RESULT",
+            agent_name=agent_name,
+            namespace=list(namespace),
+            node_name=model_context.get("nodeName"),
+            message_id=message_id,
+            text="model result summary",
+            data=_semantic_payload(
+                "MODEL_OUTPUT",
+                durability=DURABLE,
+                requestId=message_id,
+                messageId=message_id,
+                finishReason=finish_reason,
+                status="COMPLETED",
+                **model_context,
+            ),
+            status="COMPLETED",
         )
 
 
@@ -511,6 +622,55 @@ def _message_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     return _sanitize_payload(
         {str(key): value for key, value in metadata.items() if str(key) in allowed}
     )
+
+def _semantic_payload(kind: str, *, durability: str, **fields: Any) -> dict[str, Any]:
+    payload = {
+        "schemaVersion": SEMANTIC_SCHEMA_VERSION,
+        "kind": kind,
+        "durability": durability,
+    }
+    for key, value in fields.items():
+        if value in (None, "", [], {}):
+            continue
+        payload[key] = value
+    return _sanitize_payload(payload)
+
+
+def _model_context_from_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    context: dict[str, Any] = {}
+    provider = _text(metadata.get("ls_provider"))
+    model = _text(metadata.get("ls_model_name"))
+    node_name = _text(metadata.get("langgraph_node"))
+    if provider:
+        context["provider"] = provider
+    if model:
+        context["model"] = model
+    if node_name:
+        context["nodeName"] = node_name
+        context["goalSummary"] = f"Execute node {node_name}"
+    return context
+
+
+def _bound_tool_names(tool_call_chunks: Any) -> list[str]:
+    if not isinstance(tool_call_chunks, list):
+        return []
+    names: list[str] = []
+    for item in tool_call_chunks[:MAX_STREAM_COLLECTION_ITEMS]:
+        if isinstance(item, dict):
+            name = _text(item.get("name"))
+            if name and name not in names:
+                names.append(name)
+    return names
+
+
+def _safe_tool_parameters(value: Any) -> Any:
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except Exception:
+            return {"arguments": _safe_tool_arguments(value)}
+        return _safe_value(parsed)
+    return _safe_value(value)
 
 
 

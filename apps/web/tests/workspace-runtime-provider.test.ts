@@ -50,6 +50,57 @@ test("agent stream parser preserves streamed whitespace and structured metadata"
   assert.deepEqual(parsed?.data, { provider: "openai" });
 });
 
+test("agent stream parser preserves semantic runtime payloads", () => {
+  const parsed = parseAgentStreamEvent(
+    JSON.stringify({
+      event_id: "agent-event-2",
+      sequence: 8,
+      client_sequence: 4,
+      emitted_at: "2026-09-16T00:00:01.000Z",
+      assessment_id: "assessment-1",
+      run_id: "run-1",
+      correlation_id: "corr-1",
+      event_type: "SEMANTIC_TOOL_CALL",
+      source: "engineering",
+      agent_name: "investigator",
+      namespace: ["task:investigator"],
+      node_name: "model",
+      message_id: "message-2",
+      tool_name: "search_nodes",
+      tool_call_id: "call-2",
+      status: "RUNNING",
+      text: "tool call started",
+      data: {
+        schemaVersion: "AGENT_STREAM_SEMANTIC_V1",
+        kind: "TOOL_CALL",
+        durability: "DURABLE",
+        toolName: "search_nodes",
+        toolCallId: "call-2",
+        parameters: {
+          nodeType: "AI_MODEL_INVOCATION",
+          api_key: "[REDACTED]",
+        },
+        evidenceRefs: ["evidence:ai:1"],
+      },
+    }),
+  );
+
+  assert.ok(parsed);
+  assert.equal(parsed?.eventType, "SEMANTIC_TOOL_CALL");
+  assert.deepEqual(parsed?.data, {
+    schemaVersion: "AGENT_STREAM_SEMANTIC_V1",
+    kind: "TOOL_CALL",
+    durability: "DURABLE",
+    toolName: "search_nodes",
+    toolCallId: "call-2",
+    parameters: {
+      nodeType: "AI_MODEL_INVOCATION",
+      api_key: "[REDACTED]",
+    },
+    evidenceRefs: ["evidence:ai:1"],
+  });
+});
+
 test("workspace runtime parser groups runs and activity by assessment", () => {
   const parsed = parseRuntimeEvent(
     JSON.stringify({

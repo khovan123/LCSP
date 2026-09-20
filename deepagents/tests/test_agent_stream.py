@@ -53,7 +53,12 @@ class FakeAgent:
                         }
                     ],
                 ),
-                {"langgraph_node": "model", "ls_provider": "openai"},
+                {
+                    "langgraph_node": "model",
+                    "ls_provider": "openai",
+                    "ls_model_name": "gpt-test",
+                    "finish_reason": "stop",
+                },
             ),
         }
         yield {
@@ -114,8 +119,12 @@ def test_invoke_with_stream_forwards_visible_events_and_returns_root_values():
     assert types[0] == "AGENT_STARTED"
     assert "MODEL_CONTENT_DELTA" in types
     assert "MODEL_REASONING_DELTA" in types
+    assert "MODEL_REQUEST" in types
+    assert "MODEL_RESULT" in types
     assert "TOOL_CALL_DELTA" in types
+    assert "SEMANTIC_TOOL_CALL" in types
     assert "TOOL_RESULT" in types
+    assert "SEMANTIC_TOOL_RESULT" in types
     assert "GRAPH_UPDATE" in types
     assert "CUSTOM_PROGRESS" in types
     assert types[-1] == "AGENT_COMPLETED"
@@ -124,6 +133,24 @@ def test_invoke_with_stream_forwards_visible_events_and_returns_root_values():
     assert reasoning["text"] == "Checked evidence"
     assert "private reasoning text" not in str(events)
     assert "super-secret-value" not in str(events)
+
+    model_request = next(event for event in events if event["event_type"] == "MODEL_REQUEST")
+    assert model_request["data"]["kind"] == "MODEL_REQUEST"
+    assert model_request["data"]["durability"] == "DURABLE"
+    assert model_request["data"]["provider"] == "openai"
+    assert model_request["data"]["model"] == "gpt-test"
+    assert model_request["data"]["nodeName"] == "model"
+
+    semantic_tool_call = next(
+        event for event in events if event["event_type"] == "SEMANTIC_TOOL_CALL"
+    )
+    assert semantic_tool_call["data"]["kind"] == "TOOL_CALL"
+    assert semantic_tool_call["data"]["toolName"] == "lookup_rule"
+    assert semantic_tool_call["data"]["parameters"]["api_key"] != "super-secret-value"
+
+    model_result = next(event for event in events if event["event_type"] == "MODEL_RESULT")
+    assert model_result["data"]["kind"] == "MODEL_OUTPUT"
+    assert model_result["data"]["finishReason"] == "stop"
 
     update = next(event for event in events if event["event_type"] == "GRAPH_UPDATE")
     assert update["data"]["selectedRuleIds"] == ["ER-1"]
@@ -193,4 +220,3 @@ def test_buffered_emitter_never_blocks_agent_on_backpressure():
     elapsed = monotonic() - started
     assert elapsed < 0.1
     release_delivery.set()
-

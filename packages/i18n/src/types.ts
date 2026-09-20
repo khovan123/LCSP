@@ -208,6 +208,11 @@ export type PagesMessages = {
       state: string;
       provider: string;
       credential: string;
+      scanner: string;
+      engineeringRule: string;
+      skill: string;
+      model: string;
+      provenance: string;
     };
     agentStreamSelected: string;
     recentAssessments: string;
@@ -1820,6 +1825,11 @@ export type PagesMessages = {
     messageLabel: string;
     reasonLabel: string;
     valueLabel: string;
+    semanticRuntimeLabel: string;
+    semanticKindLabel: string;
+    semanticStatusLabel: string;
+    semanticDurabilityLabel: string;
+    semanticCorrelationLabel: string;
     emptyValueLabel: string;
     notApplicableValueLabel: string;
     rerunScan: string;
