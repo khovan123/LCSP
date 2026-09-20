@@ -220,8 +220,16 @@ def _text_computed_receiver_candidates(
         if bracket_start in matched_brackets:
             continue
         tail = source[opener.end() : opener.end() + 4096]
+        # A completed index/member read is not a dispatch. Only inspect the
+        # current semicolon-delimited expression when the bracket is genuinely
+        # unbalanced, so a later unrelated call cannot claim this opener.
+        if "]" in tail:
+            continue
+        statement_tail = tail.split(";", 1)[0]
         if not re.search(
-            r"(?:[A-Za-z_$][\w$]*|['\"`])\s*\(", tail, re.DOTALL
+            r"(?:[A-Za-z_$][\w$]*|['\"`])\s*\(",
+            statement_tail,
+            re.DOTALL,
         ):
             continue
         receiver, _kind = _text_normalize_js_receiver(
@@ -950,6 +958,74 @@ class RepositorySemanticExtractor:
                         )
                     )
 
+        def add_projection_value_flow(
+            holder_key: str,
+            holder_name: str,
+            property_path: str,
+            property_value: str,
+            line_no: int,
+        ) -> None:
+            """Emit one canonical member path and recursively model object values."""
+            projection_key = f"projection:{holder_key}:{property_path}"
+            program.add_node(
+                SemanticNodeFact(
+                    projection_key,
+                    "VARIABLE",
+                    f"{holder_name}.{property_path}",
+                    relative,
+                    line_no,
+                    line_no,
+                    attributes={"memberProjection": True},
+                )
+            )
+            nested_object = re.fullmatch(
+                r"\s*\{(.*)\}\s*", property_value, re.DOTALL
+            )
+            if nested_object:
+                for nested_part in _text_split_top_level(
+                    nested_object.group(1), ","
+                ):
+                    nested_match = re.fullmatch(
+                        r"\s*([A-Za-z_$][\w$]*)\s*(?::\s*(.+))?\s*",
+                        nested_part,
+                    )
+                    if not nested_match:
+                        continue
+                    nested_name = nested_match.group(1)
+                    nested_value = nested_match.group(2) or nested_name
+                    add_projection_value_flow(
+                        holder_key,
+                        holder_name,
+                        f"{property_path}.{nested_name}",
+                        nested_value,
+                        line_no,
+                    )
+                return
+            for source in js_expression_references(property_value):
+                source_key = js_binding_key(source, line_no)
+                if not source_key.startswith("param:"):
+                    program.add_node(
+                        SemanticNodeFact(
+                            source_key,
+                            "VARIABLE",
+                            source,
+                            relative,
+                            line_no,
+                            line_no,
+                            semantic_types=semantic_types_for_identifier(
+                                source
+                            ),
+                        )
+                    )
+                program.add_edge(
+                    SemanticEdgeFact(
+                        "ALIASES",
+                        source_key,
+                        projection_key,
+                        attributes={"property": property_path},
+                    )
+                )
+
         computed_dispatches_by_line: dict[
             int, list[tuple[int, str, str]]
         ] = {}
@@ -1046,44 +1122,13 @@ class RepositorySemanticExtractor:
                         property_value = (
                             property_match.group(2) or property_name
                         )
-                        projection_key = (
-                            f"projection:{left_key}:{property_name}"
+                        add_projection_value_flow(
+                            left_key,
+                            left_name,
+                            property_name,
+                            property_value,
+                            line_no,
                         )
-                        program.add_node(
-                            SemanticNodeFact(
-                                projection_key,
-                                "VARIABLE",
-                                f"{left_name}.{property_name}",
-                                relative,
-                                line_no,
-                                line_no,
-                                attributes={"memberProjection": True},
-                            )
-                        )
-                        for source in js_expression_references(property_value):
-                            source_key = js_binding_key(source, line_no)
-                            if not source_key.startswith("param:"):
-                                program.add_node(
-                                    SemanticNodeFact(
-                                        source_key,
-                                        "VARIABLE",
-                                        source,
-                                        relative,
-                                        line_no,
-                                        line_no,
-                                        semantic_types=semantic_types_for_identifier(
-                                            source
-                                        ),
-                                    )
-                                )
-                            program.add_edge(
-                                SemanticEdgeFact(
-                                    "ALIASES",
-                                    source_key,
-                                    projection_key,
-                                    attributes={"property": property_name},
-                                )
-                            )
                 for source in js_expression_references(rhs_expression):
                     if source == left_name:
                         continue
@@ -1327,32 +1372,39 @@ class RepositorySemanticExtractor:
                     )
 
                 property_assignment = re.search(
-                    r"(?<![\w$.])(?P<holder>[A-Za-z_$][\w$]*)\s*"
-                    r"(?:\.\s*(?P<dot_property>[A-Za-z_$][\w$]*)|"
-                    r"\[\s*(?P<bracket_property>[^\]\n]+)\s*\])\s*"
+                    r"(?<![\w$.])(?P<holder>[A-Za-z_$][\w$]*)"
+                    r"(?P<property_path>(?:\s*\.\s*[A-Za-z_$][\w$]*|"
+                    r"\s*\[\s*[^\]\n]+\s*\])+?)\s*"
                     r"=(?!=|>)\s*(?P<rhs>.+?)(?:;|$)",
                     line,
                 )
                 if is_js_text and property_assignment:
                     holder_name = property_assignment.group("holder")
-                    property_expression = (
-                        property_assignment.group("dot_property")
-                        or property_assignment.group("bracket_property")
-                        or ""
-                    ).strip()
-                    literal_property = re.fullmatch(
-                        r"(['\"`])([A-Za-z_$][\w$]*)\1",
-                        property_expression,
+                    property_path = property_assignment.group(
+                        "property_path"
                     )
-                    property_name = (
-                        property_expression
-                        if property_assignment.group("dot_property")
-                        else (
+                    property_parts: list[str] = []
+                    for property_match in re.finditer(
+                        r"\.\s*([A-Za-z_$][\w$]*)|"
+                        r"\[\s*([^\]\n]+)\s*\]",
+                        property_path,
+                    ):
+                        dot_name, bracket_expression = property_match.groups()
+                        if dot_name:
+                            property_parts.append(dot_name)
+                            continue
+                        literal_property = re.fullmatch(
+                            r"(['\"`])([A-Za-z_$][\w$]*)\1",
+                            (bracket_expression or "").strip(),
+                        )
+                        property_parts.append(
                             literal_property.group(2)
                             if literal_property
                             else "*"
                         )
-                    )
+                    if not property_parts:
+                        continue
+                    property_name = ".".join(property_parts)
                     rhs_expression = property_assignment.group("rhs")
                     holder_key = js_binding_key(holder_name, line_no)
                     projection_key = (

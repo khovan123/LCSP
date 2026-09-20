@@ -1950,6 +1950,17 @@ class AIDiscoveryEnricher:
             if left_root != right_root:
                 projection_parent[right_root] = left_root
 
+        def projection_paths_overlap(left: str, right: str) -> bool:
+            if left == right:
+                return True
+            if left == "*" or right == "*":
+                return True
+            if left.endswith(".*"):
+                return right.startswith(left[:-1])
+            if right.endswith(".*"):
+                return left.startswith(right[:-1])
+            return False
+
         for edge in program.edges:
             if edge.edge_type not in {"ALIASES", "ASSIGNS"}:
                 continue
@@ -1985,11 +1996,7 @@ class AIDiscoveryEnricher:
                     len("projection:") :
                 ].rsplit(":", 1)
                 if (
-                    (
-                        candidate_property == property_name
-                        or candidate_property == "*"
-                        or property_name == "*"
-                    )
+                    projection_paths_overlap(candidate_property, property_name)
                     and projection_find(candidate_holder) == component
                 ):
                     projection_equivalents.setdefault(

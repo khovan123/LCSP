@@ -3018,3 +3018,118 @@ service[
   method("runtime", true);
 """)
     assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_nested_object_literal_projection_reaches_computed_dispatch(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const holder = { nested: { service } };
+const method = "summarize";
+service.summarize("closed", false);
+holder.nested.service[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_nested_property_write_reaches_computed_dispatch(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const holder = {};
+const method = "summarize";
+holder.nested.service = service;
+service.summarize("closed", false);
+holder.nested.service[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_nested_foreign_projection_does_not_poison_closed_method(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const recorder = new LocalRecorder();
+const holder = { nested: { recorder } };
+const method = "flush";
+service.summarize("closed", false);
+holder.nested.recorder[method]();
+""")
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+
+
+def test_nested_projection_through_holder_alias_preserves_identity(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const holder = { nested: { service } };
+const alias = holder;
+const method = "summarize";
+service.summarize("closed", false);
+alias.nested.service[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_index_read_followed_by_unrelated_call_does_not_poison_closed_method(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+service.summarize("closed", false);
+service[0];
+logStatus();
+""")
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
+
+
+def test_index_string_read_followed_by_unrelated_call_does_not_poison_closed_method(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+service.summarize("closed", false);
+service["status"];
+foo();
+""")
+    assert discovery["gate"] == "AI_ABSENT_CONFIRMED"
