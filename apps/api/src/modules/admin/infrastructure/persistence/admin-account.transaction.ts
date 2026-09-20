@@ -12,6 +12,7 @@ import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rb
 import type { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { AUTH_RECORD_TYPES } from "../../../auth/infrastructure/persistence/auth-record.persistence.js";
+import { isNumber, isRecord } from "../../../../common/utils/index.js";
 
 export type AdminActor = RbacRequestContext & {
   correlationId: string;
@@ -91,10 +92,7 @@ export async function assertCurrentAdmin(
   });
   const metadata = session?.metadata;
   const sessionVersion =
-    metadata &&
-    typeof metadata === "object" &&
-    !Array.isArray(metadata) &&
-    typeof metadata.accessVersion === "number"
+    isRecord(metadata) && isNumber(metadata.accessVersion)
       ? metadata.accessVersion
       : 0;
   if (!session || sessionVersion !== user.accessVersion) {
