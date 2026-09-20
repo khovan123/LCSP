@@ -1936,6 +1936,7 @@ class AIDiscoveryEnricher:
             if (node.attributes or {}).get("receiverProjectionKey")
         )
         projection_holders = {}
+        projection_source_lines: dict[str, int] = {}
         for key in projection_keys:
             if not key.startswith("projection:"):
                 continue
@@ -1943,6 +1944,9 @@ class AIDiscoveryEnricher:
                 ":", 1
             )
             projection_holders[holder_key] = property_name
+            projection_node = node_by_key.get(key)
+            if projection_node is not None and projection_node.start_line:
+                projection_source_lines[key] = int(projection_node.start_line)
         # Keep alias state at the binding and source position. A variable key
         # can be assigned several times, so a file-wide union would let a
         # future write erase an alias that was valid at an earlier dispatch.
@@ -2050,60 +2054,46 @@ class AIDiscoveryEnricher:
                 )
             )
 
+        def value_component_at(
+            key: str,
+            at_line: int,
+            seen: frozenset[tuple[str, int]] = frozenset(),
+        ) -> tuple[str, str]:
+            """Resolve the object/value captured by a binding at a source line."""
+            state_key = (key, at_line)
+            if state_key in seen:
+                return ("unresolved", f"unresolved:{key}:{at_line}")
+            events = [
+                event
+                for event in holder_assignment_events.get(key, [])
+                if event[0] <= at_line
+            ]
+            if not events:
+                return ("known", key)
+            line_no, source_key, declaration, foreign = events[-1]
+            if source_key is not None:
+                return value_component_at(
+                    source_key,
+                    line_no,
+                    seen | {state_key},
+                )
+            if declaration:
+                return ("known", key)
+            if foreign:
+                return ("foreign", f"foreign:{key}:{line_no}")
+            return ("unresolved", f"unresolved:{key}:{line_no}")
+
         def projection_equivalents_at(
             receiver_holder_key: str,
             receiver_property: str,
             dispatch_line: int,
         ) -> set[str]:
-            """Resolve holder aliases using only assignments visible at a call."""
-            parent = {
-                holder: holder
-                for holder in set(projection_holders)
-                | set(holder_assignment_events)
-            }
-
-            def find(key: str) -> str:
-                parent.setdefault(key, key)
-                if parent[key] != key:
-                    parent[key] = find(parent[key])
-                return parent[key]
-
-            def union(left: str, right: str) -> None:
-                left_root = find(left)
-                right_root = find(right)
-                if left_root != right_root:
-                    parent[right_root] = left_root
-
-            def latest_event(
-                key: str,
-                at_line: int = dispatch_line,
-            ) -> tuple[int, str | None, bool, bool] | None:
-                prior = [
-                    event
-                    for event in holder_assignment_events.get(key, [])
-                    if event[0] <= at_line
-                ]
-                return prior[-1] if prior else None
-
-            for target_key, events in holder_assignment_events.items():
-                event = next(
-                    (item for item in reversed(events) if item[0] <= dispatch_line),
-                    None,
-                )
-                if event is None or event[1] is None:
-                    continue
-                # An alias captures the source value at this assignment. A
-                # later write to the source binding must not change it.
-                source_event = latest_event(event[1], event[0])
-                if (
-                    source_event is not None
-                    and source_event[1] is None
-                    and not source_event[2]
-                ):
-                    continue
-                union(target_key, event[1])
-
-            component = find(receiver_holder_key)
+            """Resolve projection aliases from value snapshots, not names."""
+            receiver_state, receiver_component = value_component_at(
+                receiver_holder_key, dispatch_line
+            )
+            if receiver_state != "known":
+                return set()
             result: set[str] = set()
             for candidate in projection_keys:
                 if not candidate.startswith("projection:"):
@@ -2111,9 +2101,16 @@ class AIDiscoveryEnricher:
                 candidate_holder, candidate_property = candidate[
                     len("projection:") :
                 ].rsplit(":", 1)
+                candidate_line = projection_source_lines.get(
+                    candidate, dispatch_line
+                )
+                candidate_state, candidate_component = value_component_at(
+                    candidate_holder, candidate_line
+                )
                 if (
                     projection_paths_overlap(candidate_property, receiver_property)
-                    and find(candidate_holder) == component
+                    and candidate_state == "known"
+                    and candidate_component == receiver_component
                 ):
                     result.add(candidate)
             return result
@@ -2429,6 +2426,15 @@ class AIDiscoveryEnricher:
                             prior_reassignments
                             and not prior_reassignments[-1][1]
                         )
+                        receiver_value_unresolved = False
+                        if receiver_holder_key:
+                            receiver_value_unresolved = (
+                                value_component_at(
+                                    receiver_holder_key,
+                                    int(element_dispatch.start_line or 0),
+                                )[0]
+                                == "unresolved"
+                            )
                         binding_relevant = (
                             receiver_projection_key
                             in relevant_method_receiver_keys
@@ -2439,6 +2445,7 @@ class AIDiscoveryEnricher:
                                 & relevant_method_receiver_keys
                             )
                             or unresolved_reassignment
+                            or receiver_value_unresolved
                         )
                     if (
                         binding_relevant
