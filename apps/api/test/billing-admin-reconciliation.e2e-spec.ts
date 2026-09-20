@@ -620,7 +620,7 @@ describe("Admin billing reconciliation (e2e)", () => {
     assert.equal(dashboard.items[0]?.account?.userId, "user-1");
     assert.equal(dashboard.items[0]?.account?.email, "manager@acme.test");
     assert.equal(dashboard.items[0]?.order?.paymentCode, "LCSP-ADMIN-ORDER");
-    assert.equal(dashboard.items[0]?.order?.creditUnits, "100000");
+    assert.equal(dashboard.items[0]?.order?.creditUnits, "500");
     assert.equal(dashboard.page, 1);
     assert.equal(dashboard.pageSize, 1);
     assert.equal(dashboard.totalCount, 2);

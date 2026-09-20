@@ -470,10 +470,12 @@ describe("LCSP-310 payment reconciliation", () => {
       accounting.rebuildProjection(ownerB.a.id),
     ]);
     expect(projectionA).toEqual({
+      ledgerBalance: 100n,
       availableBalance: 60n,
       reservedBalance: 40n,
     });
     expect(projectionB).toEqual({
+      ledgerBalance: 200n,
       availableBalance: 200n,
       reservedBalance: 0n,
     });
