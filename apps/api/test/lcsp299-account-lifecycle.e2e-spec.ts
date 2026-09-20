@@ -8,13 +8,11 @@ import {
   jest,
 } from "@jest/globals";
 import type {
-  AdminAccountOperation,
   AdminUserActionInput,
   AdminUserDetail,
   AdminUserListResponse,
 } from "@lcsp/contracts/auth";
 import {
-  ADMIN_ACCOUNT_OPERATIONS,
   AUTH_ACCOUNT_STATUSES,
   AUTH_AUDIT_EVENT_TYPES,
   AUTH_USER_ROLES,
