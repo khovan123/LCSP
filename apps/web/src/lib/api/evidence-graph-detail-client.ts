@@ -42,6 +42,9 @@ export type ProgramEvidenceGraphDetail = {
       evidence_state?: string | null;
       resolution_state?: string | null;
     }>;
+    usage_flow_count?: number;
+    rendered_usage_flow_count?: number;
+    omitted_usage_flow_count?: number;
   };
   claims: Array<{
     id: string;
@@ -126,11 +129,28 @@ export function normalizeProgramEvidenceGraphDetail(
       ai_model_invocations: normalizeMetric(overview.ai_model_invocations),
       evidence_mapped_scope: normalizeMetric(overview.evidence_mapped_scope),
     },
+    paths: {
+      nodes: detail.paths?.nodes ?? [],
+      edges: detail.paths?.edges ?? [],
+      usage_flow_count: normalizeCount(detail.paths?.usage_flow_count),
+      rendered_usage_flow_count: normalizeCount(
+        detail.paths?.rendered_usage_flow_count,
+      ),
+      omitted_usage_flow_count: normalizeCount(
+        detail.paths?.omitted_usage_flow_count,
+      ),
+    },
   };
 }
 
 function normalizeMetric(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizeCount(value: unknown): number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : 0;
 }
 
 export async function getProgramEvidenceGraphDetail(

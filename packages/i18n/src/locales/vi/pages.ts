@@ -1648,6 +1648,8 @@ export const viPages = {
         "Truy vết bằng chứng Scanner đã quản trị từ bề mặt ứng dụng tới biên AI.",
       noAiUsagePaths:
         "Snapshot bằng chứng đã chấp nhận này chưa có đường dẫn sử dụng AI được quản trị.",
+      omittedAiUsagePaths:
+        "Có thêm đường dẫn sử dụng AI đã được quản trị nằm ngoài phần đang hiển thị.",
       aiUsageRoles: {
         moduleFeature: "Mô-đun / tính năng",
         routeHandlerFeature: "Route / handler",

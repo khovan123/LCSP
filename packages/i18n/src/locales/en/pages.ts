@@ -1645,6 +1645,8 @@ export const enPages = {
         "Follow governed Scanner evidence from application surface to AI boundary.",
       noAiUsagePaths:
         "No governed AI usage path is available for this accepted evidence snapshot.",
+      omittedAiUsagePaths:
+        "Additional governed AI usage paths exist outside this rendered view.",
       aiUsageRoles: {
         moduleFeature: "Module / feature",
         routeHandlerFeature: "Route / handler",

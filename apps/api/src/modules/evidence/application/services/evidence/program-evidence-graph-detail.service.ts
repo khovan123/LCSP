@@ -16,14 +16,8 @@ import type {
 } from "../../contracts/evidence/program-evidence-graph-detail.contract.js";
 import { ArtifactStorageService } from "../../../../../platform/storage/artifact-storage.service.js";
 
-const MAX_PROJECTED_NODES = 240;
-const MAX_PROJECTED_EDGES = 480;
-const RANKED_SEED_NODES = 24;
 const MAX_CACHED_PROJECTIONS = 8;
-const MAX_AI_USAGE_SEEDS = 16;
 const MAX_AI_USAGE_PATH_DEPTH = 10;
-const MAX_AI_USAGE_NODES = 160;
-const MAX_AI_USAGE_EDGES = 320;
 // Same ordering as String.prototype.localeCompare without arguments, without
 // re-resolving locale data for each of the ~10^6 comparisons on large graphs.
 const collator = new Intl.Collator();
@@ -53,12 +47,7 @@ const AI_USAGE_SEED_KINDS = new Set([
   "AI_MODEL_INVOCATION",
   "AI_API_CANDIDATE",
   "AI_GATEWAY",
-  "AI_PROVIDER",
-  "SDK_CLIENT",
-  "PACKAGE_DEPENDENCY",
   "UNRESOLVED_DYNAMIC_TARGET",
-  "MODEL",
-  "MODEL_ENDPOINT",
 ]);
 
 const AI_CONTEXT_NODE_KINDS = new Set([
@@ -66,6 +55,7 @@ const AI_CONTEXT_NODE_KINDS = new Set([
   "PACKAGE",
   "MODULE",
   "FILE",
+  "PACKAGE_DEPENDENCY",
   "HTTP_ROUTE",
   "GRPC_METHOD",
   "GRAPHQL_OPERATION",
@@ -254,7 +244,7 @@ export class ProgramEvidenceGraphDetailService {
       }
     }
     const sourceGraph = artifact ?? graph;
-    const { nodes, edges } = projectAiUsageGraph(
+    const paths = projectAiUsageGraph(
       graphNodes(sourceGraph?.nodes),
       graphEdges(sourceGraph?.edges),
     );
@@ -286,7 +276,7 @@ export class ProgramEvidenceGraphDetailService {
             "evidence_mapped_scope_percent",
           ]),
         },
-        paths: { nodes, edges },
+        paths,
         claims: projectedClaims,
         finding: provenanceFinding(projectedClaims),
         source: provenanceSource(sourceGraph),
@@ -424,10 +414,7 @@ function compareSourceCandidates(
 function projectAiUsageGraph(
   nodes: InternalProgramEvidenceGraphNode[],
   edges: InternalProgramEvidenceGraphEdge[],
-): {
-  nodes: ProgramEvidenceGraphNodeDto[];
-  edges: ProgramEvidenceGraphEdgeDto[];
-} {
+): ProgramEvidenceGraphDetailDto["paths"] {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const validEdges = edges.filter(
     (edge) => nodeById.has(edge.source) && nodeById.has(edge.target),
@@ -437,11 +424,16 @@ function projectAiUsageGraph(
     if (!AI_PATH_EDGE_TYPES.has(edge.relationship.toUpperCase())) continue;
     incoming.set(edge.target, [...(incoming.get(edge.target) ?? []), edge]);
   }
-  const seedNodes = nodes
-    .filter(isAiUsageSeedNode)
-    .sort(compareAiSeedNodes)
-    .slice(0, MAX_AI_USAGE_SEEDS);
-  if (!seedNodes.length) return { nodes: [], edges: [] };
+  const seedNodes = nodes.filter(isAiUsageSeedNode).sort(compareAiSeedNodes);
+  if (!seedNodes.length) {
+    return {
+      nodes: [],
+      edges: [],
+      usage_flow_count: 0,
+      rendered_usage_flow_count: 0,
+      omitted_usage_flow_count: 0,
+    };
+  }
 
   const selectedNodes = new Map<string, InternalProgramEvidenceGraphNode>();
   const selectedEdges = new Map<string, InternalProgramEvidenceGraphEdge>();
@@ -453,10 +445,12 @@ function projectAiUsageGraph(
     appendGovernedProviderProjection(seed, selectedNodes, selectedEdges);
   }
 
-  const projectedNodes = [...selectedNodes.values()]
-    .filter((node) => AI_CONTEXT_NODE_KINDS.has(node.kind.toUpperCase()))
-    .map(toPublicNode)
-    .sort((left, right) => collator.compare(left.id, right.id));
+  const projectedNodes = sortAiUsageNodes(
+    [...selectedNodes.values()]
+      .filter((node) => AI_CONTEXT_NODE_KINDS.has(node.kind.toUpperCase()))
+      .map(toPublicNode),
+    seedNodes,
+  );
   const projectedNodeIds = new Set(projectedNodes.map((node) => node.id));
   const projectedEdges = [...selectedEdges.values()]
     .filter(
@@ -465,9 +459,30 @@ function projectAiUsageGraph(
     )
     .map(toPublicEdge)
     .sort((left, right) => collator.compare(left.id, right.id));
-  return boundedGraph(
-    projectedNodes.slice(0, MAX_AI_USAGE_NODES),
-    projectedEdges.slice(0, MAX_AI_USAGE_EDGES),
+  const renderedSeedIds = new Set(
+    projectedNodes
+      .filter((node) => seedNodes.some((seed) => seed.id === node.id))
+      .map((node) => node.id),
+  );
+  return {
+    nodes: projectedNodes,
+    edges: projectedEdges,
+    usage_flow_count: seedNodes.length,
+    rendered_usage_flow_count: renderedSeedIds.size,
+    omitted_usage_flow_count: seedNodes.length - renderedSeedIds.size,
+  };
+}
+
+function sortAiUsageNodes(
+  nodes: ProgramEvidenceGraphNodeDto[],
+  seedNodes: InternalProgramEvidenceGraphNode[],
+): ProgramEvidenceGraphNodeDto[] {
+  const seedIds = new Set(seedNodes.map((node) => node.id));
+  return [...nodes].sort(
+    (left, right) =>
+      Number(!seedIds.has(left.id)) - Number(!seedIds.has(right.id)) ||
+      aiKindPriority(left.kind) - aiKindPriority(right.kind) ||
+      collator.compare(left.id, right.id),
   );
 }
 
@@ -646,18 +661,14 @@ function isAiUsageSeedNode(node: InternalProgramEvidenceGraphNode): boolean {
   if (kind === "UNRESOLVED_DYNAMIC_TARGET") {
     return booleanAttribute(node.attributes?.aiMaterial);
   }
-  if (kind === "SDK_CLIENT" || kind === "PACKAGE_DEPENDENCY") {
+  if (kind === "AI_GATEWAY") {
     return (
-      booleanAttribute(node.attributes?.aiRelevant) ||
-      text(node.attributes?.semanticRole)?.startsWith("PROVIDER_") === true
+      booleanAttribute(node.attributes?.aiMaterial) ||
+      node.evidence_state === AI_DISCOVERY_EVIDENCE_STATES.confirmedAiCall ||
+      node.evidence_state === AI_DISCOVERY_EVIDENCE_STATES.possibleAiCall
     );
   }
-  return (
-    kind === "AI_GATEWAY" ||
-    kind === "AI_PROVIDER" ||
-    kind === "MODEL" ||
-    kind === "MODEL_ENDPOINT"
-  );
+  return false;
 }
 
 function compareAiSeedNodes(
@@ -679,10 +690,8 @@ function aiKindPriority(kind: string): number {
       return 1;
     case "AI_GATEWAY":
       return 2;
-    case "AI_PROVIDER":
-      return 3;
     case "UNRESOLVED_DYNAMIC_TARGET":
-      return 4;
+      return 3;
     default:
       return 5;
   }
@@ -756,7 +765,9 @@ function roleForNode(node: InternalProgramEvidenceGraphNode): string {
   ) {
     return PROGRAM_GRAPH_NODE_ROLES.routeHandlerFeature;
   }
-  if (kind === "SDK_CLIENT") return PROGRAM_GRAPH_NODE_ROLES.aiSdk;
+  if (kind === "SDK_CLIENT" || kind === "PACKAGE_DEPENDENCY") {
+    return PROGRAM_GRAPH_NODE_ROLES.aiSdk;
+  }
   if (kind === "AI_MODEL_INVOCATION") {
     return PROGRAM_GRAPH_NODE_ROLES.aiSdkInvocation;
   }
@@ -780,96 +791,6 @@ function roleForNode(node: InternalProgramEvidenceGraphNode): string {
     return PROGRAM_GRAPH_NODE_ROLES.unresolvedCandidate;
   }
   return PROGRAM_GRAPH_NODE_ROLES.serviceClient;
-}
-
-function boundedGraph(
-  nodes: ProgramEvidenceGraphNodeDto[],
-  edges: ProgramEvidenceGraphEdgeDto[],
-): {
-  nodes: ProgramEvidenceGraphNodeDto[];
-  edges: ProgramEvidenceGraphEdgeDto[];
-} {
-  if (
-    nodes.length <= MAX_PROJECTED_NODES &&
-    edges.length <= MAX_PROJECTED_EDGES
-  ) {
-    const ids = new Set(nodes.map((node) => node.id));
-    return {
-      nodes,
-      edges: edges.filter(
-        (edge) => ids.has(edge.source) && ids.has(edge.target),
-      ),
-    };
-  }
-  const selected = new Set(
-    rankedSeedNodes(nodes, RANKED_SEED_NODES).map((node) => node.id),
-  );
-  let expanded = true;
-  while (expanded && selected.size < MAX_PROJECTED_NODES) {
-    expanded = false;
-    for (const edge of edges) {
-      if (selected.has(edge.source) && !selected.has(edge.target)) {
-        selected.add(edge.target);
-        expanded = true;
-      } else if (selected.has(edge.target) && !selected.has(edge.source)) {
-        selected.add(edge.source);
-        expanded = true;
-      }
-      if (selected.size >= MAX_PROJECTED_NODES) break;
-    }
-  }
-  const projectedNodes = nodes.filter((node) => selected.has(node.id));
-  const projectedEdges = edges
-    .filter((edge) => selected.has(edge.source) && selected.has(edge.target))
-    .sort((left, right) => collator.compare(left.id, right.id))
-    .slice(0, MAX_PROJECTED_EDGES);
-  return { nodes: projectedNodes, edges: projectedEdges };
-}
-
-/**
- * First `limit` nodes of the stable order (priority kinds first, then id), selected in
- * O(n log limit) instead of sorting every node of a 10^5-node graph.
- */
-function rankedSeedNodes(
-  nodes: ProgramEvidenceGraphNodeDto[],
-  limit: number,
-): ProgramEvidenceGraphNodeDto[] {
-  const top: Array<{ node: ProgramEvidenceGraphNodeDto; score: number }> = [];
-  for (const node of nodes) {
-    const candidate = { node, score: seedScore(node) };
-    const compare = (
-      left: { node: ProgramEvidenceGraphNodeDto; score: number },
-      right: { node: ProgramEvidenceGraphNodeDto; score: number },
-    ) =>
-      left.score - right.score || collator.compare(left.node.id, right.node.id);
-    if (top.length === limit && compare(candidate, top[limit - 1]) >= 0) {
-      continue;
-    }
-    // Insert after equal elements to keep the stable-sort order for ties.
-    let low = 0;
-    let high = top.length;
-    while (low < high) {
-      const middle = (low + high) >> 1;
-      if (compare(top[middle], candidate) <= 0) {
-        low = middle + 1;
-      } else {
-        high = middle;
-      }
-    }
-    top.splice(low, 0, candidate);
-    if (top.length > limit) top.pop();
-  }
-  return top.map((entry) => entry.node);
-}
-
-function seedScore(node: ProgramEvidenceGraphNodeDto): number {
-  const kind = node.kind.toUpperCase();
-  return kind.includes("AI_") ||
-    kind.includes("AGENT_BOUNDARY") ||
-    kind.includes("HTTP_ROUTE") ||
-    kind === "ENTRYPOINT"
-    ? 0
-    : 1;
 }
 
 function graphNodes(value: unknown): InternalProgramEvidenceGraphNode[] {

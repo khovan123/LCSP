@@ -135,6 +135,9 @@ const detail = {
         resolution_state: "OBSERVED",
       },
     ],
+    usage_flow_count: 2,
+    rendered_usage_flow_count: 2,
+    omitted_usage_flow_count: 0,
   },
   claims: [],
   provenance: {
@@ -439,6 +442,32 @@ test("renders AI usage roles and unresolved evidence states", async () => {
   );
   assert.match(container.textContent ?? "", /Unresolved|Chưa phân giải/);
   assert.doesNotMatch(container.textContent ?? "", /OPENAI|ANTHROPIC/);
+});
+
+test("renders omitted AI usage metadata when the projection reports overflow", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () =>
+    root.render(
+      React.createElement(GraphFirstDetail, {
+        assessmentId: "assessment-1",
+        detail: {
+          ...detail,
+          paths: {
+            ...detail.paths,
+            omitted_usage_flow_count: 3,
+          },
+        },
+      }),
+    ),
+  );
+
+  assert.match(
+    container.textContent ?? "",
+    /Additional governed AI usage paths|Có thêm đường dẫn sử dụng AI/,
+  );
 });
 
 test("formats evidence scope as a percentage in both graph detail renderers", async () => {

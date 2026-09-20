@@ -94,7 +94,12 @@ describe("ProgramEvidenceGraphDetailService", () => {
                 label: "authorize",
                 source: { file_path: "src/auth.ts", line_number: 12 },
               },
-              { node_id: "node-2", node_type: "AI_PROVIDER", label: "OpenAI" },
+              {
+                node_id: "node-2",
+                node_type: "AI_MODEL_INVOCATION",
+                label: "responses.create",
+                resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+              },
             ],
             edges: [
               {
@@ -235,10 +240,10 @@ describe("ProgramEvidenceGraphDetailService", () => {
     });
 
     expect(result.paths.nodes.map((node) => node.id)).toEqual([
+      "sdk:openai",
       "module:web",
       "projection-provider:sdk:openai:OPENAI",
       "route:chat",
-      "sdk:openai",
       "service:chat",
     ]);
     expect(result.paths.edges.map((edge) => edge.id)).toEqual([
@@ -445,16 +450,126 @@ describe("ProgramEvidenceGraphDetailService", () => {
       ],
     });
 
-    expect(result.paths).toEqual({ nodes: [], edges: [] });
+    expect(result.paths).toEqual({
+      nodes: [],
+      edges: [],
+      usage_flow_count: 0,
+      rendered_usage_flow_count: 0,
+      omitted_usage_flow_count: 0,
+    });
   });
 
-  it("reads a durable graph reference and returns a bounded deterministic projection", async () => {
-    const nodes = Array.from({ length: 300 }, (_, index) => ({
+  it("does not promote AI-relevant package dependencies into active usage", async () => {
+    const result = await projectGraph({
+      nodes: [
+        { node_id: "repository", node_type: "REPOSITORY", label: "repo" },
+        {
+          node_id: "dependency:openai",
+          node_type: "PACKAGE_DEPENDENCY",
+          label: "openai",
+          attributes: { aiRelevant: true },
+          resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+        },
+      ],
+      edges: [
+        {
+          edge_id: "repo-dep",
+          source_node_id: "repository",
+          target_node_id: "dependency:openai",
+          edge_type: "DEPENDS_ON",
+          resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+        },
+      ],
+    });
+
+    expect(result.paths).toEqual({
+      nodes: [],
+      edges: [],
+      usage_flow_count: 0,
+      rendered_usage_flow_count: 0,
+      omitted_usage_flow_count: 0,
+    });
+  });
+
+  it("does not promote AI SDK client references into active usage", async () => {
+    const result = await projectGraph({
+      nodes: [
+        { node_id: "module:api", node_type: "MODULE", label: "API module" },
+        {
+          node_id: "sdk-client:openai",
+          node_type: "SDK_CLIENT",
+          label: "OpenAIClient",
+          attributes: { semanticRole: "PROVIDER_OPENAI" },
+          resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+        },
+      ],
+      edges: [
+        {
+          edge_id: "module-client",
+          source_node_id: "module:api",
+          target_node_id: "sdk-client:openai",
+          edge_type: "IMPORTS",
+          resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+        },
+      ],
+    });
+
+    expect(result.paths.nodes).toEqual([]);
+    expect(result.paths.usage_flow_count).toBe(0);
+  });
+
+  it("allows dependency evidence only as context for a governed invocation", async () => {
+    const result = await projectGraph({
+      nodes: [
+        { node_id: "module:api", node_type: "MODULE", label: "API module" },
+        {
+          node_id: "dependency:openai",
+          node_type: "PACKAGE_DEPENDENCY",
+          label: "openai",
+          attributes: { aiRelevant: true },
+          resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+        },
+        {
+          node_id: "sdk:openai",
+          node_type: "AI_MODEL_INVOCATION",
+          label: "responses.create",
+          resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+        },
+      ],
+      edges: [
+        {
+          edge_id: "module-dep",
+          source_node_id: "module:api",
+          target_node_id: "dependency:openai",
+          edge_type: "DEPENDS_ON",
+          resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+        },
+        {
+          edge_id: "dep-sdk",
+          source_node_id: "dependency:openai",
+          target_node_id: "sdk:openai",
+          edge_type: "CALLS",
+          resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
+        },
+      ],
+    });
+
+    expect(result.paths.nodes.map((node) => node.id)).toEqual([
+      "sdk:openai",
+      "dependency:openai",
+      "module:api",
+    ]);
+    expect(result.paths.usage_flow_count).toBe(1);
+  });
+
+  it("reads a durable graph reference and returns a complete deterministic AI projection", async () => {
+    const nodes = Array.from({ length: 17 }, (_, index) => ({
       node_id: `node-${String(index).padStart(3, "0")}`,
-      node_type: index === 0 ? "AI_PROVIDER" : "FUNCTION",
+      node_type: "AI_MODEL_INVOCATION",
       label: `node-${index}`,
+      resolution_state: AI_DISCOVERY_RESOLUTION_STATES.observed,
     }));
-    const edges = Array.from({ length: 299 }, (_, index) => ({
+    const edges = Array.from({ length: 16 }, (_, index) => ({
       edge_id: `edge-${String(index).padStart(3, "0")}`,
       source_node_id: `node-${String(index).padStart(3, "0")}`,
       target_node_id: `node-${String(index + 1).padStart(3, "0")}`,
@@ -477,12 +592,14 @@ describe("ProgramEvidenceGraphDetailService", () => {
       },
       snapshot: null,
     });
-    expect(result.paths.nodes.length).toBeLessThanOrEqual(160);
-    expect(result.paths.edges.length).toBeLessThanOrEqual(320);
-    expect(result.paths.nodes[0]?.kind).toBe("AI_PROVIDER");
+    expect(result.paths.nodes).toHaveLength(17);
+    expect(result.paths.usage_flow_count).toBe(17);
+    expect(result.paths.rendered_usage_flow_count).toBe(17);
+    expect(result.paths.omitted_usage_flow_count).toBe(0);
+    expect(result.paths.nodes.map((node) => node.id)).toContain("node-016");
   });
 
-  it("selects the same seed ordering as a full stable sort, including ties and non-ASCII ids", async () => {
+  it("represents every governed AI usage regardless of deterministic ordering", async () => {
     const ids = ["é-1", "E-1", "a-10", "a-2", "Z-1", "ä-3", "b_1", "B-1"];
     const nodes = Array.from({ length: 400 }, (_, index) => ({
       node_id: `${ids[index % ids.length]}-${index}`,
@@ -526,7 +643,9 @@ describe("ProgramEvidenceGraphDetailService", () => {
         ["AI_MODEL_INVOCATION", "FUNCTION", "HTTP_ROUTE"].includes(node.kind),
       ),
     ).toBe(true);
-    expect(result.paths.nodes.length).toBeLessThanOrEqual(160);
+    expect(result.paths.usage_flow_count).toBe(80);
+    expect(result.paths.rendered_usage_flow_count).toBe(80);
+    expect(result.paths.omitted_usage_flow_count).toBe(0);
   });
 
   it("keeps the first minimal provenance source like a stable sort", async () => {
@@ -625,7 +744,8 @@ describe("ProgramEvidenceGraphDetailService", () => {
       snapshot: null,
       loadEvidencePayload,
     });
-    first.paths.nodes[0].label = "mutated by a caller";
+    expect(first.paths.nodes).toEqual([]);
+    first.paths.usage_flow_count = 99;
     const second = await service.projectAcceptedReport({
       report,
       snapshot: {
@@ -640,7 +760,7 @@ describe("ProgramEvidenceGraphDetailService", () => {
 
     expect(loadEvidencePayload).toHaveBeenCalledTimes(1);
     expect(readJsonArtifactReference).toHaveBeenCalledTimes(1);
-    expect(second.paths.nodes[0].label).toBe("provider");
+    expect(second.paths.usage_flow_count).toBe(0);
     expect(second.repository.repository_full_name).toBe("org/repo");
 
     mtimeMs = 2;

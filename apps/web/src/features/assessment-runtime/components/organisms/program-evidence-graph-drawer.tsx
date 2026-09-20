@@ -501,6 +501,14 @@ export function GraphFirstDetail({
                 {topology.edges.length}{" "}
                 {resolveAppMessage("pages.assessmentFlow.graph.edges" as never)}
               </span>
+              {detail.paths.omitted_usage_flow_count ? (
+                <span className="max-w-64 truncate rounded-full border border-amber-500/50 px-2 py-1 text-amber-700">
+                  {detail.paths.omitted_usage_flow_count}{" "}
+                  {resolveAppMessage(
+                    "pages.assessmentFlow.graph.omittedAiUsagePaths" as never,
+                  )}
+                </span>
+              ) : null}
               <span aria-hidden="true" className="h-4 w-px bg-border/70" />
               <div
                 className="hidden shrink-0 items-center gap-1"

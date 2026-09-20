@@ -1584,6 +1584,7 @@ export type PagesMessages = {
       aiUsageTopologyTitle: string;
       aiUsageTopologyDescription: string;
       noAiUsagePaths: string;
+      omittedAiUsagePaths: string;
       aiUsageRoles: {
         moduleFeature: string;
         routeHandlerFeature: string;

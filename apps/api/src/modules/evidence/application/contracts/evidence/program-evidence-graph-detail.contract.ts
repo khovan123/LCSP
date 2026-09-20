@@ -65,6 +65,9 @@ export interface ProgramEvidenceGraphDetailDto {
   paths: {
     nodes: ProgramEvidenceGraphNodeDto[];
     edges: ProgramEvidenceGraphEdgeDto[];
+    usage_flow_count: number;
+    rendered_usage_flow_count: number;
+    omitted_usage_flow_count: number;
   };
   claims: ProgramEvidenceGraphClaimDto[];
   provenance: {
