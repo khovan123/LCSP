@@ -22,6 +22,9 @@ export interface ProgramEvidenceGraphNodeDto {
   symbol: string | null;
   file: string | null;
   line: number | null;
+  ai_usage_role?: string | null;
+  evidence_state?: string | null;
+  resolution_state?: string | null;
 }
 
 export interface ProgramEvidenceGraphEdgeDto {
@@ -29,6 +32,8 @@ export interface ProgramEvidenceGraphEdgeDto {
   source: string;
   target: string;
   relationship: string;
+  evidence_state?: string | null;
+  resolution_state?: string | null;
 }
 
 export interface ProgramEvidenceGraphClaimDto {

@@ -63,6 +63,9 @@ const detail = {
         symbol: null,
         file: "src/a.ts",
         line: 1,
+        ai_usage_role: "ROUTE_HANDLER_FEATURE",
+        evidence_state: null,
+        resolution_state: "OBSERVED",
       },
       {
         id: "b",
@@ -71,6 +74,9 @@ const detail = {
         symbol: "handleB",
         file: "src/b.ts",
         line: 2,
+        ai_usage_role: "SERVICE_CLIENT",
+        evidence_state: null,
+        resolution_state: "OBSERVED",
       },
       {
         id: "c",
@@ -79,6 +85,9 @@ const detail = {
         symbol: "callProvider",
         file: "src/provider.ts",
         line: 9,
+        ai_usage_role: "AI_PROVIDER",
+        evidence_state: "AI_PROVIDER_REFERENCE",
+        resolution_state: "CORROBORATED",
       },
       {
         id: "d",
@@ -87,13 +96,44 @@ const detail = {
         symbol: null,
         file: null,
         line: null,
+        ai_usage_role: "AI_SDK_INVOCATION",
+        evidence_state: "CONFIRMED_AI_CALL",
+        resolution_state: "OBSERVED",
       },
     ],
     edges: [
-      { id: "e1", source: "a", target: "b", relationship: "CALLS" },
-      { id: "e2", source: "a", target: "c", relationship: "SENDS_TO_AI" },
-      { id: "e3", source: "b", target: "d", relationship: "FLOWS_TO" },
-      { id: "e4", source: "c", target: "d", relationship: "FLOWS_TO" },
+      {
+        id: "e1",
+        source: "a",
+        target: "b",
+        relationship: "CALLS",
+        evidence_state: null,
+        resolution_state: "OBSERVED",
+      },
+      {
+        id: "e2",
+        source: "a",
+        target: "c",
+        relationship: "SENDS_TO_AI",
+        evidence_state: "AI_PROVIDER_REFERENCE",
+        resolution_state: "CORROBORATED",
+      },
+      {
+        id: "e3",
+        source: "b",
+        target: "d",
+        relationship: "FLOWS_TO",
+        evidence_state: "CONFIRMED_AI_CALL",
+        resolution_state: "OBSERVED",
+      },
+      {
+        id: "e4",
+        source: "c",
+        target: "d",
+        relationship: "FLOWS_TO",
+        evidence_state: "CONFIRMED_AI_CALL",
+        resolution_state: "OBSERVED",
+      },
     ],
   },
   claims: [],
@@ -169,7 +209,8 @@ for (const [code, status, expectedState] of [
       )) as typeof fetch;
 
     try {
-      const result = await getProgramEvidenceGraphDetailState("assessment-graph");
+      const result =
+        await getProgramEvidenceGraphDetailState("assessment-graph");
       assert.deepEqual(result, {
         state: PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES[expectedState],
         detail: null,
@@ -225,7 +266,10 @@ test("renders canonical topology, preserves direction, and updates inspector on 
     .filter((element) => element.getAttribute("visibility") === "visible")
     .map((element) => element.textContent?.trim())
     .filter(Boolean);
-  assert.ok(visibleRelationshipLabels.includes("CALLS") || visibleRelationshipLabels.includes("FLOWS_TO"));
+  assert.ok(
+    visibleRelationshipLabels.includes("CALLS") ||
+      visibleRelationshipLabels.includes("FLOWS_TO"),
+  );
 
   const svg = container.querySelector("svg");
   assert.ok(svg);
@@ -303,11 +347,98 @@ test("renders the workspace overview before a node is selected", async () => {
     container.textContent ?? "",
     /Evidence-mapped scope|Độ phủ bằng chứng kỹ thuật/,
   );
-  assert.match(container.textContent ?? "", /Open Artifacts|Mở danh sách Artifacts/);
+  assert.match(
+    container.textContent ?? "",
+    /Open Artifacts|Mở danh sách Artifacts/,
+  );
   assert.match(
     container.textContent ?? "",
     /Evidence graph is pinned|Sơ đồ này được tạo từ snapshot/,
   );
+});
+
+test("renders the governed no-AI usage empty state without graph noise", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () =>
+    root.render(
+      React.createElement(GraphFirstDetail, {
+        assessmentId: "assessment-1",
+        detail: {
+          ...detail,
+          paths: { nodes: [], edges: [] },
+        },
+      }),
+    ),
+  );
+
+  assert.match(
+    container.textContent ?? "",
+    /No governed AI usage path|chưa có đường dẫn sử dụng AI/,
+  );
+  assert.doesNotMatch(container.textContent ?? "", /Node A|Node B/);
+});
+
+test("renders AI usage roles and unresolved evidence states", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () =>
+    root.render(
+      React.createElement(GraphFirstDetail, {
+        assessmentId: "assessment-1",
+        detail: {
+          ...detail,
+          paths: {
+            nodes: [
+              {
+                id: "route",
+                kind: "HTTP_ROUTE",
+                label: "POST /ai",
+                symbol: null,
+                file: null,
+                line: null,
+                ai_usage_role: "ROUTE_HANDLER_FEATURE",
+                evidence_state: null,
+                resolution_state: "OBSERVED",
+              },
+              {
+                id: "gateway",
+                kind: "AI_API_CANDIDATE",
+                label: "custom model gateway",
+                symbol: null,
+                file: null,
+                line: null,
+                ai_usage_role: "AI_API_ENDPOINT",
+                evidence_state: "POSSIBLE_AI_CALL",
+                resolution_state: "UNRESOLVED",
+              },
+            ],
+            edges: [
+              {
+                id: "edge",
+                source: "route",
+                target: "gateway",
+                relationship: "CALLS_EXTERNAL",
+                evidence_state: "POSSIBLE_AI_CALL",
+                resolution_state: "UNRESOLVED",
+              },
+            ],
+          },
+        },
+      }),
+    ),
+  );
+
+  assert.match(
+    container.textContent ?? "",
+    /REST\/API AI endpoint|Endpoint AI REST\/API/,
+  );
+  assert.match(container.textContent ?? "", /Unresolved|Chưa phân giải/);
+  assert.doesNotMatch(container.textContent ?? "", /OPENAI|ANTHROPIC/);
 });
 
 test("formats evidence scope as a percentage in both graph detail renderers", async () => {

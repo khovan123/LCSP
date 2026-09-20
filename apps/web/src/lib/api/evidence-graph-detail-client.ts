@@ -30,12 +30,17 @@ export type ProgramEvidenceGraphDetail = {
       symbol: string | null;
       file: string | null;
       line: number | null;
+      ai_usage_role?: string | null;
+      evidence_state?: string | null;
+      resolution_state?: string | null;
     }>;
     edges: Array<{
       id: string;
       source: string;
       target: string;
       relationship: string;
+      evidence_state?: string | null;
+      resolution_state?: string | null;
     }>;
   };
   claims: Array<{
@@ -100,9 +105,12 @@ const UNAVAILABLE_GRAPH_STATE_BY_PROBLEM_CODE: Record<
   string,
   UnavailableProgramEvidenceGraphState
 > = {
-  [EVIDENCE_ERROR_CODES.notReady]: PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.pending,
-  [EVIDENCE_ERROR_CODES.buildFailed]: PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.failed,
-  [EVIDENCE_ERROR_CODES.notFound]: PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.notFound,
+  [EVIDENCE_ERROR_CODES.notReady]:
+    PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.pending,
+  [EVIDENCE_ERROR_CODES.buildFailed]:
+    PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.failed,
+  [EVIDENCE_ERROR_CODES.notFound]:
+    PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.notFound,
 };
 
 /** Normalize optional upstream metric properties to the contract's null sentinel. */

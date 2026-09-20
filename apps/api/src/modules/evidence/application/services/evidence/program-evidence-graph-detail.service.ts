@@ -1,4 +1,8 @@
 import { Injectable } from "@nestjs/common";
+import {
+  AI_DISCOVERY_EVIDENCE_STATES,
+  AI_DISCOVERY_RESOLUTION_STATES,
+} from "@lcsp/contracts/evidence";
 
 import { isRecord } from "../../../../../common/utils/index.js";
 import type {
@@ -16,9 +20,115 @@ const MAX_PROJECTED_NODES = 240;
 const MAX_PROJECTED_EDGES = 480;
 const RANKED_SEED_NODES = 24;
 const MAX_CACHED_PROJECTIONS = 8;
+const MAX_AI_USAGE_SEEDS = 16;
+const MAX_AI_USAGE_PATH_DEPTH = 10;
+const MAX_AI_USAGE_NODES = 160;
+const MAX_AI_USAGE_EDGES = 320;
 // Same ordering as String.prototype.localeCompare without arguments, without
 // re-resolving locale data for each of the ~10^6 comparisons on large graphs.
 const collator = new Intl.Collator();
+
+const PROGRAM_GRAPH_RESOLUTION_STATES = {
+  observed: AI_DISCOVERY_RESOLUTION_STATES.observed,
+  corroborated: AI_DISCOVERY_RESOLUTION_STATES.corroborated,
+  inferred: AI_DISCOVERY_RESOLUTION_STATES.inferred,
+  unresolved: AI_DISCOVERY_RESOLUTION_STATES.unresolved,
+} as const;
+
+const PROGRAM_GRAPH_NODE_ROLES = {
+  moduleFeature: "MODULE_FEATURE",
+  routeHandlerFeature: "ROUTE_HANDLER_FEATURE",
+  serviceClient: "SERVICE_CLIENT",
+  aiSdk: "AI_SDK",
+  aiSdkInvocation: "AI_SDK_INVOCATION",
+  aiApiEndpoint: "AI_API_ENDPOINT",
+  aiGateway: "AI_GATEWAY",
+  aiProvider: "AI_PROVIDER",
+  modelIdentity: "MODEL_IDENTITY",
+  configControl: "CONFIG_CONTROL",
+  unresolvedCandidate: "UNRESOLVED_AI_CANDIDATE",
+} as const;
+
+const AI_USAGE_SEED_KINDS = new Set([
+  "AI_MODEL_INVOCATION",
+  "AI_API_CANDIDATE",
+  "AI_GATEWAY",
+  "AI_PROVIDER",
+  "SDK_CLIENT",
+  "PACKAGE_DEPENDENCY",
+  "UNRESOLVED_DYNAMIC_TARGET",
+  "MODEL",
+  "MODEL_ENDPOINT",
+]);
+
+const AI_CONTEXT_NODE_KINDS = new Set([
+  "REPOSITORY",
+  "PACKAGE",
+  "MODULE",
+  "FILE",
+  "HTTP_ROUTE",
+  "GRPC_METHOD",
+  "GRAPHQL_OPERATION",
+  "WEBHOOK",
+  "COMMAND",
+  "QUERY",
+  "CRON",
+  "BUSINESS_ACTION",
+  "AGENT_BOUNDARY_SOURCE",
+  "CLASS",
+  "FUNCTION",
+  "METHOD",
+  "CALL_SITE",
+  "SDK_CLIENT",
+  "EXTERNAL_API",
+  "AI_API_CANDIDATE",
+  "AI_GATEWAY",
+  "AI_PROVIDER",
+  "AI_MODEL_INVOCATION",
+  "UNRESOLVED_DYNAMIC_TARGET",
+  "CONFIG_SOURCE",
+  "ENV_SOURCE",
+  "CONTROL_CONDITION",
+  "FEATURE_FLAG",
+  "MODEL",
+  "MODEL_ENDPOINT",
+]);
+
+const AI_PATH_SOURCE_KINDS = new Set([
+  "MODULE",
+  "PACKAGE",
+  "FILE",
+  "HTTP_ROUTE",
+  "GRPC_METHOD",
+  "GRAPHQL_OPERATION",
+  "WEBHOOK",
+  "COMMAND",
+  "QUERY",
+  "CRON",
+  "BUSINESS_ACTION",
+  "AGENT_BOUNDARY_SOURCE",
+]);
+
+const AI_PATH_EDGE_TYPES = new Set([
+  "CONTAINS",
+  "DECLARES",
+  "DEPENDS_ON",
+  "IMPORTS",
+  "EXPORTS",
+  "HANDLED_BY",
+  "CALLS",
+  "CALLS_API",
+  "CALLS_DYNAMICALLY",
+  "CALLS_EXTERNAL",
+  "INVOKES_BOUNDARY",
+  "SENDS_TO_AI",
+  "INVOKES_AI",
+  "RESOLVES_TO",
+  "CONFIGURES",
+  "CONTROLS",
+  "GUARDS",
+  "FLOWS_TO",
+]);
 
 type EvidenceGraphReport = {
   id: string;
@@ -144,7 +254,7 @@ export class ProgramEvidenceGraphDetailService {
       }
     }
     const sourceGraph = artifact ?? graph;
-    const { nodes, edges } = boundedGraph(
+    const { nodes, edges } = projectAiUsageGraph(
       graphNodes(sourceGraph?.nodes),
       graphEdges(sourceGraph?.edges),
     );
@@ -284,6 +394,22 @@ function provenanceSource(
 
 type SourceCandidate = ProgramEvidenceGraphSourceDto & { file: string };
 
+type InternalProgramEvidenceGraphNode = ProgramEvidenceGraphNodeDto & {
+  attributes: Record<string, unknown> | null;
+  evidence_refs: string[];
+  support_refs: string[];
+  coverage_state: string | null;
+  origin: string | null;
+};
+
+type InternalProgramEvidenceGraphEdge = ProgramEvidenceGraphEdgeDto & {
+  attributes: Record<string, unknown> | null;
+  evidence_refs: string[];
+  support_refs: string[];
+  coverage_state: string | null;
+  origin: string | null;
+};
+
 function compareSourceCandidates(
   left: SourceCandidate,
   right: SourceCandidate,
@@ -293,6 +419,367 @@ function compareSourceCandidates(
     (left.start_line ?? 0) - (right.start_line ?? 0) ||
     collator.compare(left.symbol ?? "", right.symbol ?? "")
   );
+}
+
+function projectAiUsageGraph(
+  nodes: InternalProgramEvidenceGraphNode[],
+  edges: InternalProgramEvidenceGraphEdge[],
+): {
+  nodes: ProgramEvidenceGraphNodeDto[];
+  edges: ProgramEvidenceGraphEdgeDto[];
+} {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const validEdges = edges.filter(
+    (edge) => nodeById.has(edge.source) && nodeById.has(edge.target),
+  );
+  const incoming = new Map<string, InternalProgramEvidenceGraphEdge[]>();
+  for (const edge of validEdges) {
+    if (!AI_PATH_EDGE_TYPES.has(edge.relationship.toUpperCase())) continue;
+    incoming.set(edge.target, [...(incoming.get(edge.target) ?? []), edge]);
+  }
+  const seedNodes = nodes
+    .filter(isAiUsageSeedNode)
+    .sort(compareAiSeedNodes)
+    .slice(0, MAX_AI_USAGE_SEEDS);
+  if (!seedNodes.length) return { nodes: [], edges: [] };
+
+  const selectedNodes = new Map<string, InternalProgramEvidenceGraphNode>();
+  const selectedEdges = new Map<string, InternalProgramEvidenceGraphEdge>();
+  for (const seed of seedNodes) {
+    const path = strongestPathToAiSeed(seed, incoming, nodeById);
+    for (const node of path.nodes) selectedNodes.set(node.id, node);
+    for (const edge of path.edges) selectedEdges.set(edge.id, edge);
+    selectedNodes.set(seed.id, seed);
+    appendGovernedProviderProjection(seed, selectedNodes, selectedEdges);
+  }
+
+  const projectedNodes = [...selectedNodes.values()]
+    .filter((node) => AI_CONTEXT_NODE_KINDS.has(node.kind.toUpperCase()))
+    .map(toPublicNode)
+    .sort((left, right) => collator.compare(left.id, right.id));
+  const projectedNodeIds = new Set(projectedNodes.map((node) => node.id));
+  const projectedEdges = [...selectedEdges.values()]
+    .filter(
+      (edge) =>
+        projectedNodeIds.has(edge.source) && projectedNodeIds.has(edge.target),
+    )
+    .map(toPublicEdge)
+    .sort((left, right) => collator.compare(left.id, right.id));
+  return boundedGraph(
+    projectedNodes.slice(0, MAX_AI_USAGE_NODES),
+    projectedEdges.slice(0, MAX_AI_USAGE_EDGES),
+  );
+}
+
+function strongestPathToAiSeed(
+  seed: InternalProgramEvidenceGraphNode,
+  incoming: Map<string, InternalProgramEvidenceGraphEdge[]>,
+  nodeById: Map<string, InternalProgramEvidenceGraphNode>,
+): {
+  nodes: InternalProgramEvidenceGraphNode[];
+  edges: InternalProgramEvidenceGraphEdge[];
+} {
+  const queue: Array<{
+    nodeId: string;
+    edges: InternalProgramEvidenceGraphEdge[];
+    score: number;
+  }> = [{ nodeId: seed.id, edges: [], score: 0 }];
+  const visited = new Map<string, number>([[seed.id, 0]]);
+  let best: {
+    node: InternalProgramEvidenceGraphNode;
+    edges: InternalProgramEvidenceGraphEdge[];
+    score: number;
+  } | null = null;
+  let fallback: InternalProgramEvidenceGraphEdge[] = [];
+
+  while (queue.length) {
+    queue.sort(
+      (left, right) =>
+        left.score - right.score ||
+        left.edges.length - right.edges.length ||
+        collator.compare(left.nodeId, right.nodeId),
+    );
+    const current = queue.shift();
+    if (!current) break;
+    const currentNode = nodeById.get(current.nodeId);
+    if (!currentNode) continue;
+    if (current.edges.length > fallback.length) fallback = current.edges;
+    if (
+      current.nodeId !== seed.id &&
+      AI_PATH_SOURCE_KINDS.has(currentNode.kind.toUpperCase())
+    ) {
+      const candidate = {
+        node: currentNode,
+        edges: current.edges,
+        score: current.score + sourceKindCost(currentNode.kind),
+      };
+      if (
+        !best ||
+        candidate.score < best.score ||
+        (candidate.score === best.score &&
+          candidate.edges.length > best.edges.length)
+      ) {
+        best = candidate;
+      }
+    }
+    if (current.edges.length >= MAX_AI_USAGE_PATH_DEPTH) continue;
+    for (const edge of incoming.get(current.nodeId) ?? []) {
+      const source = nodeById.get(edge.source);
+      if (!source || !AI_CONTEXT_NODE_KINDS.has(source.kind.toUpperCase())) {
+        continue;
+      }
+      const nextScore = current.score + evidenceCost(edge);
+      if ((visited.get(source.id) ?? Number.POSITIVE_INFINITY) <= nextScore) {
+        continue;
+      }
+      visited.set(source.id, nextScore);
+      queue.push({
+        nodeId: source.id,
+        edges: [edge, ...current.edges],
+        score: nextScore,
+      });
+    }
+  }
+
+  const pathEdges = best?.edges ?? fallback;
+  const pathNodeIds = new Set<string>([seed.id]);
+  for (const edge of pathEdges) {
+    pathNodeIds.add(edge.source);
+    pathNodeIds.add(edge.target);
+  }
+  return {
+    nodes: [...pathNodeIds]
+      .map((id) => nodeById.get(id))
+      .filter((node): node is InternalProgramEvidenceGraphNode =>
+        Boolean(node),
+      ),
+    edges: pathEdges,
+  };
+}
+
+function sourceKindCost(kind: string): number {
+  switch (kind.toUpperCase()) {
+    case "MODULE":
+    case "PACKAGE":
+    case "FILE":
+      return 0;
+    case "HTTP_ROUTE":
+    case "GRPC_METHOD":
+    case "GRAPHQL_OPERATION":
+    case "WEBHOOK":
+    case "COMMAND":
+    case "QUERY":
+    case "CRON":
+    case "BUSINESS_ACTION":
+    case "AGENT_BOUNDARY_SOURCE":
+      return 2;
+    default:
+      return 4;
+  }
+}
+
+function appendGovernedProviderProjection(
+  node: InternalProgramEvidenceGraphNode,
+  selectedNodes: Map<string, InternalProgramEvidenceGraphNode>,
+  selectedEdges: Map<string, InternalProgramEvidenceGraphEdge>,
+) {
+  const provider = text(node.attributes?.provider);
+  const isObservedSdkInvocation =
+    node.kind.toUpperCase() === "AI_MODEL_INVOCATION" &&
+    (node.resolution_state === PROGRAM_GRAPH_RESOLUTION_STATES.observed ||
+      node.resolution_state === PROGRAM_GRAPH_RESOLUTION_STATES.corroborated);
+  if (
+    !provider ||
+    (node.evidence_state !== AI_DISCOVERY_EVIDENCE_STATES.confirmedAiCall &&
+      !isObservedSdkInvocation) ||
+    node.resolution_state === PROGRAM_GRAPH_RESOLUTION_STATES.unresolved
+  ) {
+    return;
+  }
+  const providerId = `projection-provider:${node.id}:${provider}`;
+  selectedNodes.set(providerId, {
+    id: providerId,
+    kind: "AI_PROVIDER",
+    label: provider,
+    symbol: null,
+    file: null,
+    line: null,
+    ai_usage_role: PROGRAM_GRAPH_NODE_ROLES.aiProvider,
+    evidence_state: AI_DISCOVERY_EVIDENCE_STATES.aiProviderReference,
+    resolution_state: node.resolution_state,
+    attributes: null,
+    evidence_refs: node.evidence_refs,
+    support_refs: node.support_refs,
+    coverage_state: node.coverage_state,
+    origin: node.origin,
+  });
+  selectedEdges.set(`projection-provider-edge:${node.id}:${provider}`, {
+    id: `projection-provider-edge:${node.id}:${provider}`,
+    source: node.id,
+    target: providerId,
+    relationship: "RESOLVES_TO",
+    evidence_state: AI_DISCOVERY_EVIDENCE_STATES.aiProviderReference,
+    resolution_state: node.resolution_state,
+    attributes: null,
+    evidence_refs: node.evidence_refs,
+    support_refs: node.support_refs,
+    coverage_state: node.coverage_state,
+    origin: node.origin,
+  });
+}
+
+function isAiUsageSeedNode(node: InternalProgramEvidenceGraphNode): boolean {
+  const kind = node.kind.toUpperCase();
+  if (!AI_USAGE_SEED_KINDS.has(kind)) return false;
+  if (
+    kind === "AI_MODEL_INVOCATION" &&
+    node.resolution_state !== PROGRAM_GRAPH_RESOLUTION_STATES.unresolved
+  ) {
+    return true;
+  }
+  if (kind === "AI_API_CANDIDATE") {
+    return (
+      node.evidence_state === AI_DISCOVERY_EVIDENCE_STATES.confirmedAiCall ||
+      node.evidence_state === AI_DISCOVERY_EVIDENCE_STATES.possibleAiCall
+    );
+  }
+  if (kind === "UNRESOLVED_DYNAMIC_TARGET") {
+    return booleanAttribute(node.attributes?.aiMaterial);
+  }
+  if (kind === "SDK_CLIENT" || kind === "PACKAGE_DEPENDENCY") {
+    return (
+      booleanAttribute(node.attributes?.aiRelevant) ||
+      text(node.attributes?.semanticRole)?.startsWith("PROVIDER_") === true
+    );
+  }
+  return (
+    kind === "AI_GATEWAY" ||
+    kind === "AI_PROVIDER" ||
+    kind === "MODEL" ||
+    kind === "MODEL_ENDPOINT"
+  );
+}
+
+function compareAiSeedNodes(
+  left: InternalProgramEvidenceGraphNode,
+  right: InternalProgramEvidenceGraphNode,
+): number {
+  return (
+    evidenceCost(left) - evidenceCost(right) ||
+    aiKindPriority(left.kind) - aiKindPriority(right.kind) ||
+    collator.compare(left.id, right.id)
+  );
+}
+
+function aiKindPriority(kind: string): number {
+  switch (kind.toUpperCase()) {
+    case "AI_MODEL_INVOCATION":
+      return 0;
+    case "AI_API_CANDIDATE":
+      return 1;
+    case "AI_GATEWAY":
+      return 2;
+    case "AI_PROVIDER":
+      return 3;
+    case "UNRESOLVED_DYNAMIC_TARGET":
+      return 4;
+    default:
+      return 5;
+  }
+}
+
+function evidenceCost(
+  item: Pick<
+    ProgramEvidenceGraphNodeDto | ProgramEvidenceGraphEdgeDto,
+    "resolution_state" | "evidence_state"
+  >,
+): number {
+  const resolution = item.resolution_state;
+  const evidence = item.evidence_state;
+  if (
+    resolution === PROGRAM_GRAPH_RESOLUTION_STATES.observed ||
+    resolution === PROGRAM_GRAPH_RESOLUTION_STATES.corroborated
+  ) {
+    return evidence === AI_DISCOVERY_EVIDENCE_STATES.possibleAiCall ? 1 : 0;
+  }
+  if (resolution === PROGRAM_GRAPH_RESOLUTION_STATES.inferred) return 2;
+  if (resolution === PROGRAM_GRAPH_RESOLUTION_STATES.unresolved) return 5;
+  return 3;
+}
+
+function toPublicNode(
+  node: InternalProgramEvidenceGraphNode,
+): ProgramEvidenceGraphNodeDto {
+  return {
+    id: node.id,
+    kind: node.kind,
+    label: node.label,
+    symbol: node.symbol,
+    file: node.file,
+    line: node.line,
+    ai_usage_role: node.ai_usage_role ?? roleForNode(node),
+    evidence_state: node.evidence_state,
+    resolution_state: node.resolution_state,
+  };
+}
+
+function toPublicEdge(
+  edge: InternalProgramEvidenceGraphEdge,
+): ProgramEvidenceGraphEdgeDto {
+  return {
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    relationship: edge.relationship,
+    evidence_state: edge.evidence_state,
+    resolution_state: edge.resolution_state,
+  };
+}
+
+function roleForNode(node: InternalProgramEvidenceGraphNode): string {
+  const kind = node.kind.toUpperCase();
+  if (["REPOSITORY", "PACKAGE", "MODULE", "FILE"].includes(kind)) {
+    return PROGRAM_GRAPH_NODE_ROLES.moduleFeature;
+  }
+  if (
+    [
+      "HTTP_ROUTE",
+      "GRPC_METHOD",
+      "GRAPHQL_OPERATION",
+      "WEBHOOK",
+      "COMMAND",
+      "QUERY",
+      "CRON",
+      "BUSINESS_ACTION",
+      "AGENT_BOUNDARY_SOURCE",
+    ].includes(kind)
+  ) {
+    return PROGRAM_GRAPH_NODE_ROLES.routeHandlerFeature;
+  }
+  if (kind === "SDK_CLIENT") return PROGRAM_GRAPH_NODE_ROLES.aiSdk;
+  if (kind === "AI_MODEL_INVOCATION") {
+    return PROGRAM_GRAPH_NODE_ROLES.aiSdkInvocation;
+  }
+  if (kind === "AI_API_CANDIDATE" || kind === "EXTERNAL_API") {
+    return PROGRAM_GRAPH_NODE_ROLES.aiApiEndpoint;
+  }
+  if (kind === "AI_GATEWAY") return PROGRAM_GRAPH_NODE_ROLES.aiGateway;
+  if (kind === "AI_PROVIDER") return PROGRAM_GRAPH_NODE_ROLES.aiProvider;
+  if (kind === "MODEL" || kind === "MODEL_ENDPOINT") {
+    return PROGRAM_GRAPH_NODE_ROLES.modelIdentity;
+  }
+  if (
+    kind === "CONFIG_SOURCE" ||
+    kind === "ENV_SOURCE" ||
+    kind === "CONTROL_CONDITION" ||
+    kind === "FEATURE_FLAG"
+  ) {
+    return PROGRAM_GRAPH_NODE_ROLES.configControl;
+  }
+  if (kind === "UNRESOLVED_DYNAMIC_TARGET") {
+    return PROGRAM_GRAPH_NODE_ROLES.unresolvedCandidate;
+  }
+  return PROGRAM_GRAPH_NODE_ROLES.serviceClient;
 }
 
 function boundedGraph(
@@ -385,13 +872,14 @@ function seedScore(node: ProgramEvidenceGraphNodeDto): number {
     : 1;
 }
 
-function graphNodes(value: unknown): ProgramEvidenceGraphNodeDto[] {
+function graphNodes(value: unknown): InternalProgramEvidenceGraphNode[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
     const node = record(entry);
     const id = text(node?.node_id ?? node?.nodeId);
     if (!id) return [];
     const source = record(node?.source);
+    const attributes = safeAttributes(node?.attributes);
     return [
       {
         id,
@@ -405,12 +893,26 @@ function graphNodes(value: unknown): ProgramEvidenceGraphNodeDto[] {
             source?.start_line ??
             source?.startLine,
         ),
+        ai_usage_role: null,
+        evidence_state: discoveryState(attributes),
+        resolution_state: resolutionState(
+          node?.resolution_state ?? node?.resolutionState,
+        ),
+        attributes,
+        evidence_refs: strings(
+          node?.evidence_refs ?? node?.evidenceRefs,
+        ).filter(isSafeReference),
+        support_refs: strings(node?.support_refs ?? node?.supportRefs).filter(
+          isSafeReference,
+        ),
+        coverage_state: text(node?.coverage_state ?? node?.coverageState),
+        origin: text(node?.origin),
       },
     ];
   });
 }
 
-function graphEdges(value: unknown): ProgramEvidenceGraphEdgeDto[] {
+function graphEdges(value: unknown): InternalProgramEvidenceGraphEdge[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
     const edge = record(entry);
@@ -422,6 +924,7 @@ function graphEdges(value: unknown): ProgramEvidenceGraphEdgeDto[] {
       edge?.target_node_id ?? edge?.targetNodeId ?? edge?.target,
     );
     if (!id || !source || !target) return [];
+    const attributes = safeAttributes(edge?.attributes);
     return [
       {
         id,
@@ -430,6 +933,19 @@ function graphEdges(value: unknown): ProgramEvidenceGraphEdgeDto[] {
         relationship:
           text(edge?.edge_type ?? edge?.edgeType ?? edge?.relationship) ??
           "RELATED",
+        evidence_state: discoveryState(attributes),
+        resolution_state: resolutionState(
+          edge?.resolution_state ?? edge?.resolutionState,
+        ),
+        attributes,
+        evidence_refs: strings(
+          edge?.evidence_refs ?? edge?.evidenceRefs,
+        ).filter(isSafeReference),
+        support_refs: strings(edge?.support_refs ?? edge?.supportRefs).filter(
+          isSafeReference,
+        ),
+        coverage_state: text(edge?.coverage_state ?? edge?.coverageState),
+        origin: text(edge?.origin),
       },
     ];
   });
@@ -510,6 +1026,53 @@ function strings(value: unknown): string[] {
         )
         .map((item) => item.trim())
     : [];
+}
+function safeAttributes(value: unknown): Record<string, unknown> | null {
+  const attrs = record(value);
+  if (!attrs) return null;
+  const safe: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(attrs)) {
+    if (!isSafeAttributeName(key)) continue;
+    if (typeof raw === "boolean") {
+      safe[key] = raw;
+    } else if (typeof raw === "number" && Number.isFinite(raw)) {
+      safe[key] = raw;
+    } else if (typeof raw === "string") {
+      const value = text(raw);
+      if (value) safe[key] = value.slice(0, 240);
+    } else if (Array.isArray(raw)) {
+      const values = raw
+        .map((item) => text(item))
+        .filter((item): item is string => Boolean(item))
+        .slice(0, 8);
+      if (values.length) safe[key] = values;
+    }
+  }
+  return Object.keys(safe).length ? safe : null;
+}
+function isSafeAttributeName(value: string): boolean {
+  return !/\b(token|secret|password|credential|authorization)\b/i.test(value);
+}
+function discoveryState(attrs: Record<string, unknown> | null): string | null {
+  const state = text(attrs?.discoveryState ?? attrs?.discovery_state);
+  return state &&
+    (Object.values(AI_DISCOVERY_EVIDENCE_STATES) as readonly string[]).includes(
+      state,
+    )
+    ? state
+    : null;
+}
+function resolutionState(value: unknown): string {
+  const state = text(value);
+  return state &&
+    (
+      Object.values(PROGRAM_GRAPH_RESOLUTION_STATES) as readonly string[]
+    ).includes(state)
+    ? state
+    : PROGRAM_GRAPH_RESOLUTION_STATES.unresolved;
+}
+function booleanAttribute(value: unknown): boolean {
+  return value === true || value === "true" || value === "TRUE";
 }
 function isSafeReference(value: string): boolean {
   return (
