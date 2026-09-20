@@ -226,9 +226,26 @@ def _text_computed_receiver_candidates(
         depth = 1
         quote: str | None = None
         escaped = False
+        line_comment = False
+        block_comment = False
         statement_tail = tail
         completed = False
-        for index, character in enumerate(tail):
+        index = 0
+        while index < len(tail):
+            character = tail[index]
+            next_character = tail[index + 1] if index + 1 < len(tail) else ""
+            if line_comment:
+                if character == "\n":
+                    line_comment = False
+                index += 1
+                continue
+            if block_comment:
+                if character == "*" and next_character == "/":
+                    block_comment = False
+                    index += 2
+                    continue
+                index += 1
+                continue
             if quote is not None:
                 if escaped:
                     escaped = False
@@ -236,9 +253,19 @@ def _text_computed_receiver_candidates(
                     escaped = True
                 elif character == quote:
                     quote = None
+                index += 1
+                continue
+            if character == "/" and next_character == "/":
+                line_comment = True
+                index += 2
+                continue
+            if character == "/" and next_character == "*":
+                block_comment = True
+                index += 2
                 continue
             if character in {'"', "'", "`"}:
                 quote = character
+                index += 1
                 continue
             if character == "[":
                 depth += 1
@@ -250,6 +277,7 @@ def _text_computed_receiver_candidates(
             elif character == ";" and depth == 1:
                 statement_tail = tail[:index]
                 break
+            index += 1
         if completed:
             continue
         if not re.search(
@@ -1105,6 +1133,21 @@ class RepositorySemanticExtractor:
                             relative,
                             line_no,
                             line_no,
+                            attributes={
+                                "jsAssignment": True,
+                                "assignmentLine": line_no,
+                                "assignmentRhs": right,
+                                "assignmentSourceKey": (
+                                    js_binding_key(right, line_no)
+                                    if re.fullmatch(
+                                        r"[A-Za-z_$][\w$]*", right
+                                    )
+                                    else ""
+                                ),
+                                "assignmentDeclaration": bool(
+                                    re.match(r"\s*(?:const|let|var)\b", line)
+                                ),
+                            },
                             semantic_types=semantic_types_for_identifier(left),
                         )
                     )
@@ -1126,10 +1169,12 @@ class RepositorySemanticExtractor:
             # asserted RHS expressions as explicit graph aliases. The graph can
             # then decide whether a receiver reaches a governed method without
             # teaching the scanner every JavaScript expression form.
+            assignment_source = re.sub(r"/\*.*?\*/", "", line)
+            assignment_source = assignment_source.split("//", 1)[0]
             full_assignment = re.search(
                 r"\b(?:const|let|var)?\s*([A-Za-z_$][\w$]*)"
                 r"(?:\s*:\s*[^=,;]+)?\s*=\s*(.+?)(?:;|$)",
-                line,
+                assignment_source,
             )
             if (
                 is_js_text
@@ -1149,6 +1194,27 @@ class RepositorySemanticExtractor:
                         relative,
                         line_no,
                         line_no,
+                        attributes={
+                            "jsAssignment": True,
+                            "assignmentLine": line_no,
+                            "assignmentRhs": rhs_expression,
+                            "assignmentDeclaration": bool(
+                                re.match(
+                                    r"\s*(?:const|let|var)\b",
+                                    assignment_source,
+                                )
+                            ),
+                            "assignmentSourceKey": (
+                                js_binding_key(
+                                    rhs_expression.strip(), line_no
+                                )
+                                if re.fullmatch(
+                                    r"[A-Za-z_$][\w$]*",
+                                    rhs_expression.strip(),
+                                )
+                                else ""
+                            ),
+                        },
                         semantic_types=semantic_types_for_identifier(left_name),
                     )
                 )

@@ -1943,72 +1943,73 @@ class AIDiscoveryEnricher:
                 ":", 1
             )
             projection_holders[holder_key] = property_name
-        projection_parent = {holder: holder for holder in projection_holders}
-
-        # A mutable alias is equivalent only until its next binding assignment.
-        # Literal containers/values and non-governed constructors are foreign;
-        # other writes remain uncertain at the dispatch site.
-        holder_reassignments: dict[str, list[tuple[int, bool]]] = {}
-        projection_holder_nodes = {
-            holder_key: node_by_key.get(holder_key)
-            for holder_key in projection_holders
-        }
-        for holder_key, holder_node in projection_holder_nodes.items():
-            if holder_node is None or not holder_node.label:
+        # Keep alias state at the binding and source position. A variable key
+        # can be assigned several times, so a file-wide union would let a
+        # future write erase an alias that was valid at an earlier dispatch.
+        holder_assignment_events: dict[
+            str, list[tuple[int, str | None, bool, bool]]
+        ] = {}
+        for assignment_node in program.nodes:
+            if assignment_node.file_path != relative:
                 continue
-            declaration_re = re.compile(
-                rf"\b(?:const|let|var)\b[^;\n]*\b"
-                rf"{re.escape(holder_node.label)}\b"
-            )
-            declaration_lines = [
-                line_no
-                for line_no, source_line in enumerate(
-                    source_text.splitlines(), start=1
-                )
-                if declaration_re.search(source_line)
-            ]
-            declaration_line = min(
-                declaration_lines,
-                default=int(holder_node.start_line or 0),
-            )
-            assignment_re = re.compile(
-                rf"(?<![\w$.]){re.escape(holder_node.label)}\s*"
-                rf"=(?!=|>)\s*(.+?)(?:;|$)"
-            )
-            for line_no, source_line in enumerate(
-                source_text.splitlines(), start=1
+            attributes = assignment_node.attributes or {}
+            if (
+                assignment_node.node_type != "VARIABLE"
+                or attributes.get("jsAssignment") is not True
             ):
-                if line_no <= declaration_line:
-                    continue
-                assignment = assignment_re.search(source_line)
-                if not assignment:
-                    continue
-                rhs = assignment.group(1).strip()
-                constructor = re.match(
-                    r"^new\s+([A-Za-z_$][\w$]*)", rhs
+                continue
+            line_no = int(attributes.get("assignmentLine") or 0)
+            if line_no < 1:
+                continue
+            source_key = str(attributes.get("assignmentSourceKey") or "")
+            rhs = str(attributes.get("assignmentRhs") or "").strip()
+            rhs_references = set(
+                re.findall(r"\b[A-Za-z_$][\w$]*\b", rhs)
+            )
+            rhs_references.difference_update(
+                {"const", "let", "var", "new", "true", "false", "null"}
+            )
+            constructor = re.match(
+                r"^new\s+([A-Za-z_$][\w$]*)\b", rhs
+            )
+            complete_object = rhs.startswith("{") and rhs.endswith("}")
+            complete_array = rhs.startswith("[") and rhs.endswith("]")
+            primitive = bool(
+                re.match(
+                    r"^(?:['\"`]|[-+]?\d|true\b|false\b|null\b)",
+                    rhs,
                 )
-                foreign = bool(
-                    re.match(
-                        r"^(?:\{|\[|['\"`]|[-+]?\d|true\b|false\b|null\b)",
-                        rhs,
+            )
+            foreign = bool(
+                (not source_key and primitive)
+                or (not source_key and complete_object and not rhs_references)
+                or (not source_key and complete_array and not rhs_references)
+                or (
+                    not source_key
+                    and constructor is not None
+                    and not rhs_references
+                    and ")" in rhs
+                )
+            )
+            holder_assignment_events.setdefault(assignment_node.key, []).append(
+                (
+                    line_no,
+                    source_key or None,
+                    bool(attributes.get("assignmentDeclaration")),
+                    foreign,
+                )
+            )
+
+        for events in holder_assignment_events.values():
+            events.sort(key=lambda item: item[0])
+
+        holder_reassignments: dict[str, list[tuple[int, bool]]] = {}
+        for holder_key, events in holder_assignment_events.items():
+            for line_no, source_key, declaration, foreign in events:
+                if source_key is None and not declaration:
+                    holder_reassignments.setdefault(holder_key, []).append(
+                        (line_no, foreign)
                     )
-                    or (constructor and constructor.group(1) != owner_class)
-                )
-                holder_reassignments.setdefault(holder_key, []).append(
-                    (line_no, foreign)
-                )
-
-        def projection_find(key: str) -> str:
-            parent = projection_parent.setdefault(key, key)
-            if parent != key:
-                projection_parent[key] = projection_find(parent)
-            return projection_parent[key]
-
-        def projection_union(left: str, right: str) -> None:
-            left_root = projection_find(left)
-            right_root = projection_find(right)
-            if left_root != right_root:
-                projection_parent[right_root] = left_root
 
         def projection_paths_overlap(left: str, right: str) -> bool:
             left_segments = left.split(".")
@@ -2022,39 +2023,58 @@ class AIDiscoveryEnricher:
                 )
             )
 
-        for edge in program.edges:
-            if edge.edge_type not in {"ALIASES", "ASSIGNS"}:
-                continue
-            if not self._edge_is_trusted(edge):
-                continue
-            source_node = node_by_key.get(edge.source_key)
-            target_node = node_by_key.get(edge.target_key)
-            if (
-                source_node is None
-                or target_node is None
-                or source_node.file_path != relative
-                or target_node.file_path != relative
-                or source_node.node_type not in {"VARIABLE", "PARAMETER"}
-                or target_node.node_type not in {"VARIABLE", "PARAMETER"}
-                or (source_node.attributes or {}).get("memberProjection")
-                or (target_node.attributes or {}).get("memberProjection")
-            ):
-                continue
-            if any(
-                holder_reassignments.get(holder_key)
-                for holder_key in (source_node.key, target_node.key)
-            ):
-                continue
-            projection_union(source_node.key, target_node.key)
+        def projection_equivalents_at(
+            receiver_holder_key: str,
+            receiver_property: str,
+            dispatch_line: int,
+        ) -> set[str]:
+            """Resolve holder aliases using only assignments visible at a call."""
+            parent = {
+                holder: holder
+                for holder in set(projection_holders)
+                | set(holder_assignment_events)
+            }
 
-        projection_equivalents: dict[str, set[str]] = {}
-        for projection_key in projection_keys:
-            if not projection_key.startswith("projection:"):
-                continue
-            holder_key, property_name = projection_key[len("projection:") :].rsplit(
-                ":", 1
-            )
-            component = projection_find(holder_key)
+            def find(key: str) -> str:
+                parent.setdefault(key, key)
+                if parent[key] != key:
+                    parent[key] = find(parent[key])
+                return parent[key]
+
+            def union(left: str, right: str) -> None:
+                left_root = find(left)
+                right_root = find(right)
+                if left_root != right_root:
+                    parent[right_root] = left_root
+
+            def latest_event(
+                key: str,
+            ) -> tuple[int, str | None, bool, bool] | None:
+                prior = [
+                    event
+                    for event in holder_assignment_events.get(key, [])
+                    if event[0] <= dispatch_line
+                ]
+                return prior[-1] if prior else None
+
+            for target_key, events in holder_assignment_events.items():
+                event = next(
+                    (item for item in reversed(events) if item[0] <= dispatch_line),
+                    None,
+                )
+                if event is None or event[1] is None:
+                    continue
+                source_event = latest_event(event[1])
+                if (
+                    source_event is not None
+                    and source_event[1] is None
+                    and not source_event[2]
+                ):
+                    continue
+                union(target_key, event[1])
+
+            component = find(receiver_holder_key)
+            result: set[str] = set()
             for candidate in projection_keys:
                 if not candidate.startswith("projection:"):
                     continue
@@ -2062,14 +2082,12 @@ class AIDiscoveryEnricher:
                     len("projection:") :
                 ].rsplit(":", 1)
                 if (
-                    projection_paths_overlap(candidate_property, property_name)
-                    and projection_find(candidate_holder) == component
+                    projection_paths_overlap(candidate_property, receiver_property)
+                    and find(candidate_holder) == component
                 ):
-                    projection_equivalents.setdefault(
-                        projection_key, set()
-                    ).add(candidate)
+                    result.add(candidate)
+            return result
 
-            # Any alias/value-flow escape means direct call-site closure is not established.
         # This catches local aliases, Python aliases, and callbacks represented as
         # PASSES_ARGUMENT without pretending their eventual target is known.
         for edge in program.edges:
@@ -2352,14 +2370,24 @@ class AIDiscoveryEnricher:
                                 receiver_projection_key.rsplit(":", 1)[0]
                                 + ":*"
                             )
-                        equivalent_projection_keys = projection_equivalents.get(
-                            receiver_projection_key, set()
-                        )
                         receiver_holder_key = ""
+                        receiver_property = ""
                         if receiver_projection_key.startswith("projection:"):
-                            receiver_holder_key = receiver_projection_key[
+                            projection_value = receiver_projection_key[
                                 len("projection:") :
-                            ].rsplit(":", 1)[0]
+                            ]
+                            receiver_holder_key, receiver_property = (
+                                projection_value.rsplit(":", 1)
+                            )
+                        equivalent_projection_keys = (
+                            projection_equivalents_at(
+                                receiver_holder_key,
+                                receiver_property,
+                                int(element_dispatch.start_line or 0),
+                            )
+                            if receiver_holder_key and receiver_property
+                            else set()
+                        )
                         prior_reassignments = [
                             item
                             for item in holder_reassignments.get(

@@ -3277,3 +3277,149 @@ service.summarize("closed", false);
 alias.service[method]("runtime", true);
 """)
     assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_holder_alias_dispatch_before_later_reassignment_stays_technical(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const holder = { service };
+let alias = holder;
+const method = "summarize";
+service.summarize("closed", false);
+alias.service[method]("runtime", true);
+alias = {};
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_comment_assignment_does_not_break_holder_alias_flow(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const holder = { service };
+let alias = holder;
+// alias = {};
+const method = "summarize";
+service.summarize("closed", false);
+alias.service[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_same_name_reassignment_in_nested_scope_does_not_cross_bindings(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+const holder = { service };
+let alias = holder;
+function unrelated() {
+  let alias = {};
+  alias.service = new LocalRecorder();
+}
+const method = "summarize";
+service.summarize("closed", false);
+alias.service[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_container_constructor_with_governed_value_stays_technical(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+let alias = null;
+alias = new Holder(service);
+const method = "summarize";
+service.summarize("closed", false);
+alias.service[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_multiline_container_reassignment_stays_technical(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+let alias = null;
+alias = {
+  service,
+};
+const method = "summarize";
+service.summarize("closed", false);
+alias.service[method]("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_unbalanced_receiver_ignores_bracket_in_line_comment(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+service.summarize("closed", false);
+service[
+  // ] generated source is incomplete
+  method("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
+
+
+def test_unbalanced_receiver_ignores_bracket_in_block_comment(
+    tmp_path: Path,
+) -> None:
+    discovery = _discovery(tmp_path, """
+class AiService {
+  summarize(text: string, aiEnabled: boolean) {
+    if (!aiEnabled) return text;
+    return client.responses.create({ model: "gpt-5", input: text });
+  }
+}
+const service = new AiService();
+service.summarize("closed", false);
+service[
+  /* ] generated source is incomplete */
+  method("runtime", true);
+""")
+    assert discovery["gate"] == "AI_UNKNOWN"
