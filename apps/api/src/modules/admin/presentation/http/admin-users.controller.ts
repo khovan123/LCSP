@@ -11,24 +11,28 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import {
-  ADMIN_ACCOUNT_OPERATIONS as O,
-  AUTH_USER_ROLES,
-} from "@lcsp/contracts/auth";
+import { CommandBus, QueryBus } from "@nestjs/cqrs";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
-import { AdminAccountReadService } from "../../application/services/admin-account-read.service.js";
-import { AdminAccountCommandService } from "../../application/services/admin-account-command.service.js";
+import {
+  ListAdminUsersQuery,
+  GetAdminUserDetailQuery,
+} from "../../application/queries/index.js";
+import {
+  SuspendUserCommand,
+  RestoreUserCommand,
+} from "../../application/commands/index.js";
 import { idempotency } from "../../application/services/admin-account.validation.js";
 import type { AdminActor } from "../../application/services/admin-account.transaction.js";
 
 @Controller("admin/users")
 export class AdminUsersController {
   constructor(
-    private readonly reads: AdminAccountReadService,
-    private readonly commands: AdminAccountCommandService,
+    private readonly queryBus: QueryBus,
+    private readonly commandBus: CommandBus,
   ) {}
 
   @Get()
@@ -38,7 +42,11 @@ export class AdminUsersController {
     @Query() query: Record<string, unknown>,
     @Req() request: AuthenticatedRequest,
   ) {
-    return resultEnvelope(await this.reads.list(query, request.correlationId!));
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new ListAdminUsersQuery(query, request.correlationId!),
+      ),
+    );
   }
 
   @Get(":id")
@@ -48,7 +56,11 @@ export class AdminUsersController {
     @Param("id") id: string,
     @Req() request: AuthenticatedRequest,
   ) {
-    return resultEnvelope(await this.reads.detail(id, request.correlationId!));
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetAdminUserDetailQuery(id, request.correlationId!),
+      ),
+    );
   }
 
   @Post(":id/suspend")
@@ -62,7 +74,9 @@ export class AdminUsersController {
     @Req() request: AuthenticatedRequest,
   ) {
     return resultEnvelope(
-      await this.commands.mutate(id, O.suspend, body, this.actor(request, key)),
+      await this.commandBus.execute(
+        new SuspendUserCommand(id, body, this.actor(request, key)),
+      ),
     );
   }
 
@@ -77,7 +91,9 @@ export class AdminUsersController {
     @Req() request: AuthenticatedRequest,
   ) {
     return resultEnvelope(
-      await this.commands.mutate(id, O.restore, body, this.actor(request, key)),
+      await this.commandBus.execute(
+        new RestoreUserCommand(id, body, this.actor(request, key)),
+      ),
     );
   }
 

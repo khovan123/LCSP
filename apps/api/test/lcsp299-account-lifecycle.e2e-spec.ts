@@ -34,6 +34,9 @@ import { RbacGuard } from "../src/platform/rbac/rbac.guard.js";
 import { RbacContextLoader } from "../src/platform/rbac/rbac-context.loader.js";
 import { RbacPreflightService } from "../src/platform/rbac/rbac-preflight.service.js";
 import { RBAC_DECISIONS } from "@lcsp/contracts/rbac";
+import { CqrsModule } from "@nestjs/cqrs";
+import { ADMIN_COMMAND_HANDLERS } from "../src/modules/admin/application/commands/index.js";
+import { ADMIN_QUERY_HANDLERS } from "../src/modules/admin/application/queries/index.js";
 import { AdminUsersController } from "../src/modules/admin/presentation/http/admin-users.controller.js";
 import { AdminAccountReadService } from "../src/modules/admin/application/services/admin-account-read.service.js";
 import { AdminAccountCommandService } from "../src/modules/admin/application/services/admin-account-command.service.js";
@@ -110,6 +113,7 @@ integration(
       }
       prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl!) });
       const module = await Test.createTestingModule({
+        imports: [CqrsModule],
         controllers: [AdminUsersController, ProtectedController],
         providers: [
           { provide: PrismaService, useValue: prisma },
@@ -126,6 +130,8 @@ integration(
           },
           AdminAccountReadService,
           AdminAccountCommandService,
+          ...ADMIN_COMMAND_HANDLERS,
+          ...ADMIN_QUERY_HANDLERS,
           AuthAuditService,
           AuditWriterService,
           ProblemExceptionFilter,
