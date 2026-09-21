@@ -195,7 +195,7 @@ EvidenceClaim, Scanner/PGE, EngineeringRule, legal or final-verdict events.
 
 Every decision type has an explicit policy row:
 
-- allowed modes: `OFF`, `SHADOW`, `ASSISTED`, `AUTONOMOUS`;
+- allowed modes: `SHADOW`, `ASSIST`, `ACTIVE`;
 - minimum confidence;
 - maximum false-negative tolerance;
 - fallback action;
@@ -209,7 +209,7 @@ Low confidence, provider failure, invalid output, privacy-redaction uncertainty,
 policy mismatch, unsupported decision type, expired model version, or timeout
 always falls back to current LCSP behavior.
 
-Initial production mode is `SHADOW`. `AUTONOMOUS` is allowed only for an
+Initial production mode is `SHADOW`. `ACTIVE` is allowed only for an
 allowlisted decision type after the evaluation gate in this document passes and
 after a separate reviewed activation change updates the policy.
 
@@ -263,7 +263,7 @@ after a separate reviewed activation change updates the policy.
 
 ## Evaluation Gate
 
-Autonomous routing is blocked until an LCSP-specific labeled evaluation set
+Active routing is blocked until an LCSP-specific labeled evaluation set
 exists for the target decision type.
 
 Measure at minimum:
@@ -287,10 +287,10 @@ Suggested activation thresholds for non-safety-critical decisions:
 - p95 latency within the per-decision budget;
 - invalid-output and timeout fallback rates within budget;
 - calibrated confidence monotonicity across buckets;
-- documented rollback path to `SHADOW` or `OFF`.
+- documented rollback path to `SHADOW`.
 
-Safety-critical decisions remain `SHADOW` or `ASSISTED` unless a separate
-architecture review explicitly approves an autonomous mode.
+Safety-critical decisions remain `SHADOW` or `ASSIST` unless a separate
+architecture review explicitly approves `ACTIVE` mode.
 
 ## Rollout Phases
 
@@ -318,14 +318,22 @@ architecture review explicitly approves an autonomous mode.
 - build LCSP-specific labeled eval sets;
 - measure agreement, false-negative rate, calibration, fallback, latency, cost
   and reasoning-token reduction;
-- enable autonomous routing only per allowlisted decision type after thresholds
+- enable `ACTIVE` routing only per allowlisted decision type after thresholds
   are satisfied;
 - preserve reasoning-model fallback for uncertain or safety-critical decisions.
 
-## Sprint 12 Issue Pack
+## Sprint 12 Tracking Map
 
-These issue drafts are the required Sprint 12 tracking units. They should be
-created as separate issues before implementation begins.
+The Sprint 12 implementation issues already exist. The `S12-JEV-*` sections
+below are conceptual checklist slices for this architecture plan, not new Jira
+issues to create. Track implementation through the canonical Jira issues:
+
+| Conceptual sections | Canonical Jira issue |
+| --- | --- |
+| `S12-JEV-01` through `S12-JEV-04` | LCSP-335 |
+| `S12-JEV-05` and `S12-JEV-06` | LCSP-336 |
+| `S12-JEV-07` | LCSP-337 |
+| `S12-JEV-08` | LCSP-338 |
 
 ### S12-JEV-01 - Architecture contract and decision-type registry
 
@@ -486,14 +494,14 @@ Scope:
 
 Safety boundaries:
 
-- no autonomous routing before the eval gate passes;
+- no `ACTIVE` routing before the eval gate passes;
 - safety-critical decision types require separate architecture review;
-- rollback to `SHADOW` or `OFF` must be operationally simple.
+- rollback to `SHADOW` must be operationally simple.
 
 Regression expectations:
 
 - eval runner fails closed when labels or policy thresholds are missing;
-- activation tests prove unsupported decision types cannot enter `AUTONOMOUS`;
+- activation tests prove unsupported decision types cannot enter `ACTIVE`;
 - runbook includes rollback verification and post-activation monitoring.
 
 ## Acceptance Criteria
@@ -502,7 +510,7 @@ Regression expectations:
 - Existing Scanner/PGE, EngineeringRule, deterministic legal/compliance gates,
   EvidenceClaim validation and final verdict boundaries are preserved.
 - Core gateway, shadow integrations, tool-routing integrations and
-  evaluation/observability are tracked by dedicated Sprint 12 issues.
+  evaluation/observability are tracked by LCSP-335 through LCSP-338.
 - Every implementation issue includes safety boundaries and regression
   expectations.
 - Shadow mode is the default and cannot modify authoritative production
@@ -511,7 +519,7 @@ Regression expectations:
   always falls back to existing LCSP behavior.
 - Raw/unrestricted source and sensitive runtime/customer context are excluded
   from Jev payloads.
-- Evaluation criteria are defined before autonomous activation.
+- Evaluation criteria are defined before `ACTIVE` activation.
 - Final legal/compliance/risk verdict delegation to Jev is explicitly excluded.
 
 ## Non-goals
