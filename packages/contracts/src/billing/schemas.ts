@@ -284,6 +284,16 @@ export type BillingAdminDashboardQuery = z.infer<
   typeof billingAdminDashboardQuerySchema
 >;
 
+export const billingAdminExportQuerySchema =
+  billingAdminDashboardQuerySchema.pick({
+    period: true,
+    status: true,
+    gateway: true,
+  });
+export type BillingAdminExportQuery = z.infer<
+  typeof billingAdminExportQuerySchema
+>;
+
 const billingAdminAccountSchema = z.object({
   userId: nonEmptyText,
   email: z.email(),
@@ -339,6 +349,14 @@ export const billingAdminDashboardSchema = z.object({
 });
 export const billingAdminGatewaySchema = z.enum(BILLING_ADMIN_GATEWAYS);
 export type BillingAdminDashboard = z.infer<typeof billingAdminDashboardSchema>;
+
+export const billingAdminExportReportSchema = z.object({
+  period: z.enum(BILLING_ADMIN_PERIODS),
+  items: z.array(billingAdminPaymentRowSchema),
+});
+export type BillingAdminExportReport = z.infer<
+  typeof billingAdminExportReportSchema
+>;
 
 export function parseBillingAdminDashboard(value: unknown) {
   const parsed = billingAdminDashboardSchema.safeParse(value);

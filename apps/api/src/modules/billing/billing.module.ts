@@ -37,6 +37,7 @@ import { GetBillingRevenueSummaryHandler } from "./application/queries/get-billi
 import { ListBillingTransactionsHandler } from "./application/queries/list-billing-transactions/list-billing-transactions.handler.js";
 import { ResolveBillingAssessmentOwnerHandler } from "./application/queries/resolve-billing-assessment-owner/resolve-billing-assessment-owner.handler.js";
 import { GetBillingAdminDashboardHandler } from "./application/queries/get-admin-billing-dashboard/get-admin-billing-dashboard.handler.js";
+import { GetBillingAdminExportHandler } from "./application/queries/get-admin-billing-export/get-admin-billing-export.handler.js";
 import {
   BILLING_USAGE_KERNEL,
   BillingUsageKernel,
@@ -80,6 +81,7 @@ import {
     EstimateUsageBillingHandler,
     GetBillingOrderHandler,
     GetBillingAdminDashboardHandler,
+    GetBillingAdminExportHandler,
     GetBillingReconciliationHandler,
     GetBillingWalletHandler,
     ListBillingHistoryHandler,

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   BILLING_ADMIN_PERIODS,
+  BILLING_ADMIN_GATEWAYS,
+  BILLING_ADMIN_PAYMENT_FILTERS,
   BILLING_ORDER_STATUSES,
   BILLING_PAYMENT_PROVIDERS,
   PREPAID_BILLING_CONFIG,
@@ -18,6 +20,7 @@ import {
   getBillingEstimate,
   getBillingWallet,
 } from "../src/lib/api/billing-client.ts";
+import { fetchAdminBillingExport } from "../src/lib/api/admin-billing-client.ts";
 import { validatedBillingUpstreamJson } from "../src/lib/server/billing-upstream.ts";
 
 test("Billing amount schema enforces the canonical amount boundaries", () => {
@@ -199,6 +202,34 @@ test("Billing browser client uses schemas for local input and response checks", 
   try {
     await assert.rejects(getBillingWallet(), BillingRequestError);
     await assert.rejects(getBillingEstimate("10001"), BillingRequestError);
+    assert.equal(fetchCalls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Admin billing export client fetches one snapshot report and validates it", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = async (input) => {
+    fetchCalls += 1;
+    assert.equal(
+      String(input),
+      `/api/admin/billing/export?period=${BILLING_ADMIN_PERIODS.mtd}&status=${BILLING_ADMIN_PAYMENT_FILTERS.all}&gateway=${BILLING_ADMIN_GATEWAYS.all}`,
+    );
+    return Response.json({
+      ok: true,
+      data: { period: BILLING_ADMIN_PERIODS.mtd, items: [] },
+    });
+  };
+
+  try {
+    const report = await fetchAdminBillingExport({
+      period: BILLING_ADMIN_PERIODS.mtd,
+      status: BILLING_ADMIN_PAYMENT_FILTERS.all,
+      gateway: BILLING_ADMIN_GATEWAYS.all,
+    });
+    assert.deepEqual(report, { period: BILLING_ADMIN_PERIODS.mtd, items: [] });
     assert.equal(fetchCalls, 1);
   } finally {
     globalThis.fetch = originalFetch;

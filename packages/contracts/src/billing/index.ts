@@ -9,6 +9,8 @@ export * from "./sepay.ts";
 export * from "./admin-reporting.ts";
 export {
   billingAdminDashboardSchema,
+  billingAdminExportReportSchema,
+  billingAdminExportQuerySchema,
   billingAdminGatewaySchema,
   billingAdminPaymentRowSchema,
   billingAdminRejectSchema,
@@ -35,6 +37,8 @@ export {
 } from "./schemas.ts";
 export type {
   BillingAdminDashboardQuery,
+  BillingAdminExportQuery,
+  BillingAdminExportReport,
   BillingAdminRejectRequest,
   BillingAdminReconciliationListQuery,
   BillingAdminResolveRequest,

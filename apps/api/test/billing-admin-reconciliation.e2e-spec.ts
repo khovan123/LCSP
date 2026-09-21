@@ -5,6 +5,9 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import {
+  BILLING_ADMIN_GATEWAYS,
+  BILLING_ADMIN_PAYMENT_FILTERS,
+  BILLING_ADMIN_PERIODS,
   BILLING_ORDER_STATUSES,
   LLM_USAGE_STATUSES,
   PAYMENT_RECONCILIATION_REASONS,
@@ -632,6 +635,46 @@ describe("Admin billing reconciliation (e2e)", () => {
 
     await httpRequest(app)
       .get("/admin/billing")
+      .set("Authorization", `Bearer ${customerToken}`)
+      .expect(403);
+  });
+
+  it("exports rows in stable receivedAt and id order and denies customers", async () => {
+    const receivedAt = new Date(Date.now() - 1000);
+    const exports = await Promise.all(
+      ["TX-ADMIN-EXPORT-A", "TX-ADMIN-EXPORT-B"].map((providerTransactionId) =>
+        prisma.paymentTransaction.create({
+          data: {
+            provider: BILLING_ADMIN_GATEWAYS.sepay,
+            providerTransactionId,
+            amountMinorUnits: 1000n,
+            receivedAt,
+          },
+        }),
+      ),
+    );
+    const expectedIds = exports
+      .map((payment) => payment.id)
+      .sort((left, right) => (left > right ? -1 : left < right ? 1 : 0));
+
+    const response = await httpRequest(app)
+      .get(
+        `/admin/billing/export?period=${BILLING_ADMIN_PERIODS.mtd}&status=${BILLING_ADMIN_PAYMENT_FILTERS.all}&gateway=${BILLING_ADMIN_GATEWAYS.all}`,
+      )
+      .set("Authorization", `Bearer ${adminToken}`)
+      .expect(200);
+    const report = successBody<{
+      items: Array<{ id: string; receivedAt: string }>;
+    }>(response);
+    assert.deepEqual(
+      report.items
+        .map((item) => item.id)
+        .filter((id) => expectedIds.includes(id)),
+      expectedIds,
+    );
+
+    await httpRequest(app)
+      .get("/admin/billing/export")
       .set("Authorization", `Bearer ${customerToken}`)
       .expect(403);
   });

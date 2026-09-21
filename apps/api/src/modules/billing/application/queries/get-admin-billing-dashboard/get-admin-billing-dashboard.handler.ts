@@ -16,6 +16,10 @@ import type { BillingAdminDashboardQuery } from "@lcsp/contracts/billing";
 import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { GetBillingAdminDashboardQuery } from "./get-admin-billing-dashboard.query.js";
+import {
+  BILLING_ADMIN_PAYMENT_RELATIONS,
+  toBillingAdminPaymentRow,
+} from "./billing-admin-payment.mapper.js";
 
 const OPEN_RECONCILIATION_STATUSES = [
   PAYMENT_RECONCILIATION_STATUSES.UNMATCHED,
@@ -84,19 +88,8 @@ export class GetBillingAdminDashboardHandler implements IQueryHandler<GetBilling
       this.getSettledTopUpTrend(trendFrom, now),
       this.prisma.paymentTransaction.findMany({
         where: paymentWhere,
-        include: {
-          user: { select: { id: true, email: true, displayName: true } },
-          billingOrder: {
-            select: {
-              id: true,
-              paymentCode: true,
-              status: true,
-              creditUnits: true,
-              user: { select: { id: true, email: true, displayName: true } },
-            },
-          },
-        },
-        orderBy: { receivedAt: "desc" },
+        include: BILLING_ADMIN_PAYMENT_RELATIONS,
+        orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
         skip: (input.page - 1) * input.pageSize,
         take: input.pageSize,
       }),
@@ -112,34 +105,7 @@ export class GetBillingAdminDashboardHandler implements IQueryHandler<GetBilling
         duplicatePaymentCount,
         settledTopUpTrend,
       },
-      items: items.map((payment) => {
-        const account = payment.billingOrder?.user ?? payment.user ?? null;
-        return {
-          id: payment.id,
-          provider: payment.provider,
-          providerTransactionId: payment.providerTransactionId,
-          amountVnd: payment.amountMinorUnits.toString(),
-          reconciliationStatus: payment.reconciliationStatus,
-          reconciliationReason: payment.reconciliationReason,
-          receivedAt: payment.receivedAt.toISOString(),
-          reconciledAt: payment.reconciledAt?.toISOString() ?? null,
-          account: account
-            ? {
-                userId: account.id,
-                email: account.email,
-                displayName: account.displayName,
-              }
-            : null,
-          order: payment.billingOrder
-            ? {
-                id: payment.billingOrder.id,
-                paymentCode: payment.billingOrder.paymentCode,
-                status: payment.billingOrder.status,
-                creditUnits: payment.billingOrder.creditUnits.toString(),
-              }
-            : null,
-        };
-      }),
+      items: items.map(toBillingAdminPaymentRow),
       page: input.page,
       pageSize: input.pageSize,
       totalCount,

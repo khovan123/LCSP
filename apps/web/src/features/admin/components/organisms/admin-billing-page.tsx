@@ -37,7 +37,7 @@ import {
   BILLING_ADMIN_STATUS_LABEL_KEYS,
 } from "../../config/billing-admin.config";
 import {
-  fetchAdminBilling,
+  fetchAdminBillingExport,
   type AdminBillingQuery,
 } from "@/lib/api/admin-billing-client";
 import { useAdminBillingQuery } from "@/lib/api/admin-billing-queries";
@@ -84,21 +84,12 @@ export function AdminBillingPage() {
     setIsExporting(true);
     setExportFailed(false);
     try {
-      const exportQuery: AdminBillingQuery = {
-        ...query,
-        page: 1,
-        pageSize: 100,
-      };
-      const firstPage = await fetchAdminBilling(exportQuery);
-      const rows = [...firstPage.items];
-      const pageCount = Math.ceil(firstPage.totalCount / exportQuery.pageSize);
-      for (let exportPage = 2; exportPage <= pageCount; exportPage += 1) {
-        const result = await fetchAdminBilling({
-          ...exportQuery,
-          page: exportPage,
-        });
-        rows.push(...result.items);
-      }
+      const report = await fetchAdminBillingExport({
+        period,
+        status,
+        gateway,
+      });
+      const rows = report.items;
 
       const columns = [
         message("pages.admin.billing.columns.order"),
