@@ -6,6 +6,9 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from jsonschema import SchemaError as JsonSchemaSchemaError
+from jsonschema.validators import validator_for
+
 from .contracts import DECISION_TYPES, DecisionRequest
 
 
@@ -195,11 +198,39 @@ STATE_KEYS_BY_DECISION_TYPE = {
         "tool_names",
     },
 }
+APPROVED_QUESTION_PROMPTS_BY_DECISION_TYPE = {
+    DECISION_TYPES["pr_review_triage"]: {
+        "route": "Choose a bounded review route.",
+        "risk_score": "Score bounded routing risk.",
+        "topic": "Return a normalized topic object.",
+    },
+    DECISION_TYPES["root_non_deterministic_next_stage"]: {
+        "next_stage": "Choose a bounded next-stage route.",
+        "transition_confidence": "Score bounded transition confidence.",
+        "topic": "Return a normalized routing topic object.",
+    },
+    DECISION_TYPES["interview_topic_routing"]: {
+        "route": "Choose a bounded Interview route.",
+        "confidence": "Score bounded Interview routing confidence.",
+        "topic": "Return a normalized Interview topic object.",
+    },
+    DECISION_TYPES["planner_candidate_ranking"]: {
+        "candidate": "Choose a bounded Planner candidate.",
+        "priority_score": "Score bounded Planner candidate priority.",
+        "rank_metadata": "Return normalized Planner ranking metadata.",
+    },
+    DECISION_TYPES["investigator_next_action"]: {
+        "next_action": "Choose a bounded Investigator action.",
+        "confidence": "Score bounded Investigator action confidence.",
+        "action_metadata": "Return normalized Investigator action metadata.",
+    },
+}
 
 
 def validate_outbound_request(request: DecisionRequest) -> dict[str, Any]:
     """Return a provider payload only if it passes the outbound privacy policy."""
 
+    _validate_questions(request)
     _validate_state_payload(
         request.state_payload,
         allowed_keys=STATE_KEYS_BY_DECISION_TYPE.get(request.decision_type, frozenset()),
@@ -209,6 +240,39 @@ def validate_outbound_request(request: DecisionRequest) -> dict[str, Any]:
     payload = request.model_dump(mode="json", exclude_none=True)
     _validate_value(payload, path=("decision_request",), depth=0)
     return payload
+
+
+def _validate_questions(request: DecisionRequest) -> None:
+    approved_prompts = APPROVED_QUESTION_PROMPTS_BY_DECISION_TYPE.get(request.decision_type)
+    if approved_prompts is None:
+        raise DecisionRedactionError(
+            "QUESTION_PROMPT_DECISION_TYPE_UNSUPPORTED",
+            "decision questions have no prompt allowlist for this decision type",
+        )
+    for question in request.questions:
+        approved_prompt = approved_prompts.get(question.question_id)
+        if approved_prompt is None or question.prompt != approved_prompt:
+            raise DecisionRedactionError(
+                "QUESTION_PROMPT_NOT_ALLOWLISTED",
+                f"decision question prompt is not allowlisted: {question.question_id}",
+            )
+        _validate_string(
+            question.prompt,
+            path=("decision_request", "questions", question.question_id, "prompt"),
+        )
+        if question.question_type == "NOUL":
+            _validate_local_noul_schema(question.noul_schema, question_id=question.question_id)
+
+
+def _validate_local_noul_schema(schema: dict[str, Any], *, question_id: str) -> None:
+    try:
+        validator = validator_for(schema)
+        validator.check_schema(schema)
+    except JsonSchemaSchemaError as exc:
+        raise DecisionRedactionError(
+            "PROVIDER_SCHEMA_INVALID",
+            f"decision question NOUL schema is invalid: {question_id}",
+        ) from exc
 
 
 def _validate_state_payload(

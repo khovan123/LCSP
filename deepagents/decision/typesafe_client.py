@@ -9,6 +9,7 @@ from hashlib import sha256
 from typing import Any
 
 import httpx
+from jsonschema import SchemaError as JsonSchemaSchemaError
 from jsonschema import ValidationError as JsonSchemaValidationError
 from jsonschema import validate as validate_json_schema
 from pydantic import ValidationError
@@ -173,7 +174,14 @@ def _map_response(
                 or response.get("audit_ref")
             ),
         )
-    except (KeyError, TypeError, ValueError, ValidationError, JsonSchemaValidationError) as exc:
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+        ValidationError,
+        JsonSchemaValidationError,
+        JsonSchemaSchemaError,
+    ) as exc:
         raise TypeSafeJevError(
             "PROVIDER_SCHEMA_INVALID",
             "Jev provider response did not match the LCSP decision contract",
@@ -273,7 +281,7 @@ def _probabilities(value: Any) -> dict[str, float]:
 def _validate_noul_schema(value: dict[str, Any], schema: dict[str, Any]) -> None:
     try:
         validate_json_schema(instance=value, schema=schema)
-    except JsonSchemaValidationError as exc:
+    except (JsonSchemaValidationError, JsonSchemaSchemaError) as exc:
         raise TypeSafeJevError(
             "PROVIDER_SCHEMA_INVALID",
             "Jev NOUL result does not match the declared schema",

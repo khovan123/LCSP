@@ -252,6 +252,24 @@ def test_invalid_noul_schema_falls_back(noul):
     assert outcome.policy_result.reason_code == "PROVIDER_SCHEMA_INVALID"
 
 
+def test_malformed_local_noul_schema_falls_back_before_network_execution():
+    request = _request()
+    questions = tuple(
+        question.model_copy(update={"noul_schema": {"type": "not-a-json-schema-type"}})
+        if question.question_id == "topic"
+        else question
+        for question in request.questions
+    )
+    calls = []
+    gateway = DecisionGateway(config=_config(), client=_client(calls=calls))
+
+    outcome = gateway.decide(request.model_copy(update={"questions": questions}))
+
+    assert calls == []
+    assert outcome.provider_result is None
+    assert outcome.policy_result.reason_code == "PROVIDER_SCHEMA_INVALID"
+
+
 def test_missing_credentials_by_shadow_mode_falls_back_without_crashing():
     gateway = DecisionGateway(config=_config(api_key=None), client=None)
 
@@ -309,6 +327,31 @@ def test_unknown_customer_context_keys_are_rejected_before_network_execution(sta
 
     assert calls == []
     assert outcome.policy_result.reason_code == reason
+
+
+def test_question_prompt_customer_context_is_rejected_before_network_execution():
+    request = _request()
+    questions = tuple(
+        question.model_copy(
+            update={
+                "prompt": (
+                    "Route this customer: internal revenue, business process, "
+                    "and private case facts."
+                )
+            }
+        )
+        if question.question_id == "route"
+        else question
+        for question in request.questions
+    )
+    calls = []
+    gateway = DecisionGateway(config=_config(), client=_client(calls=calls))
+
+    outcome = gateway.decide(request.model_copy(update={"questions": questions}))
+
+    assert calls == []
+    assert outcome.provider_result is None
+    assert outcome.policy_result.reason_code == "QUESTION_PROMPT_NOT_ALLOWLISTED"
 
 
 @pytest.mark.parametrize(
