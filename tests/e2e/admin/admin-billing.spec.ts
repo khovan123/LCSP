@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import {
   BILLING_ADMIN_GATEWAYS,
@@ -115,6 +116,11 @@ test.describe("Admin Billing & Revenue release gate", () => {
     expect(reportDownload.suggestedFilename()).toMatch(
       /billing-report-mtd\.csv/,
     );
+    const reportPath = await reportDownload.path();
+    expect(reportPath).not.toBeNull();
+    if (!reportPath) throw new Error("Billing export did not produce a file");
+    const reportCsv = await readFile(reportPath, "utf8");
+    expect(reportCsv).toContain("LCSP-E2E-21");
     await expect(
       page.getByText(/Billing is scoped to the customer account/),
     ).toBeVisible();

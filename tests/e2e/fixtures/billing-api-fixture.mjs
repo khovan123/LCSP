@@ -97,6 +97,24 @@ const server = createServer(async (request, response) => {
     return success(response, []);
   }
 
+  if (request.method === "GET" && url.pathname === "/admin/billing/export") {
+    if (role !== "ADMIN") return problem(response, 403, "RBAC_DENIED");
+    if (token === "billing-e2e-admin-error") {
+      return problem(response, 503, "BILLING_REPORT_UNAVAILABLE");
+    }
+    const status = url.searchParams.get("status") ?? "ALL";
+    const gateway = url.searchParams.get("gateway") ?? "ALL";
+    const items = fixture.adminBilling.items.filter(
+      (item) =>
+        (status === "ALL" || item.reconciliationStatus === status) &&
+        (gateway === "ALL" || item.provider === gateway),
+    );
+    return success(response, {
+      period: normalizePeriod(url.searchParams.get("period")),
+      items,
+    });
+  }
+
   if (request.method === "GET" && url.pathname === "/admin/billing") {
     if (role !== "ADMIN") return problem(response, 403, "RBAC_DENIED");
     if (token === "billing-e2e-admin-error") {
