@@ -5,7 +5,7 @@ import {
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
 } from "@lcsp/contracts/auth";
 import { HttpStatus } from "@nestjs/common";
-import { problemException } from "../../../../../platform/problems/problem-factory.js";
+import { problemException } from "../../../../../platform/http/filters/error.factory.js";
 
 import type {
   AuditEvent,

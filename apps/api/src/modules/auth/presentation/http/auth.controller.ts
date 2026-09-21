@@ -50,7 +50,6 @@ import {
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { ZodValidationPipe } from "../../../../common/pipes/zod-validation.pipe.ts";
-import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { AllowPendingMfa } from "../../../../platform/rbac/decorators/allow-pending-mfa.decorator.js";
 import { RequireSession } from "../../../../platform/rbac/decorators/require-session.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
@@ -105,10 +104,8 @@ export class AuthController {
     @Body(new ZodValidationPipe(signInSchema)) payload: SignInInput,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new SignInCommand(payload, { correlationId }),
-      ),
+    return this.commandBus.execute(
+      new SignInCommand(payload, { correlationId }),
     );
   }
 
@@ -121,15 +118,13 @@ export class AuthController {
     @Body(new ZodValidationPipe(signUpSchema)) payload: SignUpInput,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new SignUpCommand({
-          email: payload.email,
-          displayName: payload.display_name,
-          password: payload.password,
-          correlationId,
-        }),
-      ),
+    return this.commandBus.execute(
+      new SignUpCommand({
+        email: payload.email,
+        displayName: payload.display_name,
+        password: payload.password,
+        correlationId,
+      }),
     );
   }
 
@@ -142,10 +137,8 @@ export class AuthController {
     @Body(new ZodValidationPipe(revokeSessionSchema)) body: RevokeSessionInput,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new RevokeSessionCommand(body.session_token, { correlationId }),
-      ),
+    return this.commandBus.execute(
+      new RevokeSessionCommand(body.session_token, { correlationId }),
     );
   }
 
@@ -158,13 +151,11 @@ export class AuthController {
   @RequireSession()
   @AllowPendingMfa()
   async enrollMfa(@Req() request: AuthenticatedRequest) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new EnrollMfaCommand(
-          request.rbacContext.userId,
-          request.rbacContext.sessionId,
-          { correlationId: request.correlationId },
-        ),
+    return this.commandBus.execute(
+      new EnrollMfaCommand(
+        request.rbacContext.userId,
+        request.rbacContext.sessionId,
+        { correlationId: request.correlationId },
       ),
     );
   }
@@ -177,13 +168,11 @@ export class AuthController {
   @UseGuards(RbacGuard)
   @RequireSession()
   async disableMfa(@Req() request: AuthenticatedRequest) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new DisableMfaCommand(
-          request.rbacContext.userId,
-          request.rbacContext.sessionId,
-          { correlationId: request.correlationId },
-        ),
+    return this.commandBus.execute(
+      new DisableMfaCommand(
+        request.rbacContext.userId,
+        request.rbacContext.sessionId,
+        { correlationId: request.correlationId },
       ),
     );
   }
@@ -196,12 +185,10 @@ export class AuthController {
     @Body(new ZodValidationPipe(verifyMfaOtpSchema)) body: VerifyMfaOtpInput,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new VerifyMfaOtpCommand(body.session_token, body.otp, {
-          correlationId,
-        }),
-      ),
+    return this.commandBus.execute(
+      new VerifyMfaOtpCommand(body.session_token, body.otp, {
+        correlationId,
+      }),
     );
   }
 
@@ -214,12 +201,10 @@ export class AuthController {
     body: VerifyMfaRecoveryCodeInput,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new VerifyMfaRecoveryCodeCommand(body.session_token, body.code, {
-          correlationId,
-        }),
-      ),
+    return this.commandBus.execute(
+      new VerifyMfaRecoveryCodeCommand(body.session_token, body.code, {
+        correlationId,
+      }),
     );
   }
 
@@ -237,13 +222,11 @@ export class AuthController {
     aliases: [{ method: "POST", pathTemplate: "/api/auth/mfa/recovery-codes" }],
   })
   async generateMfaRecoveryCodes(@Req() request: AuthenticatedRequest) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new GenerateMfaRecoveryCodesCommand(
-          request.rbacContext.userId,
-          request.rbacContext.sessionId,
-          { correlationId: request.correlationId },
-        ),
+    return this.commandBus.execute(
+      new GenerateMfaRecoveryCodesCommand(
+        request.rbacContext.userId,
+        request.rbacContext.sessionId,
+        { correlationId: request.correlationId },
       ),
     );
   }
@@ -259,14 +242,12 @@ export class AuthController {
     body: RecordMfaRecoveryCodeAccessInput,
     @Req() request: AuthenticatedRequest,
   ) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new RecordMfaRecoveryCodeAccessCommand(
-          request.rbacContext.userId,
-          body.action,
-          request.rbacContext.sessionId,
-          { correlationId: request.correlationId },
-        ),
+    return this.commandBus.execute(
+      new RecordMfaRecoveryCodeAccessCommand(
+        request.rbacContext.userId,
+        body.action,
+        request.rbacContext.sessionId,
+        { correlationId: request.correlationId },
       ),
     );
   }
@@ -283,14 +264,12 @@ export class AuthController {
     body: PasswordReauthInput,
     @Req() request: AuthenticatedRequest,
   ) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new ReauthenticatePasswordCommand(
-          body.password,
-          request.rbacContext.userId,
-          request.rbacContext.sessionId,
-          { correlationId: request.correlationId },
-        ),
+    return this.commandBus.execute(
+      new ReauthenticatePasswordCommand(
+        body.password,
+        request.rbacContext.userId,
+        request.rbacContext.sessionId,
+        { correlationId: request.correlationId },
       ),
     );
   }
@@ -309,16 +288,14 @@ export class AuthController {
     @Req() request: AuthenticatedRequest,
   ) {
     const route = body.path ?? body.route ?? "";
-    return resultEnvelope(
-      await this.queryBus.execute<
-        CheckSensitiveRouteQuery,
-        SensitiveRouteCheckDto
-      >(
-        new CheckSensitiveRouteQuery(
-          request.rbacContext.sessionId,
-          body.method,
-          route,
-        ),
+    return this.queryBus.execute<
+      CheckSensitiveRouteQuery,
+      SensitiveRouteCheckDto
+    >(
+      new CheckSensitiveRouteQuery(
+        request.rbacContext.sessionId,
+        body.method,
+        route,
       ),
     );
   }
@@ -333,16 +310,14 @@ export class AuthController {
     @Body(new ZodValidationPipe(updateProfileSchema)) body: UpdateProfileInput,
     @Req() request: AuthenticatedRequest,
   ) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new UpdateProfileCommand(
-          body,
-          request.rbacContext.userId,
-          request.rbacContext.sessionId,
-          {
-            correlationId: request.correlationId,
-          },
-        ),
+    return this.commandBus.execute(
+      new UpdateProfileCommand(
+        body,
+        request.rbacContext.userId,
+        request.rbacContext.sessionId,
+        {
+          correlationId: request.correlationId,
+        },
       ),
     );
   }
@@ -354,10 +329,8 @@ export class AuthController {
   @UseGuards(RbacGuard)
   @RequireSession()
   async getProfile(@Req() request: AuthenticatedRequest) {
-    return resultEnvelope(
-      await this.queryBus.execute(
-        new GetAuthProfileQuery(request.rbacContext, request.correlationId!),
-      ),
+    return this.queryBus.execute(
+      new GetAuthProfileQuery(request.rbacContext, request.correlationId!),
     );
   }
 
@@ -368,10 +341,8 @@ export class AuthController {
   @UseGuards(RbacGuard)
   @RequireSession()
   async listSessions(@Req() request: AuthenticatedRequest) {
-    return resultEnvelope(
-      await this.queryBus.execute(
-        new ListAuthSessionsQuery(request.rbacContext),
-      ),
+    return this.queryBus.execute(
+      new ListAuthSessionsQuery(request.rbacContext),
     );
   }
 
@@ -385,12 +356,10 @@ export class AuthController {
     @Param("sessionId") sessionId: string,
     @Req() request: AuthenticatedRequest,
   ) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new RevokeOwnedSessionCommand(sessionId, request.rbacContext, {
-          correlationId: request.correlationId,
-        }),
-      ),
+    return this.commandBus.execute(
+      new RevokeOwnedSessionCommand(sessionId, request.rbacContext, {
+        correlationId: request.correlationId,
+      }),
     );
   }
 
@@ -404,13 +373,11 @@ export class AuthController {
     @Headers("x-correlation-id") correlationId?: string,
     @Headers("x-app-origin") appOrigin?: string,
   ) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new RequestPasswordRecoveryCommand(payload, {
-          correlationId,
-          app_origin: appOrigin,
-        }),
-      ),
+    return this.commandBus.execute(
+      new RequestPasswordRecoveryCommand(payload, {
+        correlationId,
+        app_origin: appOrigin,
+      }),
     );
   }
 
@@ -423,10 +390,8 @@ export class AuthController {
     payload: ConfirmPasswordRecoveryInput,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new ConfirmPasswordRecoveryCommand(payload, { correlationId }),
-      ),
+    return this.commandBus.execute(
+      new ConfirmPasswordRecoveryCommand(payload, { correlationId }),
     );
   }
 
@@ -438,10 +403,8 @@ export class AuthController {
     @Query(new ZodValidationPipe(oauthStartSchema)) query: OAuthStartInput,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new OAuthStartCommand(query, { correlationId }),
-      ),
+    return this.commandBus.execute(
+      new OAuthStartCommand(query, { correlationId }),
     );
   }
 
@@ -454,10 +417,8 @@ export class AuthController {
     query: OAuthCallbackInput,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new OAuthCallbackCommand(query, { correlationId }),
-      ),
+    return this.commandBus.execute(
+      new OAuthCallbackCommand(query, { correlationId }),
     );
   }
 
@@ -472,14 +433,12 @@ export class AuthController {
     @Query(new ZodValidationPipe(oauthLinkStartSchema))
     query: OAuthLinkStartInput,
   ) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new OAuthLinkStartCommand(
-          query,
-          request.rbacContext.userId,
-          request.rbacContext.sessionId,
-          { correlationId: request.correlationId },
-        ),
+    return this.commandBus.execute(
+      new OAuthLinkStartCommand(
+        query,
+        request.rbacContext.userId,
+        request.rbacContext.sessionId,
+        { correlationId: request.correlationId },
       ),
     );
   }
@@ -495,14 +454,12 @@ export class AuthController {
     @Query(new ZodValidationPipe(oauthLinkCallbackSchema))
     query: OAuthLinkCallbackInput,
   ) {
-    return resultEnvelope(
-      await this.commandBus.execute(
-        new OAuthLinkCallbackCommand(
-          query,
-          request.rbacContext.userId,
-          request.rbacContext.sessionId,
-          { correlationId: request.correlationId },
-        ),
+    return this.commandBus.execute(
+      new OAuthLinkCallbackCommand(
+        query,
+        request.rbacContext.userId,
+        request.rbacContext.sessionId,
+        { correlationId: request.correlationId },
       ),
     );
   }

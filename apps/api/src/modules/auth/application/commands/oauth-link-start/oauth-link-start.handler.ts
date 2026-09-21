@@ -7,7 +7,7 @@ import { Inject } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 
-import { problemException } from "../../../../../platform/problems/problem-factory.ts";
+import { problemException } from "../../../../../platform/http/filters/error.factory.js";
 import { OAuthState } from "../../../domain/models/auth.models.ts";
 import { OAuthProviderRegistry } from "../../../infrastructure/oauth/oauth-provider.registry.ts";
 import { issueOAuthStateToken } from "../../../infrastructure/security/security.utils.ts";

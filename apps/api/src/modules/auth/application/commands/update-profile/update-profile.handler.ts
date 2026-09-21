@@ -9,7 +9,7 @@ import {
 import { Inject } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 
-import { problemException } from "../../../../../platform/problems/problem-factory.js";
+import { problemException } from "../../../../../platform/http/filters/error.factory.js";
 import { EmailAddress } from "../../../domain/value-objects/email-address.value-object.ts";
 import type { UpdateProfileSuccess } from "../../contracts/auth/profile.contract.ts";
 import {

@@ -11,7 +11,7 @@ import * as crypto from "node:crypto";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.ts";
-import { problemException } from "../../../../../platform/problems/problem-factory.js";
+import { problemException } from "../../../../../platform/http/filters/error.factory.js";
 import {
   AUTH_RECORD_TYPES,
   authRecordLookupKey,

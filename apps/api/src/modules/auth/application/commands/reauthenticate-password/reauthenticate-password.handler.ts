@@ -8,7 +8,7 @@ import {
 import { Inject } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 
-import { problemException } from "../../../../../platform/problems/problem-factory.ts";
+import { problemException } from "../../../../../platform/http/filters/error.factory.js";
 import { verifySecret } from "../../../infrastructure/security/security.utils.ts";
 import type { PasswordReauthSuccess } from "../../contracts/auth/password-reauth.contract.ts";
 import {

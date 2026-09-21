@@ -9,7 +9,6 @@ import {
 
 import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
-import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { ZodValidationPipe } from "../../../../common/pipes/zod-validation.pipe.js";
 import { GetAdminOverviewQuery } from "../../application/queries/index.js";
 
@@ -35,8 +34,6 @@ export class AdminOverviewController {
     )
     query: AdminOverviewQueryInput,
   ) {
-    return resultEnvelope(
-      await this.queryBus.execute(new GetAdminOverviewQuery(query.period)),
-    );
+    return this.queryBus.execute(new GetAdminOverviewQuery(query.period));
   }
 }
