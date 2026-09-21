@@ -47,6 +47,9 @@ jobs:
               - 'packages/i18n/**'
               - 'frozen/interview-agent-frozen/**'
               - 'tests/**'
+              - 'docs/operations/lcsp-333-managed-sandbox-release-gate.md'
+              - 'scripts/check-managed-sandbox-release-gate.mjs'
+              - 'scripts/check-managed-sandbox-release-gate.test.mjs'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
@@ -100,6 +103,9 @@ jobs:
 
       - name: Check billing production data sources
         run: pnpm run check:billing-release-gate
+
+      - name: Check managed sandbox release gate validator
+        run: pnpm run test:managed-sandbox-release-gate
 
   web-production-build:
     name: Web lint and production build
