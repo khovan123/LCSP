@@ -6,7 +6,7 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from .contracts import DecisionRequest
+from .contracts import DECISION_TYPES, DecisionRequest
 
 
 class DecisionRedactionError(ValueError):
@@ -122,14 +122,155 @@ SOURCE_LIKE_PATTERNS = (
     re.compile(r"^\s*(?:const|let|var)\s+\w+\s*=", re.MULTILINE),
     re.compile(r"\b(?:SELECT|INSERT|UPDATE|DELETE)\s+.+\s+FROM\s+", re.IGNORECASE),
 )
+COMMON_STATE_KEYS = frozenset(
+    {
+        "action_candidates",
+        "allowed_actions",
+        "allowed_choices",
+        "artifact_refs",
+        "candidate_ids",
+        "confidence_prior",
+        "coverage_state",
+        "edge_id",
+        "edge_ids",
+        "edge_type",
+        "edge_types",
+        "evidence_ref",
+        "evidence_refs",
+        "limitation_codes",
+        "node_id",
+        "node_ids",
+        "node_type",
+        "node_types",
+        "reason_code",
+        "resolution_state",
+        "route_candidates",
+        "status",
+        "topic_key",
+        "topic_keys",
+    }
+)
+STATE_KEYS_BY_DECISION_TYPE = {
+    DECISION_TYPES["pr_review_triage"]: COMMON_STATE_KEYS
+    | {
+        "base_sha",
+        "changed_file_count",
+        "changed_file_exts",
+        "head_sha",
+        "label_ids",
+        "pr_number",
+        "review_domain",
+        "reviewer_role",
+        "sanitized_diff_metadata",
+    },
+    DECISION_TYPES["root_non_deterministic_next_stage"]: COMMON_STATE_KEYS
+    | {
+        "current_stage",
+        "deterministic_transition_available",
+        "pending_stage_candidates",
+        "run_status",
+    },
+    DECISION_TYPES["interview_topic_routing"]: COMMON_STATE_KEYS
+    | {
+        "active_question_id",
+        "active_topic_key",
+        "customer_safe_topic_keys",
+        "question_ids",
+        "resolution_criteria_keys",
+    },
+    DECISION_TYPES["planner_candidate_ranking"]: COMMON_STATE_KEYS
+    | {
+        "candidate_count",
+        "engineering_rule_ids",
+        "graph_seed_refs",
+        "rule_ids",
+        "scope_ids",
+    },
+    DECISION_TYPES["investigator_next_action"]: COMMON_STATE_KEYS
+    | {
+        "engineering_rule_ids",
+        "frontier_state",
+        "last_tool_name",
+        "rule_ids",
+        "tool_names",
+    },
+}
 
 
 def validate_outbound_request(request: DecisionRequest) -> dict[str, Any]:
     """Return a provider payload only if it passes the outbound privacy policy."""
 
+    _validate_state_payload(
+        request.state_payload,
+        allowed_keys=STATE_KEYS_BY_DECISION_TYPE.get(request.decision_type, frozenset()),
+        path=("decision_request", "state_payload"),
+        depth=0,
+    )
     payload = request.model_dump(mode="json", exclude_none=True)
     _validate_value(payload, path=("decision_request",), depth=0)
     return payload
+
+
+def _validate_state_payload(
+    value: Any,
+    *,
+    allowed_keys: frozenset[str],
+    path: tuple[str, ...],
+    depth: int,
+) -> None:
+    if not allowed_keys:
+        raise DecisionRedactionError(
+            "STATE_PAYLOAD_DECISION_TYPE_UNSUPPORTED",
+            "decision state payload has no allowlist for this decision type",
+        )
+    if depth > 8:
+        raise DecisionRedactionError(
+            "STATE_PAYLOAD_TOO_DEEP",
+            f"decision state payload is too deeply nested at {_format_path(path)}",
+        )
+    if isinstance(value, Mapping):
+        for raw_key, item in value.items():
+            key = str(raw_key)
+            _validate_key(key, path=path)
+            if key not in allowed_keys:
+                raise DecisionRedactionError(
+                    "STATE_PAYLOAD_KEY_NOT_ALLOWLISTED",
+                    f"decision state payload key is not allowlisted: {_format_path((*path, key))}",
+                )
+            _validate_state_payload(
+                item,
+                allowed_keys=allowed_keys,
+                path=(*path, key),
+                depth=depth + 1,
+            )
+        return
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray, str)):
+        if len(value) > 100:
+            raise DecisionRedactionError(
+                "STATE_PAYLOAD_SEQUENCE_TOO_LARGE",
+                f"decision state payload sequence is too large at {_format_path(path)}",
+            )
+        for index, item in enumerate(value):
+            _validate_state_payload(
+                item,
+                allowed_keys=allowed_keys,
+                path=(*path, str(index)),
+                depth=depth + 1,
+            )
+        return
+    if isinstance(value, str):
+        if len(value) > 1_000:
+            raise DecisionRedactionError(
+                "STATE_PAYLOAD_STRING_TOO_LARGE",
+                f"decision state payload string is too large at {_format_path(path)}",
+            )
+        _validate_string(value, path=path)
+        return
+    if isinstance(value, (bytes, bytearray)):
+        raise DecisionRedactionError(
+            "BINARY_PAYLOAD_FORBIDDEN",
+            f"binary decision payload is forbidden at {_format_path(path)}",
+        )
 
 
 def _validate_value(value: Any, *, path: tuple[str, ...], depth: int) -> None:

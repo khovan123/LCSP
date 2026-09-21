@@ -9,6 +9,8 @@ from hashlib import sha256
 from typing import Any
 
 import httpx
+from jsonschema import ValidationError as JsonSchemaValidationError
+from jsonschema import validate as validate_json_schema
 from pydantic import ValidationError
 
 from .contracts import DecisionRequest, DecisionResult, QuestionDecision
@@ -142,10 +144,15 @@ def _map_response(
             _map_question(item, questions_by_id=questions_by_id)
             for item in items
         )
-        if set(result.question_id for result in mapped) != set(questions_by_id):
+        mapped_question_ids = [result.question_id for result in mapped]
+        if (
+            len(mapped_question_ids) != len(questions_by_id)
+            or len(set(mapped_question_ids)) != len(mapped_question_ids)
+            or set(mapped_question_ids) != set(questions_by_id)
+        ):
             raise TypeSafeJevError(
                 "PROVIDER_SCHEMA_INVALID",
-                "Jev response question IDs must match the request",
+                "Jev response must include exactly one result per requested question",
             )
         confidence = min(result.confidence for result in mapped)
         return DecisionResult(
@@ -166,7 +173,7 @@ def _map_response(
                 or response.get("audit_ref")
             ),
         )
-    except (KeyError, TypeError, ValueError, ValidationError) as exc:
+    except (KeyError, TypeError, ValueError, ValidationError, JsonSchemaValidationError) as exc:
         raise TypeSafeJevError(
             "PROVIDER_SCHEMA_INVALID",
             "Jev provider response did not match the LCSP decision contract",
@@ -250,6 +257,7 @@ def _map_question(
                 "PROVIDER_SCHEMA_INVALID",
                 "Jev NOUL result must be an object",
             )
+        _validate_noul_schema(noul, question.noul_schema)
         return QuestionDecision(**common, noul=noul)
     raise TypeSafeJevError("PROVIDER_SCHEMA_INVALID", "unsupported question type")
 
@@ -260,6 +268,16 @@ def _probabilities(value: Any) -> dict[str, float]:
     if not isinstance(value, dict):
         raise TypeSafeJevError("PROVIDER_SCHEMA_INVALID", "probabilities must be an object")
     return {str(key): _required_float(item, "probability") for key, item in value.items()}
+
+
+def _validate_noul_schema(value: dict[str, Any], schema: dict[str, Any]) -> None:
+    try:
+        validate_json_schema(instance=value, schema=schema)
+    except JsonSchemaValidationError as exc:
+        raise TypeSafeJevError(
+            "PROVIDER_SCHEMA_INVALID",
+            "Jev NOUL result does not match the declared schema",
+        ) from exc
 
 
 def _required_float(value: Any, field_name: str) -> float:

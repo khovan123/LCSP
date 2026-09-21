@@ -1,3 +1,4 @@
+import copy
 import json
 
 import pytest
@@ -45,7 +46,22 @@ def _request(*, decision_type: str | None = None, state_payload: dict | None = N
                 question_id="topic",
                 question_type="NOUL",
                 prompt="Return a normalized topic object.",
-                noul_schema={"type": "object", "required": ["topic"]},
+                noul_schema={
+                    "type": "object",
+                    "required": ["topic", "metadata"],
+                    "additionalProperties": False,
+                    "properties": {
+                        "topic": {"type": "string"},
+                        "metadata": {
+                            "type": "object",
+                            "required": ["priority"],
+                            "additionalProperties": False,
+                            "properties": {
+                                "priority": {"type": "string"},
+                            },
+                        },
+                    },
+                },
             ),
         ),
     )
@@ -73,7 +89,10 @@ def _response(*, confidence: float = 0.93):
             },
             {
                 "questionId": "topic",
-                "noul": {"topic": "human_review_uncertainty"},
+                "noul": {
+                    "topic": "human_review_uncertainty",
+                    "metadata": {"priority": "medium"},
+                },
                 "probability": 0.9,
                 "confidence": confidence,
             },
@@ -132,7 +151,8 @@ def test_choice_score_noul_mapping_captures_model_version_and_shadow_no_action()
     assert outcome.provider_result.question_results[0].selected_choice == "ESCALATE"
     assert outcome.provider_result.question_results[1].score == 0.71
     assert outcome.provider_result.question_results[2].noul == {
-        "topic": "human_review_uncertainty"
+        "topic": "human_review_uncertainty",
+        "metadata": {"priority": "medium"},
     }
     assert outcome.provider_result.raw_response_hash.startswith("sha256:")
     assert outcome.policy_result.action == POLICY_ACTIONS["no_action"]
@@ -191,6 +211,47 @@ def test_invalid_provider_schema_falls_back():
     assert outcome.policy_result.reason_code == "PROVIDER_SCHEMA_INVALID"
 
 
+def test_duplicate_provider_question_result_falls_back():
+    response = _response()
+    response["decisions"].append(copy.deepcopy(response["decisions"][0]))
+    gateway = DecisionGateway(
+        config=_config(),
+        client=_client(response=response),
+    )
+
+    outcome = gateway.decide(_request())
+
+    assert outcome.provider_result is None
+    assert outcome.policy_result.reason_code == "PROVIDER_SCHEMA_INVALID"
+
+
+@pytest.mark.parametrize(
+    "noul",
+    [
+        {"metadata": {"priority": "medium"}},
+        {"topic": 123, "metadata": {"priority": "medium"}},
+        {
+            "topic": "human_review_uncertainty",
+            "metadata": {"priority": "medium"},
+            "extra": "not-allowed",
+        },
+        {"topic": "human_review_uncertainty", "metadata": {"extra": "nested"}},
+    ],
+)
+def test_invalid_noul_schema_falls_back(noul):
+    response = _response()
+    response["decisions"][2]["noul"] = noul
+    gateway = DecisionGateway(
+        config=_config(),
+        client=_client(response=response),
+    )
+
+    outcome = gateway.decide(_request())
+
+    assert outcome.provider_result is None
+    assert outcome.policy_result.reason_code == "PROVIDER_SCHEMA_INVALID"
+
+
 def test_missing_credentials_by_shadow_mode_falls_back_without_crashing():
     gateway = DecisionGateway(config=_config(api_key=None), client=None)
 
@@ -230,6 +291,24 @@ def test_secret_like_value_is_rejected_before_network_execution():
 
     assert calls == []
     assert outcome.policy_result.reason_code == "SECRET_LIKE_PAYLOAD_VALUE"
+
+
+@pytest.mark.parametrize(
+    "state_payload,reason",
+    [
+        ({"customer_notes": "private customer business context"}, "STATE_PAYLOAD_KEY_NOT_ALLOWLISTED"),
+        ({"private_summary": "confidential customer details"}, "FORBIDDEN_PAYLOAD_KEY"),
+        ({"business_context": {"summary": "confidential internal details"}}, "STATE_PAYLOAD_KEY_NOT_ALLOWLISTED"),
+    ],
+)
+def test_unknown_customer_context_keys_are_rejected_before_network_execution(state_payload, reason):
+    calls = []
+    gateway = DecisionGateway(config=_config(), client=_client(calls=calls))
+
+    outcome = gateway.decide(_request(state_payload=state_payload))
+
+    assert calls == []
+    assert outcome.policy_result.reason_code == reason
 
 
 @pytest.mark.parametrize(
