@@ -1,8 +1,9 @@
-import {
-  BILLING_ORDER_STATUSES,
-  PAYMENT_RECONCILIATION_REASONS,
-  PAYMENT_RECONCILIATION_STATUSES,
-} from "./statuses.ts";
+import { PAYMENT_RECONCILIATION_STATUSES } from "./statuses.ts";
+import type {
+  BillingAdminDashboard as BillingAdminDashboardSchema,
+  BillingAdminPaymentRow as BillingAdminPaymentRowSchema,
+  BillingAdminSummary as BillingAdminSummarySchema,
+} from "./schemas.ts";
 
 export const BILLING_ADMIN_PERIODS = {
   mtd: "MTD",
@@ -35,39 +36,6 @@ export const BILLING_ADMIN_GATEWAYS = {
 export type BillingAdminGateway =
   (typeof BILLING_ADMIN_GATEWAYS)[keyof typeof BILLING_ADMIN_GATEWAYS];
 
-export type BillingAdminSummary = {
-  settledTopUpVnd: string;
-  usageRevenueVnd: string;
-  pendingReconciliationCount: number;
-  duplicatePaymentCount: number;
-  settledTopUpTrend: Array<{ day: string; amountVnd: string }>;
-};
-
-export type BillingAdminPaymentRow = {
-  id: string;
-  provider: string;
-  providerTransactionId: string;
-  amountVnd: string;
-  reconciliationStatus: (typeof PAYMENT_RECONCILIATION_STATUSES)[keyof typeof PAYMENT_RECONCILIATION_STATUSES];
-  reconciliationReason:
-    | (typeof PAYMENT_RECONCILIATION_REASONS)[keyof typeof PAYMENT_RECONCILIATION_REASONS]
-    | null;
-  receivedAt: string;
-  reconciledAt: string | null;
-  account: { userId: string; email: string; displayName: string | null } | null;
-  order: {
-    id: string;
-    paymentCode: string;
-    status: (typeof BILLING_ORDER_STATUSES)[keyof typeof BILLING_ORDER_STATUSES];
-    creditUnits: string | null;
-  } | null;
-};
-
-export type BillingAdminDashboard = {
-  period: BillingAdminPeriod;
-  summary: BillingAdminSummary;
-  items: BillingAdminPaymentRow[];
-  page: number;
-  pageSize: number;
-  totalCount: number;
-};
+export type BillingAdminSummary = BillingAdminSummarySchema;
+export type BillingAdminPaymentRow = BillingAdminPaymentRowSchema;
+export type BillingAdminDashboard = BillingAdminDashboardSchema;

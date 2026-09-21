@@ -1,4 +1,5 @@
-import { Injectable } from "@nestjs/common";
+import { QueryHandler } from "@nestjs/cqrs";
+import type { IQueryHandler } from "@nestjs/cqrs";
 import {
   BILLING_ADMIN_GATEWAYS,
   BILLING_ADMIN_PAYMENT_FILTERS,
@@ -9,12 +10,12 @@ import {
 } from "@lcsp/contracts/billing";
 import type {
   BillingAdminDashboard,
-  BillingAdminGateway,
   BillingAdminPeriod,
-  BillingAdminPaymentFilter,
 } from "@lcsp/contracts/billing";
+import type { BillingAdminDashboardQuery } from "@lcsp/contracts/billing";
 import type { Prisma } from "@prisma/client";
-import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
+import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { GetBillingAdminDashboardQuery } from "./get-admin-billing-dashboard.query.js";
 
 const OPEN_RECONCILIATION_STATUSES = [
   PAYMENT_RECONCILIATION_STATUSES.UNMATCHED,
@@ -22,19 +23,15 @@ const OPEN_RECONCILIATION_STATUSES = [
   PAYMENT_RECONCILIATION_STATUSES.NEEDS_REVIEW,
 ] as const;
 
-@Injectable()
-export class BillingAdminRevenueService {
+@QueryHandler(GetBillingAdminDashboardQuery)
+export class GetBillingAdminDashboardHandler implements IQueryHandler<GetBillingAdminDashboardQuery> {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getDashboard(input: {
-    period: BillingAdminPeriod;
-    status: BillingAdminPaymentFilter;
-    gateway: BillingAdminGateway;
-    page: number;
-    pageSize: number;
-    now?: Date;
-  }): Promise<BillingAdminDashboard> {
-    const now = input.now ?? new Date();
+  async execute(
+    query: GetBillingAdminDashboardQuery,
+  ): Promise<BillingAdminDashboard> {
+    const input: BillingAdminDashboardQuery = query.input;
+    const now = query.now ?? new Date();
     const from = periodStart(now, input.period);
     const trendFrom = new Date(now);
     trendFrom.setUTCHours(0, 0, 0, 0);
@@ -176,37 +173,6 @@ export class BillingAdminRevenueService {
       return { day: key, amountVnd: (byDay.get(key) ?? 0n).toString() };
     });
   }
-}
-
-export function normalizeBillingAdminPeriod(
-  value?: string,
-): BillingAdminPeriod {
-  if (value === BILLING_ADMIN_PERIODS.mtd) return BILLING_ADMIN_PERIODS.mtd;
-  if (value === BILLING_ADMIN_PERIODS.d7) return BILLING_ADMIN_PERIODS.d7;
-  if (value === BILLING_ADMIN_PERIODS.d90) return BILLING_ADMIN_PERIODS.d90;
-  return BILLING_ADMIN_PERIODS.d30;
-}
-
-export function normalizeBillingAdminGateway(
-  value?: string,
-): BillingAdminGateway {
-  if (value === BILLING_ADMIN_GATEWAYS.sepay)
-    return BILLING_ADMIN_GATEWAYS.sepay;
-  return BILLING_ADMIN_GATEWAYS.all;
-}
-
-export function normalizeBillingAdminFilter(
-  value?: string,
-): BillingAdminPaymentFilter {
-  if (
-    value &&
-    Object.values(BILLING_ADMIN_PAYMENT_FILTERS).includes(
-      value as BillingAdminPaymentFilter,
-    )
-  ) {
-    return value as BillingAdminPaymentFilter;
-  }
-  return BILLING_ADMIN_PAYMENT_FILTERS.all;
 }
 
 function periodStart(now: Date, period: BillingAdminPeriod): Date {

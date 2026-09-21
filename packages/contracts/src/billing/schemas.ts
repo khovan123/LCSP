@@ -5,22 +5,30 @@ import {
   BILLING_ADMIN_PAYMENT_FILTERS,
   BILLING_ADMIN_PERIODS,
 } from "./admin.ts";
-import { PREPAID_BILLING_CONFIG } from "./prepaid.ts";
-import { PAYMENT_RECONCILIATION_STATUSES } from "./statuses.ts";
+import {
+  BILLING_ESTIMATE_AVAILABILITY,
+  BILLING_PAYMENT_PROVIDERS,
+  PREPAID_BILLING_CONFIG,
+} from "./prepaid.ts";
+import { effectiveRuntimeModelSchema } from "./runtime-model.ts";
+import {
+  BILLING_ORDER_STATUSES,
+  PAYMENT_RECONCILIATION_REASONS,
+  PAYMENT_RECONCILIATION_STATUSES,
+} from "./statuses.ts";
 
 const nonEmptyText = z.string().trim().min(1);
 const flexibleText = z
   .union([z.string(), z.number()])
   .transform((value) => String(value).trim())
   .pipe(z.string().min(1));
-const integerText = z
-  .union([z.string(), z.number()])
-  .transform((value) => String(value).trim())
-  .pipe(z.string().regex(/^-?\d+$/));
 const nonNegativeIntegerText = z
   .union([z.string(), z.number()])
   .transform((value) => String(value).trim())
   .pipe(z.string().regex(/^\d+$/));
+const positiveIntegerText = nonNegativeIntegerText.refine(
+  (value) => BigInt(value) > 0n,
+);
 
 const minimumAmountVnd = Number(PREPAID_BILLING_CONFIG.minimumAmountVnd);
 const maximumAmountVnd = Number(PREPAID_BILLING_CONFIG.maximumAmountVnd);
@@ -43,6 +51,60 @@ export const billingAmountVndSchema = z
       amount % amountStepVnd === 0
     );
   });
+
+export const billingWalletViewSchema = z.object({
+  walletId: nonEmptyText,
+  availableCredits: nonNegativeIntegerText,
+  reservedCredits: nonNegativeIntegerText,
+  totalCredits: nonNegativeIntegerText,
+  version: z.number().int().safe().nonnegative(),
+});
+export type BillingWalletView = z.infer<typeof billingWalletViewSchema>;
+
+export const billingUsageEstimateSchema = z.object({
+  currency: z.literal(PREPAID_BILLING_CONFIG.currency),
+  amountVnd: billingAmountVndSchema,
+  creditUnits: nonNegativeIntegerText,
+  expiresInHours: z.number().int().safe().positive(),
+  availability: z.enum(BILLING_ESTIMATE_AVAILABILITY),
+  effectiveRuntimeModel: effectiveRuntimeModelSchema.nullable(),
+  estimatedUsageChargeVnd: nonNegativeIntegerText.nullable(),
+});
+export type BillingUsageEstimate = z.infer<typeof billingUsageEstimateSchema>;
+
+export const billingPaymentInstructionsSchema = z.object({
+  provider: z.enum(BILLING_PAYMENT_PROVIDERS),
+  currency: z.literal(PREPAID_BILLING_CONFIG.currency),
+  paymentCode: nonEmptyText,
+  amountVnd: billingAmountVndSchema,
+  bankName: z.string(),
+  bankAccountNumber: z.string(),
+  accountHolder: z.string(),
+  transferContent: z.string(),
+  qrCodeUrl: z.string(),
+});
+
+export const billingOrderViewSchema = z.object({
+  id: nonEmptyText,
+  amountVnd: billingAmountVndSchema,
+  creditUnits: positiveIntegerText,
+  paymentCode: nonEmptyText,
+  status: z.enum(BILLING_ORDER_STATUSES),
+  expiresAt: z.iso.datetime().nullable(),
+  creditedAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  paymentInstructions: billingPaymentInstructionsSchema,
+});
+export type BillingOrderView = z.infer<typeof billingOrderViewSchema>;
+
+export const billingHistoryViewSchema = z.object({
+  orders: z.array(billingOrderViewSchema),
+  page: z.number().int().safe().positive(),
+  pageSize: z.number().int().safe().positive(),
+  totalCount: z.number().int().safe().nonnegative(),
+});
+export type BillingHistoryView = z.infer<typeof billingHistoryViewSchema>;
 
 export const billingCreateOrderSchema = z.object({
   amount_vnd: billingAmountVndSchema,
@@ -82,27 +144,37 @@ export type BillingHistoryQueryInput = z.infer<
 
 export const billingResourceIdSchema = nonEmptyText;
 
-export const billingUsageReservationSchema = z.object({
-  assessmentId: flexibleText,
-  runId: flexibleText,
-  idempotencyKey: flexibleText,
-  provider: flexibleText,
-  model: flexibleText,
-  amountCredits: integerText,
-  maxChargeCredits: integerText,
-  maxInputTokens: nonNegativeIntegerText,
-  maxOutputTokens: nonNegativeIntegerText,
-  maxReasoningTokens: nonNegativeIntegerText,
-  maxInvocations: nonNegativeIntegerText,
-  authorizedModels: z
-    .array(
-      z.object({
-        provider: flexibleText,
-        model: flexibleText,
-      }),
-    )
-    .min(1),
-});
+export const billingUsageReservationSchema = z
+  .object({
+    assessmentId: flexibleText,
+    runId: flexibleText,
+    idempotencyKey: flexibleText,
+    provider: flexibleText,
+    model: flexibleText,
+    amountCredits: positiveIntegerText,
+    maxChargeCredits: nonNegativeIntegerText,
+    maxInputTokens: nonNegativeIntegerText,
+    maxOutputTokens: nonNegativeIntegerText,
+    maxReasoningTokens: nonNegativeIntegerText,
+    maxInvocations: positiveIntegerText,
+    authorizedModels: z
+      .array(
+        z.object({
+          provider: flexibleText,
+          model: flexibleText,
+        }),
+      )
+      .min(1),
+  })
+  .superRefine((value, context) => {
+    if (BigInt(value.amountCredits) < BigInt(value.maxChargeCredits)) {
+      context.addIssue({
+        code: "custom",
+        path: ["amountCredits"],
+        message: "Reservation amount must cover the maximum invocation charge",
+      });
+    }
+  });
 export type BillingUsageReservationRequest = z.infer<
   typeof billingUsageReservationSchema
 >;
@@ -120,13 +192,6 @@ export const billingUsageClaimSchema = z.object({
 });
 export type BillingUsageClaimRequest = z.infer<typeof billingUsageClaimSchema>;
 
-const runtimeModelSchema = z.object({
-  provider: nonEmptyText.optional(),
-  model: nonEmptyText.optional(),
-  policyVersion: nonEmptyText.optional(),
-  effectiveAt: nonEmptyText.optional(),
-});
-
 export const billingUsageSettlementSchema = z
   .object({
     assessmentId: nonEmptyText,
@@ -134,16 +199,16 @@ export const billingUsageSettlementSchema = z
     agentRole: nonEmptyText,
     provider: nonEmptyText.optional(),
     model: nonEmptyText.optional(),
-    effectiveRuntimeModel: runtimeModelSchema.optional(),
-    reservationId: flexibleText.optional(),
-    invocationId: flexibleText.optional(),
+    effectiveRuntimeModel: effectiveRuntimeModelSchema.optional(),
+    reservationId: flexibleText,
+    invocationId: flexibleText,
     providerResponseId: flexibleText.optional(),
-    inputTokens: integerText.optional(),
-    cachedInputTokens: integerText.optional(),
-    cacheWriteTokens: integerText.optional(),
-    outputTokens: integerText.optional(),
-    reasoningTokens: integerText.optional(),
-    totalTokens: integerText.optional(),
+    inputTokens: nonNegativeIntegerText.optional(),
+    cachedInputTokens: nonNegativeIntegerText.optional(),
+    cacheWriteTokens: nonNegativeIntegerText.optional(),
+    outputTokens: nonNegativeIntegerText.optional(),
+    reasoningTokens: nonNegativeIntegerText.optional(),
+    totalTokens: nonNegativeIntegerText.optional(),
     occurredAt: z.iso.datetime().optional(),
   })
   .superRefine((value, context) => {
@@ -218,6 +283,67 @@ export const billingAdminDashboardQuerySchema = z.object({
 export type BillingAdminDashboardQuery = z.infer<
   typeof billingAdminDashboardQuerySchema
 >;
+
+const billingAdminAccountSchema = z.object({
+  userId: nonEmptyText,
+  email: z.email(),
+  displayName: z.string().nullable(),
+});
+
+export const billingAdminPaymentRowSchema = z.object({
+  id: nonEmptyText,
+  provider: nonEmptyText,
+  providerTransactionId: nonEmptyText,
+  amountVnd: nonNegativeIntegerText,
+  reconciliationStatus: z.enum(PAYMENT_RECONCILIATION_STATUSES),
+  reconciliationReason: z.enum(PAYMENT_RECONCILIATION_REASONS).nullable(),
+  receivedAt: z.iso.datetime(),
+  reconciledAt: z.iso.datetime().nullable(),
+  account: billingAdminAccountSchema.nullable(),
+  order: z
+    .object({
+      id: nonEmptyText,
+      paymentCode: nonEmptyText,
+      status: z.enum(BILLING_ORDER_STATUSES),
+      creditUnits: nonNegativeIntegerText.nullable(),
+    })
+    .nullable(),
+});
+export type BillingAdminPaymentRow = z.infer<
+  typeof billingAdminPaymentRowSchema
+>;
+
+export const billingAdminSummarySchema = z.object({
+  settledTopUpVnd: nonNegativeIntegerText,
+  usageRevenueVnd: nonNegativeIntegerText,
+  pendingReconciliationCount: z.number().int().safe().nonnegative(),
+  duplicatePaymentCount: z.number().int().safe().nonnegative(),
+  settledTopUpTrend: z
+    .array(
+      z.object({
+        day: z.iso.date(),
+        amountVnd: nonNegativeIntegerText,
+      }),
+    )
+    .length(7),
+});
+export type BillingAdminSummary = z.infer<typeof billingAdminSummarySchema>;
+
+export const billingAdminDashboardSchema = z.object({
+  period: z.enum(BILLING_ADMIN_PERIODS),
+  summary: billingAdminSummarySchema,
+  items: z.array(billingAdminPaymentRowSchema),
+  page: z.number().int().safe().positive(),
+  pageSize: z.number().int().safe().positive(),
+  totalCount: z.number().int().safe().nonnegative(),
+});
+export const billingAdminGatewaySchema = z.enum(BILLING_ADMIN_GATEWAYS);
+export type BillingAdminDashboard = z.infer<typeof billingAdminDashboardSchema>;
+
+export function parseBillingAdminDashboard(value: unknown) {
+  const parsed = billingAdminDashboardSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
 
 export const billingAdminReconciliationListQuerySchema = z.object({
   status: z.enum(PAYMENT_RECONCILIATION_STATUSES).optional(),

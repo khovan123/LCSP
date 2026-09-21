@@ -55,7 +55,6 @@ describe("LCSP-310 payment reconciliation", () => {
       accounting,
     );
     admin = new ResolveBillingPaymentHandler(
-      new PrismaService(),
       new PrismaBillingTransaction(new PrismaService()),
       accounting,
     );

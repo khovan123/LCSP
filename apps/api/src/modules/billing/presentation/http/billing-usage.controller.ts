@@ -15,7 +15,6 @@ import {
 import { ZodValidationPipe } from "../../../../common/pipes/zod-validation.pipe.ts";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
-import { BillingDomainError } from "../../domain/billing.errors.js";
 import { ClaimBillingInvocationCommand } from "../../application/commands/claim-billing-invocation/claim-billing-invocation.command.js";
 import { ReleaseBillingReservationCommand } from "../../application/commands/release-billing-reservation/release-billing-reservation.command.js";
 import { ReserveBillingCreditsCommand } from "../../application/commands/reserve-billing-credits/reserve-billing-credits.command.js";
@@ -133,12 +132,8 @@ export class BillingUsageController {
     body: BillingUsageSettlementRequest,
   ) {
     try {
-      const assessmentId =
-        typeof body.assessmentId === "string" ? body.assessmentId.trim() : "";
-      if (!assessmentId)
-        throw new BillingDomainError("usage identity is required");
       const userId = await this.queryBus.execute(
-        new ResolveBillingAssessmentOwnerQuery(assessmentId),
+        new ResolveBillingAssessmentOwnerQuery(body.assessmentId),
       );
       const result = await this.commandBus.execute(
         new SettleBillingUsageCommand(toSettlementInput(body, userId)),
