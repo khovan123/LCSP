@@ -21,7 +21,7 @@ pnpm run test:managed-sandbox-release-gate
 ```
 
 For pull requests that touch the release-gate surface, CI also requires the
-`LCSP-333 managed sandbox proof` job. It runs on a self-hosted runner carrying
+`Managed sandbox proof` job. It runs on a self-hosted runner carrying
 the `lcsp-managed-sandbox` label. That runner must provide the
 `lcsp-managed-sandbox-proof` executable. The executable is the production
 proof producer: it must start the canonical PR-triggered review run, exercise
@@ -35,7 +35,7 @@ this CI path.
 
 The privileged producer job is restricted to same-repository pull-request
 branches. Fork pull requests never execute on the self-hosted managed-sandbox
-runner and the always-created LCSP-333 readiness gate fails closed for them
+runner and the always-created Managed sandbox readiness gate fails closed for them
 unless a separately governed exemption or trusted external sandbox path is
 introduced. The privileged job does not check out PR code, install PR
 dependencies, or execute repository lifecycle scripts on the host. It invokes
@@ -47,9 +47,22 @@ schema, exact-head identity, lifecycle/correlation, CI/mergeability, and privacy
 before any proof is uploaded to GitHub. Only a proof that passes this trusted
 pre-upload verification may be persisted as an Actions artifact. The trusted
 gate result must record the verifier version or hash for auditability. The
-always-created LCSP-333 readiness gate consumes only that trusted result and
+always-created Managed sandbox readiness gate consumes only that trusted result and
 must be configured as a required status check for develop; PR-controlled
 validator/package scripts are not authoritative for readiness.
+
+The globally required readiness status treats a pull request outside the
+release_gate path surface as NOT_APPLICABLE and succeeds without starting a
+managed sandbox. For an applicable pull request, the authoritative mode is
+either a successful trusted managed-sandbox proof or a governed exemption
+resolved outside PR-controlled code. The self-hosted readiness runner obtains
+an exemption only through the host-managed lcsp-managed-sandbox-exemption
+provider and validates it with lcsp-managed-sandbox-verify, binding the
+exemption to the exact repository, PR, base SHA, and head SHA. Expired,
+mismatched, replayed, or unapproved exemptions fail closed. Final authorization
+is performed by host-managed lcsp-managed-sandbox-readiness; repository code
+cannot generate, approve, or reinterpret the exemption used by its own required
+check.
 
 If the managed sandbox is unavailable, release governance may provide a
 time-boxed exemption artifact:
