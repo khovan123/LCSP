@@ -148,36 +148,28 @@ jobs:
     name: Managed sandbox readiness gate
     needs: [changes, managed-sandbox-release-gate]
     if: always() && github.event_name == 'pull_request'
-    runs-on: [self-hosted, linux, lcsp-managed-sandbox]
-    timeout-minutes: 10
+    runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
     steps:
       - name: Record non-applicable readiness
         if: needs.changes.outputs.release_gate != 'true'
         run: |
           echo "Managed sandbox readiness: NOT_APPLICABLE (release-gate surface not selected)."
 
-      - name: Resolve authoritative proof or exemption
-        if: needs.changes.outputs.release_gate == 'true'
+      - name: Require trusted managed-sandbox proof for same-repository PR
+        if: >-
+          needs.changes.outputs.release_gate == 'true' &&
+          github.event.pull_request.head.repo.full_name == github.repository
         env:
-          LCSP333_PR_NUMBER: ${{ github.event.pull_request.number }}
-          LCSP333_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          LCSP333_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          LCSP333_PRODUCER_RESULT: ${{ needs.managed-sandbox-release-gate.result }}
-          LCSP333_IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          PRODUCER_RESULT: ${{ needs.managed-sandbox-release-gate.result }}
         run: |
-          rm -rf "$RUNNER_TEMP/lcsp333-readiness"
-          mkdir -p "$RUNNER_TEMP/lcsp333-readiness"
-
-          if [ "$LCSP333_IS_FORK" = "false" ] && [ "$LCSP333_PRODUCER_RESULT" = "success" ]; then
-            echo "Trusted managed-sandbox producer succeeded; proof result will be consumed from the workflow artifact."
-            exit 0
+          if [ "$PRODUCER_RESULT" != "success" ]; then
+            echo "No trusted managed-sandbox proof is available for this exact head."
+            echo "A governed exemption must be supplied by a trusted external workflow/service; this PR workflow cannot mint one."
+            exit 1
           fi
-
-          lcsp-managed-sandbox-exemption             --repository "$GITHUB_REPOSITORY"             --pr "$LCSP333_PR_NUMBER"             --base "$LCSP333_BASE_SHA"             --head "$LCSP333_HEAD_SHA"             --out "$RUNNER_TEMP/lcsp333-readiness/lcsp333-non-sandbox-exemption.json"
-
-          lcsp-managed-sandbox-verify             --exemption "$RUNNER_TEMP/lcsp333-readiness/lcsp333-non-sandbox-exemption.json"             --expected-pr "$LCSP333_PR_NUMBER"             --expected-base "$LCSP333_BASE_SHA"             --expected-head "$LCSP333_HEAD_SHA"             --out "$RUNNER_TEMP/lcsp333-readiness/lcsp333-managed-sandbox-gate-result.json"
 
       - name: Download trusted proof gate result
         if: >-
@@ -189,22 +181,31 @@ jobs:
           name: lcsp333-trusted-gate-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
           path: artifacts
 
-      - name: Verify authoritative readiness outcome
-        if: needs.changes.outputs.release_gate == 'true'
+      - name: Verify immutable trusted proof outcome
+        if: >-
+          needs.changes.outputs.release_gate == 'true' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          needs.managed-sandbox-release-gate.result == 'success'
         env:
-          LCSP333_PR_NUMBER: ${{ github.event.pull_request.number }}
-          LCSP333_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          LCSP333_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          LCSP333_PRODUCER_RESULT: ${{ needs.managed-sandbox-release-gate.result }}
-          LCSP333_IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          if [ "$LCSP333_IS_FORK" = "false" ] && [ "$LCSP333_PRODUCER_RESULT" = "success" ]; then
-            RESULT="artifacts/lcsp333-managed-sandbox-gate-result.json"
-          else
-            RESULT="$RUNNER_TEMP/lcsp333-readiness/lcsp333-managed-sandbox-gate-result.json"
-          fi
+          node -e '
+            const fs = require("fs");
+            const result = JSON.parse(fs.readFileSync("artifacts/lcsp333-managed-sandbox-gate-result.json", "utf8"));
+            if (result.ok !== true) throw new Error("trusted managed-sandbox gate did not pass");
+            const head = result.summary?.headSha ?? result.headSha;
+            if (head !== process.env.EXPECTED_HEAD_SHA) throw new Error("trusted gate result is not for exact PR head");
+            if (!result.verifierVersion && !result.verifierHash) throw new Error("trusted verifier identity is missing");
+          '
 
-          lcsp-managed-sandbox-readiness             --result "$RESULT"             --expected-pr "$LCSP333_PR_NUMBER"             --expected-base "$LCSP333_BASE_SHA"             --expected-head "$LCSP333_HEAD_SHA"
+      - name: Fail closed for fork PR without external governed exemption
+        if: >-
+          needs.changes.outputs.release_gate == 'true' &&
+          github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "Fork PRs never schedule the privileged managed-sandbox runner."
+          echo "A trusted external governance workflow/service must publish the required readiness status for an approved exemption."
+          exit 1
 
   web-production-build:
     name: Web lint and production build

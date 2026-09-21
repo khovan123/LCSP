@@ -35,9 +35,12 @@ this CI path.
 
 The privileged producer job is restricted to same-repository pull-request
 branches. Fork pull requests never execute on the self-hosted managed-sandbox
-runner and the always-created Managed sandbox readiness gate fails closed for them
-unless a separately governed exemption or trusted external sandbox path is
-introduced. The privileged job does not check out PR code, install PR
+runner. The always-created Managed sandbox readiness gate runs only on
+GitHub-hosted isolated compute, so NOT_APPLICABLE and fork decisions never
+depend on or execute commands on the privileged runner. A fork or unavailable
+sandbox fails closed unless a separately governed trusted workflow/service
+supplies an approved exemption outcome without executing fork-controlled
+workflow code on the managed-sandbox host. The privileged job does not check out PR code, install PR
 dependencies, or execute repository lifecycle scripts on the host. It invokes
 only host-managed producer and verifier binaries with immutable PR/base/head
 identifiers and writes into a fresh runner-temporary proof directory.
@@ -52,17 +55,17 @@ must be configured as a required status check for develop; PR-controlled
 validator/package scripts are not authoritative for readiness.
 
 The globally required readiness status treats a pull request outside the
-release_gate path surface as NOT_APPLICABLE and succeeds without starting a
-managed sandbox. For an applicable pull request, the authoritative mode is
-either a successful trusted managed-sandbox proof or a governed exemption
-resolved outside PR-controlled code. The self-hosted readiness runner obtains
-an exemption only through the host-managed lcsp-managed-sandbox-exemption
-provider and validates it with lcsp-managed-sandbox-verify, binding the
-exemption to the exact repository, PR, base SHA, and head SHA. Expired,
-mismatched, replayed, or unapproved exemptions fail closed. Final authorization
-is performed by host-managed lcsp-managed-sandbox-readiness; repository code
-cannot generate, approve, or reinterpret the exemption used by its own required
-check.
+release_gate path surface as NOT_APPLICABLE and succeeds on GitHub-hosted
+compute without starting a managed sandbox. For an applicable same-repository
+pull request, it consumes only the gate result emitted by the same-repository
+trusted producer/verifier. The pull-request workflow does not mint exemptions.
+Governed exemptions must originate from a separately trusted workflow or
+external governance service whose definition cannot be changed by the pull
+request, must be bound to the exact repository, PR, base SHA and head SHA, and
+must fail closed when expired, mismatched, replayed or unapproved. Such a
+trusted path may publish the stable required readiness context after validating
+the exemption; it must never execute fork-controlled workflow commands on the
+managed-sandbox host.
 
 If the managed sandbox is unavailable, release governance may provide a
 time-boxed exemption artifact:
