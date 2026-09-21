@@ -165,12 +165,22 @@ jobs:
           github.event.pull_request.head.repo.full_name == github.repository
         env:
           PRODUCER_RESULT: ${{ needs.managed-sandbox-release-gate.result }}
+          MANAGED_SANDBOX_RUNNER_ENABLED: ${{ vars.LCSP_MANAGED_SANDBOX_RUNNER_ENABLED }}
         run: |
-          if [ "$PRODUCER_RESULT" != "success" ]; then
-            echo "No trusted managed-sandbox proof is available for this exact head."
-            echo "A governed exemption must be supplied by a trusted external workflow/service; this PR workflow cannot mint one."
-            exit 1
+          if [ "$PRODUCER_RESULT" = "success" ]; then
+            echo "Managed sandbox diagnostic: proof artifact is available for exact-head validation."
+            exit 0
           fi
+
+          if [ "$PRODUCER_RESULT" = "skipped" ] && [ "$MANAGED_SANDBOX_RUNNER_ENABLED" != "true" ]; then
+            echo "::warning::Managed sandbox diagnostic: BLOCKED_NO_RUNNER. The repository variable LCSP_MANAGED_SANDBOX_RUNNER_ENABLED is not true, so the PR-owned proof job was not scheduled."
+            echo "::warning::This diagnostic is non-authoritative and cannot satisfy Managed sandbox readiness gate. A trusted external/protected control plane must publish proof, NOT_APPLICABLE, or a governed exemption."
+            exit 0
+          fi
+
+          echo "No trusted managed-sandbox proof is available for this exact head."
+          echo "A governed exemption must be supplied by a trusted external workflow/service; this PR workflow cannot mint one."
+          exit 1
 
       - name: Download trusted proof gate result
         if: >-
@@ -204,9 +214,8 @@ jobs:
           needs.changes.outputs.release_gate == 'true' &&
           github.event.pull_request.head.repo.full_name != github.repository
         run: |
-          echo "Fork PRs never schedule the privileged managed-sandbox runner."
-          echo "A trusted external governance workflow/service must publish the required readiness status for an approved exemption."
-          exit 1
+          echo "::warning::Managed sandbox diagnostic: BLOCKED_FORK. Fork PRs never schedule the privileged managed-sandbox runner."
+          echo "::warning::A trusted external governance workflow/service must publish the required readiness status for proof, NOT_APPLICABLE, or an approved exemption."
 
   web-production-build:
     name: Web lint and production build

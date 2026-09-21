@@ -37,10 +37,12 @@ The self-hosted producer is scheduled only when repository variable
 `LCSP_MANAGED_SANDBOX_RUNNER_ENABLED` is exactly `true`. Leave the variable
 unset or false until at least one trusted runner with the required host-managed
 producer and verifier binaries is registered. In that state the PR-owned
-diagnostic fails closed on GitHub-hosted compute instead of leaving the proof
-job queued indefinitely; the authoritative release gate remains unsatisfied
-until the trusted control plane publishes a valid exact-head proof or governed
-exemption.
+diagnostic records `BLOCKED_NO_RUNNER` on GitHub-hosted compute instead of
+leaving the proof job queued indefinitely. This diagnostic is non-authoritative:
+its success only means the diagnostic ran to completion, not that release
+readiness passed. The authoritative release gate remains unsatisfied until the
+trusted control plane publishes a valid exact-head proof, NOT_APPLICABLE, or a
+governed exemption.
 
 The privileged producer job is restricted to same-repository pull-request
 branches. Fork pull requests never execute on the self-hosted managed-sandbox
