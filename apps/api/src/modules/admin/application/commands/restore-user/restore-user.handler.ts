@@ -16,6 +16,7 @@ import { AuthAuditService } from "../../../../auth/application/services/auth/aut
 import {
   accountTransaction,
   assertCurrentAdmin,
+  legacyRequestHash,
   receipt,
   replay,
   requestHash,
@@ -46,8 +47,13 @@ export class RestoreUserHandler implements ICommandHandler<RestoreUserCommand> {
     const { targetId: targetUserId, body, actor } = command;
     const { expectedVersion, reason } = body;
 
-    // Generate deterministic request hash for idempotency checking
+    // Generate deterministic canonical and legacy request hashes for idempotency checking
     const payloadHash = requestHash(ADMIN_ACCOUNT_OPERATIONS.restore, {
+      id: targetUserId,
+      expectedVersion,
+      reason,
+    });
+    const legacyHash = legacyRequestHash(ADMIN_ACCOUNT_OPERATIONS.restore, {
       id: targetUserId,
       expectedVersion,
       reason,
@@ -66,6 +72,7 @@ export class RestoreUserHandler implements ICommandHandler<RestoreUserCommand> {
           actor,
           ADMIN_ACCOUNT_OPERATIONS.restore,
           payloadHash,
+          legacyHash,
         );
         if (previousReceipt) {
           return {

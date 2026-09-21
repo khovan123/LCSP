@@ -18,6 +18,7 @@ import { AUTH_RECORD_TYPES } from "../../../../auth/infrastructure/persistence/a
 import {
   accountTransaction,
   assertCurrentAdmin,
+  legacyRequestHash,
   receipt,
   replay,
   requestHash,
@@ -49,8 +50,13 @@ export class SuspendUserHandler implements ICommandHandler<SuspendUserCommand> {
     const { targetId: targetUserId, body, actor } = command;
     const { expectedVersion, reason } = body;
 
-    // Generate deterministic request hash for idempotency checking
+    // Generate deterministic canonical and legacy request hashes for idempotency checking
     const payloadHash = requestHash(ADMIN_ACCOUNT_OPERATIONS.suspend, {
+      id: targetUserId,
+      expectedVersion,
+      reason,
+    });
+    const legacyHash = legacyRequestHash(ADMIN_ACCOUNT_OPERATIONS.suspend, {
       id: targetUserId,
       expectedVersion,
       reason,
@@ -69,6 +75,7 @@ export class SuspendUserHandler implements ICommandHandler<SuspendUserCommand> {
           actor,
           ADMIN_ACCOUNT_OPERATIONS.suspend,
           payloadHash,
+          legacyHash,
         );
         if (previousReceipt) {
           return {

@@ -32,7 +32,7 @@ export async function lockAccountLifecycle(
 
 /**
  * Runs an administrative database transaction wrapped with advisory locks and error mapping.
- * Catches Postgres concurrency errors (P2034, 55P03 lock_not_available, 40P01 deadlock_detected)
+ * Catches Postgres concurrency errors (P2034, P2028, 55P03 lock_not_available, 40P01 deadlock_detected)
  * and maps them into an HTTP 409 Conflict problem exception.
  */
 export async function accountTransaction<T>(
@@ -51,12 +51,14 @@ export async function accountTransaction<T>(
       {
         isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
         timeout: 15000,
+        maxWait: 5000,
       },
     );
   } catch (error) {
     const errorDetails = error as { code?: string; meta?: { code?: string } };
     if (
       errorDetails.code === "P2034" ||
+      errorDetails.code === "P2028" ||
       errorDetails.code === "55P03" ||
       errorDetails.code === "40P01" ||
       errorDetails.meta?.code === "55P03" ||
@@ -129,9 +131,21 @@ export async function assertCurrentAdmin(
 }
 
 /**
- * Creates a deterministic SHA-256 hash of the administrative operation name and canonical JSON payload.
+ * Creates the legacy SHA-256 hash format for backward compatibility with persisted receipts.
  */
-export function requestHash(
+export function legacyRequestHash(
+  operation: AdminAccountOperation,
+  input: unknown,
+): string {
+  return createHash("sha256")
+    .update(JSON.stringify({ operation, input }))
+    .digest("hex");
+}
+
+/**
+ * Creates a deterministic SHA-256 hash of the administrative operation name and canonical JSON payload (sorted keys).
+ */
+export function canonicalRequestHash(
   operation: AdminAccountOperation,
   input: unknown,
 ): string {
@@ -145,8 +159,18 @@ export function requestHash(
 }
 
 /**
+ * Returns canonical hash for idempotency receipts.
+ */
+export function requestHash(
+  operation: AdminAccountOperation,
+  input: unknown,
+): string {
+  return canonicalRequestHash(operation, input);
+}
+
+/**
  * Checks for a previously processed idempotent command receipt.
- * If the idempotency key matches with identical payload hash, returns the cached resource ID.
+ * If the idempotency key matches with identical payload hash (or legacy hash format), returns the cached resource ID.
  * If the payload or operation differs, throws a 409 Conflict exception.
  */
 export async function replay(
@@ -154,6 +178,7 @@ export async function replay(
   actor: AdminActor,
   operation: AdminAccountOperation,
   payloadHash: string,
+  legacyHash?: string,
 ): Promise<{ resourceId: string } | null> {
   const existingReceipt =
     await transactionClient.adminAccountCommandReceipt.findUnique({
@@ -165,10 +190,10 @@ export async function replay(
       },
     });
   if (!existingReceipt) return null;
-  if (
-    existingReceipt.operation !== operation ||
-    existingReceipt.requestHash !== payloadHash
-  ) {
+  const isHashMatch =
+    existingReceipt.requestHash === payloadHash ||
+    (Boolean(legacyHash) && existingReceipt.requestHash === legacyHash);
+  if (existingReceipt.operation !== operation || !isHashMatch) {
     throw problemException(
       ADMIN_ACCOUNT_ERRORS.idempotencyConflict,
       actor.correlationId,
