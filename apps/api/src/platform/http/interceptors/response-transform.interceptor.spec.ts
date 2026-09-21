@@ -43,7 +43,7 @@ describe("ResponseTransformInterceptor", () => {
   it("bypasses wrapping when handler has bypassEnvelope metadata", async () => {
     const response = { headersSent: false };
     const reflector = {
-      get: jest.fn((key: string) => key === BYPASS_ENVELOPE_KEY),
+      getAllAndOverride: jest.fn((key: string) => key === BYPASS_ENVELOPE_KEY),
     } as unknown as Reflector;
     const interceptor = new ResponseTransformInterceptor(reflector);
     const rawData = { raw: "data" };
@@ -97,6 +97,7 @@ function createExecutionContext(response: {
   return {
     getType: () => "http",
     getHandler: () => ({}),
+    getClass: () => ({}),
     switchToHttp: () => ({
       getResponse: () => response,
     }),

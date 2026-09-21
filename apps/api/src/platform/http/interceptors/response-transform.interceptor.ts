@@ -51,10 +51,19 @@ export class ResponseTransformInterceptor implements NestInterceptor {
     }
 
     const response = context.switchToHttp().getResponse<HttpResponse>();
-    const isBypassed = this.reflector?.get<boolean>(
-      BYPASS_ENVELOPE_KEY,
-      context.getHandler(),
+    const targets = [
+      typeof context.getHandler === "function" ? context.getHandler() : undefined,
+      typeof context.getClass === "function" ? context.getClass() : undefined,
+    ].filter(
+      (target): target is NonNullable<typeof target> => target !== undefined,
     );
+    const isBypassed =
+      targets.length > 0
+        ? this.reflector?.getAllAndOverride<boolean>(
+            BYPASS_ENVELOPE_KEY,
+            targets,
+          )
+        : undefined;
 
     return next.handle().pipe(
       map((data: unknown) => {
