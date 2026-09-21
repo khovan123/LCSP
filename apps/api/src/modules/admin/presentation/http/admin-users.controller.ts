@@ -5,6 +5,8 @@ import {
   AUTH_USER_ROLES,
   type AdminListUsersQueryInput,
   type AdminUserActionInput,
+  type AdminUserDetail,
+  type AdminUserListResponse,
 } from "@lcsp/contracts/auth";
 import {
   Body,
@@ -88,8 +90,8 @@ export class AdminUsersController {
     )
     query: AdminListUsersQueryInput,
     @Req() request: AuthenticatedRequest,
-  ) {
-    return this.queryBus.execute<ListAdminUsersQuery, unknown>(
+  ): Promise<AdminUserListResponse> {
+    return this.queryBus.execute<ListAdminUsersQuery, AdminUserListResponse>(
       new ListAdminUsersQuery(query, request.correlationId!),
     );
   }
@@ -103,8 +105,8 @@ export class AdminUsersController {
   async getUserDetail(
     @Param("id") targetUserId: string,
     @Req() request: AuthenticatedRequest,
-  ) {
-    return this.queryBus.execute<GetAdminUserDetailQuery, unknown>(
+  ): Promise<AdminUserDetail> {
+    return this.queryBus.execute<GetAdminUserDetailQuery, AdminUserDetail>(
       new GetAdminUserDetailQuery(targetUserId, request.correlationId!),
     );
   }
@@ -127,8 +129,8 @@ export class AdminUsersController {
     body: AdminUserActionInput,
     @Headers("idempotency-key") idempotencyKeyHeader: unknown,
     @Req() request: AuthenticatedRequest,
-  ) {
-    return this.commandBus.execute<SuspendUserCommand, unknown>(
+  ): Promise<AdminUserDetail> {
+    return this.commandBus.execute<SuspendUserCommand, AdminUserDetail>(
       new SuspendUserCommand(
         targetUserId,
         body,
@@ -155,8 +157,8 @@ export class AdminUsersController {
     body: AdminUserActionInput,
     @Headers("idempotency-key") idempotencyKeyHeader: unknown,
     @Req() request: AuthenticatedRequest,
-  ) {
-    return this.commandBus.execute<RestoreUserCommand, unknown>(
+  ): Promise<AdminUserDetail> {
+    return this.commandBus.execute<RestoreUserCommand, AdminUserDetail>(
       new RestoreUserCommand(
         targetUserId,
         body,

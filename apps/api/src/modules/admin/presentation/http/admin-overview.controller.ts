@@ -5,6 +5,7 @@ import {
   adminOverviewQuerySchema,
   AUTH_USER_ROLES,
   type AdminOverviewQueryInput,
+  type AdminOverviewStats,
 } from "@lcsp/contracts/auth";
 
 import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
@@ -33,8 +34,8 @@ export class AdminOverviewController {
       ),
     )
     query: AdminOverviewQueryInput,
-  ) {
-    return this.queryBus.execute<GetAdminOverviewQuery, unknown>(
+  ): Promise<AdminOverviewStats> {
+    return this.queryBus.execute<GetAdminOverviewQuery, AdminOverviewStats>(
       new GetAdminOverviewQuery(query.period),
     );
   }
