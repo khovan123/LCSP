@@ -45,27 +45,38 @@ dependencies, or execute repository lifecycle scripts on the host. It invokes
 only host-managed producer and verifier binaries with immutable PR/base/head
 identifiers and writes into a fresh runner-temporary proof directory.
 
-The host-managed verifier is the authoritative trust boundary. It validates
-schema, exact-head identity, lifecycle/correlation, CI/mergeability, and privacy
-before any proof is uploaded to GitHub. Only a proof that passes this trusted
-pre-upload verification may be persisted as an Actions artifact. The trusted
-gate result must record the verifier version or hash for auditability. The
-always-created Managed sandbox readiness gate consumes only that trusted result and
-must be configured as a required status check for develop; PR-controlled
-validator/package scripts are not authoritative for readiness.
+The host-managed verifier is the authoritative proof-validation boundary. It
+validates schema, exact-head identity, lifecycle/correlation, CI/mergeability,
+and privacy before any proof is uploaded to GitHub. Only a proof that passes
+this trusted pre-upload verification may be persisted as an Actions artifact.
+The trusted gate result must record the verifier version or hash for
+auditability.
 
-The globally required readiness status treats a pull request outside the
-release_gate path surface as NOT_APPLICABLE and succeeds on GitHub-hosted
-compute without starting a managed sandbox. For an applicable same-repository
-pull request, it consumes only the gate result emitted by the same-repository
-trusted producer/verifier. The pull-request workflow does not mint exemptions.
-Governed exemptions must originate from a separately trusted workflow or
-external governance service whose definition cannot be changed by the pull
-request, must be bound to the exact repository, PR, base SHA and head SHA, and
-must fail closed when expired, mismatched, replayed or unapproved. Such a
-trusted path may publish the stable required readiness context after validating
-the exemption; it must never execute fork-controlled workflow commands on the
-managed-sandbox host.
+The branch-protection authority is deliberately separate from this
+PR-controlled workflow. The live develop ruleset requires the status context
+Managed sandbox readiness gate, but no job in this pull-request workflow emits
+that context. The job here is named Managed sandbox readiness diagnostic and is
+non-authoritative. The required context must be published for the exact head by
+a trusted GitHub App/external governance service or a workflow definition
+resolved exclusively from a protected base ref. That trusted control plane must
+validate the host-managed proof or governed exemption before publishing
+success. A candidate PR therefore cannot preserve the required context name and
+turn its implementation into an unconditional success.
+
+The PR-owned diagnostic treats a pull request outside the release_gate path
+surface as NOT_APPLICABLE and succeeds on GitHub-hosted compute without starting
+a managed sandbox, but that diagnostic cannot satisfy branch protection. For an
+applicable same-repository pull request, it consumes only the gate result emitted
+by the same-repository trusted producer/verifier. The pull-request workflow does
+not mint exemptions or publish the authoritative required context.
+
+The trusted control plane publishes Managed sandbox readiness gate only after
+binding its decision to the exact repository, PR, base SHA and head SHA. It may
+publish NOT_APPLICABLE according to protected policy, accept a verified
+managed-sandbox result, or accept a separately governed exemption. Exemptions
+must originate outside candidate-PR control and fail closed when expired,
+mismatched, replayed or unapproved. Fork-controlled workflow commands must never
+execute on the managed-sandbox host.
 
 If the managed sandbox is unavailable, release governance may provide a
 time-boxed exemption artifact:

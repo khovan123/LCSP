@@ -145,7 +145,7 @@ jobs:
           retention-days: 14
 
   managed-sandbox-readiness:
-    name: Managed sandbox readiness gate
+    name: Managed sandbox readiness diagnostic
     needs: [changes, managed-sandbox-release-gate]
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -156,7 +156,7 @@ jobs:
       - name: Record non-applicable readiness
         if: needs.changes.outputs.release_gate != 'true'
         run: |
-          echo "Managed sandbox readiness: NOT_APPLICABLE (release-gate surface not selected)."
+          echo "Managed sandbox diagnostic: NOT_APPLICABLE (release-gate surface not selected)."
 
       - name: Require trusted managed-sandbox proof for same-repository PR
         if: >-
