@@ -9,10 +9,27 @@ import type { Observable } from "rxjs";
 import { map } from "rxjs/operators";
 
 import { BYPASS_ENVELOPE_KEY } from "./bypass-envelope.decorator.js";
+import { isRecord } from "../../../common/utils/index.js";
 
 type HttpResponse = {
   headersSent?: boolean;
 };
+
+/**
+ * Checks whether the given payload is already wrapped in the standard result envelope.
+ */
+function isAlreadyEnveloped(data: unknown): boolean {
+  if (!isRecord(data)) {
+    return false;
+  }
+  if (data.ok === true && "data" in data) {
+    return true;
+  }
+  if (data.ok === false && "problem" in data) {
+    return true;
+  }
+  return false;
+}
 
 /**
  * Automatically wraps successful controller return values in the standardized API success envelope { ok: true, data }.
@@ -41,7 +58,7 @@ export class ResponseTransformInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       map((data: unknown) => {
-        if (response?.headersSent || isBypassed) {
+        if (response?.headersSent || isBypassed || isAlreadyEnveloped(data)) {
           return data;
         }
 

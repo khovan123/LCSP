@@ -58,6 +58,24 @@ describe("ResponseTransformInterceptor", () => {
     expect(result).toBe(rawData);
   });
 
+  it("does not double-wrap already enveloped payloads", async () => {
+    const response = { headersSent: false };
+    const interceptor = new ResponseTransformInterceptor();
+    const alreadyEnveloped = {
+      ok: true,
+      data: { id: "order-1", status: "PENDING" },
+    };
+
+    const result = await lastValueFrom(
+      interceptor.intercept(
+        createExecutionContext(response),
+        createCallHandler(alreadyEnveloped),
+      ),
+    );
+
+    expect(result).toEqual(alreadyEnveloped);
+  });
+
   it("passes through non-http execution contexts unchanged", async () => {
     const interceptor = new ResponseTransformInterceptor();
     const nonHttpContext = {
