@@ -20,10 +20,8 @@ const priorSha = "c".repeat(40);
 function completeStages() {
   return REQUIRED_STAGE_NAMES.map((name) => ({
     name,
-    status:
-      name === "INTERVIEW_BRANCH" ? "GOVERNED_NO_INTERVIEW" : "COMPLETED",
-    branch:
-      name === "INTERVIEW_BRANCH" ? "NO_INTERVIEW_GOVERNED" : undefined,
+    status: name === "INTERVIEW_BRANCH" ? "GOVERNED_NO_INTERVIEW" : "COMPLETED",
+    branch: name === "INTERVIEW_BRANCH" ? "NO_INTERVIEW_GOVERNED" : undefined,
     evidenceRefs: [`evidence:${name.toLowerCase()}`],
   }));
 }
@@ -190,12 +188,49 @@ test("accepts a complete managed-sandbox proof for the green exact-head case", (
   });
 });
 
+test("enforces terminal run lifecycle and canonical state consistency", () => {
+  for (const status of ["RUNNING", "QUEUED"]) {
+    const proof = clone(validProof());
+    proof.run.status = status;
+    proof.canonicalRuns[0].state = status;
+    expectInvalid(
+      proof,
+      /run\.status must be terminal[\s\S]*READY\/PASS requires run\.status=COMPLETED/u,
+    );
+  }
+
+  const completed = clone(validProof());
+  assert.equal(validateManagedSandboxProof(completed).ok, true);
+
+  const superseded = clone(validProof());
+  superseded.run.status = "SUPERSEDED";
+  superseded.run.terminalVerdict = "SUPERSEDED";
+  superseded.canonicalRuns[0].state = "SUPERSEDED";
+  assert.equal(validateManagedSandboxProof(superseded).ok, true);
+
+  const cancelled = clone(validProof());
+  cancelled.run.status = "CANCELLED";
+  cancelled.run.terminalVerdict = "CANCELLED";
+  cancelled.canonicalRuns[0].state = "CANCELLED";
+  assert.equal(validateManagedSandboxProof(cancelled).ok, true);
+
+  const mismatch = clone(validProof());
+  mismatch.canonicalRuns[0].state = "FAILED";
+  expectInvalid(
+    mismatch,
+    /authoritative canonical run state must match run\.status/u,
+  );
+});
+
 test("rejects READY verdicts when the PR head changes before final verdict", () => {
   const proof = clone(validProof());
   proof.exactHead.finalHeadSha = priorSha;
   proof.exactHead.headUnchanged = false;
 
-  expectInvalid(proof, /READY\/PASS verdict is forbidden when final PR head changed/u);
+  expectInvalid(
+    proof,
+    /READY\/PASS verdict is forbidden when final PR head changed/u,
+  );
 });
 
 test("rejects duplicate authoritative active runs for the same current head", () => {
@@ -258,7 +293,10 @@ test("rejects code-review PASS as READY while required CI is still pending", () 
   proof.ci.allRequiredPassed = false;
   proof.ci.pendingChecks = ["API e2e tests"];
 
-  expectInvalid(proof, /READY\/PASS verdict is forbidden while required CI is pending/u);
+  expectInvalid(
+    proof,
+    /READY\/PASS verdict is forbidden while required CI is pending/u,
+  );
 });
 
 test("rejects missing pipeline stages and runtime event classes", () => {
@@ -300,7 +338,8 @@ test("accepts an explicit non-sandbox exemption without marking release ready", 
       schemaVersion: EXEMPTION_SCHEMA_VERSION,
       ticket: "LCSP-333",
       approvedBy: "release-owner",
-      reason: "Managed VPS unavailable; release remains blocked pending acceptance.",
+      reason:
+        "Managed VPS unavailable; release remains blocked pending acceptance.",
       scope: "DIAGNOSTIC_ONLY",
       expiresAt: "2099-01-01T00:00:00.000Z",
       riskAcceptance: "Temporary non-ready exemption for evidence collection.",

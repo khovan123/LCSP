@@ -28,7 +28,7 @@ jobs:
       - uses: dorny/paths-filter@v4
         id: filter
         with:
-          token: ''
+          token: ""
           list-files: shell
           filters: |
             api:
@@ -113,9 +113,48 @@ jobs:
   managed-sandbox-release-gate:
     name: LCSP-333 managed sandbox proof
     needs: changes
-    if: github.event_name == 'pull_request' && needs.changes.outputs.release_gate == 'true'
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.changes.outputs.release_gate == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, lcsp-managed-sandbox]
     timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Execute trusted production-equivalent managed sandbox producer
+        env:
+          LCSP333_PR_NUMBER: ${{ github.event.pull_request.number }}
+          LCSP333_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          LCSP333_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LCSP333_TRIGGER_ID: ${{ github.event.pull_request.id }}:${{ github.run_id }}:${{ github.run_attempt }}
+        run: |
+          rm -rf "$RUNNER_TEMP/lcsp333-proof"
+          mkdir -p "$RUNNER_TEMP/lcsp333-proof"
+          lcsp-managed-sandbox-proof \
+            --repository "$GITHUB_REPOSITORY" \
+            --pr "$LCSP333_PR_NUMBER" \
+            --base "$LCSP333_BASE_SHA" \
+            --head "$LCSP333_HEAD_SHA" \
+            --trigger "$LCSP333_TRIGGER_ID" \
+            --out "$RUNNER_TEMP/lcsp333-proof/lcsp333-managed-sandbox-proof.json"
+
+      - name: Upload sanitized proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcsp333-managed-sandbox-proof-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/lcsp333-proof/lcsp333-managed-sandbox-proof.json
+          if-no-files-found: error
+          retention-days: 14
+
+  managed-sandbox-proof-validation:
+    name: LCSP-333 managed sandbox proof validation
+    needs: [changes, managed-sandbox-release-gate]
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.changes.outputs.release_gate == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -134,25 +173,14 @@ jobs:
           EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
 
-      - name: Install dependencies
+      - name: Install dependencies on isolated GitHub-hosted runner
         run: pnpm install --frozen-lockfile
 
-      - name: Execute production-equivalent managed sandbox and emit proof
-        env:
-          LCSP333_PR_NUMBER: ${{ github.event.pull_request.number }}
-          LCSP333_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          LCSP333_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          LCSP333_TRIGGER_ID: ${{ github.event.pull_request.id }}:${{ github.run_id }}:${{ github.run_attempt }}
-        run: |
-          mkdir -p artifacts
-          lcsp-managed-sandbox-proof \
-            --repository "$GITHUB_REPOSITORY" \
-            --pr "$LCSP333_PR_NUMBER" \
-            --base "$LCSP333_BASE_SHA" \
-            --head "$LCSP333_HEAD_SHA" \
-            --trigger "$LCSP333_TRIGGER_ID" \
-            --workspace "$GITHUB_WORKSPACE" \
-            --out artifacts/lcsp333-managed-sandbox-proof.json
+      - name: Download trusted managed-sandbox proof
+        uses: actions/download-artifact@v4
+        with:
+          name: lcsp333-managed-sandbox-proof-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: artifacts
 
       - name: Validate produced managed-sandbox proof
         run: |
@@ -160,14 +188,12 @@ jobs:
             --proof artifacts/lcsp333-managed-sandbox-proof.json \
             --out artifacts/lcsp333-managed-sandbox-gate-result.json
 
-      - name: Upload sanitized proof and gate result
+      - name: Upload gate result
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: lcsp333-managed-sandbox-proof-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
-          path: |
-            artifacts/lcsp333-managed-sandbox-proof.json
-            artifacts/lcsp333-managed-sandbox-gate-result.json
+          name: lcsp333-managed-sandbox-gate-result-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: artifacts/lcsp333-managed-sandbox-gate-result.json
           if-no-files-found: error
           retention-days: 14
 

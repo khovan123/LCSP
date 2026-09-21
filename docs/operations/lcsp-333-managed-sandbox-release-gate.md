@@ -33,6 +33,17 @@ the evidence, and write `LCSP333_MANAGED_SANDBOX_PROOF_V1` to the requested
 missing/invalid proof fails the required job; fixture proof is not accepted by
 this CI path.
 
+The privileged producer job is restricted to same-repository pull-request
+branches. Fork pull requests never execute on the self-hosted managed-sandbox
+runner. The privileged job does not check out PR code, install PR dependencies,
+or execute repository lifecycle scripts on the host; it invokes only the
+host-managed producer with immutable PR/base/head identifiers and writes into a
+fresh runner-temporary proof directory. PR checkout, dependency installation,
+and proof validation run afterward on a GitHub-hosted runner. The producer is
+responsible for executing the requested exact head inside its disposable,
+production-equivalent sandbox boundary and must not reuse PR workspace state or
+credentials between runs.
+
 If the managed sandbox is unavailable, release governance may provide a
 time-boxed exemption artifact:
 
@@ -72,7 +83,9 @@ The full artifact must also include:
 
 - exact-head evidence: pinned PR head, sandbox checkout SHA, and final head
   re-check;
-- one authoritative canonical run for the current PR/head/generation;
+- one authoritative canonical run for the current PR/head/generation whose
+  lifecycle state matches run.status; the run must be terminal, and READY/PASS
+  is valid only with run.status=COMPLETED;
 - restart reconciliation proving stale/orphaned runs were superseded, cancelled
   or failed with a reason;
 - managed sandbox host kind, sanitized log refs and artifact refs;

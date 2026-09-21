@@ -3,8 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const PROOF_SCHEMA_VERSION = "LCSP333_MANAGED_SANDBOX_PROOF_V1";
-export const EXEMPTION_SCHEMA_VERSION =
-  "LCSP333_NON_SANDBOX_EXEMPTION_V1";
+export const EXEMPTION_SCHEMA_VERSION = "LCSP333_NON_SANDBOX_EXEMPTION_V1";
 
 export const REQUIRED_STAGE_NAMES = [
   "PR_TRIGGER",
@@ -75,6 +74,12 @@ const TERMINAL_VERDICTS = new Set([
 ]);
 
 const ACTIVE_STATES = new Set(["ACTIVE", "QUEUED", "RUNNING"]);
+const TERMINAL_RUN_STATES = new Set([
+  "COMPLETED",
+  "FAILED",
+  "CANCELLED",
+  "SUPERSEDED",
+]);
 const SUPERSEDED_STATES = new Set(["SUPERSEDED", "CANCELLED"]);
 const COMPLETED_STAGE_STATUSES = new Set([
   "COMPLETED",
@@ -261,7 +266,11 @@ function validateCanonicalRuns(proof, run, errors) {
       candidate.authoritative === true,
   );
   if (authoritativeCurrent.length !== 1) {
-    errors.push("canonicalRuns must mark exactly one authoritative current run");
+    errors.push(
+      "canonicalRuns must mark exactly one authoritative current run",
+    );
+  } else if (authoritativeCurrent[0].state !== run.status) {
+    errors.push("authoritative canonical run state must match run.status");
   }
 
   for (const candidate of canonicalRuns) {
@@ -416,7 +425,12 @@ function validateSandbox(proof, run, errors) {
     "artifactRefs",
     "managedSandbox.artifactRefs",
   );
-  requireArray(errors, proof.managedSandbox, "logRefs", "managedSandbox.logRefs");
+  requireArray(
+    errors,
+    proof.managedSandbox,
+    "logRefs",
+    "managedSandbox.logRefs",
+  );
 }
 
 function validateCorrelation(proof, run, errors) {
@@ -501,7 +515,9 @@ function validateRestartReconciliation(proof, run, errors) {
     activeRunIds.filter((runId) => runId === run.runId).length !== 1 ||
     activeRunIds.length !== 1
   ) {
-    errors.push("restart reconciliation must leave exactly the current run active");
+    errors.push(
+      "restart reconciliation must leave exactly the current run active",
+    );
   }
   const unresolved = (proof.restartReconciliation.orphanedRuns ?? []).filter(
     (candidate) =>
@@ -559,7 +575,9 @@ function validateScenarios(proof, errors) {
     pending.pendingChecks.length === 0 ||
     ["READY", "PASS"].includes(pending.verdict)
   ) {
-    errors.push("PR #336 scenario must prove code PASS is not READY while CI runs");
+    errors.push(
+      "PR #336 scenario must prove code PASS is not READY while CI runs",
+    );
   }
 
   const cancellation = proof.scenarios.cancellation;
@@ -570,7 +588,9 @@ function validateScenarios(proof, errors) {
     errors.push("cancellation scenario must cancel the selected run");
   }
   if (cancellation.cancelledRunId === cancellation.unrelatedRunId) {
-    errors.push("cancellation scenario must use distinct selected/unrelated runs");
+    errors.push(
+      "cancellation scenario must use distinct selected/unrelated runs",
+    );
   }
   if (
     Array.isArray(cancellation.unrelatedRunStates) &&
@@ -622,6 +642,21 @@ export function validateManagedSandboxProof(proof) {
   requireString(errors, run, "triggerId", "run.triggerId");
   if (!TERMINAL_VERDICTS.has(run.terminalVerdict)) {
     errors.push("run.terminalVerdict is invalid");
+  }
+  if (!TERMINAL_RUN_STATES.has(run.status)) {
+    errors.push("run.status must be terminal");
+  }
+  if (
+    ["READY", "PASS"].includes(run.terminalVerdict) &&
+    run.status !== "COMPLETED"
+  ) {
+    errors.push("READY/PASS requires run.status=COMPLETED");
+  }
+  if (run.terminalVerdict === "SUPERSEDED" && run.status !== "SUPERSEDED") {
+    errors.push("SUPERSEDED verdict requires run.status=SUPERSEDED");
+  }
+  if (run.terminalVerdict === "CANCELLED" && run.status !== "CANCELLED") {
+    errors.push("CANCELLED verdict requires run.status=CANCELLED");
   }
   if (headSha) run.headSha = headSha;
 
