@@ -1,0 +1,239 @@
+"""Fail-closed outbound privacy checks for Jev decision payloads."""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Mapping, Sequence
+from typing import Any
+
+from .contracts import DecisionRequest
+
+
+class DecisionRedactionError(ValueError):
+    """Raised when a decision payload is unsafe to send to a remote provider."""
+
+    def __init__(self, reason_code: str, message: str) -> None:
+        super().__init__(message)
+        self.reason_code = reason_code
+
+
+FORBIDDEN_KEY_SEGMENTS = frozenset(
+    {
+        "apikey",
+        "api",
+        "auth",
+        "authorization",
+        "chain",
+        "credential",
+        "credentials",
+        "developer",
+        "env",
+        "environment",
+        "key",
+        "password",
+        "private",
+        "prompt",
+        "reasoning",
+        "secret",
+        "source",
+        "system",
+        "token",
+    }
+)
+SAFE_KEY_NAMES = frozenset(
+    {
+        "artifact_versions",
+        "base_sha",
+        "confidence",
+        "coverage_state",
+        "decision_id",
+        "decision_type",
+        "edge_id",
+        "edge_type",
+        "evidence_ref",
+        "evidence_refs",
+        "head_sha",
+        "node_id",
+        "node_type",
+        "policy_version",
+        "pr_number",
+        "question_id",
+        "question_type",
+        "questions",
+        "resolution_state",
+        "score_max",
+        "score_min",
+        "score_rubric",
+        "status",
+        "state_payload",
+        "topic_key",
+        "version",
+        "choices",
+        "noul_schema",
+    }
+)
+FORBIDDEN_EXACT_KEYS = frozenset(
+    {
+        "api_key",
+        "authorization",
+        "chain_of_thought",
+        "code",
+        "code_snippet",
+        "credentials",
+        "developer_prompt",
+        "env",
+        "environment",
+        "hidden_reasoning",
+        "password",
+        "private_context",
+        "private_customer_context",
+        "raw_legal_corpus",
+        "raw_prompt",
+        "raw_source",
+        "repository_source",
+        "secret",
+        "source_code",
+        "source_file",
+        "system_prompt",
+        "token",
+    }
+)
+FIELD_SEGMENT_PATTERN = re.compile(
+    r"[A-Z]+(?=[A-Z][a-z]|[0-9]|$)|[A-Z]?[a-z]+|[0-9]+"
+)
+SECRET_VALUE_PATTERNS = (
+    re.compile(r"\bBearer\s+[A-Za-z0-9._~+/-]+=*\b"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b"),
+    re.compile(r"\bsk-(?:ant-|proj-)?[A-Za-z0-9._-]{20,}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(
+        r"\b(?:api[_-]?key|token|secret|password|credential)\s*[:=]\s*['\"]?[A-Za-z0-9._~+/-]{12,}",
+        re.IGNORECASE,
+    ),
+)
+PROMPT_VALUE_PATTERNS = (
+    re.compile(r"\b(system|developer)\s+prompt\b", re.IGNORECASE),
+    re.compile(r"\bchain[- ]of[- ]thought\b", re.IGNORECASE),
+    re.compile(r"\bhidden reasoning\b", re.IGNORECASE),
+)
+SOURCE_LIKE_PATTERNS = (
+    re.compile(r"^\s*(?:def|class|import|from)\s+\w+", re.MULTILINE),
+    re.compile(r"^\s*(?:export\s+)?(?:async\s+)?function\s+\w+", re.MULTILINE),
+    re.compile(r"^\s*(?:const|let|var)\s+\w+\s*=", re.MULTILINE),
+    re.compile(r"\b(?:SELECT|INSERT|UPDATE|DELETE)\s+.+\s+FROM\s+", re.IGNORECASE),
+)
+
+
+def validate_outbound_request(request: DecisionRequest) -> dict[str, Any]:
+    """Return a provider payload only if it passes the outbound privacy policy."""
+
+    payload = request.model_dump(mode="json", exclude_none=True)
+    _validate_value(payload, path=("decision_request",), depth=0)
+    return payload
+
+
+def _validate_value(value: Any, *, path: tuple[str, ...], depth: int) -> None:
+    if depth > 12:
+        raise DecisionRedactionError(
+            "PAYLOAD_TOO_DEEP",
+            f"decision payload is too deeply nested at {_format_path(path)}",
+        )
+    if isinstance(value, Mapping):
+        for raw_key, item in value.items():
+            key = str(raw_key)
+            _validate_key(key, path=path)
+            _validate_value(item, path=(*path, key), depth=depth + 1)
+        return
+    if isinstance(value, str):
+        _validate_string(value, path=path)
+        return
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray, str)):
+        if len(value) > 500:
+            raise DecisionRedactionError(
+                "PAYLOAD_SEQUENCE_TOO_LARGE",
+                f"decision payload sequence is too large at {_format_path(path)}",
+            )
+        for index, item in enumerate(value):
+            _validate_value(item, path=(*path, str(index)), depth=depth + 1)
+        return
+    if isinstance(value, (bytes, bytearray)):
+        raise DecisionRedactionError(
+            "BINARY_PAYLOAD_FORBIDDEN",
+            f"binary decision payload is forbidden at {_format_path(path)}",
+        )
+
+
+def _validate_key(key: str, *, path: tuple[str, ...]) -> None:
+    normalized = key.strip()
+    if not normalized:
+        raise DecisionRedactionError(
+            "EMPTY_PAYLOAD_KEY",
+            f"decision payload key is empty at {_format_path(path)}",
+        )
+    key_lower = normalized.lower()
+    if key_lower == "prompt" and "questions" in path:
+        return
+    if key_lower == "prompt":
+        raise DecisionRedactionError(
+            "FORBIDDEN_PAYLOAD_KEY",
+            f"decision payload key is forbidden: {_format_path((*path, key))}",
+        )
+    if key_lower in SAFE_KEY_NAMES:
+        return
+    if key_lower in FORBIDDEN_EXACT_KEYS:
+        raise DecisionRedactionError(
+            "FORBIDDEN_PAYLOAD_KEY",
+            f"decision payload key is forbidden: {_format_path((*path, key))}",
+        )
+    segments = _segments(normalized)
+    if "source" in segments and {"id", "ids", "ref", "refs", "kind"} & set(segments):
+        return
+    if "prompt" in segments or "reasoning" in segments or "private" in segments:
+        raise DecisionRedactionError(
+            "FORBIDDEN_PAYLOAD_KEY",
+            f"decision payload key is forbidden: {_format_path((*path, key))}",
+        )
+    if any(segment in FORBIDDEN_KEY_SEGMENTS for segment in segments):
+        raise DecisionRedactionError(
+            "SECRET_LIKE_PAYLOAD_KEY",
+            f"decision payload key is secret-like: {_format_path((*path, key))}",
+        )
+
+
+def _validate_string(value: str, *, path: tuple[str, ...]) -> None:
+    if len(value) > 8_000:
+        raise DecisionRedactionError(
+            "STRING_PAYLOAD_TOO_LARGE",
+            f"decision payload string is too large at {_format_path(path)}",
+        )
+    if any(pattern.search(value) for pattern in SECRET_VALUE_PATTERNS):
+        raise DecisionRedactionError(
+            "SECRET_LIKE_PAYLOAD_VALUE",
+            f"decision payload contains secret-like text at {_format_path(path)}",
+        )
+    if any(pattern.search(value) for pattern in PROMPT_VALUE_PATTERNS):
+        raise DecisionRedactionError(
+            "PROMPT_PAYLOAD_FORBIDDEN",
+            f"decision payload contains prompt or hidden reasoning text at {_format_path(path)}",
+        )
+    if "\n" in value and any(pattern.search(value) for pattern in SOURCE_LIKE_PATTERNS):
+        raise DecisionRedactionError(
+            "RAW_SOURCE_PAYLOAD_FORBIDDEN",
+            f"decision payload contains source-like text at {_format_path(path)}",
+        )
+
+
+def _segments(value: str) -> tuple[str, ...]:
+    normalized = re.sub(r"[^0-9A-Za-z]+", " ", value)
+    return tuple(
+        segment.group(0).lower()
+        for word in normalized.split()
+        for segment in FIELD_SEGMENT_PATTERN.finditer(word)
+    )
+
+
+def _format_path(path: tuple[str, ...]) -> str:
+    return ".".join(path)
+
+
+__all__ = ["DecisionRedactionError", "validate_outbound_request"]
