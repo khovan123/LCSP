@@ -98,6 +98,44 @@ describe("Admin HTTP Input Validation & Contract Compatibility", () => {
       });
     });
 
+    it("accepts canonical string and number pagination parameters", () => {
+      expect(queryPipe.transform({ page: "2", pageSize: "10" })).toMatchObject({
+        page: 2,
+        pageSize: 10,
+      });
+      expect(queryPipe.transform({ page: 2, pageSize: 10 })).toMatchObject({
+        page: 2,
+        pageSize: 10,
+      });
+    });
+
+    it("rejects non-canonical pagination strings and forms with 400 and ADMIN_ACCOUNT_INVALID_INPUT", () => {
+      const nonCanonicalCases = [
+        { page: "01" },
+        { page: "1e2" },
+        { page: "+1" },
+        { page: " 2 " },
+        { page: "2.0" },
+        { pageSize: "+10" },
+        { pageSize: ["10"] },
+        { page: ["2"] },
+        { pageSize: "010", page_size: "10" },
+      ];
+
+      for (const params of nonCanonicalCases) {
+        try {
+          queryPipe.transform(params);
+          expect(true).toBe(false);
+        } catch (error) {
+          expect(error).toBeInstanceOf(HttpException);
+          const exception = error as HttpException;
+          expect(exception.getStatus()).toBe(HttpStatus.BAD_REQUEST);
+          const response = exception.getResponse() as ProblemResponse;
+          expect(response.problem.code).toBe(ADMIN_ACCOUNT_ERRORS.invalidInput);
+        }
+      }
+    });
+
     it("rejects out-of-bound or invalid pagination and filter parameters", () => {
       for (const invalidParams of [
         { pageSize: "101" },

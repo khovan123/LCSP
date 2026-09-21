@@ -225,6 +225,53 @@ export const adminUserActionSchema = z
   .strict();
 export type AdminUserActionInput = z.infer<typeof adminUserActionSchema>;
 
+const RAW_PAGINATION_REGEX = /^[1-9][0-9]*$/;
+
+function validateRawPaginationField(
+  value: unknown,
+  ctx: z.RefinementCtx,
+  path: (string | number)[],
+  maxLimit: number,
+): void {
+  if (value === undefined) {
+    return;
+  }
+  if (typeof value === "number") {
+    if (!Number.isInteger(value) || value < 1 || value > maxLimit) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Value must be an integer between 1 and ${maxLimit}`,
+        path,
+      });
+    }
+    return;
+  }
+  if (typeof value === "string") {
+    if (!RAW_PAGINATION_REGEX.test(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Value must be a positive integer matching /^[1-9][0-9]*$/",
+        path,
+      });
+      return;
+    }
+    const num = Number.parseInt(value, 10);
+    if (num < 1 || num > maxLimit) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Value must be between 1 and ${maxLimit}`,
+        path,
+      });
+    }
+    return;
+  }
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message: "Value must be a string or integer",
+    path,
+  });
+}
+
 /**
  * Validation schema and input type for Admin user list query parameters.
  */
@@ -246,24 +293,9 @@ export const adminListUsersQuerySchema = z
         ADMIN_ACCOUNT_FILTERS.all,
       ] as [string, ...string[]])
       .optional(),
-    page: z.coerce
-      .number()
-      .int()
-      .min(1)
-      .max(ADMIN_ACCOUNT_QUERY_LIMITS.maxPage)
-      .default(1),
-    pageSize: z.coerce
-      .number()
-      .int()
-      .min(1)
-      .max(ADMIN_ACCOUNT_QUERY_LIMITS.maxPageSize)
-      .optional(),
-    page_size: z.coerce
-      .number()
-      .int()
-      .min(1)
-      .max(ADMIN_ACCOUNT_QUERY_LIMITS.maxPageSize)
-      .optional(),
+    page: z.unknown().optional(),
+    pageSize: z.unknown().optional(),
+    page_size: z.unknown().optional(),
   })
   .superRefine((data, ctx) => {
     if (
@@ -290,6 +322,53 @@ export const adminListUsersQuerySchema = z
         path: ["pageSize"],
       });
     }
+    validateRawPaginationField(
+      data.page,
+      ctx,
+      ["page"],
+      ADMIN_ACCOUNT_QUERY_LIMITS.maxPage,
+    );
+    validateRawPaginationField(
+      data.pageSize,
+      ctx,
+      ["pageSize"],
+      ADMIN_ACCOUNT_QUERY_LIMITS.maxPageSize,
+    );
+    validateRawPaginationField(
+      data.page_size,
+      ctx,
+      ["page_size"],
+      ADMIN_ACCOUNT_QUERY_LIMITS.maxPageSize,
+    );
+  })
+  .transform((data) => {
+    const parseNumber = (val: unknown, fallback: number): number => {
+      if (typeof val === "number") return val;
+      if (typeof val === "string") return Number.parseInt(val, 10);
+      return fallback;
+    };
+    const resolvedPageSize =
+      data.pageSize !== undefined
+        ? parseNumber(data.pageSize, ADMIN_ACCOUNT_QUERY_LIMITS.defaultPageSize)
+        : data.page_size !== undefined
+          ? parseNumber(
+              data.page_size,
+              ADMIN_ACCOUNT_QUERY_LIMITS.defaultPageSize,
+            )
+          : ADMIN_ACCOUNT_QUERY_LIMITS.defaultPageSize;
+
+    return {
+      query: data.query ?? data.q,
+      q: data.q,
+      status: data.status,
+      role: data.role,
+      page: data.page !== undefined ? parseNumber(data.page, 1) : 1,
+      pageSize: resolvedPageSize,
+      page_size:
+        data.page_size !== undefined
+          ? parseNumber(data.page_size, resolvedPageSize)
+          : undefined,
+    };
   });
 export type AdminListUsersQueryInput = z.infer<
   typeof adminListUsersQuerySchema
