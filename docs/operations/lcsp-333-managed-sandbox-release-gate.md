@@ -35,14 +35,21 @@ this CI path.
 
 The privileged producer job is restricted to same-repository pull-request
 branches. Fork pull requests never execute on the self-hosted managed-sandbox
-runner. The privileged job does not check out PR code, install PR dependencies,
-or execute repository lifecycle scripts on the host; it invokes only the
-host-managed producer with immutable PR/base/head identifiers and writes into a
-fresh runner-temporary proof directory. PR checkout, dependency installation,
-and proof validation run afterward on a GitHub-hosted runner. The producer is
-responsible for executing the requested exact head inside its disposable,
-production-equivalent sandbox boundary and must not reuse PR workspace state or
-credentials between runs.
+runner and the always-created LCSP-333 readiness gate fails closed for them
+unless a separately governed exemption or trusted external sandbox path is
+introduced. The privileged job does not check out PR code, install PR
+dependencies, or execute repository lifecycle scripts on the host. It invokes
+only host-managed producer and verifier binaries with immutable PR/base/head
+identifiers and writes into a fresh runner-temporary proof directory.
+
+The host-managed verifier is the authoritative trust boundary. It validates
+schema, exact-head identity, lifecycle/correlation, CI/mergeability, and privacy
+before any proof is uploaded to GitHub. Only a proof that passes this trusted
+pre-upload verification may be persisted as an Actions artifact. The trusted
+gate result must record the verifier version or hash for auditability. The
+always-created LCSP-333 readiness gate consumes only that trusted result and
+must be configured as a required status check for develop; PR-controlled
+validator/package scripts are not authoritative for readiness.
 
 If the managed sandbox is unavailable, release governance may provide a
 time-boxed exemption artifact:
