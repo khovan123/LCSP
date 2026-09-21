@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from "@jest/globals";
 import { Subject, firstValueFrom } from "rxjs";
 
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import type { AssessmentAgentStreamEvent } from "@lcsp/contracts/evidence";
 
 import type { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import { WorkspaceRuntimeEventsController } from "./workspace-runtime-events.controller.js";
@@ -311,7 +312,17 @@ describe("WorkspaceRuntimeEventsController", () => {
   });
 
   it("returns paginated assessment-scoped agent stream history", async () => {
-    const getAgentStreamHistoryPage = jest.fn(() =>
+    const getAgentStreamHistoryPage = jest.fn<
+      (
+        ownerId: string,
+        assessmentId: string,
+        options?: { cursor?: string | null; limit?: number | null },
+      ) => Promise<{
+        events: AssessmentAgentStreamEvent[];
+        hasMore: boolean;
+        nextCursor: string | null;
+      }>
+    >(() =>
       Promise.resolve({
         events: [
           {

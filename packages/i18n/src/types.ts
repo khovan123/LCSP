@@ -215,6 +215,9 @@ export type PagesMessages = {
       provenance: string;
     };
     agentStreamSelected: string;
+    agentStreamLoadOlder: string;
+    agentStreamLoadingOlder: string;
+    agentStreamHistoryLoadFailed: string;
     recentAssessments: string;
     moreAssessments: string;
     allAssessments: string;

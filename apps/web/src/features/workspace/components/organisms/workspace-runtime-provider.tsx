@@ -1,6 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
+import type { AssessmentAgentStreamEvent } from "@lcsp/contracts/evidence";
 import {
   createContext,
   useCallback,
@@ -12,6 +13,7 @@ import {
 } from "react";
 
 import { apiQueryKeys } from "../../../../lib/api/query-keys.ts";
+import { apiRequest } from "../../../../lib/api/api-request.ts";
 import {
   parseAgentStreamEvent,
   parseRuntimeEvent,
@@ -21,6 +23,7 @@ import {
 import {
   WORKSPACE_RUNTIME_CONNECTION_STATES,
   type WorkspaceRuntimeAssessmentTimeline,
+  type WorkspaceRuntimeAgentStreamHistoryState,
   type WorkspaceRuntimeContextValue,
 } from "../../types/workspace-runtime.types";
 
@@ -38,6 +41,7 @@ const initialRuntime: WorkspaceRuntimeContextValue = {
   recentActivityByAssessmentId: {},
   engineeringProgressByAssessmentId: {},
   agentStreamEventsByAssessmentId: {},
+  agentStreamHistoryByAssessmentId: {},
   latestRunIdByAssessmentId: {},
   postFindingByAssessmentId: {},
   getAssessmentRuntime: (): WorkspaceRuntimeAssessmentTimeline => ({
@@ -45,17 +49,20 @@ const initialRuntime: WorkspaceRuntimeContextValue = {
     recentActivity: [],
     engineeringProgress: [],
     agentStreamEvents: [],
+    agentStreamHistory: emptyAgentStreamHistoryState(),
     latestRunId: null,
     connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connecting,
     lastEmittedAt: null,
     postFinding: null,
   }),
   subscribeAssessmentRuntime: () => () => undefined,
+  loadMoreAgentStreamHistory: () => Promise.resolve(false),
 };
 
 const WorkspaceRuntimeContext =
   createContext<WorkspaceRuntimeContextValue>(initialRuntime);
 const AGENT_STREAM_VISIBLE_EVENT_LIMIT = 5_000;
+const AGENT_STREAM_HISTORY_PAGE_LIMIT = 5_000;
 
 export type ScopedAgentStreamSource = {
   addEventListener: (
@@ -86,6 +93,8 @@ export function WorkspaceRuntimeProvider({
   const scopedAgentStreams = useRef<Map<string, ScopedAgentStreamEntry>>(
     new Map(),
   );
+  const initialHistoryRequests = useRef<Set<string>>(new Set());
+  const historyPageRequests = useRef<Set<string>>(new Set());
 
   const appendAgentStreamEvent = useCallback((event: MessageEvent<string>) => {
     const parsed = parseAgentStreamEvent(event.data);
@@ -96,9 +105,14 @@ export function WorkspaceRuntimeProvider({
       if (previous.some((item) => item.eventId === parsed.eventId)) {
         return current;
       }
-      const nextEvents = [...previous, parsed].slice(
-        -AGENT_STREAM_VISIBLE_EVENT_LIMIT,
-      );
+      const historyState =
+        current.agentStreamHistoryByAssessmentId[parsed.assessmentId] ??
+        emptyAgentStreamHistoryState();
+      const nextEvents = mergeAgentStreamEvents(previous, [parsed], {
+        limit: historyState.hasLoadedOlderHistory
+          ? null
+          : AGENT_STREAM_VISIBLE_EVENT_LIMIT,
+      });
       return withAgentStreamEvents(current, {
         ...current.agentStreamEventsByAssessmentId,
         [parsed.assessmentId]: nextEvents,
@@ -107,15 +121,133 @@ export function WorkspaceRuntimeProvider({
     return true;
   }, []);
 
+  const loadAgentStreamHistoryPage = useCallback(
+    async (
+      assessmentId: string,
+      options: { cursor: string | null; initial: boolean },
+    ) => {
+      const scopedAssessmentId = assessmentId.trim();
+      if (!scopedAssessmentId) return false;
+      const requestKey = `${scopedAssessmentId}:${options.cursor ?? ""}`;
+      if (historyPageRequests.current.has(requestKey)) return false;
+      historyPageRequests.current.add(requestKey);
+      setRuntime((current) =>
+        withAgentStreamHistoryState(current, scopedAssessmentId, {
+          ...(current.agentStreamHistoryByAssessmentId[scopedAssessmentId] ??
+            emptyAgentStreamHistoryState()),
+          isLoading: true,
+          error: null,
+        }),
+      );
+      try {
+        const { ok, payload } = await apiRequest(
+          workspaceRuntimeHistoryUrl(
+            scopedAssessmentId,
+            options.cursor,
+            AGENT_STREAM_HISTORY_PAGE_LIMIT,
+          ),
+        );
+        const page = ok ? parseAgentStreamHistoryPage(payload) : null;
+        if (page === null) {
+          setRuntime((current) =>
+            withAgentStreamHistoryState(current, scopedAssessmentId, {
+              ...(current.agentStreamHistoryByAssessmentId[
+                scopedAssessmentId
+              ] ?? emptyAgentStreamHistoryState()),
+              isLoading: false,
+              error: "history-load-failed",
+            }),
+          );
+          return false;
+        }
+        setRuntime((current) => {
+          const previous =
+            current.agentStreamEventsByAssessmentId[scopedAssessmentId] ?? [];
+          const previousHistory =
+            current.agentStreamHistoryByAssessmentId[scopedAssessmentId] ??
+            emptyAgentStreamHistoryState();
+          const hasLoadedOlderHistory =
+            previousHistory.hasLoadedOlderHistory || !options.initial;
+          const nextEvents = mergeAgentStreamEvents(previous, page.events, {
+            limit: hasLoadedOlderHistory
+              ? null
+              : AGENT_STREAM_VISIBLE_EVENT_LIMIT,
+          });
+          return withAgentStreamHistoryState(
+            withAgentStreamEvents(current, {
+              ...current.agentStreamEventsByAssessmentId,
+              [scopedAssessmentId]: nextEvents,
+            }),
+            scopedAssessmentId,
+            {
+              hasMore: page.hasMore,
+              nextCursor: page.nextCursor,
+              isLoading: false,
+              error: null,
+              hasLoadedOlderHistory,
+            },
+          );
+        });
+        return true;
+      } catch {
+        setRuntime((current) =>
+          withAgentStreamHistoryState(current, scopedAssessmentId, {
+            ...(current.agentStreamHistoryByAssessmentId[scopedAssessmentId] ??
+              emptyAgentStreamHistoryState()),
+            isLoading: false,
+            error: "history-load-failed",
+          }),
+        );
+        return false;
+      } finally {
+        historyPageRequests.current.delete(requestKey);
+      }
+    },
+    [],
+  );
+
+  const loadMoreAgentStreamHistory = useCallback(
+    async (assessmentId: string) => {
+      const scopedAssessmentId = assessmentId.trim();
+      if (!scopedAssessmentId) return false;
+      const historyState =
+        runtime.agentStreamHistoryByAssessmentId[scopedAssessmentId] ??
+        emptyAgentStreamHistoryState();
+      if (
+        historyState.isLoading ||
+        !historyState.hasMore ||
+        historyState.nextCursor === null
+      ) {
+        return false;
+      }
+      return loadAgentStreamHistoryPage(scopedAssessmentId, {
+        cursor: historyState.nextCursor,
+        initial: false,
+      });
+    },
+    [loadAgentStreamHistoryPage, runtime.agentStreamHistoryByAssessmentId],
+  );
+
   const subscribeAssessmentRuntime = useCallback(
     (assessmentId: string) => {
+      const scopedAssessmentId = assessmentId.trim();
+      if (
+        scopedAssessmentId &&
+        !initialHistoryRequests.current.has(scopedAssessmentId)
+      ) {
+        initialHistoryRequests.current.add(scopedAssessmentId);
+        void loadAgentStreamHistoryPage(scopedAssessmentId, {
+          cursor: null,
+          initial: true,
+        });
+      }
       return subscribeScopedAssessmentRuntimeStream({
         assessmentId,
         appendAgentStreamEvent,
         scopedAgentStreams: scopedAgentStreams.current,
       });
     },
-    [appendAgentStreamEvent],
+    [appendAgentStreamEvent, loadAgentStreamHistoryPage],
   );
 
   useEffect(() => {
@@ -130,9 +262,12 @@ export function WorkspaceRuntimeProvider({
       if (parsed !== null) {
         attempts = 0;
         setRuntime((current) =>
-          withAgentStreamEvents(
-            parsed,
-            current.agentStreamEventsByAssessmentId,
+          withAgentStreamHistoryByAssessmentId(
+            withAgentStreamEvents(
+              parsed,
+              current.agentStreamEventsByAssessmentId,
+            ),
+            current.agentStreamHistoryByAssessmentId,
           ),
         );
         const fingerprint = runtimeFingerprint(parsed);
@@ -228,7 +363,11 @@ export function WorkspaceRuntimeProvider({
 
   return (
     <WorkspaceRuntimeContext.Provider
-      value={{ ...runtime, subscribeAssessmentRuntime }}
+      value={{
+        ...runtime,
+        subscribeAssessmentRuntime,
+        loadMoreAgentStreamHistory,
+      }}
     >
       {children}
     </WorkspaceRuntimeContext.Provider>
@@ -250,6 +389,20 @@ export function workspaceRuntimeEventsUrl(
   return query
     ? `/api/workspace/runtime-events?${query}`
     : "/api/workspace/runtime-events";
+}
+
+export function workspaceRuntimeHistoryUrl(
+  assessmentId: string,
+  cursor: string | null,
+  limit = AGENT_STREAM_HISTORY_PAGE_LIMIT,
+): string {
+  const params = new URLSearchParams();
+  params.set("assessment_id", assessmentId);
+  params.set("limit", String(limit));
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  return `/api/workspace/runtime-events/history?${params.toString()}`;
 }
 
 export function subscribeScopedAssessmentRuntimeStream({
@@ -315,6 +468,37 @@ function releaseScopedAssessmentRuntimeStream(
   scopedAgentStreams.delete(scopedAssessmentId);
 }
 
+export function mergeAgentStreamEvents(
+  previous: AssessmentAgentStreamEvent[],
+  incoming: AssessmentAgentStreamEvent[],
+  options: { limit?: number | null } = {},
+): AssessmentAgentStreamEvent[] {
+  const eventsById = new Map<string, AssessmentAgentStreamEvent>();
+  for (const event of previous) {
+    eventsById.set(event.eventId, event);
+  }
+  for (const event of incoming) {
+    if (!eventsById.has(event.eventId)) {
+      eventsById.set(event.eventId, event);
+    }
+  }
+  const ordered = [...eventsById.values()].sort(compareAgentStreamEvents);
+  return typeof options.limit === "number"
+    ? ordered.slice(-options.limit)
+    : ordered;
+}
+
+function compareAgentStreamEvents(
+  left: AssessmentAgentStreamEvent,
+  right: AssessmentAgentStreamEvent,
+) {
+  const sequence = left.sequence - right.sequence;
+  if (sequence !== 0) return sequence;
+  const emittedAt = left.emittedAt.localeCompare(right.emittedAt);
+  if (emittedAt !== 0) return emittedAt;
+  return left.eventId.localeCompare(right.eventId);
+}
+
 function withAgentStreamEvents(
   runtime: WorkspaceRuntimeContextValue,
   agentStreamEventsByAssessmentId: WorkspaceRuntimeContextValue["agentStreamEventsByAssessmentId"],
@@ -328,11 +512,75 @@ function withAgentStreamEvents(
       engineeringProgress:
         runtime.engineeringProgressByAssessmentId[assessmentId] ?? [],
       agentStreamEvents: agentStreamEventsByAssessmentId[assessmentId] ?? [],
+      agentStreamHistory:
+        runtime.agentStreamHistoryByAssessmentId[assessmentId] ??
+        emptyAgentStreamHistoryState(),
       latestRunId: runtime.latestRunIdByAssessmentId[assessmentId] ?? null,
       connectionState: runtime.connectionState,
       lastEmittedAt: runtime.emittedAt,
       postFinding: runtime.postFindingByAssessmentId[assessmentId] ?? null,
     }),
+  };
+}
+
+function withAgentStreamHistoryState(
+  runtime: WorkspaceRuntimeContextValue,
+  assessmentId: string,
+  historyState: WorkspaceRuntimeAgentStreamHistoryState,
+): WorkspaceRuntimeContextValue {
+  return withAgentStreamHistoryByAssessmentId(runtime, {
+    ...runtime.agentStreamHistoryByAssessmentId,
+    [assessmentId]: historyState,
+  });
+}
+
+function withAgentStreamHistoryByAssessmentId(
+  runtime: WorkspaceRuntimeContextValue,
+  agentStreamHistoryByAssessmentId: WorkspaceRuntimeContextValue["agentStreamHistoryByAssessmentId"],
+): WorkspaceRuntimeContextValue {
+  return withAgentStreamEvents(
+    {
+      ...runtime,
+      agentStreamHistoryByAssessmentId,
+    },
+    runtime.agentStreamEventsByAssessmentId,
+  );
+}
+
+type AgentStreamHistoryPage = {
+  events: AssessmentAgentStreamEvent[];
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+function parseAgentStreamHistoryPage(
+  payload: unknown,
+): AgentStreamHistoryPage | null {
+  if (typeof payload !== "object" || payload === null) {
+    return null;
+  }
+  const item = payload as Record<string, unknown>;
+  if (!Array.isArray(item.events) || typeof item.has_more !== "boolean") {
+    return null;
+  }
+  const events = item.events.flatMap((event): AssessmentAgentStreamEvent[] => {
+    const parsed = parseAgentStreamEvent(JSON.stringify(event));
+    return parsed === null ? [] : [parsed];
+  });
+  return {
+    events,
+    hasMore: item.has_more,
+    nextCursor: typeof item.next_cursor === "string" ? item.next_cursor : null,
+  };
+}
+
+function emptyAgentStreamHistoryState(): WorkspaceRuntimeAgentStreamHistoryState {
+  return {
+    hasMore: false,
+    nextCursor: null,
+    isLoading: false,
+    error: null,
+    hasLoadedOlderHistory: false,
   };
 }
 

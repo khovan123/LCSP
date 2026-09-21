@@ -8,13 +8,17 @@ import {
 } from "@lcsp/contracts/evidence";
 import { resolveMessage } from "@lcsp/i18n";
 
+import { Button } from "@/components/ui/button";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
+import type { WorkspaceRuntimeAgentStreamHistoryState } from "../../types/workspace-runtime.types";
 import { AgentMessage, AgentTurn } from "./agent-turn";
 
 type AgentStreamTimelineProps = {
   events: AssessmentAgentStreamEvent[];
+  history?: WorkspaceRuntimeAgentStreamHistoryState;
+  onLoadOlder?: () => void;
   className?: string;
 };
 
@@ -29,15 +33,39 @@ type ProjectedStreamRow = {
 
 export function AgentStreamTimeline({
   events,
+  history,
+  onLoadOlder,
   className,
 }: AgentStreamTimelineProps) {
   const rows = projectStreamRows(events);
-  if (rows.length === 0) return null;
+  const labels = streamLabels();
+  const showLoadOlder =
+    history?.hasMore === true &&
+    history.nextCursor !== null &&
+    onLoadOlder !== undefined;
+  if (rows.length === 0 && !showLoadOlder) return null;
 
   return (
     <AgentTurn className={className}>
       <AgentMessage>
         <div data-slot="agent-stream-timeline" className="space-y-2">
+          {showLoadOlder ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              disabled={history.isLoading}
+              onClick={onLoadOlder}
+            >
+              {history.isLoading ? labels.loadingOlder : labels.loadOlder}
+            </Button>
+          ) : null}
+          {history?.error ? (
+            <div className="text-xs text-destructive">
+              {labels.historyLoadFailed}
+            </div>
+          ) : null}
           {rows.map((row) => (
             <div
               key={row.id}
@@ -416,6 +444,9 @@ function streamLabels() {
     model: t("pages.appShell.agentStreamLabels.model"),
     provenance: t("pages.appShell.agentStreamLabels.provenance"),
     selected: t("pages.appShell.agentStreamSelected"),
+    loadOlder: t("pages.appShell.agentStreamLoadOlder"),
+    loadingOlder: t("pages.appShell.agentStreamLoadingOlder"),
+    historyLoadFailed: t("pages.appShell.agentStreamHistoryLoadFailed"),
     running: t("pages.appShell.chatActivityStatuses.running"),
     completed: t("pages.appShell.chatActivityStatuses.completed"),
     failed: t("pages.appShell.chatActivityStatuses.failed"),

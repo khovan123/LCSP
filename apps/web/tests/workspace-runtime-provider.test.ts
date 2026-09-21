@@ -2,8 +2,10 @@ import * as assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES,
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
+  type AssessmentAgentStreamEvent,
 } from "@lcsp/contracts/evidence";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 
@@ -18,7 +20,9 @@ import {
   selectRuntimeConsoleActivity,
 } from "../src/features/evidence/utils/runtime-console.ts";
 import {
+  mergeAgentStreamEvents,
   subscribeScopedAssessmentRuntimeStream,
+  workspaceRuntimeHistoryUrl,
   workspaceRuntimeEventsUrl,
   type ScopedAgentStreamEntry,
 } from "../src/features/workspace/components/organisms/workspace-runtime-provider.tsx";
@@ -29,6 +33,45 @@ test("workspace runtime provider builds scoped semantic replay stream URLs", () 
     workspaceRuntimeEventsUrl("assessment-101", true),
     "/api/workspace/runtime-events?assessment_id=assessment-101&agent_stream_only=1",
   );
+  assert.equal(
+    workspaceRuntimeHistoryUrl("assessment-101", null, 5000),
+    "/api/workspace/runtime-events/history?assessment_id=assessment-101&limit=5000",
+  );
+  assert.equal(
+    workspaceRuntimeHistoryUrl("assessment-101", "cursor-1", 25),
+    "/api/workspace/runtime-events/history?assessment_id=assessment-101&limit=25&cursor=cursor-1",
+  );
+});
+
+test("agent stream history merge can page back beyond the initial 5000-event replay window", () => {
+  const newestWindow = Array.from({ length: 5_000 }, (_, index) =>
+    agentStreamEvent(index + 1_002),
+  );
+  const olderPage = Array.from({ length: 1_001 }, (_, index) =>
+    agentStreamEvent(index + 1),
+  );
+
+  const merged = mergeAgentStreamEvents(newestWindow, olderPage, {
+    limit: null,
+  });
+
+  assert.equal(merged.length, 6_001);
+  assert.equal(merged.at(0)?.eventId, "agent-event-1");
+  assert.equal(merged.at(-1)?.eventId, "agent-event-6001");
+});
+
+test("agent stream live merge remains bounded until older history is explicitly loaded", () => {
+  const previous = Array.from({ length: 5_000 }, (_, index) =>
+    agentStreamEvent(index + 1),
+  );
+
+  const merged = mergeAgentStreamEvents(previous, [agentStreamEvent(5_001)], {
+    limit: 5_000,
+  });
+
+  assert.equal(merged.length, 5_000);
+  assert.equal(merged.at(0)?.eventId, "agent-event-2");
+  assert.equal(merged.at(-1)?.eventId, "agent-event-5001");
 });
 
 test("workspace runtime provider opens and cleans up scoped semantic replay streams", () => {
@@ -510,5 +553,31 @@ function runtimeActivity(
     attempt: 1,
     waitingReason: null,
     ...override,
+  };
+}
+
+function agentStreamEvent(sequence: number): AssessmentAgentStreamEvent {
+  return {
+    eventId: `agent-event-${sequence}`,
+    sequence,
+    clientSequence: null,
+    emittedAt: `2026-09-16T00:${String(
+      Math.floor(sequence / 60),
+    ).padStart(2, "0")}:${String(sequence % 60).padStart(2, "0")}.000Z`,
+    assessmentId: "assessment-101",
+    runId: "run-101",
+    correlationId: "corr-101",
+    eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
+    source: "engineering",
+    agentName: "investigator",
+    subagentName: null,
+    namespace: [],
+    nodeName: "model",
+    messageId: "message-101",
+    toolName: null,
+    toolCallId: null,
+    status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+    text: `delta-${sequence}`,
+    data: null,
   };
 }

@@ -126,6 +126,7 @@ export function parseRuntimeEvent(
     recentActivityByAssessmentId,
     engineeringProgressByAssessmentId,
     agentStreamEventsByAssessmentId: {},
+    agentStreamHistoryByAssessmentId: {},
     latestRunIdByAssessmentId,
     postFindingByAssessmentId,
     getAssessmentRuntime: (assessmentId: string) => ({
@@ -134,12 +135,20 @@ export function parseRuntimeEvent(
       engineeringProgress:
         engineeringProgressByAssessmentId[assessmentId] ?? [],
       agentStreamEvents: [],
+      agentStreamHistory: {
+        hasMore: false,
+        nextCursor: null,
+        isLoading: false,
+        error: null,
+        hasLoadedOlderHistory: false,
+      },
       latestRunId: latestRunIdByAssessmentId[assessmentId] ?? null,
       connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
       lastEmittedAt: payload.emitted_at as string,
       postFinding: postFindingByAssessmentId[assessmentId] ?? null,
     }),
     subscribeAssessmentRuntime: () => () => undefined,
+    loadMoreAgentStreamHistory: () => Promise.resolve(false),
   };
 }
 
