@@ -119,6 +119,29 @@ test("agent stream live merge remains bounded until older history is explicitly 
   assert.equal(merged.at(-1)?.eventId, "agent-event-5001");
 });
 
+test("complete selected assessment history keeps visible rows after crossing 5000 live events", () => {
+  const completeInitialHistory = Array.from({ length: 5_000 }, (_, index) =>
+    agentStreamEvent(index + 1),
+  );
+  const liveEvents = Array.from({ length: 250 }, (_, index) =>
+    agentStreamEvent(index + 5_001),
+  );
+
+  const afterLiveAppend = mergeAgentStreamEvents(
+    completeInitialHistory,
+    liveEvents,
+    {
+      limit: agentStreamRetentionLimit(
+        agentStreamHistoryState({ hasHydratedCompleteHistory: true }),
+      ),
+    },
+  );
+
+  assert.equal(afterLiveAppend.length, 5_250);
+  assert.equal(afterLiveAppend.at(0)?.eventId, "agent-event-1");
+  assert.equal(afterLiveAppend.at(-1)?.eventId, "agent-event-5250");
+});
+
 test("initial agent stream history failures release the retry gate", () => {
   const initialHistoryRequests = new Set(["assessment-101"]);
 
@@ -654,6 +677,7 @@ function agentStreamHistoryState(
     isLoading: false,
     error: null,
     hasLoadedOlderHistory: false,
+    hasHydratedCompleteHistory: false,
     ...override,
   };
 }

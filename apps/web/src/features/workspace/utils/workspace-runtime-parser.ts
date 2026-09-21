@@ -141,6 +141,7 @@ export function parseRuntimeEvent(
         isLoading: false,
         error: null,
         hasLoadedOlderHistory: false,
+        hasHydratedCompleteHistory: false,
       },
       latestRunId: latestRunIdByAssessmentId[assessmentId] ?? null,
       connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,

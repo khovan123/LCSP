@@ -109,6 +109,7 @@ export type WorkspaceRuntimeAgentStreamHistoryState = {
   isLoading: boolean;
   error: string | null;
   hasLoadedOlderHistory: boolean;
+  hasHydratedCompleteHistory: boolean;
 };
 
 export type WorkspaceRuntimeSnapshot = {

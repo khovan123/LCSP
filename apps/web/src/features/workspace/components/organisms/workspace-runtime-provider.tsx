@@ -171,6 +171,9 @@ export function WorkspaceRuntimeProvider({
             error: null,
             hasLoadedOlderHistory:
               previousHistory.hasLoadedOlderHistory || !options.initial,
+            hasHydratedCompleteHistory:
+              previousHistory.hasHydratedCompleteHistory ||
+              (!page.hasMore && page.nextCursor === null),
           } satisfies WorkspaceRuntimeAgentStreamHistoryState;
           const nextEvents = mergeAgentStreamEvents(previous, page.events, {
             limit: agentStreamRetentionLimit(nextHistoryState),
@@ -507,6 +510,7 @@ export function agentStreamRetentionLimit(
   historyState: WorkspaceRuntimeAgentStreamHistoryState,
 ): number | null {
   return historyState.hasLoadedOlderHistory ||
+    historyState.hasHydratedCompleteHistory ||
     hasOlderAgentStreamHistoryCursor(historyState)
     ? null
     : AGENT_STREAM_VISIBLE_EVENT_LIMIT;
@@ -623,6 +627,7 @@ function emptyAgentStreamHistoryState(): WorkspaceRuntimeAgentStreamHistoryState
     isLoading: false,
     error: null,
     hasLoadedOlderHistory: false,
+    hasHydratedCompleteHistory: false,
   };
 }
 
