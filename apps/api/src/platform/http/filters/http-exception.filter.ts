@@ -3,7 +3,11 @@ import type { ArgumentsHost, ExceptionFilter } from "@nestjs/common";
 import type { ProblemMeta, ProblemResult } from "@lcsp/contracts/auth";
 import { randomUUID } from "node:crypto";
 
-import { cleanString, isNumber, isRecord } from "../../../common/utils/index.js";
+import {
+  cleanString,
+  isNumber,
+  isRecord,
+} from "../../../common/utils/index.js";
 import { setProblemResponseMetadata } from "./error-response-metadata.js";
 import {
   defaultErrorCodeForStatus,
@@ -87,6 +91,14 @@ function formatExceptionBody(body: unknown): string {
   if (typeof body === "string") {
     return body;
   }
+  if (
+    typeof body === "number" ||
+    typeof body === "boolean" ||
+    typeof body === "bigint" ||
+    typeof body === "symbol"
+  ) {
+    return String(body);
+  }
   if (typeof body === "object") {
     try {
       return JSON.stringify(body);
@@ -94,7 +106,7 @@ function formatExceptionBody(body: unknown): string {
       return error instanceof Error ? error.message : "unserializable_body";
     }
   }
-  return String(body);
+  return "unknown_body";
 }
 
 /**

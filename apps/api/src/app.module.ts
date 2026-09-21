@@ -130,8 +130,6 @@ function findUpwards(
       provide: APP_INTERCEPTOR,
       useClass: ResponseTransformInterceptor,
     },
-
-
   ],
 })
 export class AppModule implements NestModule {

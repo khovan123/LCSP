@@ -89,7 +89,7 @@ export class AdminUsersController {
     query: AdminListUsersQueryInput,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.queryBus.execute(
+    return this.queryBus.execute<ListAdminUsersQuery, unknown>(
       new ListAdminUsersQuery(query, request.correlationId!),
     );
   }
@@ -104,7 +104,7 @@ export class AdminUsersController {
     @Param("id") targetUserId: string,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.queryBus.execute(
+    return this.queryBus.execute<GetAdminUserDetailQuery, unknown>(
       new GetAdminUserDetailQuery(targetUserId, request.correlationId!),
     );
   }
@@ -128,7 +128,7 @@ export class AdminUsersController {
     @Headers("idempotency-key") idempotencyKeyHeader: unknown,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.commandBus.execute(
+    return this.commandBus.execute<SuspendUserCommand, unknown>(
       new SuspendUserCommand(
         targetUserId,
         body,
@@ -156,7 +156,7 @@ export class AdminUsersController {
     @Headers("idempotency-key") idempotencyKeyHeader: unknown,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.commandBus.execute(
+    return this.commandBus.execute<RestoreUserCommand, unknown>(
       new RestoreUserCommand(
         targetUserId,
         body,

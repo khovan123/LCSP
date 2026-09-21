@@ -122,25 +122,28 @@ export function problemException<TCode extends string>(
  * @returns Standard error code from shared contracts.
  */
 export function defaultErrorCodeForStatus(status: number): string {
-  switch (status) {
-    case HttpStatus.BAD_REQUEST:
-      return SHARED_ERROR_CODES.badRequest;
-    case HttpStatus.UNAUTHORIZED:
-      return SHARED_ERROR_CODES.unauthorized;
-    case HttpStatus.FORBIDDEN:
-      return SHARED_ERROR_CODES.forbidden;
-    case HttpStatus.NOT_FOUND:
-      return SHARED_ERROR_CODES.notFound;
-    case HttpStatus.CONFLICT:
-      return SHARED_ERROR_CODES.conflict;
-    case HttpStatus.UNPROCESSABLE_ENTITY:
-      return SHARED_ERROR_CODES.unprocessableEntity;
-    default:
-      if (status >= 500) {
-        return SHARED_ERROR_CODES.internalError;
-      }
-      return SHARED_ERROR_CODES.badRequest;
+  if (status === Number(HttpStatus.BAD_REQUEST)) {
+    return SHARED_ERROR_CODES.badRequest;
   }
+  if (status === Number(HttpStatus.UNAUTHORIZED)) {
+    return SHARED_ERROR_CODES.unauthorized;
+  }
+  if (status === Number(HttpStatus.FORBIDDEN)) {
+    return SHARED_ERROR_CODES.forbidden;
+  }
+  if (status === Number(HttpStatus.NOT_FOUND)) {
+    return SHARED_ERROR_CODES.notFound;
+  }
+  if (status === Number(HttpStatus.CONFLICT)) {
+    return SHARED_ERROR_CODES.conflict;
+  }
+  if (status === Number(HttpStatus.UNPROCESSABLE_ENTITY)) {
+    return SHARED_ERROR_CODES.unprocessableEntity;
+  }
+  if (status >= 500) {
+    return SHARED_ERROR_CODES.internalError;
+  }
+  return SHARED_ERROR_CODES.badRequest;
 }
 
 /**
@@ -221,4 +224,3 @@ export function resultEnvelope<TData>(data: TData): { ok: true; data: TData } {
     data,
   };
 }
-

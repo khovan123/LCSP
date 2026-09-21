@@ -34,6 +34,8 @@ export class AdminOverviewController {
     )
     query: AdminOverviewQueryInput,
   ) {
-    return this.queryBus.execute(new GetAdminOverviewQuery(query.period));
+    return this.queryBus.execute<GetAdminOverviewQuery, unknown>(
+      new GetAdminOverviewQuery(query.period),
+    );
   }
 }
