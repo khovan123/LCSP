@@ -27,8 +27,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { resolveAppMessage } from "@/lib/i18n";
 
 export type AssessmentTextArtifact =
-  | BusinessContextArtifact
-  | InvestigationNotesArtifact;
+  BusinessContextArtifact | InvestigationNotesArtifact;
 
 export function AssessmentTextArtifactDialog({
   artifact,
@@ -70,7 +69,9 @@ export function AssessmentTextArtifactDialog({
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           {loading ? (
             <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-              <Spinner aria-label={resolveAppMessage("pages.artifacts.viewer.loading")} />
+              <Spinner
+                aria-label={resolveAppMessage("pages.artifacts.viewer.loading")}
+              />
               <span>{resolveAppMessage("pages.artifacts.viewer.loading")}</span>
             </div>
           ) : !artifact ||
@@ -90,7 +91,11 @@ export function AssessmentTextArtifactDialog({
   );
 }
 
-function BusinessContextView({ artifact }: { artifact: BusinessContextArtifact }) {
+function BusinessContextView({
+  artifact,
+}: {
+  artifact: BusinessContextArtifact;
+}) {
   if (!artifact.content) return null;
   const unknown = new Set(artifact.content.unknownDimensions);
   return (
@@ -99,9 +104,18 @@ function BusinessContextView({ artifact }: { artifact: BusinessContextArtifact }
         generatedAt={artifact.generatedAt}
         updatedAt={artifact.updatedAt}
         items={[
-          [resolveAppMessage("pages.artifacts.viewer.revision"), artifact.identity.contextRevision],
-          [resolveAppMessage("pages.artifacts.viewer.sourceVersion"), artifact.identity.sourceVersion],
-          [resolveAppMessage("pages.artifacts.viewer.pgeVersion"), artifact.identity.pgeVersion],
+          [
+            resolveAppMessage("pages.artifacts.viewer.revision"),
+            artifact.identity.contextRevision,
+          ],
+          [
+            resolveAppMessage("pages.artifacts.viewer.sourceVersion"),
+            artifact.identity.sourceVersion,
+          ],
+          [
+            resolveAppMessage("pages.artifacts.viewer.pgeVersion"),
+            artifact.identity.pgeVersion,
+          ],
         ]}
       />
 
@@ -119,7 +133,8 @@ function BusinessContextView({ artifact }: { artifact: BusinessContextArtifact }
                 {businessDimensionLabel(dimension.dimension)}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {dimension.status === BUSINESS_CONTEXT_DIMENSION_STATUSES.confirmed
+                {dimension.status ===
+                BUSINESS_CONTEXT_DIMENSION_STATUSES.confirmed
                   ? resolveAppMessage("pages.artifacts.viewer.confirmed")
                   : resolveAppMessage("pages.artifacts.viewer.unknown")}
               </p>
@@ -145,10 +160,14 @@ function BusinessContextView({ artifact }: { artifact: BusinessContextArtifact }
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
                   {statement.statement}
                 </p>
-                <p className="mt-2 text-xs text-muted-foreground">{statement.scope}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {statement.scope}
+                </p>
                 {statement.evidenceRefs.length ? (
                   <PublicReferenceList
-                    label={resolveAppMessage("pages.artifacts.viewer.evidenceReferences")}
+                    label={resolveAppMessage(
+                      "pages.artifacts.viewer.evidenceReferences",
+                    )}
                     values={statement.evidenceRefs}
                   />
                 ) : null}
@@ -173,7 +192,8 @@ function BusinessContextView({ artifact }: { artifact: BusinessContextArtifact }
                 key={dimension}
                 className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2"
               >
-                {businessDimensionLabel(dimension)} · {resolveAppMessage("pages.artifacts.viewer.unknown")}
+                {businessDimensionLabel(dimension)} ·{" "}
+                {resolveAppMessage("pages.artifacts.viewer.unknown")}
               </li>
             ))}
           </ul>
@@ -183,7 +203,11 @@ function BusinessContextView({ artifact }: { artifact: BusinessContextArtifact }
   );
 }
 
-function InvestigationNotesView({ artifact }: { artifact: InvestigationNotesArtifact }) {
+function InvestigationNotesView({
+  artifact,
+}: {
+  artifact: InvestigationNotesArtifact;
+}) {
   if (!artifact.content) return null;
   const { summary } = artifact.content;
   const summaryItems = [
@@ -201,7 +225,10 @@ function InvestigationNotesView({ artifact }: { artifact: InvestigationNotesArti
         generatedAt={artifact.generatedAt}
         updatedAt={artifact.updatedAt}
         items={[
-          [resolveAppMessage("pages.artifacts.viewer.revision"), artifact.identity.contextRevisionUsed],
+          [
+            resolveAppMessage("pages.artifacts.viewer.revision"),
+            artifact.identity.contextRevisionUsed,
+          ],
         ]}
       />
 
@@ -211,11 +238,18 @@ function InvestigationNotesView({ artifact }: { artifact: InvestigationNotesArti
         </h3>
         <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {summaryItems.map(([key, value]) => (
-            <div key={key} className="rounded-lg border border-border/60 bg-card p-3">
+            <div
+              key={key}
+              className="rounded-lg border border-border/60 bg-card p-3"
+            >
               <dt className="text-xs text-muted-foreground">
-                {resolveAppMessage(`pages.artifacts.viewer.${key}` as MessageKey)}
+                {resolveAppMessage(
+                  `pages.artifacts.viewer.${key}` as MessageKey,
+                )}
               </dt>
-              <dd className="mt-1 text-lg font-semibold tabular-nums">{value}</dd>
+              <dd className="mt-1 text-lg font-semibold tabular-nums">
+                {value}
+              </dd>
             </div>
           ))}
         </dl>
@@ -225,7 +259,9 @@ function InvestigationNotesView({ artifact }: { artifact: InvestigationNotesArti
             value={executionStatusLabel(artifact.content.executionStatus)}
           />
           <SummaryStatus
-            label={resolveAppMessage("pages.artifacts.viewer.assessmentOutcome")}
+            label={resolveAppMessage(
+              "pages.artifacts.viewer.assessmentOutcome",
+            )}
             value={assessmentOutcomeLabel(artifact.content.assessmentOutcome)}
           />
           <SummaryStatus
@@ -262,17 +298,27 @@ function InvestigationNotesView({ artifact }: { artifact: InvestigationNotesArti
   );
 }
 
-function RuleNote({ rule, index }: { rule: InvestigationRuleNote; index: number }) {
+function RuleNote({
+  rule,
+  index,
+}: {
+  rule: InvestigationRuleNote;
+  index: number;
+}) {
   return (
     <article className="rounded-lg border border-border/60 bg-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <h4 className="text-sm font-semibold">{rule.title ?? `#${index + 1}`}</h4>
+        <h4 className="text-sm font-semibold">
+          {rule.title ?? `#${index + 1}`}
+        </h4>
         <span className="rounded-full border border-border/70 px-2 py-1 text-xs text-muted-foreground">
           {ruleOutcomeLabel(rule.outcome)}
         </span>
       </div>
       {rule.findingSummary ? (
-        <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{rule.findingSummary}</p>
+        <p className="mt-3 whitespace-pre-wrap text-sm leading-6">
+          {rule.findingSummary}
+        </p>
       ) : null}
       {rule.evidenceRefs.length ? (
         <PublicReferenceList
@@ -294,11 +340,15 @@ function RuleNote({ rule, index }: { rule: InvestigationRuleNote; index: number 
       ) : null}
       <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
         <SummaryStatus
-          label={resolveAppMessage("pages.artifacts.viewer.customerContextRequested")}
+          label={resolveAppMessage(
+            "pages.artifacts.viewer.customerContextRequested",
+          )}
           value={yesNo(rule.customerContextRequested)}
         />
         <SummaryStatus
-          label={resolveAppMessage("pages.artifacts.viewer.customerContextResolved")}
+          label={resolveAppMessage(
+            "pages.artifacts.viewer.customerContextResolved",
+          )}
           value={yesNo(rule.customerContextResolved)}
         />
       </dl>
@@ -326,14 +376,22 @@ function ArtifactMetadata({
       ))}
       {generatedAt ? (
         <div>
-          <dt className="text-muted-foreground">{resolveAppMessage("pages.artifacts.viewer.generated")}</dt>
-          <dd className="mt-1 font-medium">{new Date(generatedAt).toLocaleString()}</dd>
+          <dt className="text-muted-foreground">
+            {resolveAppMessage("pages.artifacts.viewer.generated")}
+          </dt>
+          <dd className="mt-1 font-medium">
+            {new Date(generatedAt).toLocaleString()}
+          </dd>
         </div>
       ) : null}
       {updatedAt ? (
         <div>
-          <dt className="text-muted-foreground">{resolveAppMessage("pages.artifacts.viewer.updated")}</dt>
-          <dd className="mt-1 font-medium">{new Date(updatedAt).toLocaleString()}</dd>
+          <dt className="text-muted-foreground">
+            {resolveAppMessage("pages.artifacts.viewer.updated")}
+          </dt>
+          <dd className="mt-1 font-medium">
+            {new Date(updatedAt).toLocaleString()}
+          </dd>
         </div>
       ) : null}
     </dl>
@@ -349,7 +407,13 @@ function SummaryStatus({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PublicReferenceList({ label, values }: { label: string; values: string[] }) {
+function PublicReferenceList({
+  label,
+  values,
+}: {
+  label: string;
+  values: string[];
+}) {
   return (
     <div className="mt-3">
       <p className="text-xs font-semibold text-muted-foreground">{label}</p>
@@ -369,15 +433,25 @@ function businessDimensionLabel(dimension: string): string {
     case BUSINESS_CONTEXT_DIMENSIONS.aiUsage:
       return resolveAppMessage("pages.artifacts.viewer.dimensionAiUsage");
     case BUSINESS_CONTEXT_DIMENSIONS.operationalProcess:
-      return resolveAppMessage("pages.artifacts.viewer.dimensionOperationalProcess");
+      return resolveAppMessage(
+        "pages.artifacts.viewer.dimensionOperationalProcess",
+      );
     case BUSINESS_CONTEXT_DIMENSIONS.decisionInfluence:
-      return resolveAppMessage("pages.artifacts.viewer.dimensionDecisionInfluence");
+      return resolveAppMessage(
+        "pages.artifacts.viewer.dimensionDecisionInfluence",
+      );
     case BUSINESS_CONTEXT_DIMENSIONS.humanOversight:
-      return resolveAppMessage("pages.artifacts.viewer.dimensionHumanOversight");
+      return resolveAppMessage(
+        "pages.artifacts.viewer.dimensionHumanOversight",
+      );
     case BUSINESS_CONTEXT_DIMENSIONS.affectedSubjects:
-      return resolveAppMessage("pages.artifacts.viewer.dimensionAffectedSubjects");
+      return resolveAppMessage(
+        "pages.artifacts.viewer.dimensionAffectedSubjects",
+      );
     case BUSINESS_CONTEXT_DIMENSIONS.dataCategories:
-      return resolveAppMessage("pages.artifacts.viewer.dimensionDataCategories");
+      return resolveAppMessage(
+        "pages.artifacts.viewer.dimensionDataCategories",
+      );
     default:
       return resolveAppMessage("pages.artifacts.viewer.unknown");
   }

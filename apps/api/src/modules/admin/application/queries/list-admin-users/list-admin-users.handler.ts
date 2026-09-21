@@ -9,9 +9,9 @@ import {
 } from "@lcsp/contracts/auth";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import { Prisma } from "@prisma/client";
-import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
-import { AUTH_RECORD_TYPES } from "../../../../auth/infrastructure/persistence/auth-record.persistence.js";
-import { ListAdminUsersQuery } from "./list-admin-users.query.js";
+import { PrismaService } from "@/infrastructure/prisma/prisma.service.js";
+import { AUTH_RECORD_TYPES } from "@/modules/auth/infrastructure/persistence/auth-record.persistence.js";
+import { ListAdminUsersQuery } from "@/modules/admin/application/queries/list-admin-users/list-admin-users.query.js";
 
 type ListRow = {
   id: string;

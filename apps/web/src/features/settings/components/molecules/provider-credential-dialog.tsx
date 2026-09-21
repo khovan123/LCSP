@@ -71,8 +71,10 @@ const PROVIDER_TITLE_KEYS = {
   },
   [CREDENTIAL_PROVIDERS.azureDevOps]: {
     connect: "pages.workspace.settingsHub.repositories.connectAzureDevOpsTitle",
-    manage: "pages.workspace.settingsHub.repositories.manageAzureDevOpsPatTitle",
-    update: "pages.workspace.settingsHub.repositories.updateAzureDevOpsPatTitle",
+    manage:
+      "pages.workspace.settingsHub.repositories.manageAzureDevOpsPatTitle",
+    update:
+      "pages.workspace.settingsHub.repositories.updateAzureDevOpsPatTitle",
   },
 } as const satisfies Record<
   CredentialProvider,

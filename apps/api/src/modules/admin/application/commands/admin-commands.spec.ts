@@ -5,18 +5,18 @@ import {
   AUTH_ACCOUNT_STATUSES,
   AUTH_USER_ROLES,
 } from "@lcsp/contracts/auth";
-import type { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
-import type { AuthAuditService } from "../../../auth/application/services/auth/auth-audit.service.js";
-import { SuspendUserCommand } from "./suspend-user/suspend-user.command.js";
-import { SuspendUserHandler } from "./suspend-user/suspend-user.handler.js";
-import { RestoreUserCommand } from "./restore-user/restore-user.command.js";
-import { RestoreUserHandler } from "./restore-user/restore-user.handler.js";
+import type { PrismaService } from "@/infrastructure/prisma/prisma.service.js";
+import type { AuthAuditService } from "@/modules/auth/application/services/auth/auth-audit.service.js";
+import { SuspendUserCommand } from "@/modules/admin/application/commands/suspend-user/suspend-user.command.js";
+import { SuspendUserHandler } from "@/modules/admin/application/commands/suspend-user/suspend-user.handler.js";
+import { RestoreUserCommand } from "@/modules/admin/application/commands/restore-user/restore-user.command.js";
+import { RestoreUserHandler } from "@/modules/admin/application/commands/restore-user/restore-user.handler.js";
 import {
   accountTransaction,
   canonicalRequestHash,
   legacyRequestHash,
   type AdminActor,
-} from "../../infrastructure/persistence/admin-account.transaction.js";
+} from "@/modules/admin/infrastructure/persistence/admin-account.transaction.js";
 
 describe("Admin CQRS Commands", () => {
   const mockActor: AdminActor = {

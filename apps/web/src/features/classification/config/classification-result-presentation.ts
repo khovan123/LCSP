@@ -20,7 +20,10 @@ export const CLASSIFICATION_RESULT_TONES = {
 export type ClassificationResultTone =
   (typeof CLASSIFICATION_RESULT_TONES)[keyof typeof CLASSIFICATION_RESULT_TONES];
 
-type ResultPresentation = { labelKey: MessageKey; tone: ClassificationResultTone };
+type ResultPresentation = {
+  labelKey: MessageKey;
+  tone: ClassificationResultTone;
+};
 
 /**
  * Execution never uses success styling: a completed run (or guardrail PASSED) is not a
@@ -114,7 +117,8 @@ export const CLASSIFICATION_RESULT_TONE_CLASS_NAMES: Record<
   ClassificationResultTone,
   string
 > = {
-  [CLASSIFICATION_RESULT_TONES.neutral]: "border-border bg-background text-foreground",
+  [CLASSIFICATION_RESULT_TONES.neutral]:
+    "border-border bg-background text-foreground",
   [CLASSIFICATION_RESULT_TONES.success]:
     "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
   [CLASSIFICATION_RESULT_TONES.warning]:

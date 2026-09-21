@@ -11,7 +11,7 @@ import {
 import {
   ASSESSMENT_ARTIFACT_AVAILABILITIES,
   type NormalizedAssessmentArtifactItem,
-} from "../../../workspace/types/assessment-runtime-adapter.types";
+} from "@/features/workspace/types/assessment-runtime-adapter.types";
 
 export function ArtifactEvidenceRow({
   item,
@@ -30,9 +30,9 @@ export function ArtifactEvidenceRow({
     item.ref.type === ARTIFACT_TYPES.investigationNotes;
   const canOpenWithViewer = Boolean(
     onOpenArtifact &&
-      (item.ref.type === ARTIFACT_TYPES.programEvidenceGraph ||
-        (isTextArtifact &&
-          item.availability === ASSESSMENT_ARTIFACT_AVAILABILITIES.ready)),
+    (item.ref.type === ARTIFACT_TYPES.programEvidenceGraph ||
+      (isTextArtifact &&
+        item.availability === ASSESSMENT_ARTIFACT_AVAILABILITIES.ready)),
   );
   const showOpenIndicator =
     canOpenWithViewer ||

@@ -6,7 +6,7 @@ import {
 } from "@lcsp/contracts/document";
 import type { MessageKey } from "@lcsp/i18n";
 
-import { PUBLIC_ENTRY_ROUTES } from "../../auth-entry.ts";
+import { PUBLIC_ENTRY_ROUTES } from "@/auth-entry.ts";
 import { apiRequest } from "./api-request.ts";
 import { API_OUTCOME_KINDS } from "./outcome-kinds.ts";
 import { getProblemCode } from "./problem-envelope.ts";

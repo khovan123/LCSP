@@ -1,6 +1,6 @@
 import { resolveAppMessage } from "@/lib/i18n";
 import type { MessageKey } from "@lcsp/i18n";
-import type { NormalizedAssessmentArtifacts } from "../../../workspace/types/assessment-runtime-adapter.types";
+import type { NormalizedAssessmentArtifacts } from "@/features/workspace/types/assessment-runtime-adapter.types";
 import { ArtifactEvidenceRow } from "../molecules/artifact-evidence-row";
 
 export function ArtifactEvidenceRail({

@@ -16,6 +16,4 @@ export type ConfirmAccessPasswordValues = z.infer<
   typeof confirmAccessPasswordSchema
 >;
 
-export type ConfirmAccessOtpValues = z.infer<
-  typeof confirmAccessOtpSchema
->;
+export type ConfirmAccessOtpValues = z.infer<typeof confirmAccessOtpSchema>;

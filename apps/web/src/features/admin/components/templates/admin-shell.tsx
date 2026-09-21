@@ -31,8 +31,7 @@ export function AdminShell({
     profile?.display_name ??
     (profile?.email ? profile.email.split("@")[0] : undefined) ??
     fallbackName;
-  const resolvedEmail =
-    adminEmail ?? profile?.email ?? fallbackEmail;
+  const resolvedEmail = adminEmail ?? profile?.email ?? fallbackEmail;
 
   return (
     <div className="flex min-h-screen w-full bg-background text-foreground antialiased selection:bg-primary/20">

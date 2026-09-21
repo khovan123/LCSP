@@ -37,5 +37,7 @@ function isCredentialBody(value: unknown): value is {
 } {
   if (typeof value !== "object" || value === null) return false;
   const body = value as Record<string, unknown>;
-  return typeof body.provider === "string" && typeof body.credential === "string";
+  return (
+    typeof body.provider === "string" && typeof body.credential === "string"
+  );
 }

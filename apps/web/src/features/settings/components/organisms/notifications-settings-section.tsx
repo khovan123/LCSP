@@ -21,7 +21,10 @@ export function NotificationsSettingsSection({
   return (
     <section className="flex flex-col gap-4">
       <SectionHeading
-        title={resolveMessage(appLocale, "pages.workspace.settingsHub.notifications.title")}
+        title={resolveMessage(
+          appLocale,
+          "pages.workspace.settingsHub.notifications.title",
+        )}
         description={resolveMessage(
           appLocale,
           "pages.workspace.settingsHub.notifications.description",

@@ -51,7 +51,7 @@ import {
   type WorkspaceRuntimeRun,
   type WorkspaceRuntimeActivityItem,
 } from "../types/workspace-runtime.types";
-import { sanitizeAssessmentInterviewState } from "../../../lib/api/assessment-interview-client";
+import { sanitizeAssessmentInterviewState } from "@/lib/api/assessment-interview-client";
 import {
   ARTIFACT_STATUSES,
   ARTIFACT_TYPES,
@@ -68,7 +68,7 @@ import {
   ENGINEERING_RULE_GATE_TOOL_NAME,
 } from "../config/runtime-activity";
 import { resolveMessage, type MessageKey } from "@lcsp/i18n";
-import { appLocale } from "../../../lib/locale";
+import { appLocale } from "@/lib/locale";
 
 const APPROVED_BLOCKED_ACTIONS = new Set<AssessmentInterviewBlockedAction>([
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
@@ -1062,7 +1062,8 @@ function normalizeArtifacts({
     businessContext,
     investigationNotes,
     ...[remediationPatch, verificationReport, finalReport].filter(
-      (artifact): artifact is NormalizedAssessmentArtifactItem => artifact !== null,
+      (artifact): artifact is NormalizedAssessmentArtifactItem =>
+        artifact !== null,
     ),
   ];
 

@@ -13,5 +13,3 @@ export default function AdminRouteLayout({
 }) {
   return <AdminShell>{children}</AdminShell>;
 }
-
-

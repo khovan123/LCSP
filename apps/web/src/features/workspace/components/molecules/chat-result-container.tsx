@@ -53,7 +53,10 @@ export function ChatResultContainer({
       ) : null}
       {children ? (
         <div
-          className={cn("min-w-0", (header || title || eyebrow || description) && "mt-3")}
+          className={cn(
+            "min-w-0",
+            (header || title || eyebrow || description) && "mt-3",
+          )}
         >
           {children}
         </div>

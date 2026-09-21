@@ -45,9 +45,13 @@ export function ConflictResolutionPage({
   const router = useRouter();
   const [viewStateOverride, setViewStateOverride] =
     useState<ConflictResolutionViewState | null>(null);
-  const [submittingIds, setSubmittingIds] = useState<ConflictResolutionDraftMap>({});
-  const [resolutions, setResolutions] = useState<ConflictResolutionStatusMap>({});
-  const [resolutionNotes, setResolutionNotes] = useState<ConflictResolutionNoteMap>({});
+  const [submittingIds, setSubmittingIds] =
+    useState<ConflictResolutionDraftMap>({});
+  const [resolutions, setResolutions] = useState<ConflictResolutionStatusMap>(
+    {},
+  );
+  const [resolutionNotes, setResolutionNotes] =
+    useState<ConflictResolutionNoteMap>({});
   const [formErrors, setFormErrors] = useState<ConflictResolutionErrorMap>({});
   const conflictsQuery = usePendingConflictsQuery(assessmentId);
   const resolveConflictMutation = useResolveConflictMutation(assessmentId);
@@ -212,10 +216,16 @@ export function ConflictResolutionPage({
       {viewState === CONFLICT_RESOLUTION_VIEW_STATES.accessRevoked ? (
         <Alert variant="destructive">
           <AlertTitle>
-            {resolveMessage(appLocale, "pages.reconciliation.accessRevokedTitle")}
+            {resolveMessage(
+              appLocale,
+              "pages.reconciliation.accessRevokedTitle",
+            )}
           </AlertTitle>
           <AlertDescription>
-            {resolveMessage(appLocale, "pages.reconciliation.accessRevokedDetail")}
+            {resolveMessage(
+              appLocale,
+              "pages.reconciliation.accessRevokedDetail",
+            )}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -235,10 +245,16 @@ export function ConflictResolutionPage({
         <Empty className="rounded-xl border bg-card">
           <EmptyHeader>
             <EmptyTitle>
-              {resolveMessage(appLocale, "pages.reconciliation.allResolvedTitle")}
+              {resolveMessage(
+                appLocale,
+                "pages.reconciliation.allResolvedTitle",
+              )}
             </EmptyTitle>
             <EmptyDescription>
-              {resolveMessage(appLocale, "pages.reconciliation.allResolvedDetail")}
+              {resolveMessage(
+                appLocale,
+                "pages.reconciliation.allResolvedDetail",
+              )}
             </EmptyDescription>
           </EmptyHeader>
           {nextStepHref ? (
@@ -250,7 +266,10 @@ export function ConflictResolutionPage({
                 href={nextStepHref}
                 className="text-sm font-medium text-primary underline-offset-4 hover:underline"
               >
-                {resolveMessage(appLocale, "pages.reconciliation.nextStepAction")}
+                {resolveMessage(
+                  appLocale,
+                  "pages.reconciliation.nextStepAction",
+                )}
               </Link>
             </EmptyContent>
           ) : null}
@@ -258,7 +277,13 @@ export function ConflictResolutionPage({
       ) : null}
 
       {viewState === CONFLICT_RESOLUTION_VIEW_STATES.loaded ? (
-        <section className="grid gap-4" aria-label={resolveMessage(appLocale, "pages.reconciliation.pendingSectionLabel")}>
+        <section
+          className="grid gap-4"
+          aria-label={resolveMessage(
+            appLocale,
+            "pages.reconciliation.pendingSectionLabel",
+          )}
+        >
           {conflicts.map((conflict) => {
             const conflictId = conflict.conflict_id;
             return (
@@ -275,7 +300,10 @@ export function ConflictResolutionPage({
                   setResolutions((prev) => ({ ...prev, [conflictId]: value }))
                 }
                 onResolutionNoteChange={(value) =>
-                  setResolutionNotes((prev) => ({ ...prev, [conflictId]: value }))
+                  setResolutionNotes((prev) => ({
+                    ...prev,
+                    [conflictId]: value,
+                  }))
                 }
                 onSubmit={() => {
                   void handleResolve(conflict);

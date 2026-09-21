@@ -60,7 +60,9 @@ function metricFromCanonical(
     : { value, format };
 }
 
-export function formatProgramEvidenceMetric(metric: ProgramEvidenceMetric): string {
+export function formatProgramEvidenceMetric(
+  metric: ProgramEvidenceMetric,
+): string {
   if (metric.value == null) {
     return t("pages.assessmentFlow.graph.unavailableValue");
   }

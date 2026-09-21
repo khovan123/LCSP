@@ -74,10 +74,7 @@ function LegalRiskTable() {
           {resolveMessage(appLocale, "pages.legalLibrary.riskTableTitle")}
         </CardTitle>
         <CardDescription>
-          {resolveMessage(
-            appLocale,
-            "pages.legalLibrary.riskTableDescription",
-          )}
+          {resolveMessage(appLocale, "pages.legalLibrary.riskTableDescription")}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -108,7 +105,9 @@ function LegalRiskTable() {
 
               return (
                 <TableRow key={chunk.id}>
-                  <TableCell className="font-mono text-xs">{chunk.id}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {chunk.id}
+                  </TableCell>
                   <TableCell>
                     <Link
                       className="font-medium hover:underline"
@@ -128,7 +127,10 @@ function LegalRiskTable() {
             })}
           </TableBody>
           <TableCaption>
-            {resolveMessage(appLocale, "pages.legalLibrary.riskTableDisclaimer")}
+            {resolveMessage(
+              appLocale,
+              "pages.legalLibrary.riskTableDisclaimer",
+            )}
           </TableCaption>
         </Table>
       </CardContent>
@@ -144,11 +146,7 @@ function RiskLevelBadge({ riskLevel }: { riskLevel: LegalRiskLevel }) {
         ? "secondary"
         : "outline";
 
-  return (
-    <Badge variant={variant}>
-      {getRiskLevelLabel(riskLevel)}
-    </Badge>
-  );
+  return <Badge variant={variant}>{getRiskLevelLabel(riskLevel)}</Badge>;
 }
 
 function getRiskLevelLabel(riskLevel: LegalRiskLevel): string {
@@ -171,14 +169,18 @@ function LegalDocumentCard({ document }: { document: LegalDocument }) {
     <Card>
       <CardHeader>
         <div className="flex items-start gap-3">
-          <ScaleIcon className="mt-0.5 size-5 text-primary" aria-hidden="true" />
+          <ScaleIcon
+            className="mt-0.5 size-5 text-primary"
+            aria-hidden="true"
+          />
           <div className="flex flex-col gap-1">
             <CardTitle>{copy.title}</CardTitle>
             <CardDescription>
               {resolveMessage(
                 appLocale,
                 "pages.legalLibrary.documentReferenceLabel",
-              )}: {copy.reference}
+              )}
+              : {copy.reference}
             </CardDescription>
           </div>
         </div>
@@ -189,7 +191,10 @@ function LegalDocumentCard({ document }: { document: LegalDocument }) {
           value={copy.issuedOn}
         />
         <MetadataRow
-          label={resolveMessage(appLocale, "pages.legalLibrary.effectiveOnLabel")}
+          label={resolveMessage(
+            appLocale,
+            "pages.legalLibrary.effectiveOnLabel",
+          )}
           value={copy.effectiveOn}
         />
         <MetadataRow

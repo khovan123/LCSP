@@ -4,7 +4,7 @@ import {
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   ASSESSMENT_RUNTIME_STAGE_CODES,
 } from "@lcsp/contracts/evidence";
-import { appLocale } from "../../../lib/locale.ts";
+import { appLocale } from "@/lib/locale.ts";
 import {
   WORKSPACE_RUNTIME_CONNECTION_STATES,
   type WorkspaceRuntimeConnectionState,
@@ -115,10 +115,7 @@ export function formatLocaleTimestamp(value: string) {
 
 export function formatRelativeTime(value: string) {
   const timestamp = new Date(value).getTime();
-  const deltaSeconds = Math.max(
-    0,
-    Math.round((Date.now() - timestamp) / 1000),
-  );
+  const deltaSeconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
   if (deltaSeconds < 60) {
     return `${deltaSeconds}s`;
   }

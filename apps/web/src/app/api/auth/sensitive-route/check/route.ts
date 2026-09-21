@@ -28,9 +28,9 @@ export async function POST(request: NextRequest) {
   const session = requireSessionToken(request);
   if (!session.ok) return session.response;
 
-  const body = (await request.json().catch(() => null)) as
-    | SensitiveRouteCheckPayload
-    | null;
+  const body = (await request
+    .json()
+    .catch(() => null)) as SensitiveRouteCheckPayload | null;
   if (!body || !isValidPayload(body)) {
     return problemJson(AUTH_ERROR_CODES.validationFailed, { status: 400 });
   }

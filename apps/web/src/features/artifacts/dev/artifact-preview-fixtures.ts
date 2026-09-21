@@ -1,6 +1,15 @@
-import { ARTIFACT_STATUSES, ARTIFACT_TYPES, type ArtifactGroup } from "../types/artifact.types";
+import {
+  ARTIFACT_STATUSES,
+  ARTIFACT_TYPES,
+  type ArtifactGroup,
+} from "../types/artifact.types";
 
-const item = (assessmentId: string, type: (typeof ARTIFACT_TYPES)[keyof typeof ARTIFACT_TYPES], title: string, context: string) => ({
+const item = (
+  assessmentId: string,
+  type: (typeof ARTIFACT_TYPES)[keyof typeof ARTIFACT_TYPES],
+  title: string,
+  context: string,
+) => ({
   ref: { assessmentId, type },
   title,
   context,
@@ -14,11 +23,36 @@ export const ARTIFACT_PREVIEW_GROUPS: ArtifactGroup[] = [
     context: "payment-service",
     updatedAt: "Updated 8 min ago",
     artifacts: [
-      item("preview-payment-ai", ARTIFACT_TYPES.businessContext, "Business context", "Context document"),
-      item("preview-payment-ai", ARTIFACT_TYPES.programEvidenceGraph, "Program Evidence Graph", "Evidence graph"),
-      item("preview-payment-ai", ARTIFACT_TYPES.findingsReport, "Findings report", "Analysis document"),
-      item("preview-payment-ai", ARTIFACT_TYPES.remediationPatch, "Remediation patch", "Code diff"),
-      item("preview-payment-ai", ARTIFACT_TYPES.finalReport, "Final report", "PDF report"),
+      item(
+        "preview-payment-ai",
+        ARTIFACT_TYPES.businessContext,
+        "Business context",
+        "Context document",
+      ),
+      item(
+        "preview-payment-ai",
+        ARTIFACT_TYPES.programEvidenceGraph,
+        "Program Evidence Graph",
+        "Evidence graph",
+      ),
+      item(
+        "preview-payment-ai",
+        ARTIFACT_TYPES.findingsReport,
+        "Findings report",
+        "Analysis document",
+      ),
+      item(
+        "preview-payment-ai",
+        ARTIFACT_TYPES.remediationPatch,
+        "Remediation patch",
+        "Code diff",
+      ),
+      item(
+        "preview-payment-ai",
+        ARTIFACT_TYPES.finalReport,
+        "Final report",
+        "PDF report",
+      ),
     ],
   },
   {
@@ -27,9 +61,24 @@ export const ARTIFACT_PREVIEW_GROUPS: ArtifactGroup[] = [
     context: "identity-service",
     updatedAt: "Updated yesterday",
     artifacts: [
-      item("preview-retention", ARTIFACT_TYPES.businessContext, "Business context", "Context document"),
-      item("preview-retention", ARTIFACT_TYPES.evidenceGraph, "Evidence graph", "Evidence graph"),
-      item("preview-retention", ARTIFACT_TYPES.findingsReport, "Findings report", "Analysis document"),
+      item(
+        "preview-retention",
+        ARTIFACT_TYPES.businessContext,
+        "Business context",
+        "Context document",
+      ),
+      item(
+        "preview-retention",
+        ARTIFACT_TYPES.evidenceGraph,
+        "Evidence graph",
+        "Evidence graph",
+      ),
+      item(
+        "preview-retention",
+        ARTIFACT_TYPES.findingsReport,
+        "Findings report",
+        "Analysis document",
+      ),
     ],
   },
   {
@@ -38,8 +87,18 @@ export const ARTIFACT_PREVIEW_GROUPS: ArtifactGroup[] = [
     context: "checkout-service",
     updatedAt: "Updated Aug 28",
     artifacts: [
-      item("preview-remediation", ARTIFACT_TYPES.remediationPatch, "Remediation patch", "Code diff"),
-      item("preview-remediation", ARTIFACT_TYPES.verificationReport, "Verification report", "Verification report"),
+      item(
+        "preview-remediation",
+        ARTIFACT_TYPES.remediationPatch,
+        "Remediation patch",
+        "Code diff",
+      ),
+      item(
+        "preview-remediation",
+        ARTIFACT_TYPES.verificationReport,
+        "Verification report",
+        "Verification report",
+      ),
     ],
   },
 ];

@@ -60,7 +60,8 @@ const SUPPORTED_CREDENTIAL_PROVIDERS = [
   CREDENTIAL_PROVIDERS.azureDevOps,
 ] as const;
 
-type SupportedCredentialProvider = (typeof SUPPORTED_CREDENTIAL_PROVIDERS)[number];
+type SupportedCredentialProvider =
+  (typeof SUPPORTED_CREDENTIAL_PROVIDERS)[number];
 
 export function RepositoriesSettingsSection({
   providerCredentialStatuses = [],
@@ -155,9 +156,7 @@ export function RepositoriesSettingsSection({
                 disabled={!option.supported}
                 onClick={() => {
                   if (
-                    SUPPORTED_CREDENTIAL_PROVIDERS.includes(
-                      credentialProvider,
-                    )
+                    SUPPORTED_CREDENTIAL_PROVIDERS.includes(credentialProvider)
                   ) {
                     openCredentialDialog(
                       credentialProvider,

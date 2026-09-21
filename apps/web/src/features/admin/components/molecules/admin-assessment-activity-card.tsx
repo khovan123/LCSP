@@ -2,7 +2,11 @@ import type { MessageKey } from "@lcsp/i18n";
 import type { AdminOverviewActivityPoint } from "@lcsp/contracts/auth";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { resolveAppMessage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -117,8 +121,16 @@ export function AdminAssessmentActivityCard({
     ...points.map((p) => Math.max(p.startedCount, p.completedCount)),
   );
 
-  const startLabel = startDate ? formatShortDate(startDate) : (points[0] ? formatShortDate(points[0].timestamp) : "");
-  const endLabel = endDate ? formatShortDate(endDate) : (points[points.length - 1] ? formatShortDate(points[points.length - 1].timestamp) : "");
+  const startLabel = startDate
+    ? formatShortDate(startDate)
+    : points[0]
+      ? formatShortDate(points[0].timestamp)
+      : "";
+  const endLabel = endDate
+    ? formatShortDate(endDate)
+    : points[points.length - 1]
+      ? formatShortDate(points[points.length - 1].timestamp)
+      : "";
 
   return (
     <div
@@ -195,7 +207,11 @@ export function AdminAssessmentActivityCard({
                   <TooltipContent side="top" className="text-xs">
                     <p className="font-medium">{pointDateLabel}</p>
                     <p className="text-muted-foreground text-xs">
-                      {point.startedCount} {resolveAppMessage("pages.admin.overview.accountStatus.active" as MessageKey)} · {point.completedCount} {completedLabel}
+                      {point.startedCount}{" "}
+                      {resolveAppMessage(
+                        "pages.admin.overview.accountStatus.active" as MessageKey,
+                      )}{" "}
+                      · {point.completedCount} {completedLabel}
                     </p>
                   </TooltipContent>
                 </Tooltip>

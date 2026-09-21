@@ -73,9 +73,13 @@ export function EngineeringRuleFindingsTable({
               <Link
                 href={href}
                 className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-                aria-label={t("pages.structuredResults.findingsTable.viewTechnicalDetails")}
+                aria-label={t(
+                  "pages.structuredResults.findingsTable.viewTechnicalDetails",
+                )}
               >
-                {t("pages.structuredResults.findingsTable.viewTechnicalDetails")}
+                {t(
+                  "pages.structuredResults.findingsTable.viewTechnicalDetails",
+                )}
                 <ArrowRightIcon aria-hidden="true" className="size-3.5" />
               </Link>
             ) : (
@@ -91,7 +95,9 @@ export function EngineeringRuleFindingsTable({
                 }}
                 className="h-7 min-w-0 px-0 text-xs font-medium text-primary hover:bg-transparent hover:underline disabled:text-muted-foreground disabled:no-underline"
               >
-                {t("pages.structuredResults.findingsTable.viewTechnicalDetails")}
+                {t(
+                  "pages.structuredResults.findingsTable.viewTechnicalDetails",
+                )}
                 <ArrowRightIcon aria-hidden="true" className="size-3.5" />
               </Button>
             )}
@@ -116,7 +122,9 @@ export function EngineeringRuleFindingsTable({
                     {t("pages.structuredResults.findingsTable.issueHeader")}
                   </th>
                   <th scope="col" className="w-58 px-3 py-2">
-                    {t("pages.structuredResults.findingsTable.whyItMattersHeader")}
+                    {t(
+                      "pages.structuredResults.findingsTable.whyItMattersHeader",
+                    )}
                   </th>
                   <th scope="col" className="w-32.5 px-3.5 py-2">
                     {t("pages.structuredResults.findingsTable.foundInHeader")}

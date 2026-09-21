@@ -5,7 +5,10 @@ import { upstreamJson, upstreamRequest } from "@/lib/server/upstream-request";
 
 export async function POST(request: Request) {
   if (isMockModeEnabled()) {
-    return successJson({ requested: true, mock_recovery_token: "mock-recovery-token" });
+    return successJson({
+      requested: true,
+      mock_recovery_token: "mock-recovery-token",
+    });
   }
   const body = await request.text();
   const origin = resolvePublicOrigin(request);

@@ -1,7 +1,7 @@
 import {
   NORMALIZED_WORKFLOW_STEP_STATUSES,
   type NormalizedWorkflowStep,
-} from "../../../workspace/types/assessment-runtime-adapter.types";
+} from "@/features/workspace/types/assessment-runtime-adapter.types";
 import { RuntimeStatusBadge } from "../atoms/runtime-status-badge";
 
 function statusDotClass(status: NormalizedWorkflowStep["status"]) {
@@ -24,13 +24,22 @@ function statusDotClass(status: NormalizedWorkflowStep["status"]) {
 export function WorkflowStatusRow({ step }: { step: NormalizedWorkflowStep }) {
   return (
     <li className="flex items-start gap-2.5 border-b border-border/50 py-2.5 last:border-b-0">
-      <span className={`mt-1.5 size-1.5 shrink-0 rounded-full ${statusDotClass(step.status)}`} aria-hidden="true" />
+      <span
+        className={`mt-1.5 size-1.5 shrink-0 rounded-full ${statusDotClass(step.status)}`}
+        aria-hidden="true"
+      />
       <span className="min-w-0 flex-1">
         <span className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm font-medium text-foreground">{step.label}</span>
+          <span className="truncate text-sm font-medium text-foreground">
+            {step.label}
+          </span>
           <RuntimeStatusBadge status={step.status} />
         </span>
-        {step.detail ? <span className="mt-1 block line-clamp-2 text-xs text-muted-foreground">{step.detail}</span> : null}
+        {step.detail ? (
+          <span className="mt-1 block line-clamp-2 text-xs text-muted-foreground">
+            {step.detail}
+          </span>
+        ) : null}
       </span>
     </li>
   );

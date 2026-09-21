@@ -3,7 +3,7 @@ import type { MessageKey } from "@lcsp/i18n";
 import {
   NORMALIZED_WORKFLOW_STEP_STATUSES,
   type NormalizedWorkflowStepStatus,
-} from "../../../workspace/types/assessment-runtime-adapter.types";
+} from "@/features/workspace/types/assessment-runtime-adapter.types";
 
 const statusLabels: Record<NormalizedWorkflowStepStatus, string> = {
   [NORMALIZED_WORKFLOW_STEP_STATUSES.queued]: resolveAppMessage(

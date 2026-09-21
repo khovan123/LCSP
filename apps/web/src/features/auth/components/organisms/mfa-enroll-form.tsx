@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  ClipboardCopyIcon,
-  DownloadIcon,
-  PrinterIcon,
-} from "lucide-react";
+import { ClipboardCopyIcon, DownloadIcon, PrinterIcon } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -80,9 +76,7 @@ export function MfaEnrollForm() {
   }
 
   async function handleCopyRecoveryCodes() {
-    if (
-      !(await logRecoveryCodeAccess(MFA_RECOVERY_CODE_ACCESS_ACTIONS.copy))
-    ) {
+    if (!(await logRecoveryCodeAccess(MFA_RECOVERY_CODE_ACCESS_ACTIONS.copy))) {
       return;
     }
     await navigator.clipboard.writeText(recoveryCodes.join("\n"));
@@ -90,9 +84,7 @@ export function MfaEnrollForm() {
 
   async function handleDownloadRecoveryCodes() {
     if (
-      !(await logRecoveryCodeAccess(
-        MFA_RECOVERY_CODE_ACCESS_ACTIONS.download,
-      ))
+      !(await logRecoveryCodeAccess(MFA_RECOVERY_CODE_ACCESS_ACTIONS.download))
     ) {
       return;
     }

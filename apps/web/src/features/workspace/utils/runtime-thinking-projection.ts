@@ -6,7 +6,7 @@ import {
 } from "@lcsp/contracts/evidence";
 import { resolveMessage } from "@lcsp/i18n";
 
-import { appLocale } from "../../../lib/locale";
+import { appLocale } from "@/lib/locale";
 import { ENGINEERING_RULE_ACTIVITY_TOOL_PREFIXES } from "../config/runtime-activity";
 import {
   RUNTIME_THINKING_PHASES,

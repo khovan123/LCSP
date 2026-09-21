@@ -4,7 +4,7 @@ import type {
   ConflictSummary,
   ResolveConflictPayload,
 } from "@/lib/api/conflict-client";
-import { API_OUTCOME_KINDS } from "../../../lib/api/outcome-kinds.ts";
+import { API_OUTCOME_KINDS } from "@/lib/api/outcome-kinds.ts";
 import type { ConflictResolutionValue } from "./conflict-card.types";
 
 export const CONFLICT_RESOLUTION_VIEW_STATES = {

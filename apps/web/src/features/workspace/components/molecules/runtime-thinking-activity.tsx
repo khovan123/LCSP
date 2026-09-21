@@ -9,12 +9,18 @@ import {
 import { formatRuntimeThinkingItem } from "../../utils/runtime-thinking-projection";
 import { AgentMessage, AgentTurn, ThoughtLine } from "./agent-turn";
 
-export function RuntimeThinkingActivity({ item }: { item: RuntimeThinkingItem }) {
+export function RuntimeThinkingActivity({
+  item,
+}: {
+  item: RuntimeThinkingItem;
+}) {
   return (
     <AgentTurn>
       <AgentMessage>
         <div className="space-y-2" data-runtime-thinking-id={item.id}>
-          <ThoughtLine label={resolveMessage(appLocale, thinkingLabelKey(item))} />
+          <ThoughtLine
+            label={resolveMessage(appLocale, thinkingLabelKey(item))}
+          />
           <p className="whitespace-pre-wrap break-words text-muted-foreground">
             {formatRuntimeThinkingItem(item)}
           </p>

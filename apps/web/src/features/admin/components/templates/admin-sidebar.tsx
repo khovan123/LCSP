@@ -6,7 +6,10 @@ import { UsersIcon, LayoutDashboardIcon, BookOpenIcon } from "lucide-react";
 import type { MessageKey } from "@lcsp/i18n";
 
 import { LCSPLogo } from "@/components/atoms/lcsp-logo";
-import { LCSP_LOGO_SIZES, LCSP_LOGO_VARIANTS } from "@/components/types/lcsp-logo.types";
+import {
+  LCSP_LOGO_SIZES,
+  LCSP_LOGO_VARIANTS,
+} from "@/components/types/lcsp-logo.types";
 import { resolveAppMessage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -15,10 +18,7 @@ type AdminSidebarProps = {
   adminEmail?: string;
 };
 
-export function AdminSidebar({
-  adminName,
-  adminEmail,
-}: AdminSidebarProps) {
+export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
   const pathname = usePathname();
   const fallbackName = resolveAppMessage(
     "pages.admin.sidebar.identityFallbackName" as MessageKey,
@@ -64,7 +64,9 @@ export function AdminSidebar({
   return (
     <aside
       className="flex h-screen w-[248px] shrink-0 flex-col justify-between border-r border-sidebar-border bg-sidebar text-sidebar-foreground select-none"
-      aria-label={resolveAppMessage("pages.admin.sidebar.navigationAria" as MessageKey)}
+      aria-label={resolveAppMessage(
+        "pages.admin.sidebar.navigationAria" as MessageKey,
+      )}
     >
       <div className="flex flex-col">
         {/* Brand Lockup & ADMIN Tag */}
@@ -73,12 +75,16 @@ export function AdminSidebar({
             <LCSPLogo
               variant={LCSP_LOGO_VARIANTS.lockup}
               size={LCSP_LOGO_SIZES.md}
-              label={resolveAppMessage("pages.admin.sidebar.logoLabel" as MessageKey)}
+              label={resolveAppMessage(
+                "pages.admin.sidebar.logoLabel" as MessageKey,
+              )}
             />
           </div>
           <div className="mt-2.5 flex items-center">
             <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase bg-sidebar-accent border border-sidebar-border">
-              {resolveAppMessage("pages.admin.sidebar.adminBadge" as MessageKey)}
+              {resolveAppMessage(
+                "pages.admin.sidebar.adminBadge" as MessageKey,
+              )}
             </span>
           </div>
         </div>
@@ -86,7 +92,9 @@ export function AdminSidebar({
         {/* Navigation Rows */}
         <nav
           className="mt-4 flex flex-col gap-1 px-3"
-          aria-label={resolveAppMessage("pages.admin.sidebar.sectionsAria" as MessageKey)}
+          aria-label={resolveAppMessage(
+            "pages.admin.sidebar.sectionsAria" as MessageKey,
+          )}
         >
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -104,7 +112,9 @@ export function AdminSidebar({
                     <span>{label}</span>
                   </div>
                   <span className="rounded bg-sidebar-border/40 px-1 py-0.5 text-[9.5px] font-medium text-muted-foreground uppercase">
-                    {resolveAppMessage("pages.admin.sidebar.soonLabel" as MessageKey)}
+                    {resolveAppMessage(
+                      "pages.admin.sidebar.soonLabel" as MessageKey,
+                    )}
                   </span>
                 </div>
               );
@@ -142,10 +152,14 @@ export function AdminSidebar({
         {/* Administration Section Note */}
         <div className="px-5">
           <p className="text-[10.5px] font-semibold tracking-wider text-sidebar-foreground/70 uppercase">
-            {resolveAppMessage("pages.admin.sidebar.administrationLabel" as MessageKey)}
+            {resolveAppMessage(
+              "pages.admin.sidebar.administrationLabel" as MessageKey,
+            )}
           </p>
           <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground">
-            {resolveAppMessage("pages.admin.sidebar.administrationDescription" as MessageKey)}
+            {resolveAppMessage(
+              "pages.admin.sidebar.administrationDescription" as MessageKey,
+            )}
           </p>
         </div>
       </div>

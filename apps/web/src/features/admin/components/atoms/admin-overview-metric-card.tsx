@@ -51,9 +51,7 @@ export function AdminOverviewMetricCard({
       <span className="text-2xl font-semibold tracking-tight text-foreground truncate">
         {displayValue}
       </span>
-      <span className="text-xs text-muted-foreground truncate">
-        {subtitle}
-      </span>
+      <span className="text-xs text-muted-foreground truncate">{subtitle}</span>
     </div>
   );
 }

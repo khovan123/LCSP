@@ -83,11 +83,17 @@ export function CorpusVersionsPage({
         actionSlot={
           <Tooltip>
             <TooltipTrigger render={<span tabIndex={0} />}>
-              <Button type="button" disabled={!canCreate || isCreating} onClick={onCreate}>
+              <Button
+                type="button"
+                disabled={!canCreate || isCreating}
+                onClick={onCreate}
+              >
                 {isCreating ? text("creating") : text("create")}
               </Button>
             </TooltipTrigger>
-            {!canCreate ? <TooltipContent>{text("createUnavailable")}</TooltipContent> : null}
+            {!canCreate ? (
+              <TooltipContent>{text("createUnavailable")}</TooltipContent>
+            ) : null}
           </Tooltip>
         }
       />
@@ -98,9 +104,7 @@ export function CorpusVersionsPage({
         {currentActive ? (
           <div className="mt-2 flex items-center justify-between gap-4">
             <div>
-              <p className="text-xl font-semibold">
-                {currentActive.version}
-              </p>
+              <p className="text-xl font-semibold">{currentActive.version}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {template("currentMeta", {
                   count: currentActive.sourceCount,
