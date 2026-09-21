@@ -228,42 +228,69 @@ export type AdminUserActionInput = z.infer<typeof adminUserActionSchema>;
 /**
  * Validation schema and input type for Admin user list query parameters.
  */
-export const adminListUsersQuerySchema = z.object({
-  query: z.string().max(ADMIN_ACCOUNT_QUERY_LIMITS.maxQueryLength).optional(),
-  q: z.string().max(ADMIN_ACCOUNT_QUERY_LIMITS.maxQueryLength).optional(),
-  status: z
-    .enum([
-      AUTH_ACCOUNT_STATUSES.active,
-      AUTH_ACCOUNT_STATUSES.suspended,
-      ADMIN_ACCOUNT_FILTERS.all,
-    ] as [string, ...string[]])
-    .optional(),
-  role: z
-    .enum([
-      AUTH_USER_ROLES.admin,
-      AUTH_USER_ROLES.customer,
-      ADMIN_ACCOUNT_FILTERS.all,
-    ] as [string, ...string[]])
-    .optional(),
-  page: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(ADMIN_ACCOUNT_QUERY_LIMITS.maxPage)
-    .default(1),
-  pageSize: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(ADMIN_ACCOUNT_QUERY_LIMITS.maxPageSize)
-    .optional(),
-  page_size: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(ADMIN_ACCOUNT_QUERY_LIMITS.maxPageSize)
-    .optional(),
-});
+export const adminListUsersQuerySchema = z
+  .object({
+    query: z.string().max(ADMIN_ACCOUNT_QUERY_LIMITS.maxQueryLength).optional(),
+    q: z.string().max(ADMIN_ACCOUNT_QUERY_LIMITS.maxQueryLength).optional(),
+    status: z
+      .enum([
+        AUTH_ACCOUNT_STATUSES.active,
+        AUTH_ACCOUNT_STATUSES.suspended,
+        ADMIN_ACCOUNT_FILTERS.all,
+      ] as [string, ...string[]])
+      .optional(),
+    role: z
+      .enum([
+        AUTH_USER_ROLES.admin,
+        AUTH_USER_ROLES.customer,
+        ADMIN_ACCOUNT_FILTERS.all,
+      ] as [string, ...string[]])
+      .optional(),
+    page: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(ADMIN_ACCOUNT_QUERY_LIMITS.maxPage)
+      .default(1),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(ADMIN_ACCOUNT_QUERY_LIMITS.maxPageSize)
+      .optional(),
+    page_size: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(ADMIN_ACCOUNT_QUERY_LIMITS.maxPageSize)
+      .optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (
+      data.query !== undefined &&
+      data.q !== undefined &&
+      data.query !== data.q
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Conflicting query parameters: 'query' and 'q' must not have different values",
+        path: ["query"],
+      });
+    }
+    if (
+      data.pageSize !== undefined &&
+      data.page_size !== undefined &&
+      data.pageSize !== data.page_size
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Conflicting query parameters: 'pageSize' and 'page_size' must not have different values",
+        path: ["pageSize"],
+      });
+    }
+  });
 export type AdminListUsersQueryInput = z.infer<
   typeof adminListUsersQuerySchema
 >;

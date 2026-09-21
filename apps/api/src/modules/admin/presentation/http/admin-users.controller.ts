@@ -36,8 +36,10 @@ import {
 } from "../../application/queries/index.js";
 import type { AdminActor } from "../../infrastructure/persistence/admin-account.transaction.js";
 
+const IDEMPOTENCY_KEY_REGEX = /^[A-Za-z0-9._:-]{1,128}$/;
+
 /**
- * Validates that an Idempotency-Key header is present, non-empty, and within acceptable length.
+ * Validates that an Idempotency-Key header is present, non-empty, and satisfies character set and length <= 128.
  */
 function assertIdempotencyKey(
   idempotencyKeyHeader: unknown,
@@ -45,8 +47,7 @@ function assertIdempotencyKey(
 ): string {
   if (
     typeof idempotencyKeyHeader !== "string" ||
-    !idempotencyKeyHeader.trim() ||
-    idempotencyKeyHeader.length > 200
+    !IDEMPOTENCY_KEY_REGEX.test(idempotencyKeyHeader)
   ) {
     throw problemException(
       ADMIN_ACCOUNT_ERRORS.idempotencyRequired,
@@ -56,7 +57,7 @@ function assertIdempotencyKey(
       },
     );
   }
-  return idempotencyKeyHeader.trim();
+  return idempotencyKeyHeader;
 }
 
 /**
@@ -80,7 +81,12 @@ export class AdminUsersController {
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.admin)
   async listUsers(
-    @Query(new ZodValidationPipe(adminListUsersQuerySchema))
+    @Query(
+      new ZodValidationPipe(
+        adminListUsersQuerySchema,
+        ADMIN_ACCOUNT_ERRORS.invalidInput,
+      ),
+    )
     query: AdminListUsersQueryInput,
     @Req() request: AuthenticatedRequest,
   ) {
@@ -117,7 +123,12 @@ export class AdminUsersController {
   @RequireRoles(AUTH_USER_ROLES.admin)
   async suspendUser(
     @Param("id") targetUserId: string,
-    @Body(new ZodValidationPipe(adminUserActionSchema))
+    @Body(
+      new ZodValidationPipe(
+        adminUserActionSchema,
+        ADMIN_ACCOUNT_ERRORS.invalidInput,
+      ),
+    )
     body: AdminUserActionInput,
     @Headers("idempotency-key") idempotencyKeyHeader: unknown,
     @Req() request: AuthenticatedRequest,
@@ -142,7 +153,12 @@ export class AdminUsersController {
   @RequireRoles(AUTH_USER_ROLES.admin)
   async restoreUser(
     @Param("id") targetUserId: string,
-    @Body(new ZodValidationPipe(adminUserActionSchema))
+    @Body(
+      new ZodValidationPipe(
+        adminUserActionSchema,
+        ADMIN_ACCOUNT_ERRORS.invalidInput,
+      ),
+    )
     body: AdminUserActionInput,
     @Headers("idempotency-key") idempotencyKeyHeader: unknown,
     @Req() request: AuthenticatedRequest,

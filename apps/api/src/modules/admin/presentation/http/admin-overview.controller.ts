@@ -1,6 +1,7 @@
 import { Controller, Get, Query, UseGuards } from "@nestjs/common";
 import { QueryBus } from "@nestjs/cqrs";
 import {
+  ADMIN_ACCOUNT_ERRORS,
   adminOverviewQuerySchema,
   AUTH_USER_ROLES,
   type AdminOverviewQueryInput,
@@ -26,7 +27,12 @@ export class AdminOverviewController {
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.admin)
   async getOverview(
-    @Query(new ZodValidationPipe(adminOverviewQuerySchema))
+    @Query(
+      new ZodValidationPipe(
+        adminOverviewQuerySchema,
+        ADMIN_ACCOUNT_ERRORS.invalidInput,
+      ),
+    )
     query: AdminOverviewQueryInput,
   ) {
     return resultEnvelope(
