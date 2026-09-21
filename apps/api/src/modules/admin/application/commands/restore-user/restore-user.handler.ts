@@ -10,9 +10,9 @@ import {
 import { HttpStatus } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { Prisma } from "@prisma/client";
-import { PrismaService } from "@/infrastructure/prisma/prisma.service.js";
-import { problemException } from "@/platform/problems/problem-factory.js";
-import { AuthAuditService } from "@/modules/auth/application/services/auth/auth-audit.service.js";
+import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
+import { AuthAuditService } from "../../../../auth/application/services/auth/auth-audit.service.js";
 import {
   accountTransaction,
   assertCurrentAdmin,
@@ -20,9 +20,9 @@ import {
   receipt,
   replay,
   requestHash,
-} from "@/modules/admin/infrastructure/persistence/admin-account.transaction.js";
-import { fetchAdminUserDetail } from "@/modules/admin/application/queries/get-admin-user-detail/get-admin-user-detail.handler.js";
-import { RestoreUserCommand } from "@/modules/admin/application/commands/restore-user/restore-user.command.js";
+} from "../../../infrastructure/persistence/admin-account.transaction.js";
+import { fetchAdminUserDetail } from "../../queries/get-admin-user-detail/get-admin-user-detail.handler.js";
+import { RestoreUserCommand } from "./restore-user.command.js";
 
 /**
  * Handles the administrative restoration of a suspended user account.

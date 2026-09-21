@@ -2,7 +2,7 @@ import type { AssessmentStatusCode } from "@lcsp/contracts/assessment";
 import type { AuthUserRole } from "@lcsp/contracts/auth";
 import type { MessageKey } from "@lcsp/i18n";
 
-import { API_OUTCOME_KINDS } from "@/lib/api/outcome-kinds.ts";
+import { API_OUTCOME_KINDS } from "../../../lib/api/outcome-kinds.ts";
 
 export type WorkspaceContext = {
   user: {

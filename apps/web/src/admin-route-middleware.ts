@@ -4,11 +4,14 @@ import { PUBLIC_ENTRY_ROUTES } from "./auth-entry.ts";
 export const ADMIN_ROOT_PATH = "/admin";
 export const ADMIN_USERS_PATH = "/admin/users";
 
-export const protectedAdminPathPrefixes = Object.freeze([ADMIN_ROOT_PATH]);
+export const protectedAdminPathPrefixes = Object.freeze([
+  ADMIN_ROOT_PATH,
+]);
 
 export function isAdminPath(pathname: string): boolean {
   return (
-    pathname === ADMIN_ROOT_PATH || pathname.startsWith(`${ADMIN_ROOT_PATH}/`)
+    pathname === ADMIN_ROOT_PATH ||
+    pathname.startsWith(`${ADMIN_ROOT_PATH}/`)
   );
 }
 

@@ -5,7 +5,7 @@ import Image from "next/image";
 
 import { resolveAppMessage } from "@/lib/i18n";
 
-import type { NormalizedAssessmentRepository } from "@/features/workspace/types/assessment-runtime-adapter.types";
+import type { NormalizedAssessmentRepository } from "../../../workspace/types/assessment-runtime-adapter.types";
 
 const PROVIDER_LOGOS = {
   [ASSESSMENT_REPOSITORY_PROVIDERS.github]:

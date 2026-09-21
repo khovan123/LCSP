@@ -44,8 +44,7 @@ export function getProblemRequiredAction(
   }
 
   const result = payload as Partial<ProblemResult<string>>;
-  return result.ok === false &&
-    typeof result.problem?.requiredAction === "string"
+  return result.ok === false && typeof result.problem?.requiredAction === "string"
     ? (result.problem.requiredAction as RequiredAction)
     : undefined;
 }
@@ -65,12 +64,16 @@ export function getProblemMeta(payload: unknown): ProblemMeta | undefined {
     : undefined;
 }
 
-export function getMfaRedirectLocation(payload: unknown): "/mfa/verify" {
+export function getMfaRedirectLocation(
+  payload: unknown,
+): "/mfa/verify" {
   void payload;
   return "/mfa/verify";
 }
 
-export function getProblemMessageKeys(payload: unknown):
+export function getProblemMessageKeys(
+  payload: unknown,
+):
   | {
       titleKey: ProblemKey;
       detailKey: ProblemKey;

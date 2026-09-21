@@ -4,7 +4,7 @@ import {
 } from "@lcsp/contracts/evidence";
 import { resolveMessage, type MessageKey } from "@lcsp/i18n";
 
-import { appLocale } from "@/lib/locale";
+import { appLocale } from "../../../lib/locale";
 
 import type {
   WorkspaceRuntimeActivityItem,
@@ -57,8 +57,7 @@ function runtimeSummaryMessageKey(
     return null;
   }
   const messageKey = value.messageKey;
-  return typeof messageKey === "string" &&
-    KNOWN_SUMMARY_MESSAGE_KEYS.has(messageKey)
+  return typeof messageKey === "string" && KNOWN_SUMMARY_MESSAGE_KEYS.has(messageKey)
     ? (messageKey as AssessmentRuntimeSummaryMessageKey)
     : null;
 }
@@ -66,10 +65,7 @@ function runtimeSummaryMessageKey(
 function runtimeSummaryParams(
   value: WorkspaceRuntimeSummaryValue | null,
 ): Record<string, string> {
-  if (
-    !isRuntimeSummaryRecord(value) ||
-    !isRuntimeSummaryRecord(value.messageParams)
-  ) {
+  if (!isRuntimeSummaryRecord(value) || !isRuntimeSummaryRecord(value.messageParams)) {
     return {};
   }
   return Object.fromEntries(
@@ -90,9 +86,7 @@ export function interpolateRuntimeSummary(
   params: Record<string, string>,
 ): string {
   return template.replace(/\{([A-Za-z0-9_]+)\}/g, (placeholder, key: string) =>
-    Object.prototype.hasOwnProperty.call(params, key)
-      ? params[key]
-      : placeholder,
+    Object.prototype.hasOwnProperty.call(params, key) ? params[key] : placeholder,
   );
 }
 

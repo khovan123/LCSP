@@ -14,8 +14,7 @@ export function AdminUserIdentityCell({
   className,
 }: AdminUserIdentityCellProps) {
   const initial =
-    avatarInitial ??
-    (fullName.charAt(0) || email.charAt(0) || "U").toUpperCase();
+    avatarInitial ?? (fullName.charAt(0) || email.charAt(0) || "U").toUpperCase();
 
   return (
     <div className={cn("flex items-center gap-3", className)}>

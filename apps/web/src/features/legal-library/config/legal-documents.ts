@@ -23,7 +23,8 @@ export const legalDocuments = [
     id: LEGAL_DOCUMENT_IDS.digitalTechnologyIndustryLaw,
     messageKey: "digitalTechnologyIndustryLaw",
     fileName: "Luat-71-2025-qh15_0710195033.pdf",
-    officialSourceUrl: "https://vanban.chinhphu.vn/?docid=214609&pageid=27160",
+    officialSourceUrl:
+      "https://vanban.chinhphu.vn/?docid=214609&pageid=27160",
   },
 ] as const;
 

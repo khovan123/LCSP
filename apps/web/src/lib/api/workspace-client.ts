@@ -5,8 +5,8 @@ import {
 } from "@lcsp/contracts/auth";
 import type { MessageKey } from "@lcsp/i18n";
 
-import { PUBLIC_ENTRY_ROUTES } from "@/auth-entry.ts";
-import { assessmentStatusLabelKeys } from "@/features/workspace/config/status-labels.ts";
+import { PUBLIC_ENTRY_ROUTES } from "../../auth-entry.ts";
+import { assessmentStatusLabelKeys } from "../../features/workspace/config/status-labels.ts";
 import type {
   AssessmentStatus,
   AssessmentSummary,
@@ -14,7 +14,7 @@ import type {
   WorkspaceContext,
   WorkspaceErrorOutcome,
   WorkspaceOutcome,
-} from "@/features/workspace/types/workspace.types.ts";
+} from "../../features/workspace/types/workspace.types.ts";
 import { apiRequest } from "./api-request.ts";
 import { API_OUTCOME_KINDS } from "./outcome-kinds.ts";
 import { getMfaRedirectLocation, getProblemCode } from "./problem-envelope.ts";

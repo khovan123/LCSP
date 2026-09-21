@@ -9,7 +9,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getAssessmentStatusLabelKey } from "@/lib/api/workspace-client";
+import {
+  getAssessmentStatusLabelKey,
+} from "@/lib/api/workspace-client";
 import { appLocale } from "@/lib/locale";
 import { getAssessmentProgress } from "../../config/assessment-progress";
 import type {

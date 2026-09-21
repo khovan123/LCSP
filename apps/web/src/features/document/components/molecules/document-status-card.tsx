@@ -2,26 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, Download } from "lucide-react";
-import type {
-  DocumentRequestStatus,
-  DocumentType,
-} from "@lcsp/contracts/document";
-import {
-  DOCUMENT_REQUEST_STATUSES,
-  DOCUMENT_TYPES,
-} from "@lcsp/contracts/document";
+import type { DocumentRequestStatus, DocumentType } from "@lcsp/contracts/document";
+import { DOCUMENT_REQUEST_STATUSES, DOCUMENT_TYPES } from "@lcsp/contracts/document";
 import { resolveMessage, type MessageKey } from "@lcsp/i18n";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { getDocumentStatus } from "@/lib/api/document-client";
 import { appLocale } from "@/lib/locale";
@@ -82,9 +69,7 @@ export function DocumentStatusCard({
   const [status, setStatus] = useState<DocumentRequestStatus>(initialStatus);
   const [blockedReason, setBlockedReason] = useState(initialBlockedReason);
   const [downloadUrl, setDownloadUrl] = useState(initialDownloadUrl);
-  const [downloadExpiresAt, setDownloadExpiresAt] = useState(
-    initialDownloadExpiresAt,
-  );
+  const [downloadExpiresAt, setDownloadExpiresAt] = useState(initialDownloadExpiresAt);
   const [isPolling, setIsPolling] = useState(
     initialStatus === DOCUMENT_REQUEST_STATUSES.queued ||
       initialStatus === DOCUMENT_REQUEST_STATUSES.generating,
@@ -117,17 +102,12 @@ export function DocumentStatusCard({
   }, [assessmentId, documentRequestId, isPolling]);
 
   const shouldShowSpinner = useMemo(
-    () =>
-      status === DOCUMENT_REQUEST_STATUSES.queued ||
-      status === DOCUMENT_REQUEST_STATUSES.generating,
+    () => status === DOCUMENT_REQUEST_STATUSES.queued || status === DOCUMENT_REQUEST_STATUSES.generating,
     [status],
   );
 
   const showDownloadButton = useMemo(
-    () =>
-      status === DOCUMENT_REQUEST_STATUSES.ready &&
-      Boolean(downloadUrl) &&
-      canDownload,
+    () => status === DOCUMENT_REQUEST_STATUSES.ready && Boolean(downloadUrl) && canDownload,
     [canDownload, downloadUrl, status],
   );
 
@@ -140,25 +120,16 @@ export function DocumentStatusCard({
     }
 
     const now = Date.now();
-    const expiresAt = downloadExpiresAt
-      ? Date.parse(downloadExpiresAt)
-      : Number.NaN;
+    const expiresAt = downloadExpiresAt ? Date.parse(downloadExpiresAt) : Number.NaN;
     if (Number.isFinite(expiresAt) && expiresAt - now <= 60_000) {
-      const refreshed = await getDocumentStatus(
-        assessmentId,
-        documentRequestId,
-      );
+      const refreshed = await getDocumentStatus(assessmentId, documentRequestId);
       if (refreshed.kind === "loaded") {
         setDownloadUrl(refreshed.data.download_url);
         setDownloadExpiresAt(refreshed.data.download_url_expires_at);
         if (!refreshed.data.download_url) {
           return;
         }
-        window.open(
-          refreshed.data.download_url,
-          "_blank",
-          "noopener,noreferrer",
-        );
+        window.open(refreshed.data.download_url, "_blank", "noopener,noreferrer");
         return;
       }
     }
@@ -173,11 +144,7 @@ export function DocumentStatusCard({
           <div>
             <CardTitle>{resolveMessage(appLocale, labelKey)}</CardTitle>
             <CardDescription className="mt-1">
-              {resolveMessage(
-                appLocale,
-                "pages.classification.documentMeta.requestedAt",
-              )}{" "}
-              {initialRequestedAt}
+              {resolveMessage(appLocale, "pages.classification.documentMeta.requestedAt")} {initialRequestedAt}
             </CardDescription>
           </div>
           <Badge
@@ -202,12 +169,7 @@ export function DocumentStatusCard({
         {status === DOCUMENT_REQUEST_STATUSES.failed ? (
           <div className="flex items-center gap-2 text-sm text-red-700">
             <AlertCircle className="size-4" />
-            <span>
-              {resolveMessage(
-                appLocale,
-                "pages.classification.documentStates.failedDetail",
-              )}
-            </span>
+            <span>{resolveMessage(appLocale, "pages.classification.documentStates.failedDetail")}</span>
           </div>
         ) : null}
 
@@ -220,10 +182,7 @@ export function DocumentStatusCard({
 
         {!canDownload && status === DOCUMENT_REQUEST_STATUSES.ready ? (
           <div className="text-sm text-muted-foreground">
-            {resolveMessage(
-              appLocale,
-              "pages.classification.documentStates.permissionDenied",
-            )}
+            {resolveMessage(appLocale, "pages.classification.documentStates.permissionDenied")}
           </div>
         ) : null}
       </CardContent>
@@ -235,10 +194,7 @@ export function DocumentStatusCard({
             onClick={onDownload}
           >
             <Download className="size-4" />
-            {resolveMessage(
-              appLocale,
-              "pages.classification.documentActions.download",
-            )}
+            {resolveMessage(appLocale, "pages.classification.documentActions.download")}
           </Button>
         ) : null}
       </CardFooter>

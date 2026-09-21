@@ -64,8 +64,7 @@ function sanitizeSessionsPayload(data: unknown) {
       typeof candidate.created_at === "string" &&
       typeof candidate.updated_at === "string" &&
       typeof candidate.expires_at === "string" &&
-      (typeof candidate.revoked_at === "string" ||
-        candidate.revoked_at === null) &&
+      (typeof candidate.revoked_at === "string" || candidate.revoked_at === null) &&
       (typeof candidate.mfa_verified_at === "string" ||
         candidate.mfa_verified_at === null) &&
       typeof candidate.is_current === "boolean"

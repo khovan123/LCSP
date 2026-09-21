@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import {
   useAssessmentArtifactsQuery,
   useAssessmentInterviewStateQuery,
-} from "@/lib/api/assessment-queries";
+} from "../../../lib/api/assessment-queries";
 import { useWorkspaceRuntime } from "../components/organisms/workspace-runtime-provider";
 import type { NormalizedAssessmentRuntime } from "../types/assessment-runtime-adapter.types";
 import { normalizeAssessmentRuntime } from "../utils/assessment-runtime-adapter";
@@ -24,9 +24,8 @@ export function useAssessmentRuntimeViewModel(
   const repositorySnapshot =
     workspaceRuntime.repositorySnapshots
       .filter((snapshot) => snapshot.assessmentId === assessmentId)
-      .sort((left, right) =>
-        right.createdAt.localeCompare(left.createdAt),
-      )[0] ?? null;
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ??
+    null;
   const scanJobs = workspaceRuntime.scanJobs.filter(
     (scanJob) => scanJob.assessmentId === assessmentId,
   );

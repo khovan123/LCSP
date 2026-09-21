@@ -8,10 +8,10 @@ import {
 import { HttpStatus } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import { Prisma } from "@prisma/client";
-import { PrismaService } from "@/infrastructure/prisma/prisma.service.js";
-import { problemException } from "@/platform/problems/problem-factory.js";
-import { AUTH_RECORD_TYPES } from "@/modules/auth/infrastructure/persistence/auth-record.persistence.js";
-import { GetAdminUserDetailQuery } from "@/modules/admin/application/queries/get-admin-user-detail/get-admin-user-detail.query.js";
+import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
+import { AUTH_RECORD_TYPES } from "../../../../auth/infrastructure/persistence/auth-record.persistence.js";
+import { GetAdminUserDetailQuery } from "./get-admin-user-detail.query.js";
 
 const IDENTITY_SELECT = {
   id: true,

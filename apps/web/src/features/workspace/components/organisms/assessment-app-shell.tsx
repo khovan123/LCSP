@@ -25,10 +25,7 @@ import {
 } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
-import {
-  AssessmentRuntimeSidebar,
-  ProgramEvidenceGraphProvider,
-} from "@/features/assessment-runtime";
+import { AssessmentRuntimeSidebar, ProgramEvidenceGraphProvider } from "@/features/assessment-runtime";
 
 import type {
   AppShellNavigationItem,
@@ -181,148 +178,136 @@ export function AssessmentAppShell({
 
   return (
     <ProgramEvidenceGraphProvider assessmentId={assessmentId}>
-      <div
-        className="flex h-svh min-h-0 w-full overflow-hidden bg-background"
-        data-shell-screen={effectiveShellState.screen}
-        data-left-sidebar={effectiveShellState.leftSidebar}
-        data-right-panel={effectiveShellState.rightPanel}
-      >
-        <LeftSidebarSlot collapsed={leftCollapsed}>
-          <AppSidebar
-            assessments={assessments}
-            onBack={() => router.back()}
-            onForward={() => router.forward()}
-            onSearch={openAssessmentSearch}
-            onSignOut={() => void handleSignOut()}
-            onOpenSettings={openSettings}
-            onToggleCollapse={toggleLeftSidebar}
-            pathname={pathname}
-            recentLoadState={recentLoadState}
-            signOutPending={signOutMutation.isPending}
-            userName={workspace?.user.display_name}
-          />
-        </LeftSidebarSlot>
+    <div
+      className="flex h-svh min-h-0 w-full overflow-hidden bg-background"
+      data-shell-screen={effectiveShellState.screen}
+      data-left-sidebar={effectiveShellState.leftSidebar}
+      data-right-panel={effectiveShellState.rightPanel}
+    >
+      <LeftSidebarSlot collapsed={leftCollapsed}>
+        <AppSidebar
+          assessments={assessments}
+          onBack={() => router.back()}
+          onForward={() => router.forward()}
+          onSearch={openAssessmentSearch}
+          onSignOut={() => void handleSignOut()}
+          onOpenSettings={openSettings}
+          onToggleCollapse={toggleLeftSidebar}
+          pathname={pathname}
+          recentLoadState={recentLoadState}
+          signOutPending={signOutMutation.isPending}
+          userName={workspace?.user.display_name}
+        />
+      </LeftSidebarSlot>
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <header className="flex h-13 shrink-0 items-center border-b border-border/70 bg-background/95 px-3 backdrop-blur sm:px-4 lg:px-5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setMobileNavigationOpen(true)}
-              aria-label={t("pages.appShell.sidebarToggle")}
-              className="lg:hidden"
-            >
-              <PanelLeftIcon />
-            </Button>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="flex h-13 shrink-0 items-center border-b border-border/70 bg-background/95 px-3 backdrop-blur sm:px-4 lg:px-5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setMobileNavigationOpen(true)}
+            aria-label={t("pages.appShell.sidebarToggle")}
+            className="lg:hidden"
+          >
+            <PanelLeftIcon />
+          </Button>
 
-            {leftCollapsed ? (
-              <SidebarHeaderControls
-                className="hidden px-0 lg:-ml-2 lg:flex"
-                onBack={() => router.back()}
-                onForward={() => router.forward()}
-                onSearch={openAssessmentSearch}
-                onToggleCollapse={toggleLeftSidebar}
-                showDivider={false}
-              />
-            ) : null}
+          {leftCollapsed ? (
+            <SidebarHeaderControls
+              className="hidden px-0 lg:-ml-2 lg:flex"
+              onBack={() => router.back()}
+              onForward={() => router.forward()}
+              onSearch={openAssessmentSearch}
+              onToggleCollapse={toggleLeftSidebar}
+              showDivider={false}
+            />
+          ) : null}
 
-            <div
-              className={cn("min-w-0 flex-1", leftCollapsed ? "ml-8" : "ml-2")}
-            >
-              <p className="truncate text-[0.6875rem] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-                {headerEyebrow}
+          <div
+            className={cn("min-w-0 flex-1", leftCollapsed ? "ml-8" : "ml-2")}
+          >
+            <p className="truncate text-[0.6875rem] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+              {headerEyebrow}
+            </p>
+            {!assessmentId ? (
+              <p className="truncate text-sm font-semibold text-foreground">
+                {headerTitle}
               </p>
-              {!assessmentId ? (
-                <p className="truncate text-sm font-semibold text-foreground">
-                  {headerTitle}
-                </p>
-              ) : null}
-            </div>
-
-            {assessmentId ? (
-              <div className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setMobileRuntimeOpen(true)}
-                  aria-label={t("pages.appShell.runtimePanelTitle")}
-                  className="xl:hidden"
-                >
-                  <PanelRightIcon />
-                </Button>
-                <Button
-                  type="button"
-                  variant={rightPanelOpen ? "secondary" : "ghost"}
-                  size="icon-sm"
-                  onClick={toggleRightPanel}
-                  aria-label={t("pages.appShell.runtimePanelTitle")}
-                  aria-pressed={rightPanelOpen}
-                  className="hidden xl:inline-flex"
-                >
-                  <PanelRightIcon />
-                </Button>
-              </div>
-            ) : null}
-          </header>
-
-          <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-muted/10">
-            <CenterContentSlot assessmentId={assessmentId}>
-              {children}
-            </CenterContentSlot>
-
-            {assessmentId ? (
-              <AssessmentRightPanelSlot open={rightPanelOpen}>
-                <AssessmentRuntimeSidebar
-                  assessmentId={assessmentId}
-                  assessmentName={assessment?.name}
-                />
-              </AssessmentRightPanelSlot>
             ) : null}
           </div>
-        </div>
 
-        <Sheet
-          open={mobileNavigationOpen}
-          onOpenChange={setMobileNavigationOpen}
-        >
-          <SheetContent
-            side="left"
-            className="w-[min(88vw,320px)] p-0 lg:hidden"
-          >
+          {assessmentId ? (
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setMobileRuntimeOpen(true)}
+                aria-label={t("pages.appShell.runtimePanelTitle")}
+                className="xl:hidden"
+              >
+                <PanelRightIcon />
+              </Button>
+              <Button
+                type="button"
+                variant={rightPanelOpen ? "secondary" : "ghost"}
+                size="icon-sm"
+                onClick={toggleRightPanel}
+                aria-label={t("pages.appShell.runtimePanelTitle")}
+                aria-pressed={rightPanelOpen}
+                className="hidden xl:inline-flex"
+              >
+                <PanelRightIcon />
+              </Button>
+            </div>
+          ) : null}
+        </header>
+
+        <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-muted/10">
+          <CenterContentSlot assessmentId={assessmentId}>
+            {children}
+          </CenterContentSlot>
+
+          {assessmentId ? (
+            <AssessmentRightPanelSlot open={rightPanelOpen}>
+              <AssessmentRuntimeSidebar assessmentId={assessmentId} assessmentName={assessment?.name} />
+            </AssessmentRightPanelSlot>
+          ) : null}
+        </div>
+      </div>
+
+      <Sheet open={mobileNavigationOpen} onOpenChange={setMobileNavigationOpen}>
+        <SheetContent side="left" className="w-[min(88vw,320px)] p-0 lg:hidden">
+          <SheetHeader className="sr-only">
+            <SheetTitle>{t("pages.appShell.mobileTitle")}</SheetTitle>
+            <SheetDescription>
+              {t("pages.appShell.mobileDescription")}
+            </SheetDescription>
+          </SheetHeader>
+          {navigation}
+        </SheetContent>
+      </Sheet>
+
+      {assessmentId ? (
+        <Sheet open={mobileRuntimeOpen} onOpenChange={setMobileRuntimeOpen}>
+          <SheetContent side="right" className="w-[min(92vw,420px)] p-0">
             <SheetHeader className="sr-only">
-              <SheetTitle>{t("pages.appShell.mobileTitle")}</SheetTitle>
-              <SheetDescription>
-                {t("pages.appShell.mobileDescription")}
-              </SheetDescription>
+              <SheetTitle>{t("pages.appShell.runtimePanelTitle")}</SheetTitle>
+              <SheetDescription>{headerEyebrow}</SheetDescription>
             </SheetHeader>
-            {navigation}
+            <AssessmentRuntimeSidebar assessmentId={assessmentId} assessmentName={assessment?.name} />
           </SheetContent>
         </Sheet>
+      ) : null}
 
-        {assessmentId ? (
-          <Sheet open={mobileRuntimeOpen} onOpenChange={setMobileRuntimeOpen}>
-            <SheetContent side="right" className="w-[min(92vw,420px)] p-0">
-              <SheetHeader className="sr-only">
-                <SheetTitle>{t("pages.appShell.runtimePanelTitle")}</SheetTitle>
-                <SheetDescription>{headerEyebrow}</SheetDescription>
-              </SheetHeader>
-              <AssessmentRuntimeSidebar
-                assessmentId={assessmentId}
-                assessmentName={assessment?.name}
-              />
-            </SheetContent>
-          </Sheet>
-        ) : null}
-
-        <SettingsModal
-          activeSection={activeSettingsSection}
-          onOpenChange={setSettingsModalOpen}
-          onSectionChange={setActiveSettingsSection}
-          open={settingsModalOpen}
-        />
-      </div>
+      <SettingsModal
+        activeSection={activeSettingsSection}
+        onOpenChange={setSettingsModalOpen}
+        onSectionChange={setActiveSettingsSection}
+        open={settingsModalOpen}
+      />
+    </div>
     </ProgramEvidenceGraphProvider>
   );
 }

@@ -28,8 +28,7 @@ export function LegalDocumentReaderPage({
               {resolveMessage(
                 appLocale,
                 "pages.legalLibrary.documentReferenceLabel",
-              )}
-              : {copy.reference}
+              )}: {copy.reference}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -55,10 +54,7 @@ export function LegalDocumentReaderPage({
               variant="outline"
             >
               <ExternalLinkIcon data-icon="inline-start" aria-hidden="true" />
-              {resolveMessage(
-                appLocale,
-                "pages.legalLibrary.openOfficialSource",
-              )}
+              {resolveMessage(appLocale, "pages.legalLibrary.openOfficialSource")}
             </Button>
           </div>
         </header>

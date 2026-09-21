@@ -35,7 +35,7 @@ export function AssessmentsDirectory() {
           </AlertDescription>
         </Alert>
       ) : null}
-      <AssessmentList
+        <AssessmentList
         assessments={assessments}
         isLoading={assessmentsQuery.isLoading}
         title={resolveMessage(appLocale, "pages.workspace.assessmentsTitle")}

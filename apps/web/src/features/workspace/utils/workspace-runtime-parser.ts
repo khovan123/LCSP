@@ -24,9 +24,8 @@ import {
   type WorkspaceRuntimeSummaryValue,
 } from "../types/workspace-runtime.types.ts";
 
-export function parseAgentStreamEvent(
-  data: string,
-): AssessmentAgentStreamEvent | null {
+
+export function parseAgentStreamEvent(data: string): AssessmentAgentStreamEvent | null {
   const item = parseObject(data);
   if (
     item === null ||
@@ -54,9 +53,7 @@ export function parseAgentStreamEvent(
     agentName: optionalString(item.agent_name),
     subagentName: optionalString(item.subagent_name),
     namespace: Array.isArray(item.namespace)
-      ? item.namespace.filter(
-          (value): value is string => typeof value === "string",
-        )
+      ? item.namespace.filter((value): value is string => typeof value === "string")
       : [],
     nodeName: optionalString(item.node_name),
     messageId: optionalString(item.message_id),

@@ -30,7 +30,8 @@ type ConfirmAccessSupportLinkItem = {
 };
 
 export type ConfirmAccessSupportItem =
-  ConfirmAccessSupportActionItem | ConfirmAccessSupportLinkItem;
+  | ConfirmAccessSupportActionItem
+  | ConfirmAccessSupportLinkItem;
 
 export type SignedInAccountPanelProps = {
   accountLabelKey: MessageKey;

@@ -76,8 +76,7 @@ type InterviewAnswerDraft = {
 export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
   const workspaceRuntime = useWorkspaceRuntime();
   const readinessQuery = useReadinessStatusQuery(assessmentId);
-  const evidenceOverviewQuery =
-    useProgramEvidenceGraphOverviewQuery(assessmentId);
+  const evidenceOverviewQuery = useProgramEvidenceGraphOverviewQuery(assessmentId);
   const connection =
     readinessQuery.data?.kind === API_OUTCOME_KINDS.loaded
       ? readinessQuery.data.data.repositoryConnection
@@ -221,9 +220,7 @@ function AssessmentInterviewFlow({
   const [draftMap, setDraftMap] = useState<
     Record<string, InterviewAnswerDraft>
   >({});
-  const [submittedQuestionId, setSubmittedQuestionId] = useState<string | null>(
-    null,
-  );
+  const [submittedQuestionId, setSubmittedQuestionId] = useState<string | null>(null);
   const [lastSavedMessage, setLastSavedMessage] = useState<string | null>(null);
 
   const activeDraft: InterviewAnswerDraft =
@@ -554,9 +551,7 @@ function AssessmentInterviewFlow({
                     isAdjusting={activeDraft.isAdjusting}
                     onAdjust={handleAdjust}
                     canSubmitSelection={isSubmitReady}
-                    hideSubmitSelection={
-                      submittedQuestionId === activeQuestion?.id
-                    }
+                    hideSubmitSelection={submittedQuestionId === activeQuestion?.id}
                     onSubmitSelection={handleSubmit}
                     blockedActions={interview.questionTurnProps.blockedActions}
                     disabled={

@@ -127,11 +127,7 @@ export function createAssessmentRuntimeSidebarPreview(
       ...runtime.artifacts,
       items: runtime.artifacts.items.map((item) =>
         item.type === "INVESTIGATION_NOTES"
-          ? {
-              ...item,
-              status: ARTIFACT_STATUSES.updating,
-              availability: "UPDATING",
-            }
+          ? { ...item, status: ARTIFACT_STATUSES.updating, availability: "UPDATING" }
           : item,
       ),
     },

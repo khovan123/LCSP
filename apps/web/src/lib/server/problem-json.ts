@@ -33,10 +33,7 @@ export function successJson<TData>(
   });
 }
 
-export function resultJson(
-  result: WebAppResult | null,
-  init: { status: number },
-) {
+export function resultJson(result: WebAppResult | null, init: { status: number }) {
   const response = NextResponse.json(result, { status: init.status });
   clearSessionCookieOnAuthFailure(response, getProblemCode(result));
   return response;

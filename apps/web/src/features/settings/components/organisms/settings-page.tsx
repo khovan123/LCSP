@@ -4,7 +4,11 @@ import { LOCALES, type Locale } from "@lcsp/contracts/shared";
 import type { ReactNode } from "react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { resolveMessage } from "@lcsp/i18n";
-import { ChevronDownIcon, InfoIcon, MoreHorizontalIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  InfoIcon,
+  MoreHorizontalIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -609,10 +613,7 @@ function AccountSettingsPanel({
       </SettingsSectionHeading>
       <div className="absolute top-74.5 left-8.5 grid w-218 grid-cols-[212px_224px_230px_1fr_48px] text-[13px] font-medium text-muted-foreground">
         <span>
-          {resolveMessage(
-            appLocale,
-            "pages.workspace.settingsHub.labels.device",
-          )}
+          {resolveMessage(appLocale, "pages.workspace.settingsHub.labels.device")}
         </span>
         <span>
           {resolveMessage(
@@ -720,9 +721,7 @@ function CompactSessionRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-36">
             <DropdownMenuGroup>
-              <DropdownMenuItem
-                onClick={() => void onRevokeSession(session.id)}
-              >
+              <DropdownMenuItem onClick={() => void onRevokeSession(session.id)}>
                 {resolveMessage(
                   appLocale,
                   "pages.workspace.settingsHub.actions.revoke",
@@ -792,7 +791,10 @@ function SettingsLanguageSelect() {
             data-component="SettingsLanguageSelectTrigger"
           >
             <span className="min-w-0 truncate">{selectedLanguageLabel}</span>
-            <ChevronDownIcon aria-hidden="true" className="size-3.5 shrink-0" />
+            <ChevronDownIcon
+              aria-hidden="true"
+              className="size-3.5 shrink-0"
+            />
           </button>
         }
       />
@@ -801,10 +803,7 @@ function SettingsLanguageSelect() {
         className="w-65 rounded-xl border-border bg-popover p-[7px] shadow-[0_8px_18px_rgba(0,0,0,0.35)]"
         data-component="SettingsLanguageSelectContent"
       >
-        <DropdownMenuRadioGroup
-          value={locale}
-          onValueChange={handleLocaleChange}
-        >
+        <DropdownMenuRadioGroup value={locale} onValueChange={handleLocaleChange}>
           {LOCALES.map((option) => {
             const selected = option === locale;
             return (
@@ -917,10 +916,7 @@ function CapabilitiesSettingsPanel() {
   return (
     <SettingsPanelCanvas dataComponent="CapabilitiesSettingsPanel">
       <SettingsSectionHeading top="top-10">
-        {resolveMessage(
-          appLocale,
-          "pages.workspace.settingsHub.sections.general",
-        )}
+        {resolveMessage(appLocale, "pages.workspace.settingsHub.sections.general")}
       </SettingsSectionHeading>
       <SettingsControlRow className="top-18">
         <div className="flex flex-col gap-1">
@@ -1014,10 +1010,7 @@ function CapabilitiesSettingsPanel() {
           </span>
         </div>
         <div className="flex flex-col gap-2">
-          <label
-            className="text-[13px] font-medium"
-            htmlFor="settings-domain-input"
-          >
+          <label className="text-[13px] font-medium" htmlFor="settings-domain-input">
             {resolveMessage(
               appLocale,
               "pages.workspace.settingsHub.capabilities.additionalAllowedDomains",

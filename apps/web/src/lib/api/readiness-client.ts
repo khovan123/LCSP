@@ -1,6 +1,6 @@
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
-import { PUBLIC_ENTRY_ROUTES } from "@/auth-entry.ts";
+import { PUBLIC_ENTRY_ROUTES } from "../../auth-entry.ts";
 import { apiRequest } from "./api-request.ts";
 import { API_OUTCOME_KINDS } from "./outcome-kinds.ts";
 

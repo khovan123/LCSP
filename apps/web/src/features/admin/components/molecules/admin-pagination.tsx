@@ -59,6 +59,7 @@ export function AdminPagination({
           <ChevronRightIcon className="size-4 ml-1" />
         </Button>
       </div>
+
     </div>
   );
 }

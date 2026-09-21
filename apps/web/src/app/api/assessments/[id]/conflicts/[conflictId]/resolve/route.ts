@@ -1,8 +1,5 @@
 import { NextRequest } from "next/server";
-import {
-  CONFLICT_RECORD_STATUSES,
-  SCAN_ERROR_CODES,
-} from "@lcsp/contracts/scan";
+import { CONFLICT_RECORD_STATUSES, SCAN_ERROR_CODES } from "@lcsp/contracts/scan";
 
 import {
   buildResolveConflictApiBody,

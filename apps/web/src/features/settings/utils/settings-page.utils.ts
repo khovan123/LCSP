@@ -15,9 +15,7 @@ export function formatDateTime(value?: string | null) {
   }).format(new Date(value));
 }
 
-export function isSettingsSectionId(
-  value: string | null,
-): value is SettingsSectionId {
+export function isSettingsSectionId(value: string | null): value is SettingsSectionId {
   return (
     value !== null &&
     (Object.values(SETTINGS_SECTION_IDS) as string[]).includes(value)

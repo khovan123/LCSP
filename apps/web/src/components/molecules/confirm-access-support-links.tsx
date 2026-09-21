@@ -22,7 +22,10 @@ export function ConfirmAccessSupportLinks({
         </h3>
         <ul className="space-y-2 pl-5 text-sm text-primary">
           {items.map((item, index) => (
-            <li key={`${item.labelKey}:${index}`} className="list-disc">
+            <li
+              key={`${item.labelKey}:${index}`}
+              className="list-disc"
+            >
               {item.kind === CONFIRM_ACCESS_SUPPORT_ITEM_KINDS.link ? (
                 <Link
                   href={item.href}

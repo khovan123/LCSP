@@ -69,9 +69,7 @@ export function InvestigationTrace({
   onOpenArtifact,
   className,
 }: InvestigationTraceProps) {
-  const currentStatusConfig =
-    statusConfig[status] ??
-    statusConfig[INVESTIGATION_TRACE_STATUSES.inProgress];
+  const currentStatusConfig = statusConfig[status] ?? statusConfig[INVESTIGATION_TRACE_STATUSES.inProgress];
 
   const hasClaims =
     typeof evidenceClaimCount === "number" &&
@@ -182,7 +180,9 @@ export function InvestigationTrace({
                 </Button>
               )
             ) : (
-              <span className="min-w-0 truncate">{claimsText ?? summary}</span>
+              <span className="min-w-0 truncate">
+                {claimsText ?? summary}
+              </span>
             )}
             <span className="shrink-0 text-muted-foreground/80">
               {resolvedArtifactRef
@@ -205,9 +205,7 @@ export function InvestigationTrace({
 
         {steps.length > 0 ? (
           <ol
-            aria-label={t(
-              "pages.structuredResults.investigationTrace.currentPath",
-            )}
+            aria-label={t("pages.structuredResults.investigationTrace.currentPath")}
             className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5"
           >
             {steps.map((step, index) => (

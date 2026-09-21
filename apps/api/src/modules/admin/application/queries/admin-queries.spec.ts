@@ -4,13 +4,13 @@ import {
   AUTH_ACCOUNT_STATUSES,
   AUTH_USER_ROLES,
 } from "@lcsp/contracts/auth";
-import type { PrismaService } from "@/infrastructure/prisma/prisma.service.js";
-import { ListAdminUsersQuery } from "@/modules/admin/application/queries/list-admin-users/list-admin-users.query.js";
-import { ListAdminUsersHandler } from "@/modules/admin/application/queries/list-admin-users/list-admin-users.handler.js";
-import { GetAdminUserDetailQuery } from "@/modules/admin/application/queries/get-admin-user-detail/get-admin-user-detail.query.js";
-import { GetAdminUserDetailHandler } from "@/modules/admin/application/queries/get-admin-user-detail/get-admin-user-detail.handler.js";
-import { GetAdminOverviewQuery } from "@/modules/admin/application/queries/get-admin-overview/get-admin-overview.query.js";
-import { GetAdminOverviewHandler } from "@/modules/admin/application/queries/get-admin-overview/get-admin-overview.handler.js";
+import type { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
+import { ListAdminUsersQuery } from "./list-admin-users/list-admin-users.query.js";
+import { ListAdminUsersHandler } from "./list-admin-users/list-admin-users.handler.js";
+import { GetAdminUserDetailQuery } from "./get-admin-user-detail/get-admin-user-detail.query.js";
+import { GetAdminUserDetailHandler } from "./get-admin-user-detail/get-admin-user-detail.handler.js";
+import { GetAdminOverviewQuery } from "./get-admin-overview/get-admin-overview.query.js";
+import { GetAdminOverviewHandler } from "./get-admin-overview/get-admin-overview.handler.js";
 
 describe("Admin CQRS Queries", () => {
   it("GetAdminUserDetailHandler queries user detail directly from prisma", async () => {

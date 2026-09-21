@@ -1,8 +1,5 @@
 import { ASSESSMENT_RUNTIME_RUN_STATUSES } from "@lcsp/contracts/evidence";
-import {
-  ARTIFACT_TYPES,
-  type ArtifactRef,
-} from "@/features/artifacts/types/artifact.types";
+import { ARTIFACT_TYPES, type ArtifactRef } from "@/features/artifacts/types/artifact.types";
 import type { EngineeringRuleEvaluationViewModel } from "@/lib/api/classification-client";
 
 import {
@@ -30,16 +27,10 @@ export function normalizeInvestigationTraceStatus(
   ) {
     return INVESTIGATION_TRACE_STATUSES.completed;
   }
-  if (
-    normalized === ASSESSMENT_RUNTIME_RUN_STATUSES.failed ||
-    normalized === "ERROR"
-  ) {
+  if (normalized === ASSESSMENT_RUNTIME_RUN_STATUSES.failed || normalized === "ERROR") {
     return INVESTIGATION_TRACE_STATUSES.failed;
   }
-  if (
-    normalized === "PAUSED" ||
-    normalized === ASSESSMENT_RUNTIME_RUN_STATUSES.waiting
-  ) {
+  if (normalized === "PAUSED" || normalized === ASSESSMENT_RUNTIME_RUN_STATUSES.waiting) {
     return INVESTIGATION_TRACE_STATUSES.paused;
   }
   return INVESTIGATION_TRACE_STATUSES.inProgress;
@@ -96,10 +87,9 @@ export function toEngineeringRuleFindingViewModel(
   evaluation: EngineeringRuleEvaluationViewModel,
   options: EngineeringRuleFindingAdapterOptions,
 ): EngineeringRuleFindingViewModel {
-  const primaryEvidence =
-    evaluation.technicalEvidence.find(
-      (ev) => ev.filePath !== null && ev.filePath.trim().length > 0,
-    ) ?? evaluation.technicalEvidence[0];
+  const primaryEvidence = evaluation.technicalEvidence.find(
+    (ev) => ev.filePath !== null && ev.filePath.trim().length > 0,
+  ) ?? evaluation.technicalEvidence[0];
 
   const source: EngineeringRuleFindingSource = {
     filePath: primaryEvidence?.filePath ?? null,
@@ -144,9 +134,7 @@ export function toEngineeringRuleFindingsViewModel(
 ): EngineeringRuleFindingsViewModel {
   const filterOnly = options.filterFindingsOnly ?? false;
   const filtered = filterOnly
-    ? evaluations.filter(
-        (ev) => ev.status === "NON_COMPLIANT" || ev.status === "UNKNOWN",
-      )
+    ? evaluations.filter((ev) => ev.status === "NON_COMPLIANT" || ev.status === "UNKNOWN")
     : evaluations;
 
   const findings = filtered.map((ev) =>

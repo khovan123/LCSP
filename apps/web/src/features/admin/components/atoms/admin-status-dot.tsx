@@ -1,7 +1,4 @@
-import {
-  AUTH_ACCOUNT_STATUSES,
-  type AuthAccountStatus,
-} from "@lcsp/contracts/auth";
+import { AUTH_ACCOUNT_STATUSES, type AuthAccountStatus } from "@lcsp/contracts/auth";
 import { cn } from "@/lib/utils";
 
 type AdminStatusDotProps = {

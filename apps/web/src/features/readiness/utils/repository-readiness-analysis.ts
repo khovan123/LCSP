@@ -2,7 +2,7 @@ import type {
   AssessmentRepositoryConnection,
   StartRepositoryAnalysisInput,
   StartRepositoryAnalysisResult,
-} from "@/lib/api/repository-analysis-client.ts";
+} from "../../../lib/api/repository-analysis-client.ts";
 
 type RepositoryReadinessAnalysisInput = {
   connection: AssessmentRepositoryConnection | null;

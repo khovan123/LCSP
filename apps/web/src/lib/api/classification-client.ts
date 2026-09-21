@@ -10,7 +10,7 @@ import {
 } from "@lcsp/contracts/scan";
 import type { MessageKey } from "@lcsp/i18n";
 
-import { PUBLIC_ENTRY_ROUTES } from "@/auth-entry.ts";
+import { PUBLIC_ENTRY_ROUTES } from "../../auth-entry.ts";
 import { apiRequest } from "./api-request.ts";
 import { getProblemCode } from "./problem-envelope.ts";
 
@@ -40,8 +40,7 @@ export const CLASSIFICATION_EXECUTION_STATES = {
 } as const;
 
 /** Assessment verdict, reusing the canonical EngineeringRule evaluation value set. */
-export const CLASSIFICATION_ASSESSMENT_OUTCOMES =
-  ENGINEERING_RULE_EVALUATION_STATUSES;
+export const CLASSIFICATION_ASSESSMENT_OUTCOMES = ENGINEERING_RULE_EVALUATION_STATUSES;
 
 export const CLASSIFICATION_EVIDENCE_QUALITIES = {
   evidenceBacked: "EVIDENCE_BACKED",
@@ -189,11 +188,7 @@ export function getClassificationActionVisibility(
 export async function rerunClassification(assessmentId: string): Promise<void> {
   const response = await apiRequest(
     `/api/assessments/${encodeURIComponent(assessmentId)}/classification/rerun`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
-    },
+    { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
   );
   if (!response.ok) {
     throw new Error(response.problemCode ?? "classification-rerun-failed");
@@ -333,20 +328,14 @@ function toGuardrailStatusViewModel(
   const observability = result?.observability
     ? toObservabilityViewModel(result.observability)
     : null;
-  const evidenceQuality = deriveEvidenceQuality(
-    observability,
-    engineeringSummary,
-  );
+  const evidenceQuality = deriveEvidenceQuality(observability, engineeringSummary);
 
   const common = {
     evaluations,
     engineeringSummary,
     limitations: result?.limitations ?? [],
     observability,
-    assessmentOutcome: deriveAssessmentOutcome(
-      engineeringSummary,
-      evidenceQuality,
-    ),
+    assessmentOutcome: deriveAssessmentOutcome(engineeringSummary, evidenceQuality),
     evidenceQuality,
     hasClassification: result !== null,
     canRerunClassification: false,
@@ -584,9 +573,7 @@ function sanitizeObservability(
   if (!recordValue(value)) return null;
   const payload = {
     openwiki: recordValue(value.openwiki) ? value.openwiki : undefined,
-    engineering_rule_preparation: recordValue(
-      value.engineering_rule_preparation,
-    )
+    engineering_rule_preparation: recordValue(value.engineering_rule_preparation)
       ? value.engineering_rule_preparation
       : undefined,
     candidate_source_hit_distribution: recordValue(
@@ -599,9 +586,7 @@ function sanitizeObservability(
   return Object.values(payload).some(Boolean) ? payload : null;
 }
 
-function sanitizeEvaluation(
-  value: unknown,
-): EngineeringRuleEvaluationPayload | null {
+function sanitizeEvaluation(value: unknown): EngineeringRuleEvaluationPayload | null {
   if (!recordValue(value)) return null;
   const engineeringRuleId = requiredString(value.engineering_rule_id);
   const legalRuleId = requiredString(value.legal_rule_id);
@@ -646,9 +631,7 @@ function sanitizeEvaluation(
   };
 }
 
-function sanitizeTechnicalEvidence(
-  value: unknown,
-): TechnicalEvidencePayload | null {
+function sanitizeTechnicalEvidence(value: unknown): TechnicalEvidencePayload | null {
   if (!recordValue(value)) return null;
   const kind = requiredString(value.kind);
   const label = requiredString(value.label);
@@ -721,9 +704,7 @@ function toObservabilityViewModel(
             sourceHits.source_evidence_count_buckets,
           ),
           scopeCoverageCounts: numberRecord(sourceHits.scope_coverage_counts),
-          sourceNodeTypeCounts: numberRecord(
-            sourceHits.source_node_type_counts,
-          ),
+          sourceNodeTypeCounts: numberRecord(sourceHits.source_node_type_counts),
         }
       : null,
     provenance: provenance

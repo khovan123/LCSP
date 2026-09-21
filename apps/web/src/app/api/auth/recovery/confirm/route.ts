@@ -6,9 +6,9 @@ import { upstreamJson, upstreamRequest } from "@/lib/server/upstream-request";
 
 export async function POST(request: Request) {
   if (isMockModeEnabled()) {
-    const body = (await request.json().catch(() => null)) as {
-      token?: unknown;
-    } | null;
+    const body = (await request.json().catch(() => null)) as
+      | { token?: unknown }
+      | null;
     if (body?.token !== "mock-recovery-token") {
       return problemJson(AUTH_ERROR_CODES.recoveryInvalid, { status: 400 });
     }

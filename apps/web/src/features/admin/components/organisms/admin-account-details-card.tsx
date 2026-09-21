@@ -21,9 +21,7 @@ function formatDate(isoString: string | null | undefined): string {
   }
 }
 
-export function AdminAccountDetailsCard({
-  user,
-}: AdminAccountDetailsCardProps) {
+export function AdminAccountDetailsCard({ user }: AdminAccountDetailsCardProps) {
   const cardTitle = resolveAppMessage(
     "pages.admin.userDetail.accountDetailsCard.title" as MessageKey,
   );

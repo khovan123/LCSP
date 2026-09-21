@@ -18,10 +18,10 @@ import {
   LEGAL_RULE_LIFECYCLE_STATUSES,
 } from "@lcsp/contracts/legal-rule-catalog";
 
-import { isRecord } from "@/common/utils/index.js";
-import { PrismaService } from "@/infrastructure/prisma/prisma.service.js";
-import { toPrismaLegalRuleLifecycleStatus } from "@/infrastructure/prisma/prisma-enum-mappers.js";
-import { GetAdminOverviewQuery } from "@/modules/admin/application/queries/get-admin-overview/get-admin-overview.query.js";
+import { isRecord } from "../../../../../common/utils/index.js";
+import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { toPrismaLegalRuleLifecycleStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
+import { GetAdminOverviewQuery } from "./get-admin-overview.query.js";
 
 /**
  * Audit event types that are relevant for the administrative overview recent activity feed.

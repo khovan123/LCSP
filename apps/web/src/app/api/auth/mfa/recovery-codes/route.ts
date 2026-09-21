@@ -11,7 +11,11 @@ export async function POST(request: NextRequest) {
 
   if (isMockModeEnabled()) {
     return successJson({
-      recovery_codes: ["ABCD-EFGH-IJKL", "MNPR-STUV-WXYZ", "2345-6789-ABCD"],
+      recovery_codes: [
+        "ABCD-EFGH-IJKL",
+        "MNPR-STUV-WXYZ",
+        "2345-6789-ABCD",
+      ],
     });
   }
 

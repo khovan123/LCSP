@@ -1,8 +1,5 @@
 import type { MessageKey } from "@lcsp/i18n";
-import {
-  AUTH_ACCOUNT_STATUSES,
-  type AuthAccountStatus,
-} from "@lcsp/contracts/auth";
+import { AUTH_ACCOUNT_STATUSES, type AuthAccountStatus } from "@lcsp/contracts/auth";
 import { resolveAppMessage } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { AdminStatusDot } from "./admin-status-dot";
@@ -23,20 +20,12 @@ export function AdminStatusBadge({
 
   const label =
     status === AUTH_ACCOUNT_STATUSES.active
-      ? resolveAppMessage(
-          "pages.admin.userDetail.statusPill.active" as MessageKey,
-        )
+      ? resolveAppMessage("pages.admin.userDetail.statusPill.active" as MessageKey)
       : status === AUTH_ACCOUNT_STATUSES.suspended
-        ? resolveAppMessage(
-            "pages.admin.userDetail.statusPill.suspended" as MessageKey,
-          )
+        ? resolveAppMessage("pages.admin.userDetail.statusPill.suspended" as MessageKey)
         : status === AUTH_ACCOUNT_STATUSES.invited
-          ? resolveAppMessage(
-              "pages.admin.userDetail.statusPill.invited" as MessageKey,
-            )
-          : resolveAppMessage(
-              "pages.admin.userDetail.statusPill.deactivated" as MessageKey,
-            );
+          ? resolveAppMessage("pages.admin.userDetail.statusPill.invited" as MessageKey)
+          : resolveAppMessage("pages.admin.userDetail.statusPill.deactivated" as MessageKey);
 
   return (
     <div

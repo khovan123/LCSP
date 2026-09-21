@@ -7,9 +7,8 @@ type CollapsibleContextValue = {
   setOpen: (open: boolean) => void;
 };
 
-const CollapsibleContext = React.createContext<CollapsibleContextValue | null>(
-  null,
-);
+const CollapsibleContext =
+  React.createContext<CollapsibleContextValue | null>(null);
 
 function Collapsible({
   open,

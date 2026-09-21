@@ -50,10 +50,7 @@ export function ClassificationStatusPage({
       <PageShell description={headingDescription}>
         <StatusCard
           title={resolveMessage(appLocale, "pages.classification.pageTitle")}
-          description={resolveMessage(
-            appLocale,
-            "pages.classification.loading",
-          )}
+          description={resolveMessage(appLocale, "pages.classification.loading")}
           badgeLabel={resolveMessage(
             appLocale,
             "pages.classification.states.processingBadge",
@@ -97,10 +94,7 @@ export function ClassificationStatusPage({
     ? directRuntimeDescription(state)
     : resolveMessage(appLocale, viewModel.descriptionKey);
   const summary = viewModel.engineeringSummary
-    ? formatClassificationRuntimeSummary(
-        appLocale,
-        viewModel.engineeringSummary,
-      )
+    ? formatClassificationRuntimeSummary(appLocale, viewModel.engineeringSummary)
     : viewModel.summaryKey
       ? resolveMessage(appLocale, viewModel.summaryKey)
       : null;
@@ -132,10 +126,7 @@ export function ClassificationStatusPage({
           <div className="grid gap-3 sm:grid-cols-4">
             <Metric
               value={viewModel.engineeringSummary.total}
-              label={resolveClassificationRuntimeMessage(
-                appLocale,
-                "metricTotal",
-              )}
+              label={resolveClassificationRuntimeMessage(appLocale, "metricTotal")}
             />
             <Metric
               value={viewModel.engineeringSummary.compliant}
@@ -153,10 +144,7 @@ export function ClassificationStatusPage({
             />
             <Metric
               value={viewModel.engineeringSummary.unknown}
-              label={resolveClassificationRuntimeMessage(
-                appLocale,
-                "metricUnknown",
-              )}
+              label={resolveClassificationRuntimeMessage(appLocale, "metricUnknown")}
             />
           </div>
         ) : null}
@@ -223,10 +211,7 @@ export function ClassificationStatusPage({
               render={<Link href={`/assessments/${assessmentId}/documents`} />}
               variant="outline"
             >
-              {resolveMessage(
-                appLocale,
-                "pages.classification.generateGapAnalysis",
-              )}
+              {resolveMessage(appLocale, "pages.classification.generateGapAnalysis")}
             </Button>
           ) : null}
         </div>
@@ -255,10 +240,7 @@ function ClassificationObservabilityPanel({
     <section className="rounded-lg border bg-muted/20 p-4">
       <div>
         <p className="text-sm font-medium">
-          {resolveMessage(
-            appLocale,
-            "pages.classification.observability.title",
-          )}
+          {resolveMessage(appLocale, "pages.classification.observability.title")}
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           {resolveMessage(
@@ -449,36 +431,21 @@ function openWikiStatusLabel(value: boolean | null): string {
       "pages.classification.observability.unavailable",
     );
   }
-  return resolveMessage(
-    appLocale,
-    "pages.classification.observability.unknown",
-  );
+  return resolveMessage(appLocale, "pages.classification.observability.unknown");
 }
 
 function sourceHitBucketLabel(value: string): string {
   if (value === "0") {
-    return resolveMessage(
-      appLocale,
-      "pages.classification.observability.bucket0",
-    );
+    return resolveMessage(appLocale, "pages.classification.observability.bucket0");
   }
   if (value === "1") {
-    return resolveMessage(
-      appLocale,
-      "pages.classification.observability.bucket1",
-    );
+    return resolveMessage(appLocale, "pages.classification.observability.bucket1");
   }
   if (value === "2_5") {
-    return resolveMessage(
-      appLocale,
-      "pages.classification.observability.bucket2To5",
-    );
+    return resolveMessage(appLocale, "pages.classification.observability.bucket2To5");
   }
   if (value === "6_20") {
-    return resolveMessage(
-      appLocale,
-      "pages.classification.observability.bucket6To20",
-    );
+    return resolveMessage(appLocale, "pages.classification.observability.bucket6To20");
   }
   if (value === "21_plus") {
     return resolveMessage(
@@ -522,10 +489,7 @@ function EngineeringRuleCard({
           value={`${Math.round(evaluation.confidence * 100)}%`}
         />
         <DetailMetric
-          label={resolveClassificationRuntimeMessage(
-            appLocale,
-            "technicalEvidence",
-          )}
+          label={resolveClassificationRuntimeMessage(appLocale, "technicalEvidence")}
           value={String(evaluation.technicalEvidenceCount)}
         />
         <DetailMetric
@@ -707,15 +671,9 @@ function directRuntimeDescription(state: string): string {
     return resolveClassificationRuntimeMessage(appLocale, "blockedDescription");
   }
   if (state === "degraded") {
-    return resolveClassificationRuntimeMessage(
-      appLocale,
-      "degradedDescription",
-    );
+    return resolveClassificationRuntimeMessage(appLocale, "degradedDescription");
   }
-  return resolveMessage(
-    appLocale,
-    "pages.classification.states.processingDescription",
-  );
+  return resolveMessage(appLocale, "pages.classification.states.processingDescription");
 }
 
 function statusLabel(

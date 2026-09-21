@@ -72,9 +72,7 @@ export function AgentStreamTimeline({
 function projectStreamRows(
   events: AssessmentAgentStreamEvent[],
 ): ProjectedStreamRow[] {
-  const ordered = [...events].sort(
-    (left, right) => left.sequence - right.sequence,
-  );
+  const ordered = [...events].sort((left, right) => left.sequence - right.sequence);
   const rows: ProjectedStreamRow[] = [];
   let previousMergeKey: string | null = null;
 
@@ -96,8 +94,7 @@ function projectStreamRows(
 function deltaMergeKey(event: AssessmentAgentStreamEvent): string | null {
   if (
     event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta &&
-    event.eventType !==
-      ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelReasoningDelta &&
+    event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelReasoningDelta &&
     event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.toolCallDelta
   ) {
     return null;
@@ -124,70 +121,23 @@ function toStreamRow(event: AssessmentAgentStreamEvent): ProjectedStreamRow {
 
   switch (event.eventType) {
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.subagentSelected:
-      return row(
-        event,
-        `${labels.subagent} · ${name}`,
-        labels.selected,
-        eventData(event),
-      );
+      return row(event, `${labels.subagent} · ${name}`, labels.selected, eventData(event));
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentStarted:
-      return row(
-        event,
-        `${labels.agent} · ${name}`,
-        labels.running,
-        eventMeta(event),
-      );
+      return row(event, `${labels.agent} · ${name}`, labels.running, eventMeta(event));
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentCompleted:
-      return row(
-        event,
-        `${labels.agent} · ${name}`,
-        labels.completed,
-        eventMeta(event),
-      );
+      return row(event, `${labels.agent} · ${name}`, labels.completed, eventMeta(event));
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentFailed:
-      return row(
-        event,
-        `${labels.agent} · ${name}`,
-        event.text ?? labels.failed,
-        eventMeta(event),
-        true,
-      );
+      return row(event, `${labels.agent} · ${name}`, event.text ?? labels.failed, eventMeta(event), true);
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted:
-      return row(
-        event,
-        `${labels.flow} · ${name}`,
-        labels.running,
-        eventData(event),
-      );
+      return row(event, `${labels.flow} · ${name}`, labels.running, eventData(event));
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted:
-      return row(
-        event,
-        `${labels.flow} · ${name}`,
-        labels.completed,
-        eventData(event),
-      );
+      return row(event, `${labels.flow} · ${name}`, labels.completed, eventData(event));
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed:
-      return row(
-        event,
-        `${labels.flow} · ${name}`,
-        event.text ?? labels.failed,
-        eventData(event),
-        true,
-      );
+      return row(event, `${labels.flow} · ${name}`, event.text ?? labels.failed, eventData(event), true);
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelReasoningDelta:
-      return row(
-        event,
-        `${labels.reasoning} · ${name}`,
-        event.text,
-        eventMeta(event),
-      );
+      return row(event, `${labels.reasoning} · ${name}`, event.text, eventMeta(event));
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta:
-      return row(
-        event,
-        `${labels.output} · ${name}`,
-        event.text,
-        eventMeta(event),
-      );
+      return row(event, `${labels.output} · ${name}`, event.text, eventMeta(event));
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.toolCallDelta:
       return row(
         event,
@@ -203,12 +153,7 @@ function toStreamRow(event: AssessmentAgentStreamEvent): ProjectedStreamRow {
         eventMeta(event),
       );
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.log:
-      return row(
-        event,
-        `${labels.log} · ${name}`,
-        event.text,
-        eventData(event),
-      );
+      return row(event, `${labels.log} · ${name}`, event.text, eventData(event));
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeEvent:
       return row(
         event,
@@ -218,40 +163,15 @@ function toStreamRow(event: AssessmentAgentStreamEvent): ProjectedStreamRow {
         event.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
       );
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.customProgress:
-      return row(
-        event,
-        `${labels.progress} · ${name}`,
-        event.text,
-        eventData(event),
-      );
+      return row(event, `${labels.progress} · ${name}`, event.text, eventData(event));
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.graphUpdate:
-      return row(
-        event,
-        `${labels.update} · ${name}`,
-        event.text,
-        eventData(event),
-      );
+      return row(event, `${labels.update} · ${name}`, event.text, eventData(event));
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.graphState:
-      return row(
-        event,
-        `${labels.state} · ${name}`,
-        event.text,
-        eventData(event),
-      );
+      return row(event, `${labels.state} · ${name}`, event.text, eventData(event));
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.providerFallback:
-      return row(
-        event,
-        `${labels.provider} · ${name}`,
-        event.text,
-        eventData(event),
-      );
+      return row(event, `${labels.provider} · ${name}`, event.text, eventData(event));
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.credentialRotation:
-      return row(
-        event,
-        `${labels.credential} · ${name}`,
-        event.text,
-        eventData(event),
-      );
+      return row(event, `${labels.credential} · ${name}`, event.text, eventData(event));
     default:
       return row(event, event.eventType, event.text, eventData(event));
   }

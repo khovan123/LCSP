@@ -20,21 +20,21 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import type { AuthenticatedRequest } from "@/common/interfaces/authenticated-request.interface.js";
-import { ZodValidationPipe } from "@/common/pipes/zod-validation.pipe.js";
-import { problemException } from "@/platform/problems/problem-factory.js";
-import { resultEnvelope } from "@/platform/problems/result-envelope.js";
-import { RequireRoles } from "@/platform/rbac/decorators/require-roles.decorator.js";
-import { RbacGuard } from "@/platform/rbac/rbac.guard.js";
+import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
+import { ZodValidationPipe } from "../../../../common/pipes/zod-validation.pipe.js";
+import { problemException } from "../../../../platform/problems/problem-factory.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
+import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import {
   RestoreUserCommand,
   SuspendUserCommand,
-} from "@/modules/admin/application/commands/index.js";
+} from "../../application/commands/index.js";
 import {
   GetAdminUserDetailQuery,
   ListAdminUsersQuery,
-} from "@/modules/admin/application/queries/index.js";
-import type { AdminActor } from "@/modules/admin/infrastructure/persistence/admin-account.transaction.js";
+} from "../../application/queries/index.js";
+import type { AdminActor } from "../../infrastructure/persistence/admin-account.transaction.js";
 
 /**
  * Validates that an Idempotency-Key header is present, non-empty, and within acceptable length.

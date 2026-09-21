@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { apiQueryKeys } from "@/lib/api/query-keys.ts";
+import { apiQueryKeys } from "../../../../lib/api/query-keys.ts";
 import {
   parseAgentStreamEvent,
   parseRuntimeEvent,
@@ -74,10 +74,7 @@ export function WorkspaceRuntimeProvider({
       if (parsed !== null) {
         attempts = 0;
         setRuntime((current) =>
-          withAgentStreamEvents(
-            parsed,
-            current.agentStreamEventsByAssessmentId,
-          ),
+          withAgentStreamEvents(parsed, current.agentStreamEventsByAssessmentId),
         );
         const fingerprint = runtimeFingerprint(parsed);
         if (latestFingerprint.current !== fingerprint) {
@@ -93,8 +90,7 @@ export function WorkspaceRuntimeProvider({
               queryKey: apiQueryKeys.assessment.evidence(assessmentId),
             });
             void queryClient.invalidateQueries({
-              queryKey:
-                apiQueryKeys.assessment.evidenceGraphOverview(assessmentId),
+              queryKey: apiQueryKeys.assessment.evidenceGraphOverview(assessmentId),
             });
             void queryClient.invalidateQueries({
               queryKey: apiQueryKeys.assessment.classification(assessmentId),
@@ -109,10 +105,8 @@ export function WorkspaceRuntimeProvider({
       if (parsed === null) return;
       attempts = 0;
       setRuntime((current) => {
-        const previous =
-          current.agentStreamEventsByAssessmentId[parsed.assessmentId] ?? [];
-        if (previous.some((item) => item.eventId === parsed.eventId))
-          return current;
+        const previous = current.agentStreamEventsByAssessmentId[parsed.assessmentId] ?? [];
+        if (previous.some((item) => item.eventId === parsed.eventId)) return current;
         const nextEvents = [...previous, parsed].slice(-1000);
         return withAgentStreamEvents(current, {
           ...current.agentStreamEventsByAssessmentId,
