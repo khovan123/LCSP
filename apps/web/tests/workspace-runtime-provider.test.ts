@@ -14,13 +14,18 @@ import {
   parseRuntimeEvent,
   runtimeFingerprint,
 } from "../src/features/workspace/utils/workspace-runtime-parser.ts";
-import type { WorkspaceRuntimeActivityItem } from "../src/features/workspace/types/workspace-runtime.types.ts";
+import type {
+  WorkspaceRuntimeActivityItem,
+  WorkspaceRuntimeAgentStreamHistoryState,
+} from "../src/features/workspace/types/workspace-runtime.types.ts";
 import {
   buildRuntimeConsoleModel,
   selectRuntimeConsoleActivity,
 } from "../src/features/evidence/utils/runtime-console.ts";
 import {
+  agentStreamRetentionLimit,
   mergeAgentStreamEvents,
+  retainInitialAgentStreamHistoryRequest,
   subscribeScopedAssessmentRuntimeStream,
   workspaceRuntimeHistoryUrl,
   workspaceRuntimeEventsUrl,
@@ -60,6 +65,46 @@ test("agent stream history merge can page back beyond the initial 5000-event rep
   assert.equal(merged.at(-1)?.eventId, "agent-event-6001");
 });
 
+test("agent stream history keeps the cursor boundary while live tail advances", () => {
+  const liveTail = Array.from({ length: 5_000 }, (_, index) =>
+    agentStreamEvent(index + 1_003),
+  );
+  const initialHistoryPage = Array.from({ length: 5_000 }, (_, index) =>
+    agentStreamEvent(index + 1_002),
+  );
+  const olderPage = Array.from({ length: 1_001 }, (_, index) =>
+    agentStreamEvent(index + 1),
+  );
+
+  const afterInitialHistory = mergeAgentStreamEvents(
+    liveTail,
+    initialHistoryPage,
+    {
+      limit: agentStreamRetentionLimit(
+        agentStreamHistoryState({ hasMore: true, nextCursor: "cursor-1002" }),
+      ),
+    },
+  );
+  const reconstructed = mergeAgentStreamEvents(
+    afterInitialHistory,
+    olderPage,
+    {
+      limit: agentStreamRetentionLimit(
+        agentStreamHistoryState({ hasLoadedOlderHistory: true }),
+      ),
+    },
+  );
+
+  assert.equal(afterInitialHistory.length, 5_001);
+  assert.equal(afterInitialHistory.at(0)?.eventId, "agent-event-1002");
+  assert.equal(afterInitialHistory.at(-1)?.eventId, "agent-event-6002");
+  assert.equal(reconstructed.length, 6_002);
+  assert.deepEqual(
+    reconstructed.map((event) => event.sequence),
+    Array.from({ length: 6_002 }, (_, index) => index + 1),
+  );
+});
+
 test("agent stream live merge remains bounded until older history is explicitly loaded", () => {
   const previous = Array.from({ length: 5_000 }, (_, index) =>
     agentStreamEvent(index + 1),
@@ -72,6 +117,24 @@ test("agent stream live merge remains bounded until older history is explicitly 
   assert.equal(merged.length, 5_000);
   assert.equal(merged.at(0)?.eventId, "agent-event-2");
   assert.equal(merged.at(-1)?.eventId, "agent-event-5001");
+});
+
+test("initial agent stream history failures release the retry gate", () => {
+  const initialHistoryRequests = new Set(["assessment-101"]);
+
+  retainInitialAgentStreamHistoryRequest(
+    initialHistoryRequests,
+    "assessment-101",
+    false,
+  );
+  assert.equal(initialHistoryRequests.has("assessment-101"), false);
+
+  retainInitialAgentStreamHistoryRequest(
+    initialHistoryRequests,
+    "assessment-101",
+    true,
+  );
+  assert.equal(initialHistoryRequests.has("assessment-101"), true);
 });
 
 test("workspace runtime provider opens and cleans up scoped semantic replay streams", () => {
@@ -579,5 +642,18 @@ function agentStreamEvent(sequence: number): AssessmentAgentStreamEvent {
     status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
     text: `delta-${sequence}`,
     data: null,
+  };
+}
+
+function agentStreamHistoryState(
+  override: Partial<WorkspaceRuntimeAgentStreamHistoryState>,
+): WorkspaceRuntimeAgentStreamHistoryState {
+  return {
+    hasMore: false,
+    nextCursor: null,
+    isLoading: false,
+    error: null,
+    hasLoadedOlderHistory: false,
+    ...override,
   };
 }

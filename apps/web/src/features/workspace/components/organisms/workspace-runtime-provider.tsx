@@ -109,9 +109,7 @@ export function WorkspaceRuntimeProvider({
         current.agentStreamHistoryByAssessmentId[parsed.assessmentId] ??
         emptyAgentStreamHistoryState();
       const nextEvents = mergeAgentStreamEvents(previous, [parsed], {
-        limit: historyState.hasLoadedOlderHistory
-          ? null
-          : AGENT_STREAM_VISIBLE_EVENT_LIMIT,
+        limit: agentStreamRetentionLimit(historyState),
       });
       return withAgentStreamEvents(current, {
         ...current.agentStreamEventsByAssessmentId,
@@ -166,12 +164,16 @@ export function WorkspaceRuntimeProvider({
           const previousHistory =
             current.agentStreamHistoryByAssessmentId[scopedAssessmentId] ??
             emptyAgentStreamHistoryState();
-          const hasLoadedOlderHistory =
-            previousHistory.hasLoadedOlderHistory || !options.initial;
+          const nextHistoryState = {
+            hasMore: page.hasMore,
+            nextCursor: page.nextCursor,
+            isLoading: false,
+            error: null,
+            hasLoadedOlderHistory:
+              previousHistory.hasLoadedOlderHistory || !options.initial,
+          } satisfies WorkspaceRuntimeAgentStreamHistoryState;
           const nextEvents = mergeAgentStreamEvents(previous, page.events, {
-            limit: hasLoadedOlderHistory
-              ? null
-              : AGENT_STREAM_VISIBLE_EVENT_LIMIT,
+            limit: agentStreamRetentionLimit(nextHistoryState),
           });
           return withAgentStreamHistoryState(
             withAgentStreamEvents(current, {
@@ -179,13 +181,7 @@ export function WorkspaceRuntimeProvider({
               [scopedAssessmentId]: nextEvents,
             }),
             scopedAssessmentId,
-            {
-              hasMore: page.hasMore,
-              nextCursor: page.nextCursor,
-              isLoading: false,
-              error: null,
-              hasLoadedOlderHistory,
-            },
+            nextHistoryState,
           );
         });
         return true;
@@ -215,10 +211,23 @@ export function WorkspaceRuntimeProvider({
         emptyAgentStreamHistoryState();
       if (
         historyState.isLoading ||
-        !historyState.hasMore ||
-        historyState.nextCursor === null
+        (historyState.error === null &&
+          (!historyState.hasMore || historyState.nextCursor === null))
       ) {
         return false;
+      }
+      if (historyState.error !== null && historyState.nextCursor === null) {
+        initialHistoryRequests.current.add(scopedAssessmentId);
+        const loaded = await loadAgentStreamHistoryPage(scopedAssessmentId, {
+          cursor: null,
+          initial: true,
+        });
+        retainInitialAgentStreamHistoryRequest(
+          initialHistoryRequests.current,
+          scopedAssessmentId,
+          loaded,
+        );
+        return loaded;
       }
       return loadAgentStreamHistoryPage(scopedAssessmentId, {
         cursor: historyState.nextCursor,
@@ -239,6 +248,12 @@ export function WorkspaceRuntimeProvider({
         void loadAgentStreamHistoryPage(scopedAssessmentId, {
           cursor: null,
           initial: true,
+        }).then((loaded) => {
+          retainInitialAgentStreamHistoryRequest(
+            initialHistoryRequests.current,
+            scopedAssessmentId,
+            loaded,
+          );
         });
       }
       return subscribeScopedAssessmentRuntimeStream({
@@ -486,6 +501,33 @@ export function mergeAgentStreamEvents(
   return typeof options.limit === "number"
     ? ordered.slice(-options.limit)
     : ordered;
+}
+
+export function agentStreamRetentionLimit(
+  historyState: WorkspaceRuntimeAgentStreamHistoryState,
+): number | null {
+  return historyState.hasLoadedOlderHistory ||
+    hasOlderAgentStreamHistoryCursor(historyState)
+    ? null
+    : AGENT_STREAM_VISIBLE_EVENT_LIMIT;
+}
+
+export function retainInitialAgentStreamHistoryRequest(
+  initialHistoryRequests: Set<string>,
+  assessmentId: string,
+  loaded: boolean,
+) {
+  if (loaded) {
+    initialHistoryRequests.add(assessmentId);
+    return;
+  }
+  initialHistoryRequests.delete(assessmentId);
+}
+
+function hasOlderAgentStreamHistoryCursor(
+  historyState: WorkspaceRuntimeAgentStreamHistoryState,
+): boolean {
+  return historyState.hasMore && historyState.nextCursor !== null;
 }
 
 function compareAgentStreamEvents(

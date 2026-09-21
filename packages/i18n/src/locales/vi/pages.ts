@@ -193,6 +193,7 @@ export const viPages = {
     agentStreamSelected: "Đã chọn",
     agentStreamLoadOlder: "Tải hoạt động cũ hơn",
     agentStreamLoadingOlder: "Đang tải hoạt động cũ hơn...",
+    agentStreamRetryHistory: "Thử tải lại lịch sử hoạt động",
     agentStreamHistoryLoadFailed: "Không thể tải hoạt động cũ hơn.",
     recentAssessments: "Assessment gần đây",
     moreAssessments: "Thêm assessment",

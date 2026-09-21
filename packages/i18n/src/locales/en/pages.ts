@@ -191,6 +191,7 @@ export const enPages = {
     agentStreamSelected: "Selected",
     agentStreamLoadOlder: "Load earlier activity",
     agentStreamLoadingOlder: "Loading earlier activity...",
+    agentStreamRetryHistory: "Retry activity history",
     agentStreamHistoryLoadFailed: "Earlier activity could not be loaded.",
     recentAssessments: "Recent assessments",
     moreAssessments: "More assessments",

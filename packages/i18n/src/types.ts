@@ -217,6 +217,7 @@ export type PagesMessages = {
     agentStreamSelected: string;
     agentStreamLoadOlder: string;
     agentStreamLoadingOlder: string;
+    agentStreamRetryHistory: string;
     agentStreamHistoryLoadFailed: string;
     recentAssessments: string;
     moreAssessments: string;

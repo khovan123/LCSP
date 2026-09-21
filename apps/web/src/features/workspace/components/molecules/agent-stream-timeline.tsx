@@ -39,26 +39,30 @@ export function AgentStreamTimeline({
 }: AgentStreamTimelineProps) {
   const rows = projectStreamRows(events);
   const labels = streamLabels();
-  const showLoadOlder =
-    history?.hasMore === true &&
-    history.nextCursor !== null &&
+  const showHistoryAction =
+    ((history?.hasMore === true && history.nextCursor !== null) ||
+      history?.error != null) &&
     onLoadOlder !== undefined;
-  if (rows.length === 0 && !showLoadOlder) return null;
+  if (rows.length === 0 && !showHistoryAction) return null;
 
   return (
     <AgentTurn className={className}>
       <AgentMessage>
         <div data-slot="agent-stream-timeline" className="space-y-2">
-          {showLoadOlder ? (
+          {showHistoryAction ? (
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-xs"
-              disabled={history.isLoading}
+              disabled={history?.isLoading === true}
               onClick={onLoadOlder}
             >
-              {history.isLoading ? labels.loadingOlder : labels.loadOlder}
+              {history?.isLoading === true
+                ? labels.loadingOlder
+                : history?.error != null
+                  ? labels.retryHistory
+                  : labels.loadOlder}
             </Button>
           ) : null}
           {history?.error ? (
@@ -446,6 +450,7 @@ function streamLabels() {
     selected: t("pages.appShell.agentStreamSelected"),
     loadOlder: t("pages.appShell.agentStreamLoadOlder"),
     loadingOlder: t("pages.appShell.agentStreamLoadingOlder"),
+    retryHistory: t("pages.appShell.agentStreamRetryHistory"),
     historyLoadFailed: t("pages.appShell.agentStreamHistoryLoadFailed"),
     running: t("pages.appShell.chatActivityStatuses.running"),
     completed: t("pages.appShell.chatActivityStatuses.completed"),
