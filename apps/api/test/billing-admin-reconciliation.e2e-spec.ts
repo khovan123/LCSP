@@ -6,6 +6,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import {
   BILLING_ORDER_STATUSES,
+  LLM_USAGE_STATUSES,
   PAYMENT_RECONCILIATION_REASONS,
   PAYMENT_RECONCILIATION_STATUSES,
 } from "@lcsp/contracts/billing";
