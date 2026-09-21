@@ -33,6 +33,15 @@ the evidence, and write `LCSP333_MANAGED_SANDBOX_PROOF_V1` to the requested
 missing/invalid proof fails the required job; fixture proof is not accepted by
 this CI path.
 
+The self-hosted producer is scheduled only when repository variable
+`LCSP_MANAGED_SANDBOX_RUNNER_ENABLED` is exactly `true`. Leave the variable
+unset or false until at least one trusted runner with the required host-managed
+producer and verifier binaries is registered. In that state the PR-owned
+diagnostic fails closed on GitHub-hosted compute instead of leaving the proof
+job queued indefinitely; the authoritative release gate remains unsatisfied
+until the trusted control plane publishes a valid exact-head proof or governed
+exemption.
+
 The privileged producer job is restricted to same-repository pull-request
 branches. Fork pull requests never execute on the self-hosted managed-sandbox
 runner. The PR-owned managed-sandbox diagnostic runs only on GitHub-hosted

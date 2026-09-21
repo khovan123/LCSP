@@ -116,7 +116,8 @@ jobs:
     if: >-
       github.event_name == 'pull_request' &&
       needs.changes.outputs.release_gate == 'true' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      vars.LCSP_MANAGED_SANDBOX_RUNNER_ENABLED == 'true'
     runs-on: [self-hosted, linux, lcsp-managed-sandbox]
     timeout-minutes: 45
     permissions:
