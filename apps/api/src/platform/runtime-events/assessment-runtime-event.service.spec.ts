@@ -337,18 +337,17 @@ describe("AssessmentRuntimeEventService", () => {
         ...agentStreamPersistenceMock(persistedRows),
         findMany: jest.fn(
           ({ take, where }: { take?: number; where?: unknown }) => {
-            expect(take).toBeUndefined();
-            expect(where).toMatchObject({
-              assessmentId: "assessment-a",
-              assessment: { ownerId: "user-a" },
-              toolName: "agent_stream_semantic",
-            });
+            expect(take).toBe(5_001);
+            expect(JSON.stringify(where)).toContain("assessment-a");
+            expect(JSON.stringify(where)).toContain("agent_stream_semantic");
             return Promise.resolve(
-              [...persistedRows].sort(
-                (left, right) =>
-                  ((right as { sequence?: number }).sequence ?? 0) -
-                  ((left as { sequence?: number }).sequence ?? 0),
-              ),
+              [...persistedRows]
+                .sort(
+                  (left, right) =>
+                    ((right as { sequence?: number }).sequence ?? 0) -
+                    ((left as { sequence?: number }).sequence ?? 0),
+                )
+                .slice(0, take),
             );
           },
         ),
@@ -493,11 +492,8 @@ describe("AssessmentRuntimeEventService", () => {
             take?: number;
             where?: { assessmentId?: string };
           }) => {
-            expect(where).toMatchObject({
-              assessmentId: "assessment-a",
-              assessment: { ownerId: "user-a" },
-              toolName: "agent_stream_semantic",
-            });
+            expect(JSON.stringify(where)).toContain("assessment-a");
+            expect(JSON.stringify(where)).toContain("agent_stream_semantic");
             expect(orderBy).toEqual([
               { createdAt: "desc" },
               { sequence: "desc" },
@@ -533,7 +529,7 @@ describe("AssessmentRuntimeEventService", () => {
     });
   });
 
-  it("replays complete assessment-scoped journal history beyond the owner-wide hydration cap", async () => {
+  it("bounds assessment-scoped journal replay and leaves older history to cursor pages", async () => {
     const persistedRows = Array.from({ length: 6_001 }, (_, index) =>
       durableAgentStreamRow(index + 1),
     );
@@ -554,22 +550,20 @@ describe("AssessmentRuntimeEventService", () => {
           }: {
             orderBy?: unknown;
             take?: number;
-            where?: { assessmentId?: string };
+            where?: unknown;
           }) => {
-            expect(where).toMatchObject({
-              assessmentId: "assessment-a",
-              assessment: { ownerId: "user-a" },
-              toolName: "agent_stream_semantic",
-            });
+            expect(JSON.stringify(where)).toContain("assessment-a");
+            expect(JSON.stringify(where)).toContain("agent_stream_semantic");
             expect(orderBy).toEqual([
               { createdAt: "desc" },
               { sequence: "desc" },
+              { id: "desc" },
             ]);
-            expect(take).toBeUndefined();
+            expect(take).toBe(5_001);
             return Promise.resolve(
-              [...persistedRows].sort(
-                (left, right) => right.sequence - left.sequence,
-              ),
+              [...persistedRows]
+                .sort((left, right) => right.sequence - left.sequence)
+                .slice(0, take),
             );
           },
         ),
@@ -586,15 +580,79 @@ describe("AssessmentRuntimeEventService", () => {
       }
     ).getDurableAgentStreamEvents("user-a", "assessment-a");
 
-    expect(replay).toHaveLength(6_001);
+    expect(replay).toHaveLength(5_000);
     expect(replay[0]).toMatchObject({
-      eventId: "assessment-a-semantic-1",
-      sequence: 1,
+      eventId: "assessment-a-semantic-1002",
+      sequence: 1002,
     });
     expect(replay.at(-1)).toMatchObject({
       eventId: "assessment-a-semantic-6001",
       sequence: 6001,
     });
+  });
+
+  it("paginates complete assessment-scoped journal history with an opaque cursor", async () => {
+    const persistedRows = Array.from({ length: 6 }, (_, index) =>
+      durableAgentStreamRow(index + 1),
+    );
+    const prisma = {
+      assessment: {
+        findUnique: jest
+          .fn<
+            (args: { where: { id: string } }) => Promise<{ ownerId: string }>
+          >()
+          .mockResolvedValue({ ownerId: "user-a" }),
+      },
+      assessmentRuntimeEvent: {
+        findMany: jest.fn(
+          ({ take, where }: { take?: number; where?: { AND?: unknown[] } }) => {
+            const hasCursor = JSON.stringify(where).includes('"OR"');
+            const rows = hasCursor
+              ? persistedRows.filter((row) => row.sequence < 4)
+              : persistedRows;
+            return Promise.resolve(
+              [...rows]
+                .sort((left, right) => right.sequence - left.sequence)
+                .slice(0, take),
+            );
+          },
+        ),
+      },
+    };
+    const service = new AssessmentRuntimeEventService(prisma as never);
+
+    const firstPage = await service.getAgentStreamHistoryPage(
+      "user-a",
+      "assessment-a",
+      { limit: 3 },
+    );
+    const secondPage = await service.getAgentStreamHistoryPage(
+      "user-a",
+      "assessment-a",
+      { cursor: firstPage.nextCursor, limit: 3 },
+    );
+
+    expect(firstPage.events.map((event) => event.sequence)).toEqual([4, 5, 6]);
+    expect(firstPage.hasMore).toBe(true);
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+    expect(secondPage.events.map((event) => event.sequence)).toEqual([1, 2, 3]);
+    expect(secondPage.hasMore).toBe(false);
+    expect(secondPage.nextCursor).toBeNull();
+    expect(prisma.assessmentRuntimeEvent.findMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ take: 4 }),
+    );
+    expect(prisma.assessmentRuntimeEvent.findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        take: 4,
+        where: expect.objectContaining({
+          AND: expect.arrayContaining([
+            expect.objectContaining({ OR: expect.any(Array) }),
+          ]),
+        }),
+      }),
+    );
   });
 
   it("keeps independent durable replay windows per assessment", async () => {
@@ -728,13 +786,15 @@ describe("AssessmentRuntimeEventService", () => {
         ),
       },
       assessmentRuntimeEvent: {
-        findMany: jest.fn(({ where }: { where?: { assessmentId?: string } }) =>
-          Promise.resolve(
-            where?.assessmentId
-              ? [durableAgentStreamRow(1, where.assessmentId)]
-              : [],
-          ),
-        ),
+        findMany: jest.fn(({ where }: { where?: unknown }) => {
+          const assessmentId =
+            typeof where === "object" && where !== null
+              ? JSON.stringify(where).match(/assessment-\d+/)?.[0]
+              : null;
+          return Promise.resolve(
+            assessmentId ? [durableAgentStreamRow(1, assessmentId)] : [],
+          );
+        }),
       },
     };
     const service = new AssessmentRuntimeEventService(prisma as never);
@@ -924,6 +984,76 @@ describe("AssessmentRuntimeEventService", () => {
     expect(live?.sequence).toBeGreaterThan(replay[0]?.sequence ?? 0);
   });
 
+  it("excludes agent stream journal rows from canonical workflow run projections", async () => {
+    const canonicalCompletedScanRow = {
+      id: "runtime-canonical-completed",
+      assessmentId: "assessment-1",
+      runId: "scan-1",
+      correlationId: "corr-1",
+      sequence: 1,
+      eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runCompleted,
+      runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+      stage: ASSESSMENT_RUNTIME_STAGE_CODES.scan,
+      toolName: "repository_scan",
+      summary: "Repository scan completed",
+      inputSummaryJson: null,
+      outputSummaryJson: null,
+      errorSummary: null,
+      startedAt: null,
+      completedAt: null,
+      durationMs: null,
+      attempt: null,
+      waitingReason: null,
+      createdAt: new Date("2026-09-20T00:00:00.000Z"),
+    };
+    const newerJournalRow = durableAgentStreamRow(2, "assessment-1", "scan-1");
+    newerJournalRow.createdAt = new Date("2026-09-20T00:01:00.000Z");
+    const prisma = {
+      assessmentRuntimeEvent: {
+        findMany: jest.fn(({ where }: { where?: unknown }) => {
+          const serializedWhere = JSON.stringify(where);
+          if (serializedWhere.includes("engineering_rule_plan_summary")) {
+            return Promise.resolve([]);
+          }
+          expect(serializedWhere).toContain("agent_stream_semantic");
+          return Promise.resolve([canonicalCompletedScanRow]);
+        }),
+        findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
+      },
+      repositorySnapshot: emptyRepositorySnapshots(),
+      assessment: assessmentOwner(),
+      repositoryScanJob: {
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([]),
+      },
+      technicalEvidenceReport: {
+        findMany: jest
+          .fn<(args?: unknown) => Promise<unknown[]>>()
+          .mockResolvedValue([]),
+      },
+    };
+    const service = new AssessmentRuntimeEventService(prisma as never);
+
+    const snapshot = await service.buildWorkspaceSnapshot("user-1");
+
+    expect(snapshot.runs).toEqual([
+      expect.objectContaining({
+        assessmentId: "assessment-1",
+        runId: "scan-1",
+        status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.scan,
+      }),
+    ]);
+    expect(snapshot.recentActivity).toEqual([
+      expect.objectContaining({
+        eventId: "runtime-canonical-completed",
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.scan,
+      }),
+    ]);
+  });
+
   it("builds orchestration activity from scan jobs and evidence reports when runtime events are absent", async () => {
     const prisma = {
       assessmentRuntimeEvent: {
@@ -970,7 +1100,14 @@ describe("AssessmentRuntimeEventService", () => {
     const snapshot = await service.buildWorkspaceSnapshot("user-1");
 
     expect(prisma.assessmentRuntimeEvent.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { assessment: { ownerId: "user-1" } } }),
+      expect.objectContaining({
+        where: {
+          AND: [
+            { assessment: { ownerId: "user-1" } },
+            { NOT: { toolName: "agent_stream_semantic" } },
+          ],
+        },
+      }),
     );
     expect(prisma.repositorySnapshot.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { assessment: { ownerId: "user-1" } } }),
@@ -1717,13 +1854,20 @@ describe("AssessmentRuntimeEventService", () => {
         .fn<(args: Record<string, unknown>) => Promise<unknown[]>>()
         .mockImplementation((args) => {
           const where = (args.where ?? {}) as Record<string, unknown>;
-          if (Object.keys(where).length === 0) {
+          const take = typeof args.take === "number" ? args.take : undefined;
+          const serializedWhere = JSON.stringify(where);
+          if (
+            Object.keys(where).length === 0 ||
+            serializedWhere.includes("agent_stream_semantic")
+          ) {
             return Promise.resolve(
-              [...windowRows].sort(
-                (left, right) =>
-                  right.createdAt.getTime() - left.createdAt.getTime() ||
-                  right.sequence - left.sequence,
-              ),
+              [...windowRows]
+                .sort(
+                  (left, right) =>
+                    right.createdAt.getTime() - left.createdAt.getTime() ||
+                    right.sequence - left.sequence,
+                )
+                .slice(0, take),
             );
           }
           let rows = allEvents;

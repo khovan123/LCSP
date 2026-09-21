@@ -5,7 +5,15 @@ import type {
   AssessmentPostFindingRuntimeState,
 } from "@lcsp/contracts/evidence";
 import type { MessageEvent } from "@nestjs/common";
-import { Controller, Logger, Query, Req, Sse, UseGuards } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Logger,
+  Query,
+  Req,
+  Sse,
+  UseGuards,
+} from "@nestjs/common";
 import {
   EMPTY,
   catchError,
@@ -21,6 +29,7 @@ import type { AuthenticatedRequest } from "../../../../common/interfaces/authent
 import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 
 /**
  * Streams orchestration runtime snapshots to authorized workspace clients over Server-Sent Events.
@@ -162,6 +171,35 @@ export class WorkspaceRuntimeEventsController {
     return agentStreamOnly === "1"
       ? agentStream
       : merge(snapshots, agentStream);
+  }
+
+  @Get("agent-stream-history")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
+  async agentStreamHistory(
+    @Req() request: AuthenticatedRequest,
+    @Query("assessment_id") assessmentId?: string,
+    @Query("cursor") cursor?: string,
+    @Query("limit") limit?: string,
+  ) {
+    const rbacContext = request.rbacContext;
+    const ownerId =
+      rbacContext.role === AUTH_USER_ROLES.customer
+        ? rbacContext.userId
+        : `no-assessment-owner:${rbacContext.userId}`;
+    const page = await this.runtimeEvents.getAgentStreamHistoryPage(
+      ownerId,
+      assessmentId?.trim() ?? "",
+      {
+        cursor: cursor?.trim() ? cursor.trim() : null,
+        limit: limit === undefined ? null : Number(limit),
+      },
+    );
+    return resultEnvelope({
+      events: page.events.map(toAgentStreamPayload),
+      has_more: page.hasMore,
+      next_cursor: page.nextCursor,
+    });
   }
 }
 

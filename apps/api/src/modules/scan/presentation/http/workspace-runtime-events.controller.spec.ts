@@ -310,6 +310,69 @@ describe("WorkspaceRuntimeEventsController", () => {
     }
   });
 
+  it("returns paginated assessment-scoped agent stream history", async () => {
+    const getAgentStreamHistoryPage = jest.fn(() =>
+      Promise.resolve({
+        events: [
+          {
+            eventId: "agent-history-1",
+            sequence: 42,
+            clientSequence: null,
+            emittedAt: "2026-09-16T00:00:03.000Z",
+            assessmentId: "assessment-101",
+            runId: "run-101",
+            correlationId: "corr-101",
+            eventType: "MODEL_CONTENT_DELTA",
+            source: "engineering",
+            agentName: "investigator",
+            subagentName: null,
+            namespace: [],
+            nodeName: "model",
+            messageId: "message-101",
+            toolName: null,
+            toolCallId: null,
+            status: "RUNNING",
+            text: "visible output",
+            data: null,
+          },
+        ],
+        hasMore: true,
+        nextCursor: "cursor-2",
+      }),
+    );
+    const controller = new WorkspaceRuntimeEventsController({
+      getAgentStreamHistoryPage,
+    } as unknown as AssessmentRuntimeEventService);
+
+    const response = await controller.agentStreamHistory(
+      customerRequest,
+      " assessment-101 ",
+      " cursor-1 ",
+      "25",
+    );
+
+    expect(getAgentStreamHistoryPage).toHaveBeenCalledWith(
+      "user-1",
+      "assessment-101",
+      { cursor: "cursor-1", limit: 25 },
+    );
+    expect(response).toEqual({
+      ok: true,
+      data: {
+        events: [
+          expect.objectContaining({
+            event_id: "agent-history-1",
+            assessment_id: "assessment-101",
+            event_type: "MODEL_CONTENT_DELTA",
+            text: "visible output",
+          }),
+        ],
+        has_more: true,
+        next_cursor: "cursor-2",
+      },
+    });
+  });
+
   it("does not cancel an in-flight runtime snapshot when the polling interval ticks again", async () => {
     jest.useFakeTimers();
     let resolveSnapshot: (value: unknown) => void = () => {};

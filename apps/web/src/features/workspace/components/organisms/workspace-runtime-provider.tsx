@@ -55,6 +55,7 @@ const initialRuntime: WorkspaceRuntimeContextValue = {
 
 const WorkspaceRuntimeContext =
   createContext<WorkspaceRuntimeContextValue>(initialRuntime);
+const AGENT_STREAM_VISIBLE_EVENT_LIMIT = 5_000;
 
 export type ScopedAgentStreamSource = {
   addEventListener: (
@@ -95,7 +96,9 @@ export function WorkspaceRuntimeProvider({
       if (previous.some((item) => item.eventId === parsed.eventId)) {
         return current;
       }
-      const nextEvents = [...previous, parsed];
+      const nextEvents = [...previous, parsed].slice(
+        -AGENT_STREAM_VISIBLE_EVENT_LIMIT,
+      );
       return withAgentStreamEvents(current, {
         ...current.agentStreamEventsByAssessmentId,
         [parsed.assessmentId]: nextEvents,

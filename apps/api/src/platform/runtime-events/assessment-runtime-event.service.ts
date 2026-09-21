@@ -70,6 +70,8 @@ const AGENT_STREAM_DURABLE_REPLAY_ASSESSMENT_LIMIT = 100;
 const AGENT_STREAM_DURABLE_REPLAY_QUERY_CONCURRENCY = 4;
 const AGENT_STREAM_EVENT_DEDUPE_SEEN_LIMIT =
   AGENT_STREAM_DURABLE_REPLAY_TOTAL_LIMIT + 1_000;
+const AGENT_STREAM_HISTORY_DEFAULT_LIMIT = 500;
+const AGENT_STREAM_HISTORY_MAX_LIMIT = 5_000;
 const INVALID_ASSESSMENT_STREAM_SCOPE = "__invalid_assessment_stream_scope__";
 
 export type PublishAgentStreamEventInput = {
@@ -183,6 +185,12 @@ type OwnedAssessmentAgentStreamEvent = {
 
 type ObserveAgentStreamEventsOptions = {
   assessmentId?: string | null;
+};
+
+export type AgentStreamHistoryPage = {
+  events: AssessmentAgentStreamEvent[];
+  nextCursor: string | null;
+  hasMore: boolean;
 };
 
 type RuntimeEvidenceReportSnapshot = {
@@ -564,10 +572,14 @@ export class AssessmentRuntimeEventService {
     ownerId: string,
     assessmentId: string | null = null,
   ): Promise<AssessmentAgentStreamEvent[]> {
-    const assessmentIds =
-      assessmentId === null
-        ? await this.getOwnedAssessmentIds(ownerId)
-        : await this.getOwnedAssessmentId(ownerId, assessmentId);
+    if (assessmentId !== null) {
+      return (
+        await this.getAgentStreamHistoryPage(ownerId, assessmentId, {
+          limit: AGENT_STREAM_DURABLE_REPLAY_TOTAL_LIMIT,
+        })
+      ).events;
+    }
+    const assessmentIds = await this.getOwnedAssessmentIds(ownerId);
     const rowsByAssessment = await mapWithConcurrency(
       assessmentIds,
       AGENT_STREAM_DURABLE_REPLAY_QUERY_CONCURRENCY,
@@ -579,14 +591,7 @@ export class AssessmentRuntimeEventService {
             toolName: AGENT_STREAM_JOURNAL_TOOL_NAME,
           },
           orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
-          ...(assessmentId === null
-            ? {
-                take: durableReplayLimitForAssessment(
-                  index,
-                  assessmentIds.length,
-                ),
-              }
-            : {}),
+          take: durableReplayLimitForAssessment(index, assessmentIds.length),
         }),
     );
     return rowsByAssessment
@@ -596,6 +601,53 @@ export class AssessmentRuntimeEventService {
         return event === null ? [] : [event];
       })
       .sort(compareAgentStreamEvents);
+  }
+
+  async getAgentStreamHistoryPage(
+    ownerId: string,
+    assessmentId: string,
+    options?: { cursor?: string | null; limit?: number | null },
+  ): Promise<AgentStreamHistoryPage> {
+    const assessmentIds = await this.getOwnedAssessmentId(
+      ownerId,
+      assessmentId,
+    );
+    if (assessmentIds.length === 0) {
+      return { events: [], nextCursor: null, hasMore: false };
+    }
+    const limit = normalizeAgentStreamHistoryLimit(options?.limit);
+    const cursor = decodeAgentStreamHistoryCursor(options?.cursor);
+    const rows = await this.safeFindMany({
+      where: {
+        AND: [
+          {
+            assessmentId,
+            assessment: { ownerId },
+            toolName: AGENT_STREAM_JOURNAL_TOOL_NAME,
+          },
+          ...(cursor === null ? [] : [agentStreamHistoryCursorWhere(cursor)]),
+        ],
+      },
+      orderBy: [{ createdAt: "desc" }, { sequence: "desc" }, { id: "desc" }],
+      take: limit + 1,
+    });
+    const pageRows = rows.slice(0, limit);
+    const events = [...pageRows]
+      .reverse()
+      .flatMap((row) => {
+        const event = agentStreamJournalEventFromRow(row);
+        return event === null ? [] : [event];
+      })
+      .sort(compareAgentStreamEvents);
+    const lastRow = pageRows.at(-1);
+    return {
+      events,
+      hasMore: rows.length > limit,
+      nextCursor:
+        rows.length > limit && lastRow
+          ? encodeAgentStreamHistoryCursor(lastRow)
+          : null,
+    };
   }
 
   private nextAgentStreamSequence(): number {
@@ -711,7 +763,9 @@ export class AssessmentRuntimeEventService {
     const [events, repositorySnapshots, scanJobs, evidenceReports] =
       await Promise.all([
         this.safeFindMany({
-          ...(ownerId ? { where: { assessment: { ownerId } } } : {}),
+          where: nonAgentStreamJournalWhere(
+            ownerId ? { assessment: { ownerId } } : undefined,
+          ),
           orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
           take: 200,
         }),
@@ -818,7 +872,7 @@ export class AssessmentRuntimeEventService {
     assessmentId: string,
   ): Promise<AssessmentPostFindingRuntimeState | null> {
     const events = await this.safeFindMany({
-      where: { assessmentId },
+      where: nonAgentStreamJournalWhere({ assessmentId }),
       orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
       take: 200,
     });
@@ -1899,6 +1953,11 @@ function normalizeAssessmentStreamScope(
   );
 }
 
+function nonAgentStreamJournalWhere(where?: Record<string, unknown>) {
+  const nonJournal = { NOT: { toolName: AGENT_STREAM_JOURNAL_TOOL_NAME } };
+  return where ? { AND: [where, nonJournal] } : nonJournal;
+}
+
 function durableReplayLimitForAssessment(
   index: number,
   assessmentCount: number,
@@ -1914,6 +1973,83 @@ function durableReplayLimitForAssessment(
   const remainder =
     AGENT_STREAM_DURABLE_REPLAY_TOTAL_LIMIT % eligibleAssessmentCount;
   return baseLimit + (index < remainder ? 1 : 0);
+}
+
+type AgentStreamHistoryCursor = {
+  createdAt: Date;
+  sequence: number;
+  id: string;
+};
+
+function normalizeAgentStreamHistoryLimit(limit: number | null | undefined) {
+  if (typeof limit !== "number" || !Number.isFinite(limit)) {
+    return AGENT_STREAM_HISTORY_DEFAULT_LIMIT;
+  }
+  return Math.min(
+    AGENT_STREAM_HISTORY_MAX_LIMIT,
+    Math.max(1, Math.floor(limit)),
+  );
+}
+
+function encodeAgentStreamHistoryCursor(
+  row: PersistedAssessmentRuntimeEvent,
+): string {
+  return Buffer.from(
+    JSON.stringify({
+      createdAt: row.createdAt.toISOString(),
+      sequence: row.sequence,
+      id: row.id,
+    }),
+  ).toString("base64url");
+}
+
+function decodeAgentStreamHistoryCursor(
+  cursor: string | null | undefined,
+): AgentStreamHistoryCursor | null {
+  if (!cursor?.trim()) return null;
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(cursor, "base64url").toString("utf8"),
+    ) as Record<string, unknown>;
+    const createdAt =
+      typeof decoded.createdAt === "string"
+        ? new Date(decoded.createdAt)
+        : null;
+    const sequence = numberValue(decoded.sequence);
+    const id = stringValue(decoded.id);
+    if (
+      createdAt === null ||
+      Number.isNaN(createdAt.getTime()) ||
+      sequence === null ||
+      id === null
+    ) {
+      return null;
+    }
+    return { createdAt, sequence, id };
+  } catch {
+    return null;
+  }
+}
+
+function agentStreamHistoryCursorWhere(cursor: AgentStreamHistoryCursor) {
+  return {
+    OR: [
+      { createdAt: { lt: cursor.createdAt } },
+      {
+        AND: [
+          { createdAt: cursor.createdAt },
+          { sequence: { lt: cursor.sequence } },
+        ],
+      },
+      {
+        AND: [
+          { createdAt: cursor.createdAt },
+          { sequence: cursor.sequence },
+          { id: { lt: cursor.id } },
+        ],
+      },
+    ],
+  };
 }
 
 async function mapWithConcurrency<TInput, TOutput>(
