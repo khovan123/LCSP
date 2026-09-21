@@ -95,7 +95,7 @@ export function WorkspaceRuntimeProvider({
       if (previous.some((item) => item.eventId === parsed.eventId)) {
         return current;
       }
-      const nextEvents = [...previous, parsed].slice(-1000);
+      const nextEvents = [...previous, parsed];
       return withAgentStreamEvents(current, {
         ...current.agentStreamEventsByAssessmentId,
         [parsed.assessmentId]: nextEvents,
