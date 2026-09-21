@@ -9,6 +9,7 @@ import {
   PROOF_SCHEMA_VERSION,
   REQUIRED_STAGE_NAMES,
   REQUIRED_VISIBLE_EVENT_TYPES,
+  validateManagedSandboxReleaseAuthority,
   validateManagedSandboxProof,
   validateNonSandboxExemption,
 } from "./check-managed-sandbox-release-gate.mjs";
@@ -16,6 +17,14 @@ import {
 const headSha = "a".repeat(40);
 const baseSha = "b".repeat(40);
 const priorSha = "c".repeat(40);
+const trustedIntegrationId = 987654;
+const githubActionsIntegrationId = 15368;
+const repositoryId = 1271744875;
+const trustedWorkflowSource = {
+  repositoryId,
+  path: ".github/workflows/managed-sandbox-readiness-gate.yml",
+  ref: "refs/heads/lcsp-governance/managed-sandbox-readiness-gate",
+};
 
 function completeStages() {
   return REQUIRED_STAGE_NAMES.map((name) => ({
@@ -174,6 +183,111 @@ function expectInvalid(proof, pattern) {
   assert.equal(result.ok, false);
   assert.match(result.errors.join("\n"), pattern);
 }
+
+function rulesetWithManagedSandboxStatus(check) {
+  return {
+    id: 18478777,
+    name: "develop",
+    rules: [
+      {
+        type: "required_status_checks",
+        parameters: {
+          required_status_checks: [
+            { context: "Require Jira issue key" },
+            {
+              context: "Managed sandbox readiness gate",
+              ...check,
+            },
+          ],
+          strict_required_status_checks_policy: true,
+        },
+      },
+    ],
+  };
+}
+
+function rulesetWithTrustedWorkflow(workflow = {}) {
+  return {
+    id: 18478777,
+    name: "develop",
+    rules: [
+      {
+        type: "workflows",
+        parameters: {
+          workflows: [
+            {
+              repository_id: repositoryId,
+              path: trustedWorkflowSource.path,
+              ref: trustedWorkflowSource.ref,
+              ...workflow,
+            },
+          ],
+        },
+      },
+    ],
+  };
+}
+
+test("rejects a context-only managed-sandbox readiness status check", () => {
+  const result = validateManagedSandboxReleaseAuthority(
+    rulesetWithManagedSandboxStatus({}),
+    { trustedIntegrationIds: [trustedIntegrationId] },
+  );
+
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join("\n"), /context name only/u);
+  assert.match(
+    result.errors.join("\n"),
+    /candidate-controlled workflows can satisfy/u,
+  );
+});
+
+test("rejects GitHub Actions as the authoritative managed-sandbox readiness publisher", () => {
+  const result = validateManagedSandboxReleaseAuthority(
+    rulesetWithManagedSandboxStatus({
+      integration_id: githubActionsIntegrationId,
+    }),
+    { trustedIntegrationIds: [githubActionsIntegrationId] },
+  );
+
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join("\n"), /GitHub Actions must not/u);
+  assert.match(result.errors.join("\n"), /same-named jobs/u);
+});
+
+test("accepts a trusted app-bound managed-sandbox readiness status check", () => {
+  const result = validateManagedSandboxReleaseAuthority(
+    rulesetWithManagedSandboxStatus({
+      integration_id: trustedIntegrationId,
+    }),
+    { trustedIntegrationIds: [trustedIntegrationId] },
+  );
+
+  assert.equal(result.ok, true, result.errors.join("\n"));
+  assert.equal(result.summary.trustedStatusCheckCount, 1);
+});
+
+test("accepts a protected required workflow as the managed-sandbox release authority", () => {
+  const result = validateManagedSandboxReleaseAuthority(
+    rulesetWithTrustedWorkflow(),
+    { trustedWorkflowSources: [trustedWorkflowSource] },
+  );
+
+  assert.equal(result.ok, true, result.errors.join("\n"));
+  assert.equal(result.summary.trustedWorkflowCount, 1);
+});
+
+test("rejects a required workflow source that is not pinned to an approved protected ref or SHA", () => {
+  const result = validateManagedSandboxReleaseAuthority(
+    rulesetWithTrustedWorkflow({
+      ref: "refs/heads/feature/candidate-controlled-readiness",
+    }),
+    { trustedWorkflowSources: [trustedWorkflowSource] },
+  );
+
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join("\n"), /protected required workflow/u);
+});
 
 test("accepts a complete managed-sandbox proof for the green exact-head case", () => {
   const result = validateManagedSandboxProof(validProof());

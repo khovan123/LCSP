@@ -35,13 +35,13 @@ this CI path.
 
 The privileged producer job is restricted to same-repository pull-request
 branches. Fork pull requests never execute on the self-hosted managed-sandbox
-runner. The always-created Managed sandbox readiness gate runs only on
-GitHub-hosted isolated compute, so NOT_APPLICABLE and fork decisions never
-depend on or execute commands on the privileged runner. A fork or unavailable
-sandbox fails closed unless a separately governed trusted workflow/service
-supplies an approved exemption outcome without executing fork-controlled
-workflow code on the managed-sandbox host. The privileged job does not check out PR code, install PR
-dependencies, or execute repository lifecycle scripts on the host. It invokes
+runner. The PR-owned managed-sandbox diagnostic runs only on GitHub-hosted
+isolated compute, so NOT_APPLICABLE and fork decisions never depend on or
+execute commands on the privileged runner. A fork or unavailable sandbox fails
+closed unless a separately governed trusted workflow/service supplies an
+approved exemption outcome without executing fork-controlled workflow code on
+the managed-sandbox host. The privileged job does not check out PR code, install
+PR dependencies, or execute repository lifecycle scripts on the host. It invokes
 only host-managed producer and verifier binaries with immutable PR/base/head
 identifiers and writes into a fresh runner-temporary proof directory.
 
@@ -53,15 +53,18 @@ The trusted gate result must record the verifier version or hash for
 auditability.
 
 The branch-protection authority is deliberately separate from this
-PR-controlled workflow. The live develop ruleset requires the status context
-Managed sandbox readiness gate, but no job in this pull-request workflow emits
-that context. The job here is named Managed sandbox readiness diagnostic and is
-non-authoritative. The required context must be published for the exact head by
-a trusted GitHub App/external governance service or a workflow definition
-resolved exclusively from a protected base ref. That trusted control plane must
-validate the host-managed proof or governed exemption before publishing
-success. A candidate PR therefore cannot preserve the required context name and
-turn its implementation into an unconditional success.
+PR-controlled workflow. The pull-request workflow must not be the release
+authority for `Managed sandbox readiness gate`; the job here is named
+`Managed sandbox readiness diagnostic` and is non-authoritative. The live
+develop ruleset must either bind the required readiness status to a trusted
+GitHub App/external governance service by `integration_id`, or replace the
+name-only status requirement with a required workflow whose definition is
+resolved only from an approved protected ref or immutable SHA outside candidate
+PR control. A ruleset that requires only the context string
+`Managed sandbox readiness gate` is not sufficient, because a candidate
+GitHub Actions workflow can emit a same-named job. The trusted control plane
+must validate the host-managed proof or governed exemption for the exact head
+before publishing success.
 
 The PR-owned diagnostic treats a pull request outside the release_gate path
 surface as NOT_APPLICABLE and succeeds on GitHub-hosted compute without starting
@@ -70,13 +73,13 @@ applicable same-repository pull request, it consumes only the gate result emitte
 by the same-repository trusted producer/verifier. The pull-request workflow does
 not mint exemptions or publish the authoritative required context.
 
-The trusted control plane publishes Managed sandbox readiness gate only after
-binding its decision to the exact repository, PR, base SHA and head SHA. It may
-publish NOT_APPLICABLE according to protected policy, accept a verified
-managed-sandbox result, or accept a separately governed exemption. Exemptions
-must originate outside candidate-PR control and fail closed when expired,
-mismatched, replayed or unapproved. Fork-controlled workflow commands must never
-execute on the managed-sandbox host.
+The trusted control plane publishes or satisfies Managed sandbox readiness gate
+only after binding its decision to the exact repository, PR, base SHA and head
+SHA. It may publish NOT_APPLICABLE according to protected policy, accept a
+verified managed-sandbox result, or accept a separately governed exemption.
+Exemptions must originate outside candidate-PR control and fail closed when
+expired, mismatched, replayed or unapproved. Fork-controlled workflow commands
+must never execute on the managed-sandbox host.
 
 If the managed sandbox is unavailable, release governance may provide a
 time-boxed exemption artifact:

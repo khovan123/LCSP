@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 export const PROOF_SCHEMA_VERSION = "LCSP333_MANAGED_SANDBOX_PROOF_V1";
 export const EXEMPTION_SCHEMA_VERSION = "LCSP333_NON_SANDBOX_EXEMPTION_V1";
+export const READINESS_GATE_CONTEXT = "Managed sandbox readiness gate";
+export const GITHUB_ACTIONS_INTEGRATION_ID = 15368;
 
 export const REQUIRED_STAGE_NAMES = [
   "PR_TRIGGER",
@@ -615,6 +617,116 @@ function validatePrivacy(proof, errors) {
     }
   }
   inspectPrivacy(proof, errors);
+}
+
+function arrayValue(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function requiredStatusChecks(ruleset) {
+  return arrayValue(ruleset?.rules)
+    .filter((rule) => rule?.type === "required_status_checks")
+    .flatMap((rule) =>
+      arrayValue(rule?.parameters?.required_status_checks),
+    );
+}
+
+function requiredWorkflows(ruleset) {
+  return arrayValue(ruleset?.rules)
+    .filter((rule) => rule?.type === "workflows")
+    .flatMap((rule) => arrayValue(rule?.parameters?.workflows));
+}
+
+function matchesTrustedWorkflow(workflow, trustedWorkflow) {
+  if (workflow?.repository_id !== trustedWorkflow.repositoryId) return false;
+  if (workflow?.path !== trustedWorkflow.path) return false;
+  if (trustedWorkflow.ref && workflow?.ref !== trustedWorkflow.ref) return false;
+  if (trustedWorkflow.sha && workflow?.sha !== trustedWorkflow.sha) return false;
+  return Boolean(trustedWorkflow.ref || trustedWorkflow.sha);
+}
+
+export function validateManagedSandboxReleaseAuthority(
+  ruleset,
+  {
+    trustedIntegrationIds = [],
+    trustedWorkflowSources = [],
+    readinessContext = READINESS_GATE_CONTEXT,
+  } = {},
+) {
+  const errors = [];
+  const warnings = [];
+  if (!pushRequiredObject(errors, ruleset, "ruleset")) {
+    return { ok: false, errors, warnings };
+  }
+
+  const trustedIntegrationIdSet = new Set(trustedIntegrationIds);
+  if (trustedIntegrationIdSet.has(GITHUB_ACTIONS_INTEGRATION_ID)) {
+    errors.push(
+      "GitHub Actions must not be configured as the trusted managed-sandbox readiness integration",
+    );
+  }
+
+  const readinessChecks = requiredStatusChecks(ruleset).filter(
+    (check) => check?.context === readinessContext,
+  );
+  const trustedStatusChecks = readinessChecks.filter(
+    (check) =>
+      Number.isInteger(check.integration_id) &&
+      check.integration_id !== GITHUB_ACTIONS_INTEGRATION_ID &&
+      trustedIntegrationIdSet.has(check.integration_id),
+  );
+
+  for (const check of readinessChecks) {
+    if (!Number.isInteger(check.integration_id)) {
+      errors.push(
+        `${readinessContext} is required by context name only; bind it to a trusted integration or remove the status check in favor of a protected required workflow`,
+      );
+      continue;
+    }
+    if (check.integration_id === GITHUB_ACTIONS_INTEGRATION_ID) {
+      errors.push(
+        `${readinessContext} must not trust the GitHub Actions integration because candidate PR workflows can emit same-named jobs`,
+      );
+      continue;
+    }
+    if (!trustedIntegrationIdSet.has(check.integration_id)) {
+      errors.push(
+        `${readinessContext} integration_id ${check.integration_id} is not in the trusted managed-sandbox publisher allow-list`,
+      );
+    }
+  }
+
+  const trustedWorkflowMatches = requiredWorkflows(ruleset).filter((workflow) =>
+    trustedWorkflowSources.some((trustedWorkflow) =>
+      matchesTrustedWorkflow(workflow, trustedWorkflow),
+    ),
+  );
+
+  if (readinessChecks.length === 0 && trustedWorkflowMatches.length === 0) {
+    errors.push(
+      `${readinessContext} must be enforced by either a trusted integration-bound status check or a protected required workflow`,
+    );
+  }
+  if (
+    readinessChecks.length > 0 &&
+    trustedStatusChecks.length === 0 &&
+    trustedWorkflowMatches.length === 0
+  ) {
+    errors.push(
+      `candidate-controlled workflows can satisfy ${readinessContext}; no trusted publisher or protected required workflow is enforced`,
+    );
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+    summary: {
+      readinessContext,
+      trustedStatusCheckCount: trustedStatusChecks.length,
+      trustedWorkflowCount: trustedWorkflowMatches.length,
+    },
+  };
 }
 
 export function validateManagedSandboxProof(proof) {
