@@ -127,7 +127,7 @@ export class AdminUsersController {
       ),
     )
     body: AdminUserActionInput,
-    @Headers("idempotency-key") idempotencyKeyHeader?: string,
+    @Headers("idempotency-key") idempotencyKeyHeader: string | undefined,
     @Req() request: AuthenticatedRequest,
   ): Promise<AdminUserDetail> {
     return this.commandBus.execute<SuspendUserCommand, AdminUserDetail>(
@@ -155,7 +155,7 @@ export class AdminUsersController {
       ),
     )
     body: AdminUserActionInput,
-    @Headers("idempotency-key") idempotencyKeyHeader?: string,
+    @Headers("idempotency-key") idempotencyKeyHeader: string | undefined,
     @Req() request: AuthenticatedRequest,
   ): Promise<AdminUserDetail> {
     return this.commandBus.execute<RestoreUserCommand, AdminUserDetail>(
@@ -172,7 +172,7 @@ export class AdminUsersController {
    */
   private buildAdminActor(
     request: AuthenticatedRequest,
-    idempotencyKeyHeader?: string,
+    idempotencyKeyHeader: string | undefined,
   ): AdminActor {
     return {
       ...request.rbacContext,
