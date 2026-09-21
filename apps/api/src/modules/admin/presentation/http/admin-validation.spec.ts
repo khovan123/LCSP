@@ -271,21 +271,23 @@ describe("Admin HTTP Input Validation & Contract Compatibility", () => {
   });
 
   describe("Overview Query Validation (adminOverviewQuerySchema)", () => {
-    it("rejects invalid period with ADMIN_ACCOUNT_INVALID_INPUT", () => {
-      try {
-        overviewPipe.transform({ period: "180D" });
-        expect(true).toBe(false);
-      } catch (error) {
-        expect(error).toBeInstanceOf(HttpException);
-        const exception = error as HttpException;
-        expect(exception.getStatus()).toBe(HttpStatus.BAD_REQUEST);
-        const response = exception.getResponse() as ProblemResponse;
-        expect(response.problem.code).toBe(ADMIN_ACCOUNT_ERRORS.invalidInput);
-      }
-    });
-
-    it("accepts valid overview periods", () => {
+    it("preserves legacy 30D fallback for missing, unsupported, or arbitrary periods", () => {
+      expect(overviewPipe.transform({})).toEqual({
+        period: "30D",
+      });
+      expect(overviewPipe.transform({ period: "7D" })).toEqual({
+        period: "7D",
+      });
       expect(overviewPipe.transform({ period: "30D" })).toEqual({
+        period: "30D",
+      });
+      expect(overviewPipe.transform({ period: "90D" })).toEqual({
+        period: "90D",
+      });
+      expect(overviewPipe.transform({ period: "180D" })).toEqual({
+        period: "30D",
+      });
+      expect(overviewPipe.transform({ period: "foo" })).toEqual({
         period: "30D",
       });
     });

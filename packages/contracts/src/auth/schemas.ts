@@ -394,15 +394,16 @@ export type AdminListUsersQueryInput = z.infer<
 
 /**
  * Validation schema and input type for Admin overview metrics query parameters.
+ * Preserves legacy fallback: unsupported periods or missing values default to 30D.
  */
 export const adminOverviewQuerySchema = z.object({
   period: z
-    .enum(
-      Object.values(ADMIN_OVERVIEW_PERIODS) as [
-        (typeof ADMIN_OVERVIEW_PERIODS)[keyof typeof ADMIN_OVERVIEW_PERIODS],
-        ...(typeof ADMIN_OVERVIEW_PERIODS)[keyof typeof ADMIN_OVERVIEW_PERIODS][],
-      ],
-    )
-    .default(ADMIN_OVERVIEW_PERIODS.p30d),
+    .string()
+    .optional()
+    .transform((raw) => {
+      if (raw === ADMIN_OVERVIEW_PERIODS.p7d) return ADMIN_OVERVIEW_PERIODS.p7d;
+      if (raw === ADMIN_OVERVIEW_PERIODS.p90d) return ADMIN_OVERVIEW_PERIODS.p90d;
+      return ADMIN_OVERVIEW_PERIODS.p30d;
+    }),
 });
 export type AdminOverviewQueryInput = z.infer<typeof adminOverviewQuerySchema>;
