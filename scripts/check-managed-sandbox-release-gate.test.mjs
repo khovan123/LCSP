@@ -225,6 +225,33 @@ test("rejects stale prior-head runs that remain active after synchronize", () =>
   expectInvalid(proof, /prior-head run review-run-338-prior-active/u);
 });
 
+test("rejects correlation identity from another generation or exact head", () => {
+  const generationMismatch = clone(validProof());
+  generationMismatch.correlation.generation = 2;
+  expectInvalid(
+    generationMismatch,
+    /correlation\.generation must match run\.generation/u,
+  );
+
+  const baseMismatch = clone(validProof());
+  baseMismatch.correlation.baseSha = priorSha;
+  expectInvalid(baseMismatch, /correlation\.baseSha must match run\.baseSha/u);
+
+  const headMismatch = clone(validProof());
+  headMismatch.correlation.headSha = priorSha;
+  expectInvalid(headMismatch, /correlation\.headSha must match run\.headSha/u);
+});
+
+test("accepts correlation identity only when it matches the canonical run", () => {
+  const proof = validProof();
+  const result = validateManagedSandboxProof(proof);
+
+  assert.equal(result.ok, true);
+  assert.equal(proof.correlation.generation, proof.run.generation);
+  assert.equal(proof.correlation.baseSha, proof.run.baseSha);
+  assert.equal(proof.correlation.headSha, proof.run.headSha);
+});
+
 test("rejects code-review PASS as READY while required CI is still pending", () => {
   const proof = clone(validProof());
   proof.ci.allRequiredTerminal = false;

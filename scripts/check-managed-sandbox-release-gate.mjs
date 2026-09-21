@@ -443,6 +443,21 @@ function validateCorrelation(proof, run, errors) {
   if (proof.correlation.runId !== run.runId) {
     errors.push("correlation.runId must match run.runId");
   }
+  if (proof.correlation.generation !== run.generation) {
+    errors.push("correlation.generation must match run.generation");
+  }
+  if (
+    isSha(proof.correlation.baseSha) &&
+    proof.correlation.baseSha.toLowerCase() !== run.baseSha.toLowerCase()
+  ) {
+    errors.push("correlation.baseSha must match run.baseSha");
+  }
+  if (
+    isSha(proof.correlation.headSha) &&
+    proof.correlation.headSha.toLowerCase() !== run.headSha.toLowerCase()
+  ) {
+    errors.push("correlation.headSha must match run.headSha");
+  }
 }
 
 function validateRuntime(proof, errors) {

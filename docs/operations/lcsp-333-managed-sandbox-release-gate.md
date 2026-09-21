@@ -20,6 +20,19 @@ Validate the gate implementation itself:
 pnpm run test:managed-sandbox-release-gate
 ```
 
+For pull requests that touch the release-gate surface, CI also requires the
+`LCSP-333 managed sandbox proof` job. It runs on a self-hosted runner carrying
+the `lcsp-managed-sandbox` label. That runner must provide the
+`lcsp-managed-sandbox-proof` executable. The executable is the production
+proof producer: it must start the canonical PR-triggered review run, exercise
+Scanner → PGE → Interview or governed no-interview → EngineeringRule → Planner
+→ Investigator, observe durable runtime/Web evidence and restart
+reconciliation, re-check GitHub CI/mergeability and the final PR head, sanitize
+the evidence, and write `LCSP333_MANAGED_SANDBOX_PROOF_V1` to the requested
+`--out` path. Missing runner capacity, a missing producer executable, or a
+missing/invalid proof fails the required job; fixture proof is not accepted by
+this CI path.
+
 If the managed sandbox is unavailable, release governance may provide a
 time-boxed exemption artifact:
 

@@ -60,6 +60,9 @@ jobs:
               - 'frozen/interview-agent-frozen/**'
             release_gate:
               - '.github/workflows/test.yml'
+              - 'docs/operations/lcsp-333-managed-sandbox-release-gate.md'
+              - 'scripts/check-managed-sandbox-release-gate.mjs'
+              - 'scripts/check-managed-sandbox-release-gate.test.mjs'
               - 'apps/api/**'
               - 'apps/web/**'
               - 'deepagents/**'
@@ -106,6 +109,67 @@ jobs:
 
       - name: Check managed sandbox release gate validator
         run: pnpm run test:managed-sandbox-release-gate
+
+  managed-sandbox-release-gate:
+    name: LCSP-333 managed sandbox proof
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.release_gate == 'true'
+    runs-on: [self-hosted, linux, lcsp-managed-sandbox]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Verify exact PR head checkout
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Execute production-equivalent managed sandbox and emit proof
+        env:
+          LCSP333_PR_NUMBER: ${{ github.event.pull_request.number }}
+          LCSP333_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          LCSP333_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LCSP333_TRIGGER_ID: ${{ github.event.pull_request.id }}:${{ github.run_id }}:${{ github.run_attempt }}
+        run: |
+          mkdir -p artifacts
+          lcsp-managed-sandbox-proof \
+            --repository "$GITHUB_REPOSITORY" \
+            --pr "$LCSP333_PR_NUMBER" \
+            --base "$LCSP333_BASE_SHA" \
+            --head "$LCSP333_HEAD_SHA" \
+            --trigger "$LCSP333_TRIGGER_ID" \
+            --workspace "$GITHUB_WORKSPACE" \
+            --out artifacts/lcsp333-managed-sandbox-proof.json
+
+      - name: Validate produced managed-sandbox proof
+        run: |
+          pnpm run check:managed-sandbox-release-gate -- \
+            --proof artifacts/lcsp333-managed-sandbox-proof.json \
+            --out artifacts/lcsp333-managed-sandbox-gate-result.json
+
+      - name: Upload sanitized proof and gate result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcsp333-managed-sandbox-proof-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            artifacts/lcsp333-managed-sandbox-proof.json
+            artifacts/lcsp333-managed-sandbox-gate-result.json
+          if-no-files-found: error
+          retention-days: 14
 
   web-production-build:
     name: Web lint and production build
