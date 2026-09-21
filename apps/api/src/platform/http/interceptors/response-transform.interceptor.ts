@@ -52,7 +52,9 @@ export class ResponseTransformInterceptor implements NestInterceptor {
 
     const response = context.switchToHttp().getResponse<HttpResponse>();
     const targets = [
-      typeof context.getHandler === "function" ? context.getHandler() : undefined,
+      typeof context.getHandler === "function"
+        ? context.getHandler()
+        : undefined,
       typeof context.getClass === "function" ? context.getClass() : undefined,
     ].filter(
       (target): target is NonNullable<typeof target> => target !== undefined,
