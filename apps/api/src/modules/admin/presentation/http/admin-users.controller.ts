@@ -43,7 +43,7 @@ const IDEMPOTENCY_KEY_REGEX = /^[A-Za-z0-9._:-]{1,128}$/;
  * Validates that an Idempotency-Key header is present, non-empty, and satisfies character set and length <= 128.
  */
 function assertIdempotencyKey(
-  idempotencyKeyHeader: unknown,
+  idempotencyKeyHeader: string | undefined,
   correlationId: string,
 ): string {
   if (
@@ -127,7 +127,7 @@ export class AdminUsersController {
       ),
     )
     body: AdminUserActionInput,
-    @Headers("idempotency-key") idempotencyKeyHeader: unknown,
+    @Headers("idempotency-key") idempotencyKeyHeader?: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<AdminUserDetail> {
     return this.commandBus.execute<SuspendUserCommand, AdminUserDetail>(
@@ -155,7 +155,7 @@ export class AdminUsersController {
       ),
     )
     body: AdminUserActionInput,
-    @Headers("idempotency-key") idempotencyKeyHeader: unknown,
+    @Headers("idempotency-key") idempotencyKeyHeader?: string,
     @Req() request: AuthenticatedRequest,
   ): Promise<AdminUserDetail> {
     return this.commandBus.execute<RestoreUserCommand, AdminUserDetail>(
@@ -172,7 +172,7 @@ export class AdminUsersController {
    */
   private buildAdminActor(
     request: AuthenticatedRequest,
-    idempotencyKeyHeader: unknown,
+    idempotencyKeyHeader?: string,
   ): AdminActor {
     return {
       ...request.rbacContext,
