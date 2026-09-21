@@ -75,7 +75,29 @@ import {
   VerifyMfaOtpCommand,
   VerifyMfaRecoveryCodeCommand,
 } from "../../application/commands/index.ts";
-import type { SensitiveRouteCheckDto } from "../../application/contracts/auth/index.ts";
+import type {
+  AuthProfileSuccess,
+  AuthSessionsSuccess,
+  ConfirmRecoverySuccess,
+  DisableMfaSuccess,
+  EnrollMfaSuccess,
+  GenerateMfaRecoveryCodesSuccess,
+  OAuthCallbackSuccess,
+  OAuthLinkCallbackSuccess,
+  OAuthLinkStartSuccess,
+  OAuthStartSuccess,
+  PasswordReauthSuccess,
+  RecordMfaRecoveryCodeAccessSuccess,
+  RequestRecoverySuccess,
+  RevokeOwnedSessionSuccess,
+  RevokeSessionSuccess,
+  SensitiveRouteCheckDto,
+  SignInSuccess,
+  SignUpResponse,
+  UpdateProfileSuccess,
+  VerifyMfaOtpSuccess,
+  VerifyMfaRecoveryCodeSuccess,
+} from "../../application/contracts/auth/index.ts";
 import {
   CheckSensitiveRouteQuery,
   GetAuthProfileQuery,
@@ -103,8 +125,8 @@ export class AuthController {
   async signIn(
     @Body(new ZodValidationPipe(signInSchema)) payload: SignInInput,
     @Headers("x-correlation-id") correlationId?: string,
-  ) {
-    return this.commandBus.execute<SignInCommand, unknown>(
+  ): Promise<SignInSuccess> {
+    return this.commandBus.execute<SignInCommand, SignInSuccess>(
       new SignInCommand(payload, { correlationId }),
     );
   }
@@ -117,8 +139,8 @@ export class AuthController {
   async signUp(
     @Body(new ZodValidationPipe(signUpSchema)) payload: SignUpInput,
     @Headers("x-correlation-id") correlationId?: string,
-  ) {
-    return this.commandBus.execute<SignUpCommand, unknown>(
+  ): Promise<SignUpResponse> {
+    return this.commandBus.execute<SignUpCommand, SignUpResponse>(
       new SignUpCommand({
         email: payload.email,
         displayName: payload.display_name,
@@ -136,8 +158,8 @@ export class AuthController {
   async revokeSession(
     @Body(new ZodValidationPipe(revokeSessionSchema)) body: RevokeSessionInput,
     @Headers("x-correlation-id") correlationId?: string,
-  ) {
-    return this.commandBus.execute<RevokeSessionCommand, unknown>(
+  ): Promise<RevokeSessionSuccess> {
+    return this.commandBus.execute<RevokeSessionCommand, RevokeSessionSuccess>(
       new RevokeSessionCommand(body.session_token, { correlationId }),
     );
   }
@@ -150,8 +172,10 @@ export class AuthController {
   @UseGuards(RbacGuard)
   @RequireSession()
   @AllowPendingMfa()
-  async enrollMfa(@Req() request: AuthenticatedRequest) {
-    return this.commandBus.execute<EnrollMfaCommand, unknown>(
+  async enrollMfa(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<EnrollMfaSuccess> {
+    return this.commandBus.execute<EnrollMfaCommand, EnrollMfaSuccess>(
       new EnrollMfaCommand(
         request.rbacContext.userId,
         request.rbacContext.sessionId,
@@ -167,8 +191,10 @@ export class AuthController {
   @Delete("auth/mfa")
   @UseGuards(RbacGuard)
   @RequireSession()
-  async disableMfa(@Req() request: AuthenticatedRequest) {
-    return this.commandBus.execute<DisableMfaCommand, unknown>(
+  async disableMfa(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<DisableMfaSuccess> {
+    return this.commandBus.execute<DisableMfaCommand, DisableMfaSuccess>(
       new DisableMfaCommand(
         request.rbacContext.userId,
         request.rbacContext.sessionId,
@@ -184,8 +210,8 @@ export class AuthController {
   async verifyMfaOtp(
     @Body(new ZodValidationPipe(verifyMfaOtpSchema)) body: VerifyMfaOtpInput,
     @Headers("x-correlation-id") correlationId?: string,
-  ) {
-    return this.commandBus.execute<VerifyMfaOtpCommand, unknown>(
+  ): Promise<VerifyMfaOtpSuccess> {
+    return this.commandBus.execute<VerifyMfaOtpCommand, VerifyMfaOtpSuccess>(
       new VerifyMfaOtpCommand(body.session_token, body.otp, {
         correlationId,
       }),
@@ -200,8 +226,11 @@ export class AuthController {
     @Body(new ZodValidationPipe(verifyMfaRecoveryCodeSchema))
     body: VerifyMfaRecoveryCodeInput,
     @Headers("x-correlation-id") correlationId?: string,
-  ) {
-    return this.commandBus.execute<VerifyMfaRecoveryCodeCommand, unknown>(
+  ): Promise<VerifyMfaRecoveryCodeSuccess> {
+    return this.commandBus.execute<
+      VerifyMfaRecoveryCodeCommand,
+      VerifyMfaRecoveryCodeSuccess
+    >(
       new VerifyMfaRecoveryCodeCommand(body.session_token, body.code, {
         correlationId,
       }),
@@ -221,8 +250,13 @@ export class AuthController {
     pathTemplate: "/auth/mfa/recovery-codes",
     aliases: [{ method: "POST", pathTemplate: "/api/auth/mfa/recovery-codes" }],
   })
-  async generateMfaRecoveryCodes(@Req() request: AuthenticatedRequest) {
-    return this.commandBus.execute<GenerateMfaRecoveryCodesCommand, unknown>(
+  async generateMfaRecoveryCodes(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<GenerateMfaRecoveryCodesSuccess> {
+    return this.commandBus.execute<
+      GenerateMfaRecoveryCodesCommand,
+      GenerateMfaRecoveryCodesSuccess
+    >(
       new GenerateMfaRecoveryCodesCommand(
         request.rbacContext.userId,
         request.rbacContext.sessionId,
@@ -241,8 +275,11 @@ export class AuthController {
     @Body(new ZodValidationPipe(recordMfaRecoveryCodeAccessSchema))
     body: RecordMfaRecoveryCodeAccessInput,
     @Req() request: AuthenticatedRequest,
-  ) {
-    return this.commandBus.execute<RecordMfaRecoveryCodeAccessCommand, unknown>(
+  ): Promise<RecordMfaRecoveryCodeAccessSuccess> {
+    return this.commandBus.execute<
+      RecordMfaRecoveryCodeAccessCommand,
+      RecordMfaRecoveryCodeAccessSuccess
+    >(
       new RecordMfaRecoveryCodeAccessCommand(
         request.rbacContext.userId,
         body.action,
@@ -263,8 +300,11 @@ export class AuthController {
     @Body(new ZodValidationPipe(passwordReauthSchema))
     body: PasswordReauthInput,
     @Req() request: AuthenticatedRequest,
-  ) {
-    return this.commandBus.execute<ReauthenticatePasswordCommand, unknown>(
+  ): Promise<PasswordReauthSuccess> {
+    return this.commandBus.execute<
+      ReauthenticatePasswordCommand,
+      PasswordReauthSuccess
+    >(
       new ReauthenticatePasswordCommand(
         body.password,
         request.rbacContext.userId,
@@ -286,7 +326,7 @@ export class AuthController {
     @Body(new ZodValidationPipe(checkSensitiveRouteSchema))
     body: CheckSensitiveRouteInput,
     @Req() request: AuthenticatedRequest,
-  ) {
+  ): Promise<SensitiveRouteCheckDto> {
     const route = body.path ?? body.route ?? "";
     return this.queryBus.execute<
       CheckSensitiveRouteQuery,
@@ -309,8 +349,8 @@ export class AuthController {
   async updateProfile(
     @Body(new ZodValidationPipe(updateProfileSchema)) body: UpdateProfileInput,
     @Req() request: AuthenticatedRequest,
-  ) {
-    return this.commandBus.execute<UpdateProfileCommand, unknown>(
+  ): Promise<UpdateProfileSuccess> {
+    return this.commandBus.execute<UpdateProfileCommand, UpdateProfileSuccess>(
       new UpdateProfileCommand(
         body,
         request.rbacContext.userId,
@@ -328,8 +368,10 @@ export class AuthController {
   @Get("auth/profile")
   @UseGuards(RbacGuard)
   @RequireSession()
-  async getProfile(@Req() request: AuthenticatedRequest) {
-    return this.queryBus.execute<GetAuthProfileQuery, unknown>(
+  async getProfile(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<AuthProfileSuccess> {
+    return this.queryBus.execute<GetAuthProfileQuery, AuthProfileSuccess>(
       new GetAuthProfileQuery(request.rbacContext, request.correlationId!),
     );
   }
@@ -340,8 +382,10 @@ export class AuthController {
   @Get("auth/sessions")
   @UseGuards(RbacGuard)
   @RequireSession()
-  async listSessions(@Req() request: AuthenticatedRequest) {
-    return this.queryBus.execute<ListAuthSessionsQuery, unknown>(
+  async listSessions(
+    @Req() request: AuthenticatedRequest,
+  ): Promise<AuthSessionsSuccess> {
+    return this.queryBus.execute<ListAuthSessionsQuery, AuthSessionsSuccess>(
       new ListAuthSessionsQuery(request.rbacContext),
     );
   }
@@ -355,8 +399,11 @@ export class AuthController {
   async revokeOwnedSession(
     @Param("sessionId") sessionId: string,
     @Req() request: AuthenticatedRequest,
-  ) {
-    return this.commandBus.execute<RevokeOwnedSessionCommand, unknown>(
+  ): Promise<RevokeOwnedSessionSuccess> {
+    return this.commandBus.execute<
+      RevokeOwnedSessionCommand,
+      RevokeOwnedSessionSuccess
+    >(
       new RevokeOwnedSessionCommand(sessionId, request.rbacContext, {
         correlationId: request.correlationId,
       }),
@@ -372,8 +419,11 @@ export class AuthController {
     payload: RequestPasswordRecoveryInput,
     @Headers("x-correlation-id") correlationId?: string,
     @Headers("x-app-origin") appOrigin?: string,
-  ) {
-    return this.commandBus.execute<RequestPasswordRecoveryCommand, unknown>(
+  ): Promise<RequestRecoverySuccess> {
+    return this.commandBus.execute<
+      RequestPasswordRecoveryCommand,
+      RequestRecoverySuccess
+    >(
       new RequestPasswordRecoveryCommand(payload, {
         correlationId,
         app_origin: appOrigin,
@@ -389,10 +439,11 @@ export class AuthController {
     @Body(new ZodValidationPipe(confirmPasswordRecoverySchema))
     payload: ConfirmPasswordRecoveryInput,
     @Headers("x-correlation-id") correlationId?: string,
-  ) {
-    return this.commandBus.execute<ConfirmPasswordRecoveryCommand, unknown>(
-      new ConfirmPasswordRecoveryCommand(payload, { correlationId }),
-    );
+  ): Promise<ConfirmRecoverySuccess> {
+    return this.commandBus.execute<
+      ConfirmPasswordRecoveryCommand,
+      ConfirmRecoverySuccess
+    >(new ConfirmPasswordRecoveryCommand(payload, { correlationId }));
   }
 
   /**
@@ -402,8 +453,8 @@ export class AuthController {
   async oauthStart(
     @Query(new ZodValidationPipe(oauthStartSchema)) query: OAuthStartInput,
     @Headers("x-correlation-id") correlationId?: string,
-  ) {
-    return this.commandBus.execute<OAuthStartCommand, unknown>(
+  ): Promise<OAuthStartSuccess> {
+    return this.commandBus.execute<OAuthStartCommand, OAuthStartSuccess>(
       new OAuthStartCommand(query, { correlationId }),
     );
   }
@@ -416,8 +467,8 @@ export class AuthController {
     @Query(new ZodValidationPipe(oauthCallbackSchema))
     query: OAuthCallbackInput,
     @Headers("x-correlation-id") correlationId?: string,
-  ) {
-    return this.commandBus.execute<OAuthCallbackCommand, unknown>(
+  ): Promise<OAuthCallbackSuccess> {
+    return this.commandBus.execute<OAuthCallbackCommand, OAuthCallbackSuccess>(
       new OAuthCallbackCommand(query, { correlationId }),
     );
   }
@@ -432,8 +483,11 @@ export class AuthController {
     @Req() request: AuthenticatedRequest,
     @Query(new ZodValidationPipe(oauthLinkStartSchema))
     query: OAuthLinkStartInput,
-  ) {
-    return this.commandBus.execute<OAuthLinkStartCommand, unknown>(
+  ): Promise<OAuthLinkStartSuccess> {
+    return this.commandBus.execute<
+      OAuthLinkStartCommand,
+      OAuthLinkStartSuccess
+    >(
       new OAuthLinkStartCommand(
         query,
         request.rbacContext.userId,
@@ -453,8 +507,11 @@ export class AuthController {
     @Req() request: AuthenticatedRequest,
     @Query(new ZodValidationPipe(oauthLinkCallbackSchema))
     query: OAuthLinkCallbackInput,
-  ) {
-    return this.commandBus.execute<OAuthLinkCallbackCommand, unknown>(
+  ): Promise<OAuthLinkCallbackSuccess> {
+    return this.commandBus.execute<
+      OAuthLinkCallbackCommand,
+      OAuthLinkCallbackSuccess
+    >(
       new OAuthLinkCallbackCommand(
         query,
         request.rbacContext.userId,
