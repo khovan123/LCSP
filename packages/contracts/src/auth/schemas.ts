@@ -357,18 +357,36 @@ export const adminListUsersQuerySchema = z
             )
           : ADMIN_ACCOUNT_QUERY_LIMITS.defaultPageSize;
 
-    return {
-      query: data.query ?? data.q,
-      q: data.q,
-      status: data.status,
-      role: data.role,
+    const result: {
+      query?: string;
+      q?: string;
+      status?: string;
+      role?: string;
+      page?: number;
+      pageSize?: number;
+      page_size?: number;
+    } = {
       page: data.page !== undefined ? parseNumber(data.page, 1) : 1,
       pageSize: resolvedPageSize,
-      page_size:
-        data.page_size !== undefined
-          ? parseNumber(data.page_size, resolvedPageSize)
-          : undefined,
     };
+
+    if (data.query !== undefined || data.q !== undefined) {
+      result.query = data.query ?? data.q;
+    }
+    if (data.q !== undefined) {
+      result.q = data.q;
+    }
+    if (data.status !== undefined) {
+      result.status = data.status;
+    }
+    if (data.role !== undefined) {
+      result.role = data.role;
+    }
+    if (data.page_size !== undefined) {
+      result.page_size = parseNumber(data.page_size, resolvedPageSize);
+    }
+
+    return result;
   });
 export type AdminListUsersQueryInput = z.infer<
   typeof adminListUsersQuerySchema
