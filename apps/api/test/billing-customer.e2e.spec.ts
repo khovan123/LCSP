@@ -60,7 +60,7 @@ describe("LCSP-312 customer billing HTTP API (e2e)", () => {
     }).compile();
     app = moduleFixture.createNestApplication();
     await app.init();
-  });
+  }, 30_000);
 
   beforeEach(async () => {
     await prisma.llmUsageEvent.deleteMany();

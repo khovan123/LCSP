@@ -27,7 +27,7 @@ const nonNegativeIntegerText = z
   .transform((value) => String(value).trim())
   .pipe(z.string().regex(/^\d+$/));
 const positiveIntegerText = nonNegativeIntegerText.refine(
-  (value) => BigInt(value) > 0n,
+  (value) => /[1-9]/.test(value),
 );
 
 const minimumAmountVnd = Number(PREPAID_BILLING_CONFIG.minimumAmountVnd);

@@ -35,7 +35,7 @@ assert.match(customerSource, /useBillingWalletQuery\(/);
 assert.match(customerSource, /getBillingWallet\(/);
 assert.match(customerSource, /upstreamRequest\("\/billing\/wallet"/);
 assert.match(adminSource, /useAdminBillingQuery\(/);
-assert.match(adminSource, /validatedUpstreamJson\(/);
+assert.match(adminSource, /validatedBillingUpstreamJson\(/);
 assert.match(adminSource, /parseBillingAdminDashboard/);
 assert.doesNotMatch(
   productionSource,

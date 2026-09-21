@@ -34,10 +34,8 @@ export class ListBillingHistoryHandler implements IQueryHandler<ListBillingHisto
       }),
     );
     return {
-      orders: await Promise.all(
-        result.orders.map(async (order) =>
-          toBillingOrderView(order, this.config),
-        ),
+      orders: result.orders.map((order) =>
+        toBillingOrderView(order, this.config),
       ),
       page,
       pageSize,
