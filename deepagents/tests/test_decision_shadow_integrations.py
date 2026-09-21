@@ -1,0 +1,317 @@
+import json
+
+from decision import (
+    DecisionGateway,
+    DecisionGatewayConfig,
+    InterviewRoutingPacket,
+    PrReviewTriagePacket,
+    RootRoutingPacket,
+    ShadowDecisionObserver,
+)
+from decision.shadow import INTERVIEW_TOPIC_CHOICES, ROOT_ROUTE_CHOICES
+from decision.telemetry import InMemoryDecisionTelemetrySink
+from decision.typesafe_client import TypeSafeJevClient, TypeSafeJevError
+
+
+def _config(**overrides):
+    values = {
+        "provider": "jev",
+        "mode": "SHADOW",
+        "fallback": "existing",
+        "api_key": "typesafe-test-key",
+        "timeout_ms": 100,
+        "policy_version": "TEST_POLICY",
+        "endpoint": "https://typesafe.test/jev",
+        "max_retries": 0,
+    }
+    values.update(overrides)
+    return DecisionGatewayConfig(**values)
+
+
+def _client(*, calls=None, choice_overrides=None, confidence=0.93, errors=None):
+    call_log = calls if calls is not None else []
+    choices = dict(choice_overrides or {})
+    failures = list(errors or [])
+
+    def transport(payload, headers, timeout):
+        call_log.append({"payload": payload, "headers": headers, "timeout": timeout})
+        if failures:
+            raise failures.pop(0)
+        decisions = []
+        for question in payload["questions"]:
+            question_id = question["question_id"]
+            question_type = question["question_type"]
+            item = {
+                "questionId": question_id,
+                "confidence": confidence,
+                "probability": confidence,
+            }
+            if question_type == "CHOICE":
+                selected = choices.get(question_id, question["choices"][0])
+                item["choice"] = selected
+                item["probabilities"] = {selected: confidence}
+            elif question_type == "SCORE":
+                item["score"] = 0.64
+            else:
+                item["noul"] = {"value": True, "reason_code": "BOUNDED_SIGNAL"}
+            decisions.append(item)
+        return {
+            "provider": "typesafe",
+            "modelVersion": "jev-shadow-test",
+            "responseId": "jev-shadow-response",
+            "usage": {"inputTokens": 20, "outputTokens": 10},
+            "decisions": decisions,
+        }
+
+    return TypeSafeJevClient(
+        api_key="typesafe-test-key",
+        endpoint="https://typesafe.test/jev",
+        timeout_ms=100,
+        max_retries=0,
+        transport=transport,
+    )
+
+
+def _observer(*, client, sink=None, config=None, seen=None):
+    gateway = DecisionGateway(config=config or _config(), client=client)
+    return ShadowDecisionObserver(
+        gateway=gateway,
+        telemetry_sink=sink,
+        seen_decision_ids=seen,
+    )
+
+
+def _pr_packet(**overrides):
+    values = {
+        "pr_number": 343,
+        "head_sha": "d2a7352c26494f00a0ce51f534d508364eb26c08",
+        "base_sha": "4064ae2c498f8d712e7e7c4c55a5e89f6a1cd0fb",
+        "review_run_id": "review-run-1",
+        "changed_filenames": ("deepagents/decision/shadow.py", "deepagents/tests/test_decision_shadow_integrations.py"),
+        "change_categories": ("python", "tests"),
+        "jira_issue_ids": ("LCSP-336",),
+        "acceptance_criteria_ids": ("AC-shadow-pr-triage",),
+        "bounded_summary": "Decision shadow observer and focused tests.",
+        "ci_state_codes": ("PYTHON_WORKER_PENDING", "RELEASE_GATE_PENDING"),
+        "scanner_change_metadata": ("PGE_METADATA_AVAILABLE",),
+        "diff_stat_keys": ("python_files_changed", "tests_changed"),
+        "addition_count": 120,
+        "deletion_count": 4,
+        "pge_artifact_version": "sha256:" + "a" * 64,
+    }
+    values.update(overrides)
+    return PrReviewTriagePacket(**values)
+
+
+def test_pr_review_triage_records_shadow_result_with_exact_head_correlation():
+    calls = []
+    sink = InMemoryDecisionTelemetrySink()
+    observer = _observer(
+        client=_client(calls=calls, choice_overrides={"affected_domain": "SCANNER"}),
+        sink=sink,
+    )
+
+    record = observer.observe_pr_review_triage(
+        _pr_packet(),
+        authoritative_domain="SCANNER",
+    )
+
+    assert len(calls) == 1
+    payload = calls[0]["payload"]
+    assert payload["head_sha"] == "d2a7352c26494f00a0ce51f534d508364eb26c08"
+    assert "raw_diff" not in json.dumps(payload, sort_keys=True)
+    assert record.shadow_proposed_action == "SCANNER"
+    assert record.authoritative_action == "SCANNER"
+    assert record.agreement is True
+    result_events = [event for event in sink.events if event["eventType"] == "DECISION_MODEL_RESULT"]
+    assert result_events
+    assert result_events[0]["headSha"] == "d2a7352c26494f00a0ce51f534d508364eb26c08"
+    assert result_events[0]["data"]["authoritativeAction"] == "SCANNER"
+    assert result_events[0]["data"]["shadowProposedAction"] == "SCANNER"
+    assert result_events[0]["data"]["agreement"] is True
+
+
+def test_pr_review_triage_rejects_raw_source_before_provider_execution():
+    calls = []
+    observer = _observer(client=_client(calls=calls))
+
+    record = observer.observe_pr_review_triage(
+        _pr_packet(bounded_summary="def leak_secret():\n    return token"),
+        authoritative_domain="SCANNER",
+    )
+
+    assert calls == []
+    assert record.gateway_outcome is not None
+    assert record.gateway_outcome.provider_result is None
+    assert record.fallback_reason == "RAW_SOURCE_PAYLOAD_FORBIDDEN"
+
+
+def test_root_deterministic_transition_bypasses_jev():
+    calls = []
+    observer = _observer(client=_client(calls=calls))
+
+    record = observer.observe_root_routing(
+        RootRoutingPacket(
+            assessment_id="assessment-1",
+            review_run_id="run-1",
+            checkpoint_id="checkpoint-1",
+            current_stage="ENGINEERING_RULE_DONE",
+            run_status="READY",
+            authoritative_route="PLAN",
+            deterministic_transition_available=True,
+        )
+    )
+
+    assert calls == []
+    assert record.skipped is True
+    assert record.authoritative_action == "PLAN"
+    assert record.fallback_reason == "DETERMINISTIC_TRANSITION"
+
+
+def test_ambiguous_root_routing_observes_jev_without_changing_authority():
+    calls = []
+    sink = InMemoryDecisionTelemetrySink()
+    observer = _observer(
+        client=_client(calls=calls, choice_overrides={"route": "INVESTIGATE"}),
+        sink=sink,
+    )
+
+    record = observer.observe_root_routing(
+        RootRoutingPacket(
+            assessment_id="assessment-1",
+            review_run_id="run-1",
+            checkpoint_id="checkpoint-ambiguous",
+            current_stage="POST_INTERVIEW",
+            run_status="AMBIGUOUS",
+            authoritative_route="PLAN",
+            deterministic_transition_available=False,
+            pending_stage_candidates=("PLAN", "INVESTIGATE"),
+            coverage_state="PARTIAL",
+        )
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["payload"]["questions"][0]["choices"] == list(ROOT_ROUTE_CHOICES)
+    assert record.authoritative_action == "PLAN"
+    assert record.shadow_proposed_action == "INVESTIGATE"
+    assert record.agreement is False
+    assert sink.events[0]["assessmentId"] == "assessment-1"
+    assert sink.events[0]["reviewRunId"] == "run-1"
+
+
+def test_provider_failure_and_low_confidence_leave_root_route_unchanged():
+    failure_calls = []
+    failure_observer = _observer(
+        client=_client(
+            calls=failure_calls,
+            errors=[TypeSafeJevError("PROVIDER_AUTH_ERROR", "auth failed")],
+        )
+    )
+
+    failed = failure_observer.observe_root_routing(
+        RootRoutingPacket(
+            assessment_id="assessment-1",
+            review_run_id="run-fail",
+            checkpoint_id="checkpoint-fail",
+            current_stage="POST_INTERVIEW",
+            run_status="AMBIGUOUS",
+            authoritative_route="INTERVIEW",
+            deterministic_transition_available=False,
+        )
+    )
+
+    assert failed.authoritative_action == "INTERVIEW"
+    assert failed.shadow_proposed_action is None
+    assert failed.fallback_reason == "PROVIDER_AUTH_ERROR"
+
+    low_confidence_calls = []
+    low_confidence_observer = _observer(
+        client=_client(
+            calls=low_confidence_calls,
+            choice_overrides={"route": "GATE"},
+            confidence=0.2,
+        )
+    )
+
+    low_confidence = low_confidence_observer.observe_root_routing(
+        RootRoutingPacket(
+            assessment_id="assessment-1",
+            review_run_id="run-low-confidence",
+            checkpoint_id="checkpoint-low-confidence",
+            current_stage="POST_INTERVIEW",
+            run_status="AMBIGUOUS",
+            authoritative_route="INTERVIEW",
+            deterministic_transition_available=False,
+        )
+    )
+
+    assert low_confidence.authoritative_action == "INTERVIEW"
+    assert low_confidence.shadow_proposed_action == "GATE"
+    assert low_confidence.fallback_reason == "LOW_CONFIDENCE"
+
+
+def test_interview_topic_choice_is_restricted_to_server_owned_enum():
+    calls = []
+    observer = _observer(
+        client=_client(calls=calls, choice_overrides={"missing_topic": "DATA_SOURCE"})
+    )
+
+    record = observer.observe_interview_routing(
+        InterviewRoutingPacket(
+            assessment_id="assessment-1",
+            review_run_id="run-interview",
+            authoritative_topic="DATA_SOURCE",
+            active_question_id="question-1",
+            active_topic_key="DATA_SOURCE",
+            context_revision=3,
+            customer_safe_topic_keys=("DATA_SOURCE", "PURPOSE"),
+            unresolved_topic_keys=("DATA_SOURCE",),
+            resolution_criteria_keys=("data_source_confirmed",),
+        )
+    )
+
+    assert len(calls) == 1
+    topic_question = calls[0]["payload"]["questions"][1]
+    assert topic_question["question_id"] == "missing_topic"
+    assert tuple(topic_question["choices"]) == INTERVIEW_TOPIC_CHOICES
+    assert record.shadow_proposed_action == "DATA_SOURCE"
+    assert record.agreement is True
+
+
+def test_jev_cannot_set_ai_absence_risk_or_readiness_state():
+    calls = []
+    observer = _observer(
+        client=_client(calls=calls, choice_overrides={"missing_topic": "AI_ABSENT_CONFIRMED"})
+    )
+
+    record = observer.observe_interview_routing(
+        InterviewRoutingPacket(
+            assessment_id="assessment-1",
+            review_run_id="run-invalid-topic",
+            authoritative_topic="NONE",
+        )
+    )
+
+    assert record.gateway_outcome is not None
+    assert record.gateway_outcome.provider_result is None
+    assert record.shadow_proposed_action is None
+    assert record.authoritative_action == "NONE"
+    assert record.fallback_reason == "PROVIDER_SCHEMA_INVALID"
+
+
+def test_shadow_observer_deduplicates_replayed_decision_id():
+    calls = []
+    seen: set[str] = set()
+    observer = _observer(
+        client=_client(calls=calls, choice_overrides={"affected_domain": "CI_RELEASE"}),
+        seen=seen,
+    )
+    packet = _pr_packet(pr_number=344, head_sha="b" * 40)
+
+    first = observer.observe_pr_review_triage(packet, authoritative_domain="CI_RELEASE")
+    replay = observer.observe_pr_review_triage(packet, authoritative_domain="CI_RELEASE")
+
+    assert len(calls) == 1
+    assert first.skipped is False
+    assert replay.skipped is True
+    assert replay.fallback_reason == "DUPLICATE_DECISION_ID"
