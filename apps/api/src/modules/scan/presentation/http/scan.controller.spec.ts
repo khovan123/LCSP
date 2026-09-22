@@ -233,7 +233,7 @@ describe("InternalScanController", () => {
   });
 
   it("persists bounded decision-model events by exact PR head correlation", async () => {
-    const create = jest.fn().mockResolvedValue({});
+    const create = jest.fn<() => Promise<unknown>>().mockResolvedValue({});
     const controller = new InternalScanController(
       {} as unknown as CommandBus,
       {} as never,
@@ -272,7 +272,7 @@ describe("InternalScanController", () => {
 
   it("claims decision IDs once and reports replay duplicates without provider authority", async () => {
     const create = jest
-      .fn()
+      .fn<() => Promise<unknown>>()
       .mockResolvedValueOnce({})
       .mockRejectedValueOnce({ code: "P2002" });
     const controller = new InternalScanController(
@@ -303,7 +303,7 @@ describe("InternalScanController", () => {
   });
 
   it("completes decision records with bounded shadow comparison only", async () => {
-    const upsert = jest.fn().mockResolvedValue({});
+    const upsert = jest.fn<() => Promise<unknown>>().mockResolvedValue({});
     const controller = new InternalScanController(
       {} as unknown as CommandBus,
       {} as never,

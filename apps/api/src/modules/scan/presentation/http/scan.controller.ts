@@ -780,7 +780,7 @@ function boundedDecisionCompletionPayload(
   if (typeof payload.skipped === "boolean") {
     result.skipped = payload.skipped;
   }
-  return result;
+  return result as Prisma.InputJsonObject;
 }
 
 function boundedDecisionEventPayload(
@@ -795,9 +795,9 @@ function boundedDecisionEventPayload(
   if (decisionType) result.decisionType = decisionType;
   if (payload.data !== undefined) {
     const data = parseRuntimeSummaryValue(payload.data);
-    if (data !== null) result.data = data;
+    if (data !== null) result.data = data as Prisma.InputJsonValue;
   }
-  return result;
+  return result as Prisma.InputJsonObject;
 }
 
 function parseWorkerRuntimeEventPayload(
