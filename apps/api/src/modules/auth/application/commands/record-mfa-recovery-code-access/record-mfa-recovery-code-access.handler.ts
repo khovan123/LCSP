@@ -28,6 +28,15 @@ const RECOVERY_CODE_ACCESS_EVENTS = {
     AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodeCopied,
 } as const;
 
+/**
+ * Handles recording audit telemetry whenever a user accesses their MFA recovery codes.
+ *
+ * Enforces:
+ * 1. Active, unexpired session belonging to the user.
+ * 2. MFA verified status on the session (step-up required).
+ * 3. Maps access action (view, download, print, copy) to specific audit events.
+ * 4. Records structured audit logs with actor ID and action metadata.
+ */
 @CommandHandler(RecordMfaRecoveryCodeAccessCommand)
 export class RecordMfaRecoveryCodeAccessHandler implements ICommandHandler<RecordMfaRecoveryCodeAccessCommand> {
   constructor(
@@ -36,6 +45,12 @@ export class RecordMfaRecoveryCodeAccessHandler implements ICommandHandler<Recor
     private readonly sessions: SessionRepository,
   ) {}
 
+  /**
+   * Executes access telemetry recording for recovery codes.
+   *
+   * @param command - Contains userId, access action, sessionId, and request metadata.
+   * @returns Success response with correlation ID.
+   */
   async execute(
     command: RecordMfaRecoveryCodeAccessCommand,
   ): Promise<RecordMfaRecoveryCodeAccessSuccess> {

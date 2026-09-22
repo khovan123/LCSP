@@ -20,6 +20,15 @@ import {
 import { AuthSupportService } from "../../services/auth/auth-support.service.ts";
 import { ReauthenticatePasswordCommand } from "./reauthenticate-password.command.ts";
 
+/**
+ * Handles password re-authentication (sudo mode) for sensitive account actions.
+ *
+ * Enforces:
+ * 1. Valid, active session belonging to the authenticated user.
+ * 2. Constant-time verification of user's current password.
+ * 3. Marks session with `sensitiveActionVerifiedAt` timestamp upon success.
+ * 4. Records audit trails for both success and failed password checks.
+ */
 @CommandHandler(ReauthenticatePasswordCommand)
 export class ReauthenticatePasswordHandler implements ICommandHandler<ReauthenticatePasswordCommand> {
   constructor(
@@ -30,6 +39,12 @@ export class ReauthenticatePasswordHandler implements ICommandHandler<Reauthenti
     private readonly users: UserRepository,
   ) {}
 
+  /**
+   * Executes password re-authentication for the active session.
+   *
+   * @param command - Contains current password, userId, sessionId, and request metadata.
+   * @returns Verification success response.
+   */
   async execute(
     command: ReauthenticatePasswordCommand,
   ): Promise<PasswordReauthSuccess> {

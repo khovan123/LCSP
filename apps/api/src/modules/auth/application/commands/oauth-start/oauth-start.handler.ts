@@ -21,6 +21,16 @@ import { OAuthStartCommand } from "./oauth-start.command.ts";
 
 const OAUTH_STATE_TTL_MS = 10 * 60_000;
 
+/**
+ * Handles initiating an OAuth 2.0 / OIDC authentication flow.
+ *
+ * Enforces:
+ * 1. Validates that requested provider is supported and configured in the provider registry.
+ * 2. Whitelist-checks the `redirect_uri` origin against configured allowed redirect origins.
+ * 3. Issues cryptographically secure state and nonce tokens with a 10-minute TTL.
+ * 4. Persists ephemeral OAuthState in repository.
+ * 5. Builds provider-specific authorization URL and records start audit event.
+ */
 @CommandHandler(OAuthStartCommand)
 export class OAuthStartHandler implements ICommandHandler<OAuthStartCommand> {
   constructor(
@@ -31,6 +41,12 @@ export class OAuthStartHandler implements ICommandHandler<OAuthStartCommand> {
     private readonly configService: ConfigService,
   ) {}
 
+  /**
+   * Executes OAuth initiation.
+   *
+   * @param command - Contains OAuth payload (provider, redirect_uri) and request metadata.
+   * @returns Authorization redirect URL and correlation ID.
+   */
   async execute(command: OAuthStartCommand): Promise<OAuthStartSuccess> {
     const { payload, requestMeta } = command;
     const { oauthStates } = this;

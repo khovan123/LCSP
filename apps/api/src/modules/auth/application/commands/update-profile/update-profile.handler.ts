@@ -22,6 +22,16 @@ import {
 import { AuthSupportService } from "../../services/auth/auth-support.service.ts";
 import { UpdateProfileCommand } from "./update-profile.command.ts";
 
+/**
+ * Handles updating authenticated user profile details, email policies, and recovery email.
+ *
+ * Enforces:
+ * 1. Requires authenticated user context and active session.
+ * 2. Enforces MFA verification if MFA is required for the user.
+ * 3. Validates email policy consistency (e.g. policy requiring recovery email must have recovery email provided).
+ * 4. Ensures recovery email is not already taken by another account as primary or recovery email.
+ * 5. Applies field updates, persists changes, and logs structured audit trail.
+ */
 @CommandHandler(UpdateProfileCommand)
 export class UpdateProfileHandler implements ICommandHandler<UpdateProfileCommand> {
   constructor(
@@ -34,6 +44,12 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
     private readonly mfaEnrollments: MfaEnrollmentRepository,
   ) {}
 
+  /**
+   * Executes profile update.
+   *
+   * @param command - Contains profile payload, userId, sessionId, and request metadata.
+   * @returns List of updated fields and correlation ID.
+   */
   async execute(command: UpdateProfileCommand): Promise<UpdateProfileSuccess> {
     const { payload, userId, sessionId, requestMeta } = command;
     const { users, sessions, mfaEnrollments } = this;

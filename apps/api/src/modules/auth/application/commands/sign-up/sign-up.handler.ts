@@ -28,6 +28,16 @@ import { SignUpCommand } from "./sign-up.command.ts";
 
 const SESSION_TTL_MS = 8 * 60 * 60_000;
 
+/**
+ * Handles new customer account registration.
+ *
+ * Enforces:
+ * 1. Email uniqueness pre-check and atomic database duplicate constraint handling.
+ * 2. Secure password hashing with scrypt.
+ * 3. Atomic transaction creating user record, initial authenticated session, and audit log.
+ * 4. Account lifecycle advisory locking to serialize user creation operations.
+ * 5. Returns issued session token and expiration timestamp.
+ */
 @CommandHandler(SignUpCommand)
 export class SignUpHandler implements ICommandHandler<SignUpCommand> {
   constructor(
@@ -35,6 +45,12 @@ export class SignUpHandler implements ICommandHandler<SignUpCommand> {
     private readonly authAudit: AuthAuditService,
   ) {}
 
+  /**
+   * Executes user registration and initial session issuance.
+   *
+   * @param command - Contains normalized email, display name, password, and correlation ID.
+   * @returns User ID, opaque session token, and session expiration timestamp.
+   */
   async execute(command: SignUpCommand): Promise<SignUpResponse> {
     const { email, displayName, password } = command.input;
     const correlationId = command.input.correlationId ?? createCorrelationId();

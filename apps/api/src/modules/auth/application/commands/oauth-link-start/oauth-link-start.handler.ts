@@ -21,6 +21,15 @@ import { OAuthLinkStartCommand } from "./oauth-link-start.command.ts";
 
 const OAUTH_STATE_TTL_MS = 10 * 60_000;
 
+/**
+ * Handles initiating an OAuth 2.0 / OIDC flow to link a social provider to an existing authenticated account.
+ *
+ * Enforces:
+ * 1. Requires active authenticated user session context (userId, sessionId).
+ * 2. Validates provider support and allowed redirect URI origin whitelist.
+ * 3. Associates issued state/nonce with the authenticated userId and sessionId.
+ * 4. Generates authorization URL and records linking audit event.
+ */
 @CommandHandler(OAuthLinkStartCommand)
 export class OAuthLinkStartHandler implements ICommandHandler<OAuthLinkStartCommand> {
   constructor(
@@ -31,6 +40,12 @@ export class OAuthLinkStartHandler implements ICommandHandler<OAuthLinkStartComm
     private readonly configService: ConfigService,
   ) {}
 
+  /**
+   * Executes OAuth link initiation.
+   *
+   * @param command - Contains OAuth payload, userId, sessionId, and request metadata.
+   * @returns Authorization redirect URL and correlation ID.
+   */
   async execute(
     command: OAuthLinkStartCommand,
   ): Promise<OAuthLinkStartSuccess> {

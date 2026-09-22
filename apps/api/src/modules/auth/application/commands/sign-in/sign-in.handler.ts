@@ -29,6 +29,18 @@ const DECOY_PASSWORD_HASH = hashSecret(
   "decoy-password-for-constant-time-compare",
 );
 
+/**
+ * Handles user sign-in via primary email and password.
+ *
+ * Enforces:
+ * 1. Constant-time secret comparison against decoy hash on missing email to prevent enumeration timing attacks.
+ * 2. Account temporary lockout checks with retry metadata.
+ * 3. Constant-time password hash verification with incremental failed-attempt lock escalation.
+ * 4. Active access status check (rejects suspended accounts).
+ * 5. Email verification prerequisite check.
+ * 6. Session issuance with MFA status discovery.
+ * 7. Comprehensive audit logging for succeeded and failed authentication attempts.
+ */
 @CommandHandler(SignInCommand)
 export class SignInHandler implements ICommandHandler<SignInCommand> {
   constructor(
@@ -41,6 +53,12 @@ export class SignInHandler implements ICommandHandler<SignInCommand> {
     private readonly mfaEnrollments: MfaEnrollmentRepository,
   ) {}
 
+  /**
+   * Executes sign-in authentication flow.
+   *
+   * @param command - Contains sign-in payload (email, password) and request metadata.
+   * @returns Session token, safe user projection, and MFA requirement flags.
+   */
   async execute(command: SignInCommand): Promise<SignInSuccess> {
     const { payload, requestMeta } = command;
     const { users, sessions, mfaEnrollments } = this;

@@ -27,6 +27,17 @@ import {
 import { AuthSupportService } from "../../services/auth/auth-support.service.ts";
 import { OAuthCallbackCommand } from "./oauth-callback.command.ts";
 
+/**
+ * Handles completing an OAuth 2.0 / OIDC login flow.
+ *
+ * Enforces:
+ * 1. Single-use atomic consumption of OAuth state to eliminate replay attacks.
+ * 2. Validates state expiration, provider match, and non-link state invariant.
+ * 3. Exchanges authorization code with upstream provider and validates claims (issuer, audience, nonce, expiry).
+ * 4. Resolves federated user identity and ensures account is active and verified.
+ * 5. Issues authenticated session and discovers MFA requirement.
+ * 6. Records structured audit logs for login outcome.
+ */
 @CommandHandler(OAuthCallbackCommand)
 export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackCommand> {
   constructor(
@@ -44,6 +55,12 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
     private readonly providerRegistry: OAuthProviderRegistry,
   ) {}
 
+  /**
+   * Executes OAuth callback authorization and session creation.
+   *
+   * @param command - Contains callback payload (code, state, provider) and request metadata.
+   * @returns Session token, expiration, and MFA status.
+   */
   async execute(command: OAuthCallbackCommand): Promise<OAuthCallbackSuccess> {
     const { payload, requestMeta } = command;
     const { oauthStates, oauthIdentities, users, sessions, mfaEnrollments } =

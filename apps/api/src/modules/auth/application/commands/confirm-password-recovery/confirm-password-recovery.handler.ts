@@ -25,6 +25,17 @@ import {
 import { AuthSupportService } from "../../services/auth/auth-support.service.ts";
 import { ConfirmPasswordRecoveryCommand } from "./confirm-password-recovery.command.ts";
 
+/**
+ * Handles completing password recovery and resetting the user's password.
+ *
+ * Enforces:
+ * 1. Validates recovery token fingerprint and active, unconsumed expiration status.
+ * 2. Verifies user exists and has active access status.
+ * 3. Updates password hash securely with scrypt and resets failed login counters.
+ * 4. Marks recovery token as consumed (single-use invariant).
+ * 5. Immediately revokes all active sessions for the user to force re-login.
+ * 6. Emits audit trails for recovery confirmation or failure.
+ */
 @CommandHandler(ConfirmPasswordRecoveryCommand)
 export class ConfirmPasswordRecoveryHandler implements ICommandHandler<ConfirmPasswordRecoveryCommand> {
   constructor(
@@ -37,6 +48,12 @@ export class ConfirmPasswordRecoveryHandler implements ICommandHandler<ConfirmPa
     private readonly sessions: SessionRepository,
   ) {}
 
+  /**
+   * Executes password reset confirmation.
+   *
+   * @param command - Contains recovery token, new password, and request metadata.
+   * @returns Success confirmation and correlation ID.
+   */
   async execute(
     command: ConfirmPasswordRecoveryCommand,
   ): Promise<ConfirmRecoverySuccess> {
