@@ -915,6 +915,7 @@ function decisionEventSemanticPayload(
     resultSummary: compactJsonObject({
       questionIds: jsonValue(data.questionIds),
       questionTypes: jsonValue(data.questionTypes),
+      questionResults: jsonValue(data.questionResults),
       probabilities: jsonValue(data.probabilities),
       selectedTypedResult: jsonValue(data.selectedTypedResult),
       artifactVersionHashes: jsonValue(data.artifactVersionHashes),

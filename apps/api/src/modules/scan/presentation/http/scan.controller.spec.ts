@@ -305,6 +305,20 @@ describe("InternalScanController", () => {
         provider: "jev",
         modelVersion: "jev-2026-09-22",
         policyVersion: "jev-shadow-v1",
+        questionResults: [
+          {
+            questionId: "next_action",
+            questionType: "CHOICE",
+            selectedChoice: "TRACE_STATIC_FLOW",
+            probability: 0.87,
+            probabilities: {
+              TRACE_STATIC_FLOW: 0.87,
+              REQUEST_TARGETED_INPUT: 0.08,
+              CHECK_RUNTIME_EVIDENCE: 0.05,
+            },
+            confidence: 0.87,
+          },
+        ],
         selectedTypedResult: { next_action: "TRACE_STATIC_FLOW" },
         shadowProposedAction: "TRACE_STATIC_FLOW",
         authoritativeAction: "TRACE_STATIC_FLOW",
@@ -332,6 +346,15 @@ describe("InternalScanController", () => {
           authoritativeAction: "TRACE_STATIC_FLOW",
           confidence: 0.87,
           resultSummary: expect.objectContaining({
+            questionResults: [
+              expect.objectContaining({
+                questionId: "next_action",
+                probabilities: expect.objectContaining({
+                  TRACE_STATIC_FLOW: 0.87,
+                  REQUEST_TARGETED_INPUT: 0.08,
+                }),
+              }),
+            ],
             selectedTypedResult: expect.objectContaining({
               next_action: "TRACE_STATIC_FLOW",
             }),

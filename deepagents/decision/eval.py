@@ -8,7 +8,6 @@ from collections import defaultdict
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
-from statistics import median
 from typing import Any
 
 from .contracts import DECISION_TYPES, DecisionRequest, DecisionResult
@@ -87,7 +86,12 @@ def evaluate_dataset(path: Path = DEFAULT_DATASET) -> dict[str, Any]:
         model_version: _metrics_for_group(model_version, items)
         for model_version, items in sorted(per_version.items())
     }
-    decision_reports = _per_decision_metrics(records)
+    all_items = [item for items in per_version.values() for item in items]
+    decision_reports = _per_decision_metrics(
+        all_items,
+        dataset_version=raw["dataset_version"],
+        dataset_hash=dataset_hash,
+    )
     policy = _activation_policy(decision_reports, version_reports)
     return {
         "schemaVersion": "LCSP_JEV_DECISION_EVAL_REPORT_V1",
@@ -148,35 +152,149 @@ def _metrics_for_group(
     }
 
 
-def _per_decision_metrics(records: list[EvalRecord]) -> dict[str, Any]:
-    grouped: dict[str, list[EvalRecord]] = defaultdict(list)
-    for record in records:
-        grouped[record.decision_class].append(record)
+def _per_decision_metrics(
+    items: list[tuple[EvalRecord, DecisionResult | None, str | None]],
+    *,
+    dataset_version: str,
+    dataset_hash: str,
+) -> dict[str, Any]:
+    grouped: dict[str, list[tuple[EvalRecord, DecisionResult | None, str | None]]] = defaultdict(list)
+    for item in items:
+        grouped[item[0].decision_class].append(item)
     return {
-        decision_type: _decision_policy_state(decision_type, items)
-        for decision_type, items in sorted(grouped.items())
+        decision_type: _decision_policy_state(
+            decision_type,
+            decision_items,
+            dataset_version=dataset_version,
+            dataset_hash=dataset_hash,
+        )
+        for decision_type, decision_items in sorted(grouped.items())
     }
 
 
-def _decision_policy_state(decision_type: str, records: list[EvalRecord]) -> dict[str, Any]:
+def _decision_policy_state(
+    decision_type: str,
+    items: list[tuple[EvalRecord, DecisionResult | None, str | None]],
+    *,
+    dataset_version: str,
+    dataset_hash: str,
+) -> dict[str, Any]:
     policy = DEFAULT_DECISION_POLICIES.get(decision_type)
+    records = [record for record, _, _ in items]
     sample_size = len(records)
+    by_model: dict[str, list[tuple[EvalRecord, DecisionResult | None, str | None]]] = defaultdict(list)
+    for item in items:
+        model_version = item[1].model_version if item[1] else "NO_PROVIDER_RESULT"
+        by_model[model_version].append(item)
+    model_reports = {
+        model_version: _decision_model_policy_state(
+            decision_type,
+            model_version,
+            model_items,
+            dataset_version=dataset_version,
+            dataset_hash=dataset_hash,
+        )
+        for model_version, model_items in sorted(by_model.items())
+    }
     return {
         "sampleSize": sample_size,
         "riskTierCounts": _counts(record.risk_tier for record in records),
         "labelSources": _counts(record.label_source for record in records),
         "activationMode": "SHADOW",
         "activationRecommendation": "REMAIN_SHADOW",
-        "requirements": {
-            "sufficientEvalSampleSize": sample_size >= (policy.min_eval_sample_size if policy else 50),
-            "decisionClassQualityThresholdConfigured": policy is not None,
-            "boundedFalseNegativeRateConfigured": bool(policy and policy.max_false_negative_rate >= 0),
-            "acceptableCalibrationConfigured": bool(policy and policy.max_expected_calibration_error >= 0),
-            "privacyFindingClear": bool(policy and policy.privacy_review_clear),
+        "models": model_reports,
+        "requirements": _aggregate_requirements(model_reports, policy is not None),
+    }
+
+
+def _decision_model_policy_state(
+    decision_type: str,
+    model_version: str,
+    items: list[tuple[EvalRecord, DecisionResult | None, str | None]],
+    *,
+    dataset_version: str,
+    dataset_hash: str,
+) -> dict[str, Any]:
+    policy = DEFAULT_DECISION_POLICIES.get(decision_type)
+    metrics = _metrics_for_group(model_version, items)
+    sample_size = metrics["recordCount"]
+    quality_score = metrics["agreementAccuracy"]
+    false_negative_rate = metrics["highRiskFalseNegativeRate"]
+    expected_calibration_error = metrics["expectedCalibrationError"]
+    requirements = {
+        "sufficientEvalSampleSize": bool(
+            policy and sample_size >= policy.min_eval_sample_size
+        ),
+        "decisionClassQualityPassed": bool(
+            policy and quality_score is not None and quality_score >= policy.min_quality_score
+        ),
+        "boundedFalseNegativeRatePassed": bool(
+            policy
+            and (
+                not policy.safety_critical
+                or (
+                    false_negative_rate is not None
+                    and false_negative_rate <= policy.max_false_negative_rate
+                )
+            )
+        ),
+        "acceptableCalibrationPassed": bool(
+            policy
+            and expected_calibration_error is not None
+            and expected_calibration_error <= policy.max_expected_calibration_error
+        ),
+        "privacyFindingClear": bool(policy and policy.privacy_review_clear),
+        "fallbackPathTested": bool(policy and policy.fallback_path_tested),
+        "exactModelVersionCaptured": model_version != "NO_PROVIDER_RESULT",
+        "rollbackSwitchAvailable": bool(policy and policy.rollback_switch_available),
+    }
+    return {
+        **metrics,
+        "datasetVersion": dataset_version,
+        "datasetHash": dataset_hash,
+        "activationMode": "SHADOW",
+        "activationRecommendation": (
+            "PROMOTION_ELIGIBLE_BY_ALLOWLIST"
+            if all(requirements.values()) and bool(policy and policy.active_allowed)
+            else "REMAIN_SHADOW"
+        ),
+        "requirements": requirements,
+        "activationEvidence": {
+            "decisionType": decision_type,
+            "modelVersion": model_version,
+            "datasetVersion": dataset_version,
+            "datasetHash": dataset_hash,
+            "policyVersion": _policy_version(items),
+            "sampleSize": sample_size,
+            "qualityScore": quality_score,
+            "falseNegativeRate": false_negative_rate,
+            "expectedCalibrationError": expected_calibration_error,
             "fallbackPathTested": bool(policy and policy.fallback_path_tested),
-            "exactModelVersionCaptured": True,
+            "privacyReviewClear": bool(policy and policy.privacy_review_clear),
             "rollbackSwitchAvailable": bool(policy and policy.rollback_switch_available),
         },
+    }
+
+
+def _aggregate_requirements(
+    model_reports: dict[str, Any],
+    has_policy: bool,
+) -> dict[str, bool]:
+    if not has_policy or not model_reports:
+        return {
+            "sufficientEvalSampleSize": False,
+            "decisionClassQualityPassed": False,
+            "boundedFalseNegativeRatePassed": False,
+            "acceptableCalibrationPassed": False,
+            "privacyFindingClear": False,
+            "fallbackPathTested": False,
+            "exactModelVersionCaptured": False,
+            "rollbackSwitchAvailable": False,
+        }
+    keys = next(iter(model_reports.values()))["requirements"].keys()
+    return {
+        key: any(report["requirements"].get(key) is True for report in model_reports.values())
+        for key in keys
     }
 
 
@@ -186,11 +304,20 @@ def _activation_policy(
 ) -> dict[str, Any]:
     blocked = []
     for decision_type, report in decision_reports.items():
-        missing = [
-            key for key, value in report["requirements"].items() if value is not True
-        ]
-        if missing:
-            blocked.append({"decisionType": decision_type, "missing": missing})
+        for model_version, model_report in report["models"].items():
+            missing = [
+                key
+                for key, value in model_report["requirements"].items()
+                if value is not True
+            ]
+            if missing:
+                blocked.append(
+                    {
+                        "decisionType": decision_type,
+                        "modelVersion": model_version,
+                        "missing": missing,
+                    }
+                )
     drifted = [
         version
         for version, report in version_reports.items()
@@ -229,6 +356,24 @@ def _record(value: dict[str, Any]) -> EvalRecord:
         baseline_output_tokens=value.get("baseline_output_tokens"),
         artifact_metadata=dict(value.get("artifact_metadata") or {}),
     )
+
+
+def _policy_version(
+    items: list[tuple[EvalRecord, DecisionResult | None, str | None]],
+) -> str | None:
+    versions = {
+        result.policy_version
+        for _, result, failure in items
+        if result is not None and failure is None
+    }
+    if len(versions) == 1:
+        return next(iter(versions))
+    request_versions = {
+        record.request.policy_version
+        for record, _, _ in items
+        if record.request.policy_version
+    }
+    return next(iter(request_versions)) if len(request_versions) == 1 else None
 
 
 def _prediction(result: DecisionResult) -> Any:

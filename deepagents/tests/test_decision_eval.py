@@ -17,6 +17,14 @@ def test_offline_decision_eval_reports_per_model_and_blocks_activation():
     assert report["policy"]["defaultMode"] == "SHADOW"
     assert report["policy"]["passed"] is False
     assert report["policy"]["recommendation"] == "DO_NOT_PROMOTE"
+    investigator = report["perDecision"]["INVESTIGATOR_NEXT_ACTION"]["models"][
+        "jev-2026-09-22.eval"
+    ]
+    assert investigator["agreementAccuracy"] == 1.0
+    assert investigator["highRiskFalseNegativeRate"] == 0.0
+    assert investigator["requirements"]["sufficientEvalSampleSize"] is False
+    assert investigator["requirements"]["acceptableCalibrationPassed"] is False
+    assert investigator["activationEvidence"]["modelVersion"] == "jev-2026-09-22.eval"
 
 
 def test_offline_decision_eval_report_is_machine_readable_json():
