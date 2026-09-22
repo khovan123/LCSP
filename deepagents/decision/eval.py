@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from collections import defaultdict
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from .contracts import DECISION_TYPES, DecisionRequest, DecisionResult
+from .contracts import DecisionRequest, DecisionResult
 from .policy import DEFAULT_DECISION_POLICIES
 from .typesafe_client import TypeSafeJevError, _map_response
 
@@ -25,6 +26,8 @@ class EvalRecord:
     decision_class: str
     risk_tier: str
     expected_decision: Any
+    expected_questions: dict[str, Any]
+    expected_ranking: tuple[str, ...]
     label_source: str
     request: DecisionRequest
     response: dict[str, Any] | None
@@ -35,6 +38,20 @@ class EvalRecord:
     baseline_input_tokens: int | None
     baseline_output_tokens: int | None
     artifact_metadata: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class QuestionEvaluation:
+    question_id: str
+    question_type: str
+    predicted: Any
+    expected: Any
+    correct: bool
+    confidence: float
+    probability: float | None
+    safety_relevant: bool
+    actual_positive: bool
+    predicted_positive: bool
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -114,28 +131,25 @@ def _metrics_for_group(
     records = [record for record, _, _ in items]
     successes = [(record, result) for record, result, failure in items if result and not failure]
     failures = [failure for _, _, failure in items if failure]
-    agreements = [
-        _prediction(result) == record.expected_decision
-        for record, result in successes
-        if _single_label(record.expected_decision)
-    ]
+    question_evaluations = _question_evaluations(successes)
+    agreements = [item.correct for item in question_evaluations]
     confidences = [result.confidence for _, result in successes]
     latencies = [record.latency_ms for record in records]
     usage = [_usage(result) for _, result in successes]
-    high_risk = [
-        (_prediction(result), record.expected_decision)
-        for record, result in successes
-        if record.risk_tier == "HIGH" and _single_label(record.expected_decision)
-    ]
+    safety_questions = [item for item in question_evaluations if item.safety_relevant]
+    ranking_metrics = _ranking_metrics(successes)
     return {
         "modelVersion": model_version,
         "recordCount": len(records),
         "agreementAccuracy": _ratio(sum(agreements), len(agreements)),
         "brierScore": _brier(successes),
         "expectedCalibrationError": _ece(successes),
+        "questionMetrics": _question_metrics(question_evaluations),
+        "rankingMetrics": ranking_metrics,
         "confidenceDistribution": _confidence_distribution(confidences),
         "coverageByThreshold": _coverage(confidences),
-        "highRiskFalseNegativeRate": _false_negative_rate(high_risk),
+        "highRiskFalseNegativeRate": _false_negative_rate(safety_questions),
+        "safetyQuestionCount": len({item.question_id for item in safety_questions}),
         "providerSchemaFailureRate": _failure_rate(failures, "PROVIDER_SCHEMA_INVALID", len(records)),
         "timeoutRate": _failure_rate(failures, "PROVIDER_TIMEOUT", len(records)),
         "fallbackRate": _ratio(len(failures), len(records)),
@@ -221,6 +235,21 @@ def _decision_model_policy_state(
     quality_score = metrics["agreementAccuracy"]
     false_negative_rate = metrics["highRiskFalseNegativeRate"]
     expected_calibration_error = metrics["expectedCalibrationError"]
+    safety_question_count = metrics["safetyQuestionCount"]
+    safety_metrics_covered = bool(
+        policy and safety_question_count >= len(policy.safety_question_ids)
+    )
+    bounded_false_negative_rate_passed = bool(
+        policy
+        and (
+            not (policy.safety_critical or policy.safety_question_ids)
+            or (
+                safety_metrics_covered
+                and false_negative_rate is not None
+                and false_negative_rate <= policy.max_false_negative_rate
+            )
+        )
+    )
     requirements = {
         "sufficientEvalSampleSize": bool(
             policy and sample_size >= policy.min_eval_sample_size
@@ -228,16 +257,8 @@ def _decision_model_policy_state(
         "decisionClassQualityPassed": bool(
             policy and quality_score is not None and quality_score >= policy.min_quality_score
         ),
-        "boundedFalseNegativeRatePassed": bool(
-            policy
-            and (
-                not policy.safety_critical
-                or (
-                    false_negative_rate is not None
-                    and false_negative_rate <= policy.max_false_negative_rate
-                )
-            )
-        ),
+        "boundedFalseNegativeRatePassed": bounded_false_negative_rate_passed,
+        "safetyQuestionMetricsCovered": safety_metrics_covered,
         "acceptableCalibrationPassed": bool(
             policy
             and expected_calibration_error is not None
@@ -268,6 +289,14 @@ def _decision_model_policy_state(
             "sampleSize": sample_size,
             "qualityScore": quality_score,
             "falseNegativeRate": false_negative_rate,
+            "safetyQuestionCount": safety_question_count,
+            "safetyQuestionMetrics": {
+                question_id: metrics["questionMetrics"][question_id]
+                for question_id in policy.safety_question_ids
+                if question_id in metrics["questionMetrics"]
+            }
+            if policy
+            else {},
             "expectedCalibrationError": expected_calibration_error,
             "fallbackPathTested": bool(policy and policy.fallback_path_tested),
             "privacyReviewClear": bool(policy and policy.privacy_review_clear),
@@ -285,6 +314,7 @@ def _aggregate_requirements(
             "sufficientEvalSampleSize": False,
             "decisionClassQualityPassed": False,
             "boundedFalseNegativeRatePassed": False,
+            "safetyQuestionMetricsCovered": False,
             "acceptableCalibrationPassed": False,
             "privacyFindingClear": False,
             "fallbackPathTested": False,
@@ -345,6 +375,8 @@ def _record(value: dict[str, Any]) -> EvalRecord:
         decision_class=value["decision_class"],
         risk_tier=value["risk_tier"],
         expected_decision=value["expected_decision"],
+        expected_questions=_expected_questions(value),
+        expected_ranking=tuple(value.get("expected_ranking") or ()),
         label_source=value["label_source"],
         request=DecisionRequest(**value["request"]),
         response=value.get("captured_response"),
@@ -376,13 +408,99 @@ def _policy_version(
     return next(iter(request_versions)) if len(request_versions) == 1 else None
 
 
-def _prediction(result: DecisionResult) -> Any:
-    first = result.question_results[0]
-    if first.selected_choice is not None:
-        return first.selected_choice
-    if first.score is not None:
-        return first.score
-    return first.noul
+def _expected_questions(value: dict[str, Any]) -> dict[str, Any]:
+    explicit = value.get("expected_questions")
+    if isinstance(explicit, dict) and explicit:
+        return dict(explicit)
+    questions = value.get("request", {}).get("questions") or []
+    primary = (
+        questions[0].get("question_id")
+        if questions and isinstance(questions[0], dict)
+        else None
+    )
+    return {str(primary): value["expected_decision"]} if primary else {}
+
+
+def _question_evaluations(
+    items: list[tuple[EvalRecord, DecisionResult]],
+) -> list[QuestionEvaluation]:
+    evaluations: list[QuestionEvaluation] = []
+    for record, result in items:
+        expected_by_question = record.expected_questions
+        for question in result.question_results:
+            if question.question_id not in expected_by_question:
+                continue
+            predicted = _question_prediction(question)
+            expected = expected_by_question[question.question_id]
+            if not _single_label(predicted) and not isinstance(predicted, dict):
+                continue
+            actual_positive = _actual_positive(question.question_id, expected)
+            predicted_positive = _predicted_positive(question.question_id, predicted)
+            evaluations.append(
+                QuestionEvaluation(
+                    question_id=question.question_id,
+                    question_type=question.question_type,
+                    predicted=predicted,
+                    expected=expected,
+                    correct=_labels_equal(predicted, expected),
+                    confidence=question.confidence,
+                    probability=question.probability,
+                    safety_relevant=_is_safety_question(question.question_id, record),
+                    actual_positive=actual_positive,
+                    predicted_positive=predicted_positive,
+                )
+            )
+    return evaluations
+
+
+def _question_prediction(question: Any) -> Any:
+    if question.selected_choice is not None:
+        return question.selected_choice
+    if question.score is not None:
+        return question.score
+    return question.noul
+
+
+def _labels_equal(predicted: Any, expected: Any) -> bool:
+    if isinstance(expected, dict):
+        return isinstance(predicted, dict) and all(
+            predicted.get(key) == value for key, value in expected.items()
+        )
+    return predicted == expected
+
+
+def _is_safety_question(question_id: str, record: EvalRecord) -> bool:
+    policy = DEFAULT_DECISION_POLICIES.get(record.decision_class)
+    if policy and question_id in policy.safety_question_ids:
+        return True
+    return question_id in {
+        "needs_deep_review",
+        "needs_reasoning_escalation",
+        "material_customer_fact_unresolved",
+        "current_context_sufficient",
+    }
+
+
+def _actual_positive(question_id: str, expected: Any) -> bool:
+    if isinstance(expected, dict) and isinstance(expected.get("value"), bool):
+        return _positive_boolean(question_id, expected["value"])
+    if isinstance(expected, bool):
+        return _positive_boolean(question_id, expected)
+    return expected in {"ESCALATE", "DEEP_REVIEW", "NEEDS_INPUT", "TRACE_STATIC_FLOW"}
+
+
+def _predicted_positive(question_id: str, predicted: Any) -> bool:
+    if isinstance(predicted, dict) and isinstance(predicted.get("value"), bool):
+        return _positive_boolean(question_id, predicted["value"])
+    if isinstance(predicted, bool):
+        return _positive_boolean(question_id, predicted)
+    return predicted in {"ESCALATE", "DEEP_REVIEW", "NEEDS_INPUT", "TRACE_STATIC_FLOW"}
+
+
+def _positive_boolean(question_id: str, value: bool) -> bool:
+    if question_id == "current_context_sufficient":
+        return value is False
+    return value is True
 
 
 def _single_label(value: Any) -> bool:
@@ -400,24 +518,21 @@ def _usage(result: DecisionResult) -> dict[str, float]:
 
 def _brier(items: list[tuple[EvalRecord, DecisionResult]]) -> float | None:
     values = []
-    for record, result in items:
-        prediction = _prediction(result)
-        probability = result.question_results[0].probability
-        if probability is None or not _single_label(record.expected_decision):
+    for evaluation in _question_evaluations(items):
+        probability = evaluation.probability
+        if probability is None:
             continue
-        actual = 1.0 if prediction == record.expected_decision else 0.0
+        actual = 1.0 if evaluation.correct else 0.0
         values.append((probability - actual) ** 2)
     return round(sum(values) / len(values), 6) if values else None
 
 
 def _ece(items: list[tuple[EvalRecord, DecisionResult]], buckets: int = 10) -> float | None:
     bucket_values: list[list[tuple[float, bool]]] = [[] for _ in range(buckets)]
-    for record, result in items:
-        if not _single_label(record.expected_decision):
-            continue
-        confidence = result.confidence
+    for evaluation in _question_evaluations(items):
+        confidence = evaluation.confidence
         index = min(buckets - 1, int(confidence * buckets))
-        bucket_values[index].append((confidence, _prediction(result) == record.expected_decision))
+        bucket_values[index].append((confidence, evaluation.correct))
     total = sum(len(bucket) for bucket in bucket_values)
     if total == 0:
         return None
@@ -444,12 +559,139 @@ def _coverage(values: list[float]) -> dict[str, float]:
     return {str(threshold): _ratio(sum(1 for value in values if value >= threshold), len(values)) for threshold in DEFAULT_THRESHOLDS}
 
 
-def _false_negative_rate(items: list[tuple[Any, Any]]) -> float | None:
-    positives = [item for item in items if item[1] in {"ESCALATE", "DEEP_REVIEW", "NEEDS_INPUT", "TRACE_STATIC_FLOW"}]
+def _question_metrics(evaluations: list[QuestionEvaluation]) -> dict[str, Any]:
+    grouped: dict[str, list[QuestionEvaluation]] = defaultdict(list)
+    for item in evaluations:
+        grouped[item.question_id].append(item)
+    return {
+        question_id: {
+            "sampleSize": len(items),
+            "questionType": items[0].question_type,
+            "accuracy": _ratio(sum(item.correct for item in items), len(items)),
+            "brierScore": _question_brier(items),
+            "expectedCalibrationError": _question_ece(items),
+            "precision": _precision(items),
+            "recall": _recall(items),
+            "falseNegativeRate": _false_negative_rate(items),
+            "safetyRelevant": any(item.safety_relevant for item in items),
+        }
+        for question_id, items in sorted(grouped.items())
+    }
+
+
+def _question_brier(items: list[QuestionEvaluation]) -> float | None:
+    values = [
+        (item.probability - (1.0 if item.correct else 0.0)) ** 2
+        for item in items
+        if item.probability is not None
+    ]
+    return round(sum(values) / len(values), 6) if values else None
+
+
+def _question_ece(items: list[QuestionEvaluation], buckets: int = 10) -> float | None:
+    bucket_values: list[list[tuple[float, bool]]] = [[] for _ in range(buckets)]
+    for item in items:
+        index = min(buckets - 1, int(item.confidence * buckets))
+        bucket_values[index].append((item.confidence, item.correct))
+    total = sum(len(bucket) for bucket in bucket_values)
+    if total == 0:
+        return None
+    ece = 0.0
+    for bucket in bucket_values:
+        if not bucket:
+            continue
+        avg_confidence = sum(item[0] for item in bucket) / len(bucket)
+        accuracy = sum(1 for _, correct in bucket if correct) / len(bucket)
+        ece += (len(bucket) / total) * abs(avg_confidence - accuracy)
+    return round(ece, 6)
+
+
+def _precision(items: list[QuestionEvaluation]) -> float | None:
+    predicted_positives = [item for item in items if item.predicted_positive]
+    if not predicted_positives:
+        return None
+    true_positives = sum(1 for item in predicted_positives if item.actual_positive)
+    return _ratio(true_positives, len(predicted_positives))
+
+
+def _recall(items: list[QuestionEvaluation]) -> float | None:
+    actual_positives = [item for item in items if item.actual_positive]
+    if not actual_positives:
+        return None
+    true_positives = sum(1 for item in actual_positives if item.predicted_positive)
+    return _ratio(true_positives, len(actual_positives))
+
+
+def _false_negative_rate(items: list[QuestionEvaluation]) -> float | None:
+    positives = [item for item in items if item.actual_positive]
     if not positives:
         return None
-    misses = sum(1 for predicted, actual in positives if predicted != actual)
+    misses = sum(1 for item in positives if not item.predicted_positive)
     return _ratio(misses, len(positives))
+
+
+def _ranking_metrics(items: list[tuple[EvalRecord, DecisionResult]]) -> dict[str, Any]:
+    reciprocal_ranks: list[float] = []
+    ndcgs: list[float] = []
+    for record, result in items:
+        if not record.expected_ranking:
+            continue
+        ranked_prediction = _ranked_prediction(result)
+        if not ranked_prediction:
+            continue
+        reciprocal_ranks.append(
+            _reciprocal_rank(ranked_prediction, record.expected_ranking)
+        )
+        ndcgs.append(_ndcg_at_k(ranked_prediction, record.expected_ranking))
+    return {
+        "sampleSize": len(reciprocal_ranks),
+        "meanReciprocalRank": round(sum(reciprocal_ranks) / len(reciprocal_ranks), 6)
+        if reciprocal_ranks
+        else None,
+        "ndcg": round(sum(ndcgs) / len(ndcgs), 6) if ndcgs else None,
+    }
+
+
+def _ranked_prediction(result: DecisionResult) -> tuple[str, ...]:
+    for question in result.question_results:
+        if question.probabilities:
+            return tuple(
+                key
+                for key, _ in sorted(
+                    question.probabilities.items(),
+                    key=lambda item: item[1],
+                    reverse=True,
+                )
+            )
+    return ()
+
+
+def _reciprocal_rank(predicted: tuple[str, ...], expected: tuple[str, ...]) -> float:
+    expected_first = expected[0]
+    try:
+        return 1.0 / (predicted.index(expected_first) + 1)
+    except ValueError:
+        return 0.0
+
+
+def _ndcg_at_k(predicted: tuple[str, ...], expected: tuple[str, ...]) -> float:
+    relevance = {item: len(expected) - index for index, item in enumerate(expected)}
+    dcg = 0.0
+    for index, item in enumerate(predicted[: len(expected)]):
+        dcg += relevance.get(item, 0) / _log2(index + 2)
+    ideal = sum(
+        (len(expected) - index) / _log2(index + 2)
+        for index in range(len(expected))
+    )
+    return dcg / ideal if ideal else 0.0
+
+
+def _log2(value: int) -> float:
+    return (
+        value.bit_length() - 1
+        if value > 0 and value & (value - 1) == 0
+        else math.log2(value)
+    )
 
 
 def _failure_rate(failures: list[str | None], reason: str, total: int) -> float:

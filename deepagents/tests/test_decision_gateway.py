@@ -451,6 +451,7 @@ def test_active_mode_rejects_allowlisted_model_with_bad_eval_calibration():
                 quality_score=0.95,
                 false_negative_rate=None,
                 expected_calibration_error=0.25,
+                safety_question_count=0,
                 fallback_path_tested=True,
                 privacy_review_clear=True,
                 rollback_switch_available=True,

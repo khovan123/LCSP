@@ -109,6 +109,7 @@ class DecisionTypePolicy:
     min_eval_sample_size: int = 50
     max_false_negative_rate: float = 0.02
     max_expected_calibration_error: float = 0.10
+    safety_question_ids: tuple[str, ...] = field(default_factory=tuple)
     fallback_path_tested: bool = False
     privacy_review_clear: bool = False
     rollback_switch_available: bool = True
@@ -129,25 +130,41 @@ class DecisionActivationEvidence:
     quality_score: float
     false_negative_rate: float | None
     expected_calibration_error: float | None
+    safety_question_count: int
     fallback_path_tested: bool
     privacy_review_clear: bool
     rollback_switch_available: bool
 
 
 DEFAULT_DECISION_POLICIES: dict[str, DecisionTypePolicy] = {
-    DECISION_TYPES["pr_review_triage"]: DecisionTypePolicy(threshold=0.70),
+    DECISION_TYPES["pr_review_triage"]: DecisionTypePolicy(
+        threshold=0.70,
+        safety_question_ids=(
+            "security_sensitive_change",
+            "exact_head_lifecycle_risk",
+            "needs_deep_review",
+            "likely_missing_regression_tests",
+            "requires_managed_sandbox_attention",
+        ),
+    ),
     DECISION_TYPES["root_non_deterministic_next_stage"]: DecisionTypePolicy(
         threshold=0.85,
         safety_critical=True,
+        safety_question_ids=("needs_reasoning_escalation",),
     ),
     DECISION_TYPES["interview_topic_routing"]: DecisionTypePolicy(
         threshold=0.80,
         safety_critical=True,
+        safety_question_ids=(
+            "material_customer_fact_unresolved",
+            "current_context_sufficient",
+        ),
     ),
     DECISION_TYPES["planner_candidate_ranking"]: DecisionTypePolicy(threshold=0.75),
     DECISION_TYPES["investigator_next_action"]: DecisionTypePolicy(
         threshold=0.85,
         safety_critical=True,
+        safety_question_ids=("next_action",),
     ),
 }
 
@@ -303,7 +320,9 @@ def _activation_evidence_ready(
         return False
     if evidence.quality_score < policy.min_quality_score:
         return False
-    if policy.safety_critical:
+    if policy.safety_critical or policy.safety_question_ids:
+        if evidence.safety_question_count < len(policy.safety_question_ids):
+            return False
         if evidence.false_negative_rate is None:
             return False
         if evidence.false_negative_rate > policy.max_false_negative_rate:
