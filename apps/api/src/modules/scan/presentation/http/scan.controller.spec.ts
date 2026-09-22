@@ -270,6 +270,82 @@ describe("InternalScanController", () => {
         }),
       }),
     });
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        payloadJson: expect.objectContaining({
+          data: expect.not.objectContaining({
+            prompt: expect.anything(),
+          }),
+        }),
+      }),
+    });
+  });
+
+  it("mirrors safe decision-model events through the durable agent stream", async () => {
+    const create = jest
+      .fn<(args: unknown) => Promise<unknown>>()
+      .mockResolvedValue({});
+    const publishAgentStreamEvent = jest
+      .fn<(args: unknown) => Promise<unknown>>()
+      .mockResolvedValue({ eventId: "agent-event-1" });
+    const controller = new InternalScanController(
+      {} as unknown as CommandBus,
+      { publishAgentStreamEvent } as never,
+      { decisionModelEvent: { create } } as never,
+    );
+
+    await controller.recordDecisionModelEvent({
+      eventType: "DECISION_MODEL_RESULT",
+      decisionId: "investigator-action-v1:assessment-1:run-1:checkpoint-1",
+      decisionType: "INVESTIGATOR_NEXT_ACTION",
+      assessmentId: "assessment-1",
+      reviewRunId: "run-1",
+      checkpointId: "checkpoint-1",
+      data: {
+        provider: "jev",
+        modelVersion: "jev-2026-09-22",
+        policyVersion: "jev-shadow-v1",
+        selectedTypedResult: { next_action: "TRACE_STATIC_FLOW" },
+        shadowProposedAction: "TRACE_STATIC_FLOW",
+        authoritativeAction: "TRACE_STATIC_FLOW",
+        agreement: true,
+        confidence: 0.87,
+        thresholdUsed: 0.85,
+        decisionMode: "SHADOW",
+        latencyMs: 174,
+        usage: { inputTokens: 46, outputTokens: 8, costUsd: 0.00023 },
+        prompt: "must not be projected",
+      },
+    });
+
+    expect(publishAgentStreamEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assessmentId: "assessment-1",
+        runId: "run-1",
+        eventType: "DECISION_MODEL_RESULT",
+        source: "jev_decision_gateway",
+        data: expect.objectContaining({
+          kind: "DECISION_MODEL",
+          provider: "jev",
+          model: "jev-2026-09-22",
+          shadowProposedAction: "TRACE_STATIC_FLOW",
+          authoritativeAction: "TRACE_STATIC_FLOW",
+          confidence: 0.87,
+          resultSummary: expect.objectContaining({
+            selectedTypedResult: expect.objectContaining({
+              next_action: "TRACE_STATIC_FLOW",
+            }),
+          }),
+        }),
+      }),
+    );
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        payloadJson: expect.objectContaining({
+          data: expect.not.objectContaining({ prompt: expect.anything() }),
+        }),
+      }),
+    });
   });
 
   it("claims decision IDs once and reports replay duplicates without provider authority", async () => {

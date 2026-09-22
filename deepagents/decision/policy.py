@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .contracts import (
     DECISION_FALLBACKS,
@@ -24,6 +24,13 @@ DEFAULT_POLICY_VERSION = "LCSP_JEV_CONFIDENCE_POLICY_V1"
 DEFAULT_JEV_ENDPOINT = "https://api.typesafe.ai/v1/jev/decisions"
 DEFAULT_TIMEOUT_MS = 3_000
 DEFAULT_MAX_RETRIES = 1
+PERMANENTLY_EXCLUDED_DECISION_TYPE_MARKERS = (
+    "LEGAL",
+    "COMPLIANCE",
+    "FINAL_RISK",
+    "FINAL_READINESS",
+    "FINAL_ASSESSMENT",
+)
 
 
 class DecisionConfigurationError(RuntimeError):
@@ -40,6 +47,7 @@ class DecisionGatewayConfig:
     policy_version: str = DEFAULT_POLICY_VERSION
     endpoint: str = DEFAULT_JEV_ENDPOINT
     max_retries: int = DEFAULT_MAX_RETRIES
+    requested_model_version: str | None = None
 
     @classmethod
     def from_env(cls) -> "DecisionGatewayConfig":
@@ -78,6 +86,10 @@ class DecisionGatewayConfig:
             policy_version=policy_version,
             endpoint=endpoint,
             max_retries=max_retries,
+            requested_model_version=(
+                os.getenv("LCSP_JEV_MODEL_VERSION") or ""
+            ).strip()
+            or None,
         )
 
     def validate_active_credentials(self) -> None:
@@ -93,6 +105,14 @@ class DecisionTypePolicy:
     assist_allowed: bool = False
     active_allowed: bool = False
     safety_critical: bool = False
+    min_eval_sample_size: int = 50
+    max_false_negative_rate: float = 0.02
+    max_expected_calibration_error: float = 0.10
+    fallback_path_tested: bool = False
+    privacy_review_clear: bool = False
+    rollback_switch_available: bool = True
+    approved_model_versions: tuple[str, ...] = field(default_factory=tuple)
+    permanent_exclusion_reason: str | None = None
 
 
 DEFAULT_DECISION_POLICIES: dict[str, DecisionTypePolicy] = {
@@ -152,6 +172,21 @@ class DecisionPolicy:
                 config=config,
                 reason_code="UNKNOWN_DECISION_TYPE",
             )
+        if _is_permanently_excluded(request.decision_type, policy):
+            return self.failure(
+                request=request,
+                config=config,
+                reason_code="DECISION_TYPE_PERMANENTLY_EXCLUDED",
+            )
+        if (
+            policy.approved_model_versions
+            and result.model_version not in policy.approved_model_versions
+        ):
+            return self.failure(
+                request=request,
+                config=config,
+                reason_code="MODEL_VERSION_DRIFT",
+            )
         if result.confidence < policy.threshold:
             return self.failure(
                 request=request,
@@ -178,6 +213,18 @@ class DecisionPolicy:
                 config=config,
                 reason_code="ACTIVE_NOT_ALLOWLISTED",
             )
+        if config.mode == "ACTIVE" and policy.safety_critical:
+            return self.failure(
+                request=request,
+                config=config,
+                reason_code="ACTIVE_SAFETY_REVIEW_REQUIRED",
+            )
+        if config.mode == "ACTIVE" and not _activation_evidence_ready(policy):
+            return self.failure(
+                request=request,
+                config=config,
+                reason_code="ACTIVATION_EVIDENCE_INCOMPLETE",
+            )
         return DecisionPolicyResult(
             action=POLICY_ACTIONS["accept_typed_decision"],
             reason_code="THRESHOLD_PASSED",
@@ -193,6 +240,24 @@ def _fallback_action(fallback: DecisionFallback) -> str:
     if fallback == DECISION_FALLBACKS["none"]:
         return POLICY_ACTIONS["no_action"]
     return POLICY_ACTIONS["fallback_to_existing_llm"]
+
+
+def _is_permanently_excluded(decision_type: str, policy: DecisionTypePolicy) -> bool:
+    if policy.permanent_exclusion_reason:
+        return True
+    return any(
+        marker in decision_type
+        for marker in PERMANENTLY_EXCLUDED_DECISION_TYPE_MARKERS
+    )
+
+
+def _activation_evidence_ready(policy: DecisionTypePolicy) -> bool:
+    return (
+        policy.fallback_path_tested
+        and policy.privacy_review_clear
+        and policy.rollback_switch_available
+        and len(policy.approved_model_versions) > 0
+    )
 
 
 def _provider(value: str) -> DecisionProvider:
@@ -256,4 +321,5 @@ __all__ = [
     "DecisionGatewayConfig",
     "DecisionPolicy",
     "DecisionTypePolicy",
+    "PERMANENTLY_EXCLUDED_DECISION_TYPE_MARKERS",
 ]

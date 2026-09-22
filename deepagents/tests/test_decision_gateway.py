@@ -163,6 +163,14 @@ def test_choice_score_noul_mapping_captures_model_version_and_shadow_no_action()
         "DECISION_THRESHOLD_APPLIED",
         "DECISION_FALLBACK",
     ]
+    result_event = sink.events[1]
+    assert result_event["data"]["modelVersion"] == "jev-2026-09-22"
+    assert result_event["data"]["selectedTypedResult"]["route"] == "ESCALATE"
+    assert result_event["data"]["questionResults"][0]["probabilities"] == {
+        "LOW_RISK": 0.12,
+        "ESCALATE": 0.88,
+    }
+    assert result_event["data"]["latencyMs"] >= 0
 
 
 def test_timeout_retries_are_bounded_before_success():
