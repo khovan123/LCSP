@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 from collections.abc import Callable
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -53,20 +54,37 @@ def main(argv: list[str] | None = None) -> int:
             "artifacts/decision/pr-review-triage.json",
         ),
     )
+    parser.add_argument("--packet-only", action="store_true")
+    parser.add_argument("--record-packet", default=None)
+    parser.add_argument("--require-durable", action="store_true")
     args = parser.parse_args(argv)
 
     output_path = Path(args.output)
     try:
-        record = run_pr_review_shadow_triage(
-            pr_number=args.pr_number,
-            base_sha=args.base_sha,
-            head_sha=args.head_sha,
-            output_path=output_path,
-        )
+        if args.record_packet:
+            record = record_pr_review_shadow_triage_packet(
+                packet_path=Path(args.record_packet),
+                output_path=output_path,
+                require_durable=args.require_durable,
+            )
+        elif args.packet_only:
+            record = write_pr_review_shadow_triage_packet(
+                pr_number=args.pr_number,
+                base_sha=args.base_sha,
+                head_sha=args.head_sha,
+                output_path=output_path,
+            )
+        else:
+            record = run_pr_review_shadow_triage(
+                pr_number=args.pr_number,
+                base_sha=args.base_sha,
+                head_sha=args.head_sha,
+                output_path=output_path,
+            )
         print(
             "LCSP PR-review shadow triage recorded "
-            f"decision_id={record['decisionId']} "
-            f"fallback={record.get('fallbackReason')}"
+            f"status={record.get('recordingStatus')} "
+            f"decision_id={record.get('decisionId')}"
         )
     except Exception as exc:
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -106,12 +124,106 @@ def run_pr_review_shadow_triage(
     sink = JsonlTelemetrySink(output_path.with_suffix(".events.jsonl"))
     observer = observer_factory(sink) if observer_factory else _default_observer(sink)
     authoritative_domain = infer_authoritative_domain(packet.changed_filenames)
+    return _record_packet(
+        packet,
+        authoritative_domain=authoritative_domain,
+        output_path=output_path,
+        sink=sink,
+        observer=observer,
+    )
+
+
+def write_pr_review_shadow_triage_packet(
+    *,
+    pr_number: int | None = None,
+    base_sha: str | None = None,
+    head_sha: str | None = None,
+    output_path: Path,
+) -> dict[str, Any]:
+    event = _github_event()
+    packet = build_packet_from_environment(
+        event=event,
+        pr_number=pr_number,
+        base_sha=base_sha,
+        head_sha=head_sha,
+    )
+    payload = {
+        "schemaVersion": "LCSP_PR_REVIEW_TRIAGE_PACKET_V1",
+        "recordingStatus": "PACKET_READY_UNTRUSTED_PR_STAGE",
+        "typedResultRecorded": False,
+        "trustedRecorderRequired": True,
+        "authoritativeReviewDomain": infer_authoritative_domain(packet.changed_filenames),
+        "packet": _packet_payload(packet),
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    return payload
+
+
+def record_pr_review_shadow_triage_packet(
+    *,
+    packet_path: Path,
+    output_path: Path,
+    require_durable: bool = False,
+    observer_factory: Callable[[JsonlTelemetrySink], ShadowDecisionObserver] | None = None,
+) -> dict[str, Any]:
+    packet_payload = json.loads(packet_path.read_text(encoding="utf-8"))
+    packet = _packet_from_payload(packet_payload.get("packet"))
+    authoritative_domain = _text(
+        packet_payload.get("authoritativeReviewDomain")
+    ) or infer_authoritative_domain(packet.changed_filenames)
+    if require_durable and _api_client_from_environment() is None and observer_factory is None:
+        payload = {
+            **_packet_correlation(packet),
+            "schemaVersion": "LCSP_PR_REVIEW_TRIAGE_RECORD_V1",
+            "recordingStatus": "TYPED_RESULT_NOT_RECORDED_DURABLE_CREDENTIALS_MISSING",
+            "typedResultRecorded": False,
+            "authoritativeReviewDomain": authoritative_domain,
+        }
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        return payload
+    sink = JsonlTelemetrySink(output_path.with_suffix(".events.jsonl"))
+    observer = (
+        observer_factory(sink)
+        if observer_factory
+        else _default_observer(sink, require_durable=require_durable)
+    )
+    return _record_packet(
+        packet,
+        authoritative_domain=authoritative_domain,
+        output_path=output_path,
+        sink=sink,
+        observer=observer,
+    )
+
+
+def _record_packet(
+    packet: PrReviewTriagePacket,
+    *,
+    authoritative_domain: str,
+    output_path: Path,
+    sink: JsonlTelemetrySink,
+    observer: ShadowDecisionObserver,
+) -> dict[str, Any]:
     record = observer.observe_pr_review_triage(
         packet,
         authoritative_domain=authoritative_domain,
     )
+    typed_result_recorded = (
+        record.gateway_outcome is not None
+        and record.gateway_outcome.provider_result is not None
+        and not record.skipped
+    )
     payload = {
         **shadow_record_payload(record),
+        "schemaVersion": "LCSP_PR_REVIEW_TRIAGE_RECORD_V1",
+        "recordingStatus": (
+            "TYPED_RESULT_RECORDED"
+            if typed_result_recorded
+            else "TYPED_RESULT_NOT_RECORDED_FALLBACK"
+        ),
+        "typedResultRecorded": typed_result_recorded,
         "prNumber": packet.pr_number,
         "baseSha": packet.base_sha,
         "headSha": packet.head_sha,
@@ -155,7 +267,7 @@ def build_packet_from_environment(
         changed_filenames=changed_filenames,
         change_categories=categories,
         jira_issue_ids=jira_ids,
-        acceptance_criteria_ids=tuple(f"{jira_id}:LCSP-336" for jira_id in jira_ids),
+        acceptance_criteria_ids=(),
         bounded_summary=_bounded_summary(title=title, categories=categories),
         ci_state_codes=_ci_state_codes(),
         scanner_change_metadata=_scanner_metadata(changed_filenames),
@@ -183,10 +295,16 @@ def infer_authoritative_domain(paths: tuple[str, ...]) -> str:
     return "OTHER"
 
 
-def _default_observer(sink: JsonlTelemetrySink) -> ShadowDecisionObserver:
+def _default_observer(
+    sink: JsonlTelemetrySink,
+    *,
+    require_durable: bool = False,
+) -> ShadowDecisionObserver:
     api_client = _api_client_from_environment()
     telemetry_sink: Callable[[dict[str, Any]], None] = sink
     idempotency_store: Any = InMemoryDecisionIdempotencyStore()
+    if require_durable and api_client is None:
+        raise RuntimeError("durable decision idempotency is required")
     if api_client is not None:
         api_sink = worker_api_decision_event_sink(api_client)
 
@@ -200,6 +318,39 @@ def _default_observer(sink: JsonlTelemetrySink) -> ShadowDecisionObserver:
         telemetry_sink=telemetry_sink,
         idempotency_store=idempotency_store,
     )
+
+
+def _packet_payload(packet: PrReviewTriagePacket) -> dict[str, Any]:
+    return {key: value for key, value in asdict(packet).items() if value is not None}
+
+
+def _packet_from_payload(payload: Any) -> PrReviewTriagePacket:
+    if not isinstance(payload, dict):
+        raise ValueError("PR-review triage packet payload is invalid")
+    tuple_keys = {
+        "changed_filenames",
+        "change_categories",
+        "jira_issue_ids",
+        "acceptance_criteria_ids",
+        "ci_state_codes",
+        "scanner_change_metadata",
+        "diff_stat_keys",
+    }
+    values = {
+        key: tuple(value) if key in tuple_keys and isinstance(value, list) else value
+        for key, value in payload.items()
+    }
+    return PrReviewTriagePacket(**values)
+
+
+def _packet_correlation(packet: PrReviewTriagePacket) -> dict[str, Any]:
+    return {
+        "decisionId": f"review-triage-v1:{packet.pr_number}:{packet.head_sha}",
+        "decisionType": "PR_REVIEW_TRIAGE",
+        "prNumber": packet.pr_number,
+        "baseSha": packet.base_sha,
+        "headSha": packet.head_sha,
+    }
 
 
 def _api_client_from_environment() -> Any | None:

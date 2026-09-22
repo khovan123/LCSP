@@ -12,7 +12,11 @@ from decision import (
     WorkerApiDecisionIdempotencyStore,
 )
 from contracts.handoffs import PlannerResult
-from decision.pr_review_triage import run_pr_review_shadow_triage
+from decision.pr_review_triage import (
+    record_pr_review_shadow_triage_packet,
+    run_pr_review_shadow_triage,
+    write_pr_review_shadow_triage_packet,
+)
 from orchestration.dispatcher import RootSubagentDispatcher
 from orchestration.lifecycle import RootSubagentReservation
 from decision.shadow import INTERVIEW_TOPIC_CHOICES, ROOT_ROUTE_CHOICES
@@ -594,9 +598,79 @@ def test_pr_review_triage_runner_records_bounded_exact_head_packet(tmp_path, mon
     assert "deepagents/decision/shadow.py" in packet.changed_filenames
     assert packet.addition_count == 16
     assert packet.deletion_count == 4
+    assert packet.acceptance_criteria_ids == ()
     assert observed["authoritative_domain"] == "AGENT_RUNTIME"
     serialized = json.dumps(packet.__dict__, sort_keys=True)
     assert "raw_diff" not in serialized
     assert "def " not in serialized
     assert result["headSha"] == head_sha
     assert output.exists()
+
+
+def test_pr_review_triage_pull_request_stage_writes_packet_without_provider_call(tmp_path, monkeypatch):
+    head_sha = "f" * 40
+    base_sha = "a" * 40
+
+    def fake_git_lines(*args):
+        if "--name-only" in args:
+            return ["deepagents/decision/shadow.py"]
+        if "--numstat" in args:
+            return ["8\t2\tdeepagents/decision/shadow.py"]
+        return []
+
+    monkeypatch.setattr("decision.pr_review_triage._git_lines", fake_git_lines)
+    output = tmp_path / "pr-review-triage-packet.json"
+
+    result = write_pr_review_shadow_triage_packet(
+        pr_number=344,
+        base_sha=base_sha,
+        head_sha=head_sha,
+        output_path=output,
+    )
+
+    assert result["recordingStatus"] == "PACKET_READY_UNTRUSTED_PR_STAGE"
+    assert result["typedResultRecorded"] is False
+    assert result["trustedRecorderRequired"] is True
+    packet = result["packet"]
+    assert packet["head_sha"] == head_sha
+    assert packet["base_sha"] == base_sha
+    assert packet["acceptance_criteria_ids"] == ()
+    serialized = output.read_text(encoding="utf-8")
+    assert "TYPESAFE_API_KEY" not in serialized
+    assert "raw_diff" not in serialized
+
+
+def test_pr_review_triage_trusted_recorder_requires_durable_store(tmp_path):
+    packet_path = tmp_path / "packet.json"
+    packet_path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "LCSP_PR_REVIEW_TRIAGE_PACKET_V1",
+                "authoritativeReviewDomain": "AGENT_RUNTIME",
+                "packet": {
+                    "pr_number": 344,
+                    "head_sha": "b" * 40,
+                    "base_sha": "c" * 40,
+                    "changed_filenames": ["deepagents/decision/shadow.py"],
+                    "change_categories": ["python_worker"],
+                    "jira_issue_ids": ["LCSP-336"],
+                    "acceptance_criteria_ids": [],
+                    "ci_state_codes": ["GITHUB_ACTIONS"],
+                    "scanner_change_metadata": [],
+                    "diff_stat_keys": ["python_worker_files_changed"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "record.json"
+
+    result = record_pr_review_shadow_triage_packet(
+        packet_path=packet_path,
+        output_path=output,
+        require_durable=True,
+    )
+
+    assert result["recordingStatus"] == "TYPED_RESULT_NOT_RECORDED_DURABLE_CREDENTIALS_MISSING"
+    assert result["typedResultRecorded"] is False
+    assert result["headSha"] == "b" * 40
