@@ -33,7 +33,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
-        run: gh run download "$SOURCE_RUN_ID" --dir artifacts-in
+          EXPECTED_ARTIFACT_NAME: lcsp336-pr-review-shadow-packet-${{ github.event.workflow_run.pull_requests[0].number }}-${{ github.event.workflow_run.head_sha }}
+        run: gh run download "$SOURCE_RUN_ID" --name "$EXPECTED_ARTIFACT_NAME" --dir artifacts-in || true
 
       - name: Record typed PR-review shadow triage
         working-directory: deepagents
@@ -49,9 +50,9 @@ jobs:
           EXPECTED_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           EXPECTED_BASE_SHA: ${{ github.event.workflow_run.pull_requests[0].base.sha }}
         run: |
-          packet="$(find ../artifacts-in -name pr-review-triage-packet.json -print -quit)"
           mkdir -p ../artifacts/decision
-          if [ -z "$packet" ]; then
+          packet="../artifacts-in/pr-review-triage-packet.json"
+          if [ ! -f "$packet" ]; then
             printf '%s\n' '{"recordingStatus":"TYPED_RESULT_NOT_RECORDED_PACKET_MISSING","typedResultRecorded":false}' > ../artifacts/decision/pr-review-triage-record.json
             exit 0
           fi
@@ -59,18 +60,35 @@ jobs:
             printf '%s\n' '{"recordingStatus":"TYPED_RESULT_NOT_RECORDED_TRUSTED_CORRELATION_UNAVAILABLE","typedResultRecorded":false}' > ../artifacts/decision/pr-review-triage-record.json
             exit 0
           fi
-          trusted_files="../artifacts/decision/trusted-changed-files.txt"
-          gh api "repos/$GITHUB_REPOSITORY/compare/$EXPECTED_BASE_SHA...$EXPECTED_HEAD_SHA" --jq '.files[].filename' > "$trusted_files"
+          trusted_compare="../artifacts/decision/trusted-compare.json"
+          trusted_pr="../artifacts/decision/trusted-pr.json"
+          if ! gh api "repos/$GITHUB_REPOSITORY/compare/$EXPECTED_BASE_SHA...$EXPECTED_HEAD_SHA" > "$trusted_compare"; then
+            printf '%s\n' '{"recordingStatus":"TYPED_RESULT_NOT_RECORDED_TRUSTED_METADATA_UNAVAILABLE","typedResultRecorded":false,"trustedMetadataError":"GITHUB_COMPARE_UNAVAILABLE"}' > ../artifacts/decision/pr-review-triage-record.json
+            exit 0
+          fi
+          if ! gh api "repos/$GITHUB_REPOSITORY/pulls/$EXPECTED_PR_NUMBER" > "$trusted_pr"; then
+            printf '%s\n' '{"recordingStatus":"TYPED_RESULT_NOT_RECORDED_TRUSTED_METADATA_UNAVAILABLE","typedResultRecorded":false,"trustedMetadataError":"GITHUB_PR_UNAVAILABLE"}' > ../artifacts/decision/pr-review-triage-record.json
+            exit 0
+          fi
           trusted_domain="$(
-            python -c 'from decision.pr_review_triage import infer_authoritative_domain; import sys; print(infer_authoritative_domain([line.strip() for line in open(sys.argv[1], encoding="utf-8") if line.strip()]))' "$trusted_files"
+            python -c 'from decision.pr_review_triage import infer_authoritative_domain; import json, sys; data=json.load(open(sys.argv[1], encoding="utf-8")); print(infer_authoritative_domain(tuple(item["filename"] for item in data.get("files", []) if item.get("filename"))))' "$trusted_compare"
           )"
+          trusted_title="$(python -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("title") or "")' "$trusted_pr")"
+          trusted_head_ref="$(python -c 'import json, sys; data=json.load(open(sys.argv[1], encoding="utf-8")); print((data.get("head") or {}).get("ref") or "")' "$trusted_pr")"
           python -m decision.pr_review_triage \
             --record-packet "$packet" \
             --require-durable \
+            --require-trusted-metadata \
             --expected-pr-number "$EXPECTED_PR_NUMBER" \
             --expected-head-sha "$EXPECTED_HEAD_SHA" \
             --expected-base-sha "$EXPECTED_BASE_SHA" \
             --trusted-authoritative-domain "$trusted_domain" \
+            --trusted-compare-json "$trusted_compare" \
+            --trusted-pr-title "$trusted_title" \
+            --trusted-head-ref "$trusted_head_ref" \
+            --trusted-review-run-id "${{ github.event.workflow_run.id }}" \
+            --trusted-ci-state-code "workflow:${{ github.event.workflow_run.name }}" \
+            --trusted-ci-state-code "conclusion:${{ github.event.workflow_run.conclusion }}" \
             --output "../artifacts/decision/pr-review-triage-record.json"
 
       - name: Upload trusted PR-review shadow triage record

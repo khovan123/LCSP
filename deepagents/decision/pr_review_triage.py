@@ -61,6 +61,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--expected-head-sha", default=None)
     parser.add_argument("--expected-base-sha", default=None)
     parser.add_argument("--trusted-authoritative-domain", default=None)
+    parser.add_argument("--trusted-compare-json", default=None)
+    parser.add_argument("--trusted-pr-title", default=None)
+    parser.add_argument("--trusted-head-ref", default=None)
+    parser.add_argument("--trusted-review-run-id", default=None)
+    parser.add_argument("--trusted-ci-state-code", action="append", default=[])
+    parser.add_argument("--require-trusted-metadata", action="store_true")
     args = parser.parse_args(argv)
 
     output_path = Path(args.output)
@@ -74,6 +80,14 @@ def main(argv: list[str] | None = None) -> int:
                 expected_head_sha=args.expected_head_sha,
                 expected_base_sha=args.expected_base_sha,
                 trusted_authoritative_domain=args.trusted_authoritative_domain,
+                trusted_compare_path=Path(args.trusted_compare_json)
+                if args.trusted_compare_json
+                else None,
+                trusted_pr_title=args.trusted_pr_title,
+                trusted_head_ref=args.trusted_head_ref,
+                trusted_review_run_id=args.trusted_review_run_id,
+                trusted_ci_state_codes=tuple(args.trusted_ci_state_code),
+                require_trusted_metadata=args.require_trusted_metadata,
             )
         elif args.packet_only:
             record = write_pr_review_shadow_triage_packet(
@@ -177,13 +191,17 @@ def record_pr_review_shadow_triage_packet(
     expected_head_sha: str | None = None,
     expected_base_sha: str | None = None,
     trusted_authoritative_domain: str | None = None,
+    trusted_compare_path: Path | None = None,
+    trusted_pr_title: str | None = None,
+    trusted_head_ref: str | None = None,
+    trusted_review_run_id: str | None = None,
+    trusted_ci_state_codes: tuple[str, ...] = (),
+    require_trusted_metadata: bool = False,
     observer_factory: Callable[[JsonlTelemetrySink], ShadowDecisionObserver] | None = None,
 ) -> dict[str, Any]:
     packet_payload = json.loads(packet_path.read_text(encoding="utf-8"))
     packet = _packet_from_payload(packet_payload.get("packet"))
-    authoritative_domain = _text(trusted_authoritative_domain) or infer_authoritative_domain(
-        packet.changed_filenames
-    )
+    authoritative_domain = _text(trusted_authoritative_domain)
     correlation_mismatches = _trusted_correlation_mismatches(
         packet,
         expected_pr_number=expected_pr_number,
@@ -207,6 +225,40 @@ def record_pr_review_shadow_triage_packet(
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
         return payload
+    trusted_metadata_error: str | None = None
+    if trusted_compare_path is not None:
+        try:
+            packet = _trusted_packet_from_compare(
+                source_packet=packet,
+                compare_payload=json.loads(trusted_compare_path.read_text(encoding="utf-8")),
+                expected_pr_number=expected_pr_number,
+                expected_head_sha=expected_head_sha,
+                expected_base_sha=expected_base_sha,
+                trusted_pr_title=trusted_pr_title,
+                trusted_head_ref=trusted_head_ref,
+                trusted_review_run_id=trusted_review_run_id,
+                trusted_ci_state_codes=trusted_ci_state_codes,
+            )
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            trusted_metadata_error = type(exc).__name__
+    elif require_trusted_metadata:
+        trusted_metadata_error = "TRUSTED_COMPARE_JSON_MISSING"
+    if trusted_metadata_error is not None:
+        payload = {
+            **_packet_correlation(packet),
+            "schemaVersion": "LCSP_PR_REVIEW_TRIAGE_RECORD_V1",
+            "recordingStatus": "TYPED_RESULT_NOT_RECORDED_TRUSTED_METADATA_INVALID",
+            "typedResultRecorded": False,
+            "authoritativeReviewDomain": authoritative_domain
+            or infer_authoritative_domain(packet.changed_filenames),
+            "trustedMetadataError": trusted_metadata_error,
+        }
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        return payload
+    authoritative_domain = authoritative_domain or infer_authoritative_domain(
+        packet.changed_filenames
+    )
     if require_durable and _api_client_from_environment() is None and observer_factory is None:
         payload = {
             **_packet_correlation(packet),
@@ -303,6 +355,63 @@ def _trusted_correlation_payload(
         "headSha": _text(expected_head_sha),
         "baseSha": _text(expected_base_sha),
     }
+
+
+def _trusted_packet_from_compare(
+    *,
+    source_packet: PrReviewTriagePacket,
+    compare_payload: Any,
+    expected_pr_number: int | None,
+    expected_head_sha: str | None,
+    expected_base_sha: str | None,
+    trusted_pr_title: str | None,
+    trusted_head_ref: str | None,
+    trusted_review_run_id: str | None,
+    trusted_ci_state_codes: tuple[str, ...],
+) -> PrReviewTriagePacket:
+    files = compare_payload.get("files") if isinstance(compare_payload, dict) else None
+    if not isinstance(files, list):
+        raise ValueError("trusted GitHub compare payload is invalid")
+    changed_filenames: list[str] = []
+    additions = 0
+    deletions = 0
+    for entry in files:
+        if not isinstance(entry, dict):
+            raise ValueError("trusted GitHub compare file entry is invalid")
+        filename = _text(entry.get("filename"))
+        if not filename:
+            continue
+        changed_filenames.append(filename)
+        additions += _int_or_none(entry.get("additions")) or 0
+        deletions += _int_or_none(entry.get("deletions")) or 0
+    if not changed_filenames:
+        raise ValueError("trusted GitHub compare payload has no files")
+    trusted_paths = tuple(dict.fromkeys(changed_filenames))
+    categories = tuple(dict.fromkeys(_category_for_path(path) for path in trusted_paths))
+    title = _text(trusted_pr_title)
+    head_ref = _text(trusted_head_ref)
+    jira_ids = tuple(
+        dict.fromkeys(
+            JIRA_ID_PATTERN.findall(" ".join(item for item in (title, head_ref) if item))
+        )
+    )
+    return PrReviewTriagePacket(
+        pr_number=expected_pr_number or source_packet.pr_number,
+        head_sha=_text(expected_head_sha) or source_packet.head_sha,
+        base_sha=_text(expected_base_sha) or source_packet.base_sha,
+        review_run_id=_text(trusted_review_run_id) or source_packet.review_run_id,
+        changed_filenames=trusted_paths,
+        change_categories=categories,
+        jira_issue_ids=jira_ids,
+        acceptance_criteria_ids=(),
+        bounded_summary=_bounded_summary(title=title, categories=categories),
+        ci_state_codes=tuple(value for value in trusted_ci_state_codes if value),
+        scanner_change_metadata=_scanner_metadata(trusted_paths),
+        diff_stat_keys=_diff_stat_keys(trusted_paths),
+        addition_count=additions,
+        deletion_count=deletions,
+        pge_artifact_version=_text(os.getenv("LCSP_PGE_ARTIFACT_VERSION")),
+    )
 
 
 def build_packet_from_environment(

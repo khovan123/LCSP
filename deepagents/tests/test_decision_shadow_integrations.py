@@ -782,3 +782,158 @@ def test_pr_review_triage_trusted_recorder_uses_trusted_authoritative_domain(tmp
 
     assert observed["authoritative_domain"] == "AGENT_RUNTIME"
     assert result["authoritativeReviewDomain"] == "AGENT_RUNTIME"
+
+
+def test_pr_review_triage_trusted_recorder_replaces_forged_packet_metadata(
+    tmp_path,
+    monkeypatch,
+):
+    packet_path = tmp_path / "packet.json"
+    compare_path = tmp_path / "trusted-compare.json"
+    head_sha = "b" * 40
+    base_sha = "c" * 40
+    observed = {}
+    monkeypatch.delenv("LCSP_PGE_ARTIFACT_VERSION", raising=False)
+    packet_path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "LCSP_PR_REVIEW_TRIAGE_PACKET_V1",
+                "authoritativeReviewDomain": "LEGAL_RULES",
+                "packet": {
+                    "pr_number": 344,
+                    "head_sha": head_sha,
+                    "base_sha": base_sha,
+                    "changed_filenames": ["apps/api/src/fake-payment-secret.ts"],
+                    "change_categories": ["api"],
+                    "jira_issue_ids": ["LCSP-999"],
+                    "acceptance_criteria_ids": ["LCSP-999:forged"],
+                    "bounded_summary": "forged unrestricted PR summary",
+                    "ci_state_codes": ["FORGED_CI_GREEN"],
+                    "scanner_change_metadata": ["FORGED_SCANNER_SIGNAL"],
+                    "diff_stat_keys": ["forged_files_changed"],
+                    "addition_count": 9999,
+                    "deletion_count": 9999,
+                    "pge_artifact_version": "forged-pge-version",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    compare_path.write_text(
+        json.dumps(
+            {
+                "files": [
+                    {
+                        "filename": "deepagents/decision/shadow.py",
+                        "additions": 10,
+                        "deletions": 2,
+                    },
+                    {
+                        "filename": "docs/operations/lcsp-336.md",
+                        "additions": 5,
+                        "deletions": 1,
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeObserver:
+        def observe_pr_review_triage(self, packet, *, authoritative_domain=None):
+            observed["packet"] = packet
+            observed["authoritative_domain"] = authoritative_domain
+            return ShadowDecisionRecord(
+                decision_id=f"review-triage-v1:{packet.pr_number}:{packet.head_sha}",
+                decision_type="PR_REVIEW_TRIAGE",
+                authoritative_action=authoritative_domain,
+                shadow_proposed_action="AGENT_RUNTIME",
+                agreement=True,
+                confidence=None,
+                fallback_reason="MISSING_CREDENTIALS",
+                skipped=False,
+            )
+
+    result = record_pr_review_shadow_triage_packet(
+        packet_path=packet_path,
+        output_path=tmp_path / "record.json",
+        expected_pr_number=344,
+        expected_head_sha=head_sha,
+        expected_base_sha=base_sha,
+        trusted_authoritative_domain="AGENT_RUNTIME",
+        trusted_compare_path=compare_path,
+        trusted_pr_title="LCSP-336 shadow decision integrations",
+        trusted_head_ref="feat/LCSP-336-shadow",
+        trusted_review_run_id="trusted-run-1",
+        trusted_ci_state_codes=("workflow:Tests", "conclusion:success"),
+        require_trusted_metadata=True,
+        observer_factory=lambda sink: FakeObserver(),
+    )
+
+    packet = observed["packet"]
+    assert packet.changed_filenames == (
+        "deepagents/decision/shadow.py",
+        "docs/operations/lcsp-336.md",
+    )
+    assert packet.change_categories == ("python_worker", "docs")
+    assert packet.jira_issue_ids == ("LCSP-336",)
+    assert packet.acceptance_criteria_ids == ()
+    assert packet.ci_state_codes == ("workflow:Tests", "conclusion:success")
+    assert packet.scanner_change_metadata == ()
+    assert packet.diff_stat_keys == ("docs_files_changed", "python_worker_files_changed")
+    assert packet.addition_count == 15
+    assert packet.deletion_count == 3
+    assert packet.pge_artifact_version is None
+    serialized = json.dumps(packet.__dict__, sort_keys=True)
+    assert "LCSP-999" not in serialized
+    assert "FORGED_CI_GREEN" not in serialized
+    assert "forged-pge-version" not in serialized
+    assert result["changedFileCount"] == 2
+    assert result["changeCategories"] == ["python_worker", "docs"]
+
+
+def test_pr_review_triage_trusted_recorder_requires_trusted_metadata_before_observer(
+    tmp_path,
+):
+    packet_path = tmp_path / "packet.json"
+    head_sha = "b" * 40
+    base_sha = "c" * 40
+    packet_path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "LCSP_PR_REVIEW_TRIAGE_PACKET_V1",
+                "packet": {
+                    "pr_number": 344,
+                    "head_sha": head_sha,
+                    "base_sha": base_sha,
+                    "changed_filenames": ["deepagents/decision/shadow.py"],
+                    "change_categories": ["python_worker"],
+                    "jira_issue_ids": ["LCSP-336"],
+                    "acceptance_criteria_ids": [],
+                    "ci_state_codes": ["GITHUB_ACTIONS"],
+                    "scanner_change_metadata": [],
+                    "diff_stat_keys": ["python_worker_files_changed"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "record.json"
+
+    def fail_if_called(sink):
+        raise AssertionError("missing trusted metadata must not construct observers")
+
+    result = record_pr_review_shadow_triage_packet(
+        packet_path=packet_path,
+        output_path=output,
+        expected_pr_number=344,
+        expected_head_sha=head_sha,
+        expected_base_sha=base_sha,
+        require_trusted_metadata=True,
+        observer_factory=fail_if_called,
+    )
+
+    assert result["recordingStatus"] == "TYPED_RESULT_NOT_RECORDED_TRUSTED_METADATA_INVALID"
+    assert result["trustedMetadataError"] == "TRUSTED_COMPARE_JSON_MISSING"
+    assert result["typedResultRecorded"] is False
+    assert not output.with_suffix(".events.jsonl").exists()
