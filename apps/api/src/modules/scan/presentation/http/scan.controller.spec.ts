@@ -390,7 +390,9 @@ describe("InternalScanController", () => {
         data?: { resultSummary?: Record<string, unknown> };
       }
     ).data?.resultSummary;
-    expect(JSON.stringify(persistedPayload)).not.toContain("raw private prompt");
+    expect(JSON.stringify(persistedPayload)).not.toContain(
+      "raw private prompt",
+    );
     expect(JSON.stringify(persistedPayload)).not.toContain("decision-secret");
     expect(JSON.stringify(persistedPayload)).not.toContain(
       "customer-specific content",
