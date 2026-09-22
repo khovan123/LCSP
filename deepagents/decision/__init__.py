@@ -15,11 +15,15 @@ from .shadow import (
     INTERVIEW_TOPIC_CHOICES,
     PR_REVIEW_DOMAIN_CHOICES,
     ROOT_ROUTE_CHOICES,
+    InMemoryDecisionIdempotencyStore,
     InterviewRoutingPacket,
     PrReviewTriagePacket,
     RootRoutingPacket,
     ShadowDecisionObserver,
     ShadowDecisionRecord,
+    WorkerApiDecisionIdempotencyStore,
+    observer_from_api_client,
+    worker_api_decision_event_sink,
 )
 
 __all__ = [
@@ -33,6 +37,7 @@ __all__ = [
     "DecisionRequest",
     "DecisionResult",
     "INTERVIEW_TOPIC_CHOICES",
+    "InMemoryDecisionIdempotencyStore",
     "InterviewRoutingPacket",
     "PR_REVIEW_DOMAIN_CHOICES",
     "PrReviewTriagePacket",
@@ -41,4 +46,7 @@ __all__ = [
     "RootRoutingPacket",
     "ShadowDecisionObserver",
     "ShadowDecisionRecord",
+    "WorkerApiDecisionIdempotencyStore",
+    "observer_from_api_client",
+    "worker_api_decision_event_sink",
 ]

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Protocol
 
 from .contracts import DECISION_TYPES, DecisionGatewayOutcome, DecisionQuestion, DecisionRequest
 from .gateway import DecisionGateway
@@ -104,6 +104,63 @@ class ShadowDecisionRecord:
     skipped: bool = False
 
 
+class DecisionIdempotencyStore(Protocol):
+    """Durable decision-id claim store used to suppress replayed provider calls."""
+
+    def claim(self, decision_id: str, *, request: DecisionRequest) -> bool:
+        """Atomically claim one decision ID before provider execution."""
+
+    def complete(self, record: ShadowDecisionRecord) -> None:
+        """Persist the final shadow comparison for replay/audit."""
+
+
+class InMemoryDecisionIdempotencyStore:
+    """Test/local idempotency store; production should pass an API-backed store."""
+
+    def __init__(self) -> None:
+        self.claimed: set[str] = set()
+        self.records: dict[str, ShadowDecisionRecord] = {}
+
+    def claim(self, decision_id: str, *, request: DecisionRequest) -> bool:
+        if decision_id in self.claimed:
+            return False
+        self.claimed.add(decision_id)
+        return True
+
+    def complete(self, record: ShadowDecisionRecord) -> None:
+        self.records[record.decision_id] = record
+
+
+class WorkerApiDecisionIdempotencyStore:
+    """API-backed idempotency adapter for worker replay/process boundaries."""
+
+    def __init__(self, api_client: Any) -> None:
+        self._api_client = api_client
+
+    def claim(self, decision_id: str, *, request: DecisionRequest) -> bool:
+        claim = getattr(self._api_client, "claim_decision_model_request", None)
+        if not callable(claim):
+            return True
+        return bool(
+            claim(
+                decision_id,
+                {
+                    "decisionType": request.decision_type,
+                    "assessmentId": request.assessment_id,
+                    "reviewRunId": request.review_run_id,
+                    "prNumber": request.pr_number,
+                    "baseSha": request.base_sha,
+                    "headSha": request.head_sha,
+                },
+            )
+        )
+
+    def complete(self, record: ShadowDecisionRecord) -> None:
+        complete = getattr(self._api_client, "complete_decision_model_request", None)
+        if callable(complete):
+            complete(record.decision_id, shadow_record_payload(record))
+
+
 class ShadowDecisionObserver:
     """Invoke Jev in shadow mode and persist only comparison telemetry."""
 
@@ -112,11 +169,18 @@ class ShadowDecisionObserver:
         *,
         gateway: DecisionGateway | None = None,
         telemetry_sink: TelemetrySink | None = None,
+        idempotency_store: DecisionIdempotencyStore | None = None,
         seen_decision_ids: set[str] | None = None,
     ) -> None:
         self._gateway = gateway or DecisionGateway()
         self._telemetry_sink = telemetry_sink
-        self._seen_decision_ids = seen_decision_ids if seen_decision_ids is not None else set()
+        if idempotency_store is None:
+            memory_store = InMemoryDecisionIdempotencyStore()
+            if seen_decision_ids is not None:
+                memory_store.claimed.update(seen_decision_ids)
+            self._idempotency_store = memory_store
+        else:
+            self._idempotency_store = idempotency_store
 
     def observe_pr_review_triage(
         self,
@@ -169,7 +233,7 @@ class ShadowDecisionObserver:
         authoritative_action: str | None,
         comparison_question_id: str,
     ) -> ShadowDecisionRecord:
-        if request.decision_id in self._seen_decision_ids:
+        if not self._idempotency_store.claim(request.decision_id, request=request):
             return ShadowDecisionRecord(
                 decision_id=request.decision_id,
                 decision_type=request.decision_type,
@@ -180,7 +244,6 @@ class ShadowDecisionObserver:
                 fallback_reason="DUPLICATE_DECISION_ID",
                 skipped=True,
             )
-        self._seen_decision_ids.add(request.decision_id)
 
         outcome = self._gateway.decide(request)
         proposed = _selected_choice(outcome, comparison_question_id)
@@ -210,7 +273,7 @@ class ShadowDecisionObserver:
         if self._telemetry_sink is not None:
             for event in events:
                 self._telemetry_sink(event)
-        return ShadowDecisionRecord(
+        record = ShadowDecisionRecord(
             decision_id=request.decision_id,
             decision_type=request.decision_type,
             authoritative_action=authoritative_action,
@@ -221,6 +284,8 @@ class ShadowDecisionObserver:
             telemetry_events=events,
             gateway_outcome=outcome,
         )
+        self._idempotency_store.complete(record)
+        return record
 
 
 def build_pr_review_triage_request(packet: PrReviewTriagePacket) -> DecisionRequest:
@@ -343,7 +408,11 @@ def build_interview_routing_request(packet: InterviewRoutingPacket) -> DecisionR
         state_payload["context_revision"] = max(0, int(packet.context_revision))
 
     return DecisionRequest(
-        decision_id=f"interview-topic-v1:{packet.assessment_id}:{packet.review_run_id}",
+        decision_id=(
+            "interview-topic-v1:"
+            f"{packet.assessment_id}:{packet.review_run_id}:"
+            f"rev-{max(0, int(packet.context_revision or 0))}"
+        ),
         decision_type=DECISION_TYPES["interview_topic_routing"],
         assessment_id=packet.assessment_id,
         review_run_id=packet.review_run_id,
@@ -462,16 +531,62 @@ def _enrich_event(
     return {**event, "data": {key: value for key, value in data.items() if value is not None}}
 
 
+def shadow_record_payload(record: ShadowDecisionRecord) -> dict[str, Any]:
+    return {
+        "decisionId": record.decision_id,
+        "decisionType": record.decision_type,
+        "authoritativeAction": record.authoritative_action,
+        "shadowProposedAction": record.shadow_proposed_action,
+        "agreement": record.agreement,
+        "confidence": record.confidence,
+        "fallbackReason": record.fallback_reason,
+        "skipped": record.skipped,
+    }
+
+
+def worker_api_decision_event_sink(api_client: Any) -> TelemetrySink:
+    def sink(event: dict[str, Any]) -> None:
+        post = getattr(api_client, "post_decision_model_event", None)
+        if callable(post):
+            post(event)
+            return
+        post_agent_event = getattr(api_client, "post_agent_stream_event", None)
+        if callable(post_agent_event):
+            post_agent_event(
+                {
+                    "event_type": event.get("eventType"),
+                    "schemaVersion": "LCSP_DECISION_MODEL_EVENT_V1",
+                    "kind": "DECISION_MODEL",
+                    "durability": "DURABLE",
+                    "payload": event,
+                }
+            )
+
+
+def observer_from_api_client(api_client: Any, *, gateway: DecisionGateway | None = None) -> ShadowDecisionObserver:
+    return ShadowDecisionObserver(
+        gateway=gateway,
+        telemetry_sink=worker_api_decision_event_sink(api_client),
+        idempotency_store=WorkerApiDecisionIdempotencyStore(api_client),
+    )
+
+
 __all__ = [
     "INTERVIEW_TOPIC_CHOICES",
     "PR_REVIEW_DOMAIN_CHOICES",
     "ROOT_ROUTE_CHOICES",
+    "DecisionIdempotencyStore",
+    "InMemoryDecisionIdempotencyStore",
     "InterviewRoutingPacket",
     "PrReviewTriagePacket",
     "RootRoutingPacket",
     "ShadowDecisionObserver",
     "ShadowDecisionRecord",
+    "WorkerApiDecisionIdempotencyStore",
     "build_interview_routing_request",
     "build_pr_review_triage_request",
     "build_root_routing_request",
+    "observer_from_api_client",
+    "shadow_record_payload",
+    "worker_api_decision_event_sink",
 ]

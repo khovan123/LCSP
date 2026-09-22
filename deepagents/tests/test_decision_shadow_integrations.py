@@ -3,11 +3,15 @@ import json
 from decision import (
     DecisionGateway,
     DecisionGatewayConfig,
+    InMemoryDecisionIdempotencyStore,
     InterviewRoutingPacket,
     PrReviewTriagePacket,
     RootRoutingPacket,
     ShadowDecisionObserver,
 )
+from contracts.handoffs import PlannerResult
+from orchestration.dispatcher import RootSubagentDispatcher
+from orchestration.lifecycle import RootSubagentReservation
 from decision.shadow import INTERVIEW_TOPIC_CHOICES, ROOT_ROUTE_CHOICES
 from decision.telemetry import InMemoryDecisionTelemetrySink
 from decision.typesafe_client import TypeSafeJevClient, TypeSafeJevError
@@ -72,11 +76,12 @@ def _client(*, calls=None, choice_overrides=None, confidence=0.93, errors=None):
     )
 
 
-def _observer(*, client, sink=None, config=None, seen=None):
+def _observer(*, client, sink=None, config=None, seen=None, store=None):
     gateway = DecisionGateway(config=config or _config(), client=client)
     return ShadowDecisionObserver(
         gateway=gateway,
         telemetry_sink=sink,
+        idempotency_store=store,
         seen_decision_ids=seen,
     )
 
@@ -301,17 +306,169 @@ def test_jev_cannot_set_ai_absence_risk_or_readiness_state():
 
 def test_shadow_observer_deduplicates_replayed_decision_id():
     calls = []
-    seen: set[str] = set()
+    store = InMemoryDecisionIdempotencyStore()
     observer = _observer(
         client=_client(calls=calls, choice_overrides={"affected_domain": "CI_RELEASE"}),
-        seen=seen,
+        store=store,
     )
     packet = _pr_packet(pr_number=344, head_sha="b" * 40)
 
     first = observer.observe_pr_review_triage(packet, authoritative_domain="CI_RELEASE")
-    replay = observer.observe_pr_review_triage(packet, authoritative_domain="CI_RELEASE")
+    recreated_observer = _observer(
+        client=_client(calls=calls, choice_overrides={"affected_domain": "CI_RELEASE"}),
+        store=store,
+    )
+    replay = recreated_observer.observe_pr_review_triage(packet, authoritative_domain="CI_RELEASE")
 
     assert len(calls) == 1
     assert first.skipped is False
     assert replay.skipped is True
     assert replay.fallback_reason == "DUPLICATE_DECISION_ID"
+
+
+def test_interview_decision_identity_includes_context_revision():
+    calls = []
+    store = InMemoryDecisionIdempotencyStore()
+    first_observer = _observer(
+        client=_client(calls=calls, choice_overrides={"missing_topic": "PURPOSE"}),
+        store=store,
+    )
+    packet_v1 = InterviewRoutingPacket(
+        assessment_id="assessment-1",
+        review_run_id="run-interview",
+        authoritative_topic="PURPOSE",
+        context_revision=1,
+    )
+    packet_v2 = InterviewRoutingPacket(
+        assessment_id="assessment-1",
+        review_run_id="run-interview",
+        authoritative_topic="PURPOSE",
+        context_revision=2,
+    )
+
+    first = first_observer.observe_interview_routing(packet_v1)
+    replay_observer = _observer(
+        client=_client(calls=calls, choice_overrides={"missing_topic": "PURPOSE"}),
+        store=store,
+    )
+    replay = replay_observer.observe_interview_routing(packet_v1)
+    later_revision = replay_observer.observe_interview_routing(packet_v2)
+
+    assert len(calls) == 2
+    assert first.decision_id.endswith(":rev-1")
+    assert replay.skipped is True
+    assert later_revision.decision_id.endswith(":rev-2")
+    assert later_revision.skipped is False
+
+
+def test_root_dispatcher_observes_shadow_route_without_changing_authoritative_dispatch():
+    from unittest.mock import MagicMock
+
+    calls = []
+    observer = _observer(
+        client=_client(calls=calls, choice_overrides={"route": "INVESTIGATE"})
+    )
+    lifecycle = MagicMock()
+    reservation = RootSubagentReservation(
+        subagent_type="planner",
+        status="OWNER",
+        execution_id="planner:owner",
+        trigger="AMBIGUOUS_ROOT_ROUTE",
+    )
+    lifecycle.reserve_subagent.return_value = reservation
+    lifecycle.owner_instruction.return_value = ""
+    lifecycle.complete_subagent.return_value = {"status": "COMPLETE"}
+    specialist = MagicMock()
+    specialist.invoke.return_value = {
+        "structured_response": {
+            "status": "INVESTIGATE",
+            "engineering_rule_ids": ["ENG-1"],
+            "artifact_versions": {"technicalEvidenceReportId": "ter-1"},
+            "coverage_state": "COMPLETE",
+            "selected_scope": [
+                {
+                    "ref": "node:ai",
+                    "criterion": "AI invocation exists",
+                }
+            ],
+            "unresolved_facts": [],
+            "next_step": "INVESTIGATE",
+        }
+    }
+    dispatcher = RootSubagentDispatcher(
+        lifecycle=lifecycle,
+        agent_factory=MagicMock(return_value=specialist),
+        subagents={
+            "planner": {
+                "name": "planner",
+                "model": "test-model",
+                "tools": [],
+                "system_prompt": "planner prompt",
+                "middleware": [],
+                "response_format": PlannerResult,
+            }
+        },
+        shadow_decision_observer=observer,
+    )
+
+    result = dispatcher.dispatch(
+        subagent_type="planner",
+        instruction="Plan from bounded state.",
+        trigger="AMBIGUOUS_ROOT_ROUTE",
+        metadata={
+            "root_shadow_routing": True,
+            "assessment_id": "assessment-1",
+            "workflow_run_id": "workflow-1",
+            "checkpoint_id": "checkpoint-1",
+            "current_stage": "POST_INTERVIEW",
+            "run_status": "AMBIGUOUS",
+            "pending_stage_candidates": ("PLAN", "INVESTIGATE"),
+            "deterministic_transition_available": False,
+        },
+        reenter_root=False,
+    )
+
+    assert len(calls) == 1
+    assert result["status"] == "COMPLETED"
+    assert result["subagentType"] == "planner"
+
+
+def test_root_dispatcher_shadow_bypasses_deterministic_transition_at_call_site():
+    from unittest.mock import MagicMock
+
+    calls = []
+    observer = _observer(client=_client(calls=calls))
+    root = MagicMock()
+    root.invoke.return_value = {"messages": [{"role": "assistant", "content": "queued"}]}
+    dispatcher = RootSubagentDispatcher(
+        root_agent=root,
+        subagents={
+            "planner": {
+                "name": "planner",
+                "model": "test-model",
+                "tools": [],
+                "system_prompt": "planner prompt",
+                "middleware": [],
+            }
+        },
+        shadow_decision_observer=observer,
+    )
+
+    result = dispatcher.dispatch(
+        subagent_type="planner",
+        instruction="Plan from deterministic state.",
+        trigger="DETERMINISTIC_ROUTE",
+        metadata={
+            "root_shadow_routing": True,
+            "assessment_id": "assessment-1",
+            "workflow_run_id": "workflow-1",
+            "checkpoint_id": "checkpoint-1",
+            "current_stage": "ENGINEERING_RULE_READY",
+            "run_status": "READY",
+            "pending_stage_candidates": ("PLAN",),
+            "deterministic_transition_available": True,
+        },
+    )
+
+    assert result["status"] == "ROOT_REENTERED"
+    assert calls == []

@@ -13,6 +13,11 @@ from orchestration.agent_stream import invoke_with_stream, publish_agent_stream_
 from collections.abc import Callable
 from typing import Any
 
+from decision.shadow import (
+    RootRoutingPacket,
+    ShadowDecisionObserver,
+    observer_from_api_client,
+)
 from model_policy import create_lcsp_agent as create_agent
 from subagents import FLOW_SUBAGENTS
 
@@ -35,6 +40,7 @@ class RootSubagentDispatcher:
         enable_thread_checkpointing: bool = False,
         checkpointer: Any | None = None,
         program_graph_loader: Callable[[LCSPRunContext, dict[str, Any]], Any] | None = None,
+        shadow_decision_observer: ShadowDecisionObserver | None = None,
     ) -> None:
         self._lifecycle = lifecycle or RootOrchestrationLifecycle()
         self._agent_factory = agent_factory
@@ -43,6 +49,7 @@ class RootSubagentDispatcher:
         self._enable_thread_checkpointing = enable_thread_checkpointing
         self._checkpointer = checkpointer
         self._program_graph_loader = program_graph_loader or _load_program_graph_from_metadata
+        self._shadow_decision_observer = shadow_decision_observer
         self._subagents = subagents or {
             str(item["name"]): item for item in FLOW_SUBAGENTS
         }
@@ -71,6 +78,13 @@ class RootSubagentDispatcher:
                 "affected_rule_ids": affected_rule_ids or [],
                 "reenter_root": reenter_root,
             },
+        )
+        self._observe_shadow_root_routing(
+            subagent_type=subagent_type,
+            trigger=trigger,
+            metadata=dict(metadata or {}),
+            thread_id=thread_id,
+            context=context,
         )
         if reenter_root:
             return self._dispatch_via_root(
@@ -193,6 +207,62 @@ class RootSubagentDispatcher:
             "episode": {"captured": False},
         }
 
+    def _observe_shadow_root_routing(
+        self,
+        *,
+        subagent_type: str,
+        trigger: str | None,
+        metadata: dict[str, Any],
+        thread_id: str | None,
+        context: LCSPRunContext | None,
+    ) -> None:
+        if not _has_root_routing_shadow_state(metadata):
+            return
+        observer = self._shadow_decision_observer
+        if observer is None:
+            api_client = metadata.get("api_client")
+            if api_client is None:
+                return
+            observer = observer_from_api_client(api_client)
+        observer.observe_root_routing(
+            RootRoutingPacket(
+                assessment_id=(
+                    context.assessment_id
+                    if context is not None and context.assessment_id
+                    else str(metadata.get("assessment_id") or metadata.get("assessmentId") or "")
+                ),
+                review_run_id=(
+                    context.workflow_run_id
+                    if context is not None and context.workflow_run_id
+                    else str(metadata.get("workflow_run_id") or metadata.get("workflowRunId") or thread_id or "")
+                ),
+                checkpoint_id=(
+                    context.checkpoint_id
+                    if context is not None and context.checkpoint_id
+                    else str(metadata.get("checkpoint_id") or metadata.get("checkpointId") or "root-dispatch")
+                ),
+                current_stage=str(metadata.get("current_stage") or metadata.get("currentStage") or trigger or "UNKNOWN"),
+                run_status=str(metadata.get("run_status") or metadata.get("runStatus") or "RUNNING"),
+                authoritative_route=_authoritative_route_for_subagent(subagent_type),
+                deterministic_transition_available=_deterministic_transition_available(metadata),
+                pending_stage_candidates=tuple(
+                    str(item)
+                    for item in (
+                        metadata.get("pending_stage_candidates")
+                        or metadata.get("pendingStageCandidates")
+                        or ()
+                    )
+                ),
+                coverage_state=(
+                    str(metadata.get("coverage_state") or metadata.get("coverageState"))
+                    if (metadata.get("coverage_state") or metadata.get("coverageState")) is not None
+                    else None
+                ),
+                transition_reason_code=trigger,
+                is_replay=bool(metadata.get("is_replay") or metadata.get("isReplay")),
+            )
+        )
+
     def _dispatch_via_root(
         self,
         *,
@@ -306,3 +376,34 @@ def _load_program_graph_from_metadata(
     if not isinstance(payload, dict):
         return None
     return payload.get("evidence_graph") or payload.get("evidenceGraph")
+
+
+def _has_root_routing_shadow_state(metadata: dict[str, Any]) -> bool:
+    return bool(
+        metadata.get("root_shadow_routing")
+        or metadata.get("rootShadowRouting")
+        or metadata.get("pending_stage_candidates")
+        or metadata.get("pendingStageCandidates")
+    )
+
+
+def _deterministic_transition_available(metadata: dict[str, Any]) -> bool:
+    value = (
+        metadata.get("deterministic_transition_available")
+        if "deterministic_transition_available" in metadata
+        else metadata.get("deterministicTransitionAvailable")
+    )
+    return bool(value)
+
+
+def _authoritative_route_for_subagent(subagent_type: str) -> str:
+    normalized = subagent_type.strip().lower()
+    if normalized == "planner":
+        return "PLAN"
+    if normalized == "investigator":
+        return "INVESTIGATE"
+    if normalized == "interview":
+        return "INTERVIEW"
+    if normalized in {"gate", "classification"}:
+        return "GATE"
+    return "STOP"
