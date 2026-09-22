@@ -57,6 +57,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--packet-only", action="store_true")
     parser.add_argument("--record-packet", default=None)
     parser.add_argument("--require-durable", action="store_true")
+    parser.add_argument("--expected-pr-number", type=int, default=None)
+    parser.add_argument("--expected-head-sha", default=None)
+    parser.add_argument("--expected-base-sha", default=None)
+    parser.add_argument("--trusted-authoritative-domain", default=None)
     args = parser.parse_args(argv)
 
     output_path = Path(args.output)
@@ -66,6 +70,10 @@ def main(argv: list[str] | None = None) -> int:
                 packet_path=Path(args.record_packet),
                 output_path=output_path,
                 require_durable=args.require_durable,
+                expected_pr_number=args.expected_pr_number,
+                expected_head_sha=args.expected_head_sha,
+                expected_base_sha=args.expected_base_sha,
+                trusted_authoritative_domain=args.trusted_authoritative_domain,
             )
         elif args.packet_only:
             record = write_pr_review_shadow_triage_packet(
@@ -165,13 +173,40 @@ def record_pr_review_shadow_triage_packet(
     packet_path: Path,
     output_path: Path,
     require_durable: bool = False,
+    expected_pr_number: int | None = None,
+    expected_head_sha: str | None = None,
+    expected_base_sha: str | None = None,
+    trusted_authoritative_domain: str | None = None,
     observer_factory: Callable[[JsonlTelemetrySink], ShadowDecisionObserver] | None = None,
 ) -> dict[str, Any]:
     packet_payload = json.loads(packet_path.read_text(encoding="utf-8"))
     packet = _packet_from_payload(packet_payload.get("packet"))
-    authoritative_domain = _text(
-        packet_payload.get("authoritativeReviewDomain")
-    ) or infer_authoritative_domain(packet.changed_filenames)
+    authoritative_domain = _text(trusted_authoritative_domain) or infer_authoritative_domain(
+        packet.changed_filenames
+    )
+    correlation_mismatches = _trusted_correlation_mismatches(
+        packet,
+        expected_pr_number=expected_pr_number,
+        expected_head_sha=expected_head_sha,
+        expected_base_sha=expected_base_sha,
+    )
+    if correlation_mismatches:
+        payload = {
+            **_packet_correlation(packet),
+            "schemaVersion": "LCSP_PR_REVIEW_TRIAGE_RECORD_V1",
+            "recordingStatus": "TYPED_RESULT_NOT_RECORDED_CORRELATION_MISMATCH",
+            "typedResultRecorded": False,
+            "authoritativeReviewDomain": authoritative_domain,
+            "correlationMismatches": correlation_mismatches,
+            "trustedCorrelation": _trusted_correlation_payload(
+                expected_pr_number=expected_pr_number,
+                expected_head_sha=expected_head_sha,
+                expected_base_sha=expected_base_sha,
+            ),
+        }
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        return payload
     if require_durable and _api_client_from_environment() is None and observer_factory is None:
         payload = {
             **_packet_correlation(packet),
@@ -236,6 +271,38 @@ def _record_packet(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
     return payload
+
+
+def _trusted_correlation_mismatches(
+    packet: PrReviewTriagePacket,
+    *,
+    expected_pr_number: int | None,
+    expected_head_sha: str | None,
+    expected_base_sha: str | None,
+) -> list[str]:
+    mismatches: list[str] = []
+    if expected_pr_number is not None and packet.pr_number != expected_pr_number:
+        mismatches.append("PR_NUMBER_MISMATCH")
+    expected_head = _text(expected_head_sha)
+    if expected_head and packet.head_sha != expected_head:
+        mismatches.append("HEAD_SHA_MISMATCH")
+    expected_base = _text(expected_base_sha)
+    if expected_base and packet.base_sha != expected_base:
+        mismatches.append("BASE_SHA_MISMATCH")
+    return mismatches
+
+
+def _trusted_correlation_payload(
+    *,
+    expected_pr_number: int | None,
+    expected_head_sha: str | None,
+    expected_base_sha: str | None,
+) -> dict[str, Any]:
+    return {
+        "prNumber": expected_pr_number,
+        "headSha": _text(expected_head_sha),
+        "baseSha": _text(expected_base_sha),
+    }
 
 
 def build_packet_from_environment(

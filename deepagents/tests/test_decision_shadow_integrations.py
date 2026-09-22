@@ -674,3 +674,111 @@ def test_pr_review_triage_trusted_recorder_requires_durable_store(tmp_path):
     assert result["recordingStatus"] == "TYPED_RESULT_NOT_RECORDED_DURABLE_CREDENTIALS_MISSING"
     assert result["typedResultRecorded"] is False
     assert result["headSha"] == "b" * 40
+
+
+def test_pr_review_triage_trusted_recorder_rejects_forged_packet_correlation(tmp_path):
+    packet_path = tmp_path / "packet.json"
+    trusted_head_sha = "b" * 40
+    trusted_base_sha = "c" * 40
+    packet_path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "LCSP_PR_REVIEW_TRIAGE_PACKET_V1",
+                "authoritativeReviewDomain": "LEGAL_RULES",
+                "packet": {
+                    "pr_number": 999,
+                    "head_sha": "d" * 40,
+                    "base_sha": trusted_base_sha,
+                    "changed_filenames": ["deepagents/decision/shadow.py"],
+                    "change_categories": ["python_worker"],
+                    "jira_issue_ids": ["LCSP-336"],
+                    "acceptance_criteria_ids": [],
+                    "ci_state_codes": ["GITHUB_ACTIONS"],
+                    "scanner_change_metadata": [],
+                    "diff_stat_keys": ["python_worker_files_changed"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "record.json"
+
+    def fail_if_called(sink):
+        raise AssertionError("forged packets must not construct observers")
+
+    result = record_pr_review_shadow_triage_packet(
+        packet_path=packet_path,
+        output_path=output,
+        require_durable=True,
+        expected_pr_number=344,
+        expected_head_sha=trusted_head_sha,
+        expected_base_sha=trusted_base_sha,
+        trusted_authoritative_domain="AGENT_RUNTIME",
+        observer_factory=fail_if_called,
+    )
+
+    assert result["recordingStatus"] == "TYPED_RESULT_NOT_RECORDED_CORRELATION_MISMATCH"
+    assert result["typedResultRecorded"] is False
+    assert result["correlationMismatches"] == ["PR_NUMBER_MISMATCH", "HEAD_SHA_MISMATCH"]
+    assert result["trustedCorrelation"] == {
+        "prNumber": 344,
+        "headSha": trusted_head_sha,
+        "baseSha": trusted_base_sha,
+    }
+    assert result["authoritativeReviewDomain"] == "AGENT_RUNTIME"
+    assert not output.with_suffix(".events.jsonl").exists()
+
+
+def test_pr_review_triage_trusted_recorder_uses_trusted_authoritative_domain(tmp_path):
+    packet_path = tmp_path / "packet.json"
+    head_sha = "b" * 40
+    base_sha = "c" * 40
+    observed = {}
+    packet_path.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "LCSP_PR_REVIEW_TRIAGE_PACKET_V1",
+                "authoritativeReviewDomain": "LEGAL_RULES",
+                "packet": {
+                    "pr_number": 344,
+                    "head_sha": head_sha,
+                    "base_sha": base_sha,
+                    "changed_filenames": ["docs/operations/lcsp-336.md"],
+                    "change_categories": ["docs"],
+                    "jira_issue_ids": ["LCSP-336"],
+                    "acceptance_criteria_ids": [],
+                    "ci_state_codes": ["GITHUB_ACTIONS"],
+                    "scanner_change_metadata": [],
+                    "diff_stat_keys": ["docs_files_changed"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeObserver:
+        def observe_pr_review_triage(self, packet, *, authoritative_domain=None):
+            observed["authoritative_domain"] = authoritative_domain
+            return ShadowDecisionRecord(
+                decision_id=f"review-triage-v1:{packet.pr_number}:{packet.head_sha}",
+                decision_type="PR_REVIEW_TRIAGE",
+                authoritative_action=authoritative_domain,
+                shadow_proposed_action="AGENT_RUNTIME",
+                agreement=False,
+                confidence=None,
+                fallback_reason="MISSING_CREDENTIALS",
+                skipped=False,
+            )
+
+    result = record_pr_review_shadow_triage_packet(
+        packet_path=packet_path,
+        output_path=tmp_path / "record.json",
+        expected_pr_number=344,
+        expected_head_sha=head_sha,
+        expected_base_sha=base_sha,
+        trusted_authoritative_domain="AGENT_RUNTIME",
+        observer_factory=lambda sink: FakeObserver(),
+    )
+
+    assert observed["authoritative_domain"] == "AGENT_RUNTIME"
+    assert result["authoritativeReviewDomain"] == "AGENT_RUNTIME"
