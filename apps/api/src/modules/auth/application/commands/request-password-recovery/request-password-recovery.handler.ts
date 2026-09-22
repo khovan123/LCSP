@@ -1,14 +1,12 @@
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
   AUTH_BACKUP_EMAIL_POLICIES,
-  AUTH_ERROR_CODES,
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
 } from "@lcsp/contracts/auth";
 
 import { Inject } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 
-import { problemException } from "../../../../../platform/http/filters/error.factory.js";
 import { RecoveryRequest } from "../../../domain/models/auth.models.ts";
 import {
   fingerprintToken,
@@ -50,13 +48,6 @@ export class RequestPasswordRecoveryHandler implements ICommandHandler<RequestPa
     const { users, recoveryRequests } = this;
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
-
-    if (
-      typeof payload.email !== "string" ||
-      payload.email.trim().length === 0
-    ) {
-      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
-    }
 
     const email = payload.email.trim().toLowerCase();
     const user = await users.findByPrimaryEmail(email);

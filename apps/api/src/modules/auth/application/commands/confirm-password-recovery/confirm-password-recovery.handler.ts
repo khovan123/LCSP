@@ -45,15 +45,6 @@ export class ConfirmPasswordRecoveryHandler implements ICommandHandler<ConfirmPa
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
 
-    if (
-      typeof payload.token !== "string" ||
-      payload.token.trim().length === 0 ||
-      typeof payload.new_password !== "string" ||
-      payload.new_password.length === 0
-    ) {
-      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
-    }
-
     const now = this.support.now();
     const recoveryRequest = await recoveryRequests.findByFingerprint(
       fingerprintToken(payload.token),

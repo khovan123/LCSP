@@ -37,12 +37,8 @@ export class OAuthStartHandler implements ICommandHandler<OAuthStartCommand> {
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
 
-    const providerName = asNonEmptyString(payload?.provider);
-    const redirectUri = asNonEmptyString(payload?.redirect_uri);
-
-    if (!providerName || !redirectUri) {
-      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
-    }
+    const providerName = payload.provider;
+    const redirectUri = payload.redirect_uri;
 
     const provider = this.providerRegistry.resolve(providerName);
     if (!provider) {
@@ -115,12 +111,6 @@ export class OAuthStartHandler implements ICommandHandler<OAuthStartCommand> {
       correlationId: correlationId,
     });
   }
-}
-
-function asNonEmptyString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : null;
 }
 
 function isAllowedRedirectOrigin(

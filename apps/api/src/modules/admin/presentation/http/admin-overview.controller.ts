@@ -8,10 +8,10 @@ import {
   type AdminOverviewStats,
 } from "@lcsp/contracts/auth";
 
-import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
-import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
-import { ZodValidationPipe } from "../../../../common/pipes/zod-validation.pipe.js";
-import { GetAdminOverviewQuery } from "../../application/queries/index.js";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.ts";
+import { RbacGuard } from "../../../../platform/rbac/rbac.guard.ts";
+import { ZodValidationPipe } from "../../../../common/pipes/zod-validation.pipe.ts";
+import { GetAdminOverviewQuery } from "../../application/queries/index.ts";
 
 /**
  * Administrative HTTP controller for aggregating system overview metrics.

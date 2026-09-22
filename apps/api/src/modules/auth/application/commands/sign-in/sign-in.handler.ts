@@ -46,10 +46,9 @@ export class SignInHandler implements ICommandHandler<SignInCommand> {
     const { users, sessions, mfaEnrollments } = this;
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
-    this.support.validateCredentialPayload(payload, correlationId);
 
-    const email = payload.email as string;
-    const password = payload.password as string;
+    const email = payload.email;
+    const password = payload.password;
     const user = await users.findByPrimaryEmail(email.toLowerCase());
     if (!user) {
       // Run the same scrypt-based comparison as the found-user path so the

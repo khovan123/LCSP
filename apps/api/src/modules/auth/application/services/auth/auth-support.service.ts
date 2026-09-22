@@ -21,7 +21,6 @@ import {
   issueOpaqueToken,
 } from "../../../infrastructure/security/security.utils.ts";
 import type { SafeUserProjection } from "../../contracts/auth/common.contract.ts";
-import type { CredentialPayload } from "../../contracts/auth/sign-in.contract.ts";
 import type {
   MfaEnrollmentRepository,
   SessionRepository,
@@ -91,20 +90,6 @@ export class AuthSupportService {
         ? repositoriesOrUsers.users
         : repositoriesOrUsers;
     return repo.findById(userId);
-  }
-
-  validateCredentialPayload(
-    payload: CredentialPayload,
-    correlationId: string,
-  ): void {
-    if (
-      !this.requireString(payload?.email) ||
-      !this.requireString(payload?.password)
-    ) {
-      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId, {
-        status: HttpStatus.BAD_REQUEST,
-      });
-    }
   }
 
   async createSession(
@@ -188,9 +173,5 @@ export class AuthSupportService {
         ? repositoriesOrMfa.mfaEnrollments
         : repositoriesOrMfa;
     return repo.findByUserId(userId);
-  }
-
-  private requireString(value: unknown): value is string {
-    return typeof value === "string" && value.trim().length > 0;
   }
 }

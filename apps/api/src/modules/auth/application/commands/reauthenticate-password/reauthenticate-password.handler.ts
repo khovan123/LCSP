@@ -38,10 +38,6 @@ export class ReauthenticatePasswordHandler implements ICommandHandler<Reauthenti
     const correlationId =
       requestMeta?.correlationId ?? this.support.createCorrelationId();
 
-    if (typeof password !== "string" || password.trim().length === 0) {
-      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
-    }
-
     if (!userId || !sessionId) {
       throw problemException(AUTH_ERROR_CODES.authRequired, correlationId);
     }

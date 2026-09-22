@@ -39,13 +39,9 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
 
-    const code = asNonEmptyString(payload?.code);
-    const stateValue = asNonEmptyString(payload?.state);
-    const providerParam = asNonEmptyString(payload?.provider);
-
-    if (!code || !stateValue || !providerParam) {
-      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
-    }
+    const code = payload.code;
+    const stateValue = payload.state;
+    const providerParam = payload.provider;
 
     const oauthState = await oauthStates.consumeByState(stateValue);
 
@@ -174,10 +170,4 @@ export class OAuthLinkCallbackHandler implements ICommandHandler<OAuthLinkCallba
       correlationId: correlationId,
     });
   }
-}
-
-function asNonEmptyString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : null;
 }

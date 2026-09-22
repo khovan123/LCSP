@@ -27,8 +27,6 @@ import { AuthAuditService } from "../../services/auth/auth-audit.service.ts";
 import { SignUpCommand } from "./sign-up.command.ts";
 
 const SESSION_TTL_MS = 8 * 60 * 60_000;
-const MIN_PASSWORD_LENGTH = 12;
-const MAX_DISPLAY_NAME_LENGTH = 100;
 
 @CommandHandler(SignUpCommand)
 export class SignUpHandler implements ICommandHandler<SignUpCommand> {
@@ -40,34 +38,6 @@ export class SignUpHandler implements ICommandHandler<SignUpCommand> {
   async execute(command: SignUpCommand): Promise<SignUpResponse> {
     const { email, displayName, password } = command.input;
     const correlationId = command.input.correlationId ?? createCorrelationId();
-
-    if (!isValidEmail(email) || !isValidDisplayName(displayName)) {
-      await this.recordFailure(
-        correlationId,
-        SIGN_UP_ERROR_CODES.invalidRequest,
-      );
-      throw problemException(
-        SIGN_UP_ERROR_CODES.invalidRequest,
-        correlationId,
-        {
-          status: HttpStatus.BAD_REQUEST,
-        },
-      );
-    }
-
-    if (!isNonEmptyString(password) || password.length < MIN_PASSWORD_LENGTH) {
-      await this.recordFailure(
-        correlationId,
-        SIGN_UP_ERROR_CODES.passwordTooShort,
-      );
-      throw problemException(
-        SIGN_UP_ERROR_CODES.passwordTooShort,
-        correlationId,
-        {
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-        },
-      );
-    }
 
     const normalizedEmail = email.trim().toLowerCase();
     const trimmedDisplayName = displayName.trim();
@@ -194,24 +164,6 @@ export class SignUpHandler implements ICommandHandler<SignUpCommand> {
       },
     });
   }
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-function isValidEmail(value: unknown): value is string {
-  return (
-    isNonEmptyString(value) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
-  );
-}
-
-function isValidDisplayName(value: unknown): value is string {
-  return (
-    isNonEmptyString(value) &&
-    value.trim().length >= 1 &&
-    value.trim().length <= MAX_DISPLAY_NAME_LENGTH
-  );
 }
 
 function isUniqueConstraintViolation(error: unknown): boolean {

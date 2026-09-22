@@ -22,20 +22,20 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
-import { ZodValidationPipe } from "../../../../common/pipes/zod-validation.pipe.js";
-import { problemException } from "../../../../platform/http/filters/error.factory.js";
-import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
-import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
+import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.ts";
+import { ZodValidationPipe } from "../../../../common/pipes/zod-validation.pipe.ts";
+import { problemException } from "../../../../platform/http/filters/error.factory.ts";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.ts";
+import { RbacGuard } from "../../../../platform/rbac/rbac.guard.ts";
 import {
   RestoreUserCommand,
   SuspendUserCommand,
-} from "../../application/commands/index.js";
+} from "../../application/commands/index.ts";
 import {
   GetAdminUserDetailQuery,
   ListAdminUsersQuery,
-} from "../../application/queries/index.js";
-import type { AdminActor } from "../../infrastructure/persistence/admin-account.transaction.js";
+} from "../../application/queries/index.ts";
+import type { AdminActor } from "../../infrastructure/persistence/admin-account.transaction.ts";
 
 const IDEMPOTENCY_KEY_REGEX = /^[A-Za-z0-9._:-]{1,128}$/;
 

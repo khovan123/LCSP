@@ -51,13 +51,9 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
     const correlationId =
       requestMeta.correlationId ?? this.support.createCorrelationId();
 
-    const code = asNonEmptyString(payload?.code);
-    const stateValue = asNonEmptyString(payload?.state);
-    const providerParam = asNonEmptyString(payload?.provider);
-
-    if (!code || !stateValue || !providerParam) {
-      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
-    }
+    const code = payload.code;
+    const stateValue = payload.state;
+    const providerParam = payload.provider;
 
     // Atomic delete-and-return: a state value can only ever be consumed once,
     // closing the replay window even under concurrent callback requests.
@@ -207,10 +203,4 @@ export class OAuthCallbackHandler implements ICommandHandler<OAuthCallbackComman
       correlationId: correlationId,
     });
   }
-}
-
-function asNonEmptyString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : null;
 }

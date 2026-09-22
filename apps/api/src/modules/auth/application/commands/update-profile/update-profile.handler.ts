@@ -1,16 +1,15 @@
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
-  AUTH_BACKUP_EMAIL_POLICIES,
   AUTH_ERROR_CODES,
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
   AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
+  type UpdateProfileInput,
 } from "@lcsp/contracts/auth";
 
 import { Inject } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 
 import { problemException } from "../../../../../platform/http/filters/error.factory.js";
-import { EmailAddress } from "../../../domain/value-objects/email-address.value-object.ts";
 import type { UpdateProfileSuccess } from "../../contracts/auth/profile.contract.ts";
 import {
   AUTH_MFA_ENROLLMENT_REPOSITORY,
@@ -21,12 +20,7 @@ import {
   type UserRepository,
 } from "../../ports/persistence/index.ts";
 import { AuthSupportService } from "../../services/auth/auth-support.service.ts";
-import {
-  type UpdateProfilePayload,
-  UpdateProfileCommand,
-} from "./update-profile.command.ts";
-
-const MAX_DISPLAY_NAME_LENGTH = 120;
+import { UpdateProfileCommand } from "./update-profile.command.ts";
 
 @CommandHandler(UpdateProfileCommand)
 export class UpdateProfileHandler implements ICommandHandler<UpdateProfileCommand> {
@@ -50,42 +44,7 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
       throw problemException(AUTH_ERROR_CODES.authRequired, correlationId);
     }
 
-    if (!this.hasUpdateField(payload)) {
-      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
-    }
-
-    if (
-      typeof payload.display_name === "string" &&
-      payload.display_name.trim().length > MAX_DISPLAY_NAME_LENGTH
-    ) {
-      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
-    }
-
-    if (typeof payload.recovery_email === "string") {
-      const trimmed = payload.recovery_email.trim();
-      if (trimmed.length > 0 && !EmailAddress.isValid(trimmed)) {
-        throw problemException(
-          AUTH_ERROR_CODES.validationFailed,
-          correlationId,
-        );
-      }
-    }
-
-    if (
-      typeof payload.backup_recovery_email_policy === "string" &&
-      !Object.values(AUTH_BACKUP_EMAIL_POLICIES).includes(
-        payload.backup_recovery_email_policy,
-      )
-    ) {
-      throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
-    }
-
-    if (
-      typeof payload.primary_email_address_policy === "string" &&
-      !Object.values(AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES).includes(
-        payload.primary_email_address_policy,
-      )
-    ) {
+    if (!payload || !this.hasUpdateField(payload)) {
       throw problemException(AUTH_ERROR_CODES.validationFailed, correlationId);
     }
 
@@ -189,7 +148,7 @@ export class UpdateProfileHandler implements ICommandHandler<UpdateProfileComman
     };
   }
 
-  private hasUpdateField(payload: UpdateProfilePayload): boolean {
+  private hasUpdateField(payload: UpdateProfileInput): boolean {
     return (
       typeof payload.display_name === "string" ||
       typeof payload.recovery_email === "string" ||
