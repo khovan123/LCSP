@@ -114,6 +114,10 @@ class DecisionIdempotencyStore(Protocol):
         """Persist the final shadow comparison for replay/audit."""
 
 
+class DecisionIdempotencyClaimUnavailable(RuntimeError):
+    """Raised when a durable idempotency claim cannot be established."""
+
+
 class InMemoryDecisionIdempotencyStore:
     """Test/local idempotency store; production should pass an API-backed store."""
 
@@ -140,20 +144,27 @@ class WorkerApiDecisionIdempotencyStore:
     def claim(self, decision_id: str, *, request: DecisionRequest) -> bool:
         claim = getattr(self._api_client, "claim_decision_model_request", None)
         if not callable(claim):
-            return True
-        return bool(
-            claim(
-                decision_id,
-                {
-                    "decisionType": request.decision_type,
-                    "assessmentId": request.assessment_id,
-                    "reviewRunId": request.review_run_id,
-                    "prNumber": request.pr_number,
-                    "baseSha": request.base_sha,
-                    "headSha": request.head_sha,
-                },
+            raise DecisionIdempotencyClaimUnavailable(
+                "decision idempotency claim API is unavailable"
             )
-        )
+        try:
+            return bool(
+                claim(
+                    decision_id,
+                    {
+                        "decisionType": request.decision_type,
+                        "assessmentId": request.assessment_id,
+                        "reviewRunId": request.review_run_id,
+                        "prNumber": request.pr_number,
+                        "baseSha": request.base_sha,
+                        "headSha": request.head_sha,
+                    },
+                )
+            )
+        except Exception as exc:
+            raise DecisionIdempotencyClaimUnavailable(
+                "decision idempotency claim failed"
+            ) from exc
 
     def complete(self, record: ShadowDecisionRecord) -> None:
         complete = getattr(self._api_client, "complete_decision_model_request", None)
@@ -233,7 +244,20 @@ class ShadowDecisionObserver:
         authoritative_action: str | None,
         comparison_question_id: str,
     ) -> ShadowDecisionRecord:
-        if not self._idempotency_store.claim(request.decision_id, request=request):
+        try:
+            claimed = self._idempotency_store.claim(request.decision_id, request=request)
+        except DecisionIdempotencyClaimUnavailable:
+            return ShadowDecisionRecord(
+                decision_id=request.decision_id,
+                decision_type=request.decision_type,
+                authoritative_action=authoritative_action,
+                shadow_proposed_action=None,
+                agreement=None,
+                confidence=None,
+                fallback_reason="IDEMPOTENCY_CLAIM_UNAVAILABLE",
+                skipped=True,
+            )
+        if not claimed:
             return ShadowDecisionRecord(
                 decision_id=request.decision_id,
                 decision_type=request.decision_type,
@@ -575,6 +599,7 @@ __all__ = [
     "INTERVIEW_TOPIC_CHOICES",
     "PR_REVIEW_DOMAIN_CHOICES",
     "ROOT_ROUTE_CHOICES",
+    "DecisionIdempotencyClaimUnavailable",
     "DecisionIdempotencyStore",
     "InMemoryDecisionIdempotencyStore",
     "InterviewRoutingPacket",

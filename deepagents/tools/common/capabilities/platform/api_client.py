@@ -550,11 +550,11 @@ class WorkerApiClient:
             if getattr(exc, "status_code", None) == 409:
                 return False
             logger.warning(
-                "DECISION_MODEL_CLAIM_FAILED_OPEN",
+                "DECISION_MODEL_CLAIM_FAILED_CLOSED",
                 decision_id=decision_id,
                 error=type(exc).__name__,
             )
-            return True
+            raise
         return bool(response.get("claimed", True))
 
     def complete_decision_model_request(self, decision_id: str, payload: dict) -> None:

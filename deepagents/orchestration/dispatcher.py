@@ -8,9 +8,8 @@ create agent-specific orchestrators.
 
 from __future__ import annotations
 
-from orchestration.agent_stream import invoke_with_stream, publish_agent_stream_event
-
 from collections.abc import Callable
+import logging
 from typing import Any
 
 from decision.shadow import (
@@ -19,11 +18,15 @@ from decision.shadow import (
     observer_from_api_client,
 )
 from model_policy import create_lcsp_agent as create_agent
+from orchestration.agent_stream import invoke_with_stream, publish_agent_stream_event
 from subagents import FLOW_SUBAGENTS
 
 from .context import LCSPRunContext
 from .lifecycle import RootOrchestrationLifecycle
 from .result_validation import repair_targeted_interview_frontier, validate_specialist_handoff
+
+
+logger = logging.getLogger(__name__)
 
 
 class RootSubagentDispatcher:
@@ -79,13 +82,19 @@ class RootSubagentDispatcher:
                 "reenter_root": reenter_root,
             },
         )
-        self._observe_shadow_root_routing(
-            subagent_type=subagent_type,
-            trigger=trigger,
-            metadata=dict(metadata or {}),
-            thread_id=thread_id,
-            context=context,
-        )
+        try:
+            self._observe_shadow_root_routing(
+                subagent_type=subagent_type,
+                trigger=trigger,
+                metadata=dict(metadata or {}),
+                thread_id=thread_id,
+                context=context,
+            )
+        except Exception as exc:
+            logger.warning(
+                "LCSP_SHADOW_ROOT_ROUTING_OBSERVATION_FAILED",
+                extra={"error": type(exc).__name__},
+            )
         if reenter_root:
             return self._dispatch_via_root(
                 subagent_type=subagent_type,

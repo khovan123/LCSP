@@ -8,8 +8,11 @@ from decision import (
     PrReviewTriagePacket,
     RootRoutingPacket,
     ShadowDecisionObserver,
+    ShadowDecisionRecord,
+    WorkerApiDecisionIdempotencyStore,
 )
 from contracts.handoffs import PlannerResult
+from decision.pr_review_triage import run_pr_review_shadow_triage
 from orchestration.dispatcher import RootSubagentDispatcher
 from orchestration.lifecycle import RootSubagentReservation
 from decision.shadow import INTERVIEW_TOPIC_CHOICES, ROOT_ROUTE_CHOICES
@@ -326,6 +329,28 @@ def test_shadow_observer_deduplicates_replayed_decision_id():
     assert replay.fallback_reason == "DUPLICATE_DECISION_ID"
 
 
+def test_shadow_observer_skips_provider_when_durable_claim_is_unavailable():
+    calls = []
+
+    class FailingClaimApi:
+        def claim_decision_model_request(self, decision_id, payload):
+            raise RuntimeError("claim API unavailable")
+
+    observer = _observer(
+        client=_client(calls=calls, choice_overrides={"affected_domain": "CI_RELEASE"}),
+        store=WorkerApiDecisionIdempotencyStore(FailingClaimApi()),
+    )
+
+    record = observer.observe_pr_review_triage(
+        _pr_packet(pr_number=345, head_sha="c" * 40),
+        authoritative_domain="CI_RELEASE",
+    )
+
+    assert calls == []
+    assert record.skipped is True
+    assert record.fallback_reason == "IDEMPOTENCY_CLAIM_UNAVAILABLE"
+
+
 def test_interview_decision_identity_includes_context_revision():
     calls = []
     store = InMemoryDecisionIdempotencyStore()
@@ -472,3 +497,106 @@ def test_root_dispatcher_shadow_bypasses_deterministic_transition_at_call_site()
 
     assert result["status"] == "ROOT_REENTERED"
     assert calls == []
+
+
+def test_root_dispatcher_shadow_observer_failure_does_not_block_authoritative_dispatch():
+    from unittest.mock import MagicMock
+
+    class RaisingObserver:
+        def observe_root_routing(self, packet):
+            raise RuntimeError("shadow should not block root")
+
+    root = MagicMock()
+    root.invoke.return_value = {"messages": [{"role": "assistant", "content": "queued"}]}
+    dispatcher = RootSubagentDispatcher(
+        root_agent=root,
+        subagents={
+            "planner": {
+                "name": "planner",
+                "model": "test-model",
+                "tools": [],
+                "system_prompt": "planner prompt",
+                "middleware": [],
+            }
+        },
+        shadow_decision_observer=RaisingObserver(),
+    )
+
+    result = dispatcher.dispatch(
+        subagent_type="planner",
+        instruction="Plan from ambiguous state.",
+        trigger="AMBIGUOUS_ROOT_ROUTE",
+        metadata={
+            "root_shadow_routing": True,
+            "assessment_id": "assessment-1",
+            "workflow_run_id": "workflow-1",
+            "checkpoint_id": "checkpoint-1",
+            "current_stage": "POST_INTERVIEW",
+            "run_status": "AMBIGUOUS",
+            "pending_stage_candidates": ("PLAN", "INVESTIGATE"),
+            "deterministic_transition_available": False,
+        },
+    )
+
+    assert result["status"] == "ROOT_REENTERED"
+    assert result["subagentType"] == "planner"
+
+
+def test_pr_review_triage_runner_records_bounded_exact_head_packet(tmp_path, monkeypatch):
+    observed = {}
+    head_sha = "d" * 40
+    base_sha = "e" * 40
+
+    def fake_git_lines(*args):
+        if "--name-only" in args:
+            return [
+                "deepagents/decision/shadow.py",
+                "apps/api/src/modules/scan/presentation/http/scan.controller.ts",
+            ]
+        if "--numstat" in args:
+            return [
+                "12\t3\tdeepagents/decision/shadow.py",
+                "4\t1\tapps/api/src/modules/scan/presentation/http/scan.controller.ts",
+            ]
+        return []
+
+    class FakeObserver:
+        def observe_pr_review_triage(self, packet, *, authoritative_domain=None):
+            observed["packet"] = packet
+            observed["authoritative_domain"] = authoritative_domain
+            return ShadowDecisionRecord(
+                decision_id=f"review-triage-v1:{packet.pr_number}:{packet.head_sha}",
+                decision_type="PR_REVIEW_TRIAGE",
+                authoritative_action=authoritative_domain,
+                shadow_proposed_action="AGENT_RUNTIME",
+                agreement=authoritative_domain == "AGENT_RUNTIME",
+                confidence=None,
+                fallback_reason="MISSING_CREDENTIALS",
+                skipped=False,
+            )
+
+    monkeypatch.setattr("decision.pr_review_triage._git_lines", fake_git_lines)
+    monkeypatch.setenv("GITHUB_RUN_ID", "run-336")
+    output = tmp_path / "pr-review-triage.json"
+
+    result = run_pr_review_shadow_triage(
+        pr_number=344,
+        base_sha=base_sha,
+        head_sha=head_sha,
+        output_path=output,
+        observer_factory=lambda sink: FakeObserver(),
+    )
+
+    packet = observed["packet"]
+    assert packet.pr_number == 344
+    assert packet.head_sha == head_sha
+    assert packet.base_sha == base_sha
+    assert "deepagents/decision/shadow.py" in packet.changed_filenames
+    assert packet.addition_count == 16
+    assert packet.deletion_count == 4
+    assert observed["authoritative_domain"] == "AGENT_RUNTIME"
+    serialized = json.dumps(packet.__dict__, sort_keys=True)
+    assert "raw_diff" not in serialized
+    assert "def " not in serialized
+    assert result["headSha"] == head_sha
+    assert output.exists()
