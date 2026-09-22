@@ -941,7 +941,8 @@ function decisionEventText(
   payload: Prisma.InputJsonObject,
 ): string {
   const data = jsonRecord(payload.data);
-  const selected = textFromJson(data.shadowProposedAction) ?? textFromJson(data.action);
+  const selected =
+    textFromJson(data.shadowProposedAction) ?? textFromJson(data.action);
   const confidence = numberFromJson(data.confidence);
   const confidenceText =
     confidence === null ? null : `confidence=${confidence.toFixed(2)}`;
@@ -960,21 +961,28 @@ function compactJsonObject(
   value: Record<string, Prisma.InputJsonValue | null>,
 ): Prisma.InputJsonObject {
   return Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, Prisma.InputJsonValue] => {
-      const item = entry[1];
-      if (item === null) return false;
-      if (Array.isArray(item) && item.length === 0) return false;
-      if (typeof item === "object" && !Array.isArray(item) && Object.keys(item).length === 0) {
-        return false;
-      }
-      return true;
-    }),
+    Object.entries(value).filter(
+      (entry): entry is [string, Prisma.InputJsonValue] => {
+        const item = entry[1];
+        if (item === null) return false;
+        if (Array.isArray(item) && item.length === 0) return false;
+        if (
+          typeof item === "object" &&
+          !Array.isArray(item) &&
+          Object.keys(item).length === 0
+        ) {
+          return false;
+        }
+        return true;
+      },
+    ),
   );
 }
 
 function textFromJson(value: unknown): string | null {
   if (typeof value === "string" && value.trim()) return value.trim();
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "number" || typeof value === "boolean")
+    return String(value);
   if (value !== null && typeof value === "object") return JSON.stringify(value);
   return null;
 }
@@ -993,7 +1001,7 @@ function jsonValue(value: unknown): Prisma.InputJsonValue | null {
 }
 
 function jsonRecord(value: unknown): Record<string, unknown> {
-  return isRecord(value) ? (value as Record<string, unknown>) : {};
+  return isRecord(value) ? value : {};
 }
 
 function parseWorkerRuntimeEventPayload(
