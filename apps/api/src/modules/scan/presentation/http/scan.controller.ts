@@ -876,6 +876,23 @@ const DECISION_EVENT_DATA_KEYS = new Set([
   "statePayloadKeys",
 ]);
 
+const DECISION_EVENT_TEXT_MAX_LENGTH = 500;
+const DECISION_EVENT_RECORD_MAX_KEYS = 100;
+const DECISION_EVENT_NESTED_PRIVATE_KEYS = new Set([
+  "apikey",
+  "credential",
+  "credentials",
+  "hiddenreasoning",
+  "privatecontext",
+  "prompt",
+  "rawprompt",
+  "rawsource",
+  "reasoning",
+  "secret",
+  "source",
+  "token",
+]);
+
 function boundedDecisionEventData(
   value: unknown,
 ): Prisma.InputJsonObject | null {
@@ -883,10 +900,201 @@ function boundedDecisionEventData(
   const result: Record<string, Prisma.InputJsonValue> = {};
   for (const [key, item] of Object.entries(value)) {
     if (!DECISION_EVENT_DATA_KEYS.has(key)) continue;
-    const parsed = parseRuntimeSummaryValue(item);
+    const parsed = parseDecisionEventDataValue(key, item);
     if (parsed !== null) result[key] = parsed;
   }
   return Object.keys(result).length > 0 ? result : null;
+}
+
+function parseDecisionEventDataValue(
+  key: string,
+  value: unknown,
+): Prisma.InputJsonValue | null {
+  if (
+    key === "questionIds" ||
+    key === "questionTypes" ||
+    key === "statePayloadKeys"
+  ) {
+    return boundedTextArray(value);
+  }
+  if (key === "questionResults") {
+    return boundedDecisionQuestionResults(value);
+  }
+  if (key === "probabilities") {
+    return boundedNumberRecord(value, { probability: true });
+  }
+  if (key === "selectedTypedResult") {
+    return boundedSelectedTypedResult(value);
+  }
+  if (key === "usage" || key === "cost" || key === "artifactVersionHashes") {
+    return boundedScalarRecord(value);
+  }
+  return parseRuntimeSummaryValue(value);
+}
+
+function boundedDecisionQuestionResults(
+  value: unknown,
+): Prisma.InputJsonArray | null {
+  if (!Array.isArray(value)) return null;
+  const results = value
+    .map((item) => boundedDecisionQuestionResult(item))
+    .filter((item): item is Prisma.InputJsonObject => item !== null);
+  return results.length > 0 ? results : null;
+}
+
+function boundedDecisionQuestionResult(
+  value: unknown,
+): Prisma.InputJsonObject | null {
+  if (!isRecord(value)) return null;
+  const result = compactJsonObject({
+    questionId: boundedText(value.questionId),
+    questionType: boundedText(value.questionType),
+    selectedChoice: boundedText(value.selectedChoice),
+    score: boundedFiniteNumber(value.score),
+    noul: boundedNoulProjection(value.noul),
+    probability: boundedFiniteNumber(value.probability, { probability: true }),
+    probabilities: boundedNumberRecord(value.probabilities, {
+      probability: true,
+    }),
+    confidence: boundedFiniteNumber(value.confidence, { probability: true }),
+  });
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+function boundedSelectedTypedResult(
+  value: unknown,
+): Prisma.InputJsonObject | null {
+  if (!isRecord(value)) return null;
+  const result: Record<string, Prisma.InputJsonValue> = {};
+  for (const [key, item] of Object.entries(value).slice(
+    0,
+    DECISION_EVENT_RECORD_MAX_KEYS,
+  )) {
+    const safeKey = boundedText(key);
+    if (!safeKey || isPrivateDecisionNestedKey(safeKey)) continue;
+    const parsed = boundedSelectedTypedResultValue(item);
+    if (parsed !== null) result[safeKey] = parsed;
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+function boundedSelectedTypedResultValue(
+  value: unknown,
+): Prisma.InputJsonValue | null {
+  const text = boundedText(value);
+  if (text !== null) return text;
+  const number = boundedFiniteNumber(value);
+  if (number !== null) return number;
+  if (typeof value === "boolean") return value;
+  if (Array.isArray(value)) {
+    const items = value
+      .slice(0, DECISION_EVENT_RECORD_MAX_KEYS)
+      .map((item) => boundedSelectedTypedResultValue(item))
+      .filter((item): item is Prisma.InputJsonValue => item !== null);
+    return items.length > 0 ? items : null;
+  }
+  return boundedNoulProjection(value);
+}
+
+function boundedNoulProjection(value: unknown): Prisma.InputJsonObject | null {
+  if (!isRecord(value)) return null;
+  const result: Record<string, Prisma.InputJsonValue> = {};
+  for (const [key, item] of Object.entries(value).slice(
+    0,
+    DECISION_EVENT_RECORD_MAX_KEYS,
+  )) {
+    const safeKey = boundedText(key);
+    if (!safeKey || isPrivateDecisionNestedKey(safeKey)) continue;
+    const text = boundedText(item);
+    if (text !== null) {
+      result[safeKey] = text;
+      continue;
+    }
+    const number = boundedFiniteNumber(item);
+    if (number !== null) {
+      result[safeKey] = number;
+      continue;
+    }
+    if (typeof item === "boolean") {
+      result[safeKey] = item;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+function boundedScalarRecord(value: unknown): Prisma.InputJsonObject | null {
+  if (!isRecord(value)) return null;
+  const result: Record<string, Prisma.InputJsonValue> = {};
+  for (const [key, item] of Object.entries(value).slice(
+    0,
+    DECISION_EVENT_RECORD_MAX_KEYS,
+  )) {
+    const safeKey = boundedText(key);
+    if (!safeKey || isPrivateDecisionNestedKey(safeKey)) continue;
+    const text = boundedText(item);
+    if (text !== null) {
+      result[safeKey] = text;
+      continue;
+    }
+    const number = boundedFiniteNumber(item);
+    if (number !== null) {
+      result[safeKey] = number;
+      continue;
+    }
+    if (typeof item === "boolean") {
+      result[safeKey] = item;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+function boundedNumberRecord(
+  value: unknown,
+  options?: { probability?: boolean },
+): Prisma.InputJsonObject | null {
+  if (!isRecord(value)) return null;
+  const result: Record<string, Prisma.InputJsonValue> = {};
+  for (const [key, item] of Object.entries(value).slice(
+    0,
+    DECISION_EVENT_RECORD_MAX_KEYS,
+  )) {
+    const safeKey = boundedText(key);
+    const number = boundedFiniteNumber(item, options);
+    if (safeKey && !isPrivateDecisionNestedKey(safeKey) && number !== null) {
+      result[safeKey] = number;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+function boundedTextArray(value: unknown): Prisma.InputJsonArray | null {
+  if (!Array.isArray(value)) return null;
+  const result = value
+    .slice(0, DECISION_EVENT_RECORD_MAX_KEYS)
+    .map((item) => boundedText(item))
+    .filter((item): item is string => item !== null);
+  return result.length > 0 ? result : null;
+}
+
+function boundedText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, DECISION_EVENT_TEXT_MAX_LENGTH) : null;
+}
+
+function isPrivateDecisionNestedKey(value: string): boolean {
+  return DECISION_EVENT_NESTED_PRIVATE_KEYS.has(
+    value.replace(/[^A-Za-z0-9]/g, "").toLowerCase(),
+  );
+}
+
+function boundedFiniteNumber(
+  value: unknown,
+  options?: { probability?: boolean },
+): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (options?.probability && (value < 0 || value > 1)) return null;
+  return value;
 }
 
 function decisionEventSemanticPayload(

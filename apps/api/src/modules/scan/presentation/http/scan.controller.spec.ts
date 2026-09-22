@@ -317,9 +317,15 @@ describe("InternalScanController", () => {
               CHECK_RUNTIME_EVIDENCE: 0.05,
             },
             confidence: 0.87,
+            prompt: "raw private prompt",
+            secret: "decision-secret",
+            privateContext: "customer-specific content",
           },
         ],
-        selectedTypedResult: { next_action: "TRACE_STATIC_FLOW" },
+        selectedTypedResult: {
+          next_action: "TRACE_STATIC_FLOW",
+          privateContext: "customer-specific content",
+        },
         shadowProposedAction: "TRACE_STATIC_FLOW",
         authoritativeAction: "TRACE_STATIC_FLOW",
         agreement: true,
@@ -327,7 +333,12 @@ describe("InternalScanController", () => {
         thresholdUsed: 0.85,
         decisionMode: "SHADOW",
         latencyMs: 174,
-        usage: { inputTokens: 46, outputTokens: 8, costUsd: 0.00023 },
+        usage: {
+          inputTokens: 46,
+          outputTokens: 8,
+          costUsd: 0.00023,
+          prompt: "raw private prompt",
+        },
         prompt: "must not be projected",
       },
     });
@@ -369,6 +380,26 @@ describe("InternalScanController", () => {
         }),
       }),
     });
+    const persistedPayload = (
+      create.mock.calls[0]?.[0] as {
+        data?: { payloadJson?: { data?: Record<string, unknown> } };
+      }
+    ).data?.payloadJson?.data;
+    const streamPayload = (
+      publishAgentStreamEvent.mock.calls[0]?.[0] as {
+        data?: { resultSummary?: Record<string, unknown> };
+      }
+    ).data?.resultSummary;
+    expect(JSON.stringify(persistedPayload)).not.toContain("raw private prompt");
+    expect(JSON.stringify(persistedPayload)).not.toContain("decision-secret");
+    expect(JSON.stringify(persistedPayload)).not.toContain(
+      "customer-specific content",
+    );
+    expect(JSON.stringify(streamPayload)).not.toContain("raw private prompt");
+    expect(JSON.stringify(streamPayload)).not.toContain("decision-secret");
+    expect(JSON.stringify(streamPayload)).not.toContain(
+      "customer-specific content",
+    );
   });
 
   it("claims decision IDs once and reports replay duplicates without provider authority", async () => {
