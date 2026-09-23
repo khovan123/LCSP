@@ -12,9 +12,6 @@ from orchestration.result_validation import (
 )
 from contracts.handoffs import InvestigatorResult
 from middleware.provider_schema import relax_array_upper_bounds
-from tools.common.capabilities.agentic_evidence.entrypoints.program_graph_tool_entrypoints import (
-    _project_safe_edge,
-)
 
 
 def _investigator_payload() -> dict:
@@ -59,7 +56,7 @@ def _graph() -> dict:
                 "attributes": {},
                 "semantic_types": [],
                 "evidence_refs": [],
-                "origin": "STATIC_ANALYSIS",
+                "origin": "DEEP_AGENT",
                 "resolution_state": "CORROBORATED",
                 "support_refs": [],
             },
@@ -71,7 +68,7 @@ def _graph() -> dict:
                 "attributes": {},
                 "semantic_types": [],
                 "evidence_refs": [],
-                "origin": "STATIC_ANALYSIS",
+                "origin": "DEEP_AGENT",
                 "resolution_state": "CORROBORATED",
                 "support_refs": [],
             },
@@ -527,7 +524,7 @@ def test_stripping_customer_context_refs_does_not_accept_decided_claim_without_r
         }
     )
 
-    with pytest.raises(SpecialistHandoffValidationError, match="at least one evidence"):
+    with pytest.raises(SpecialistHandoffValidationError, match="source locations or governed refs"):
         validate_specialist_handoff("investigator", payload)
 
 
@@ -803,7 +800,7 @@ def test_schema_validation_error_surfaces_the_underlying_field_and_reason() -> N
     with pytest.raises(SpecialistHandoffValidationError, match="schema validation") as exc_info:
         validate_specialist_handoff("investigator", payload)
 
-    assert "at least one evidence, graph-path, or source-anchor ref" in str(exc_info.value)
+    assert "direct source locations or governed refs" in str(exc_info.value)
 
 
 def test_evidence_claim_validation_error_surfaces_the_unresolved_ref() -> None:
@@ -822,22 +819,6 @@ def test_evidence_claim_validation_error_surfaces_the_unresolved_ref() -> None:
     message = str(exc_info.value)
     assert "claim-1" in message
     assert "node:missing" in message
-
-
-def test_project_safe_edge_exposes_edge_id_for_topology_proof() -> None:
-    """The Investigator's tool projection must give the model what the topology gate requires."""
-    projected = _project_safe_edge(
-        {
-            "edge_id": "edge:receives",
-            "source_node_id": "node:ai",
-            "target_node_id": "node:output",
-            "edge_type": "RECEIVES_FROM_AI",
-            "resolution_state": "CORROBORATED",
-            "evidence_refs": [],
-        }
-    )
-
-    assert projected["edge_id"] == "edge:receives"
 
 
 # ============================================================================
@@ -999,7 +980,7 @@ def test_requirement_not_met_claim_rejected_without_any_ref() -> None:
     with pytest.raises(SpecialistHandoffValidationError, match="schema validation") as exc_info:
         validate_specialist_handoff("investigator", payload)
 
-    assert "at least one evidence, graph-path, or source-anchor ref" in str(exc_info.value)
+    assert "direct source locations or governed refs" in str(exc_info.value)
 
 
 def test_scope_not_applicable_claim_rejected_when_carrying_graph_refs() -> None:

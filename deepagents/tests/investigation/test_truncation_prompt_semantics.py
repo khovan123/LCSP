@@ -17,7 +17,7 @@ def _packet() -> InvestigationPacket:
     )
 
 
-def test_investigation_prompt_treats_truncated_as_search_state_only() -> None:
+def test_investigation_prompt_treats_graph_memory_as_non_authoritative() -> None:
     ledger = EvidenceLedger()
     ledger.add(
         source="graph_tool",
@@ -33,30 +33,29 @@ def test_investigation_prompt_treats_truncated_as_search_state_only() -> None:
     payload = json.loads(LawGuidedInvestigator._prompt(_packet(), ledger, [], 0))
     claim_rules = " ".join(payload["claimRules"])
 
-    assert "result.truncated" in claim_rules
-    assert "not an unresolved engineering fact by itself" in claim_rules
-    assert "continuationFrontiers" in claim_rules
-    assert "max_hops" in claim_rules
-    assert "max_results" in claim_rules
+    assert "codebase_memory_graph" in claim_rules
+    assert "trust direct repository source" in claim_rules
+    assert "negative/absence claims" in claim_rules
+    assert "incomplete indexing" in claim_rules
 
 
-def test_investigation_prompt_requires_seeded_traces_before_closing_claims() -> None:
+def test_investigation_prompt_requires_direct_source_before_closing_claims() -> None:
     payload = json.loads(LawGuidedInvestigator._prompt(_packet(), EvidenceLedger(), [], 0))
     claim_rules = " ".join(payload["claimRules"])
 
-    assert "SUBSTRING candidate discovery only" in claim_rules
-    assert "Never close MET or NOT_MET solely from search_nodes/search_program_graph" in claim_rules
-    assert "trace_static_flow or inspect_data_path starts from concrete seed refs" in claim_rules
-    assert "pre-executed seed observations" in claim_rules
+    assert "sourceLocations" in claim_rules
+    assert "source you actually inspected" in claim_rules
+    assert "Do not invent node_id" in claim_rules
+    assert "otherwise return UNRESOLVED_ENGINEERING_FACT" in claim_rules
 
 
-def test_forced_finish_does_not_equate_truncation_with_unknown() -> None:
+def test_forced_finish_requires_source_grounding_or_unresolved_fact() -> None:
     ledger = EvidenceLedger()
     payload = json.loads(
         LawGuidedInvestigator._finish_prompt(_packet(), ledger, [])
     )
     claim_rules = " ".join(payload["claimRules"])
 
-    assert "truncated=true" in claim_rules
-    assert "already proven" in claim_rules
-    assert "absenceProven=false" in claim_rules
+    assert "Decided claims require exact sourceLocations" in claim_rules
+    assert "UNRESOLVED_ENGINEERING_FACT" in claim_rules
+    assert "Do not invent Program Evidence Graph identifiers" in claim_rules

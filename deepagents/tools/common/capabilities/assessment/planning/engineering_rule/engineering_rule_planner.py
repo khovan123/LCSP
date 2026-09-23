@@ -219,7 +219,6 @@ class EngineeringRulePlanner:
         graph: ProgramEvidenceGraph,
         workflow_run_id: str,
         correlation_id: str | None = None,
-        openwiki_context: dict[str, Any] | None = None,
     ) -> EngineeringRulePlan:
         rows = tuple(candidates)
         if not rows:
@@ -250,8 +249,11 @@ class EngineeringRulePlanner:
                 agent_name="lcsp-engineering-rule-planner",
                 model=self._model,
                 system_prompt=(
-                    "Plan the bounded technical investigation only. Do not make "
-                    "legal applicability, risk, or compliance decisions."
+                    "Plan the bounded technical investigation directly from the assessment "
+                    "repository using native Deep Agents filesystem/shell/task tools. "
+                    "codebase_memory_graph MCP may be used as optional architecture memory, "
+                    "but direct repository source is authoritative. Do not make legal "
+                    "applicability, risk, or compliance decisions."
                 ),
                 response_format=self._plan_response_schema(),
                 middleware=MODEL_GOVERNANCE_MIDDLEWARE,
@@ -265,8 +267,7 @@ class EngineeringRulePlanner:
                                 rows,
                                 confirmed_context,
                                 graph,
-                                openwiki_context,
-                            ),
+                                            ),
                         }
                     ]
                 },
@@ -557,30 +558,20 @@ class EngineeringRulePlanner:
         candidates: tuple[EngineeringRulePlanningCandidate, ...],
         confirmed_customer_context: ConfirmedStructuredBusinessContext,
         graph: ProgramEvidenceGraph,
-        openwiki_context: dict[str, Any] | None = None,
     ) -> str:
         payload = {
             "confirmedStructuredBusinessContext": (
                 confirmed_customer_context.to_prompt_dict()
             ),
             "repositoryEvidenceSummary": cls._graph_summary(graph),
-            "openWikiArchitectureHints": openwiki_context or {
-                "source": "openwiki",
-                "available": False,
-                "authority": "UNVERIFIED_ARCHITECTURE_HINT",
-                "policy": (
-                    "May prioritize planner investigation only. Must not satisfy "
-                    "legal citations, source evidence, compliance, or gap classification."
-                ),
-                "hintCount": 0,
-                "hints": [],
-            },
             "engineeringRules": [row.to_prompt_dict() for row in candidates],
         }
         return (
             "You are the LCSP EngineeringRule Planner. Select only the technical "
             "EngineeringRules that should be investigated for this assessment using "
-            "both confirmed structured business context and repository evidence summaries. "
+            "confirmed structured business context, repository evidence summaries, and direct "
+            "repository inspection when needed. Native repository source is authoritative; "
+            "codebase_memory_graph MCP is an optional relationship/index aid. "
             "Use only confirmedStructuredBusinessContext.statements where source is "
             "CUSTOMER_CONFIRMED and resolutionState is CONFIRMED. This is an "
             "investigation-scope plan, not a legal applicability or legal risk-tier "
@@ -594,10 +585,7 @@ class EngineeringRulePlanner:
             "citationSet, version IDs, jurisdiction, applicabilityCriteria, "
             "requiredEvidence, acceptedEvidenceTypes, negativeEvidenceTypes, and "
             "validationPolicy bound what may be investigated. Do not create legal "
-            "claims or compliance conclusions. OpenWiki architecture hints, when "
-            "present, are unverified documentation hints for prioritizing search "
-            "only; they are not SOURCE basis, citation evidence, source anchors, "
-            "and not proof of compliance. Domain-specific "
+            "claims or compliance conclusions. Domain-specific "
             "rules such as healthcare, education, public-sector, high-risk, or "
             "medium-risk should be SKIP only when neither Customer context nor source "
             "signals make their technical requirement materially relevant. For every "

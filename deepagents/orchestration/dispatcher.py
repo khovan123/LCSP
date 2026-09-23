@@ -297,9 +297,15 @@ class RootSubagentDispatcher:
             context.workflow_run_id if context is not None and context.workflow_run_id else thread_id
         )
         config: dict[str, Any] = {"metadata": dict(metadata or {})}
+        configurable: dict[str, str] = {}
         if root_thread_id:
-            config["configurable"] = {"thread_id": root_thread_id}
+            configurable["thread_id"] = root_thread_id
             config["metadata"]["lcsp_thread_id"] = root_thread_id
+        if context is not None:
+            configurable["assessment_id"] = context.assessment_id
+            config["metadata"]["assessment_id"] = context.assessment_id
+        if configurable:
+            config["configurable"] = configurable
         config["metadata"]["lcsp_system_event_subagent"] = subagent_type
         if affected_rule_ids:
             config["metadata"]["affected_rule_ids"] = list(affected_rule_ids)

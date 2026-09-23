@@ -225,7 +225,6 @@ function ClassificationObservabilityPanel({
 }: {
   observability: ClassificationObservabilityViewModel;
 }) {
-  const openWiki = observability.openWiki;
   const preparation = observability.engineeringRulePreparation;
   const distribution = observability.candidateSourceHitDistribution;
   const provenance = observability.provenance;
@@ -250,14 +249,7 @@ function ClassificationObservabilityPanel({
         </p>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-4">
-        <DetailMetric
-          label={resolveMessage(
-            appLocale,
-            "pages.classification.observability.openWikiStatus",
-          )}
-          value={openWikiStatusLabel(openWiki?.available ?? null)}
-        />
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <DetailMetric
           label={resolveMessage(
             appLocale,
@@ -287,30 +279,6 @@ function ClassificationObservabilityPanel({
         />
       </div>
 
-      {openWiki?.error ? (
-        <div className="mt-4 rounded-md border bg-background px-3 py-3 text-sm">
-          <span className="font-medium">
-            {resolveMessage(
-              appLocale,
-              "pages.classification.observability.openWikiError",
-            )}
-          </span>{" "}
-          <span className="break-all text-muted-foreground">
-            {openWiki.error}
-          </span>
-          {openWiki.fallback ? (
-            <div className="mt-1 text-xs text-muted-foreground">
-              <span className="font-medium">
-                {resolveMessage(
-                  appLocale,
-                  "pages.classification.observability.fallback",
-                )}
-              </span>{" "}
-              <span>{openWiki.fallback}</span>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
 
       {visibleFailedLegalRuleIds.length ? (
         <div className="mt-4">
@@ -416,22 +384,6 @@ function CountDistribution({
       </dl>
     </div>
   );
-}
-
-function openWikiStatusLabel(value: boolean | null): string {
-  if (value === true) {
-    return resolveMessage(
-      appLocale,
-      "pages.classification.observability.available",
-    );
-  }
-  if (value === false) {
-    return resolveMessage(
-      appLocale,
-      "pages.classification.observability.unavailable",
-    );
-  }
-  return resolveMessage(appLocale, "pages.classification.observability.unknown");
 }
 
 function sourceHitBucketLabel(value: string): string {

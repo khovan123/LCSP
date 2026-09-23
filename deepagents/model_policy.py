@@ -10,7 +10,7 @@ from langsmith_bootstrap import disable_langsmith_tracing_by_default
 
 disable_langsmith_tracing_by_default()
 
-from langchain.agents import create_agent as _langchain_create_agent
+from deepagents import create_deep_agent as _deepagents_create_agent
 from langchain.chat_models import init_chat_model
 from middleware.billing_metering import BillingAgentRoleMiddleware
 from provider_credentials import credential_init_kwargs, llm7_base_url
@@ -366,7 +366,7 @@ def create_lcsp_agent(
     model: Any,
     **kwargs: Any,
 ):
-    """Create a LangChain agent with LCSP agent-scoped model policy applied."""
+    """Create a Deep Agent with LCSP agent-scoped model policy applied."""
     resolved_model = (
         resolve_agent_model(agent_name=agent_name, model_spec=model)
         if isinstance(model, str)
@@ -379,7 +379,15 @@ def create_lcsp_agent(
             BillingAgentRoleMiddleware(billing_role_for_agent(agent_name)),
             *middleware,
         ]
-    return _langchain_create_agent(
+    if "backend" not in kwargs:
+        from tools.common.capabilities.platform.managed_workspace import (
+            current_managed_backend,
+        )
+
+        managed_backend = current_managed_backend()
+        if managed_backend is not None:
+            kwargs["backend"] = managed_backend
+    return _deepagents_create_agent(
         model=resolved_model,
         name=langchain_name,
         **kwargs,

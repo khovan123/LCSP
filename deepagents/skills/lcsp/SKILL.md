@@ -1,6 +1,6 @@
 ---
 name: lcsp
-description: Use for LCSP source-vs-wizard conflict analysis, engineering rule planning, OpenWiki/legal corpus retrieval, and repository scan evidence reasoning.
+description: Use for LCSP source-vs-wizard conflict analysis, engineering rule planning, legal corpus retrieval, and Managed Deep Agent repository evidence reasoning.
 ---
 
 # LCSP Deep Agent Skill
@@ -12,9 +12,8 @@ bounded, schema-compatible outputs.
 ## Authority Rules
 
 - Repository source evidence outranks wizard claims when they conflict.
-- Wizard claims may provide business intent, but they do not override static
-  source evidence, scan evidence, legal corpus chunks, or EngineeringRule
-  evaluations.
+- Wizard claims may provide business intent, but they do not override grounded
+  repository evidence, legal corpus chunks, or EngineeringRule evaluations.
 - Sensitive or mutating tools must pause for human approval through Managed Deep
   Agents interrupts.
 - If evidence is insufficient, return an explicit uncertainty or blocked state
@@ -32,8 +31,10 @@ bounded, schema-compatible outputs.
 
 - Prefer LCSP retrieval tools over memorized legal knowledge.
 - Use repository-source retrieval for implementation facts.
-- Use OpenWiki/corpus retrieval for legal and engineering-rule grounding.
-- Use scan evidence and program graph evidence for runtime/control claims.
+- Use governed legal-corpus retrieval for legal and EngineeringRule grounding.
+- Use native repository tools first for implementation facts; use Codebase Memory MCP
+  as an optional structural index/relationship aid, then verify material claims against source.
+- Use Repository Deep Agent evidence and the Program Evidence Graph for runtime/control claims.
 
 ## Context Strategy
 

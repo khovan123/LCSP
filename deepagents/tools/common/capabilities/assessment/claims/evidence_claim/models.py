@@ -51,6 +51,7 @@ class EvidenceClaim:
     evidence_refs: tuple[str, ...]
     graph_path_refs: tuple[str, ...] = ()
     source_anchor_refs: tuple[str, ...] = ()
+    source_locations: tuple[dict[str, Any], ...] = ()
     confidence: float = 0.0
     limitations: tuple[str, ...] = ()
     criterion: str | None = None

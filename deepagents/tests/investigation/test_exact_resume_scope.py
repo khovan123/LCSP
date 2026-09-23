@@ -128,12 +128,7 @@ def _resumed_handoff() -> dict:
     }
 
 
-def test_exact_resume_selects_only_affected_rule_even_when_openwiki_is_unavailable(
-    monkeypatch,
-) -> None:
-    # If OpenWiki were consulted, this unavailable runtime would trigger the
-    # OPENWIKI_REQUIRED_FALLBACK_ALL plan and widen the resume to every rule.
-    monkeypatch.setenv("OPENWIKI_RUNTIME_COMMAND", "missing-openwiki-runtime-command")
+def test_exact_resume_selects_only_affected_rule() -> None:
     api_client = MagicMock()
     api_client.get_active_legal_rule_catalog.return_value = {
         "versionId": "catalog-v1",
@@ -158,7 +153,6 @@ def test_exact_resume_selects_only_affected_rule_even_when_openwiki_is_unavailab
         status="UNKNOWN",
         evidence_refs=("evidence:ai:1",),
     )
-    assert _ExactResumePlanner.requires_openwiki_context is False
 
     pipeline = PlannedEngineeringInvestigationPipeline(
         api_client=api_client,
@@ -193,9 +187,10 @@ def test_exact_resume_selects_only_affected_rule_even_when_openwiki_is_unavailab
     }
     assert {row["interviewContextRevisionUsed"] for row in result.planner_decisions} == {4}
     assert not result.planner_fallback_used
-    assert result.observability["openwiki"] == {
-        "available": False,
-        "skipped": "DETERMINISTIC_PLANNER_DOES_NOT_USE_OPENWIKI",
+    assert "openwiki" not in result.observability
+    assert result.observability["repository_planning_context"] == {
+        "source": "MDA_REPOSITORY_DATABASE",
+        "codebaseMemoryMcpOptional": True,
     }
     assert ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"] not in (
         result.limitations

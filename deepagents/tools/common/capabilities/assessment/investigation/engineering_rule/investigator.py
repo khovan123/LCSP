@@ -5,18 +5,15 @@ from orchestration.agent_stream import invoke_with_stream
 
 import hashlib
 import json
-from typing import Any, Callable
+from typing import Any
 
 from langchain.agents.middleware import ToolCallLimitMiddleware
-from langchain.tools import BaseTool, tool
 
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.billing_metering import BillingMeteringError
 from model_policy import INVESTIGATOR_MODEL_SPEC, create_lcsp_agent as create_agent
 from tools.common.capabilities.platform.logging import get_logger
 from tools.common.capabilities.platform.tracing import traceable
-from tools.common.capabilities.evidence.graph.query.query_engine import ProgramGraphQueryEngine
-from tools.common.capabilities.evidence.graph.schema.vocabulary import EDGE_TYPES, NODE_TYPES
 
 from tools.common.capabilities.assessment.claims.evidence_claim.evidence_claim_validator import EvidenceClaimValidationError, EvidenceClaimValidator
 from tools.common.capabilities.assessment.claims.evidence_claim.evidence_ledger import EvidenceLedger
@@ -31,24 +28,10 @@ from tools.common.capabilities.assessment.claims.evidence_claim.models import (
 
 logger = get_logger(__name__)
 MAX_INVESTIGATION_STEPS = 8
-MAX_GRAPH_TOOL_STEPS = 4
 MAX_WORKING_RESULTS = 4
 MAX_WORKING_RESULT_CHARS = 24_000
 MAX_PROMPT_CHARS = 110_000
 INVESTIGATION_PROMPT_VERSION = "engineering-rule-investigation.v1"
-GRAPH_TOOL_NAMES = (
-    "search_nodes",
-    "trace_static_flow",
-    "inspect_data_path",
-    "inspect_decision_path",
-    "inspect_human_review_path",
-    "symbol_context",
-    "provider_invocations",
-)
-STATE_TOOL_NAMES = (
-    "list_observations",
-    "inspect_observation",
-)
 CANONICAL_CLAIM_TYPES = frozenset(ENGINEERING_EVIDENCE_CLAIM_TYPES.values())
 CLAIM_VALUE_BY_TYPE: dict[str, bool | None] = {
     ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]: True,
@@ -118,22 +101,22 @@ class LawGuidedInvestigator:
         workflow_run_id: str,
         correlation_id: str | None = None,
     ) -> list[EvidenceClaim]:
-        engine = ProgramGraphQueryEngine(graph)
         ledger = EvidenceLedger()
         for item in packet.initial_results:
             ledger.add(source="engineering_rule_seed_query", result=item)
         if packet.confirmed_customer_context:
             ledger.add(source="confirmed_customer_context", result=dict(packet.confirmed_customer_context))
 
-        native_tools = self._native_tools(engine=engine, ledger=ledger)
         agent = create_agent(
             agent_name="law_guided_investigator",
             model=self._model,
-            tools=native_tools,
             system_prompt=(
-                "Investigate one EngineeringRule using only the supplied native tools and "
-                "EvidenceLedger observation IDs. Produce one structured claim per required "
-                "criterion. Never invent graph, source, or observation references."
+                "Investigate one EngineeringRule directly inside the assessment repository. "
+                "Use native Deep Agents filesystem/shell/task tools as the primary source of "
+                "truth. When configured, codebase_memory_graph MCP may accelerate architecture "
+                "and relationship discovery, but direct repository source wins on conflict. "
+                "Return exact repository source locations for every decided technical claim; "
+                "never invent Program Evidence Graph node/edge IDs."
             ),
             response_format=self._claims_response_schema(),
             middleware=[
@@ -146,7 +129,7 @@ class LawGuidedInvestigator:
         )
         try:
             response = invoke_with_stream(agent,
-                {"messages": [{"role": "user", "content": self._agent_prompt(packet, ledger)}]},
+                {"messages": [{"role": "user", "content": self._prompt(packet, ledger, [], 0)}]},
                 config={
                     "metadata": {
                         "workflow_run_id": workflow_run_id,
@@ -182,248 +165,42 @@ class LawGuidedInvestigator:
         )
         return claims
 
-    def _native_tools(
-        self,
-        *,
-        engine: ProgramGraphQueryEngine,
-        ledger: EvidenceLedger,
-    ) -> list[BaseTool]:
-        graph_calls = {"used": 0}
-
-        def run_graph(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-            prepared, reference_error = self._prepare_graph_arguments(
-                tool_name,
-                arguments,
-                ledger,
-            )
-            if reference_error is not None:
-                return reference_error
-            if graph_calls["used"] >= self._graph_tool_limit():
-                return {
-                    "error": "GRAPH_TOOL_BUDGET_EXHAUSTED",
-                    "graphToolCallsUsed": graph_calls["used"],
-                }
-            graph_calls["used"] += 1
-            raw_result = self._execute_graph_tool(engine, tool_name, prepared)
-            observation = ledger.add(
-                source="graph_tool",
-                tool=tool_name,
-                arguments=prepared,
-                result=raw_result,
-            )
-            result = {
-                "observationId": observation.observation_id,
-                "summary": ledger.summary(observation),
-                "preview": ledger.preview(observation.observation_id, limit=6),
-            }
-            logger.info(
-                "ENGINEERING_INVESTIGATION_TOOL_RESULT",
-                tool=tool_name,
-                result_summary=summarize_investigation_tool_result(result),
-                graph_tool_calls_used=graph_calls["used"],
-                ledger_observation_count=ledger.total,
-            )
-            return result
-
-        @tool
-        def search_nodes(
-            node_types: list[str] | None = None,
-            text: str | None = None,
-            path_prefixes: list[str] | None = None,
-            semantic_types: list[str] | None = None,
-        ) -> dict[str, Any]:
-            """Search bounded Program Evidence Graph nodes by canonical type, path, semantic type, or text."""
-            return run_graph("search_nodes", locals())
-
-        @tool
-        def trace_static_flow(
-            start_ref: str,
-            direction: str = "FORWARD",
-            edge_types: list[str] | None = None,
-            stop_node_types: list[str] | None = None,
-        ) -> dict[str, Any]:
-            """Trace bounded static control, data, or event flow from one concrete graph node ref."""
-            return run_graph("trace_static_flow", locals())
-
-        @tool
-        def inspect_data_path(start_ref: str, direction: str = "FORWARD") -> dict[str, Any]:
-            """Inspect bounded data-flow evidence from one concrete graph node ref."""
-            return run_graph("inspect_data_path", locals())
-
-        @tool
-        def inspect_decision_path(
-            start_ref: str,
-            action_categories: list[str] | None = None,
-        ) -> dict[str, Any]:
-            """Inspect bounded decision and action flow from one concrete graph node ref."""
-            return run_graph("inspect_decision_path", locals())
-
-        @tool
-        def inspect_human_review_path(start_ref: str) -> dict[str, Any]:
-            """Inspect bounded human-review and override evidence from one graph node ref."""
-            return run_graph("inspect_human_review_path", locals())
-
-        @tool
-        def symbol_context(symbol_ref: str) -> dict[str, Any]:
-            """Resolve one symbol ref and return bounded neighboring graph context."""
-            return run_graph("symbol_context", locals())
-
-        @tool
-        def provider_invocations(provider: str | None = None) -> dict[str, Any]:
-            """Return bounded AI provider invocation nodes, optionally filtered by provider."""
-            return run_graph("provider_invocations", locals())
-
-        @tool
-        def list_observations(offset: int = 0, limit: int = 20) -> dict[str, Any]:
-            """Page the LCSP EvidenceLedger observation index."""
-            return ledger.index(offset=offset, limit=limit)
-
-        @tool
-        def inspect_observation(
-            observation_id: str,
-            section: str | None = None,
-            offset: int = 0,
-            limit: int = 12,
-        ) -> dict[str, Any]:
-            """Page one EvidenceLedger observation using an advertised section name."""
-            try:
-                return ledger.inspect(
-                    observation_id,
-                    section=section,
-                    offset=offset,
-                    limit=limit,
-                )
-            except KeyError as error:
-                return {"error": "UNKNOWN_OBSERVATION_REF", "detail": str(error)}
-
-        return [
-            search_nodes,
-            trace_static_flow,
-            inspect_data_path,
-            inspect_decision_path,
-            inspect_human_review_path,
-            symbol_context,
-            provider_invocations,
-            list_observations,
-            inspect_observation,
-        ]
-
-    def _agent_prompt(
-        self,
-        packet: InvestigationPacket,
-        ledger: EvidenceLedger,
-    ) -> str:
-        return self._prompt(packet, ledger, [], 0)
-
-    def _graph_tool_limit(self) -> int:
-        return MAX_GRAPH_TOOL_STEPS
-
-    def _prepare_graph_arguments(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-        ledger: EvidenceLedger,
-    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
-        return dict(arguments), None
-
-    def _execute_graph_tool(
-        self,
-        engine: ProgramGraphQueryEngine,
-        tool_name: str,
-        arguments: dict[str, Any],
-    ) -> dict[str, Any] | list[dict[str, Any]]:
-        tools: dict[str, Callable[..., Any]] = {
-            "search_nodes": engine.search_nodes,
-            "trace_static_flow": engine.trace_static_flow,
-            "inspect_data_path": engine.inspect_data_path,
-            "inspect_decision_path": engine.inspect_decision_path,
-            "inspect_human_review_path": engine.inspect_human_review_path,
-            "symbol_context": engine.symbol_context,
-            "provider_invocations": engine.provider_invocations,
-        }
-        tool = tools.get(tool_name)
-        if tool is None:
-            return {"error": "UNKNOWN_GRAPH_TOOL", "allowedTools": sorted(tools)}
-        try:
-            result = tool(**self._normalize_tool_arguments(tool_name, arguments))
-        except (TypeError, ValueError) as error:
-            return {
-                "error": "INVALID_GRAPH_TOOL_ARGUMENTS",
-                "tool": tool_name,
-                "errorType": type(error).__name__,
-                "detail": str(error)[:500],
-            }
-        return result.to_dict() if hasattr(result, "to_dict") else result
-
-    @staticmethod
-    def _normalize_tool_arguments(
-        tool_name: str,
-        arguments: dict[str, Any],
-    ) -> dict[str, Any]:
-        aliases = {
-            "nodeTypes": "node_types",
-            "pathPrefixes": "path_prefixes",
-            "semanticTypes": "semantic_types",
-            "maxResults": "max_results",
-            "startRef": "start_ref",
-            "maxHops": "max_hops",
-            "edgeTypes": "edge_types",
-            "stopNodeTypes": "stop_node_types",
-            "actionCategories": "action_categories",
-            "symbolRef": "symbol_ref",
-            "maxNeighbors": "max_neighbors",
-        }
-        normalized = {aliases.get(key, key): value for key, value in arguments.items()}
-        LawGuidedInvestigator._validate_graph_vocabulary(
-            "node_types", normalized.get("node_types"), NODE_TYPES
-        )
-        LawGuidedInvestigator._validate_graph_vocabulary(
-            "stop_node_types", normalized.get("stop_node_types"), NODE_TYPES
-        )
-        LawGuidedInvestigator._validate_graph_vocabulary(
-            "edge_types", normalized.get("edge_types"), EDGE_TYPES
-        )
-        if tool_name == "search_nodes":
-            normalized.setdefault("max_results", 25)
-        elif tool_name in {
-            "trace_static_flow",
-            "inspect_data_path",
-            "inspect_decision_path",
-            "inspect_human_review_path",
-        }:
-            normalized.setdefault("max_results", 80)
-        return normalized
-
-    @staticmethod
-    def _validate_graph_vocabulary(
-        field_name: str,
-        value: Any,
-        allowed: frozenset[str],
-    ) -> None:
-        if value is None:
-            return
-        if not isinstance(value, (list, tuple)):
-            raise ValueError(f"{field_name} must be an array")
-        invalid = sorted({str(item) for item in value if str(item) not in allowed})
-        if invalid:
-            raise ValueError(
-                f"{field_name} contains non-canonical Program Evidence Graph values: {invalid}"
-            )
-
     @classmethod
     def _claims_response_schema(cls) -> dict[str, Any]:
+        source_location_schema = cls._closed_schema(
+            {
+                "path": {"type": "string", "minLength": 1, "maxLength": 500},
+                "startLine": {"type": "integer", "minimum": 1},
+                "endLine": {"type": "integer", "minimum": 1},
+                "symbol": {"type": "string", "maxLength": 500},
+            },
+            required=("path", "startLine", "endLine"),
+        )
         claim_schema = cls._closed_schema(
             {
                 "criterion": {"type": "string", "maxLength": 500},
                 "claimType": {"type": "string", "enum": sorted(CANONICAL_CLAIM_TYPES)},
-                "observationRefs": {"type": "array", "items": {"type": "string"}, "maxItems": 12},
+                "sourceLocations": {
+                    "type": "array",
+                    "items": source_location_schema,
+                    "maxItems": 24,
+                },
                 "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                 "limitations": {
                     "type": "array",
-                    "items": {"type": "string", "enum": sorted(MODEL_SELECTABLE_LIMITATION_CODES)},
+                    "items": {
+                        "type": "string",
+                        "enum": sorted(MODEL_SELECTABLE_LIMITATION_CODES),
+                    },
                 },
             },
-            required=("criterion", "claimType", "observationRefs", "confidence", "limitations"),
+            required=(
+                "criterion",
+                "claimType",
+                "sourceLocations",
+                "confidence",
+                "limitations",
+            ),
         )
         return cls._closed_schema(
             {"claims": {"type": "array", "items": claim_schema, "minItems": 1, "maxItems": 12}},
@@ -483,6 +260,20 @@ class LawGuidedInvestigator:
             limitations, invalid_limitation = self._normalize_limitations(
                 item.get("limitations")
             )
+            source_locations = tuple(
+                {
+                    "path": str(location.get("path") or "").replace("\\", "/").lstrip("/"),
+                    "start_line": int(location.get("startLine") or location.get("start_line") or 0),
+                    "end_line": int(location.get("endLine") or location.get("end_line") or 0),
+                    **(
+                        {"symbol": str(location.get("symbol"))}
+                        if location.get("symbol")
+                        else {}
+                    ),
+                }
+                for location in item.get("sourceLocations") or []
+                if isinstance(location, dict)
+            )
             observation_refs = tuple(
                 dict.fromkeys(
                     str(value)
@@ -524,7 +315,8 @@ class LawGuidedInvestigator:
                 provenance = ledger.provenance_for(())
 
             has_provenance = bool(
-                provenance.evidence_refs
+                source_locations
+                or provenance.evidence_refs
                 or provenance.graph_refs
                 or provenance.source_anchor_refs
             )
@@ -555,6 +347,7 @@ class LawGuidedInvestigator:
                 provenance.evidence_refs,
                 provenance.graph_refs,
                 provenance.source_anchor_refs,
+                source_locations,
                 float(item.get("confidence") or 0),
                 tuple(dict.fromkeys(limitations)),
                 criterion,
@@ -773,47 +566,36 @@ class LawGuidedInvestigator:
         working_results: list[dict[str, Any]],
         step: int,
     ) -> str:
+        _ = (working_results, step)
         return cls._render_prompt(
             {
                 "task": (
-                    "Investigate the EngineeringRule against the Program Evidence Graph. "
-                    "The LCSP EvidenceLedger is the source of truth; this prompt is only a working view. "
-                    "Use the EngineeringRule-owned graph/retrieval hints before broad search, inspect only "
-                    "advertised observation sections, and finish when sufficiently evidenced. "
-                    "Never decide legal compliance, certification, or infer facts outside evidence."
+                    "Investigate the EngineeringRule directly in the repository working database. "
+                    "Use native Deep Agents ls/glob/grep/read_file/execute/task tools. "
+                    "Use codebase_memory_graph MCP only as optional graph memory/relationship help; "
+                    "verify material facts in repository source before deciding."
                 ),
                 "engineeringRule": cls._rule_contract(packet),
-                "evidenceLedger": ledger.index(offset=0, limit=20),
                 "seedContext": {
-                    "seedEvidenceRefCount": len(packet.evidence_refs),
+                    "priorDeterministicObservationCount": ledger.total,
                     "unresolvedFrontierCount": len(packet.unresolved_frontiers),
                     "confirmedCustomerContextStored": bool(packet.confirmed_customer_context),
                 },
-                "recentToolResults": working_results[-MAX_WORKING_RESULTS:],
-                "nativeToolStep": step + 1,
                 "claimRules": [
-                    "startingNodeTypes, targetNodeTypes, graphQueries and edgeStrategies are canonical graph retrieval hints; use them rather than inventing graph types.",
-                    "requiredEvidence, supportingEvidence and negativeEvidence are engineering criterion labels, NOT Program Evidence Graph node types.",
-                    "Use retrievalHints keywords/commonApis/commonLibraries/patterns for targeted code search; do not substitute criterion labels as search_nodes.node_types.",
-                    "search_nodes/search_program_graph is SUBSTRING candidate discovery only; an empty result is absence of substring matches, not proof that a graph path is absent.",
-                    "Never close MET or NOT_MET solely from search_nodes/search_program_graph; close either outcome only after trace_static_flow or inspect_data_path starts from concrete seed refs already present in this packet or its seed observations.",
-                    "For graphQueries, prefer the structured startNodeTypes/followEdges/stopNodeTypes and pre-executed seed observations over searching by graphQueries.name.",
-                    "At finish emit exactly one primary claim for each requiredEvidence label and set criterion to that exact label; supportingEvidence/negativeEvidence are evidence guidance, not extra claim criteria.",
-                    "If a required criterion cannot be resolved, emit UNRESOLVED_ENGINEERING_FACT for that criterion rather than an unscoped generic unresolved claim.",
-                    "MET/NOT_MET must reference one or more observationRefs with concrete provenance.",
-                    "UNRESOLVED must reference the strongest relevant observationRefs when any seed/tool observation exists for that criterion.",
-                    "Do not author evidenceRefs, graphPathRefs, or sourceAnchorRefs yourself.",
-                    "LCSP derives immutable provenance from observationRefs deterministically.",
-                    "Absence is NOT_MET only when the relevant observation proves bounded complete search.",
-                    "Search resource guards are internal; never infer engineering meaning from max_hops, max_results, node limits, edge limits, or neighbor limits.",
-                    "Use only result.truncated to decide whether a bounded search is exhaustive. truncated=true is not an unresolved engineering fact by itself.",
-                    "If required evidence is still missing after truncated=true, continue or narrow the search from continuationFrontiers before finishing.",
-                    "Treat dynamic or external uncertainty as UNRESOLVED only when the relevant observation contains an actual unresolvedFrontier or boundary that can affect the required criterion.",
-                    "Every EvidenceLedger summary advertises availableSections. Never guess section names across graph, customer context, repo-map, or code-search observations.",
-                    "Keep the structured response compact: reference observation IDs only and never copy observation text, tool output, or code into any response field; every string must stay well under 500 characters.",
+                    "Return exactly one primary claim for each requiredEvidence criterion.",
+                    "For RULE_REQUIREMENT_MET or RULE_REQUIREMENT_NOT_MET, cite one or more exact sourceLocations from customer repository source.",
+                    "Each sourceLocations entry must contain repository-relative path, startLine, and endLine from source you actually inspected.",
+                    "Do not cite .git or .lcsp as customer evidence.",
+                    "Do not invent node_id, edge_id, source_anchor_id, evidenceRef, graphPathRef, or observationRef values.",
+                    "LCSP resolves source citations to legacy graph provenance internally only when downstream deterministic topology validation still requires it.",
+                    "If source and codebase_memory_graph disagree, trust direct repository source and report the graph-memory inconsistency as a limitation when material.",
+                    "For negative/absence claims, inspect all material candidate paths and coverage; otherwise return UNRESOLVED_ENGINEERING_FACT.",
+                    "Treat dynamic dispatch, external runtime behavior, generated code gaps, or incomplete indexing as limitations rather than evidence of absence.",
+                    "Never decide legal applicability, risk tier, certification, or final compliance.",
                 ],
             }
         )
+
 
     @classmethod
     def _finish_prompt(
@@ -822,28 +604,23 @@ class LawGuidedInvestigator:
         ledger: EvidenceLedger,
         working_results: list[dict[str, Any]],
     ) -> str:
+        _ = (ledger, working_results)
         return cls._render_prompt(
             {
                 "task": (
-                    "Investigation turn budget is exhausted. Call finish now. Reference only "
-                    "EvidenceLedger observation IDs; LCSP will derive all graph/source provenance."
+                    "Finish the EngineeringRule investigation now using direct repository source "
+                    "citations gathered with native Deep Agents tools."
                 ),
                 "engineeringRule": cls._rule_contract(packet),
-                "evidenceLedger": ledger.index(offset=0, limit=40),
-                "recentToolResults": working_results[-MAX_WORKING_RESULTS:],
                 "claimRules": [
-                    "Emit exactly one primary claim per requiredEvidence criterion and set criterion to the exact requiredEvidence label.",
-                    "If a required criterion is insufficiently evidenced, emit UNRESOLVED_ENGINEERING_FACT for that criterion.",
-                    "UNRESOLVED must reference relevant observationRefs when the EvidenceLedger contains seed/tool observations for that criterion.",
-                    "Do not create separate claims for supportingEvidence or negativeEvidence labels; use them only to select supporting observations.",
-                    "Do not mark a claim unresolved solely because an observation has truncated=true when the required criterion is already proven by concrete evidence.",
-                    "Do not emit MET or NOT_MET from search_nodes/search_program_graph alone; absenceProven=false or matchMode=SUBSTRING requires unresolved or a concrete trace_static_flow/inspect_data_path observation from packet seeds.",
-                    "Do not invent evidence/node/edge/source-anchor IDs.",
-                    "Use only observationRefs returned by the EvidenceLedger.",
-                    "Keep the structured response compact: never copy observation text, tool output, or code into any response field; every string must stay well under 500 characters.",
+                    "Emit exactly one primary claim per requiredEvidence criterion.",
+                    "Decided claims require exact sourceLocations.",
+                    "If the criterion is not proven from inspected source, emit UNRESOLVED_ENGINEERING_FACT with a valid limitation code.",
+                    "Do not invent Program Evidence Graph identifiers.",
                 ],
             }
         )
+
 
     @staticmethod
     def _log_finish(
@@ -869,6 +646,7 @@ class LawGuidedInvestigator:
                     "evidence_refs": list(claim.evidence_refs),
                     "graph_path_refs": list(claim.graph_path_refs),
                     "source_anchor_refs": list(claim.source_anchor_refs),
+                    "source_locations": list(claim.source_locations),
                     "confidence": claim.confidence,
                     "limitations": list(claim.limitations),
                 }

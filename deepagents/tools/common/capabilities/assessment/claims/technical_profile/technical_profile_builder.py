@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 from middleware.redaction import redact_string
-from tools.common.capabilities.evidence.scanner.dependencies.dependency_fact import is_ai_package
+from tools.common.capabilities.evidence.package_signals import is_ai_package
 from .evidence_quality_evaluator import EvidenceQualityEvaluator
 
 SCHEMA_VERSION = "2.0.0"
@@ -58,15 +58,25 @@ class TechnicalProfileBuilder:
         evidence_payload = self._read_dict(evidence_report, "evidence_payload")
         privacy_flags = self._privacy_flags(evidence_report)
         self._assert_privacy(privacy_flags)
+        ai_discovery = self._read_dict(evidence_payload, "ai_discovery")
         ai_usage_signals = self._read_list(evidence_payload, "ai_usage_signals")
+        if not ai_usage_signals:
+            ai_usage_signals = self._read_list(ai_discovery, "findings")
         tool_failures = self._read_list(evidence_payload, "tool_failures")
-        coverage_notes = [str(note) for note in self._read_list(evidence_payload, "coverage_notes")]
+        coverage_notes = [
+            str(note)
+            for note in (
+                self._read_list(evidence_payload, "coverage_notes")
+                or self._read_list(evidence_payload, "coverageLimitations")
+            )
+        ]
         tools_version = self._read_dict(evidence_report, "tools_version")
         quality = self._quality_evaluator.evaluate(
             tools_version={str(k): str(v) for k, v in tools_version.items()},
             tool_failures=[item for item in tool_failures if isinstance(item, dict)],
             ai_usage_signals=[item for item in ai_usage_signals if isinstance(item, dict)],
             coverage_notes=coverage_notes,
+            ai_discovery_gate=str(ai_discovery.get("gate") or "") or None,
         )
         graph = self._program_graph(evidence_payload)
         graph_summary = self._graph_summary(graph)

@@ -5,9 +5,7 @@ from unittest.mock import patch
 
 from tools.common.capabilities.assessment.claims.evidence_claim.evidence_ledger import EvidenceLedger
 from tools.common.capabilities.assessment.investigation.engineering_rule.investigator import (
-    GRAPH_TOOL_NAMES,
     MAX_PROMPT_CHARS,
-    STATE_TOOL_NAMES,
     LawGuidedInvestigator,
 )
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
@@ -59,14 +57,17 @@ def test_investigator_uses_native_tools_and_structured_claims() -> None:
 
     class Agent:
         def invoke(self, payload, config=None):
-            search = next(tool for tool in captured["tools"] if tool.name == "search_nodes")
-            result = search.invoke({"node_types": ["HUMAN_REVIEW"]})
             return {
                 "structured_response": {
                     "claims": [{
                         "criterion": "A bounded human review path",
                         "claimType": "RULE_REQUIREMENT_MET",
-                        "observationRefs": ["obs:0001"],
+                        "sourceLocations": [{
+                            "path": "src/review.py",
+                            "startLine": 1,
+                            "endLine": 8,
+                            "symbol": "review",
+                        }],
                         "confidence": 0.95,
                         "limitations": [],
                     }]
@@ -92,14 +93,14 @@ def test_investigator_uses_native_tools_and_structured_claims() -> None:
             workflow_run_id="workflow-1",
         )
 
-    assert {tool.name for tool in captured["tools"]} == {
-        *GRAPH_TOOL_NAMES,
-        *STATE_TOOL_NAMES,
-    }
+    assert "tools" not in captured
+    assert "native Deep Agents filesystem/shell/task tools" in captured["system_prompt"]
+    assert "codebase_memory_graph MCP" in captured["system_prompt"]
     assert captured["response_format"] == LawGuidedInvestigator._claims_response_schema()
     assert claims[0].claim_type == "RULE_REQUIREMENT_MET"
-    assert claims[0].evidence_refs == ("evidence:review-1",)
-    assert claims[0].graph_path_refs == ("node-1",)
+    assert claims[0].source_locations == ({
+        "path": "src/review.py", "start_line": 1, "end_line": 8, "symbol": "review"
+    },)
 
 
 def test_evidence_ledger_keeps_full_seed_results_while_prompt_uses_index() -> None:
@@ -115,15 +116,16 @@ def test_evidence_ledger_keeps_full_seed_results_while_prompt_uses_index() -> No
     payload = json.loads(prompt)
 
     assert ledger.get("obs:0100").result["nodes"][99]["label"] == "x" * 10_000
-    assert payload["evidenceLedger"]["total"] == 100
-    assert payload["evidenceLedger"]["hasMore"] is True
+    assert payload["seedContext"]["priorDeterministicObservationCount"] == 100
+    assert "evidenceLedger" not in payload
     assert len(prompt) <= MAX_PROMPT_CHARS
 
 
-def test_structured_claim_schema_exposes_only_observation_refs() -> None:
+def test_structured_claim_schema_exposes_only_direct_source_locations() -> None:
     claim = LawGuidedInvestigator._claims_response_schema()["properties"]["claims"]["items"]
     properties = claim["properties"]
-    assert "observationRefs" in properties
+    assert "sourceLocations" in properties
+    assert "observationRefs" not in properties
     assert "evidenceRefs" not in properties
     assert properties["limitations"]["items"]["enum"] == sorted(
         MODEL_SELECTABLE_LIMITATION_CODES

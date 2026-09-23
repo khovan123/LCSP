@@ -387,12 +387,12 @@ export class AssessmentRuntimeEventService {
   }
 
   /**
-   * Records a scanner-worker runtime progress event after resolving tenant and assessment identity from the scan job.
+   * Records a repository-analysis-worker runtime progress event after resolving tenant and assessment identity from the scan job.
    *
    * @param input - Worker supplied runtime metadata plus the scan-job identifier.
    * @returns A promise that resolves after the sanitized runtime event is persisted, or after the scan job is ignored because it is absent/inactive.
    */
-  async recordScanWorkerEvent(
+  async recordRepositoryAnalysisEvent(
     input: RecordWorkerRuntimeEventInput,
   ): Promise<RecordWorkerRuntimeEventResult> {
     const scanJob = await this.prisma.repositoryScanJob.findUnique({

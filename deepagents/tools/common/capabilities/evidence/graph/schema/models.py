@@ -28,7 +28,7 @@ class ProgramNode:
     coverage_state: str = "SUFFICIENT"
     source_anchor_ref: str | None = None
     # v3 trust/provenance metadata. Defaults preserve v2 construction call sites.
-    origin: str = "STATIC_ANALYSIS"
+    origin: str = "DEEP_AGENT"
     resolution_state: str = "OBSERVED"
     support_refs: list[str] = field(default_factory=list)
 
@@ -46,7 +46,7 @@ class ProgramEdge:
     attributes: dict[str, Any] = field(default_factory=dict)
     evidence_refs: list[str] = field(default_factory=list)
     coverage_state: str = "SUFFICIENT"
-    origin: str = "STATIC_ANALYSIS"
+    origin: str = "DEEP_AGENT"
     resolution_state: str = "OBSERVED"
     support_refs: list[str] = field(default_factory=list)
 

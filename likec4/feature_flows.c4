@@ -131,7 +131,7 @@ views {
 
   dynamic view flow_github_repository_scan {
     title 'Feature Flow 2: GitHub App Connect & Automatic Repository Scan'
-    description 'Execution path from Settings Page repo connect card to Scanner Worker & evidence callback.'
+    description 'Execution path from Settings Page repo connect card to Managed Repository Analysis Agent and evidence callback.'
 
     lcsp.web.settingsPage -> lcsp.web.repoConnectCard '1. Manager views GitHub Repository Connect Card'
     lcsp.web.repoConnectCard -> lcsp.web.githubStartRoute '2. Click Connect Repository (GET /api/github/app/start)'
@@ -146,9 +146,9 @@ views {
     lcsp.api.createScanJobHandler -> lcsp.api.prismaDataMapper '11. Writes RepositoryScanJob & OutboxMessage record'
     lcsp.api.outboxPublisherService -> lcsp.api.prismaDataMapper '12. OutboxPollerService reads PENDING OutboxMessage'
     lcsp.api.outboxPublisherService -> lcsp.queue.scanTriggersQueue '13. Publishes event to RabbitMQ queue lcsp.queue.scan.triggers'
-    lcsp.queue.scanTriggersQueue -> lcsp.pythonWorkers.scannerWorker '14. Python Scanner Worker consumes scan job message'
-    githubApp -> lcsp.pythonWorkers.scannerWorker '15. Scanner Worker fetches commit-pinned repository snapshot'
-    lcsp.pythonWorkers.scannerWorker -> lcsp.api.internalScanCallbackController '16. Worker posts evidence to /internal/scan-jobs/:id/callback'
+    lcsp.queue.scanTriggersQueue -> lcsp.pythonWorkers.repositoryAnalysisWorker '14. Repository Analysis Agent consumes scan job message'
+    githubApp -> lcsp.pythonWorkers.repositoryAnalysisWorker '15. Repository Analysis Agent hydrates the commit-pinned repository working database'
+    lcsp.pythonWorkers.repositoryAnalysisWorker -> lcsp.api.internalScanCallbackController '16. Repository Analysis Agent posts structured evidence to /internal/scan-jobs/:id/callback'
     lcsp.api.internalScanCallbackController -> lcsp.api.prismaDataMapper '17. Saves TechnicalEvidenceReport in PostgreSQL'
   }
 

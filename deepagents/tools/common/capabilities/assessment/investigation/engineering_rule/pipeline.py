@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 from tools.legal.retrieval.legal_basis.chromadb_citation_retriever import ChromaDbCitationRetriever
@@ -16,8 +15,6 @@ from middleware.billing_metering import BillingMeteringError
 from tools.common.capabilities.evidence.graph.schema.models import ProgramEvidenceGraph
 from memory_policy.episodes import capture_verified_episode
 
-from tools.common.capabilities.assessment.investigation.engineering_rule.code_context import CodeContextSession
-from tools.common.capabilities.assessment.investigation.engineering_rule.code_context_investigator import CodeContextLawGuidedInvestigator
 from tools.common.capabilities.assessment.investigation.engineering_rule.initial_query_executor import InitialQueryExecutor
 from tools.common.capabilities.assessment.investigation.engineering_rule.investigator import (
     INVESTIGATION_PROMPT_VERSION,
@@ -32,7 +29,7 @@ from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_LIMITATION_CODES,
     EvidenceClaim,
 )
-from .rule_evaluator import (
+from tools.common.capabilities.assessment.evaluation.engineering_rule.rule_evaluator import (
     ENGINEERING_RULE_EVALUATION_STATUSES,
     EngineeringRuleEvaluation,
     EngineeringRuleEvaluator,
@@ -124,6 +121,7 @@ class EngineeringInvestigationResult:
                 if claim.evidence_refs
                 or claim.graph_path_refs
                 or claim.source_anchor_refs
+                or claim.source_locations
                 or claim.customer_context_refs
             ),
             "evaluations_with_evidence": sum(
@@ -147,11 +145,9 @@ class EngineeringInvestigationPipeline:
     deterministic evaluation then emits COMPLIANT/NON_COMPLIANT/UNKNOWN outcomes.
     No TechnicalProfile, AIUsageFlow, VerifiedProfile, or LegalRuleMatch is required.
 
-    Repository source, when available, is read only from the immutable snapshot's
-    temporary workspace by ``CodeContextSession``. It is never added to persisted
-    TechnicalEvidenceReport/ProgramEvidenceGraph payloads. Safe source-location
-    metadata needed by the assessment UI is projected from the in-memory graph into
-    the ClassificationResult so API readers never depend on worker-local graph files.
+    Repository source is inspected directly through the repository-rooted Managed
+    Deep Agents backend. No host-local code-context workspace or custom repository
+    search layer participates in production investigation.
     """
 
     def __init__(
@@ -174,7 +170,7 @@ class EngineeringInvestigationPipeline:
             retriever=self._retriever,
         )
         self._query_executor = query_executor or InitialQueryExecutor()
-        self._investigator = investigator or CodeContextLawGuidedInvestigator(model)
+        self._investigator = investigator or LawGuidedInvestigator(model)
         self._evaluator = evaluator or EngineeringRuleEvaluator()
 
     def run(
@@ -191,7 +187,7 @@ class EngineeringInvestigationPipeline:
     ) -> EngineeringInvestigationResult:
         _ = scan_job_id
         graph = self._graph(evidence_report)
-        code_context = CodeContextSession(graph, workspace_path=workspace_path)
+        _ = workspace_path
         catalog = self._api_client.get_active_legal_rule_catalog()
         corpus = self._api_client.get_active_legal_corpus()
         catalog_version_id = self._required_id(
@@ -287,23 +283,12 @@ class EngineeringInvestigationPipeline:
                         confirmed_customer_context=confirmed_customer_context,
                     )
                     try:
-                        if isinstance(
-                            self._investigator, CodeContextLawGuidedInvestigator
-                        ):
-                            rule_claims = self._investigator.investigate(
-                                packet=packet,
-                                graph=graph,
-                                workflow_run_id=workflow_run_id,
-                                correlation_id=correlation_id,
-                                code_context=code_context,
-                            )
-                        else:
-                            rule_claims = self._investigator.investigate(
-                                packet=packet,
-                                graph=graph,
-                                workflow_run_id=workflow_run_id,
-                                correlation_id=correlation_id,
-                            )
+                        rule_claims = self._investigator.investigate(
+                            packet=packet,
+                            graph=graph,
+                            workflow_run_id=workflow_run_id,
+                            correlation_id=correlation_id,
+                        )
                     except BillingMeteringError:
                         raise
                     except Exception as error:

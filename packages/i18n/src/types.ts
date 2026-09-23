@@ -1929,12 +1929,9 @@ export type PagesMessages = {
     observability: {
       title: string;
       description: string;
-      openWikiStatus: string;
       compileFailed: string;
       candidates: string;
       claimsWithEvidence: string;
-      openWikiError: string;
-      fallback: string;
       failedLegalRuleIds: string;
       sourceHitBuckets: string;
       sourceEvidenceBuckets: string;
@@ -1942,9 +1939,6 @@ export type PagesMessages = {
       sourceNodeTypes: string;
       evaluationsWithEvidence: string;
       displayableTechnicalEvidence: string;
-      available: string;
-      unavailable: string;
-      unknown: string;
       bucket0: string;
       bucket1: string;
       bucket2To5: string;

@@ -46,7 +46,7 @@ def _program_graph() -> dict[str, Any]:
                 "attributes": {},
                 "semantic_types": [],
                 "evidence_refs": ["EV-RECOVERY-1"],
-                "origin": "STATIC_ANALYSIS",
+                "origin": "DEEP_AGENT",
                 "resolution_state": "CORROBORATED",
                 "support_refs": [],
             }

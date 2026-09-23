@@ -111,13 +111,6 @@ pnpm install --frozen-lockfile
 echo "==> Install Managed Deep Agent"
 .venv/bin/python -m pip install ./deepagents
 
-echo "==> Build scanner TS/JS analyzer"
-cd "$APP/deepagents/tools/graph/scanner/ts_js_bridge/ts-js-analyzer"
-npm ci
-npm run build
-npm prune --omit=dev
-
-cd "$APP"
 
 echo "==> Build API"
 dotenv -e .env.pm2 -- pnpm --filter @lcsp/api build

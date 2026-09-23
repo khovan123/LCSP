@@ -1452,7 +1452,7 @@ describe("AssessmentRuntimeEventService", () => {
     });
   });
 
-  it("records scanner-worker runtime events using scan-job tenant context", async () => {
+  it("records repository-analysis-worker runtime events using scan-job tenant context", async () => {
     const assessmentRuntimeEvent = {
       findFirst: jest.fn().mockImplementation(() => Promise.resolve(null)),
       create: jest.fn().mockImplementation(() => Promise.resolve({})),
@@ -1480,15 +1480,15 @@ describe("AssessmentRuntimeEventService", () => {
     const service = new AssessmentRuntimeEventService(prisma as never);
 
     await expect(
-      service.recordScanWorkerEvent({
+      service.recordRepositoryAnalysisEvent({
         scanJobId: "scan-1",
         eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
         runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
         stage: ASSESSMENT_RUNTIME_STAGE_CODES.scan,
-        toolName: "syft",
-        summary: "syft completed with non-blocking failure",
+        toolName: "codebase-memory-graph",
+        summary: "Codebase Memory completed with non-blocking failure",
         outputSummary: { outcome: "tool_failure" },
-        errorSummary: "syft not available",
+        errorSummary: "Codebase Memory unavailable",
         startedAt: new Date("2026-08-14T08:00:00.000Z"),
         completedAt: new Date("2026-08-14T08:00:01.000Z"),
         durationMs: 1000,
@@ -1504,15 +1504,15 @@ describe("AssessmentRuntimeEventService", () => {
         eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
         runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
         stage: ASSESSMENT_RUNTIME_STAGE_CODES.scan,
-        toolName: "syft",
+        toolName: "codebase-memory-graph",
         outputSummaryJson: { outcome: "tool_failure" },
-        errorSummary: "syft not available",
+        errorSummary: "Codebase Memory unavailable",
         durationMs: 1000,
       }),
     });
   });
 
-  it("retries scanner-worker runtime event sequence collisions", async () => {
+  it("retries repository-analysis-worker runtime event sequence collisions", async () => {
     const sequenceCollision = Object.assign(
       new Error(
         'Unique constraint failed on the fields: ("runId", "sequence")',
@@ -1557,13 +1557,13 @@ describe("AssessmentRuntimeEventService", () => {
     const service = new AssessmentRuntimeEventService(prisma as never);
 
     await expect(
-      service.recordScanWorkerEvent({
+      service.recordRepositoryAnalysisEvent({
         scanJobId: "scan-1",
         eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
         runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
         stage: ASSESSMENT_RUNTIME_STAGE_CODES.scan,
-        toolName: "semgrep",
-        summary: "Running semgrep analysis",
+        toolName: "repository-analysis",
+        summary: "Running repository analysis",
       }),
     ).resolves.toEqual({ recorded: true });
 
@@ -1589,7 +1589,7 @@ describe("AssessmentRuntimeEventService", () => {
     });
   });
 
-  it("skips late scanner-worker start events after the scan job is terminal", async () => {
+  it("skips late repository-analysis-worker start events after the scan job is terminal", async () => {
     const assessmentRuntimeEvent = {
       findFirst: jest.fn().mockImplementation(() => Promise.resolve(null)),
       create: jest.fn().mockImplementation(() => Promise.resolve({})),
@@ -1617,7 +1617,7 @@ describe("AssessmentRuntimeEventService", () => {
     const service = new AssessmentRuntimeEventService(prisma as never);
 
     await expect(
-      service.recordScanWorkerEvent({
+      service.recordRepositoryAnalysisEvent({
         scanJobId: "scan-1",
         eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
         runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
@@ -1630,7 +1630,7 @@ describe("AssessmentRuntimeEventService", () => {
     expect(assessmentRuntimeEvent.create).not.toHaveBeenCalled();
   });
 
-  it("records scanner-worker terminal close events after the scan job is terminal", async () => {
+  it("records repository-analysis-worker terminal close events after the scan job is terminal", async () => {
     const assessmentRuntimeEvent = {
       findFirst: jest.fn().mockImplementation(() => Promise.resolve(null)),
       create: jest.fn().mockImplementation(() => Promise.resolve({})),
@@ -1658,7 +1658,7 @@ describe("AssessmentRuntimeEventService", () => {
     const service = new AssessmentRuntimeEventService(prisma as never);
 
     await expect(
-      service.recordScanWorkerEvent({
+      service.recordRepositoryAnalysisEvent({
         scanJobId: "scan-1",
         eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runCompleted,
         runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
