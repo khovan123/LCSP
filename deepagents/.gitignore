@@ -77,3 +77,6 @@ dmypy.json
 # Local outputs and generated data
 output/
 .mda/
+.cbm-cache/
+.cbm-home/
+.uv-cache/

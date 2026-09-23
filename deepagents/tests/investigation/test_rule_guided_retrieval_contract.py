@@ -2,19 +2,17 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
-from tools.common.capabilities.assessment.investigation.engineering_rule.code_context_investigator import (
-    CodeContextLawGuidedInvestigator,
+from tools.common.capabilities.assessment.claims.evidence_claim.evidence_ledger import (
+    EvidenceLedger,
 )
-from tools.common.capabilities.assessment.claims.evidence_claim.evidence_ledger import EvidenceLedger
-from tools.common.capabilities.assessment.investigation.engineering_rule.investigator import LawGuidedInvestigator
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_EVIDENCE_CLAIM_TYPES,
     ENGINEERING_LIMITATION_CODES,
     InvestigationPacket,
 )
-from tools.common.capabilities.evidence.graph.query.query_engine import ProgramGraphQueryEngine
+from tools.common.capabilities.assessment.investigation.engineering_rule.investigator import (
+    LawGuidedInvestigator,
+)
 
 
 def _packet() -> InvestigationPacket:
@@ -58,14 +56,32 @@ def _graph() -> dict:
                 "node_id": "node-1",
                 "node_type": "AI_OUTPUT",
                 "label": "AI output",
-                "source": {"file_path": "src/output.py", "symbol_ref": "render"},
+                "source": {
+                    "file_path": "src/output.py",
+                    "start_line": 4,
+                    "end_line": 12,
+                    "symbol_ref": "render",
+                },
                 "attributes": {},
                 "semantic_types": [],
                 "evidence_refs": ["evidence:1"],
+                "resolution_state": "OBSERVED",
             }
         ],
         "edges": [],
-        "source_anchors": [],
+        "source_anchors": [
+            {
+                "anchor_id": "anchor:1",
+                "snapshot_id": "snapshot-1",
+                "commit_sha": "abc123",
+                "file_path": "src/output.py",
+                "symbol_ref": "render",
+                "start_line": 4,
+                "end_line": 12,
+                "source_hash": "sha256:test",
+                "graph_node_id": "node-1",
+            }
+        ],
         "indexes": {},
         "unresolved_frontiers": [],
         "coverage_state": "SUFFICIENT",
@@ -77,86 +93,50 @@ def _graph() -> dict:
     }
 
 
-def test_rule_contract_exposes_retrieval_hints_separately_from_evidence_labels() -> None:
+def test_rule_contract_keeps_legal_retrieval_hints_separate_from_source_citations() -> None:
     payload = json.loads(
         LawGuidedInvestigator._prompt(_packet(), EvidenceLedger(), [], 0)
     )
     rule = payload["engineeringRule"]
 
-    assert rule["startingNodeTypes"] == ["AI_OUTPUT"]
-    assert rule["targetNodeTypes"] == ["HTTP_RESPONSE", "NOTIFICATION"]
-    assert rule["edgeStrategies"] == ["CALLS", "RETURNS"]
-    assert rule["graphQueries"][0]["startNodeTypes"] == ["AI_OUTPUT"]
     assert rule["retrievalHints"]["keywords"] == ["disclosure", "label", "watermark"]
     assert rule["requiredEvidence"] == ["AI_OUTPUT_SURFACE"]
-    assert any("NOT Program Evidence Graph node types" in row for row in payload["claimRules"])
+    assert "sourceLocations" not in rule
+    assert any("native Deep Agents" in row for row in [payload["task"]])
 
 
-def test_graph_tool_schema_only_allows_canonical_node_and_edge_vocabulary() -> None:
-    investigator = LawGuidedInvestigator("test:model")
-    tools = {
-        tool.name: tool
-        for tool in investigator._native_tools(
-            engine=ProgramGraphQueryEngine(_graph()),
-            ledger=EvidenceLedger(),
-        )
-    }
-    trace = tools["trace_static_flow"].args_schema.model_json_schema()["properties"]
-
-    assert "edge_types" in trace
-    assert "stop_node_types" in trace
-
-    with pytest.raises(ValueError, match="non-canonical"):
-        LawGuidedInvestigator._normalize_tool_arguments(
-            "search_nodes",
-            {"node_types": ["AI_OUTPUT_SURFACE"]},
-        )
-
-
-def test_code_prompt_drives_targeted_search_then_source_expansion() -> None:
-    payload = json.loads(
-        CodeContextLawGuidedInvestigator._code_prompt(
-            _packet(), EvidenceLedger(), [], 0
-        )
-    )
-
-    assert payload["codeInvestigationFlow"][0].startswith(
-        "SEARCH: LCSP deterministically seeds code search from EngineeringRule retrievalHints"
-    )
-    assert any("get_code" in row and "implementation behavior" in row for row in payload["codeContextRules"])
-    assert any("Tests, specs, mocks" in row for row in payload["codeContextRules"])
-
-
-def test_finish_schema_requires_exact_required_evidence_criterion_scope() -> None:
+def test_finish_schema_requires_repository_source_locations() -> None:
     claim_schema = LawGuidedInvestigator._claims_response_schema()["properties"][
         "claims"
     ]["items"]
+    properties = claim_schema["properties"]
 
-    assert "criterion" in claim_schema["properties"]
     assert "criterion" in claim_schema["required"]
-    assert "observationRefs" in claim_schema["properties"]
-    assert "evidenceRefs" not in claim_schema["properties"]
+    assert "sourceLocations" in claim_schema["required"]
+    assert set(properties["sourceLocations"]["items"]["required"]) == {
+        "path",
+        "startLine",
+        "endLine",
+    }
+    assert "observationRefs" not in properties
+    assert "evidenceRefs" not in properties
 
 
-def test_invalid_finish_criterion_fails_closed_to_unresolved() -> None:
-    ledger = EvidenceLedger()
-    observation = ledger.add(
-        source="graph_tool",
-        result={
-            "nodes": [_graph()["nodes"][0]],
-            "evidenceRefs": ["evidence:1"],
-            "truncated": False,
-        },
-    )
-    investigator = LawGuidedInvestigator("test:model")
-
-    claims = investigator._claims_from_payload(
+def test_invalid_finish_criterion_fails_closed_even_with_source_location() -> None:
+    claims = LawGuidedInvestigator("test:model")._claims_from_payload(
         {
             "claims": [
                 {
                     "criterion": "DISCLOSURE_OR_LABEL_CONTROL",
                     "claimType": ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"],
-                    "observationRefs": [observation.observation_id],
+                    "sourceLocations": [
+                        {
+                            "path": "src/output.py",
+                            "startLine": 4,
+                            "endLine": 8,
+                            "symbol": "render",
+                        }
+                    ],
                     "confidence": 0.9,
                     "limitations": [],
                 }
@@ -164,9 +144,12 @@ def test_invalid_finish_criterion_fails_closed_to_unresolved() -> None:
         },
         _packet(),
         _graph(),
-        ledger,
+        EvidenceLedger(),
     )
 
     assert claims[0].criterion is None
     assert claims[0].claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
-    assert ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"] in claims[0].limitations
+    assert (
+        ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]
+        in claims[0].limitations
+    )

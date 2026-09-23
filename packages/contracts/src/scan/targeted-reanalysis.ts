@@ -40,12 +40,7 @@ export const REQUEST_TARGETED_REANALYSIS_INPUT_JSON_SCHEMA = {
       pattern: STABLE_EVIDENCE_REPORT_ID,
     },
     analyzerId: {
-      enum: [
-        "RUN_SEMGREP_RULES",
-        "RUN_PYTHON_SEMANTIC_ANALYSIS",
-        "RUN_TS_JS_SEMANTIC_ANALYSIS",
-        "RUN_STRUCTURAL_AUGMENTATION",
-      ],
+      enum: ["DEEP_AGENT_REPOSITORY_ANALYSIS"],
     },
     scope: {
       type: "object",

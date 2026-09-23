@@ -98,13 +98,6 @@ export type EngineeringRuleEvaluationViewModel = {
 };
 
 export type ClassificationObservabilityViewModel = {
-  openWiki: {
-    available: boolean | null;
-    error: string | null;
-    fallback: string | null;
-    hintCount: number | null;
-    authority: string | null;
-  } | null;
   engineeringRulePreparation: {
     legalRulesSeen: number;
     candidateCount: number;
@@ -517,7 +510,6 @@ type ClassificationResultPayload = {
 };
 
 type ClassificationObservabilityPayload = {
-  openwiki?: Record<string, unknown>;
   engineering_rule_preparation?: Record<string, unknown>;
   candidate_source_hit_distribution?: Record<string, unknown>;
   provenance?: Record<string, unknown>;
@@ -572,7 +564,6 @@ function sanitizeObservability(
 ): ClassificationObservabilityPayload | null {
   if (!recordValue(value)) return null;
   const payload = {
-    openwiki: recordValue(value.openwiki) ? value.openwiki : undefined,
     engineering_rule_preparation: recordValue(value.engineering_rule_preparation)
       ? value.engineering_rule_preparation
       : undefined,
@@ -665,21 +656,10 @@ function sanitizeLegalProvision(value: unknown): LegalProvisionPayload | null {
 function toObservabilityViewModel(
   value: ClassificationObservabilityPayload,
 ): ClassificationObservabilityViewModel {
-  const openWiki = value.openwiki;
   const preparation = value.engineering_rule_preparation;
   const sourceHits = value.candidate_source_hit_distribution;
   const provenance = value.provenance;
   return {
-    openWiki: openWiki
-      ? {
-          available:
-            typeof openWiki.available === "boolean" ? openWiki.available : null,
-          error: nullableString(openWiki.error) ?? null,
-          fallback: nullableString(openWiki.fallback) ?? null,
-          hintCount: nullableInteger(openWiki.hint_count),
-          authority: nullableString(openWiki.authority) ?? null,
-        }
-      : null,
     engineeringRulePreparation: preparation
       ? {
           legalRulesSeen: nonNegativeNumber(preparation.legal_rules_seen),

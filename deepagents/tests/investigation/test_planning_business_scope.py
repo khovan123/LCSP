@@ -21,7 +21,7 @@ def _node(
     node_type: str,
     label: str,
     *,
-    origin: str = "STATIC_ANALYSIS",
+    origin: str = "DEEP_AGENT",
     resolution_state: str = "OBSERVED",
     support_refs: list[str] | None = None,
     semantic_types: list[str] | None = None,
@@ -51,7 +51,7 @@ def _edge(edge_id: str, edge_type: str, source: str, target: str) -> dict:
         "attributes": {},
         "evidence_refs": [f"evidence:{edge_id}"],
         "coverage_state": "SUFFICIENT",
-        "origin": "STATIC_ANALYSIS",
+        "origin": "DEEP_AGENT",
         "resolution_state": "OBSERVED",
         "support_refs": [],
     }
@@ -299,7 +299,7 @@ def test_planner_prompt_excludes_internal_llm_runtime_from_graph_summary() -> No
             "semantic_types": [],
             "evidence_refs": ["evidence:internal-provider"],
             "coverage_state": "SUFFICIENT",
-            "origin": "STATIC_ANALYSIS",
+            "origin": "DEEP_AGENT",
             "resolution_state": "OBSERVED",
             "support_refs": [],
         }

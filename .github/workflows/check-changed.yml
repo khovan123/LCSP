@@ -262,3 +262,21 @@ jobs:
 
       - name: Install dependencies
         run: python -m pip install -e ".[dev]"
+
+
+      - name: Provision Codebase Memory 0.11.0
+        run: |
+          python -m pip install --no-cache-dir codebase-memory-mcp==0.11.0
+          CBM_HOME="$RUNNER_TEMP/codebase-memory-home"
+          CBM_CACHE="$RUNNER_TEMP/codebase-memory-cache"
+          mkdir -p "$CBM_HOME" "$CBM_CACHE"
+          HOME="$CBM_HOME" XDG_CACHE_HOME="$CBM_CACHE" codebase-memory-mcp --version
+          CBM_BINARY="$CBM_CACHE/codebase-memory-mcp/0.11.0/codebase-memory-mcp"
+          test -x "$CBM_BINARY"
+          echo "LCSP_CODEBASE_MEMORY_E2E_BINARY=$CBM_BINARY" >> "$GITHUB_ENV"
+
+      - name: Compile Managed Deep Agents app
+        run: mda build .
+
+      - name: Test Python workers
+        run: pytest

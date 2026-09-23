@@ -134,7 +134,7 @@ describe("ScanController role-only RBAC", () => {
       "ter_12345678",
       {
         inputArtifactVersion: "ter_12345678",
-        analyzerId: "RUN_TS_JS_SEMANTIC_ANALYSIS",
+        analyzerId: "DEEP_AGENT_REPOSITORY_ANALYSIS",
         scope: { pathPrefixes: ["src/web/"] },
         reasonRequirementId: "requirement:gap_12345678",
         idempotencyKey: "request_targeted_reanalysis_0001",
@@ -171,7 +171,7 @@ describe("InternalScanController", () => {
         assessmentId: "assessment-1",
         userId: "user-1",
         inputArtifactVersion: "ter_12345678",
-        analyzerId: "RUN_SEMGREP_RULES",
+        analyzerId: "DEEP_AGENT_REPOSITORY_ANALYSIS",
         scope: { pathPrefixes: ["apps/api/"] },
         reasonRequirementId: "requirement:gap_12345678",
         idempotencyKey: "request_targeted_reanalysis_0001",

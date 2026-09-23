@@ -61,7 +61,6 @@ Trusted Scan Trigger and Scan Job Orchestration
 - Handoff chính của epic là `RepositorySnapshot`, `TechnicalEvidenceReport`, rồi `TechnicalProfile`; ba artifact này phải giữ boundary rõ.
 
 - Previous story context: `docs/developer/story-handbook/3-2-pin-commit-and-create-repositorysnapshot.md`
-- Next story dependency seam: `docs/developer/story-handbook/3-4-static-scanner-workspace-and-sandbox.md`
 - Artifact chain for this epic: repository connection -> commit-pinned snapshot -> trusted scan trigger -> scanner execution -> TechnicalEvidenceReport -> TechnicalProfile.
 - Workflow/state focus: repository/snapshot/scan/evidence/profile states from REPOSITORY_CONNECTED to TECHNICAL_PROFILE_READY.
 
@@ -145,7 +144,7 @@ Trusted Scan Trigger and Scan Job Orchestration
 ### File Structure Notes
 
 - `apps/api` cho repository selection, scan request/status API và outbox command creation.
-- `deepagents` cho queue consumer, scanner runtime, evidence gates, TechnicalProfile worker.
+- `deepagents` cho queue consumer, repository-analysis runtime, evidence gates, TechnicalProfile worker.
 - `packages/*` cho command/event schemas, status projection contracts, evidence/profile DTOs.
 
 ### Implementation Guidance for the Dev Agent
@@ -183,17 +182,12 @@ Trusted Scan Trigger and Scan Job Orchestration
 - [Source: docs/specs/event-catalog.md]
 - [Source: docs/architecture/architecture.md]
 - [Source: docs/implementation/dev-compendium.md]
-- [Source: docs/specs/scanner-spec.md]
-- [Source: docs/implementation/scanner-implementation.md]
-- [Source: docs/implementation/scanner-worker-implementation.md]
+- [Source: docs/architecture/repository-deep-agent-analysis.md]
 - [Source: docs/implementation/python-worker-platform-implementation.md]
 - [Source: docs/implementation/queue-implementation.md]
 - [Source: docs/implementation/decisions/trusted-scan-trigger-retry-dlq-replay-decision.md]
-- [Source: docs/implementation/decisions/scanner-severity-tool-provenance-decision.md]
 - [Source: docs/implementation/tasks/modules/scan/01-scan-job-status-endpoint.md]
 - [Source: docs/implementation/tasks/modules/python-workers/platform/01-worker-platform-bootstrap.md]
-- [Source: docs/implementation/tasks/modules/python-workers/scanner/01-scanner-workspace-setup.md]
-- [Source: docs/implementation/tasks/modules/python-workers/scanner/04-evidence-report-assembly.md]
 - [Source: docs/implementation/tasks/modules/python-workers/intelligence/01-technical-profile-worker.md]
 - [Source: docs/implementation/handoffs/HANDOFF-scanner-evidence-to-technical-profile.md]
 

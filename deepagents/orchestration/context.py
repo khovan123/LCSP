@@ -8,6 +8,7 @@ hydrated by the runtime stages that own those data boundaries.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,9 @@ class LCSPRunContext:
     legal_rule_ids: tuple[str, ...] = ()
     idempotency_key: str | None = None
     correlation_id: str | None = None
+    system_boundary_name: str | None = None
+    system_event: dict[str, Any] = field(default_factory=dict)
+    repository_path: str | None = None
 
 
 def bounded_context_lines(context: LCSPRunContext | None) -> tuple[str, ...]:

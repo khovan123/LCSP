@@ -787,8 +787,8 @@ def _post_scan_callback(
         ScanCallbackPayload(
             scan_job_id=scan_job_id,
             status="SUCCESS",
-            tools_version={"scanner": "lcsp-278-release"},
-            config_hash={"scanner": "sha256:lcsp-278-release"},
+            tools_version={"deepagents": "0.7.17", "repository-analysis": "1.0.0"},
+            config_hash={"repository-analysis": "sha256:lcsp-278-release"},
             evidence_payload={"evidence_graph": _program_graph(snapshot_id)},
             privacy_flags={
                 "containsSourceCode": False,
@@ -888,7 +888,7 @@ def _program_graph(snapshot_id: str = SNAPSHOT_ID) -> dict[str, Any]:
                 "attributes": {"purpose": "recommendation approval authority"},
                 "semantic_types": ["approval_authority", "recommendation"],
                 "evidence_refs": [EVIDENCE_REF],
-                "origin": "STATIC_ANALYSIS",
+                "origin": "DEEP_AGENT",
                 "resolution_state": "OBSERVED",
                 "support_refs": [],
             }

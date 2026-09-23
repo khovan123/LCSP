@@ -298,7 +298,7 @@ export class InternalScanController {
   ) {}
 
   /**
-   * Accepts a scanner-worker callback for one repository scan job.
+   * Accepts a repository-analysis-worker callback for one repository scan job.
    *
    * @param scanJobId - Scan-job identifier from the callback route.
    * @param payload - Scanner callback payload containing terminal status and sanitized evidence.
@@ -325,7 +325,7 @@ export class InternalScanController {
   }
 
   /**
-   * Accepts privacy-safe scanner-worker runtime progress metadata for one active scan job.
+   * Accepts privacy-safe repository-analysis-worker runtime progress metadata for one active scan job.
    *
    * @param scanJobId - Scan-job identifier whose tenant and assessment context is resolved server-side.
    * @param payload - Sanitized runtime progress payload using shared runtime value sets.
@@ -338,7 +338,7 @@ export class InternalScanController {
     @Param("scanJobId") scanJobId: string,
     @Body() payload: WorkerRuntimeEventRequest,
   ) {
-    const result = await this.runtimeEvents.recordScanWorkerEvent({
+    const result = await this.runtimeEvents.recordRepositoryAnalysisEvent({
       scanJobId,
       ...parseWorkerRuntimeEventPayload(payload, "scan-runtime-event"),
     });
@@ -598,10 +598,7 @@ export class InternalScanController {
 }
 
 const TARGETED_REANALYSIS_ANALYZERS = new Set([
-  "RUN_SEMGREP_RULES",
-  "RUN_PYTHON_SEMANTIC_ANALYSIS",
-  "RUN_TS_JS_SEMANTIC_ANALYSIS",
-  "RUN_STRUCTURAL_AUGMENTATION",
+  "DEEP_AGENT_REPOSITORY_ANALYSIS",
 ]);
 const EVIDENCE_REPORT_ID = /^ter_[A-Za-z0-9_-]{8,120}$/;
 const REASON_REQUIREMENT_ID = /^requirement:[A-Za-z0-9_-]{1,120}$/;
@@ -1585,7 +1582,7 @@ export class InternalTargetedReanalysisController {
   ): Promise<void> {
     await this.auditWriter.write({
       eventType,
-      actorId: AUDIT_ACTOR_IDS.scannerWorker,
+      actorId: AUDIT_ACTOR_IDS.repositoryAnalysisWorker,
       assessmentId: request.assessmentId,
       resourceType: AUDIT_RESOURCE_TYPES.workerTask,
       resourceId: requestId,
@@ -1594,7 +1591,7 @@ export class InternalTargetedReanalysisController {
       result: eventType,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
       actor: {
-        id: AUDIT_ACTOR_IDS.scannerWorker,
+        id: AUDIT_ACTOR_IDS.repositoryAnalysisWorker,
         type: AUDIT_ACTOR_TYPES.service,
       },
       payload: { requestId },

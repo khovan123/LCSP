@@ -471,8 +471,8 @@ test("runtime console model sorts scan steps and expands active or failed steps"
       eventType: "TOOL_COMPLETED",
       runStatus: "RUNNING",
       sequence: 2,
-      toolName: "syft",
-      summary: "Completed syft",
+      toolName: "deepagents",
+      summary: "Completed Deep Agents repository inventory",
     }),
     runtimeActivity({
       eventId: "tool-started",
@@ -487,8 +487,8 @@ test("runtime console model sorts scan steps and expands active or failed steps"
       eventType: "TOOL_FAILED",
       runStatus: "RUNNING",
       sequence: 3,
-      toolName: "deptry",
-      summary: "deptry completed with a non-blocking failure",
+      toolName: "codebase-memory-graph",
+      summary: "Codebase Memory completed with a non-blocking failure",
     }),
   ]);
 
@@ -529,12 +529,12 @@ test("runtime console model keeps waiting steps out of completed fallback", () =
 test("runtime console model closes orphaned tool starts after the run completes", () => {
   const model = buildRuntimeConsoleModel([
     runtimeActivity({
-      eventId: "semgrep-started",
+      eventId: "repository-analysis-started",
       eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
       runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
       sequence: 1,
-      toolName: "semgrep",
-      summary: "Running semgrep analysis",
+      toolName: "repository-analysis",
+      summary: "Running repository analysis",
     }),
     runtimeActivity({
       eventId: "run-completed",

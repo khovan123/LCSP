@@ -314,8 +314,6 @@ class ResumedManagedInvestigatorPipeline:
 class _ExactResumePlanner:
     """Deterministically reconstruct the already-pinned targeted rule scope."""
 
-    requires_openwiki_context = False
-
     def __init__(self, affected_rule_ids: tuple[str, ...]) -> None:
         self._affected_rule_ids = affected_rule_ids
 
@@ -327,13 +325,11 @@ class _ExactResumePlanner:
         graph: Any,
         workflow_run_id: str,
         correlation_id: str | None = None,
-        openwiki_context: dict[str, Any] | None = None,
     ) -> EngineeringRulePlan:
         _ = (
             graph,
             workflow_run_id,
             correlation_id,
-            openwiki_context,
         )
         rows = tuple(candidates)
         available = {str(item.engineering_rule_id) for item in rows}
@@ -732,7 +728,10 @@ def _invoke_managed_investigator(
                             )
                             return recovered.model_dump(mode="json"), latest_checkpoint
 
-        configurable: dict[str, str] = {"thread_id": thread_id}
+        configurable: dict[str, str] = {
+            "thread_id": thread_id,
+            "assessment_id": context.assessment_id,
+        }
         if checkpoint_id:
             configurable["checkpoint_id"] = checkpoint_id
         current_instruction = instruction

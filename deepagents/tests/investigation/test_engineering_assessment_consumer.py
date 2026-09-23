@@ -437,7 +437,7 @@ def test_exact_resume_gate_continuation_does_not_refetch_the_pinned_snapshot() -
         triage_trigger_publisher=MagicMock(),
     ).handle({"evidenceReportId": "ter-1", "workflowRunId": "scan-1"}, "corr-1")
 
-    snapshot_client.download_snapshot_archive.assert_not_called()
+    snapshot_client.download_archive.assert_not_called()
     code_workspace.materialize.assert_not_called()
     code_workspace.cleanup.assert_not_called()
     assert pipeline.run.call_args.kwargs["workspace_path"] is None
@@ -448,7 +448,7 @@ def test_investigation_run_still_materializes_the_pinned_snapshot_once(tmp_path)
     pipeline = MagicMock()
     pipeline.run.return_value = _empty_complete_result()
     snapshot_client = MagicMock()
-    snapshot_client.download_snapshot_archive.return_value = b"archive"
+    snapshot_client.download_archive.return_value = b"archive"
     code_workspace = MagicMock()
     code_workspace.materialize.return_value = SimpleNamespace(
         workspace_path=tmp_path,
@@ -466,8 +466,8 @@ def test_investigation_run_still_materializes_the_pinned_snapshot_once(tmp_path)
         triage_trigger_publisher=MagicMock(),
     ).handle({"evidenceReportId": "ter-1", "workflowRunId": "scan-1"}, "corr-1")
 
-    snapshot_client.download_snapshot_archive.assert_called_once()
-    request = snapshot_client.download_snapshot_archive.call_args.args[0]
+    snapshot_client.download_archive.assert_called_once()
+    request = snapshot_client.download_archive.call_args.args[0]
     assert (request.snapshot_id, request.scan_job_id) == ("snapshot-1", "scan-1")
     assert pipeline.run.call_args.kwargs["workspace_path"] == tmp_path
     code_workspace.cleanup.assert_called_once_with("investigation-corr-1")

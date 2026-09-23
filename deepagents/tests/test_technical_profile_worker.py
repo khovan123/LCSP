@@ -42,9 +42,8 @@ def _evidence_report(
         "assessment_id": assessment_id,
         "status": status,
         "tools_version": {
-            "syft": "syft v1.0.0",
-            "semgrep_ai_usage": "semgrep 1.99.0",
-            "semgrep_secret_detect": "semgrep 1.99.0",
+            "deepagents": "0.7.17",
+            "repository-analysis": "1.0.0",
         },
         "evidence_payload": {
             "sbom_entries": sbom_entries
@@ -123,13 +122,13 @@ def test_t02_evidence_with_no_ai_signals_is_low_quality() -> None:
 
 
 @pytest.mark.p0
-def test_t03_syft_failed_semgrep_passed_is_medium_quality() -> None:
+def test_t03_deepagents_failed_repository_analysis_present_is_medium_quality() -> None:
     profile = TechnicalProfileBuilder().build(
         _evidence_report(
             tool_failures=[
                 {
-                    "tool_name": "syft",
-                    "tool_version": "syft v1.0.0",
+                    "tool_name": "deepagents",
+                    "tool_version": "0.7.17",
                     "outcome": "tool_failure",
                     "messages": ["failed safely"],
                 }
@@ -138,8 +137,8 @@ def test_t03_syft_failed_semgrep_passed_is_medium_quality() -> None:
     )
 
     assert profile.evidence_quality == EVIDENCE_QUALITY_MEDIUM
-    assert profile.tool_coverage["syft"] is False
-    assert profile.tool_coverage["semgrep"] is True
+    assert profile.tool_coverage["deepagents"] is False
+    assert profile.tool_coverage["repository-analysis"] is True
 
 
 @pytest.mark.p0
@@ -148,15 +147,14 @@ def test_t04_all_critical_tools_failed_is_insufficient() -> None:
         _evidence_report(
             ai_usage_signals=[],
             tool_failures=[
-                {"tool_name": "syft", "tool_version": "x", "outcome": "tool_failure"},
                 {
-                    "tool_name": "semgrep_ai_usage",
-                    "tool_version": "x",
+                    "tool_name": "deepagents",
+                    "tool_version": "0.7.17",
                     "outcome": "tool_failure",
                 },
                 {
-                    "tool_name": "semgrep_secret_detect",
-                    "tool_version": "x",
+                    "tool_name": "repository-analysis",
+                    "tool_version": "1.0.0",
                     "outcome": "tool_failure",
                 },
             ],
@@ -330,12 +328,12 @@ def test_consumer_rejects_non_accepted_report_before_callback() -> None:
 @pytest.mark.p0
 def test_evaluator_exposes_tool_coverage_for_missing_tools() -> None:
     result = EvidenceQualityEvaluator().evaluate(
-        tools_version={"syft": "syft v1.0.0"},
+        tools_version={"deepagents": "0.7.17"},
         tool_failures=[],
         ai_usage_signals=[{"signal_type": "model_call"}],
         coverage_notes=[],
     )
 
-    assert result.tool_coverage["syft"] is True
-    assert result.tool_coverage["semgrep"] is False
+    assert result.tool_coverage["deepagents"] is True
+    assert result.tool_coverage["repository-analysis"] is False
     assert result.evidence_quality == EVIDENCE_QUALITY_MEDIUM

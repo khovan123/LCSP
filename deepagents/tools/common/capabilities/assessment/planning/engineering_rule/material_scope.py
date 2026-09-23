@@ -111,7 +111,6 @@ _INTERNAL_LLM_RUNTIME_PATH_MARKERS = (
     "deepagents/subagents/",
     "deepagents/middleware/model_governance.py",
     "deepagents/tools/common/capabilities/assessment/investigation/engineering_rule/investigator.py",
-    "deepagents/tools/common/capabilities/assessment/investigation/engineering_rule/code_context_investigator.py",
     "deepagents/tools/common/capabilities/assessment/planning/engineering_rule/engineering_rule_planner.py",
     "deepagents/tools/legal/corpus/engineering_rules/compilation/",
 )
@@ -183,7 +182,7 @@ def is_internal_llm_runtime_node(node: dict[str, Any]) -> bool:
 def _trustworthy_semantic_node(node: dict[str, Any]) -> bool:
     """Return whether graph semantics are strong enough to affect Planner scope."""
     state = str(node.get("resolution_state") or "OBSERVED")
-    origin = str(node.get("origin") or "STATIC_ANALYSIS")
+    origin = str(node.get("origin") or "DEEP_AGENT")
     if state not in _STRONG_RESOLUTION_STATES:
         return False
     if origin == "LLM_SEMANTIC_ENRICHMENT":
@@ -308,7 +307,6 @@ class MaterialEngineeringRulePlanner(EngineeringRulePlanner):
         candidates: tuple[EngineeringRulePlanningCandidate, ...],
         confirmed_customer_context: ConfirmedStructuredBusinessContext,
         graph: ProgramEvidenceGraph,
-        openwiki_context: dict[str, Any] | None = None,
     ) -> str:
         rules = []
         for candidate in candidates:
@@ -330,17 +328,6 @@ class MaterialEngineeringRulePlanner(EngineeringRulePlanner):
                 confirmed_customer_context.to_prompt_dict()
             ),
             "repositoryEvidenceSummary": cls._graph_summary(graph),
-            "openWikiArchitectureHints": openwiki_context or {
-                "source": "openwiki",
-                "available": False,
-                "authority": "UNVERIFIED_ARCHITECTURE_HINT",
-                "policy": (
-                    "May prioritize planner investigation only. Must not satisfy "
-                    "legal citations, source evidence, compliance, or gap classification."
-                ),
-                "hintCount": 0,
-                "hints": [],
-            },
             "engineeringRules": rules,
         }
         return (
@@ -358,9 +345,7 @@ class MaterialEngineeringRulePlanner(EngineeringRulePlanner):
             "concrete unresolved scope fact requires investigation. SKIP healthcare, education, "
             "public-sector, high-risk, medium-risk, prohibited-practice, or other domain-specific "
             "controls when Customer context excludes/does not indicate that scope and materialSourceSignal.hitCount "
-            "is zero. OpenWiki architecture hints are unverified documentation hints for "
-            "prioritizing search only; they are not SOURCE basis, citation evidence, "
-            "source anchors, and not proof of compliance. Never invent rule IDs. Return exactly one decision per rule using only the "
+            "is zero. Never invent rule IDs. Return exactly one decision per rule using only the "
             "declared reason codes and basis values.\n\n"
             + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         )

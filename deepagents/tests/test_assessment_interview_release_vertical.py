@@ -143,7 +143,7 @@ def _program_graph() -> dict[str, Any]:
                 'attributes': {},
                 'semantic_types': [],
                 'evidence_refs': [EVIDENCE_REF],
-                'origin': 'STATIC_ANALYSIS',
+                'origin': 'DEEP_AGENT',
                 'resolution_state': 'CORROBORATED',
                 'support_refs': [],
             }
@@ -727,12 +727,6 @@ def test_release_gate_crosses_production_boundaries_and_exact_resume_is_replay_s
         _durable_create_agent_factory(run_counter),
     )
 
-    architecture = tmp_path / 'openwiki' / 'architecture'
-    architecture.mkdir(parents=True)
-    (architecture / 'overview.md').write_text(
-        '# Runtime Architecture\n\nThe AI model invocation feeds a human review workflow before approval.',
-        encoding='utf-8',
-    )
     workspace = _Workspace(tmp_path)
     initial_query = _QueryExecutor()
     planner = _RecordingPlanner()

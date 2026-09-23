@@ -145,7 +145,6 @@ class ScopedMaterialEngineeringRulePlanner(MaterialEngineeringRulePlanner):
         candidates: tuple[EngineeringRulePlanningCandidate, ...],
         confirmed_customer_context: ConfirmedStructuredBusinessContext,
         graph: ProgramEvidenceGraph,
-        openwiki_context: dict[str, Any] | None = None,
     ) -> str:
         return (
             "Coverage rule: use each engineering rule's scopeCoverage only. Repository-wide "
@@ -156,6 +155,5 @@ class ScopedMaterialEngineeringRulePlanner(MaterialEngineeringRulePlanner):
                 candidates,
                 confirmed_customer_context,
                 graph,
-                openwiki_context,
             )
         )

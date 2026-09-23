@@ -34,7 +34,7 @@ model {
 
     internalScanCallbackController = controller 'InternalScanController' {
       technology 'apps/api/src/modules/scan/presentation/http/internal-scan.controller.ts'
-      description 'Internal webhook callback route /internal/scan-jobs/:scanJobId/callback from Python Scanner Worker.'
+      description 'Internal webhook callback route /internal/scan-jobs/:scanJobId/callback from the Repository Analysis Agent.'
     }
 
     reconciliationController = controller 'ReconciliationController' {
@@ -113,7 +113,7 @@ model {
 
   extend lcsp.queue {
     scanTriggersQueue = queueChannel 'Queue: lcsp.queue.scan.triggers' {
-      description 'RabbitMQ queue delivering scan job triggers to Python Scanner Worker.'
+      description 'RabbitMQ queue delivering scan job triggers to the managed Repository Analysis Agent.'
     }
 
     reconciliationJobsQueue = queueChannel 'Queue: lcsp.queue.reconciliation.jobs' {
@@ -143,9 +143,9 @@ model {
   lcsp.api.outboxPublisherService -> lcsp.api.prismaDataMapper 'Poll PENDING OutboxMessage records'
   lcsp.api.outboxPublisherService -> lcsp.queue.scanTriggersQueue 'Publish event to RabbitMQ Queue'
 
-  lcsp.queue.scanTriggersQueue -> lcsp.pythonWorkers.scannerWorker 'Consume scan job message'
-  githubApp -> lcsp.pythonWorkers.scannerWorker 'Fetch commit-pinned snapshot code'
-  lcsp.pythonWorkers.scannerWorker -> lcsp.api.internalScanCallbackController 'HTTP POST /internal/scan-jobs/:id/callback'
+  lcsp.queue.scanTriggersQueue -> lcsp.pythonWorkers.repositoryAnalysisWorker 'Consume repository-analysis job message'
+  githubApp -> lcsp.pythonWorkers.repositoryAnalysisWorker 'Hydrate commit-pinned repository working database'
+  lcsp.pythonWorkers.repositoryAnalysisWorker -> lcsp.api.internalScanCallbackController 'HTTP POST /internal/scan-jobs/:id/callback'
 
   lcsp.api.internalScanCallbackController -> lcsp.api.prismaDataMapper 'Persist TechnicalEvidenceReport (ACCEPTED)'
   lcsp.api.internalScanCallbackController -> lcsp.queue.reconciliationJobsQueue 'Publish evidence collected event to RabbitMQ'
@@ -185,9 +185,9 @@ views {
     lcsp.api.createScanJobHandler -> lcsp.api.prismaDataMapper '7. Handler writes OutboxMessage record inside DB transaction'
     lcsp.api.outboxPublisherService -> lcsp.api.prismaDataMapper '8. OutboxPollerService reads PENDING OutboxMessage'
     lcsp.api.outboxPublisherService -> lcsp.queue.scanTriggersQueue '9. OutboxPublisherService publishes event to RabbitMQ queue'
-    lcsp.queue.scanTriggersQueue -> lcsp.pythonWorkers.scannerWorker '10. Python Scanner Worker consumes scan job from RabbitMQ'
-    githubApp -> lcsp.pythonWorkers.scannerWorker '11. Scanner Worker fetches code from GitHub App snapshot'
-    lcsp.pythonWorkers.scannerWorker -> lcsp.api.internalScanCallbackController '12. Worker posts results back to /internal/scan-jobs/:id/callback'
+    lcsp.queue.scanTriggersQueue -> lcsp.pythonWorkers.repositoryAnalysisWorker '10. Repository Analysis Agent consumes scan job from RabbitMQ'
+    githubApp -> lcsp.pythonWorkers.repositoryAnalysisWorker '11. Repository Analysis Agent hydrates commit-pinned repository snapshot'
+    lcsp.pythonWorkers.repositoryAnalysisWorker -> lcsp.api.internalScanCallbackController '12. Repository Analysis Agent posts structured evidence to /internal/scan-jobs/:id/callback'
     lcsp.api.internalScanCallbackController -> lcsp.api.prismaDataMapper '13. Internal controller persists TechnicalEvidenceReport to PostgreSQL'
   }
 }

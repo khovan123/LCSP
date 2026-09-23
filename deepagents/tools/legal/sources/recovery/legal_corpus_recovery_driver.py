@@ -26,7 +26,7 @@ from tools.common.capabilities.platform.file_lock import (
     ensure_lock_file,
     release_file_lock,
 )
-from tools.legal.corpus.artifact_store import write_recovery_artifact
+from tools.legal.sources.recovery.artifact_store import write_recovery_artifact
 from tools.legal.corpus.partial_update.partial_update_context_builder import (
     build_partial_update_context,
 )

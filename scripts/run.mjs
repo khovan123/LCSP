@@ -3,9 +3,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  rmSync,
   readlinkSync,
-  statSync,
 } from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -27,36 +25,6 @@ const workerMda =
   process.platform === "win32"
     ? path.join(workerRoot, ".venv", "Scripts", "mda.exe")
     : path.join(workerRoot, ".venv", "bin", "mda");
-const tsJsAnalyzerRoot = path.join(
-  workerRoot,
-  "tools",
-  "common",
-  "capabilities",
-  "evidence",
-  "scanner",
-  "ts_js_bridge",
-  "ts-js-analyzer",
-);
-const tsJsAnalyzerCli = path.join(
-  tsJsAnalyzerRoot,
-  "dist",
-  "tools",
-  "ts-js-analyzer",
-  "cli.js",
-);
-const tsJsAnalyzerNodeModules = path.join(tsJsAnalyzerRoot, "node_modules");
-const tsJsAnalyzerPackageJson = path.join(tsJsAnalyzerRoot, "package.json");
-const tsJsAnalyzerTsMorphPackage = path.join(
-  tsJsAnalyzerNodeModules,
-  "ts-morph",
-  "package.json",
-);
-const tsJsAnalyzerNpmCache = path.join(tsJsAnalyzerNodeModules, ".npm-cache");
-const openWikiRuntimeScript = path.join(
-  repoRoot,
-  "scripts",
-  "openwiki_runtime.py",
-);
 const rootEnv = loadDotEnv(path.join(repoRoot, ".env"));
 const defaultOrchestrationDebug =
   process.env.ORCHESTRATION_DEBUG ?? rootEnv.ORCHESTRATION_DEBUG ?? "false";
@@ -75,15 +43,7 @@ const defaultPhoenixProject =
 const defaultDockerWorkerImage =
   process.env.LCSP_WORKER_DOCKER_IMAGE ??
   rootEnv.LCSP_WORKER_DOCKER_IMAGE ??
-  "deepagents:scanner-tools";
-const defaultOpenWikiRuntimeCommand =
-  process.env.OPENWIKI_RUNTIME_COMMAND ??
-  rootEnv.OPENWIKI_RUNTIME_COMMAND ??
-  `${shellQuote(workerPython)} ${shellQuote(openWikiRuntimeScript)}`;
-const defaultOpenWikiRuntimeTimeoutSeconds =
-  process.env.OPENWIKI_RUNTIME_TIMEOUT_SECONDS ??
-  rootEnv.OPENWIKI_RUNTIME_TIMEOUT_SECONDS ??
-  "180";
+  "deepagents:managed-agent";
 const managedAgentPythonPath = ".";
 const dockerManagedAgentPythonPath = "/app/deepagents";
 const managedAgentEventsModule =
@@ -241,8 +201,6 @@ const targets = {
       PHOENIX_TRACING: defaultPhoenixTracing,
       PHOENIX_COLLECTOR_ENDPOINT: defaultPhoenixCollectorEndpoint,
       PHOENIX_PROJECT: defaultPhoenixProject,
-      OPENWIKI_RUNTIME_COMMAND: defaultOpenWikiRuntimeCommand,
-      OPENWIKI_RUNTIME_TIMEOUT_SECONDS: defaultOpenWikiRuntimeTimeoutSeconds,
     },
     scrubVirtualEnv: true,
     description: "Start LCSP Managed Deep Agent in local dev mode",
@@ -262,8 +220,6 @@ const targets = {
       PHOENIX_TRACING: defaultPhoenixTracing,
       PHOENIX_COLLECTOR_ENDPOINT: defaultPhoenixCollectorEndpoint,
       PHOENIX_PROJECT: defaultPhoenixProject,
-      OPENWIKI_RUNTIME_COMMAND: defaultOpenWikiRuntimeCommand,
-      OPENWIKI_RUNTIME_TIMEOUT_SECONDS: defaultOpenWikiRuntimeTimeoutSeconds,
     },
     scrubVirtualEnv: true,
     description: "Start LCSP Managed Deep Agent RabbitMQ event bridge",
@@ -313,14 +269,6 @@ async function main() {
     process.exit(0);
   }
 
-  if (
-    selection === "dev" ||
-    selection === "managed_agent" ||
-    selection === "managed_agent_events"
-  ) {
-    prepareTsJsAnalyzer();
-  }
-
   if (selection in groups) {
     await runGroup(selection);
     return;
@@ -334,89 +282,6 @@ async function main() {
   console.error(`[run] Unknown target: ${selection}`);
   printHelp();
   process.exit(1);
-}
-
-function prepareTsJsAnalyzer() {
-  const dependenciesReady = isTsJsAnalyzerDependenciesReady();
-  const outputFresh = isTsJsAnalyzerOutputFresh();
-  if (dependenciesReady && outputFresh) {
-    return;
-  }
-
-  console.log("[run] Building TypeScript/JavaScript analyzer...");
-  if (!dependenciesReady) {
-    rmSync(tsJsAnalyzerNodeModules, { recursive: true, force: true });
-    runTsJsAnalyzerNpm([
-      "install",
-      "--include=dev",
-      "--package-lock=false",
-      "--workspaces=false",
-      "--no-audit",
-      "--no-fund",
-    ]);
-  }
-  if (!outputFresh) {
-    runTsJsAnalyzerNpm(["run", "build"]);
-  }
-
-  if (!existsSync(tsJsAnalyzerTsMorphPackage)) {
-    console.error(
-      `[run] ts-morph was not installed at ${tsJsAnalyzerTsMorphPackage}`,
-    );
-    process.exit(1);
-  }
-  if (!existsSync(tsJsAnalyzerCli)) {
-    console.error(`[run] Analyzer build did not create ${tsJsAnalyzerCli}`);
-    process.exit(1);
-  }
-}
-
-function isTsJsAnalyzerDependenciesReady() {
-  return (
-    existsSync(tsJsAnalyzerTsMorphPackage) &&
-    existsSync(tsJsAnalyzerPackageJson) &&
-    statSync(tsJsAnalyzerPackageJson).mtimeMs <=
-      statSync(tsJsAnalyzerTsMorphPackage).mtimeMs
-  );
-}
-
-function isTsJsAnalyzerOutputFresh() {
-  const inputs = ["analyzer.ts", "cli.ts", "package.json", "tsconfig.json"].map(
-    (file) => path.join(tsJsAnalyzerRoot, file),
-  );
-  const outputMtime = existsSync(tsJsAnalyzerCli)
-    ? statSync(tsJsAnalyzerCli).mtimeMs
-    : 0;
-  return (
-    outputMtime > 0 &&
-    inputs.every(
-      (input) => existsSync(input) && statSync(input).mtimeMs <= outputMtime,
-    )
-  );
-}
-
-function runTsJsAnalyzerNpm(args) {
-  const npm = isWindows ? "npm.cmd" : "npm";
-  const result = spawnSync(npm, [...args, "--cache", tsJsAnalyzerNpmCache], {
-    cwd: tsJsAnalyzerRoot,
-    env: buildTsJsAnalyzerNpmEnv(),
-    stdio: "inherit",
-    shell: isWindows,
-  });
-  if (result.error) {
-    console.error(`[run] failed to execute npm: ${result.error.message}`);
-    process.exit(1);
-  }
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
-  }
-}
-
-function buildTsJsAnalyzerNpmEnv() {
-  const env = { ...process.env, NPM_CONFIG_CACHE: tsJsAnalyzerNpmCache };
-  delete env.npm_config_manage_package_manager_versions;
-  delete env.NPM_CONFIG_MANAGE_PACKAGE_MANAGER_VERSIONS;
-  return env;
 }
 
 function prepareManagedAgentRuntime() {
@@ -870,8 +735,6 @@ function dockerWorkerEnv() {
     "PHOENIX_TRACING",
     "PHOENIX_COLLECTOR_ENDPOINT",
     "PHOENIX_PROJECT",
-    "OPENWIKI_RUNTIME_COMMAND",
-    "OPENWIKI_RUNTIME_TIMEOUT_SECONDS",
     "LEGAL_CHROMA_PATH",
     "LEGAL_SOURCE_STORAGE_ROOT",
   ];
@@ -910,7 +773,6 @@ function dockerWorkerEnv() {
       process.env.LCSP_LANGSMITH_TRACING ??
       rootEnv.LCSP_LANGSMITH_TRACING ??
       "false",
-    KNIP_BINARY: "/usr/local/bin/knip",
     LCSP_GRAPH_STORAGE_PATH: "/app/deepagents/tmp",
   };
 }

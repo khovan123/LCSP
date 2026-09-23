@@ -102,7 +102,7 @@ def test_delivery_handler_invokes_boundary_and_acks(monkeypatch):
     invoked = []
     monkeypatch.setattr(
         rabbitmq_consumer,
-        "invoke_boundary",
+        "dispatch_managed_agent_event",
         lambda boundary_name, message, correlation_id: invoked.append(
             (boundary_name, message, correlation_id)
         ),
@@ -135,7 +135,7 @@ def test_delivery_handler_uses_payload_correlation_id(monkeypatch):
     invoked = []
     monkeypatch.setattr(
         rabbitmq_consumer,
-        "invoke_boundary",
+        "dispatch_managed_agent_event",
         lambda boundary_name, message, correlation_id: invoked.append(
             (boundary_name, message, correlation_id)
         ),
@@ -165,7 +165,7 @@ def test_delivery_handler_nacks_on_dispatch_failure(monkeypatch):
     def fail(_boundary_name, _message, _correlation_id):
         raise RuntimeError("dispatch failed")
 
-    monkeypatch.setattr(rabbitmq_consumer, "invoke_boundary", fail)
+    monkeypatch.setattr(rabbitmq_consumer, "dispatch_managed_agent_event", fail)
     channel = FakeChannel()
     method = SimpleNamespace(delivery_tag="delivery-1", routing_key="event.test")
     properties = SimpleNamespace(headers={})
@@ -188,7 +188,7 @@ def test_delivery_handler_never_requeues_terminal_boundary_failure(monkeypatch):
     def fail(_boundary_name, _message, _correlation_id):
         raise rabbitmq_consumer.NonRetryableAgentBoundaryError("terminal")
 
-    monkeypatch.setattr(rabbitmq_consumer, "invoke_boundary", fail)
+    monkeypatch.setattr(rabbitmq_consumer, "dispatch_managed_agent_event", fail)
     channel = FakeChannel()
     method = SimpleNamespace(delivery_tag="delivery-1", routing_key="event.test")
     properties = SimpleNamespace(headers={})

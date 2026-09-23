@@ -14,11 +14,12 @@ disable_langsmith_tracing_by_default()
 from langchain.agents.middleware import TodoListMiddleware
 from managed_deepagents import define_deep_agent
 
-from harness import LCSP_FILESYSTEM_PERMISSIONS, LCSP_MODEL_SPEC, configure_lcsp_harness
+from harness import LCSP_MODEL_SPEC, configure_lcsp_harness
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.billing_metering import BillingAgentRoleMiddleware
 from middleware.runtime_context import inject_lcsp_runtime_context
 from middleware.specialist_handoff_validation import validate_lcsp_specialist_task_handoff
+from middleware.system_event_dispatch import dispatch_managed_system_event
 from middleware.triage_singleton import guard_triage_singleton_task
 from model_policy import effective_model_configs
 from orchestration.context import LCSPRunContext
@@ -70,6 +71,7 @@ agent = define_deep_agent(
     model=LCSP_MODEL_SPEC,
     tools=ROOT_TOOLS,
     middleware=[
+        dispatch_managed_system_event,
         guard_triage_singleton_task,
         validate_lcsp_specialist_task_handoff,
         inject_lcsp_runtime_context,
@@ -79,7 +81,6 @@ agent = define_deep_agent(
     ],
     context_schema=LCSPRunContext,
     subagents=FLOW_SUBAGENTS,
-    permissions=LCSP_FILESYSTEM_PERMISSIONS,
     interrupt_on={
         "request_targeted_reanalysis": True,
     },

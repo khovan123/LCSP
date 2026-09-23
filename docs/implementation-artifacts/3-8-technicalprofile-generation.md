@@ -118,7 +118,7 @@ TechnicalProfile Generation
 ### File Structure Notes
 
 - `apps/api` cho repository selection, scan request/status API và outbox command creation.
-- `deepagents` cho queue consumer, scanner runtime, evidence gates, TechnicalProfile worker.
+- `deepagents` cho queue consumer, repository-analysis runtime, evidence gates, TechnicalProfile worker.
 - `packages/*` cho command/event schemas, status projection contracts, evidence/profile DTOs.
 
 ### Implementation Guidance for the Dev Agent
@@ -146,17 +146,12 @@ TechnicalProfile Generation
 - [Source: docs/specs/event-catalog.md]
 - [Source: docs/architecture/architecture.md]
 - [Source: docs/implementation/dev-compendium.md]
-- [Source: docs/specs/scanner-spec.md]
-- [Source: docs/implementation/scanner-implementation.md]
-- [Source: docs/implementation/scanner-worker-implementation.md]
+- [Source: docs/architecture/repository-deep-agent-analysis.md]
 - [Source: docs/implementation/python-worker-platform-implementation.md]
 - [Source: docs/implementation/queue-implementation.md]
 - [Source: docs/implementation/decisions/trusted-scan-trigger-retry-dlq-replay-decision.md]
-- [Source: docs/implementation/decisions/scanner-severity-tool-provenance-decision.md]
 - [Source: docs/implementation/tasks/modules/scan/01-scan-job-status-endpoint.md]
 - [Source: docs/implementation/tasks/modules/python-workers/platform/01-worker-platform-bootstrap.md]
-- [Source: docs/implementation/tasks/modules/python-workers/scanner/01-scanner-workspace-setup.md]
-- [Source: docs/implementation/tasks/modules/python-workers/scanner/04-evidence-report-assembly.md]
 - [Source: docs/implementation/tasks/modules/python-workers/intelligence/01-technical-profile-worker.md]
 - [Source: docs/implementation/handoffs/HANDOFF-scanner-evidence-to-technical-profile.md]
 - [Source: Handoff contract embedded in `docs/planning-artifacts/epics.md` for this story]

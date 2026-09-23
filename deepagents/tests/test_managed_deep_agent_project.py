@@ -79,8 +79,6 @@ def test_managed_project_separates_authored_tools_from_runtime() -> None:
     assert tool_packages == {
         "common",
         "legal",
-        "planner",
-        "investigator",
         "orchestration",
         "triage",
     }
@@ -94,11 +92,12 @@ def test_managed_project_separates_authored_tools_from_runtime() -> None:
     assert (PROJECT_ROOT / "evals" / "scaffold").is_dir()
     assert (PROJECT_ROOT / "instructions.md").is_file()
     assert (PROJECT_ROOT / "identity.py").is_file()
-    # MDA deployment-shared long-term memory is intentionally disabled for LCSP.
-    assert not (PROJECT_ROOT / "memory.py").exists()
+    # MDA memory is enabled only for deployment-wide tenant-neutral knowledge.
+    assert (PROJECT_ROOT / "memory.py").is_file()
     assert not (PROJECT_ROOT / "orchestration" / "memory.py").exists()
     assert (PROJECT_ROOT / "middleware").is_dir()
     assert (PROJECT_ROOT / "sandbox" / "__init__.py").is_file()
+    assert (PROJECT_ROOT / "tools" / "mcp.py").is_file()
     skill_packages = {
         path.name
         for path in (PROJECT_ROOT / "skills").iterdir()
@@ -114,7 +113,7 @@ def test_managed_project_separates_authored_tools_from_runtime() -> None:
     assert {
         path.name
         for path in (PROJECT_ROOT / "tools").glob("*.py")
-    } == {"__init__.py"}
+    } == {"__init__.py", "mcp.py"}
     assert not (PROJECT_ROOT / "tools" / "graph").exists()
     assert not (PROJECT_ROOT / "tools" / "classification").exists()
 

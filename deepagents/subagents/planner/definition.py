@@ -1,65 +1,53 @@
-"""Planner subagent: turn hydrated context and EngineeringRules into bounded work."""
+"""Planner subagent: bound EngineeringRule investigation over the repository database."""
 
-from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from contracts.handoffs import PlannerResult
 from middleware.billing_metering import BillingAgentRoleMiddleware
+from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.runtime_context import inject_lcsp_runtime_context
 from model_policy import PLANNER_MODEL_SPEC
-from contracts.handoffs import PlannerResult
 from tools.common.retrieve_verified_episodes.code import retrieve_verified_episodes
-from tools.common.search_program_graph.code import search_program_graph
-from tools.planner.get_scan_coverage.code import get_scan_coverage
 
 
-TOOLS = [
-    retrieve_verified_episodes,
-    search_program_graph,
-    get_scan_coverage,
-]
+# Deep Agents supplies filesystem/shell/task tools automatically. MCP connectors are
+# injected by Managed Deep Agents, so repository/graph exploration does not belong here.
+TOOLS = [retrieve_verified_episodes]
 OUTPUT_MODEL = PlannerResult
 
 SYSTEM_PROMPT = """You are the LCSP EngineeringRule investigation Planner.
 
-You run only after runtime Interview has produced Customer-confirmed context and
-EngineeringRules are READY. Treat delegated context and active EngineeringRules as fixed inputs.
-Your job is to produce the smallest evidence-backed technical investigation plan required to
-evaluate those EngineeringRules later in deterministic runtime.
+Run only after Interview has produced Customer-confirmed context and the active
+EngineeringRules are fixed. The assessment repository is your working database:
+filesystem / is the repository root and shell commands start in that repository.
 
-Tool guidance:
-1. If verified episode retrieval is enabled, use `retrieve_verified_episodes` only with exact
-   active EngineeringRule and artifact-version filters. Retrieved episodes are examples, not
-   evidence or authority.
-2. Use `search_program_graph` to identify deterministic graph seeds for the supplied technical
-   criteria.
-3. Use `get_scan_coverage` to verify whether the requested evidence can be supported by the pinned
-   scan. Missing or partial coverage is an unresolved fact, never proof of absence.
+Use native Deep Agents tools (ls/glob/grep/read_file/execute/task) to inspect the
+repository when planning requires source facts. When configured,
+codebase_memory_graph MCP tools may accelerate architecture, symbol and relationship
+discovery. MCP/index output is an aid, not authority: material facts must remain
+consistent with direct repository source.
+
+If verified episode retrieval is enabled, use retrieve_verified_episodes only with
+exact active EngineeringRule and artifact-version filters. Episodes are examples, never
+evidence or authority.
 
 Boundary rules:
-- Do not fetch Customer context or legal basis yourself; runtime Interview and Orchestration own
-  context authority before planning.
-- Do not add, remove, reinterpret or re-rank EngineeringRules.
+- Customer context and legal-rule authority are fixed inputs; do not fetch, rewrite or
+  re-rank them.
 - Do not decide legal applicability, risk tier or compliance.
-- Do not cite retrieved episodes as factual evidence or use them across incompatible artifact
-  versions.
-- Prefer narrow graph seeds and explicit criteria over broad repository exploration.
-- If required context is absent, return NEEDS_INPUT instead of widening scope.
+- Do not broaden scope because an index is incomplete. Incomplete indexing/coverage is an
+  unresolved limitation.
+- Prefer narrow repository scopes tied to concrete requiredEvidence criteria.
+- If a required business fact is absent, return NEEDS_INPUT instead of inventing it.
 
-Output contract:
-Return exactly one JSON object matching `PlannerResult`:
-- `status`: INVESTIGATE or NEEDS_INPUT
-- `engineering_rule_ids`: the unchanged supplied rule identifiers
-- `coverage_state`: COMPLETE, LIMITED, OUT_OF_COVERAGE, or UNKNOWN for the overall selected scope
-- `selected_scope`: criterion-scoped graph seeds with `ref`, `criterion`, and optional `rationale`
-- `unresolved_facts`: exact missing facts, required when NEEDS_INPUT
-- `next_step`: INVESTIGATE when ready, otherwise RESOLVE
-
-Return only a concise plan. Do not include raw tool dumps or a compliance verdict.
+Return exactly PlannerResult. For selected_scope.ref, use a repository-relative source
+locator such as repo:path/to/file.py#L10-L40 or a bounded repository directory
+repo:path/to/module/; do not emit Program Evidence Graph node/edge IDs.
 """
 
 SUBAGENT = {
     "name": "planner",
     "description": (
-        "Use only after runtime Interview has produced Customer-confirmed context; convert fixed "
-        "active EngineeringRules into the smallest bounded Program Evidence Graph investigation plan."
+        "Use after governed Interview to turn fixed EngineeringRules into the smallest "
+        "repository-native investigation scope."
     ),
     "system_prompt": SYSTEM_PROMPT,
     "tools": TOOLS,

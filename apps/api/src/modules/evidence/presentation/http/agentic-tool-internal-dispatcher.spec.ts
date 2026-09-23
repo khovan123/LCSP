@@ -34,7 +34,7 @@ describe("agentic internal command dispatcher", () => {
       toolName: AGENTIC_TOOL_NAMES.requestTargetedReanalysis,
       artifactVersions: { technicalEvidenceReportId: "ter-1" },
       input: {
-        analyzerId: "RUN_TS_JS_SEMANTIC_ANALYSIS",
+        analyzerId: "DEEP_AGENT_REPOSITORY_ANALYSIS",
         scope: { pathPrefixes: ["apps/api/"] },
         reasonRequirementId: "requirement:12345678",
         idempotencyKey: "request-12345678",

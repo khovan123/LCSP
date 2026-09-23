@@ -6,20 +6,9 @@ from middleware.billing_metering import BillingAgentRoleMiddleware
 from middleware.interview_runtime_context import inject_interview_runtime_context
 from model_policy import INTERVIEW_MODEL_SPEC
 from tools.common.capabilities.managed.skill_loader import load_project_skill_package
-from tools.common.search_program_graph.code import search_program_graph
-from tools.investigator.inspect_data_path.code import inspect_data_path
-from tools.investigator.inspect_decision_path.code import inspect_decision_path
-from tools.investigator.inspect_human_review_path.code import inspect_human_review_path
-from tools.planner.get_scan_coverage.code import get_scan_coverage
 
 
-TOOLS = [
-    search_program_graph,
-    get_scan_coverage,
-    inspect_decision_path,
-    inspect_data_path,
-    inspect_human_review_path,
-]
+TOOLS = []
 OUTPUT_MODEL = InterviewResult
 INTERVIEW_SKILL_REFERENCES = (
     "references/agent-runtime-contract.md",
@@ -50,20 +39,22 @@ Use workingStrategy only as non-authoritative hints for terminology, phrasing an
 covered topics. Never change guidanceVersion, promote strategy into canonical guidance, or treat
 strategy hints as confirmed business facts or technical evidence.
 
-Tool guidance:
-1. Use `get_scan_coverage` to read technical coverage state (READY, PARTIAL, UNAVAILABLE) and
-   unresolved frontiers before question selection.
-2. Use `search_program_graph`, `inspect_decision_path`, `inspect_data_path`, and
-   `inspect_human_review_path` to verify observed graph paths for business clarification.
-3. Access only tenant/assessment-pinned evidence from the current snapshot. Never fabricate or
-   mutate evidence refs.
+Repository/context guidance:
+1. The assessment repository is available through native Deep Agents filesystem and shell tools.
+   Inspect source only when a technical fact is necessary to decide whether a Customer-owned
+   clarification is material.
+2. When configured, codebase_memory_graph MCP tools may help understand architecture and
+   relationships, but direct repository source remains authoritative.
+3. Index and repository-analysis coverage gaps are limitations, never proof that a business
+   behavior is absent. Never fabricate governed evidence refs; use an empty evidenceRefs list
+   when no authorized runtime-provided ref supports a Customer-facing question.
 
 Boundary rules:
 - PARTIAL / UNAVAILABLE technical coverage is a limitation, NEVER proof that a business behavior
   does not exist. Missing evidence produces uncertainty, not a negative conclusion.
 - For unresolved frontiers: only ask the Customer when a missing real-world distinction is both
   CUSTOMER-OWNED (business/operational meaning, human review policy) and MATERIAL. Never ask
-  about technical, architectural, or internal scanner coverage frontiers.
+  about technical, architectural, indexing, or repository-analysis frontiers.
 - Customer-facing "Why are we asking?" explanations must be customer-safe, bounded, and high-level.
   Never dump raw source code, secrets, credentials, internal security tokens, or EngineeringRule IDs.
 - Do not fetch legal basis, EngineeringRule details, checkpoints, or opaque continuation tokens.

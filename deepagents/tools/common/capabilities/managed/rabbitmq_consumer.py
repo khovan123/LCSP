@@ -24,8 +24,10 @@ from tools.common.capabilities.platform.logging import suppress_langgraph_heartb
 from tools.common.capabilities.managed.boundary import NonRetryableAgentBoundaryError
 from tools.common.capabilities.managed.invocation import (
     invocation_boundary_manifest,
-    invoke_boundary,
     load_boundary,
+)
+from tools.common.capabilities.managed.agent_server_client import (
+    dispatch_managed_agent_event,
 )
 from middleware.billing_recovery import start_background_worker
 from tools.common.capabilities.platform.api_client import WorkerApiClient
@@ -356,7 +358,7 @@ def _dispatch_delivery(boundary_name: str, properties: Any, body: bytes) -> None
         getattr(properties, "headers", None),
         boundary_name,
     )
-    invoke_boundary(boundary_name, message, correlation_id)
+    dispatch_managed_agent_event(boundary_name, message, correlation_id)
 
 
 def _with_billing_attempt(message: dict[str, Any], attempt: int) -> dict[str, Any]:

@@ -54,15 +54,15 @@ class AgentInvocationBoundary:
 AGENT_INVOCATION_BOUNDARIES: tuple[AgentInvocationBoundary, ...] = (
     AgentInvocationBoundary(
         "scan_requested",
-        "tools.common.capabilities.evidence.scanner.scanning.scan_boundary:ScanBoundary",
-        "scan.triggered",
+        "tools.common.capabilities.evidence.repository_analysis.boundary:RepositoryAnalysisBoundary",
+        "repository-analysis.triggered",
         "command.scan.requested.v1",
     ),
     AgentInvocationBoundary(
         "targeted_reanalysis_requested",
-        "tools.common.capabilities.evidence.scanner.scanning.targeted_reanalysis_boundary:TargetedReanalysisBoundary",
-        "scan.targeted-reanalysis-requested",
-        "command.targeted-reanalysis.requested.v1",
+        "tools.common.capabilities.evidence.repository_analysis.targeted_boundary:TargetedRepositoryAnalysisBoundary",
+        "repository-analysis.targeted",
+        "command.scan.targeted-reanalysis.v1",
     ),
     AgentInvocationBoundary(
         "engineering_assessment_requested",

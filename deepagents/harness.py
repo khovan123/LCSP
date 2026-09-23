@@ -7,8 +7,6 @@ defined separately under ``tools/<node>/<tool-name>/code.py``.
 from __future__ import annotations
 
 from deepagents import (
-    FilesystemPermission,
-    GeneralPurposeSubagentProfile,
     HarnessProfile,
     ProviderProfile,
     register_harness_profile,
@@ -68,41 +66,13 @@ def model_provider_profile_for(model_spec: str) -> ProviderProfile:
     return ProviderProfile(init_kwargs=provider_init_kwargs(provider))
 
 
-# Deep Agents injects filesystem tools in addition to authored tools. LCSP keeps
-# only read_file visible because Managed Skills use it for progressive disclosure.
-# All other filesystem / execution tools are outside the assessment flow.
-HIDDEN_BUILTIN_TOOLS = frozenset(
-    {
-        "ls",
-        "write_file",
-        "edit_file",
-        "delete",
-        "glob",
-        "grep",
-        "execute",
-    }
-)
-
-LCSP_HARNESS_PROFILE = HarnessProfile(
-    excluded_tools=HIDDEN_BUILTIN_TOOLS,
-    general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
-)
-
-# read_file remains visible only for Managed Skills. No repository/code access is
-# granted through the Deep Agents filesystem; repository evidence must come from
-# LCSP governed application tools.
-LCSP_FILESYSTEM_PERMISSIONS = [
-    FilesystemPermission(
-        operations=["read"],
-        paths=["/skills/**"],
-        mode="allow",
-    ),
-    FilesystemPermission(
-        operations=["read", "write"],
-        paths=["/**"],
-        mode="deny",
-    ),
-]
+# LCSP intentionally uses the complete Deep Agents harness. Repository analysis runs
+# inside an isolated backend per assessment, so filesystem, shell, task/subagent,
+# summarization, skills and human-in-the-loop capabilities remain available instead
+# of being reimplemented as LCSP-authored repository analyzers.
+HIDDEN_BUILTIN_TOOLS = frozenset()
+LCSP_HARNESS_PROFILE = HarnessProfile()
+LCSP_FILESYSTEM_PERMISSIONS: list = []
 
 
 def configure_lcsp_harness() -> None:

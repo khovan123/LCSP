@@ -39,12 +39,7 @@ import { problemException } from "../../../../../platform/http/filters/error.fac
 import type { RequestTargetedReanalysisResponse } from "../../contracts/scan/targeted-reanalysis.contract.js";
 import { RequestTargetedReanalysisCommand } from "./request-targeted-reanalysis.command.js";
 
-const ALLOWED_ANALYZERS = new Set([
-  "RUN_SEMGREP_RULES",
-  "RUN_PYTHON_SEMANTIC_ANALYSIS",
-  "RUN_TS_JS_SEMANTIC_ANALYSIS",
-  "RUN_STRUCTURAL_AUGMENTATION",
-]);
+const ALLOWED_ANALYZERS = new Set(["DEEP_AGENT_REPOSITORY_ANALYSIS"]);
 
 /**
  * Queues bounded targeted reanalysis requests against accepted evidence while enforcing idempotency, organization capacity, and deterministic scope resolution.
