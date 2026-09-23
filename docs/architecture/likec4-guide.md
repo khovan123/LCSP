@@ -7,8 +7,6 @@ Thư mục `likec4/` chứa các định nghĩa **LikeC4** Architecture-as-Code 
 - `likec4/specification.c4`: Định nghĩa các phần tử (system, actor, webApp, frontendPage, frontendComponent, nextRoute, apiService, workerService, database, vectorStore, queue, objectStore, externalSystem, entity, controller, handler, service, repository, queueChannel), kiểu dáng và tag.
 - `likec4/model.c4`: Định nghĩa mô hình hệ thống LCSP, actor, container và mối quan hệ giao tiếp theo `docs/architecture/architecture.md`.
 - `likec4/erd.c4`: Định nghĩa mô hình **ERD Database Entities** chuẩn từ Prisma Schema (`apps/api/prisma/schema.prisma`) và quan hệ 1:1, 1:N giữa các thực thể dữ liệu.
-- `likec4/dev_detail.c4`: Định nghĩa **Developer Architecture & End-to-End Execution Trace** nối từ 1 Single Entry Point qua URL, Next BFF Proxy, NestJS Controllers, CQRS Handlers, Domain Services, Prisma Repositories, Transactional Outbox, RabbitMQ Queues, Python Workers và Storage.
-- `likec4/feature_flows.c4`: Định nghĩa **6 sơ đồ Luồng Tương tác Mã nguồn theo Feature Độc lập (Feature-by-Feature Execution Traces)** từ Trang Frontend Page ➔ UI Component ➔ Next.js BFF Route ➔ NestJS Controller ➔ CQRS Handler ➔ Service/Repo ➔ RabbitMQ ➔ Python Worker ➔ Storage.
 - `likec4/views.c4`: Định nghĩa các góc nhìn C4 tĩnh (`index`, `containers`, `pythonWorkersView`, `evidenceScanFlow`, `legalRetrievalFlow`).
 - `likec4/usecases.c4`: Định nghĩa **3 sơ đồ Master Use Case theo Actor**, **17 sơ đồ Use Case độc lập**, và **1 sơ đồ kết nối End-to-End**.
 

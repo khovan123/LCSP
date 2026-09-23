@@ -1,3 +1,4 @@
+import { asRecord as record } from "../../../../../common/utils/index.js";
 import { Injectable } from "@nestjs/common";
 import {
   ASSESSMENT_ARTIFACT_STATUSES,
@@ -604,12 +605,6 @@ function publicScopeSummary(scope: {
     .filter(([, count]) => count > 0)
     .map(([label, count]) => `${count} ${label}`);
   return parts.length > 0 ? parts.join(", ") : "Assessment scope";
-}
-
-function record(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
 }
 
 function stringValue(value: unknown): string | null {

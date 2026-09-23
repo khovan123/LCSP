@@ -199,13 +199,13 @@ function normalizeRepoFolderToken(token) {
 function preferredRepoFoldersForDomain(domain) {
   const folderMap = {
     auth: [
-      "apps/api/src/modules/auth-workspace",
+      "apps/api/src/modules/auth",
       "apps/web/src",
       "packages/contracts/src/auth",
       "packages/i18n/src",
     ],
     governance: [
-      "apps/api/src/modules/auth-workspace",
+      "apps/api/src/modules/auth",
       "apps/web/src",
       "packages/contracts/src/shared",
       "packages/i18n/src",

@@ -75,10 +75,12 @@ LCSP authoritative data remains in the API/database:
 - deterministic evaluation outcomes;
 - report/audit artifacts.
 
-The project intentionally does **not** define root `memory.py`. Managed Deep
-Agents deployment-shared long-term memory is therefore not used for tenant or
-assessment data. This absence is the MDA memory declaration and the LCSP
-API/database remains the authority boundary.
+The project defines root `memory.py` with Managed Deep Agents agent-scoped
+durable memory for compact, tenant-neutral operational knowledge only. It must
+never become storage for assessment/customer state, repository source, legal
+conclusions, authorization decisions, or other tenant-scoped authority. The
+LCSP API/database and commit-pinned repository workspace remain the authority
+boundaries for those values.
 
 ### Todos
 

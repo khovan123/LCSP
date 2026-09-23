@@ -1,12 +1,11 @@
 import { describe, expect, it } from "@jest/globals";
-import { cleanString, isNumber, isObject, isRecord } from "./type-guards.js";
+import { asRecord, cleanString, isNumber, isRecord } from "./type-guards.js";
 
 describe("type-guards", () => {
-  describe("isRecord & isObject", () => {
+  describe("isRecord", () => {
     it("returns true for plain objects and records", () => {
       expect(isRecord({})).toBe(true);
       expect(isRecord({ key: "value" })).toBe(true);
-      expect(isObject({ key: 123 })).toBe(true);
     });
 
     it("returns false for null, undefined, arrays, and primitives", () => {
@@ -16,8 +15,15 @@ describe("type-guards", () => {
       expect(isRecord("string")).toBe(false);
       expect(isRecord(123)).toBe(false);
       expect(isRecord(true)).toBe(false);
-      expect(isObject(null)).toBe(false);
-      expect(isObject([1, 2])).toBe(false);
+    });
+  });
+
+  describe("asRecord", () => {
+    it("returns records and null for non-record values", () => {
+      expect(asRecord({ key: "value" })).toEqual({ key: "value" });
+      expect(asRecord(null)).toBeNull();
+      expect(asRecord([])).toBeNull();
+      expect(asRecord("value")).toBeNull();
     });
   });
 

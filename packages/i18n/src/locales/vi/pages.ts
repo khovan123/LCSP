@@ -2164,8 +2164,6 @@ export const viPages = {
     referencesLabel: "Tham chiếu pháp lý áp dụng",
     generateFinalReport: "Tạo Báo cáo Cuối cùng",
     generateGapAnalysis: "Tạo Phân tích Khoảng trống",
-    rerunClassification: "Chạy lại phân loại",
-    rerunSubmitting: "Đang đưa vào hàng đợi",
     errorTitle: "Không thể tải trạng thái phân loại",
     errorDetail: "Vui lòng thử lại sau ít phút.",
     observability: {
@@ -2276,10 +2274,6 @@ export const viPages = {
         "Vẫn cần bằng chứng kỹ thuật trước khi phân loại có thể tiếp tục.",
       lockedNextSteps:
         "Cung cấp thêm bằng chứng kỹ thuật bị thiếu để quá trình phân loại tiếp tục và bước tiếp theo có thể được chuẩn bị.",
-      waitingLegalReadinessTitle: "Đang chuẩn bị nền pháp lý",
-      waitingLegalReadinessBadge: "Đang chuẩn bị",
-      waitingLegalReadinessDescription:
-        "Hồ sơ bằng chứng đã được phê duyệt. Orchestration sẽ tự tiếp tục sau khi corpus pháp lý chính thống, index truy xuất và rule catalog đã duyệt sẵn sàng.",
       processingTitle: "Đang phân loại",
       processingBadge: "Đang xử lý",
       processingDescription: "Quá trình phân loại vẫn đang được chuẩn bị.",
@@ -2301,12 +2295,6 @@ export const viPages = {
         "Phân loại không thể hoàn tất vì thiếu căn cứ trích dẫn.",
       blockedSummary:
         "Cần có căn cứ trích dẫn hợp lệ trước khi bước tiếp theo có thể tiến hành.",
-      legalMatchBlockedTitle: "Không tìm thấy quy tắc pháp lý áp dụng",
-      legalMatchBlockedBadge: "Không khớp",
-      legalMatchBlockedDescription:
-        "Bước đối chiếu pháp lý đã hoàn tất nhưng không tìm thấy quy tắc nào phù hợp với hồ sơ bằng chứng đã xác minh. Phân loại không thể tiến hành khi thiếu căn cứ pháp lý áp dụng.",
-      legalMatchBlockedSummary:
-        "Liên hệ quản trị viên tuân thủ để rà soát rule catalog hoặc hồ sơ bằng chứng trước khi thử lại.",
     },
     finalReportRequestedTitle: "Yêu cầu báo cáo cuối cùng đã được gửi",
     finalReportRequestedDetail:

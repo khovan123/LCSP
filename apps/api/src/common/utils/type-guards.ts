@@ -12,13 +12,9 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Alias for isRecord - checks if an unknown value is a non-null object (and not an array).
- *
- * @param value - Unknown value to inspect.
- * @returns True when the value is a Record<string, unknown>.
- */
-export const isObject = isRecord;
+export function asRecord(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null;
+}
 
 /**
  * Checks if an unknown value is a valid finite number (excluding NaN and Infinity).

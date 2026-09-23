@@ -2164,8 +2164,6 @@ export const enPages = {
     referencesLabel: "Applicable legal references",
     generateFinalReport: "Generate Final Report",
     generateGapAnalysis: "Generate Gap Analysis",
-    rerunClassification: "Retry classification",
-    rerunSubmitting: "Queueing classification",
     errorTitle: "Unable to load classification status",
     errorDetail: "Please try again in a moment.",
     observability: {
@@ -2275,10 +2273,6 @@ export const enPages = {
         "Technical evidence is still required before classification can proceed.",
       lockedNextSteps:
         "Add the missing technical evidence so the classification can continue and the next step can be prepared.",
-      waitingLegalReadinessTitle: "Preparing legal basis",
-      waitingLegalReadinessBadge: "Preparing legal data",
-      waitingLegalReadinessDescription:
-        "The evidence profile is approved. Orchestration will continue automatically after the official legal corpus, retrieval index, and approved rule catalog are ready.",
       processingTitle: "Classification is in progress",
       processingBadge: "Processing",
       processingDescription: "The classification is still being prepared.",
@@ -2298,12 +2292,6 @@ export const enPages = {
         "The classification could not be completed because the citation basis was missing.",
       blockedSummary:
         "A valid citation basis is required before the next step can proceed.",
-      legalMatchBlockedTitle: "No applicable legal rules found",
-      legalMatchBlockedBadge: "No match",
-      legalMatchBlockedDescription:
-        "The legal matching step completed but found no rules that apply to the verified evidence profile. Classification cannot proceed without an applicable legal basis.",
-      legalMatchBlockedSummary:
-        "Contact your compliance administrator to review the rule catalog or evidence profile before retrying.",
     },
     finalReportRequestedTitle: "Final report request submitted",
     finalReportRequestedDetail:

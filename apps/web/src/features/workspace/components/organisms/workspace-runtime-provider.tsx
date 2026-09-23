@@ -635,6 +635,6 @@ export function useWorkspaceRuntime() {
   return useContext(WorkspaceRuntimeContext);
 }
 
-export const __workspaceRuntimeTestUtils = {
+const __workspaceRuntimeTestUtils = {
   parseRuntimeEvent,
 };
