@@ -1,3 +1,4 @@
+import { asRecord as objectRecord } from "../../../../common/utils/index.js";
 import { randomUUID } from "node:crypto";
 import {
   ASSESSMENT_ERROR_CODES,
@@ -4059,12 +4060,6 @@ function parseAiDiscoverySnippetRef(
     evidence_hash: evidenceHash,
     snippet_policy: "PINNED_SNAPSHOT_BOUNDED_REDACTED_V1",
   };
-}
-
-function objectRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
 }
 
 function sameStringSet(left: string[], right: string[]): boolean {

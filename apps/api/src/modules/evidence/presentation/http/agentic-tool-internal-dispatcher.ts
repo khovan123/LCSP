@@ -1,3 +1,4 @@
+import { asRecord as record } from "../../../../common/utils/index.js";
 import {
   AGENTIC_TOOL_NAMES,
   EVIDENCE_ERROR_CODES,
@@ -141,12 +142,6 @@ function requiredString(value: unknown, correlationId: string): string {
     invalid(correlationId);
   }
   return value.trim();
-}
-
-function record(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
 }
 
 function stringArray(value: unknown): string[] {

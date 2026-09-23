@@ -1926,8 +1926,6 @@ export type PagesMessages = {
     referencesLabel: string;
     generateFinalReport: string;
     generateGapAnalysis: string;
-    rerunClassification: string;
-    rerunSubmitting: string;
     errorTitle: string;
     errorDetail: string;
     observability: {
@@ -2060,9 +2058,6 @@ export type PagesMessages = {
       lockedBadge: string;
       lockedDescription: string;
       lockedNextSteps: string;
-      waitingLegalReadinessTitle: string;
-      waitingLegalReadinessBadge: string;
-      waitingLegalReadinessDescription: string;
       processingTitle: string;
       processingBadge: string;
       processingDescription: string;
@@ -2078,10 +2073,6 @@ export type PagesMessages = {
       blockedBadge: string;
       blockedDescription: string;
       blockedSummary: string;
-      legalMatchBlockedTitle: string;
-      legalMatchBlockedBadge: string;
-      legalMatchBlockedDescription: string;
-      legalMatchBlockedSummary: string;
     };
   };
   structuredResults: {

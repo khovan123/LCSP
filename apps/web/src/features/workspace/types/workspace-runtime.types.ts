@@ -112,7 +112,7 @@ export type WorkspaceRuntimeAgentStreamHistoryState = {
   hasHydratedCompleteHistory: boolean;
 };
 
-export type WorkspaceRuntimeSnapshot = {
+type WorkspaceRuntimeSnapshot = {
   emittedAt: string | null;
   runs: WorkspaceRuntimeRun[];
   recentActivity: WorkspaceRuntimeActivityItem[];

@@ -194,9 +194,6 @@ export function useStartRepositoryAnalysisMutation(assessmentId: string) {
         queryClient.invalidateQueries({
           queryKey: apiQueryKeys.assessment.readiness(assessmentId),
         }),
-        queryClient.invalidateQueries({
-          queryKey: apiQueryKeys.auth.repositories(),
-        }),
       ]);
     },
   });

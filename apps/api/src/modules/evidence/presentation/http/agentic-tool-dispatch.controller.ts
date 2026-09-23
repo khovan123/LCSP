@@ -1,3 +1,4 @@
+import { asRecord as record } from "../../../../common/utils/index.js";
 import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { RBAC_DECISIONS } from "@lcsp/contracts/rbac";
 import {
@@ -268,12 +269,6 @@ export class InternalAgenticToolDispatchController {
     }
     return this.commandBus;
   }
-}
-
-function record(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
 }
 
 function requiredString(value: unknown): string {
