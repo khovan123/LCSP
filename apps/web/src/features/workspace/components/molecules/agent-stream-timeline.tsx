@@ -7,6 +7,16 @@ import {
   type AssessmentRuntimeSummaryValue,
 } from "@lcsp/contracts/evidence";
 import { resolveMessage } from "@lcsp/i18n";
+import {
+  Brain,
+  CheckCircle2,
+  ChevronDown,
+  Circle,
+  LoaderCircle,
+  Terminal,
+  Wrench,
+  XCircle,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { appLocale } from "@/lib/locale";
@@ -22,6 +32,16 @@ type AgentStreamTimelineProps = {
   className?: string;
 };
 
+type StreamRowKind =
+  | "tool"
+  | "reasoning"
+  | "model"
+  | "progress"
+  | "log"
+  | "activity";
+
+type StreamRowStatus = "running" | "completed" | "failed" | "neutral";
+
 type ProjectedStreamRow = {
   id: string;
   sequence: number;
@@ -29,6 +49,10 @@ type ProjectedStreamRow = {
   detail: string | null;
   meta: string | null;
   failed: boolean;
+  kind: StreamRowKind;
+  status: StreamRowStatus;
+  input: AssessmentRuntimeSummaryValue | null;
+  output: AssessmentRuntimeSummaryValue | null;
 };
 
 export function AgentStreamTimeline({
@@ -70,34 +94,15 @@ export function AgentStreamTimeline({
               {labels.historyLoadFailed}
             </div>
           ) : null}
-          {rows.map((row) => (
+          <div className="relative space-y-0.5">
             <div
-              key={row.id}
-              data-stream-sequence={row.sequence}
-              className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-2 text-xs leading-5"
-            >
-              <span
-                className={cn(
-                  "font-medium text-muted-foreground",
-                  row.failed && "text-destructive",
-                )}
-              >
-                {row.label}
-              </span>
-              <div className="min-w-0">
-                {row.detail ? (
-                  <div className="whitespace-pre-wrap break-words wrap-anywhere text-foreground">
-                    {row.detail}
-                  </div>
-                ) : null}
-                {row.meta ? (
-                  <div className="break-words wrap-anywhere text-[11px] text-muted-foreground">
-                    {row.meta}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ))}
+              aria-hidden="true"
+              className="absolute bottom-3 left-[7px] top-3 w-px bg-border/60"
+            />
+            {rows.map((row) => (
+              <StreamRowView key={row.id} row={row} labels={labels} />
+            ))}
+          </div>
         </div>
       </AgentMessage>
     </AgentTurn>
@@ -109,9 +114,143 @@ function projectStreamRows(
 ): ProjectedStreamRow[] {
   const ordered = [...events].sort((left, right) => left.sequence - right.sequence);
   const rows: ProjectedStreamRow[] = [];
-  let previousMergeKey: string | null = null;
+  const toolRows = new Map<string, ProjectedStreamRow>();
+  const modelProgressRows = new Map<string, ProjectedStreamRow>();
+  const semanticToolIds = new Set<string>();
+  const semanticModelOutputIds = new Set<string>();
+  const semanticReasoningIds = new Set<string>();
 
   for (const event of ordered) {
+    const semantic = semanticData(event.data);
+    if (!semantic) continue;
+    const toolIdentity = toolIdentityKey(event, semantic);
+    if (
+      toolIdentity &&
+      (semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall ||
+        semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolResult)
+    ) {
+      semanticToolIds.add(toolIdentity);
+    }
+    if (
+      semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.modelOutput &&
+      event.messageId
+    ) {
+      semanticModelOutputIds.add(event.messageId);
+    }
+    if (
+      semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.reasoningSummary &&
+      event.messageId
+    ) {
+      semanticReasoningIds.add(event.messageId);
+    }
+  }
+
+  let previousMergeKey: string | null = null;
+  for (const event of ordered) {
+    if (
+      shouldSuppressEvent(
+        event,
+        semanticToolIds,
+        semanticModelOutputIds,
+        semanticReasoningIds,
+      )
+    ) {
+      continue;
+    }
+
+    const semantic = semanticData(event.data);
+    const toolIdentity = semantic ? toolIdentityKey(event, semantic) : null;
+    if (
+      semantic &&
+      toolIdentity &&
+      (semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall ||
+        semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolResult)
+    ) {
+      const existing = toolRows.get(toolIdentity);
+      if (existing) {
+        existing.sequence = event.sequence;
+        existing.failed =
+          existing.failed ||
+          event.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed;
+        existing.status = existing.failed ? "failed" : "completed";
+        existing.meta = semanticMeta(event, semantic);
+        if (
+          semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall
+        ) {
+          existing.input = cleanedStreamValue(semantic.parameters);
+        } else {
+          existing.output = cleanedStreamValue(semantic.resultSummary);
+          existing.detail = null;
+        }
+        previousMergeKey = null;
+        continue;
+      }
+
+      const projected = toStreamRow(event);
+      projected.kind = "tool";
+      projected.label = semanticName(
+        event,
+        semantic,
+        event.toolName ?? "tool",
+      );
+      projected.detail = null;
+      projected.input =
+        semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall
+          ? cleanedStreamValue(semantic.parameters)
+          : null;
+      projected.output =
+        semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolResult
+          ? cleanedStreamValue(semantic.resultSummary)
+          : null;
+      projected.status =
+        semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolResult
+          ? projected.failed
+            ? "failed"
+            : "completed"
+          : "running";
+      rows.push(projected);
+      toolRows.set(toolIdentity, projected);
+      previousMergeKey = null;
+      continue;
+    }
+
+    if (
+      semantic?.kind ===
+      ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.reasoningSummary
+    ) {
+      const projected = toStreamRow(event);
+      projected.kind = "reasoning";
+      projected.label = streamLabels().reasoning;
+      projected.detail =
+        reasoningSummaryText(semantic) ??
+        event.text ??
+        streamLabels().running;
+      projected.meta = semanticMeta(event, semantic);
+      rows.push(projected);
+      previousMergeKey = null;
+      continue;
+    }
+
+    const modelProgressKey = modelCallProgressKey(event);
+    if (modelProgressKey) {
+      const existing = modelProgressRows.get(modelProgressKey);
+      if (existing) {
+        const updated = toStreamRow(event);
+        existing.sequence = event.sequence;
+        existing.detail = updated.detail;
+        existing.meta = updated.meta;
+        existing.failed = updated.failed;
+        existing.status = updated.status;
+        previousMergeKey = null;
+        continue;
+      }
+      const projected = toStreamRow(event);
+      rows.push(projected);
+      modelProgressRows.set(modelProgressKey, projected);
+      previousMergeKey = null;
+      continue;
+    }
+
     const mergeKey = deltaMergeKey(event);
     const previous = rows.at(-1);
     if (mergeKey && previous && previousMergeKey === mergeKey) {
@@ -275,7 +414,70 @@ function row(
     detail,
     meta,
     failed,
+    kind: streamRowKind(event),
+    status: streamRowStatus(event, failed),
+    input: null,
+    output: null,
   };
+}
+
+function streamRowKind(event: AssessmentAgentStreamEvent): StreamRowKind {
+  switch (event.eventType) {
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelReasoningDelta:
+      return "reasoning";
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelRequest:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelResult:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallHeartbeat:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout:
+      return "model";
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.toolCallDelta:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.toolResult:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolResult:
+      return "tool";
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.log:
+      return "log";
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.customProgress:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.scannerActivity:
+      return "progress";
+    default:
+      return "activity";
+  }
+}
+
+function streamRowStatus(
+  event: AssessmentAgentStreamEvent,
+  failed: boolean,
+): StreamRowStatus {
+  if (
+    failed ||
+    event.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed ||
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed ||
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout ||
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentFailed ||
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed
+  ) {
+    return "failed";
+  }
+  if (
+    event.status === ASSESSMENT_RUNTIME_RUN_STATUSES.completed ||
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted ||
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentCompleted ||
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted
+  ) {
+    return "completed";
+  }
+  if (
+    event.status === ASSESSMENT_RUNTIME_RUN_STATUSES.running ||
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted ||
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallHeartbeat
+  ) {
+    return "running";
+  }
+  return "neutral";
 }
 
 function eventMeta(event: AssessmentAgentStreamEvent): string | null {
@@ -485,6 +687,296 @@ function humanizeSemanticKey(value: string): string {
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replaceAll("_", " ")
     .trim();
+}
+
+function StreamRowView({
+  row,
+  labels,
+}: {
+  row: ProjectedStreamRow;
+  labels: ReturnType<typeof streamLabels>;
+}) {
+  const statusLabel =
+    row.status === "running"
+      ? labels.running
+      : row.status === "completed"
+        ? labels.completed
+        : row.status === "failed"
+          ? labels.failed
+          : null;
+
+  return (
+    <div
+      data-stream-sequence={row.sequence}
+      data-stream-kind={row.kind}
+      data-stream-status={row.status}
+      className="relative min-w-0 pl-6"
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          "absolute left-0 top-[9px] z-10 flex size-[15px] items-center justify-center rounded-full bg-background text-muted-foreground",
+          row.status === "failed" && "text-destructive",
+          row.status === "completed" && "text-emerald-500",
+        )}
+      >
+        <StreamStatusIcon row={row} />
+      </span>
+      <div
+        className={cn(
+          "min-w-0 rounded-xl px-2.5 py-2 text-xs transition-colors duration-200",
+          row.kind === "tool" && "border border-border/60 bg-muted/20",
+          row.kind === "reasoning" && "bg-muted/10",
+          row.failed && "border-destructive/30 bg-destructive/5",
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <StreamKindIcon kind={row.kind} />
+          <span
+            className={cn(
+              "min-w-0 truncate font-medium text-foreground",
+              row.failed && "text-destructive",
+            )}
+          >
+            {row.label}
+          </span>
+          {statusLabel ? (
+            <span
+              className={cn(
+                "ml-auto shrink-0 text-[11px] text-muted-foreground",
+                row.status === "running" && "animate-pulse",
+                row.status === "failed" && "text-destructive",
+              )}
+            >
+              {statusLabel}
+            </span>
+          ) : null}
+        </div>
+
+        {row.kind === "reasoning" && row.detail ? (
+          <details className="group mt-1.5">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11px] text-muted-foreground select-none">
+              <ChevronDown className="size-3 transition-transform duration-200 group-open:rotate-180" />
+              {labels.reasoning}
+            </summary>
+            <div className="mt-1.5 whitespace-pre-wrap break-words wrap-anywhere text-xs leading-5 text-foreground/90">
+              {row.detail}
+            </div>
+          </details>
+        ) : row.detail ? (
+          <div className="mt-1 whitespace-pre-wrap break-words wrap-anywhere text-xs leading-5 text-foreground/90">
+            {row.detail}
+          </div>
+        ) : null}
+
+        {row.kind === "tool" ? (
+          <div className="mt-2 space-y-1.5">
+            <StreamPayloadDisclosure
+              label={labels.toolCall}
+              value={row.input}
+              defaultOpen={row.status === "running"}
+            />
+            <StreamPayloadDisclosure
+              label={labels.toolOutput}
+              value={row.output}
+            />
+          </div>
+        ) : null}
+
+        {row.meta ? (
+          <div className="mt-1.5 whitespace-pre-wrap break-words wrap-anywhere text-[11px] leading-4 text-muted-foreground">
+            {row.meta}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function StreamStatusIcon({ row }: { row: ProjectedStreamRow }) {
+  if (row.status === "running") {
+    return <LoaderCircle className="size-3.5 animate-spin" />;
+  }
+  if (row.status === "completed") {
+    return <CheckCircle2 className="size-3.5" />;
+  }
+  if (row.status === "failed") {
+    return <XCircle className="size-3.5" />;
+  }
+  return <Circle className="size-2.5 fill-current" />;
+}
+
+function StreamKindIcon({ kind }: { kind: StreamRowKind }) {
+  if (kind === "tool") {
+    return <Wrench aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />;
+  }
+  if (kind === "reasoning") {
+    return <Brain aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />;
+  }
+  if (kind === "log") {
+    return <Terminal aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />;
+  }
+  return null;
+}
+
+function StreamPayloadDisclosure({
+  label,
+  value,
+  defaultOpen = false,
+}: {
+  label: string;
+  value: AssessmentRuntimeSummaryValue | null;
+  defaultOpen?: boolean;
+}) {
+  const cleaned = cleanedStreamValue(value);
+  if (cleaned === null) return null;
+  return (
+    <details
+      open={defaultOpen}
+      className="group overflow-hidden rounded-lg border border-border/50 bg-background/60"
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground select-none">
+        <ChevronDown className="size-3 transition-transform duration-200 group-open:rotate-180" />
+        {label}
+      </summary>
+      <pre className="max-h-72 overflow-auto border-t border-border/40 px-2.5 py-2 text-[11px] leading-4 whitespace-pre-wrap break-words text-foreground/85">
+        {formatStreamValue(cleaned)}
+      </pre>
+    </details>
+  );
+}
+
+function formatStreamValue(value: AssessmentRuntimeSummaryValue): string {
+  if (typeof value === "string") return value;
+  return JSON.stringify(value, null, 2);
+}
+
+function cleanedStreamValue(
+  value: AssessmentRuntimeSummaryValue | undefined | null,
+): AssessmentRuntimeSummaryValue | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string") {
+    return value === "[HIDDEN_PRIVATE_RUNTIME_STATE]" ? null : value;
+  }
+  if (Array.isArray(value)) {
+    const cleaned = value
+      .map((item) => cleanedStreamValue(item))
+      .filter(
+        (item): item is AssessmentRuntimeSummaryValue => item !== null,
+      );
+    return cleaned.length > 0 ? cleaned : null;
+  }
+  if (typeof value === "object") {
+    if (
+      value.hidden === "private_runtime_state" ||
+      value.hidden === "[HIDDEN_PRIVATE_RUNTIME_STATE]"
+    ) {
+      return null;
+    }
+    const entries = Object.entries(value).flatMap(([key, nested]) => {
+      const cleaned = cleanedStreamValue(nested);
+      return cleaned === null ? [] : ([[key, cleaned]] as const);
+    });
+    return entries.length > 0 ? Object.fromEntries(entries) : null;
+  }
+  return value;
+}
+
+function shouldSuppressEvent(
+  event: AssessmentAgentStreamEvent,
+  semanticToolIds: Set<string>,
+  semanticModelOutputIds: Set<string>,
+  semanticReasoningIds: Set<string>,
+): boolean {
+  const identity = [
+    event.nodeName,
+    event.toolName,
+    event.source,
+    event.text,
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+
+  if (identity.includes("piimiddleware[")) return true;
+  if (
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.graphUpdate ||
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.graphState
+  ) {
+    return true;
+  }
+  if (
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.toolCallDelta &&
+    semanticToolIds.has(toolIdentityKey(event, null) ?? "")
+  ) {
+    return true;
+  }
+  if (
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.toolResult &&
+    semanticToolIds.has(toolIdentityKey(event, null) ?? "")
+  ) {
+    return true;
+  }
+  if (
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta &&
+    event.messageId !== null &&
+    semanticModelOutputIds.has(event.messageId)
+  ) {
+    return true;
+  }
+  if (
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelReasoningDelta &&
+    event.messageId !== null &&
+    semanticReasoningIds.has(event.messageId)
+  ) {
+    return true;
+  }
+  return cleanedStreamValue(event.data) === null && !event.text;
+}
+
+function toolIdentityKey(
+  event: AssessmentAgentStreamEvent,
+  semantic: SemanticRecord | null,
+): string | null {
+  const toolCallId =
+    (typeof semantic?.toolCallId === "string" ? semantic.toolCallId : null) ??
+    event.toolCallId;
+  if (toolCallId) return `${event.runId}:${toolCallId}`;
+  if (event.messageId && (event.toolName || semantic?.toolName)) {
+    return `${event.runId}:${event.messageId}:${String(
+      semantic?.toolName ?? event.toolName,
+    )}`;
+  }
+  return null;
+}
+
+function modelCallProgressKey(event: AssessmentAgentStreamEvent): string | null {
+  if (
+    event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted &&
+    event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallHeartbeat &&
+    event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted &&
+    event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed &&
+    event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout
+  ) {
+    return null;
+  }
+  const data = isSummaryRecord(event.data) ? event.data : null;
+  return [
+    event.runId,
+    event.agentName ?? "",
+    event.nodeName ?? "",
+    firstString(data?.provider, ""),
+    firstString(data?.model, ""),
+  ].join(":");
+}
+
+function reasoningSummaryText(semantic: SemanticRecord): string | null {
+  const result = semantic.resultSummary;
+  if (typeof result === "string") return result;
+  if (isSummaryRecord(result)) {
+    return firstString(result.summary, result.text, null);
+  }
+  return null;
 }
 
 function streamLabels() {
