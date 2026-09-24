@@ -67,3 +67,8 @@ for (const sharedGroup of [false, true]) {
     assert.ok(signals.some(({ signal }) => signal === "SIGTERM"));
   });
 }
+
+
+test("dev:stop matches Phoenix independently of uvx dependency arguments", () => {
+  assert.ok(stop.includes('"arize-phoenix serve"'));
+});
