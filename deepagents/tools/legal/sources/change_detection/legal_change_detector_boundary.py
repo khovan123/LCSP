@@ -12,7 +12,7 @@ from tools.common.capabilities.agentic_evidence.dispatch.dispatcher import Legal
 from tools.common.capabilities.agentic_evidence.entrypoints.legal_tool_entrypoints import LegalToolExecutionContext
 from tools.legal.corpus.partial_update.partial_update_context_builder import build_partial_update_context
 from tools.common.capabilities.platform.api_client import WorkerApiClient
-from tools.common.capabilities.managed.boundary import AgentBoundaryBase, NonRetryableAgentBoundaryError
+from tools.common.capabilities.agent_runtime.boundary import AgentBoundaryBase, NonRetryableAgentBoundaryError
 
 logger = get_logger(__name__)
 
@@ -57,7 +57,7 @@ class LegalChangeCheckResult:
 
 
 class LegalChangeDetectorBoundary(AgentBoundaryBase):
-    """Detect changes and return the partial-update context to Managed Deep Agents."""
+    """Detect changes and return the partial-update context to the Agent Runtime."""
 
     boundary_source = LEGAL_CHANGE_DETECTOR_BOUNDARY_SOURCE
     source_event = LEGAL_CHANGE_DETECTOR_COMMAND

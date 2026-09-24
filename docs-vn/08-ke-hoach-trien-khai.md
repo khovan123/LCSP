@@ -26,7 +26,7 @@ Authentication, organization, assessment, WizardProfile, readiness-only state, G
 
 ### Wave 3 — Managed Repository Analysis
 
-Managed Deep Agents repository workspace, Repository Deep Agent, Codebase Memory MCP 0.11.0, source-grounded evidence/coverage/AI gate và scan events.
+LCSP Agent Runtime repository sandbox, Repository Deep Agent, Codebase Memory MCP 0.11.0, source-grounded evidence/coverage/AI gate và scan events.
 
 ### Wave 4 — Intelligence và reconciliation
 
@@ -98,7 +98,7 @@ npm run dev:web
 cd deepagents
 uv sync --extra dev
 uv run pytest
-mda build .
+uv run langgraph dev --no-browser --no-reload --allow-blocking
 ```
 
 Các lệnh này là hợp đồng thiết kế; chưa phải bằng chứng repository hiện đã có mã chạy được.

@@ -1,11 +1,11 @@
 ---
 name: lcsp
-description: Use for LCSP source-vs-wizard conflict analysis, engineering rule planning, legal corpus retrieval, and Managed Deep Agent repository evidence reasoning.
+description: Use for LCSP source-vs-wizard conflict analysis, engineering rule planning, legal corpus retrieval, and Repository Deep Agent evidence reasoning.
 ---
 
 # LCSP Deep Agent Skill
 
-You operate inside the LCSP Managed Deep Agents runtime. Treat deterministic
+You operate inside the LCSP Deep Agents / LangGraph runtime. Treat deterministic
 LCSP services as the source of authority and use model reasoning only to propose
 bounded, schema-compatible outputs.
 

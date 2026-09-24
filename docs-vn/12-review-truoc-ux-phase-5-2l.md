@@ -42,7 +42,7 @@ POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 - `FR-050` đã được định nghĩa lại thành Automatic Trusted Scan Initiation.
 - `FR-051` đã được đánh dấu `REMOVED_FROM_PRODUCT`.
 - Python Worker Platform đã được đặt làm owner của các asynchronous domain workloads.
-- Scanner specs/toolchain cũ đã bị loại khỏi repository; active repository analysis dùng Managed Deep Agents + full Deep Agents harness và Codebase Memory tùy chọn.
+- Scanner specs/toolchain cũ đã bị loại khỏi repository; active repository analysis dùng LangGraph + native Deep Agents harness + LCSP Docker sandbox và Codebase Memory tùy chọn.
 - Trigger mapping states, domain objects, commands/events và negative paths đã được đưa vào nhiều tài liệu.
 - Readiness report đã ghi đúng kết quả `NOT READY` vì thiếu UX, epics/stories và technical decisions.
 
@@ -94,7 +94,7 @@ Yêu cầu đóng:
 
 ### ADR và technical decisions
 
-Proposal yêu cầu dedicated ADRs cho PBAC, Automatic Trusted Scan Initiation, Python Worker Platform và Managed Deep Agent repository-analysis runtime, nhưng PR hiện chủ yếu sửa ADR index và các ADr runtime cũ.
+Proposal yêu cầu dedicated ADRs cho PBAC, Automatic Trusted Scan Initiation, Python Worker Platform và LCSP Agent Runtime repository-analysis runtime, nhưng PR hiện chủ yếu sửa ADR index và các ADR runtime cũ.
 
 Các decision sau có thể chưa cần chọn implementation cụ thể để bắt đầu UX, nhưng phải được ghi là constraint/dependency rõ:
 

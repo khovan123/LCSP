@@ -107,20 +107,20 @@ for (const tool of cqrsTools) {
   );
 }
 
-const managedAgentCommandTools = [
+const agentRuntimeCommandTools = [
   "request_targeted_reanalysis",
   "resume_waiting_runs",
 ];
-for (const tool of managedAgentCommandTools) {
+for (const tool of agentRuntimeCommandTools) {
   expectContains(
     internalCommandDispatcher,
     `export function ${tool}(`,
-    "Managed Agent command dispatcher",
+    "Agent Runtime command dispatcher",
   );
   expectContains(
     pythonDispatcher,
-    `"${tool}", ToolRuntimeTarget.MANAGED_AGENT_COMMAND`,
-    "Managed Agent command binding",
+    `"${tool}", ToolRuntimeTarget.AGENT_RUNTIME_COMMAND`,
+    "Agent Runtime command binding",
   );
 }
 
@@ -156,5 +156,5 @@ if (nestDispatcher.includes("propose_gap_remediation")) {
 
 if (process.exitCode) process.exit(process.exitCode);
 console.log(
-  `[engineering-rule-runtime] OK: repository graph tools retired from custom runtime; 1 Python remediation tool, ${cqrsTools.length} Nest CQRS tools, ${managedAgentCommandTools.length} managed-agent commands`,
+  `[engineering-rule-runtime] OK: repository graph tools retired from custom runtime; 1 Python remediation tool, ${cqrsTools.length} Nest CQRS tools, ${agentRuntimeCommandTools.length} agent-runtime commands`,
 );

@@ -1,4 +1,4 @@
-"""Managed Deep Agents structured handoff contracts."""
+"""Deep Agents structured handoff contracts."""
 
 from .handoffs import (
     GraphSeed,

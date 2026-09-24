@@ -18,9 +18,9 @@ Tài liệu này không thay thế authority gốc. Khi có mâu thuẫn, luôn 
 ## Executive Summary
 
 - Task catalog vẫn giữ nhãn `IMPLEMENTATION_NOT_AUTHORIZED` ở lớp planning artifact, nhưng story-level execution artifacts hiện đã mở execution surface cho toàn bộ MVP.
-- Runtime shape đã khóa: `apps/web` là Next.js, `apps/api` là NestJS synchronous control plane, mọi async domain workload thuộc monorepo `deepagents`; repository analysis chạy qua Managed Deep Agents.
+- Runtime shape đã khóa: `apps/web` là Next.js, `apps/api` là NestJS synchronous control plane, mọi async domain workload thuộc monorepo `deepagents`; repository analysis chạy qua LCSP Agent Runtime tự host trên LangGraph + Deep Agents + Docker sandbox.
 - RBAC là authorization source of truth. Role label như `Manager` và `Developer` chỉ là attribute hoặc policy template.
-- Repository analysis do Managed Deep Agents sở hữu trên assessment repository workspace; Node.js không còn là semantic scanner subprocess.
+- Repository analysis do LCSP Agent Runtime sở hữu trên assessment repository sandbox; Node.js không còn là semantic scanner subprocess.
 - Legal retrieval dùng ChromaDB structure-first vectorless retrieval; không dùng dense embedding hoặc pgvector cho legal MVP.
 - `implementation-artifacts/` hiện phản ánh Epic `1-8` đều đang `in-progress`; Story `1.1` đã `done` và các story còn lại hiện `ready-for-dev`.
 
@@ -131,7 +131,7 @@ flowchart LR
 |---|---|---|
 | Auth / Session / RBAC | `backend-implementation.md`, `persistence-implementation.md`, `decisions/rbac-runtime-decision.md` | MW-rbac-002, Story 1.1 |
 | Assessment / Wizard / scan trigger | `backend-implementation.md`, `queue-implementation.md`, `readiness/state-transition-authority.md` | module task catalog range |
-| Repository analysis runtime | `../architecture/repository-deep-agent-analysis.md`, `python-worker-platform-implementation.md` | Managed Deep Agents repository-analysis flow |
+| Repository analysis runtime | `../architecture/repository-deep-agent-analysis.md`, `python-worker-platform-implementation.md` | LCSP Agent Runtime repository-analysis flow |
 | Technical profile / AI usage / reconciliation | `python-worker-platform-implementation.md`, handoffs, state-transition authority | module task catalog range |
 | Legal corpus / retrieval | `legal-corpus-ingestion-implementation.md`, `chromadb-vectorless-legal-retriever-implementation.md` | module task catalog range |
 | LLM / classification / document | `llm-gateway-implementation.md`, backend, queue, persistence | module task catalog range |
@@ -218,7 +218,7 @@ Ba decision này là phần tài liệu dev thường bị bỏ qua nhưng lại
 
 ### Repository Deep Agent
 
-- mỗi assessment dùng durable Managed Deep Agents thread với repository working database;
+- mỗi assessment dùng durable LangGraph thread với LCSP Docker repository working database;
 - native Deep Agents filesystem/search/shell/subagent tools là execution harness;
 - Codebase Memory MCP 0.11.0 là structural index/memory tùy chọn, không phải evidence authority;
 - direct repository source và bounded source locations là nguồn bằng chứng cuối cùng;

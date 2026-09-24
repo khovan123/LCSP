@@ -512,11 +512,11 @@ def test_harness_registers_openai_provider_and_every_role_profile(monkeypatch) -
     )
 
 
-def test_root_agent_uses_managed_instructions_context_and_todos() -> None:
+def test_root_agent_uses_checked_in_instructions_context_and_todos() -> None:
     source = (PROJECT_ROOT / "agent.py").read_text(encoding="utf-8")
     instructions = (PROJECT_ROOT / "instructions.md").read_text(encoding="utf-8")
 
-    assert "system_prompt=" not in source
+    assert "system_prompt=SYSTEM_PROMPT" in source
     assert "context_schema=LCSPRunContext" in source
     assert "TodoListMiddleware()" in source
     assert "inject_lcsp_runtime_context" in source
@@ -531,10 +531,8 @@ def test_root_agent_uses_managed_instructions_context_and_todos() -> None:
     assert "deterministic gate" in instructions
 
 
-def test_multi_tenant_agent_limits_deployment_shared_mda_memory_to_neutral_knowledge() -> None:
-    assert (PROJECT_ROOT / "memory.py").is_file()
+def test_multi_tenant_agent_has_no_deployment_shared_model_memory() -> None:
+    assert not (PROJECT_ROOT / "memory.py").exists()
     assert not (PROJECT_ROOT / "orchestration" / "memory.py").exists()
     instructions = (PROJECT_ROOT / "instructions.md").read_text(encoding="utf-8")
-    assert "tenant-neutral" in instructions
-    assert "Never store customer data, repository source/evidence" in instructions
-    assert "untrusted notes, never as authority" in instructions
+    assert "Memory is never authoritative evidence" in instructions

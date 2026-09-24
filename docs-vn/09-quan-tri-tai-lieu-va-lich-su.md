@@ -33,7 +33,7 @@ Chuẩn hóa canonical UC/FR/AC/NFR, scanner ownership, legal corpus/retrieval v
 
 ### Phase 5.2L
 
-Project Owner yêu cầu PBAC, loại structured attestation, thay Local/CI upload bằng Automatic Trusted Scan Initiation, loại manual evidence JSON khỏi product, chuyển mọi async workload sang Python Worker Platform và chuyển repository analysis sang Managed Deep Agents.
+Project Owner yêu cầu PBAC, loại structured attestation, thay Local/CI upload bằng Automatic Trusted Scan Initiation, loại manual evidence JSON khỏi product, chuyển mọi async workload sang Python Worker Platform và chuyển repository analysis sang LCSP Agent Runtime.
 
 PR #2 đã cập nhật tài liệu active theo direction này. Pass rút gọn tài liệu hiện chỉ giữ các nhóm authority đã được Project Owner yêu cầu.
 

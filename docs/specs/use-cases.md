@@ -63,7 +63,7 @@ Goal: pin repository evidence to an immutable branch/commit snapshot. Inaccessib
 
 ## UC-007 Execute Repository Scan
 
-Goal: convert the pinned snapshot into grounded technical evidence through the repository-backed Managed Deep Agent. The agent explores the repository with native filesystem/shell/subagent capabilities, may use Codebase Memory MCP as structural memory, verifies material facts against source, derives coverage and AI-discovery state, persists the compatibility evidence payload, and emits completed or failed scan-job events.
+Goal: convert the pinned snapshot into grounded technical evidence through the repository-backed Repository Deep Agent running in the LCSP Agent Runtime. The agent explores the repository with native filesystem/shell/subagent capabilities, may use Codebase Memory MCP as structural memory, verifies material facts against source, derives coverage and AI-discovery state, persists the compatibility evidence payload, and emits completed or failed scan-job events.
 
 ## UC-008 Generate TechnicalProfile
 

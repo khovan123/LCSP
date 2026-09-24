@@ -1,4 +1,4 @@
-"""Load checked-in Managed Deep Agent skills for bounded specialist prompts."""
+"""Load checked-in Deep Agent skills for bounded specialist prompts."""
 
 from __future__ import annotations
 

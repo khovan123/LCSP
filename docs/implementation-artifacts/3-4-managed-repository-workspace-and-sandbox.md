@@ -4,7 +4,7 @@ Status: ready-for-dev
 
 ## Story
 
-As LCSP, I want each assessment to hydrate its commit-pinned repository snapshot into the durable Managed Deep Agents sandbox, so repository investigation is isolated, reproducible, and source-grounded.
+As LCSP, I want each assessment to hydrate its commit-pinned repository snapshot into the durable LCSP Docker repository sandbox, so repository investigation is isolated, reproducible, and source-grounded.
 
 ## Acceptance Criteria
 
@@ -41,7 +41,7 @@ As LCSP, I want each assessment to hydrate its commit-pinned repository snapshot
 
 ## Architecture Compliance
 
-- Repository analysis is owned by Managed Deep Agents, not a standalone scanner worker.
+- Repository analysis is owned by LCSP Agent Runtime, not a standalone scanner worker.
 - NestJS remains the synchronous control plane and snapshot/job authority.
 - Direct repository source is authoritative evidence.
 - No custom language-specific scanner pipeline, package installation, or customer application execution is required.
@@ -52,7 +52,7 @@ As LCSP, I want each assessment to hydrate its commit-pinned repository snapshot
 - `deepagents/tests/test_managed_assessment_sandbox.py`
 - `deepagents/tests/test_managed_deep_agent_project.py`
 - repository snapshot and worker-runtime contract tests
-- `uv run mda build .`
+- `uv run python -m pytest tests/integration/test_docker_sandbox_e2e.py tests/integration/test_local_agent_runtime_e2e.py`
 
 ## References
 

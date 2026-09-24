@@ -334,7 +334,7 @@ Artifact upload and metadata registration must avoid orphaned states. Use staged
 
 | Artifact | MVP Retention | Rule |
 |---|---:|---|
-| Managed repository sandbox | lifecycle managed by Managed Deep Agents; customer source is not copied into LCSP persistence | no long-term raw source outside the sandbox |
+| Repository sandbox | lifecycle managed by LCSP Agent Runtime Docker sandbox; customer source is not copied into LCSP persistence | no long-term raw source outside the sandbox |
 | Source/evidence/graph/report metadata | 12 months | metadata/hash/ref only |
 | Profiles/conflicts/classification/gap | 12 months minimum | immutable/versioned |
 | Legal source snapshots/corpus versions | retained per legal corpus governance | approved history immutable |

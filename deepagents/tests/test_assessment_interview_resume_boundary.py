@@ -12,7 +12,7 @@ from orchestration.result_validation import SpecialistHandoffValidationError
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_LIMITATION_CODES,
 )
-from tools.common.capabilities.managed.invocation import invocation_boundary_manifest
+from tools.common.capabilities.agent_runtime.invocation import invocation_boundary_manifest
 from tools.common.capabilities.platform.api_client import (
     InterviewContextReadyAuthorityCallbackError,
     InterviewDecisionRepairableCallbackError,

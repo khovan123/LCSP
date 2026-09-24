@@ -1,37 +1,59 @@
-"""Remote Managed MCP capabilities for LCSP Deep Agents.
+"""Optional MCP tool loading for LCSP Deep Agents.
 
-Codebase Memory is intentionally not declared here. Managed Deep Agents 0.7 only
-accepts remote HTTP/SSE MCP servers, while codebase-memory-mcp is a local stdio
-server that must see the assessment repository inside the thread-owned sandbox.
-Repository analysis therefore installs that server into the managed sandbox and
-exposes its graph/search tools from the same repository database.
+Codebase Memory is intentionally provided inside the repository sandbox as the
+`codebase-memory-graph` command so it indexes the exact assessment repository.
+Remote MCP servers remain optional assistive tools and are not required for LCSP
+startup.
 """
 
 from __future__ import annotations
 
-from managed_deepagents import define_mcp
+import asyncio
+import os
+import warnings
+from typing import Any
 
 
-_servers: dict[str, dict[str, object]] = {
-    "langchain_docs": {
-        "transport": "http",
-        "url": "https://docs.langchain.com/mcp",
-        "default_tool_timeout": 30,
-    },
-    "langchain_reference": {
-        "transport": "http",
-        "url": "https://reference.langchain.com/mcp",
-        "default_tool_timeout": 30,
-    },
+MCP_SERVER_TARGETS: dict[str, str] = {
+    "langchain_docs": "https://docs.langchain.com/mcp",
+    "langchain_reference": "https://reference.langchain.com/mcp",
 }
+_MCP_ADAPTERS: list[Any] = []
+_MCP_TOOLS: list[Any] | None = None
 
 
-mcp = define_mcp(
-    servers=_servers,
-    prefix_tool_name_with_server_name=True,
-    throw_on_load_error=False,
-    use_standard_content_blocks=True,
-)
+def load_optional_mcp_tools() -> list[Any]:
+    """Load native LangChain MCP tools when explicitly enabled.
+
+    Remote MCP discovery can perform network handshakes, so LCSP keeps it opt-in
+    for local startup. Codebase Memory remains available inside the Docker
+    sandbox independently of this remote-tool path.
+    """
+    global _MCP_TOOLS
+    if os.getenv("LCSP_ENABLE_REMOTE_MCP", "").strip().lower() not in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return []
+    if _MCP_TOOLS is None:
+        _MCP_TOOLS = asyncio.run(_load_mcp_tools())
+    return list(_MCP_TOOLS)
 
 
-__all__ = ["mcp"]
+async def _load_mcp_tools() -> list[Any]:
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning, module="langchain.mcp")
+        from langchain.mcp import MCPAdapter
+
+    tools: list[Any] = []
+    for target in MCP_SERVER_TARGETS.values():
+        adapter = MCPAdapter(target)
+        await adapter.__aenter__()
+        _MCP_ADAPTERS.append(adapter)
+        tools.extend(await adapter.list_tools())
+    return tools
+
+
+__all__ = ["MCP_SERVER_TARGETS", "load_optional_mcp_tools"]

@@ -16,7 +16,7 @@ from orchestration.waiting_assessments import WaitingAssessmentRegistry
 from tools.common.capabilities.platform.api_client import WorkerApiClient, WorkerCallbackError
 from tools.common.capabilities.platform.callback_schemas import ClassificationCallbackPayload
 from tools.common.capabilities.platform.logging import get_logger
-from tools.common.capabilities.managed.boundary import AgentBoundaryBase, NonRetryableAgentBoundaryError
+from tools.common.capabilities.agent_runtime.boundary import AgentBoundaryBase, NonRetryableAgentBoundaryError
 from tools.common.capabilities.platform.repository_snapshot_client import (
     RepositoryArchiveRequest,
     RepositorySnapshotClient,

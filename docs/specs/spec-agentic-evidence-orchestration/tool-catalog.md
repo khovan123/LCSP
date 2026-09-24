@@ -9,13 +9,13 @@ Every tool request carries `assessmentId`, `workflowRunId`, `artifactVersions`, 
 ## Repository-analysis capabilities
 
 Repository analysis is not exposed as a bag of language-specific model-callable
-scanner tools. The Managed Deep Agent uses its native repository harness and may
+scanner tools. The Repository Deep Agent uses its native repository harness and may
 invoke Codebase Memory MCP as an optional structural-memory layer.
 
 | Capability | Purpose |
 | --- | --- |
 | Deep Agents filesystem/search | Direct repository discovery and source verification. |
-| Deep Agents execute | Bounded repository-local shell inspection in the managed sandbox. |
+| Deep Agents execute | Bounded repository-local shell inspection in the LCSP Docker sandbox. |
 | Deep Agents task/subagents | Parallel bounded exploration of packages, languages, and architecture paths. |
 | Codebase Memory index_repository | Build structural memory for the current assessment repository. |
 | Codebase Memory architecture/search tools | Accelerate architecture and symbol discovery. |
@@ -30,7 +30,7 @@ The active repository-analysis surface is the Deep Agents native harness, not th
 | Capability | Purpose |
 | --- | --- |
 | Native filesystem/search | Locate and verify repository source directly. |
-| Native execute | Run bounded repository-inspection commands inside the managed sandbox. |
+| Native execute | Run bounded repository-inspection commands inside the LCSP Docker sandbox. |
 | Native task/subagents | Split bounded codebase exploration across packages or technical frontiers. |
 | Codebase Memory MCP | Optional architecture, symbol, relationship, change, and index-coverage memory. |
 | RepositoryAnalysisResult | Persist source anchors, compatibility graph, coverage state, unresolved frontiers, and AI discovery gate. |

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from tools.common.capabilities.managed import rabbitmq_consumer
+from tools.common.capabilities.agent_runtime import rabbitmq_consumer
 
 
 class FakeChannel:
@@ -82,18 +82,18 @@ def test_boundary_bindings_are_derived_from_manifest(monkeypatch):
         ),
     )
 
-    bindings = rabbitmq_consumer.boundary_bindings("lcsp.mda.test")
+    bindings = rabbitmq_consumer.boundary_bindings("lcsp.agent_runtime.test")
 
     assert bindings == (
         rabbitmq_consumer.BoundaryBinding(
             boundary_name="scan_requested",
             source_event="command.scan.requested.v1",
-            queue_name="lcsp.mda.test.scan_requested",
+            queue_name="lcsp.agent_runtime.test.scan_requested",
         ),
         rabbitmq_consumer.BoundaryBinding(
             boundary_name="engineering_assessment_requested",
             source_event="event.technical-evidence.accepted.v1",
-            queue_name="lcsp.mda.test.engineering_assessment_requested",
+            queue_name="lcsp.agent_runtime.test.engineering_assessment_requested",
         ),
     )
 
@@ -102,7 +102,7 @@ def test_delivery_handler_invokes_boundary_and_acks(monkeypatch):
     invoked = []
     monkeypatch.setattr(
         rabbitmq_consumer,
-        "dispatch_managed_agent_event",
+        "dispatch_agent_runtime_event",
         lambda boundary_name, message, correlation_id: invoked.append(
             (boundary_name, message, correlation_id)
         ),
@@ -135,7 +135,7 @@ def test_delivery_handler_uses_payload_correlation_id(monkeypatch):
     invoked = []
     monkeypatch.setattr(
         rabbitmq_consumer,
-        "dispatch_managed_agent_event",
+        "dispatch_agent_runtime_event",
         lambda boundary_name, message, correlation_id: invoked.append(
             (boundary_name, message, correlation_id)
         ),
@@ -165,7 +165,7 @@ def test_delivery_handler_nacks_on_dispatch_failure(monkeypatch):
     def fail(_boundary_name, _message, _correlation_id):
         raise RuntimeError("dispatch failed")
 
-    monkeypatch.setattr(rabbitmq_consumer, "dispatch_managed_agent_event", fail)
+    monkeypatch.setattr(rabbitmq_consumer, "dispatch_agent_runtime_event", fail)
     channel = FakeChannel()
     method = SimpleNamespace(delivery_tag="delivery-1", routing_key="event.test")
     properties = SimpleNamespace(headers={})
@@ -188,7 +188,7 @@ def test_delivery_handler_never_requeues_terminal_boundary_failure(monkeypatch):
     def fail(_boundary_name, _message, _correlation_id):
         raise rabbitmq_consumer.NonRetryableAgentBoundaryError("terminal")
 
-    monkeypatch.setattr(rabbitmq_consumer, "dispatch_managed_agent_event", fail)
+    monkeypatch.setattr(rabbitmq_consumer, "dispatch_agent_runtime_event", fail)
     channel = FakeChannel()
     method = SimpleNamespace(delivery_tag="delivery-1", routing_key="event.test")
     properties = SimpleNamespace(headers={})
@@ -225,7 +225,7 @@ def test_retryable_delivery_failure_republishes_to_retry_queue_without_blocking(
         channel=channel,
         delivery_tag="delivery-1",
         routing_key="event.test",
-        queue_name="lcsp.mda.test.test_boundary",
+        queue_name="lcsp.agent_runtime.test.test_boundary",
         boundary_name="test_boundary",
         properties=properties,
         body=b"{\"payload\":true}",
@@ -239,7 +239,7 @@ def test_retryable_delivery_failure_republishes_to_retry_queue_without_blocking(
     assert len(channel.published) == 1
     published = channel.published[0]
     assert published["exchange"] == ""
-    assert published["routing_key"] == "lcsp.mda.test.test_boundary.retry.600000ms"
+    assert published["routing_key"] == "lcsp.agent_runtime.test.test_boundary.retry.600000ms"
     assert published["body"] == b"{\"payload\":true}"
     assert published["mandatory"] is True
     retry_properties = published["properties"]
@@ -252,7 +252,7 @@ def test_retryable_delivery_failure_republishes_to_retry_queue_without_blocking(
     assert retry_properties.headers == {
         "x-correlation-id": "corr-1",
         "custom": "kept",
-        rabbitmq_consumer.MANAGED_ATTEMPT_HEADER: 1,
+        rabbitmq_consumer.AGENT_RUNTIME_ATTEMPT_HEADER: 1,
     }
 
 
@@ -262,7 +262,7 @@ def test_configure_channel_declares_durable_retry_queue_back_to_original_queue()
         rabbitmq_consumer.BoundaryBinding(
             boundary_name="test_boundary",
             source_event="event.same",
-            queue_name="lcsp.mda.test.test_boundary",
+            queue_name="lcsp.agent_runtime.test.test_boundary",
             retry_delays_seconds=(30,),
         ),
     )
@@ -281,12 +281,12 @@ def test_configure_channel_declares_durable_retry_queue_back_to_original_queue()
 
     assert channel.confirmed is True
     assert {
-        "queue": "lcsp.mda.test.test_boundary.retry.30000ms",
+        "queue": "lcsp.agent_runtime.test.test_boundary.retry.30000ms",
         "durable": True,
         "arguments": {
             "x-message-ttl": 30000,
             "x-dead-letter-exchange": "",
-            "x-dead-letter-routing-key": "lcsp.mda.test.test_boundary",
+            "x-dead-letter-routing-key": "lcsp.agent_runtime.test.test_boundary",
         },
     } in channel.declared
 
@@ -297,7 +297,7 @@ def test_configure_channel_uses_bounded_fallback_for_empty_retry_schedule():
         rabbitmq_consumer.BoundaryBinding(
             boundary_name="default_boundary",
             source_event="event.default",
-            queue_name="lcsp.mda.test.default_boundary",
+            queue_name="lcsp.agent_runtime.test.default_boundary",
             retry_delays_seconds=(),
         ),
     )
@@ -320,12 +320,12 @@ def test_configure_channel_uses_bounded_fallback_for_empty_retry_schedule():
     ]
     assert retry_declarations == [
         {
-            "queue": "lcsp.mda.test.default_boundary.retry.2000ms",
+            "queue": "lcsp.agent_runtime.test.default_boundary.retry.2000ms",
             "durable": True,
             "arguments": {
                 "x-message-ttl": 2000,
                 "x-dead-letter-exchange": "",
-                "x-dead-letter-routing-key": "lcsp.mda.test.default_boundary",
+                "x-dead-letter-routing-key": "lcsp.agent_runtime.test.default_boundary",
             },
         }
     ]
@@ -334,7 +334,7 @@ def test_configure_channel_uses_bounded_fallback_for_empty_retry_schedule():
 def test_retry_attempt_header_increments_and_exhaustion_stops_requeue():
     channel = FakeChannel()
     properties = SimpleNamespace(
-        headers={rabbitmq_consumer.MANAGED_ATTEMPT_HEADER: 1},
+        headers={rabbitmq_consumer.AGENT_RUNTIME_ATTEMPT_HEADER: 1},
         correlation_id="corr-2",
     )
     completed = Future()
@@ -344,7 +344,7 @@ def test_retry_attempt_header_increments_and_exhaustion_stops_requeue():
         channel=channel,
         delivery_tag="delivery-2",
         routing_key="event.test",
-        queue_name="lcsp.mda.test.test_boundary",
+        queue_name="lcsp.agent_runtime.test.test_boundary",
         boundary_name="test_boundary",
         properties=properties,
         body=b"{}",
@@ -355,17 +355,17 @@ def test_retry_attempt_header_increments_and_exhaustion_stops_requeue():
 
     assert channel.acked == ["delivery-2"]
     assert channel.nacked == []
-    assert channel.published[0]["routing_key"] == "lcsp.mda.test.test_boundary.retry.120000ms"
-    assert channel.published[0]["properties"].headers[rabbitmq_consumer.MANAGED_ATTEMPT_HEADER] == 2
+    assert channel.published[0]["routing_key"] == "lcsp.agent_runtime.test.test_boundary.retry.120000ms"
+    assert channel.published[0]["properties"].headers[rabbitmq_consumer.AGENT_RUNTIME_ATTEMPT_HEADER] == 2
 
     exhausted = FakeChannel()
     rabbitmq_consumer._settle_delivery(
         channel=exhausted,
         delivery_tag="delivery-3",
         routing_key="event.test",
-        queue_name="lcsp.mda.test.test_boundary",
+        queue_name="lcsp.agent_runtime.test.test_boundary",
         boundary_name="test_boundary",
-        properties=SimpleNamespace(headers={rabbitmq_consumer.MANAGED_ATTEMPT_HEADER: 2}),
+        properties=SimpleNamespace(headers={rabbitmq_consumer.AGENT_RUNTIME_ATTEMPT_HEADER: 2}),
         body=b"{}",
         requeue_on_error=True,
         retry_delays_seconds=(30, 120),
@@ -385,7 +385,7 @@ def test_retry_publish_not_confirmed_keeps_original_delivery_requeued():
         channel=channel,
         delivery_tag="delivery-4",
         routing_key="event.test",
-        queue_name="lcsp.mda.test.test_boundary",
+        queue_name="lcsp.agent_runtime.test.test_boundary",
         boundary_name="test_boundary",
         properties=SimpleNamespace(headers={}, correlation_id="corr-4"),
         body=b"{}",

@@ -14,7 +14,7 @@ depends_on:
 
 ## Outcome
 
-Receive scan results from the repository-analysis Managed Deep Agent. Worker-authenticated (API key). Validate evidence schema and provenance metadata. Transition `RepositoryScanJob` status. Create `TechnicalEvidenceReport` artifact. Trigger downstream evidence evaluation. Secrets and raw source must not appear in evidence payload.
+Receive scan results from the repository-analysis LCSP Agent Runtime. Worker-authenticated (API key). Validate evidence schema and provenance metadata. Transition `RepositoryScanJob` status. Create `TechnicalEvidenceReport` artifact. Trigger downstream evidence evaluation. Secrets and raw source must not appear in evidence payload.
 
 ## Module Files
 
@@ -35,7 +35,7 @@ model TechnicalEvidenceReport {
   assessmentId     String
   organizationId   String
   snapshotId       String
-  toolsVersion     Json                             // { deepagents: 'x.y.z', 'managed-deepagents': 'x.y.z', 'repository-analysis': '1.0.0' }
+  toolsVersion     Json                             // { deepagents: 'x.y.z', 'langgraph': 'x.y.z', 'repository-analysis': '1.0.0' }
   configHash       Json                             // { 'repository-analysis': 'sha256:...' }
   evidencePayload  Json                             // Validated + redacted findings
   privacyFlags     Json                             // { containsSourceCode: false, ... }

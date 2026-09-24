@@ -109,7 +109,7 @@ TechnicalEvidenceReport Gates
 ### Testing Requirements
 
 - API/worker contract tests cho trusted trigger, outbox enqueue và status projection.
-- Managed repository sandbox isolation tests, coverage/provenance assertions, and source-grounding tests.
+- LCSP Docker repository sandbox isolation tests, coverage/provenance assertions, and source-grounding tests.
 - TechnicalEvidenceReport gate coverage và immutable TechnicalProfile versioning tests.
 
 ### References

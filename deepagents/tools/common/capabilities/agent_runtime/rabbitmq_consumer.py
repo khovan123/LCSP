@@ -1,4 +1,4 @@
-"""RabbitMQ ingress for Managed Deep Agent invocation boundaries."""
+"""RabbitMQ ingress for Deep Agent invocation boundaries."""
 
 from __future__ import annotations
 
@@ -21,32 +21,32 @@ from orchestration.agent_stream import install_agent_stream_log_handler
 
 from tools.common.capabilities.platform.env import load_runtime_env
 from tools.common.capabilities.platform.logging import suppress_langgraph_heartbeat_logs
-from tools.common.capabilities.managed.boundary import NonRetryableAgentBoundaryError
-from tools.common.capabilities.managed.invocation import (
+from tools.common.capabilities.agent_runtime.boundary import NonRetryableAgentBoundaryError
+from tools.common.capabilities.agent_runtime.invocation import (
     invocation_boundary_manifest,
     load_boundary,
 )
-from tools.common.capabilities.managed.agent_server_client import (
-    dispatch_managed_agent_event,
+from tools.common.capabilities.agent_runtime.agent_server_client import (
+    dispatch_agent_runtime_event,
 )
 from middleware.billing_recovery import start_background_worker
 from tools.common.capabilities.platform.api_client import WorkerApiClient
 from tools.common.capabilities.platform.config import load_config
 
-LOGGER = logging.getLogger("lcsp.mda.rabbitmq_consumer")
+LOGGER = logging.getLogger("lcsp.agent_runtime.rabbitmq_consumer")
 DEFAULT_EXCHANGE = "lcsp.events"
-DEFAULT_QUEUE_PREFIX = "lcsp.mda.boundary"
+DEFAULT_QUEUE_PREFIX = "lcsp.agent_runtime.boundary"
 DEFAULT_RECONNECT_DELAY_SECONDS = 2.0
 DEFAULT_REQUEUE_DELAY_SECONDS = 2.0
 DEFAULT_FALLBACK_MAX_REDELIVERIES = 3
-MANAGED_ATTEMPT_HEADER = "x-lcsp-managed-attempt"
+AGENT_RUNTIME_ATTEMPT_HEADER = "x-lcsp-agent-runtime-attempt"
 DEFAULT_API_READY_TIMEOUT_SECONDS = 60.0
 DEFAULT_API_READY_POLL_SECONDS = 0.5
 
 
 @dataclass(frozen=True)
 class BoundaryBinding:
-    """One RabbitMQ queue binding for one Managed Agent boundary."""
+    """One RabbitMQ queue binding for one Agent Runtime boundary."""
 
     boundary_name: str
     source_event: str
@@ -57,7 +57,7 @@ class BoundaryBinding:
 def boundary_bindings(
     queue_prefix: str = DEFAULT_QUEUE_PREFIX,
 ) -> tuple[BoundaryBinding, ...]:
-    """Return queue bindings derived from the Managed Agent boundary manifest."""
+    """Return queue bindings derived from the Agent Runtime boundary manifest."""
     bindings: list[BoundaryBinding] = []
     seen_queues: set[str] = set()
 
@@ -66,7 +66,7 @@ def boundary_bindings(
         source_event = _required_manifest_text(entry, "source_event")
         queue_name = f"{queue_prefix}.{boundary_name}"
         if queue_name in seen_queues:
-            raise RuntimeError(f"duplicate Managed Agent queue: {queue_name}")
+            raise RuntimeError(f"duplicate Agent Runtime queue: {queue_name}")
         seen_queues.add(queue_name)
         bindings.append(
             BoundaryBinding(
@@ -105,31 +105,31 @@ def run_consumer() -> None:
         raise RuntimeError("Missing required env var: RABBITMQ_URL")
 
     exchange = os.getenv("RABBITMQ_EXCHANGE", DEFAULT_EXCHANGE)
-    queue_prefix = os.getenv("LCSP_MDA_RABBITMQ_QUEUE_PREFIX", DEFAULT_QUEUE_PREFIX)
-    prefetch_count = int(os.getenv("LCSP_MDA_RABBITMQ_PREFETCH", "1"))
-    requeue_on_error = _read_bool("LCSP_MDA_RABBITMQ_REQUEUE_ON_ERROR", True)
+    queue_prefix = os.getenv("LCSP_AGENT_RUNTIME_RABBITMQ_QUEUE_PREFIX", DEFAULT_QUEUE_PREFIX)
+    prefetch_count = int(os.getenv("LCSP_AGENT_RUNTIME_RABBITMQ_PREFETCH", "1"))
+    requeue_on_error = _read_bool("LCSP_AGENT_RUNTIME_RABBITMQ_REQUEUE_ON_ERROR", True)
     reconnect_delay_seconds = float(
         os.getenv(
-            "LCSP_MDA_RABBITMQ_RECONNECT_DELAY_SECONDS",
+            "LCSP_AGENT_RUNTIME_RABBITMQ_RECONNECT_DELAY_SECONDS",
             str(DEFAULT_RECONNECT_DELAY_SECONDS),
         )
     )
     requeue_delay_seconds = float(
         os.getenv(
-            "LCSP_MDA_RABBITMQ_REQUEUE_DELAY_SECONDS",
+            "LCSP_AGENT_RUNTIME_RABBITMQ_REQUEUE_DELAY_SECONDS",
             str(DEFAULT_REQUEUE_DELAY_SECONDS),
         )
     )
     fallback_max_redeliveries = int(
         os.getenv(
-            "LCSP_MDA_RABBITMQ_FALLBACK_MAX_REDELIVERIES",
+            "LCSP_AGENT_RUNTIME_RABBITMQ_FALLBACK_MAX_REDELIVERIES",
             str(DEFAULT_FALLBACK_MAX_REDELIVERIES),
         )
     )
     api_base_url = os.getenv("NESTJS_API_BASE_URL")
     api_ready_timeout_seconds = float(
         os.getenv(
-            "LCSP_MDA_API_READY_TIMEOUT_SECONDS",
+            "LCSP_AGENT_RUNTIME_API_READY_TIMEOUT_SECONDS",
             str(DEFAULT_API_READY_TIMEOUT_SECONDS),
         )
     )
@@ -143,7 +143,7 @@ def run_consumer() -> None:
         if stopping.is_set():
             return
         stopping.set()
-        LOGGER.info("Stopping Managed Agent RabbitMQ consumer")
+        LOGGER.info("Stopping Agent Runtime RabbitMQ consumer")
         if (
             active_connection is not None
             and active_connection.is_open
@@ -170,7 +170,7 @@ def run_consumer() -> None:
 
     with ThreadPoolExecutor(
         max_workers=prefetch_count,
-        thread_name_prefix="lcsp-mda-boundary",
+        thread_name_prefix="lcsp-agent-runtime-boundary",
     ) as executor:
         while not stopping.is_set():
             connection: pika.BlockingConnection | None = None
@@ -193,12 +193,12 @@ def run_consumer() -> None:
                     requeue_delay_seconds=requeue_delay_seconds,
                     fallback_max_redeliveries=fallback_max_redeliveries,
                 )
-                LOGGER.info("Starting Managed Agent RabbitMQ consumer")
+                LOGGER.info("Starting Agent Runtime RabbitMQ consumer")
                 channel.start_consuming()
             except (pika.exceptions.AMQPError, OSError):
                 if not stopping.is_set():
                     LOGGER.exception(
-                        "Managed Agent RabbitMQ connection lost; reconnecting in %.1fs",
+                        "Agent Runtime RabbitMQ connection lost; reconnecting in %.1fs",
                         reconnect_delay_seconds,
                     )
             finally:
@@ -241,7 +241,7 @@ def _wait_for_api_ready(
 
         if monotonic() >= deadline:
             raise RuntimeError(
-                "Nest API was not ready before starting Managed Agent "
+                "Nest API was not ready before starting Agent Runtime "
                 f"RabbitMQ consumer: {health_url} ({last_error})"
             )
 
@@ -302,7 +302,7 @@ def _configure_channel(
             ),
         )
         LOGGER.info(
-            "Bound Managed Agent boundary queue=%s routing_key=%s boundary=%s retry_delays=%s",
+            "Bound Agent Runtime boundary queue=%s routing_key=%s boundary=%s retry_delays=%s",
             binding.queue_name,
             binding.source_event,
             binding.boundary_name,
@@ -358,7 +358,7 @@ def _dispatch_delivery(boundary_name: str, properties: Any, body: bytes) -> None
         getattr(properties, "headers", None),
         boundary_name,
     )
-    dispatch_managed_agent_event(boundary_name, message, correlation_id)
+    dispatch_agent_runtime_event(boundary_name, message, correlation_id)
 
 
 def _with_billing_attempt(message: dict[str, Any], attempt: int) -> dict[str, Any]:
@@ -440,7 +440,7 @@ def _settle_delivery(
             return
 
         LOGGER.error(
-            "Managed Agent boundary dispatch failed boundary=%s routing_key=%s",
+            "Agent Runtime boundary dispatch failed boundary=%s routing_key=%s",
             boundary_name,
             routing_key,
             exc_info=(type(error), error, error.__traceback__),
@@ -457,7 +457,7 @@ def _settle_delivery(
             retry_delay_seconds = retry_delays_seconds[current_attempt]
             retry_queue = _retry_queue_name(queue_name, retry_delay_seconds)
             LOGGER.warning(
-                "Managed Agent boundary retry scheduled boundary=%s routing_key=%s "
+                "Agent Runtime boundary retry scheduled boundary=%s routing_key=%s "
                 "correlation_id=%s attempt=%s max_attempts=%s delay_seconds=%s "
                 "exception_type=%s",
                 boundary_name,
@@ -482,7 +482,7 @@ def _settle_delivery(
 
         if retryable:
             LOGGER.error(
-                "Managed Agent boundary retry exhausted boundary=%s routing_key=%s "
+                "Agent Runtime boundary retry exhausted boundary=%s routing_key=%s "
                 "correlation_id=%s attempt=%s max_attempts=%s exception_type=%s",
                 boundary_name,
                 routing_key,
@@ -512,7 +512,7 @@ def _delivery_error(completed: Future[None]) -> BaseException | None:
 def _decode_message(body: bytes) -> dict[str, Any]:
     value = json.loads(body.decode("utf-8"))
     if not isinstance(value, dict):
-        raise ValueError("RabbitMQ Managed Agent message must be a JSON object")
+        raise ValueError("RabbitMQ Agent Runtime message must be a JSON object")
     return value
 
 
@@ -527,7 +527,7 @@ def _correlation_id(
     header_value = (headers or {}).get("x-correlation-id")
     if isinstance(header_value, str) and header_value:
         return header_value
-    return f"mda:{boundary_name}"
+    return f"agent-runtime:{boundary_name}"
 
 
 
@@ -539,12 +539,12 @@ def _optional_retry_delays(entry: dict[str, Any]) -> tuple[float, ...]:
             return tuple(float(value) for value in load_boundary(target).retry_delays_seconds)
         return ()
     if not isinstance(raw, (list, tuple)):
-        raise RuntimeError("Managed Agent boundary manifest retry_delays_seconds must be a list")
+        raise RuntimeError("Agent Runtime boundary manifest retry_delays_seconds must be a list")
     delays: list[float] = []
     for value in raw:
         delay = float(value)
         if delay < 0:
-            raise RuntimeError("Managed Agent boundary retry delay cannot be negative")
+            raise RuntimeError("Agent Runtime boundary retry delay cannot be negative")
         delays.append(delay)
     return tuple(delays)
 
@@ -571,7 +571,7 @@ def _retry_queue_name(queue_name: str, delay_seconds: float) -> str:
 def _delivery_attempt(properties: Any | None) -> int:
     headers = getattr(properties, "headers", None) or {}
     try:
-        return max(int(headers.get(MANAGED_ATTEMPT_HEADER, 0)), 0)
+        return max(int(headers.get(AGENT_RUNTIME_ATTEMPT_HEADER, 0)), 0)
     except (TypeError, ValueError):
         return 0
 
@@ -582,7 +582,7 @@ def _property_value(properties: Any | None, name: str) -> Any:
 
 def _retry_properties(properties: Any | None, attempt: int) -> pika.BasicProperties:
     headers = dict(getattr(properties, "headers", None) or {})
-    headers[MANAGED_ATTEMPT_HEADER] = attempt
+    headers[AGENT_RUNTIME_ATTEMPT_HEADER] = attempt
     preserved_names = (
         "content_type",
         "content_encoding",
@@ -620,7 +620,7 @@ def _publish_retry_delivery(
         )
     except pika.exceptions.AMQPError:
         LOGGER.exception(
-            "Managed Agent boundary retry publish failed retry_queue=%s attempt=%s",
+            "Agent Runtime boundary retry publish failed retry_queue=%s attempt=%s",
             retry_queue,
             attempt,
         )
@@ -631,7 +631,7 @@ def _publish_retry_delivery(
 def _required_manifest_text(entry: dict[str, str], key: str) -> str:
     value = entry.get(key)
     if not value:
-        raise RuntimeError(f"Managed Agent boundary manifest entry missing {key}")
+        raise RuntimeError(f"Agent Runtime boundary manifest entry missing {key}")
     return value
 
 

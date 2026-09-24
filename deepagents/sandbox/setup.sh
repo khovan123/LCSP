@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Codebase Memory must run inside the MDA sandbox so it indexes the exact same
+# Codebase Memory must run inside the LCSP Docker sandbox so it indexes the exact same
 # /workspace/repository database used by the Deep Agent. The PyPI package is the
 # publisher's verified bootstrap wrapper; bake the downloaded native binary into
 # the sandbox image so assessment runs do not download executables at runtime.
 #
-# Managed Deep Agents currently loads only remote HTTP/SSE MCP connectors, while
-# Codebase Memory is a stdio MCP server. Keep the actual upstream MCP binary in
-# the sandbox and expose a stable `codebase-memory-graph` command. Its `cli`
+# Keep the actual upstream Codebase Memory MCP binary in
+# the sandbox image and expose a stable `codebase-memory-graph` command. Its `cli`
 # mode invokes the exact MCP tool implementations one-shot, so the agent can use
 # index_repository/search_graph/trace_path/query_graph/etc. without moving code
 # out of the assessment sandbox.

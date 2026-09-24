@@ -1,4 +1,4 @@
-"""Structured specialist handoff contracts for LCSP Managed Deep Agents."""
+"""Structured specialist handoff contracts for LCSP Deep Agents."""
 
 from __future__ import annotations
 

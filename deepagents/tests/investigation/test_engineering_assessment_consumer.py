@@ -10,7 +10,7 @@ from tools.common.capabilities.assessment.investigation.engineering_rule.enginee
 )
 from tools.common.capabilities.assessment.investigation.engineering_rule.pipeline import EngineeringInvestigationResult
 from tools.common.capabilities.platform.api_client import WorkerCallbackError
-from tools.common.capabilities.managed.boundary import NonRetryableAgentBoundaryError
+from tools.common.capabilities.agent_runtime.boundary import NonRetryableAgentBoundaryError
 from tools.triage.legal_rule_triage.contracts import LEGAL_RULE_TRIAGE_REQUEST_COMMAND
 
 

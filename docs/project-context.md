@@ -57,7 +57,7 @@ _File này chứa các rule ngắn, có tính thực thi cao, dành cho AI agent
 - Raw source code không được gửi vào LLM.
 - Raw source không được lưu dài hạn.
 - Secrets phải redacted trước logs, findings, reports, prompts, audit records.
-- Repository source chỉ nằm trong assessment-scoped Managed Deep Agents sandbox; LCSP persistence không được giữ raw source ngoài sandbox. [Source: docs/architecture/architecture.md] [Source: docs/product/business-rules.md]
+- Repository source chỉ nằm trong assessment-scoped LCSP Docker sandbox; LCSP persistence không được giữ raw source ngoài sandbox. [Source: docs/architecture/architecture.md] [Source: docs/product/business-rules.md]
 
 ### 7. State Machine and Output Gates Cannot Be Bypassed
 

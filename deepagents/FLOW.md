@@ -1,6 +1,6 @@
 # LCSP Deep-Agent Orchestration
 
-This document defines the LCSP v3 Managed Deep Agents boundary.
+This document defines the LCSP v3 native Deep Agents / LangGraph boundary.
 
 The root is a **supervisor/orchestrator**, not another investigation worker. It
 owns bounded runtime context, thread/checkpoint execution memory, and the todo
@@ -63,7 +63,7 @@ authoritative value by a model.
 
 ### Memory
 
-Managed Deep Agents/LangGraph thread checkpointing is the supervisor's execution
+Deep Agents/LangGraph thread checkpointing is the supervisor's execution
 memory for the current run and resume point.
 
 LCSP authoritative data remains in the API/database:
@@ -75,8 +75,7 @@ LCSP authoritative data remains in the API/database:
 - deterministic evaluation outcomes;
 - report/audit artifacts.
 
-The project defines root `memory.py` with Managed Deep Agents agent-scoped
-durable memory for compact, tenant-neutral operational knowledge only. It must
+The runtime uses LangGraph checkpoint state as execution memory only. It must
 never become storage for assessment/customer state, repository source, legal
 conclusions, authorization decisions, or other tenant-scoped authority. The
 LCSP API/database and commit-pinned repository workspace remain the authority
@@ -386,7 +385,7 @@ they leave the worker. Provider fallback and key rotation keep their existing re
 semantics; streaming only reports those transitions.
 
 ```text
-Managed Agent / LangGraph
+Agent Runtime / LangGraph
         │ ordered buffered events
         ▼
 WorkerApiClient

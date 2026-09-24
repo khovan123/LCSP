@@ -9,7 +9,7 @@ from tools.common.retrieve_verified_episodes.code import retrieve_verified_episo
 
 
 # Deep Agents supplies filesystem/shell/task tools automatically. MCP connectors are
-# injected by Managed Deep Agents, so repository/graph exploration does not belong here.
+# configured by the LCSP Agent Runtime, so repository/graph exploration does not belong here.
 TOOLS = [retrieve_verified_episodes]
 OUTPUT_MODEL = PlannerResult
 

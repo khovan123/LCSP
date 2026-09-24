@@ -137,7 +137,7 @@ class WaitingAssessmentRegistry:
         """
         checkpoints = self.take_all()
         if invoker is None:
-            from tools.common.capabilities.managed.invocation import invoke_boundary
+            from tools.common.capabilities.agent_runtime.invocation import invoke_boundary
 
             invoker = invoke_boundary
         correlation_id_factory = correlation_id_factory or (

@@ -23,7 +23,7 @@ As a Manager or scoped Developer, I want to pin a branch or commit snapshot, so 
 3. **Given** source files are temporarily materialized for scan
    **When** the snapshot operation completes or fails
    **Then** LCSP retains only approved metadata and evidence artifacts
-   **And** raw source is not persisted long-term outside the assessment-scoped Managed Deep Agents repository sandbox.
+   **And** raw source is not persisted long-term outside the assessment-scoped LCSP Docker repository sandbox.
 
 ## Dev Notes
 

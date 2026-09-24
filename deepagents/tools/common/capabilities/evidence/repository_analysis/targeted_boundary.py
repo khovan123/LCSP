@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from typing import Protocol
 
-from tools.common.capabilities.managed.boundary import (
+from tools.common.capabilities.agent_runtime.boundary import (
     AgentBoundaryBase,
     NonRetryableAgentBoundaryError,
 )

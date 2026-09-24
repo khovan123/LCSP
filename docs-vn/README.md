@@ -36,7 +36,7 @@ IMPLEMENTATION_NOT_AUTHORIZED
 SPRINT_EXECUTION_NOT_AUTHORIZED
 ```
 
-PR #2 đã đồng bộ target Phase 5.2L: PBAC, Automatic Trusted Scan Initiation, Python Worker Platform, Managed Deep Agents repository analysis và ChromaDB vectorless legal RAG. Pass hiện tại rút gọn inventory active: chỉ giữ product context/brief, UC/FR/NFR/BR, specs, architecture/ADR, implementation và `docs-vn/`; nội dung lịch sử/planning không còn là tài liệu active.
+PR #2 đã đồng bộ target Phase 5.2L: PBAC, Automatic Trusted Scan Initiation, Python Worker Platform, LCSP Agent Runtime repository analysis và ChromaDB vectorless legal RAG. Pass hiện tại rút gọn inventory active: chỉ giữ product context/brief, UC/FR/NFR/BR, specs, architecture/ADR, implementation và `docs-vn/`; nội dung lịch sử/planning không còn là tài liệu active.
 
 Báo cáo và checklist closure nằm tại `12-review-truoc-ux-phase-5-2l.md`.
 

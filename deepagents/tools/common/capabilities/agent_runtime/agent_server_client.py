@@ -1,4 +1,4 @@
-"""Submit broker events into the Managed Deep Agents Agent Server."""
+"""Submit broker events into the local LangGraph Agent Server."""
 
 from __future__ import annotations
 
@@ -14,13 +14,13 @@ DEFAULT_ASSISTANT_ID = "lcsp-agent"
 _THREAD_NAMESPACE = UUID("b7b26975-09de-44e5-a7d5-c996523fd289")
 
 
-def dispatch_managed_agent_event(
+def dispatch_agent_runtime_event(
     boundary_name: str,
     message: dict[str, Any],
     correlation_id: str,
 ) -> dict[str, Any] | list[dict[str, Any]]:
     """Create/reuse one assessment thread and synchronously execute the system event."""
-    thread_id = managed_thread_id(boundary_name, message, correlation_id)
+    thread_id = agent_thread_id(boundary_name, message, correlation_id)
     assessment_id = _find_text(message, "assessmentId", "assessment_id")
     workflow_run_id = _find_text(
         message,
@@ -32,31 +32,13 @@ def dispatch_managed_agent_event(
         "scan_job_id",
     )
 
-    configurable = {
-        "thread_id": thread_id,
-        "correlation_id": correlation_id,
-        "cwd": "/workspace/repository",
-    }
-    _copy_if_present(configurable, "assessment_id", assessment_id)
-    _copy_if_present(
-        configurable,
-        "snapshot_id",
-        _find_text(message, "snapshotId", "snapshot_id"),
-    )
-    _copy_if_present(
-        configurable,
-        "scan_job_id",
-        _find_text(message, "scanJobId", "scan_job_id"),
-    )
-    _copy_if_present(
-        configurable,
-        "commit_sha",
-        _find_text(message, "commitSha", "commit_sha"),
-    )
-
     context = {
         "assessment_id": assessment_id,
         "workflow_run_id": workflow_run_id,
+        "thread_id": thread_id,
+        "snapshot_id": _find_text(message, "snapshotId", "snapshot_id"),
+        "scan_job_id": _find_text(message, "scanJobId", "scan_job_id"),
+        "commit_sha": _find_text(message, "commitSha", "commit_sha"),
         "correlation_id": correlation_id,
         "system_boundary_name": boundary_name,
         "system_event": message,
@@ -64,17 +46,21 @@ def dispatch_managed_agent_event(
     }
 
     client = get_sync_client(
-        url=os.getenv("LCSP_MDA_AGENT_SERVER_URL", DEFAULT_AGENT_SERVER_URL),
+        url=os.getenv("LCSP_AGENT_SERVER_URL", DEFAULT_AGENT_SERVER_URL),
         timeout=600,
     )
+    metadata = {"lcspAgentRuntimeThread": True}
+    if assessment_id:
+        metadata["assessmentId"] = assessment_id
+
     client.threads.create(
         thread_id=thread_id,
         if_exists="do_nothing",
-        metadata={"assessmentId": assessment_id, "lcspManagedThread": True},
+        metadata=metadata,
     )
     return client.runs.wait(
         thread_id,
-        os.getenv("LCSP_MDA_ASSISTANT_ID", DEFAULT_ASSISTANT_ID),
+        os.getenv("LCSP_AGENT_ASSISTANT_ID", DEFAULT_ASSISTANT_ID),
         input={
             "messages": [
                 {
@@ -88,7 +74,6 @@ def dispatch_managed_agent_event(
                 }
             ]
         },
-        config={"configurable": configurable},
         context=context,
         metadata={
             "lcsp_boundary_name": boundary_name,
@@ -100,12 +85,12 @@ def dispatch_managed_agent_event(
     )
 
 
-def managed_thread_id(
+def agent_thread_id(
     boundary_name: str,
     message: Mapping[str, Any],
     correlation_id: str,
 ) -> str:
-    """Use one stable MDA thread/sandbox for the full lifetime of an assessment."""
+    """Use one stable LangGraph thread/sandbox for the full assessment lifetime."""
     assessment_id = _find_text(message, "assessmentId", "assessment_id")
     if assessment_id:
         seed = f"assessment:{assessment_id}"
@@ -147,14 +132,9 @@ def _find_text(value: Any, *keys: str, depth: int = 5) -> str | None:
     return None
 
 
-def _copy_if_present(target: dict[str, str], key: str, value: str | None) -> None:
-    if value:
-        target[key] = value
-
-
 __all__ = [
     "DEFAULT_AGENT_SERVER_URL",
     "DEFAULT_ASSISTANT_ID",
-    "dispatch_managed_agent_event",
-    "managed_thread_id",
+    "agent_thread_id",
+    "dispatch_agent_runtime_event",
 ]

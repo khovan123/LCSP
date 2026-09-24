@@ -112,7 +112,7 @@ Implementation documents are build specifications, not evidence that application
 
 ## Locked MVP Runtime Decisions
 
-- Managed Deep Agents own repository-analysis execution while the Python Worker Platform carries asynchronous assessment orchestration.
+- LCSP Agent Runtime owns repository-analysis execution while the Python Worker Platform carries asynchronous assessment orchestration.
 - Python Worker Platform owns all asynchronous domain workloads.
 - Repository analysis uses native Deep Agents repository tools plus optional Codebase Memory MCP, with direct source verification and fail-closed coverage rules.
 - Cross-language structural discovery is handled by the repository agent and optional Codebase Memory MCP; no dedicated ts-morph scanner subprocess is required.

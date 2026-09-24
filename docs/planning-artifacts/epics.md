@@ -212,7 +212,7 @@ NFR-033: LLM API calls must be protected by monthly cost budget boundaries and t
 
 NFR-034: Pinned legal corpus snapshots must remain immutable, with updates governed by formal review and approval.
 
-NFR-035: Repository analysis must run inside the assessment Managed Deep Agents sandbox with the pinned repository working database, bounded resources, source-safe evidence output, explicit unresolved coverage, and no host filesystem escape.
+NFR-035: Repository analysis must run inside the assessment LCSP Docker repository sandbox with the pinned repository working database, bounded resources, source-safe evidence output, explicit unresolved coverage, and no host filesystem escape.
 
 ### Additional Requirements
 
@@ -221,7 +221,7 @@ NFR-035: Repository analysis must run inside the assessment Managed Deep Agents 
 - Backend API owns auth, RBAC enforcement boundary, assessment state, synchronous user actions, trusted trigger creation and async work creation.
 - Repository Integration must keep read-only repository authorization separate from OAuth/OIDC login.
 - Python Worker Platform owns all async domain workloads through bounded consumers/modules.
-- Managed Deep Agents owns repository analysis. The Repository Deep Agent uses native filesystem/search/shell/subagent capabilities; Codebase Memory MCP 0.11.0 may accelerate graph discovery, while direct repository source remains authoritative.
+- LCSP Agent Runtime owns repository analysis. The Repository Deep Agent uses native filesystem/search/shell/subagent capabilities; Codebase Memory MCP 0.11.0 may accelerate graph discovery, while direct repository source remains authoritative.
 - Legal Source Ingestion Worker fetches official legal sources, snapshots raw PDF/HTML into S3-compatible object storage, normalizes legal structure and stages corpus versions for review.
 - Internal Legal Operator approval creates approved immutable `LegalCorpusVersion`; this is internal operations/API/CLI scope, not customer-facing Manager/Developer UX.
 - ChromaDB Legal Indexer builds a structure-first vectorless index using document/chunk storage, stable hierarchical IDs, metadata filters, full-text records, direct ID lookup and cross-reference metadata.
@@ -1044,13 +1044,13 @@ So that duplicate, retry, out-of-order, and replay paths do not create inconsist
 ### Story 3.4: Managed Repository Workspace and Sandbox
 
 As LCSP,
-I want each assessment to hydrate its pinned snapshot into the durable Managed Deep Agents sandbox,
+I want each assessment to hydrate its pinned snapshot into the durable LCSP Docker repository sandbox,
 So that repository investigation is isolated, reproducible, and source-grounded.
 
 **Acceptance Criteria:**
 
 **Given** a RepositoryScanJob is ready
-**When** the Managed Deep Agents thread handles the trusted scan event
+**When** the LCSP Agent Runtime thread handles the trusted scan event
 **Then** it hydrates the pinned snapshot into /workspace/repository
 **And** exposes that repository as the Deep Agent filesystem root
 **And** reserves .git/ and .lcsp/ for runtime bookkeeping rather than customer evidence.

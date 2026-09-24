@@ -178,7 +178,7 @@ Nếu chưa thể cung cấp technical evidence, Manager có thể xuất readin
 - Shared customer-facing auth/workspace contracts implemented through TypeScript shared packages, provided public export boundaries are preserved.
 - Web Wizard cho Manager.
 - Python Worker Platform cho tất cả asynchronous domain workloads.
-- Managed Deep Agent thực thi Repository Scan trên durable assessment repository workspace.
+- Repository Deep Agent thực thi Repository Scan trên durable LCSP Docker repository workspace.
 - Repository analysis dùng native filesystem/search/shell/subagent tools và có thể dùng Codebase Memory MCP; không còn language-specific static-scanner toolchain.
 - Kết nối GitHub repository (read-only) và Automatic Trusted Scan Initiation.
 - Tích hợp nhà cung cấp LLM thật (Gemini, Claude, hoặc GPT) cho happy-path risk classification và document generation.
@@ -908,7 +908,7 @@ Audit trail must support the question: "Why did LCSP reach this conclusion, base
 
 - Exact list of optional human-attestable claims remains historical and out of active MVP.
 - RBAC engine/storage/cache/invalidation/topology/failure behavior is `TECHNICAL_DECISION_REQUIRED`.
-- Repository-analysis failure/coverage policy follows the managed-agent runtime contract and fail-closed evidence rules.
+- Repository-analysis failure/coverage policy follows the Agent Runtime contract and fail-closed evidence rules.
 
 ### Reporting
 
