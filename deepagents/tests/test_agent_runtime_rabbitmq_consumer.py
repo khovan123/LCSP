@@ -912,3 +912,69 @@ def test_a_malformed_api_response_is_not_mistaken_for_a_rejection():
 
     assert error.status_code is None
     assert error.callback_client_error is False
+
+
+def test_missing_scan_job_claim_is_classified_as_stale_delivery(monkeypatch):
+    from tools.common.capabilities.platform.api_client import WorkerCallbackError
+
+    class MissingWorkerClient:
+        def claim_scan_job(self, scan_job_id, payload):
+            assert scan_job_id == "scan-deleted"
+            assert payload["boundary_name"] == "scan_requested"
+            raise WorkerCallbackError(
+                "SCAN_JOB_NOT_FOUND: Callback failed with client error 404.",
+                status_code=404,
+            )
+
+    monkeypatch.setattr(
+        rabbitmq_consumer,
+        "_worker_client_or_none",
+        lambda: MissingWorkerClient(),
+    )
+
+    with pytest.raises(rabbitmq_consumer.StaleScanDelivery) as raised:
+        rabbitmq_consumer._claim_scan_delivery(
+            "scan_requested",
+            {"scanJobId": "scan-deleted"},
+            1800,
+        )
+
+    assert raised.value.scan_job_id == "scan-deleted"
+
+
+def test_stale_scan_delivery_is_acked_without_retry_or_terminal_failure(monkeypatch):
+    failures = []
+
+    class FakeWorkerClient:
+        def post_scan_terminal_failure(self, scan_job_id, payload):
+            failures.append((scan_job_id, payload))
+
+    monkeypatch.setattr(
+        rabbitmq_consumer,
+        "_worker_client_or_none",
+        lambda: FakeWorkerClient(),
+    )
+    channel = FakeChannel()
+    completed: Future[None] = Future()
+    completed.set_exception(rabbitmq_consumer.StaleScanDelivery("scan-deleted"))
+
+    rabbitmq_consumer._settle_delivery(
+        channel=channel,
+        delivery_tag="delivery-stale",
+        routing_key="command.scan.requested.v1",
+        queue_name="lcsp.agent_runtime.test.scan_requested",
+        boundary_name="scan_requested",
+        properties=SimpleNamespace(
+            headers={"x-correlation-id": "corr-stale"},
+            correlation_id="corr-stale",
+        ),
+        body=json.dumps({"scanJobId": "scan-deleted"}).encode("utf-8"),
+        requeue_on_error=True,
+        retry_delays_seconds=(2, 10, 30),
+        completed=completed,
+    )
+
+    assert channel.acked == ["delivery-stale"]
+    assert channel.nacked == []
+    assert channel.published == []
+    assert failures == []
