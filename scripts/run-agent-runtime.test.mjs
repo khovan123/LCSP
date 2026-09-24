@@ -54,3 +54,16 @@ test("agent runtime sets explicit local LangGraph concurrency", () => {
   assert.match(source, /resolvePositiveInteger/u);
   assert.match(source, /"8"/u);
 });
+
+
+test("optional observability failure does not stop Agent Runtime services", () => {
+  assert.match(source, /optional: target\.optional === true/u);
+  assert.match(
+    source,
+    /if \(optional\) \{[\s\S]*core dev services remain running\.[\s\S]*return;/u,
+  );
+  assert.match(
+    source,
+    /phoenix: \{[\s\S]*optional: true,/u,
+  );
+});
