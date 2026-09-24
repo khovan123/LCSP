@@ -24,6 +24,7 @@ DEFAULT_AGENT_SERVER_RUN_TIMEOUT_SECONDS = 600.0
 DEFAULT_AGENT_SERVER_POLL_SECONDS = 0.5
 DEFAULT_AGENT_SERVER_PENDING_HEARTBEAT_SECONDS = 10.0
 _THREAD_NAMESPACE = UUID("b7b26975-09de-44e5-a7d5-c996523fd289")
+_ACTIVE_RUN_STATUSES = {"pending", "running"}
 
 
 class AgentServerRunError(NonRetryableAgentBoundaryError):
@@ -86,31 +87,34 @@ def dispatch_agent_runtime_event(
         if_exists="do_nothing",
         metadata=metadata,
     )
-    run = client.runs.create(
-        thread_id,
-        os.getenv("LCSP_AGENT_ASSISTANT_ID", DEFAULT_ASSISTANT_ID),
-        input={
-            "messages": [
-                {
-                    "role": "user",
-                    "content": (
-                        "A trusted LCSP system event is present in runtime context. "
-                        "Root middleware dispatches it before model invocation. "
-                        "Do not copy the event payload into messages and do not invent "
-                        "repository evidence."
-                    ),
-                }
-            ]
-        },
-        context=context,
-        metadata={
-            "lcsp_boundary_name": boundary_name,
-            "correlation_id": correlation_id,
-            "assessment_id": assessment_id,
-        },
-        multitask_strategy="enqueue",
-        on_completion="keep",
-    )
+    run = _find_active_thread_run(client, thread_id)
+    reused_active_run = run is not None
+    if run is None:
+        run = client.runs.create(
+            thread_id,
+            os.getenv("LCSP_AGENT_ASSISTANT_ID", DEFAULT_ASSISTANT_ID),
+            input={
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": (
+                            "A trusted LCSP system event is present in runtime context. "
+                            "Root middleware dispatches it before model invocation. "
+                            "Do not copy the event payload into messages and do not invent "
+                            "repository evidence."
+                        ),
+                    }
+                ]
+            },
+            context=context,
+            metadata={
+                "lcsp_boundary_name": boundary_name,
+                "correlation_id": correlation_id,
+                "assessment_id": assessment_id,
+            },
+            multitask_strategy="enqueue",
+            on_completion="keep",
+        )
     run_id = _find_text(run, "run_id", "runId")
     if not run_id:
         raise AgentServerRunError(
@@ -122,10 +126,15 @@ def dispatch_agent_runtime_event(
     observer.emit(
         event_type="TOOL_STARTED",
         run_status="RUNNING",
-        summary="LangGraph repository run queued",
+        summary=(
+            "Reattached to active LangGraph repository run"
+            if reused_active_run
+            else "LangGraph repository run queued"
+        ),
         output_summary={
             "runId": run_id,
-            "schedulerState": str(run.get("status") or "pending"),
+            "schedulerState": _run_status(run, "pending"),
+            "reusedActiveRun": reused_active_run,
         },
     )
 
@@ -147,9 +156,9 @@ def dispatch_agent_runtime_event(
     )
     started_at = time.monotonic()
     next_heartbeat_at = started_at + pending_heartbeat_seconds
-    last_status = str(run.get("status") or "pending")
+    last_status = _run_status(run, "pending")
 
-    while last_status in {"pending", "running"}:
+    while last_status in _ACTIVE_RUN_STATUSES:
         now = time.monotonic()
         if now - started_at >= deadline_seconds:
             client.runs.cancel(
@@ -188,14 +197,31 @@ def dispatch_agent_runtime_event(
             next_heartbeat_at = now + pending_heartbeat_seconds
 
         time.sleep(poll_seconds)
-        run = client.runs.get(thread_id, run_id)
-        current_status = str(run.get("status") or last_status)
+        try:
+            run = client.runs.get(thread_id, run_id)
+        except httpx.TimeoutException:
+            timeout_at = time.monotonic()
+            if timeout_at >= next_heartbeat_at:
+                observer.emit(
+                    event_type="TOOL_COMPLETED",
+                    run_status="RUNNING",
+                    summary="LangGraph repository run status poll timed out; keeping existing run binding",
+                    error_summary="AGENT_RUNTIME_RUN_POLL_TIMEOUT",
+                    output_summary={
+                        "runId": run_id,
+                        "schedulerState": last_status,
+                        "elapsedSeconds": int(timeout_at - started_at),
+                    },
+                )
+                next_heartbeat_at = timeout_at + pending_heartbeat_seconds
+            continue
+        current_status = _run_status(run, last_status)
         if current_status != last_status:
             observer.emit(
                 event_type="TOOL_COMPLETED",
                 run_status=(
                     "RUNNING"
-                    if current_status in {"pending", "running"}
+                    if current_status in _ACTIVE_RUN_STATUSES
                     else ("COMPLETED" if current_status == "success" else "FAILED")
                 ),
                 summary=f"LangGraph repository run state: {current_status}",
@@ -212,7 +238,6 @@ def dispatch_agent_runtime_event(
     result = state.get("values", state) if isinstance(state, Mapping) else state
     _raise_for_agent_server_error(result)
     return result
-
 
 
 class _ScanRunObserver:
@@ -255,6 +280,34 @@ class _ScanRunObserver:
         if output_summary:
             payload["output_summary"] = dict(output_summary)
         self.client.post_scan_runtime_event(self.scan_job_id, payload)
+
+
+def _find_active_thread_run(client: Any, thread_id: str) -> Mapping[str, Any] | None:
+    """Return an already-running run for this thread so redeliveries reattach.
+
+    RabbitMQ can redeliver the same boundary when the local poller times out even
+    though the remote LangGraph run is still alive. Reusing the active run keeps
+    the scan job idempotent and avoids duplicate provider/billing reservations.
+    """
+    try:
+        runs = client.runs.list(thread_id, limit=25)
+    except Exception:
+        return None
+    for candidate in runs:
+        if not isinstance(candidate, Mapping):
+            continue
+        if _run_status(candidate, "") in _ACTIVE_RUN_STATUSES:
+            return candidate
+    return None
+
+
+def _run_status(run: Any, default: str) -> str:
+    if not isinstance(run, Mapping):
+        return default
+    status = run.get("status")
+    if isinstance(status, str) and status.strip():
+        return status.strip().lower()
+    return default
 
 
 def _positive_float_env(name: str, default: float) -> float:
@@ -316,7 +369,7 @@ def reconcile_stale_agent_runs(*, server_url: str | None = None) -> int:
         if not isinstance(thread_id, str) or not thread_id:
             continue
         for run in client.runs.list(thread_id, limit=100):
-            if run.get("status") not in {"pending", "running"}:
+            if _run_status(run, "") not in _ACTIVE_RUN_STATUSES:
                 continue
             run_id = run.get("run_id")
             created_at = _parse_datetime(run.get("created_at"))
@@ -359,6 +412,7 @@ def _parse_datetime(value: Any) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
 
 def agent_thread_id(
     boundary_name: str,
