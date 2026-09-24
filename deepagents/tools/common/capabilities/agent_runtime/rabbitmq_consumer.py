@@ -33,7 +33,10 @@ from tools.common.capabilities.agent_runtime.agent_server_client import (
     reconcile_stale_agent_runs,
 )
 from middleware.billing_recovery import start_background_worker
-from tools.common.capabilities.platform.api_client import WorkerApiClient
+from tools.common.capabilities.platform.api_client import (
+    WorkerApiClient,
+    WorkerCallbackError,
+)
 from tools.common.capabilities.platform.config import load_config
 
 LOGGER = logging.getLogger("lcsp.agent_runtime.rabbitmq_consumer")
@@ -65,6 +68,19 @@ class BoundaryExecutionTimeout(NonRetryableAgentBoundaryError):
             f"Agent Runtime boundary exceeded {timeout_seconds:.1f}s deadline"
         )
         self.timeout_seconds = timeout_seconds
+
+
+class StaleScanDelivery(NonRetryableAgentBoundaryError):
+    """A broker delivery references a scan job that no longer exists.
+
+    This is expected after local resets, assessment deletion, or queue backlog replay.
+    The delivery must be acknowledged and dropped instead of retried or terminalizing
+    a different/current scan.
+    """
+
+    def __init__(self, scan_job_id: str):
+        self.scan_job_id = scan_job_id
+        super().__init__(f"stale scan delivery for missing job {scan_job_id}")
 
 
 @dataclass(frozen=True)
@@ -518,13 +534,18 @@ def _claim_scan_delivery(
     client = _worker_client_or_none()
     if client is None:
         return
-    response = client.claim_scan_job(
-        scan_job_id,
-        {
-            "boundary_name": boundary_name,
-            "timeout_seconds": timeout_seconds,
-        },
-    )
+    try:
+        response = client.claim_scan_job(
+            scan_job_id,
+            {
+                "boundary_name": boundary_name,
+                "timeout_seconds": timeout_seconds,
+            },
+        )
+    except WorkerCallbackError as error:
+        if error.status_code == 404 and "SCAN_JOB_NOT_FOUND" in str(error):
+            raise StaleScanDelivery(scan_job_id) from error
+        raise
     if response.get("terminal") is True and response.get("claimed") is not True:
         raise NonRetryableAgentBoundaryError("scan job is already terminal")
 
@@ -751,6 +772,18 @@ def _settle_delivery(
 
     try:
         if error is None:
+            channel.basic_ack(delivery_tag=delivery_tag)
+            return
+
+        if isinstance(error, StaleScanDelivery):
+            LOGGER.info(
+                "Dropped stale Agent Runtime scan delivery boundary=%s routing_key=%s "
+                "scan_job_id=%s correlation_id=%s",
+                boundary_name,
+                routing_key,
+                error.scan_job_id,
+                _property_value(properties, "correlation_id"),
+            )
             channel.basic_ack(delivery_tag=delivery_tag)
             return
 
