@@ -924,6 +924,7 @@ def test_missing_scan_job_claim_is_classified_as_stale_delivery(monkeypatch):
             raise WorkerCallbackError(
                 "SCAN_JOB_NOT_FOUND: Callback failed with client error 404.",
                 status_code=404,
+                error_code="SCAN_JOB_NOT_FOUND",
             )
 
     monkeypatch.setattr(
