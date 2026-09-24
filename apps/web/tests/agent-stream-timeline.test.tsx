@@ -172,3 +172,65 @@ test("semantic agent stream rows render structured tool model and skill fields",
   assert.match(text, /prompt\/v1/);
   assert.match(text, /\[REDACTED\]/);
 });
+
+test("model call events render provider progress and terminal failures", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          event(
+            1,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted,
+            {
+              provider: "google_genai",
+              model: "gemini-3.5-flash-lite",
+              timeout_seconds: 30,
+              attempt: 1,
+            },
+            { text: "model call started", toolName: null },
+          ),
+          event(
+            2,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallHeartbeat,
+            {
+              provider: "google_genai",
+              model: "gemini-3.5-flash-lite",
+              elapsed_seconds: 10,
+              timeout_seconds: 30,
+            },
+            { text: "model call waiting", toolName: null },
+          ),
+          event(
+            3,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout,
+            {
+              provider: "google_genai",
+              model: "gemini-3.5-flash-lite",
+              elapsed_seconds: 30,
+              timeout_seconds: 30,
+            },
+            {
+              text: "model call timed out",
+              toolName: null,
+              status: ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+            },
+          ),
+        ]}
+      />,
+    );
+  });
+
+  const text = container.textContent ?? "";
+  assert.match(text, /gemini-3\.5-flash-lite/);
+  assert.match(text, /model call started/);
+  assert.match(text, /model call waiting/);
+  assert.match(text, /model call timed out/);
+  assert.match(text, /provider: google_genai/);
+  assert.match(text, /elapsed seconds: 10/);
+  assert.match(text, /timeout seconds: 30/);
+});

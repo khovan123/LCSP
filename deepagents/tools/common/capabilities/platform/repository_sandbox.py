@@ -11,7 +11,7 @@ import tempfile
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterator, Mapping
+from typing import Any, Callable, Iterator, Mapping
 
 from deepagents.backends.protocol import (
     DeleteResult,
@@ -46,6 +46,7 @@ _ACTIVE_BACKEND: ContextVar[object | None] = ContextVar(
     default=None,
 )
 _DOCKER_SANDBOX_MANAGER = DockerSandboxManager()
+RepositoryHydrationLifecycle = Callable[[str], None]
 
 class AssessmentRepositoryBackend(SandboxBackendProtocol):
     """Expose the assessment repository itself as the Deep Agent filesystem root.
@@ -282,13 +283,16 @@ def hydrate_repository(
     commit_sha: str = "",
     assessment_id: str = "",
     correlation_id: str | None = None,
+    lifecycle: RepositoryHydrationLifecycle | None = None,
 ) -> None:
     """Create/reuse the live repository database from an immutable baseline snapshot."""
     marker = _read_marker(backend)
     if marker.get("snapshotId") == snapshot_id and marker.get("scanJobId") == scan_job_id:
+        _emit_lifecycle(lifecycle, "repository_sandbox_reused")
         return
 
     config = load_config()
+    _emit_lifecycle(lifecycle, "repository_archive_downloading")
     archive = RepositorySnapshotClient(
         config.nestjs_api_base_url,
         config.worker_api_key,
@@ -299,6 +303,7 @@ def hydrate_repository(
             correlation_id=correlation_id or scan_job_id,
         )
     )
+    _emit_lifecycle(lifecycle, "repository_archive_downloaded")
     sanitized_archive = _sanitize_archive(archive, snapshot_id=snapshot_id)
 
     upload_files = getattr(backend, "upload_files", None)
@@ -309,6 +314,7 @@ def hydrate_repository(
             "repository sandbox backend does not support filesystem operations"
         )
 
+    _emit_lifecycle(lifecycle, "repository_sandbox_hydrating")
     uploads = upload_files([(_ARCHIVE_PATH, sanitized_archive)])
     if not uploads or getattr(uploads[0], "error", None):
         raise RuntimeError("failed to upload assessment repository into sandbox")
@@ -343,6 +349,7 @@ def hydrate_repository(
     write_result = write(REPOSITORY_META, marker_payload)
     if getattr(write_result, "error", None):
         raise RuntimeError("failed to persist repository database metadata")
+    _emit_lifecycle(lifecycle, "repository_sandbox_hydrated")
 
 
 def ensure_runtime_skills(backend: object) -> None:
@@ -405,6 +412,7 @@ def ensure_repository_for_event(
     backend: object,
     boundary_name: str,
     event: Mapping[str, Any],
+    lifecycle: RepositoryHydrationLifecycle | None = None,
 ) -> None:
     """Recover the repository database for later stages after sandbox recreation."""
     _ = boundary_name
@@ -421,6 +429,7 @@ def ensure_repository_for_event(
             commit_sha=_event_text(event, "commitSha", "commit_sha") or "",
             assessment_id=assessment_id,
             correlation_id=correlation_id,
+            lifecycle=lifecycle,
         )
         return
 
@@ -446,7 +455,16 @@ def ensure_repository_for_event(
         commit_sha=_event_text(report, "commitSha", "commit_sha") or "",
         assessment_id=_event_text(report, "assessmentId", "assessment_id") or assessment_id,
         correlation_id=correlation_id,
+        lifecycle=lifecycle,
     )
+
+
+def _emit_lifecycle(
+    lifecycle: RepositoryHydrationLifecycle | None,
+    event: str,
+) -> None:
+    if lifecycle is not None:
+        lifecycle(event)
 
 
 def _read_marker(backend: object) -> dict[str, Any]:

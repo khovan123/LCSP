@@ -19,7 +19,7 @@ import { ClaimBillingInvocationCommand } from "../../application/commands/claim-
 import { ReleaseBillingReservationCommand } from "../../application/commands/release-billing-reservation/release-billing-reservation.command.js";
 import { ReserveBillingCreditsCommand } from "../../application/commands/reserve-billing-credits/reserve-billing-credits.command.js";
 import { SettleBillingUsageCommand } from "../../application/commands/settle-billing-usage/settle-billing-usage.command.js";
-import { ResolveBillingAssessmentOwnerQuery } from "../../application/queries/resolve-billing-assessment-owner/resolve-billing-assessment-owner.query.js";
+import { ResolveBillingReservationOwnerQuery } from "../../application/queries/resolve-billing-reservation-owner/resolve-billing-reservation-owner.query.js";
 import {
   projectReservation,
   serializeBillingData,
@@ -133,7 +133,7 @@ export class BillingUsageController {
   ) {
     try {
       const userId = await this.queryBus.execute(
-        new ResolveBillingAssessmentOwnerQuery(body.assessmentId),
+        new ResolveBillingReservationOwnerQuery(body.reservationId),
       );
       const result = await this.commandBus.execute(
         new SettleBillingUsageCommand(toSettlementInput(body, userId)),

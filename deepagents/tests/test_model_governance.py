@@ -3,7 +3,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from langchain.agents.middleware import ModelResponse, ModelRetryMiddleware, PIIMiddleware
 
-from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from middleware.model_governance import (
+    MODEL_GOVERNANCE_MIDDLEWARE,
+    TRIAGE_MODEL_GOVERNANCE_MIDDLEWARE,
+)
 from middleware.billing_metering import BillingMeteringMiddleware
 from middleware.provider_fallback import ProviderFallbackMiddleware
 from middleware.token_fallback import TokenFallbackMiddleware
@@ -51,7 +54,17 @@ def test_billing_metering_is_the_innermost_governed_model_boundary() -> None:
         for index, item in enumerate(MODEL_GOVERNANCE_MIDDLEWARE)
         if isinstance(item, BillingMeteringMiddleware)
     )
-    assert metering_index == len(MODEL_GOVERNANCE_MIDDLEWARE) - 2
+    assert metering_index == len(MODEL_GOVERNANCE_MIDDLEWARE) - 1
+
+
+def test_lcsp_effective_middleware_has_no_model_call_limit() -> None:
+    middleware = (
+        *MODEL_GOVERNANCE_MIDDLEWARE,
+        *TRIAGE_MODEL_GOVERNANCE_MIDDLEWARE,
+    )
+    assert "ModelCallLimitMiddleware" not in {
+        type(item).__name__ for item in middleware
+    }
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])

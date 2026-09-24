@@ -10,6 +10,7 @@ from langchain.chat_models import init_chat_model
 from middleware.failure_policy import (
     TerminalCredentialError,
     is_auth_failure,
+    is_provider_capacity_failure,
     is_terminal_task_error,
 )
 from orchestration.agent_stream import publish_agent_stream_event
@@ -73,7 +74,11 @@ def provider_fallback_failure(error: BaseException) -> bool:
         return True
     if is_terminal_task_error(error):
         return False
-    return is_auth_failure(error) or credential_failure(error)
+    return (
+        is_auth_failure(error)
+        or is_provider_capacity_failure(error)
+        or credential_failure(error)
+    )
 
 
 def fallback_model(provider: str):

@@ -30,9 +30,15 @@ export const BILLING_USAGE_KERNEL = Symbol("BILLING_USAGE_KERNEL");
 
 export type BillingUsagePort = {
   resolveAssessmentOwner(assessmentId: string): Promise<string>;
+  resolveReservationOwner(reservationId: string): Promise<string>;
   reserveForAssessment(input: {
+    workspaceId?: string;
     assessmentId: string;
+    scanJobId?: string;
+    threadId?: string;
     runId: string;
+    invocationId?: string;
+    modelInvocationId?: string;
     amountCredits: bigint;
     maxChargeCredits: bigint;
     provider: string;
@@ -97,9 +103,28 @@ export class BillingUsageKernel {
     return assessment.ownerId;
   }
 
+  async resolveReservationOwner(reservationId: string): Promise<string> {
+    if (!this.prisma)
+      throw new BillingDomainError(
+        "Reservation ownership resolver is unavailable",
+      );
+    const reservation = await this.prisma.billingReservation.findUnique({
+      where: { id: reservationId },
+      select: { userId: true },
+    });
+    if (!reservation)
+      throw new OwnershipMismatchError("Reservation does not exist");
+    return reservation.userId;
+  }
+
   async reserveForAssessment(input: {
+    workspaceId?: string;
     assessmentId: string;
+    scanJobId?: string;
+    threadId?: string;
     runId: string;
+    invocationId?: string;
+    modelInvocationId?: string;
     amountCredits: bigint;
     maxChargeCredits: bigint;
     provider: string;
@@ -176,8 +201,15 @@ export class BillingUsageKernel {
       );
     return this.accounting.reserveCredits({
       userId,
+      workspaceId: input.workspaceId,
       assessmentId: input.assessmentId,
+      scanJobId: input.scanJobId,
+      threadId: input.threadId,
       runId: input.runId,
+      provider,
+      model,
+      invocationId: input.invocationId,
+      modelInvocationId: input.modelInvocationId,
       amountCredits: input.amountCredits,
       idempotencyKey: input.idempotencyKey,
       maxInvocations: input.maxInvocations,
@@ -235,13 +267,6 @@ export class BillingUsageKernel {
         throw new BillingDomainError(
           "Assessment and run identifiers must be supplied together",
         );
-      if (i.assessmentId) {
-        const ownerId = await repos.assessment.findOwnerId(i.assessmentId);
-        if (ownerId !== i.userId)
-          throw new OwnershipMismatchError(
-            "Assessment does not belong to the billing user",
-          );
-      }
       const provider = i.provider ?? i.effectiveRuntimeModel?.provider;
       const model = i.model ?? i.effectiveRuntimeModel?.model;
       if (!i.invocationId || !provider || !model)
@@ -259,6 +284,19 @@ export class BillingUsageKernel {
         throw new BillingDomainError("Token counts cannot be negative");
       if (i.totalTokens !== undefined && i.totalTokens < 0n)
         throw new BillingDomainError("Token counts cannot be negative");
+      const r = await reservation.findForUser(i.userId, i.reservationId);
+      if (!r)
+        throw new OwnershipMismatchError("Reservation does not belong to user");
+      if (i.assessmentId && r.assessmentId !== i.assessmentId)
+        throw new OwnershipMismatchError(
+          "Usage callback assessment does not match reservation",
+        );
+      if (i.runId && r.runId !== i.runId)
+        throw new OwnershipMismatchError(
+          "Usage callback run does not match reservation",
+        );
+      const assessmentId = r.assessmentId ?? i.assessmentId;
+      const runId = r.runId ?? i.runId;
       const existing = await usage.findByInvocation(i.userId, i.invocationId);
       const hasRequiredProviderUsage =
         i.inputTokens !== undefined && i.outputTokens !== undefined;
@@ -278,8 +316,8 @@ export class BillingUsageKernel {
             !retryableExisting) ||
           (existing.providerResponseId !== (i.providerResponseId ?? null) &&
             !retryableExisting) ||
-          existing.assessmentId !== (i.assessmentId ?? null) ||
-          existing.runId !== (i.runId ?? null) ||
+          existing.assessmentId !== (assessmentId ?? null) ||
+          existing.runId !== (runId ?? null) ||
           existing.reservationId !== i.reservationId ||
           (i.occurredAt !== undefined &&
             existing.occurredAt.getTime() !== i.occurredAt.getTime())
@@ -297,22 +335,12 @@ export class BillingUsageKernel {
             "Provider response already recorded",
           );
       }
-      const r = await reservation.findForUser(i.userId, i.reservationId);
-      if (!r)
-        throw new OwnershipMismatchError("Reservation does not belong to user");
-      if (
-        (i.assessmentId && r.assessmentId !== i.assessmentId) ||
-        (i.runId && r.runId !== i.runId)
-      )
-        throw new OwnershipMismatchError(
-          "Reservation does not belong to the assessment run",
-        );
       const createUnavailable = (availabilityReason: string) => {
         if (existing) return existing;
         return usage.create({
           userId: i.userId,
-          assessmentId: i.assessmentId,
-          runId: i.runId,
+          assessmentId: assessmentId ?? undefined,
+          runId: runId ?? undefined,
           agentRole: i.agentRole,
           provider,
           model,
@@ -333,7 +361,7 @@ export class BillingUsageKernel {
           occurredAt,
         });
       };
-      if (i.assessmentId && i.runId && !hasRequiredProviderUsage)
+      if (assessmentId && runId && !hasRequiredProviderUsage)
         return createUnavailable(
           LLM_USAGE_AVAILABILITY_REASONS.providerUsageMetadataMissing,
         );
@@ -342,7 +370,7 @@ export class BillingUsageKernel {
         occurredAt,
       );
       if (!selected) {
-        if (i.assessmentId && i.runId)
+        if (assessmentId && runId)
           return createUnavailable(
             LLM_USAGE_AVAILABILITY_REASONS.runtimePolicySnapshotMissing,
           );
@@ -370,7 +398,7 @@ export class BillingUsageKernel {
         occurredAt,
       );
       if (!snapshot) {
-        if (i.assessmentId && i.runId)
+        if (assessmentId && runId)
           return createUnavailable(
             LLM_USAGE_AVAILABILITY_REASONS.pricingSnapshotMissing,
           );
@@ -400,7 +428,7 @@ export class BillingUsageKernel {
           snapshot,
         );
       } catch (error) {
-        if (i.assessmentId && i.runId && error instanceof BillingDomainError)
+        if (assessmentId && runId && error instanceof BillingDomainError)
           return createUnavailable(
             LLM_USAGE_AVAILABILITY_REASONS.pricingSnapshotInvalid,
           );
@@ -424,8 +452,8 @@ export class BillingUsageKernel {
             })
           : await usage.create({
               userId: i.userId,
-              assessmentId: i.assessmentId,
-              runId: i.runId,
+              assessmentId: assessmentId ?? undefined,
+              runId: runId ?? undefined,
               agentRole: i.agentRole,
               provider,
               model,
@@ -447,7 +475,7 @@ export class BillingUsageKernel {
               chargedCredits: customerChargeVnd,
               occurredAt,
             });
-      if (i.assessmentId && i.runId) {
+      if (assessmentId && runId) {
         await this.accounting.settleUsageWithinTransaction(repos, {
           userId: i.userId,
           reservationId: i.reservationId,

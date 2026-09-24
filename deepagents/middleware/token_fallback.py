@@ -11,6 +11,7 @@ from middleware.failure_policy import (
     TerminalCredentialError,
     TerminalSchemaError,
     is_auth_failure,
+    is_provider_capacity_failure,
     error_status,
 )
 from orchestration.agent_stream import publish_agent_stream_event
@@ -93,7 +94,7 @@ def credential_failure(error: BaseException) -> bool:
     Authentication failures are handled separately: they mark the failing slot dead for
     this process instead of being treated as a transient failure of the same slot.
     """
-    return _is_retryable_transient_error(error)
+    return is_provider_capacity_failure(error) or _is_retryable_transient_error(error)
 
 
 def model_provider(model) -> str | None:

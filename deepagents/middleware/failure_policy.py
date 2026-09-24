@@ -5,6 +5,16 @@ from pydantic import ValidationError
 
 
 _AUTH_FAILURE_STATUSES = frozenset({401, 403})
+_PROVIDER_CAPACITY_STATUSES = frozenset({402, 429})
+_PROVIDER_CAPACITY_CODES = frozenset(
+    {
+        "billing_hard_limit_reached",
+        "insufficient_balance",
+        "insufficient_quota",
+        "quota_exceeded",
+        "rate_limit_exceeded",
+    }
+)
 
 
 class TerminalCredentialError(RuntimeError):
@@ -28,8 +38,43 @@ def error_status(error: BaseException) -> int | None:
     return None
 
 
+def _error_codes(error: BaseException) -> set[str]:
+    codes: set[str] = set()
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        for attr in ("error_code", "type", "code"):
+            value = getattr(current, attr, None)
+            if isinstance(value, str) and value.strip():
+                codes.add(value.strip().lower())
+        for payload in (
+            getattr(current, "body", None),
+            getattr(current, "response", None),
+        ):
+            if isinstance(payload, dict):
+                error_payload = payload.get("error")
+                if isinstance(error_payload, dict):
+                    for key in ("code", "type"):
+                        value = error_payload.get(key)
+                        if isinstance(value, str) and value.strip():
+                            codes.add(value.strip().lower())
+        text = str(current).lower()
+        for code in _PROVIDER_CAPACITY_CODES:
+            if code in text:
+                codes.add(code)
+        current = current.__cause__ or current.__context__
+    return codes
+
+
 def is_auth_failure(error: BaseException) -> bool:
     return error_status(error) in _AUTH_FAILURE_STATUSES
+
+
+def is_provider_capacity_failure(error: BaseException) -> bool:
+    if error_status(error) in _PROVIDER_CAPACITY_STATUSES:
+        return True
+    return bool(_error_codes(error) & _PROVIDER_CAPACITY_CODES)
 
 
 def is_terminal_task_error(error: BaseException) -> bool:
@@ -60,4 +105,8 @@ def is_terminal_task_error(error: BaseException) -> bool:
 def retry_model_error(error: Exception) -> bool:
     # Re-sending the same request with the same rejected credential cannot succeed.
     # Queue redelivery policy is intentionally unchanged (see is_terminal_task_error).
-    return not is_terminal_task_error(error) and not is_auth_failure(error)
+    return (
+        not is_terminal_task_error(error)
+        and not is_auth_failure(error)
+        and not is_provider_capacity_failure(error)
+    )

@@ -150,7 +150,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
     return { user, wallet, reservation, pricing };
   }
 
-  async function governedFixture(amountCredits = 20n) {
+  async function governedFixture(amountCredits = 20n, maxInvocations = 1n) {
     const f = await fixture();
     const assessmentId = `assessment-${id()}`;
     const runId = `run-${id()}`;
@@ -171,10 +171,148 @@ describe("LCSP-310 usage and pricing foundation", () => {
       assessmentId,
       runId,
       amountCredits,
+      maxInvocations,
       idempotencyKey: `governed-reserve-${id()}`,
     });
     return { ...f, assessmentId, runId, reservation };
   }
+
+  it("persists reservation owner context and rejects stale callback context without consuming it", async () => {
+    const f = await fixture();
+    const assessmentId = `assessment-${id()}`;
+    const staleAssessmentId = `assessment-${id()}`;
+    const runId = `run-${id()}`;
+    await prisma.assessment.createMany({
+      data: [
+        { id: assessmentId, ownerId: f.user.id, name: "Bounded usage" },
+        { id: staleAssessmentId, ownerId: f.user.id, name: "Stale usage" },
+      ],
+    });
+    const reservation = await governedUsage.reserveForAssessment({
+      workspaceId: "workspace-1",
+      assessmentId,
+      scanJobId: "scan-job-1",
+      threadId: "thread-1",
+      runId,
+      invocationId: "reservation-envelope-1",
+      modelInvocationId: "model-envelope-1",
+      amountCredits: 20n,
+      maxChargeCredits: 10n,
+      provider: runtimeModel.provider,
+      model: runtimeModel.model,
+      maxInputTokens: 1n,
+      maxOutputTokens: 1n,
+      maxReasoningTokens: 0n,
+      maxInvocations: 2n,
+      authorizedModels: [
+        { provider: runtimeModel.provider, model: runtimeModel.model },
+      ],
+      idempotencyKey: `reservation-context-${id()}`,
+    });
+    const stored = await prisma.billingReservation.findUniqueOrThrow({
+      where: { id: (reservation as { id: string }).id },
+    });
+    expect(stored.workspaceId).toBe("workspace-1");
+    expect(stored.assessmentId).toBe(assessmentId);
+    expect(stored.scanJobId).toBe("scan-job-1");
+    expect(stored.threadId).toBe("thread-1");
+    expect(stored.runId).toBe(runId);
+    expect(stored.provider).toBe(runtimeModel.provider);
+    expect(stored.model).toBe(runtimeModel.model);
+    expect(stored.invocationId).toBe("reservation-envelope-1");
+    expect(stored.modelInvocationId).toBe("model-envelope-1");
+
+    const settlement = {
+      userId: f.user.id,
+      reservationId: stored.id,
+      invocationId: "INV-STABLE-CALLBACK",
+      agentRole: "TEST_USAGE",
+      effectiveRuntimeModel: runtimeModel,
+      provider: runtimeModel.provider,
+      model: runtimeModel.model,
+      inputTokens: 1n,
+      outputTokens: 0n,
+    };
+    await expect(
+      governedUsage.recordAndSettleUsage({
+        ...settlement,
+        assessmentId: staleAssessmentId,
+        runId,
+      }),
+    ).rejects.toThrow("Usage callback assessment does not match reservation");
+    expect(
+      await prisma.llmUsageEvent.count({
+        where: { invocationId: settlement.invocationId },
+      }),
+    ).toBe(0);
+    expect(
+      (
+        await prisma.billingReservation.findUniqueOrThrow({
+          where: { id: stored.id },
+        })
+      ).status,
+    ).toBe("RESERVED");
+
+    const event = await governedUsage.recordAndSettleUsage({
+      ...settlement,
+      assessmentId,
+      runId,
+    });
+    expect(event.reservationId).toBe(stored.id);
+    expect(event.assessmentId).toBe(assessmentId);
+  });
+
+  it("settles multiple model invocations for the same reservation-bound scan run", async () => {
+    const f = await governedFixture(20n, 2n);
+
+    await governedUsage.claimInvocation({
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-MULTI-1",
+    });
+    await governedUsage.claimInvocation({
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-MULTI-2",
+    });
+    await governedUsage.recordAndSettleUsage({
+      userId: f.user.id,
+      assessmentId: f.assessmentId,
+      runId: f.runId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-MULTI-1",
+      agentRole: "TEST_USAGE",
+      effectiveRuntimeModel: runtimeModel,
+      provider: "OPENAI",
+      model: "MODEL_A",
+      inputTokens: 1n,
+      outputTokens: 0n,
+    });
+    await governedUsage.recordAndSettleUsage({
+      userId: f.user.id,
+      assessmentId: f.assessmentId,
+      runId: f.runId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-MULTI-2",
+      agentRole: "TEST_USAGE",
+      effectiveRuntimeModel: runtimeModel,
+      provider: "OPENAI",
+      model: "MODEL_A",
+      inputTokens: 1n,
+      outputTokens: 0n,
+    });
+
+    expect(
+      await prisma.llmUsageEvent.count({
+        where: { reservationId: f.reservation.id },
+      }),
+    ).toBe(2);
+    expect(
+      await prisma.creditLedgerEntry.count({
+        where: { source: "LLM_USAGE_DEBIT", referenceId: { not: null } },
+      }),
+    ).toBe(2);
+  });
 
   it("calculates exact deterministic charges with ceil rounding", () => {
     const pricing = {
@@ -497,7 +635,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
     ).toBe(1n);
   });
 
-  it("rejects governed usage when the assessment belongs to another user", async () => {
+  it("rejects governed usage when callback assessment conflicts with reservation context", async () => {
     const f = await governedFixture();
     const other = {
       id: `usage-other-${id()}`,
@@ -535,7 +673,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
         inputTokens: 1_000_000n,
         outputTokens: 0n,
       }),
-    ).rejects.toThrow("Assessment does not belong to the billing user");
+    ).rejects.toThrow("Usage callback assessment does not match reservation");
     expect(
       await prisma.llmUsageEvent.count({
         where: { invocationId: "GOVERNED-CROSS-ACCOUNT" },

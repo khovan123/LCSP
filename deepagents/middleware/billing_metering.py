@@ -6,10 +6,13 @@ model messages and hidden reasoning are never included in the billing payload.
 
 from __future__ import annotations
 
+import math
+import time
 from contextlib import contextmanager
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from threading import Event, Thread
 from typing import Any, Iterator
 from uuid import uuid4
 
@@ -20,11 +23,16 @@ from middleware.billing_recovery import (
     enqueue_usage_and_release,
 )
 from middleware.token_fallback import model_provider
+from orchestration.agent_stream import publish_agent_stream_event
+from provider_credentials import llm_provider_timeout_seconds
 from tools.common.capabilities.platform.api_client import (
     WorkerApiClient,
     WorkerCallbackError,
 )
 from tools.common.capabilities.platform.callback_schemas import SettledUsagePayload
+
+
+_MODEL_CALL_HEARTBEAT_SECONDS = 10.0
 
 
 class BillingUsageUnavailable(RuntimeError):
@@ -70,6 +78,11 @@ class BillingMeteringSession:
     run_id: str
     reservation_id: str
     agent_role: str
+    workspace_id: str | None = None
+    scan_job_id: str | None = None
+    thread_id: str | None = None
+    invocation_id: str | None = None
+    model_invocation_id: str | None = None
     effective_runtime_model: dict[str, str] = field(default_factory=dict)
     recovery_store_path: str | None = None
     max_input_tokens: int | None = None
@@ -88,8 +101,13 @@ class BillingMeteringSession:
         cls,
         *,
         api_client: WorkerApiClient,
+        workspace_id: str | None = None,
         assessment_id: str,
+        scan_job_id: str | None = None,
+        thread_id: str | None = None,
         run_id: str,
+        invocation_id: str | None = None,
+        model_invocation_id: str | None = None,
         agent_role: str,
         amount_credits: str,
         max_charge_credits: str,
@@ -111,8 +129,13 @@ class BillingMeteringSession:
 
         result = api_client.reserve_billing_credits(
             BillingReservationPayload(
+                workspaceId=workspace_id,
                 assessmentId=assessment_id,
+                scanJobId=scan_job_id,
+                threadId=thread_id,
                 runId=run_id,
+                invocationId=invocation_id,
+                modelInvocationId=model_invocation_id,
                 amountCredits=amount_credits,
                 maxChargeCredits=max_charge_credits,
                 provider=provider,
@@ -136,8 +159,13 @@ class BillingMeteringSession:
             )
         return cls(
             api_client=api_client,
+            workspace_id=workspace_id,
             assessment_id=assessment_id,
+            scan_job_id=scan_job_id,
+            thread_id=thread_id,
             run_id=run_id,
+            invocation_id=invocation_id,
+            model_invocation_id=model_invocation_id,
             reservation_id=reservation_id,
             agent_role=agent_role,
             effective_runtime_model=dict(effective_runtime_model or {}),
@@ -170,6 +198,12 @@ class BillingMeteringSession:
         except Exception:
             if self.recovery_store_path:
                 enqueue_release(self.recovery_store_path, self.reservation_id, payload)
+                _emit_billing_callback_warning(
+                    "release",
+                    reservation_id=self.reservation_id,
+                    invocation_id=None,
+                )
+                return
             raise
 
     def new_invocation_id(self) -> str:
@@ -223,20 +257,18 @@ class BillingMeteringSession:
         }
         if all(value is None for value in request_input.values()):
             return
-        # A UTF-8 byte can produce at most one tokenizer byte-fallback token.
-        # Therefore bytes <= maxInputTokens is a conservative, provider-neutral
-        # token bound; the configured byte ceiling may be stricter still.
         encoded = str(request_input).encode("utf-8")
-        byte_ceiling = self.max_input_bytes
-        if self.max_input_tokens is not None:
-            byte_ceiling = (
-                self.max_input_tokens
-                if byte_ceiling is None
-                else min(byte_ceiling, self.max_input_tokens)
-            )
-        if byte_ceiling is not None and len(encoded) > byte_ceiling:
+        byte_count = len(encoded)
+        if self.max_input_bytes is not None and byte_count > self.max_input_bytes:
             raise BillingUsageUnavailable(
-                "Input exceeds the reserved token/byte ceiling"
+                "Input exceeds the reserved byte ceiling"
+            )
+        if (
+            self.max_input_tokens is not None
+            and _estimate_input_tokens(encoded) > self.max_input_tokens
+        ):
+            raise BillingUsageUnavailable(
+                "Input exceeds the reserved token ceiling"
             )
 
     def bounded_model(self, model: Any) -> Any:
@@ -282,7 +314,7 @@ class BillingMeteringSession:
                 if self.effective_runtime_model
                 else None
             ),
-            occurredAt=datetime.now(timezone.utc).isoformat(),
+            occurredAt=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             **usage,
         )
         try:
@@ -307,6 +339,12 @@ class BillingMeteringSession:
                     # The provider already succeeded. A recovery-store failure
                     # is still terminal: replaying the model would double-spend.
                     raise BillingMeteringError(recovery_error) from error
+                _emit_billing_callback_warning(
+                    "usage",
+                    reservation_id=self.reservation_id,
+                    invocation_id=invocation_id,
+                )
+                return
             raise BillingMeteringError(error) from error
 
 
@@ -330,6 +368,19 @@ def active_billing_metering() -> BillingMeteringSession | None:
     return _active_session.get()
 
 
+def _estimate_input_tokens(encoded: bytes) -> int:
+    """Estimate prompt tokens separately from byte ceilings.
+
+    Exact tokenizer choice is provider/model-specific. LCSP uses a conservative
+    ASCII-heavy estimate here so a token ceiling is not accidentally interpreted
+    as the same number of bytes before the provider receives the request.
+    """
+
+    if not encoded:
+        return 0
+    return math.ceil(len(encoded) / 3)
+
+
 @contextmanager
 def activate_billing_agent_role(agent_role: str) -> Iterator[str]:
     token = _active_agent_role.set(agent_role)
@@ -341,6 +392,121 @@ def activate_billing_agent_role(agent_role: str) -> Iterator[str]:
 
 def active_billing_agent_role() -> str | None:
     return _active_agent_role.get()
+
+
+def _emit_billing_callback_warning(
+    callback_kind: str,
+    *,
+    reservation_id: str,
+    invocation_id: str | None,
+) -> None:
+    publish_agent_stream_event(
+        "BILLING_CALLBACK_RECOVERY_QUEUED",
+        status="WAITING",
+        text="billing callback queued for recovery",
+        data={
+            "callback_kind": callback_kind,
+            "reservation_id": reservation_id,
+            **({"invocation_id": invocation_id} if invocation_id else {}),
+        },
+    )
+
+
+class _ModelCallTelemetry:
+    """Emit safe progress around one blocking provider call."""
+
+    def __init__(self, model: Any) -> None:
+        self.provider, self.model_name = provider_identity(model)
+        self.timeout_seconds = llm_provider_timeout_seconds()
+        self._started_at = time.monotonic()
+        self._stop = Event()
+        self._context = copy_context()
+        self._thread: Thread | None = None
+
+    def start(self) -> None:
+        self._emit(
+            "MODEL_CALL_STARTED",
+            status="RUNNING",
+            text="model call started",
+            data=self._data(elapsed_seconds=0),
+        )
+        self._thread = Thread(
+            target=self._heartbeat,
+            name="lcsp-model-call-heartbeat",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def complete(self) -> None:
+        self._finish(
+            "MODEL_CALL_COMPLETED",
+            status="COMPLETED",
+            text="model call completed",
+        )
+
+    def fail(self, error: BaseException) -> None:
+        timeout = _is_timeout_error(error)
+        self._finish(
+            "MODEL_CALL_TIMEOUT" if timeout else "MODEL_CALL_FAILED",
+            status="FAILED",
+            text="model call timed out" if timeout else "model call failed",
+            data_extra={
+                "error_type": type(error).__name__,
+            },
+        )
+
+    def _finish(
+        self,
+        event_type: str,
+        *,
+        status: str,
+        text: str,
+        data_extra: dict[str, Any] | None = None,
+    ) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=0.25)
+        data = self._data(elapsed_seconds=self._elapsed_seconds())
+        if data_extra:
+            data.update(data_extra)
+        self._emit(event_type, status=status, text=text, data=data)
+
+    def _heartbeat(self) -> None:
+        while not self._stop.wait(_MODEL_CALL_HEARTBEAT_SECONDS):
+            self._emit(
+                "MODEL_CALL_HEARTBEAT",
+                status="RUNNING",
+                text="model call waiting",
+                data=self._data(elapsed_seconds=self._elapsed_seconds()),
+            )
+
+    def _elapsed_seconds(self) -> int:
+        return max(0, int(time.monotonic() - self._started_at))
+
+    def _data(self, *, elapsed_seconds: int) -> dict[str, Any]:
+        return {
+            "provider": self.provider.lower(),
+            "model": self.model_name,
+            "timeout_seconds": self.timeout_seconds,
+            "elapsed_seconds": elapsed_seconds,
+        }
+
+    def _emit(self, event_type: str, **fields: Any) -> None:
+        self._context.run(publish_agent_stream_event, event_type, **fields)
+
+
+def _is_timeout_error(error: BaseException) -> bool:
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, TimeoutError):
+            return True
+        name = type(current).__name__.lower()
+        if "timeout" in name or "timedout" in name:
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 class BillingAgentRoleMiddleware(AgentMiddleware):
@@ -374,7 +540,14 @@ class BillingMeteringMiddleware(AgentMiddleware):
         session.assert_invocation_capacity(invocation_id)
         if hasattr(request, "override"):
             request = request.override(model=session.bounded_model(billing_model))
-        response = handler(request)
+        telemetry = _ModelCallTelemetry(billing_model)
+        telemetry.start()
+        try:
+            response = handler(request)
+        except Exception as error:
+            telemetry.fail(error)
+            raise
+        telemetry.complete()
         session.record(
             response,
             billing_model,
@@ -394,7 +567,14 @@ class BillingMeteringMiddleware(AgentMiddleware):
         session.assert_invocation_capacity(invocation_id)
         if hasattr(request, "override"):
             request = request.override(model=session.bounded_model(billing_model))
-        response = await handler(request)
+        telemetry = _ModelCallTelemetry(billing_model)
+        telemetry.start()
+        try:
+            response = await handler(request)
+        except Exception as error:
+            telemetry.fail(error)
+            raise
+        telemetry.complete()
         session.record(
             response,
             billing_model,

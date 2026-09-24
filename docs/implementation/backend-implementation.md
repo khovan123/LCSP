@@ -332,7 +332,7 @@ Use an idempotency key based on repository, commit SHA, repository-analysis vers
 
 ## Security and Privacy Considerations
 
-- Non-root scanner execution.
+- Non-root repository-analysis execution in LCSP Agent Runtime.
 - Restricted filesystem write access.
 - Restricted outbound network after repository retrieval.
 - File size, count, depth and time limits.

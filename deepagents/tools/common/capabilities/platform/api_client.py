@@ -460,6 +460,40 @@ class WorkerApiClient:
             resp_data = self._post_with_retry(path, request_payload)
         return CallbackResponse(**resp_data)
 
+    def claim_scan_job(self, scan_job_id: str, payload: dict) -> dict:
+        """Atomically claim a queued scan before repository analysis starts."""
+        path = CallbackPath.SCAN_CLAIM.format(scan_job_id=scan_job_id)
+        response = self._post_with_retry(path, payload)
+        return response if isinstance(response, dict) else {}
+
+    def post_scan_terminal_failure(self, scan_job_id: str, payload: dict) -> None:
+        """Best-effort terminal scan failure callback used by broker watchdogs."""
+        url = f"{self._base_url}{CallbackPath.SCAN_TERMINAL_FAILURE.format(scan_job_id=scan_job_id)}"
+        headers = {
+            WORKER_API_KEY_HEADER: self._api_key,
+            correlationId_HEADER: get_correlationId(),
+        }
+        try:
+            response = httpx.post(
+                url,
+                json=redact_dict(payload),
+                headers=headers,
+                timeout=3.0,
+            )
+            if response.status_code >= 400:
+                logger.warning(
+                    "SCAN_TERMINAL_FAILURE_REJECTED",
+                    scan_job_id=scan_job_id,
+                    status_code=response.status_code,
+                    error_code=self._response_error_code(response),
+                )
+        except Exception as exc:
+            logger.warning(
+                "SCAN_TERMINAL_FAILURE_POST_FAILED",
+                scan_job_id=scan_job_id,
+                error=type(exc).__name__,
+            )
+
     def post_interview_progress(self, assessment_id: str, revision: int, phase: str) -> None:
         try:
             response = httpx.post(

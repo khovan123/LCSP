@@ -1,5 +1,6 @@
 import json
-from concurrent.futures import Future
+import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from threading import Event
 from types import SimpleNamespace
 
@@ -14,6 +15,9 @@ class FakeChannel:
         self.nacked = []
         self.published = []
         self.declared = []
+        self.bound = []
+        self.consumed = []
+        self.deleted = []
         self.confirmed = False
         self.publish_result = True
         self.is_open = True
@@ -37,14 +41,17 @@ class FakeChannel:
     def exchange_declare(self, **_kwargs):
         pass
 
-    def queue_bind(self, **_kwargs):
-        pass
+    def queue_bind(self, **kwargs):
+        self.bound.append(kwargs)
 
     def basic_qos(self, **_kwargs):
         pass
 
-    def basic_consume(self, **_kwargs):
-        pass
+    def basic_consume(self, **kwargs):
+        self.consumed.append(kwargs)
+
+    def queue_delete(self, **kwargs):
+        self.deleted.append(kwargs)
 
 
 class ImmediateExecutor:
@@ -54,6 +61,21 @@ class ImmediateExecutor:
             future.set_result(function(*args))
         except Exception as error:
             future.set_exception(error)
+        return future
+
+
+class HangingExecutor:
+    def submit(self, _function, *_args):
+        return Future()
+
+
+class QueuedExecutor:
+    def __init__(self):
+        self.submissions = []
+
+    def submit(self, function, *args):
+        future = Future()
+        self.submissions.append((future, function, args))
         return future
 
 
@@ -98,12 +120,44 @@ def test_boundary_bindings_are_derived_from_manifest(monkeypatch):
     )
 
 
+def test_remote_billing_run_error_maps_to_billing_failure() -> None:
+    from tools.common.capabilities.agent_runtime.agent_server_client import (
+        AgentServerRunError,
+    )
+
+    error = AgentServerRunError(
+        "BillingMeteringError",
+        "Billing usage delivery failed",
+    )
+
+    assert (
+        rabbitmq_consumer._scan_failure_reason_code(error)
+        == rabbitmq_consumer.SCAN_FAILURE_BILLING_FAILURE
+    )
+    assert isinstance(error, rabbitmq_consumer.NonRetryableAgentBoundaryError)
+
+
+
 def test_delivery_handler_invokes_boundary_and_acks(monkeypatch):
     invoked = []
+    class FakeWorkerClient:
+        def claim_scan_job(self, scan_job_id, payload):
+            assert scan_job_id == "scan-1"
+            assert payload["boundary_name"] == "scan_requested"
+            return {"claimed": True, "terminal": False}
+
+        def post_scan_terminal_failure(self, *_args, **_kwargs):
+            raise AssertionError("not expected")
+
+    monkeypatch.setattr(
+        rabbitmq_consumer,
+        "_worker_client_or_none",
+        lambda: FakeWorkerClient(),
+    )
     monkeypatch.setattr(
         rabbitmq_consumer,
         "dispatch_agent_runtime_event",
-        lambda boundary_name, message, correlation_id: invoked.append(
+        lambda boundary_name, message, correlation_id, timeout_seconds=None: invoked.append(
             (boundary_name, message, correlation_id)
         ),
     )
@@ -131,12 +185,58 @@ def test_delivery_handler_invokes_boundary_and_acks(monkeypatch):
     assert channel.nacked == []
 
 
+def test_scan_delivery_claims_job_before_dispatch(monkeypatch):
+    calls = []
+
+    class FakeWorkerClient:
+        def claim_scan_job(self, scan_job_id, payload):
+            calls.append(("claim", scan_job_id, payload))
+            return {"claimed": True, "terminal": False}
+
+        def post_scan_terminal_failure(self, *_args, **_kwargs):
+            raise AssertionError("not expected")
+
+    monkeypatch.setattr(
+        rabbitmq_consumer,
+        "_worker_client_or_none",
+        lambda: FakeWorkerClient(),
+    )
+    monkeypatch.setattr(
+        rabbitmq_consumer,
+        "dispatch_agent_runtime_event",
+        lambda boundary_name, message, correlation_id, timeout_seconds=None: calls.append(
+            ("dispatch", boundary_name, message, correlation_id)
+        ),
+    )
+
+    rabbitmq_consumer._dispatch_delivery(
+        "scan_requested",
+        SimpleNamespace(headers={"x-correlation-id": "corr-claim"}),
+        json.dumps({"scanJobId": "scan-claim"}).encode("utf-8"),
+        timeout_seconds=45,
+    )
+
+    assert calls == [
+        (
+            "claim",
+            "scan-claim",
+            {"boundary_name": "scan_requested", "timeout_seconds": 45},
+        ),
+        (
+            "dispatch",
+            "scan_requested",
+            {"scanJobId": "scan-claim"},
+            "corr-claim",
+        ),
+    ]
+
+
 def test_delivery_handler_uses_payload_correlation_id(monkeypatch):
     invoked = []
     monkeypatch.setattr(
         rabbitmq_consumer,
         "dispatch_agent_runtime_event",
-        lambda boundary_name, message, correlation_id: invoked.append(
+        lambda boundary_name, message, correlation_id, timeout_seconds=None: invoked.append(
             (boundary_name, message, correlation_id)
         ),
     )
@@ -162,7 +262,7 @@ def test_delivery_handler_uses_payload_correlation_id(monkeypatch):
 
 
 def test_delivery_handler_nacks_on_dispatch_failure(monkeypatch):
-    def fail(_boundary_name, _message, _correlation_id):
+    def fail(_boundary_name, _message, _correlation_id, timeout_seconds=None):
         raise RuntimeError("dispatch failed")
 
     monkeypatch.setattr(rabbitmq_consumer, "dispatch_agent_runtime_event", fail)
@@ -185,7 +285,7 @@ def test_delivery_handler_nacks_on_dispatch_failure(monkeypatch):
 
 
 def test_delivery_handler_never_requeues_terminal_boundary_failure(monkeypatch):
-    def fail(_boundary_name, _message, _correlation_id):
+    def fail(_boundary_name, _message, _correlation_id, timeout_seconds=None):
         raise rabbitmq_consumer.NonRetryableAgentBoundaryError("terminal")
 
     monkeypatch.setattr(rabbitmq_consumer, "dispatch_agent_runtime_event", fail)
@@ -205,6 +305,244 @@ def test_delivery_handler_never_requeues_terminal_boundary_failure(monkeypatch):
 
     assert channel.acked == []
     assert channel.nacked == [("delivery-1", False)]
+
+
+def test_boundary_timeout_settles_delivery_and_terminalizes_scan(monkeypatch):
+    failures = []
+
+    class FakeWorkerClient:
+        def claim_scan_job(self, *_args, **_kwargs):
+            raise AssertionError("not expected")
+
+        def post_scan_terminal_failure(self, scan_job_id, payload):
+            failures.append((scan_job_id, payload))
+
+    monkeypatch.setattr(
+        rabbitmq_consumer,
+        "_worker_client_or_none",
+        lambda: FakeWorkerClient(),
+    )
+    channel = FakeChannel()
+
+    rabbitmq_consumer._schedule_delivery_timeout_settlement(
+        state=rabbitmq_consumer.DeliverySettlementState(),
+        connection=FakeConnection(),
+        channel=channel,
+        delivery_tag="delivery-timeout",
+        routing_key="command.scan.requested.v1",
+        queue_name="lcsp.agent_runtime.test.scan_requested",
+        boundary_name="scan_requested",
+        properties=SimpleNamespace(headers={"x-correlation-id": "corr-timeout"}),
+        body=json.dumps({"scanJobId": "scan-timeout"}).encode("utf-8"),
+        requeue_on_error=True,
+        retry_delays_seconds=(30,),
+        timeout_seconds=0.1,
+    )
+
+    assert failures == [
+        (
+            "scan-timeout",
+            {
+                "boundary_name": "scan_requested",
+                "reason_code": "AGENT_RUNTIME_BOUNDARY_TIMEOUT",
+                "status": "FAILED",
+                "summary": "Agent Runtime boundary timed out",
+                "timeout_seconds": 0.1,
+                "correlation_id": "corr-timeout",
+            },
+        )
+    ]
+    assert channel.acked == []
+    assert channel.nacked == [("delivery-timeout", False)]
+
+
+def test_scan_terminal_failure_payload_never_uses_model_call_limit_error(monkeypatch):
+    from tools.common.capabilities.agent_runtime.agent_server_client import (
+        AgentServerRunError,
+    )
+
+    failures = []
+
+    class FakeWorkerClient:
+        def post_scan_terminal_failure(self, scan_job_id, payload):
+            failures.append((scan_job_id, payload))
+
+    monkeypatch.setattr(
+        rabbitmq_consumer,
+        "_worker_client_or_none",
+        lambda: FakeWorkerClient(),
+    )
+    channel = FakeChannel()
+    completed: Future[None] = Future()
+    completed.set_exception(
+        AgentServerRunError(
+            "ModelCallLimitExceededError",
+            "run-level model call limit exceeded",
+        ),
+    )
+
+    rabbitmq_consumer._schedule_delivery_settlement(
+        connection=FakeConnection(),
+        channel=channel,
+        delivery_tag="delivery-limit",
+        routing_key="command.scan.requested.v1",
+        queue_name="lcsp.agent_runtime.test.scan_requested",
+        boundary_name="scan_requested",
+        properties=SimpleNamespace(headers={"x-correlation-id": "corr-limit"}),
+        body=json.dumps({"scanJobId": "scan-limit"}).encode("utf-8"),
+        requeue_on_error=True,
+        retry_delays_seconds=(),
+        completed=completed,
+    )
+
+    assert failures == [
+        (
+            "scan-limit",
+            {
+                "boundary_name": "scan_requested",
+                "reason_code": "REPOSITORY_ANALYSIS_FAILED",
+                "status": "FAILED",
+                "summary": "Agent Runtime boundary failed",
+                "timeout_seconds": None,
+                "correlation_id": "corr-limit",
+            },
+        )
+    ]
+    assert "ModelCallLimitExceededError" not in json.dumps(failures)
+    assert channel.nacked == [("delivery-limit", False)]
+
+
+def test_delivery_timeout_prevents_indefinite_unacked_slot():
+    channel = FakeChannel()
+    handler = rabbitmq_consumer._delivery_handler(
+        "scan_requested",
+        connection=FakeConnection(),
+        executor=HangingExecutor(),
+        queue_name="lcsp.agent_runtime.test.scan_requested",
+        requeue_on_error=True,
+        retry_delays_seconds=(),
+        timeout_seconds=0.01,
+    )
+
+    handler(
+        channel,
+        SimpleNamespace(
+            delivery_tag="delivery-hangs",
+            routing_key="command.scan.requested.v1",
+        ),
+        SimpleNamespace(headers={}),
+        json.dumps({"scanJobId": "scan-hangs"}).encode("utf-8"),
+    )
+
+    time.sleep(0.05)
+
+    assert channel.acked == []
+    assert channel.nacked == [("delivery-hangs", False)]
+
+
+def test_timed_out_delivery_does_not_block_next_scan_when_prefetch_is_one(monkeypatch):
+    calls = []
+    first_entered = Event()
+    release_first = Event()
+
+    def dispatch(_boundary_name, message, _correlation_id, timeout_seconds=None):
+        if message["scanJobId"] == "scan-first":
+            first_entered.set()
+            release_first.wait(5)
+            return
+        calls.append(message["scanJobId"])
+
+    monkeypatch.setattr(rabbitmq_consumer, "_worker_client_or_none", lambda: None)
+    monkeypatch.setattr(rabbitmq_consumer, "dispatch_agent_runtime_event", dispatch)
+    channel = FakeChannel()
+    connection = FakeConnection()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        handler = rabbitmq_consumer._delivery_handler(
+            "scan_requested",
+            connection=connection,
+            executor=executor,
+            queue_name="lcsp.agent_runtime.test.scan_requested",
+            requeue_on_error=True,
+            retry_delays_seconds=(),
+            timeout_seconds=0.01,
+        )
+        handler(
+            channel,
+            SimpleNamespace(
+                delivery_tag="delivery-first",
+                routing_key="command.scan.requested.v1",
+            ),
+            SimpleNamespace(headers={}),
+            json.dumps({"scanJobId": "scan-first"}).encode("utf-8"),
+        )
+        assert first_entered.wait(1)
+        time.sleep(0.05)
+        assert channel.nacked == [("delivery-first", False)]
+
+        handler(
+            channel,
+            SimpleNamespace(
+                delivery_tag="delivery-second",
+                routing_key="command.scan.requested.v1",
+            ),
+            SimpleNamespace(headers={}),
+            json.dumps({"scanJobId": "scan-second"}).encode("utf-8"),
+        )
+        time.sleep(0.05)
+        release_first.set()
+
+    assert calls == ["scan-second"]
+    assert channel.acked == ["delivery-second"]
+    assert channel.nacked == [("delivery-first", False)]
+
+
+def test_timeout_cancels_queued_dispatch_before_late_claim_or_side_effect(monkeypatch):
+    dispatched = []
+    monkeypatch.setattr(rabbitmq_consumer, "_worker_client_or_none", lambda: None)
+    monkeypatch.setattr(
+        rabbitmq_consumer,
+        "dispatch_agent_runtime_event",
+        lambda *_args: dispatched.append(_args),
+    )
+    executor = QueuedExecutor()
+    channel = FakeChannel()
+    handler = rabbitmq_consumer._delivery_handler(
+        "scan_requested",
+        connection=FakeConnection(),
+        executor=executor,
+        queue_name="lcsp.agent_runtime.test.scan_requested",
+        requeue_on_error=True,
+        retry_delays_seconds=(),
+        timeout_seconds=0.01,
+    )
+
+    handler(
+        channel,
+        SimpleNamespace(
+            delivery_tag="delivery-queued",
+            routing_key="command.scan.requested.v1",
+        ),
+        SimpleNamespace(headers={}),
+        json.dumps({"scanJobId": "scan-late"}).encode("utf-8"),
+    )
+    time.sleep(0.05)
+
+    future, function, args = executor.submissions[0]
+    assert future.cancelled() is True
+    with pytest.raises(rabbitmq_consumer.BoundaryExecutionTimeout):
+        function(*args)
+
+    assert dispatched == []
+    assert channel.acked == []
+    assert channel.nacked == [("delivery-queued", False)]
+
+
+def test_default_boundary_worker_count_keeps_prefetch_one_from_starving(monkeypatch):
+    monkeypatch.delenv("LCSP_AGENT_RUNTIME_BOUNDARY_WORKERS", raising=False)
+
+    assert rabbitmq_consumer._executor_worker_count(1) > 1
+    assert rabbitmq_consumer._executor_worker_count(8) == 8
 
 
 def test_retryable_delivery_failure_republishes_to_retry_queue_without_blocking():
@@ -289,6 +627,17 @@ def test_configure_channel_declares_durable_retry_queue_back_to_original_queue()
             "x-dead-letter-routing-key": "lcsp.agent_runtime.test.test_boundary",
         },
     } in channel.declared
+    assert all(
+        not declaration.get("queue", "").startswith("lcsp.mda.boundary.")
+        for declaration in channel.declared
+    )
+    assert channel.bound == [
+        {
+            "exchange": "lcsp.events",
+            "queue": "lcsp.agent_runtime.test.test_boundary",
+            "routing_key": "event.same",
+        }
+    ]
 
 
 def test_configure_channel_uses_bounded_fallback_for_empty_retry_schedule():
@@ -329,6 +678,30 @@ def test_configure_channel_uses_bounded_fallback_for_empty_retry_schedule():
             },
         }
     ]
+
+
+def test_legacy_mda_cleanup_deletes_only_known_retired_queues():
+    channel = FakeChannel()
+    bindings = (
+        rabbitmq_consumer.BoundaryBinding(
+            boundary_name="scan_requested",
+            source_event="command.scan.requested.v1",
+            queue_name="lcsp.agent_runtime.test.scan_requested",
+            retry_delays_seconds=(2,),
+        ),
+    )
+
+    rabbitmq_consumer._cleanup_legacy_mda_topology(
+        channel=channel,
+        bindings=bindings,
+        requeue_delay_seconds=2,
+        fallback_max_redeliveries=1,
+    )
+
+    deleted_queues = {item["queue"] for item in channel.deleted}
+    assert "lcsp.mda.boundary.scan_requested" in deleted_queues
+    assert "lcsp.mda.boundary.scan_requested.retry.2000ms" in deleted_queues
+    assert all(name.startswith("lcsp.mda.boundary.") for name in deleted_queues)
 
 
 def test_retry_attempt_header_increments_and_exhaustion_stops_requeue():

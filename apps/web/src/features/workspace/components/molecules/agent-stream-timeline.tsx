@@ -229,6 +229,30 @@ function toStreamRow(event: AssessmentAgentStreamEvent): ProjectedStreamRow {
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelRequest:
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelResult:
       return row(event, `${labels.model} · ${name}`, event.text, eventData(event));
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallHeartbeat:
+      return row(
+        event,
+        `${labels.model} · ${modelCallName(event, name)}`,
+        event.text ?? labels.running,
+        modelCallMeta(event),
+      );
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted:
+      return row(
+        event,
+        `${labels.model} · ${modelCallName(event, name)}`,
+        event.text ?? labels.completed,
+        modelCallMeta(event),
+      );
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout:
+      return row(
+        event,
+        `${labels.model} · ${modelCallName(event, name)}`,
+        event.text ?? labels.failed,
+        modelCallMeta(event),
+        true,
+      );
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall:
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolResult:
       return row(event, `${labels.toolCall} · ${event.toolName ?? name}`, event.text, eventData(event));
@@ -268,6 +292,32 @@ function eventData(event: AssessmentAgentStreamEvent): string | null {
   const serialized = JSON.stringify(event.data);
   const meta = eventMeta(event);
   return [meta, serialized].filter(Boolean).join(" · ") || null;
+}
+
+function modelCallName(
+  event: AssessmentAgentStreamEvent,
+  fallback: string,
+): string {
+  const data = isSummaryRecord(event.data) ? event.data : null;
+  return firstString(data?.model, event.nodeName, fallback);
+}
+
+function modelCallMeta(event: AssessmentAgentStreamEvent): string | null {
+  const data = isSummaryRecord(event.data) ? event.data : null;
+  const fields =
+    data === null
+      ? []
+      : semanticDisplayFields(data, [
+          "provider",
+          "model",
+          "elapsed_seconds",
+          "timeout_seconds",
+          "attempt",
+          "error_type",
+          "error_code",
+        ]);
+  const meta = eventMeta(event);
+  return [meta, ...fields].filter(Boolean).join("\n") || null;
 }
 
 type SemanticRecord = Record<string, AssessmentRuntimeSummaryValue>;

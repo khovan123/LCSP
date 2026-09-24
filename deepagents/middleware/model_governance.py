@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from langchain.agents.middleware import (
     AgentMiddleware,
-    ModelCallLimitMiddleware,
     ModelRetryMiddleware,
     PIIMiddleware,
 )
@@ -99,11 +98,6 @@ MODEL_GOVERNANCE_MIDDLEWARE = (
     # Keep metering innermost so provider retry, key rotation and fallback each
     # expose their actual downstream response to one governed billing boundary.
     BillingMeteringMiddleware(),
-    ModelCallLimitMiddleware(run_limit=2, exit_behavior="error"),
 )
 
-TRIAGE_MODEL_GOVERNANCE_MIDDLEWARE = (
-    *MODEL_GOVERNANCE_MIDDLEWARE[:-1],
-    # Read/persist up to 500 claimed rules, then finish and return the handoff.
-    ModelCallLimitMiddleware(run_limit=1100, exit_behavior="error"),
-)
+TRIAGE_MODEL_GOVERNANCE_MIDDLEWARE = MODEL_GOVERNANCE_MIDDLEWARE

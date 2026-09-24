@@ -10,6 +10,7 @@ import json
 import sqlite3
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -102,10 +103,17 @@ def drain(path: str | Path, api_client: Any) -> int:
     delivered = 0
     try:
         rows = db.execute(
-            "SELECT id, kind, payload FROM billing_callback_recovery ORDER BY id"
+            """
+            SELECT id, kind, payload
+            FROM billing_callback_recovery
+            WHERE state = 'PENDING'
+            ORDER BY id
+            """
         ).fetchall()
         for row_id, kind, raw_payload in rows:
             payload = json.loads(raw_payload)
+            if kind == "USAGE":
+                payload = _normalize_usage_recovery_payload(payload)
             if kind == "RELEASE" and _has_pending_usage(
                 db, payload["reservationId"]
             ):
@@ -124,7 +132,14 @@ def drain(path: str | Path, api_client: Any) -> int:
                             {"assessmentId": payload["assessmentId"]}
                         ),
                     )
-            except Exception:
+            except Exception as error:
+                if _is_permanent_ownership_mismatch(error):
+                    _dead_letter(
+                        db,
+                        row_id,
+                        "BILLING_OWNERSHIP_MISMATCH: reservation ownership mismatch is permanent",
+                    )
+                    continue
                 # One poisoned callback must not block unrelated users. The
                 # row remains pending for retry/quarantine by the API contract.
                 continue
@@ -188,17 +203,81 @@ def _connect(path: str | Path) -> sqlite3.Connection:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             kind TEXT NOT NULL,
             recovery_key TEXT NOT NULL UNIQUE,
-            payload TEXT NOT NULL
+            payload TEXT NOT NULL,
+            state TEXT NOT NULL DEFAULT 'PENDING',
+            dead_letter_reason TEXT,
+            dead_lettered_at TEXT
         )
         """
     )
+    _ensure_column(db, "state", "TEXT NOT NULL DEFAULT 'PENDING'")
+    _ensure_column(db, "dead_letter_reason", "TEXT")
+    _ensure_column(db, "dead_lettered_at", "TEXT")
     db.commit()
     return db
 
 
+def _ensure_column(db: sqlite3.Connection, column: str, definition: str) -> None:
+    rows = db.execute("PRAGMA table_info(billing_callback_recovery)").fetchall()
+    if any(row[1] == column for row in rows):
+        return
+    db.execute(
+        f"ALTER TABLE billing_callback_recovery ADD COLUMN {column} {definition}"
+    )
+
+
+def _dead_letter(db: sqlite3.Connection, row_id: int, reason: str) -> None:
+    db.execute(
+        """
+        UPDATE billing_callback_recovery
+        SET state = 'POISON',
+            dead_letter_reason = ?,
+            dead_lettered_at = ?
+        WHERE id = ?
+        """,
+        (
+            reason,
+            datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            row_id,
+        ),
+    )
+    db.commit()
+
+
+def _is_permanent_ownership_mismatch(error: BaseException) -> bool:
+    status_code = getattr(error, "status_code", None)
+    return status_code == 403 and "BILLING_OWNERSHIP_MISMATCH" in str(error)
+
+
+def _normalize_usage_recovery_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize legacy callback timestamps to the canonical UTC-Z contract."""
+    occurred_at = payload.get("occurredAt")
+    if not isinstance(occurred_at, str) or not occurred_at.strip():
+        return payload
+    normalized = occurred_at.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return payload
+    if parsed.tzinfo is None:
+        return payload
+    canonical = (
+        parsed.astimezone(timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+    if canonical == occurred_at:
+        return payload
+    return {**payload, "occurredAt": canonical}
+
+
 def _has_pending_usage(db: sqlite3.Connection, reservation_id: str) -> bool:
     rows = db.execute(
-        "SELECT payload FROM billing_callback_recovery WHERE kind = 'USAGE'"
+        """
+        SELECT payload
+        FROM billing_callback_recovery
+        WHERE kind = 'USAGE' AND state = 'PENDING'
+        """
     ).fetchall()
     return any(json.loads(row[0]).get("reservationId") == reservation_id for row in rows)
 

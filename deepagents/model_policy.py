@@ -13,7 +13,11 @@ disable_langsmith_tracing_by_default()
 from deepagents import create_deep_agent as _deepagents_create_agent
 from langchain.chat_models import init_chat_model
 from middleware.billing_metering import BillingAgentRoleMiddleware
-from provider_credentials import credential_init_kwargs, llm7_base_url
+from provider_credentials import (
+    credential_init_kwargs,
+    llm7_base_url,
+    llm_provider_timeout_seconds,
+)
 
 
 DEFAULT_ROOT_MODEL_SPEC = "openai:gpt-5-nano"
@@ -295,6 +299,7 @@ def openai_responses_base_init_kwargs() -> dict[str, object]:
     return {
         "use_responses_api": True,
         "output_version": RESPONSES_OUTPUT_VERSION,
+        "timeout": llm_provider_timeout_seconds(),
     }
 
 
@@ -333,9 +338,12 @@ def model_init_kwargs_for_agent(*, agent_name: str, model_spec: str) -> dict[str
     if route_provider == "llm7":
         return provider_init_kwargs(route_provider)
     if normalized == "google_genai:gemini-3.5-flash-lite":
-        return {"thinking_level": GOOGLE_THINKING_LEVEL if reasoning_policy_for_agent(
-            agent_name=agent_name, model_spec=normalized
-        ) == "enabled" else "minimal"}
+        return {
+            **provider_init_kwargs(provider),
+            "thinking_level": GOOGLE_THINKING_LEVEL if reasoning_policy_for_agent(
+                agent_name=agent_name, model_spec=normalized
+            ) == "enabled" else "minimal",
+        }
     if provider != "openai":
         return provider_init_kwargs(provider)
 
@@ -425,9 +433,12 @@ def provider_init_kwargs(provider: str) -> dict[str, object]:
         return {
             "base_url": llm7_base_url(),
             "use_responses_api": False,
+            "timeout": llm_provider_timeout_seconds(),
         }
     if canonical == "openai":
         return openai_responses_base_init_kwargs()
+    if canonical == "google_genai":
+        return {"request_timeout": llm_provider_timeout_seconds()}
     return {}
 
 

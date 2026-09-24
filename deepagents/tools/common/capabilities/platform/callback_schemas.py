@@ -102,8 +102,13 @@ class SettledUsagePayload(BaseModel):
 
 class BillingReservationPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    workspaceId: Optional[str] = None
     assessmentId: str
+    scanJobId: Optional[str] = None
+    threadId: Optional[str] = None
     runId: str
+    invocationId: Optional[str] = None
+    modelInvocationId: Optional[str] = None
     amountCredits: str
     maxChargeCredits: str
     provider: str

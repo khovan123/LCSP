@@ -1,7 +1,14 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import type { CommandBus, QueryBus } from "@nestjs/cqrs";
+import { RepositoryScanJobStatus as PrismaRepositoryScanJobStatus } from "@prisma/client";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import {
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES,
+  ASSESSMENT_RUNTIME_EVENT_TYPES,
+  ASSESSMENT_RUNTIME_RUN_STATUSES,
+} from "@lcsp/contracts/evidence";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
+import { SCAN_ERROR_CODES } from "@lcsp/contracts/scan";
 
 import { RBAC_METADATA_KEY } from "../../../../platform/rbac/decorators/rbac-metadata.js";
 import { GetScanJobQuery } from "../../application/queries/get-scan-job/get-scan-job.query.js";
@@ -157,6 +164,169 @@ describe("ScanController role-only RBAC", () => {
 });
 
 describe("InternalScanController", () => {
+  it("claims a queued scan job when Agent Runtime accepts the boundary", async () => {
+    const recordRepositoryAnalysisEvent = jest
+      .fn<(args: unknown) => Promise<unknown>>()
+      .mockResolvedValue({ recorded: true });
+    const updateMany = jest
+      .fn<(args: unknown) => Promise<{ count: number }>>()
+      .mockResolvedValue({ count: 1 });
+    const findUnique = jest
+      .fn<() => Promise<unknown>>()
+      .mockResolvedValueOnce({
+        id: "scan-1",
+        status: PrismaRepositoryScanJobStatus.QUEUED,
+        attemptCount: 0,
+      })
+      .mockResolvedValueOnce({
+        status: PrismaRepositoryScanJobStatus.RUNNING,
+        attemptCount: 1,
+      });
+    const controller = new InternalScanController(
+      {} as unknown as CommandBus,
+      { recordRepositoryAnalysisEvent } as never,
+      { repositoryScanJob: { findUnique, updateMany } } as never,
+    );
+
+    const result = await controller.claimScanJob("scan-1", {
+      boundary_name: "scan_requested",
+      timeout_seconds: 1800,
+    });
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "scan-1",
+        status: PrismaRepositoryScanJobStatus.QUEUED,
+      },
+      data: {
+        status: PrismaRepositoryScanJobStatus.RUNNING,
+        blockedReason: null,
+        attemptCount: { increment: 1 },
+      },
+    });
+    expect(recordRepositoryAnalysisEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanJobId: "scan-1",
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runStarted,
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+        toolName: "agent_runtime",
+        attempt: 1,
+        inputSummary: expect.objectContaining({
+          boundaryName: "scan_requested",
+          timeoutSeconds: 1800,
+        }),
+      }),
+    );
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        claimed: true,
+        terminal: false,
+        status: REPOSITORY_SCAN_JOB_STATUSES.running,
+      },
+    });
+  });
+
+  it("terminalizes an active scan job with a safe runtime failure reason", async () => {
+    const recordRepositoryAnalysisEvent = jest
+      .fn<(args: unknown) => Promise<unknown>>()
+      .mockResolvedValue({ recorded: true });
+    const updateMany = jest
+      .fn<(args: unknown) => Promise<{ count: number }>>()
+      .mockResolvedValue({ count: 1 });
+    const findUnique = jest
+      .fn<() => Promise<unknown>>()
+      .mockResolvedValue({
+        status: PrismaRepositoryScanJobStatus.FAILED,
+      });
+    const controller = new InternalScanController(
+      {} as unknown as CommandBus,
+      { recordRepositoryAnalysisEvent } as never,
+      { repositoryScanJob: { findUnique, updateMany } } as never,
+    );
+
+    const result = await controller.markScanJobTerminalFailure("scan-1", {
+      boundary_name: "scan_requested",
+      reason_code: SCAN_ERROR_CODES.agentRuntimeBoundaryTimeout,
+      timeout_seconds: 1800,
+    });
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "scan-1",
+        status: {
+          in: [
+            PrismaRepositoryScanJobStatus.QUEUED,
+            PrismaRepositoryScanJobStatus.RUNNING,
+          ],
+        },
+      },
+      data: {
+        status: PrismaRepositoryScanJobStatus.FAILED,
+        blockedReason: SCAN_ERROR_CODES.agentRuntimeBoundaryTimeout,
+      },
+    });
+    expect(recordRepositoryAnalysisEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanJobId: "scan-1",
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runFailed,
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+        toolName: "agent_runtime",
+        errorSummary: SCAN_ERROR_CODES.agentRuntimeBoundaryTimeout,
+        outputSummary: expect.objectContaining({
+          errorCode: SCAN_ERROR_CODES.agentRuntimeBoundaryTimeout,
+          boundaryName: "scan_requested",
+          timeoutSeconds: 1800,
+        }),
+      }),
+    );
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        terminalized: true,
+        status: REPOSITORY_SCAN_JOB_STATUSES.failed,
+        reasonCode: SCAN_ERROR_CODES.agentRuntimeBoundaryTimeout,
+      },
+    });
+  });
+
+  it("does not expose arbitrary worker failure strings as scan failure reasons", async () => {
+    const updateMany = jest
+      .fn<(args: unknown) => Promise<{ count: number }>>()
+      .mockResolvedValue({ count: 1 });
+    const controller = new InternalScanController(
+      {} as unknown as CommandBus,
+      { recordRepositoryAnalysisEvent: jest.fn() } as never,
+      {
+        repositoryScanJob: {
+          updateMany,
+          findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue({
+            status: PrismaRepositoryScanJobStatus.FAILED,
+          }),
+        },
+      } as never,
+    );
+
+    const result = await controller.markScanJobTerminalFailure("scan-1", {
+      reason_code: "raw provider exception with token sk-should-not-leak",
+    });
+
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          blockedReason: SCAN_ERROR_CODES.repositoryAnalysisFailed,
+        }),
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          reasonCode: SCAN_ERROR_CODES.repositoryAnalysisFailed,
+        }),
+      }),
+    );
+  });
+
   it("creates targeted reanalysis with a synthetic CUSTOMER worker context", async () => {
     const execute = jest.fn<(command: unknown) => Promise<unknown>>();
     execute.mockResolvedValue({ status: "READY" });
@@ -229,6 +399,60 @@ describe("InternalScanController", () => {
     expect(result).toEqual({
       ok: true,
       data: { recorded: true, eventId: "agent-event-1" },
+    });
+  });
+
+  it("accepts model-call telemetry events from the worker stream", async () => {
+    const publishAgentStreamEvent = jest.fn((value: unknown) =>
+      Promise.resolve({
+        ...(value as object),
+        eventId: "agent-event-model-call",
+      }),
+    );
+    const controller = new InternalScanController(
+      {} as unknown as CommandBus,
+      { publishAgentStreamEvent } as never,
+      {} as never,
+    );
+
+    const result = await controller.recordAgentStreamEvent(
+      {
+        assessment_id: "assessment-1",
+        run_id: "run-1",
+        event_type: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout,
+        node_name: "model",
+        status: ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+        text: "model call timed out",
+        data: {
+          provider: "google_genai",
+          model: "gemini-3.5-flash-lite",
+          elapsed_seconds: 30,
+          timeout_seconds: 30,
+        },
+      },
+      "corr-header",
+    );
+
+    expect(publishAgentStreamEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assessmentId: "assessment-1",
+        runId: "run-1",
+        correlationId: "corr-header",
+        eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout,
+        nodeName: "model",
+        status: ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+        text: "model call timed out",
+        data: expect.objectContaining({
+          provider: "google_genai",
+          model: "gemini-3.5-flash-lite",
+          elapsed_seconds: 30,
+          timeout_seconds: 30,
+        }),
+      }),
+    );
+    expect(result).toEqual({
+      ok: true,
+      data: { recorded: true, eventId: "agent-event-model-call" },
     });
   });
 
