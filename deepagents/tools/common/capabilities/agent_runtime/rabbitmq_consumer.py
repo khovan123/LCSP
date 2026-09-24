@@ -543,7 +543,10 @@ def _claim_scan_delivery(
             },
         )
     except WorkerCallbackError as error:
-        if error.status_code == 404 and "SCAN_JOB_NOT_FOUND" in str(error):
+        if (
+            error.status_code == 404
+            and error.error_code == "SCAN_JOB_NOT_FOUND"
+        ):
             raise StaleScanDelivery(scan_job_id) from error
         raise
     if response.get("terminal") is True and response.get("claimed") is not True:
