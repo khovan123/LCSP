@@ -227,10 +227,112 @@ test("model call events render provider progress and terminal failures", async (
 
   const text = container.textContent ?? "";
   assert.match(text, /gemini-3\.5-flash-lite/);
-  assert.match(text, /model call started/);
-  assert.match(text, /model call waiting/);
+  assert.doesNotMatch(text, /model call started/);
+  assert.doesNotMatch(text, /model call waiting/);
   assert.match(text, /model call timed out/);
   assert.match(text, /provider: google_genai/);
-  assert.match(text, /elapsed seconds: 10/);
+  assert.match(text, /elapsed seconds: 30/);
   assert.match(text, /timeout seconds: 30/);
+  const modelRows = container.querySelectorAll('[data-stream-kind="model"]');
+  assert.equal(modelRows.length, 1);
+  assert.equal(modelRows[0]?.getAttribute("data-stream-status"), "failed");
+});
+
+
+test("tool calls pair input and output into one expandable activity row", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          event(1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall, {
+            schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+            kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall,
+            durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+            toolName: "search_nodes",
+            toolCallId: "call-1",
+            parameters: { query: "billing", limit: 5 },
+          }),
+          event(
+            2,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolResult,
+            {
+              schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+              kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolResult,
+              durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+              toolName: "search_nodes",
+              toolCallId: "call-1",
+              resultSummary: { count: 2, status: "ok" },
+            },
+            { status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed },
+          ),
+        ]}
+      />,
+    );
+  });
+
+  const toolRows = container.querySelectorAll('[data-stream-kind="tool"]');
+  assert.equal(toolRows.length, 1);
+  assert.equal(toolRows[0]?.getAttribute("data-stream-status"), "completed");
+  assert.match(toolRows[0]?.textContent ?? "", /billing/);
+  assert.match(toolRows[0]?.textContent ?? "", /count/);
+  assert.equal(toolRows[0]?.querySelectorAll("details").length, 2);
+});
+
+test("private graph state and PII middleware noise are not rendered", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          event(
+            1,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.graphState,
+            { messages: "[HIDDEN_PRIVATE_RUNTIME_STATE]" },
+            {
+              nodeName: "repository-analyst",
+              text: '{"messages":"[HIDDEN_PRIVATE_RUNTIME_STATE]"}',
+            },
+          ),
+          event(
+            2,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.customProgress,
+            { status: "RUNNING" },
+            {
+              nodeName: "PIIMiddleware[email].before_model",
+              text: "middleware progress",
+            },
+          ),
+          event(
+            3,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.customProgress,
+            {
+              schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+              kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.reasoningSummary,
+              durability: ASSESSMENT_AGENT_STREAM_DURABILITY.bestEffort,
+              resultSummary: { summary: "Checking repository architecture." },
+            },
+            { text: "provider reasoning summary" },
+          ),
+        ]}
+      />,
+    );
+  });
+
+  const text = container.textContent ?? "";
+  assert.doesNotMatch(text, /HIDDEN_PRIVATE_RUNTIME_STATE/);
+  assert.doesNotMatch(text, /PIIMiddleware/);
+  assert.match(text, /Checking repository architecture/);
+  assert.equal(
+    container.querySelectorAll('[data-stream-kind="reasoning"]').length,
+    1,
+  );
 });
