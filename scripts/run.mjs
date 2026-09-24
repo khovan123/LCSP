@@ -165,6 +165,8 @@ const targets = {
     args: [
       "--python",
       "3.13",
+      "--with",
+      "sqlalchemy<2.1",
       "arize-phoenix",
       "serve",
       "--host",
@@ -175,6 +177,7 @@ const targets = {
     env: rootEnv,
     description: "Start Arize Phoenix trace UI",
     healthPort: 6006,
+    optional: true,
   },
   agent_runtime: {
     cwd: workerRoot,
@@ -597,14 +600,25 @@ async function runGroup(name) {
     const target = targets[member];
     cleanupDockerWorkerContainer(target);
     console.log(`[run] Starting ${member}: ${target.description}`);
-    children.push({ name: member, child: spawnTarget(target) });
+    children.push({
+      name: member,
+      child: spawnTarget(target),
+      optional: target.optional === true,
+    });
   }
 
   forwardSignals(children.map(({ child }) => child));
   let exiting = false;
-  for (const { name: member, child } of children) {
+  for (const { name: member, child, optional } of children) {
     child.on("exit", (code, signal) => {
       if (exiting) return;
+      if (optional) {
+        const detail = signal ? `signal ${signal}` : `code ${code ?? 0}`;
+        console.warn(
+          `[run] Optional ${member} exited with ${detail}; core dev services remain running.`,
+        );
+        return;
+      }
       exiting = true;
       if ((code ?? 0) !== 0) {
         console.error(
