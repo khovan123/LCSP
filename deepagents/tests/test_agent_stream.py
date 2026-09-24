@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from threading import Event
 from time import monotonic
 
@@ -11,6 +12,7 @@ from orchestration.agent_stream import (
     activate_agent_stream,
     invoke_graph_with_stream,
     invoke_with_stream,
+    _should_forward_stream_log,
 )
 
 
@@ -378,3 +380,47 @@ def test_buffered_emitter_never_blocks_agent_on_backpressure():
     elapsed = monotonic() - started
     assert elapsed < 0.1
     release_delivery.set()
+
+
+def test_stream_log_filter_hides_framework_noise_but_keeps_failures():
+    noisy_info = logging.LogRecord(
+        "httpx",
+        logging.INFO,
+        __file__,
+        1,
+        "HTTP Request: POST /internal/scan-jobs",
+        (),
+        None,
+    )
+    private_info = logging.LogRecord(
+        "lcsp.agent",
+        logging.INFO,
+        __file__,
+        1,
+        "PIIMiddleware[email].before_model",
+        (),
+        None,
+    )
+    useful_info = logging.LogRecord(
+        "lcsp.repository",
+        logging.INFO,
+        __file__,
+        1,
+        "Repository index completed",
+        (),
+        None,
+    )
+    framework_error = logging.LogRecord(
+        "httpx",
+        logging.ERROR,
+        __file__,
+        1,
+        "Provider request failed",
+        (),
+        None,
+    )
+
+    assert _should_forward_stream_log(noisy_info) is False
+    assert _should_forward_stream_log(private_info) is False
+    assert _should_forward_stream_log(useful_info) is True
+    assert _should_forward_stream_log(framework_error) is True
