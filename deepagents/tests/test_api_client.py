@@ -782,3 +782,28 @@ def test_decision_model_claim_conflict_suppresses_duplicate_provider_call(client
         )
 
     assert claimed is False
+
+
+def test_scan_claim_not_found_preserves_typed_error_code(client):
+    response = httpx.Response(
+        404,
+        json={
+            "ok": False,
+            "problem": {"code": "SCAN_JOB_NOT_FOUND"},
+        },
+    )
+
+    with patch(
+        "tools.common.capabilities.platform.api_client.httpx.post",
+        return_value=response,
+    ) as post:
+        with pytest.raises(WorkerCallbackError) as caught:
+            client.claim_scan_job(
+                "scan-deleted",
+                {"boundary_name": "scan_requested", "timeout_seconds": 1800},
+            )
+
+    assert caught.value.status_code == 404
+    assert caught.value.error_code == "SCAN_JOB_NOT_FOUND"
+    assert caught.value.callback_client_error is True
+    post.assert_called_once()
