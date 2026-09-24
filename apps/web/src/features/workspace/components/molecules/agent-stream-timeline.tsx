@@ -63,6 +63,8 @@ export function AgentStreamTimeline({
 }: AgentStreamTimelineProps) {
   const rows = projectStreamRows(events);
   const labels = streamLabels();
+  const hasRunningActivity = rows.some((row) => row.status === "running");
+  const duration = streamDuration(events);
   const showHistoryAction =
     ((history?.hasMore === true && history.nextCursor !== null) ||
       history?.error != null) &&
@@ -72,38 +74,56 @@ export function AgentStreamTimeline({
   return (
     <AgentTurn className={className}>
       <AgentMessage>
-        <div data-slot="agent-stream-timeline" className="space-y-2">
-          {showHistoryAction ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              disabled={history?.isLoading === true}
-              onClick={onLoadOlder}
-            >
-              {history?.isLoading === true
-                ? labels.loadingOlder
-                : history?.error != null
-                  ? labels.retryHistory
-                  : labels.loadOlder}
-            </Button>
-          ) : null}
-          {history?.error ? (
-            <div className="text-xs text-destructive">
-              {labels.historyLoadFailed}
+        <details
+          data-slot="agent-stream-timeline"
+          open={hasRunningActivity}
+          className="group min-w-0"
+        >
+          <summary className="flex cursor-pointer list-none items-center gap-2 py-1 text-xs font-medium text-muted-foreground select-none">
+            {hasRunningActivity ? (
+              <LoaderCircle className="size-3.5 animate-spin" />
+            ) : (
+              <CheckCircle2 className="size-3.5 text-emerald-500" />
+            )}
+            <span>
+              {hasRunningActivity ? labels.thinking : labels.completed}
+              {!hasRunningActivity && duration ? ` · ${duration}` : ""}
+            </span>
+            <ChevronDown className="ml-0.5 size-3 transition-transform duration-200 group-open:rotate-180" />
+          </summary>
+          <div className="mt-1.5 space-y-2 pl-0.5">
+            {showHistoryAction ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                disabled={history?.isLoading === true}
+                onClick={onLoadOlder}
+              >
+                {history?.isLoading === true
+                  ? labels.loadingOlder
+                  : history?.error != null
+                    ? labels.retryHistory
+                    : labels.loadOlder}
+              </Button>
+            ) : null}
+            {history?.error ? (
+              <div className="text-xs text-destructive">
+                {labels.historyLoadFailed}
+              </div>
+            ) : null}
+            <div className="relative space-y-0.5">
+              <div
+                aria-hidden="true"
+                className="absolute bottom-3 left-[7px] top-3 w-px bg-border/60"
+              />
+              {rows.map((row) => (
+                <StreamRowView key={row.id} row={row} labels={labels} />
+              ))}
             </div>
-          ) : null}
-          <div className="relative space-y-0.5">
-            <div
-              aria-hidden="true"
-              className="absolute bottom-3 left-[7px] top-3 w-px bg-border/60"
-            />
-            {rows.map((row) => (
-              <StreamRowView key={row.id} row={row} labels={labels} />
-            ))}
           </div>
-        </div>
+        </details>
       </AgentMessage>
     </AgentTurn>
   );
@@ -978,6 +998,21 @@ function reasoningSummaryText(semantic: SemanticRecord): string | null {
   return null;
 }
 
+function streamDuration(events: AssessmentAgentStreamEvent[]): string | null {
+  const timestamps = events
+    .map((event) => Date.parse(event.emittedAt))
+    .filter((value) => Number.isFinite(value));
+  if (timestamps.length < 2) return null;
+  const elapsedSeconds = Math.max(
+    0,
+    Math.round((Math.max(...timestamps) - Math.min(...timestamps)) / 1000),
+  );
+  if (elapsedSeconds < 1) return null;
+  const minutes = Math.floor(elapsedSeconds / 60);
+  const seconds = elapsedSeconds % 60;
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+}
+
 function streamLabels() {
   return {
     subagent: t("pages.appShell.agentStreamLabels.subagent"),
@@ -1007,6 +1042,7 @@ function streamLabels() {
     running: t("pages.appShell.chatActivityStatuses.running"),
     completed: t("pages.appShell.chatActivityStatuses.completed"),
     failed: t("pages.appShell.chatActivityStatuses.failed"),
+    thinking: t("pages.appShell.chatThinking"),
   };
 }
 
