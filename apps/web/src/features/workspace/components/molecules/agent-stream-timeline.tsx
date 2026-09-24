@@ -646,7 +646,7 @@ function semanticMeta(
 }
 
 function isSummaryRecord(
-  value: AssessmentRuntimeSummaryValue | null,
+  value: AssessmentRuntimeSummaryValue | null | undefined,
 ): value is SemanticRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
