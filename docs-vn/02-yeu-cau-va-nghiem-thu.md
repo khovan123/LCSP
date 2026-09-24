@@ -25,7 +25,7 @@ Manager tạo assessment, hoàn thành WizardProfile, kết nối GitHub App ch�
 
 ### Scanner và evidence
 
-Repository Deep Agent chạy trong Managed Deep Agents sandbox, dùng native filesystem/search/shell/subagent harness và Codebase Memory MCP 0.11.0 tùy chọn để tạo source-grounded evidence graph, EvidenceReference, TechnicalFinding và TechnicalEvidenceReport. Chỉ report đạt schema, privacy, provenance và quality gate mới được dùng tiếp.
+Repository Deep Agent chạy trong LCSP Docker sandbox theo durable LangGraph thread, dùng native filesystem/search/shell/subagent harness và Codebase Memory MCP 0.11.0 tùy chọn để tạo source-grounded evidence graph, EvidenceReference, TechnicalFinding và TechnicalEvidenceReport. Chỉ report đạt schema, privacy, provenance và quality gate mới được dùng tiếp.
 
 ### Intelligence và reconciliation
 

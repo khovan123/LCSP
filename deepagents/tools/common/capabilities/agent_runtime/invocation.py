@@ -1,4 +1,4 @@
-"""Invoke LCSP domain handlers through Managed Deep Agents boundaries."""
+"""Invoke LCSP domain handlers through Deep Agents boundaries."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from middleware.billing_metering import (
     BillingFinalizationError,
     activate_billing_metering,
 )
-from tools.common.capabilities.managed.boundary import AgentBoundaryBase
+from tools.common.capabilities.agent_runtime.boundary import AgentBoundaryBase
 from orchestration.agent_stream import (
     AgentStreamSession,
     BufferedAgentStreamEmitter,
@@ -43,7 +43,7 @@ from tools.triage.legal_rule_triage.contracts import (
 
 @dataclass(frozen=True)
 class AgentInvocationBoundary:
-    """Static Managed Agent invocation boundary."""
+    """Static Agent Runtime invocation boundary."""
 
     name: str
     target: str
@@ -166,15 +166,21 @@ AGENT_INVOCATION_BOUNDARIES: tuple[AgentInvocationBoundary, ...] = (
         "reporting.audit-export-requested",
         "audit.export-requested",
     ),
+    AgentInvocationBoundary(
+        "agent_runtime_health_requested",
+        "tools.common.capabilities.agent_runtime.health_boundary:AgentRuntimeHealthBoundary",
+        "agent-runtime.health",
+        "internal.agent-runtime.health.v1",
+    ),
 )
 
 _BOUNDARY_INDEX = {boundary.name: boundary for boundary in AGENT_INVOCATION_BOUNDARIES}
 if len(_BOUNDARY_INDEX) != len(AGENT_INVOCATION_BOUNDARIES):
-    raise RuntimeError("Managed Agent invocation boundary names must be unique")
+    raise RuntimeError("Agent Runtime invocation boundary names must be unique")
 
 
 def invocation_boundary_manifest() -> tuple[dict[str, str], ...]:
-    """Return all domain handlers addressable as Managed Agent boundaries."""
+    """Return all domain handlers addressable as Agent Runtime boundaries."""
     return tuple(
         {
             "name": boundary.name,
@@ -191,10 +197,10 @@ def invoke_boundary(
     message: dict[str, Any],
     correlation_id: str,
 ) -> dict[str, Any]:
-    """Invoke one Managed Agent boundary by name."""
+    """Invoke one Agent Runtime boundary by name."""
     boundary = _BOUNDARY_INDEX.get(boundary_name)
     if boundary is None:
-        raise ValueError(f"unknown managed agent invocation boundary: {boundary_name}")
+        raise ValueError(f"unknown agent runtime invocation boundary: {boundary_name}")
     boundary_handler = build_boundary(boundary.target)
     session = _agent_stream_session(boundary.name, message, correlation_id)
     billing_session = _billing_metering_session(boundary.name, message, correlation_id)
@@ -425,7 +431,7 @@ def _find_first_text(
     return None
 
 def load_boundary(target: str) -> Type[AgentBoundaryBase]:
-    """Resolve and validate a Managed Agent boundary class from an import target."""
+    """Resolve and validate a Agent Runtime boundary class from an import target."""
     module_name, separator, class_name = target.partition(":")
     if not separator or not module_name or not class_name:
         raise ValueError("boundary target must use module.path:ClassName syntax")
@@ -465,7 +471,7 @@ def build_boundary(target: str) -> AgentBoundaryBase:
         bind_runtime_handlers(
             registry,
             api_client=api_client,
-            user_id="managed-deep-agent-runtime",
+            user_id="agent-runtime",
         )
         kwargs["agentic_tool_resolver"] = AgenticToolResolver(
             registry,

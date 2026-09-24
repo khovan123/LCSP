@@ -79,15 +79,15 @@ Historical material remains available through git history, not as active documen
 ```text
 apps/api                 NestJS API synchronous control plane
 apps/web                 Manager web UX
-deepagents      bounded Python Worker Platform for all async domain workloads
-Managed Deep Agents      durable repository-backed assessment runtime
+deepagents      native Deep Agents / LangGraph runtime for async workloads
+LCSP Docker sandbox      durable repository-backed assessment runtime
 PostgreSQL + ChromaDB legal index
 RabbitMQ
 S3-compatible object storage
 real LLM provider for A-to-Z acceptance
 ```
 
-Node.js downstream domain workers are `SUPERSEDED_FOR_ACTIVE_MVP`. Node.js remains valid for the NestJS API, web, tooling, and shared runtime packages; repository analysis is owned by Managed Deep Agents.
+Node.js downstream domain workers are `SUPERSEDED_FOR_ACTIVE_MVP`. Node.js remains valid for the NestJS API, web, tooling, and shared runtime packages; repository analysis is owned by the LCSP Repository Deep Agent.
 
 ## Phase 5.2L Locked Corrections
 
@@ -103,7 +103,7 @@ Node.js downstream domain workers are `SUPERSEDED_FOR_ACTIVE_MVP`. Node.js remai
 | Concern | Owner |
 | --- | --- |
 | Trusted scan trigger/job query | NestJS API synchronous control plane |
-| Assessment repository working database | Managed Deep Agents thread sandbox |
+| Assessment repository working database | LCSP Docker sandbox keyed by durable LangGraph thread |
 | Repository exploration and evidence derivation | Repository Deep Agent |
 | Structural graph/index assistance | Codebase Memory MCP 0.11.0 |
 | Evidence graph / source anchors / coverage / AI gate | Repository Deep Agent structured result |
@@ -125,10 +125,10 @@ npm run db:migrate
 npm run dev:api
 npm run dev:web
 
-# Managed Deep Agents / Python runtime
+# Native Deep Agents / LangGraph local runtime
 cd deepagents
 uv sync --frozen
-uv run mda build .
+uv run --extra dev langgraph dev --no-browser --no-reload --allow-blocking
 uv run pytest
 
 # Node runtime

@@ -189,7 +189,7 @@ def test_exact_resume_selects_only_affected_rule() -> None:
     assert not result.planner_fallback_used
     assert "openwiki" not in result.observability
     assert result.observability["repository_planning_context"] == {
-        "source": "MDA_REPOSITORY_DATABASE",
+        "source": "LCSP_REPOSITORY_DATABASE",
         "codebaseMemoryMcpOptional": True,
     }
     assert ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"] not in (

@@ -13,7 +13,7 @@ This folder contains domain and wave handoff packets for implementation planning
 
 | Handoff | Status | Scope | Included tasks |
 |---|---|---|---|
-| [Repository Deep Agent architecture](../../architecture/repository-deep-agent-analysis.md) | `ACTIVE` | repository analysis, evidence gates, TechnicalProfile | Managed Deep Agents repository-analysis flow |
+| [Repository Deep Agent architecture](../../architecture/repository-deep-agent-analysis.md) | `ACTIVE` | repository analysis, evidence gates, TechnicalProfile | LCSP Agent Runtime repository-analysis flow |
 | [HANDOFF-ai-usage-flow-and-reconciliation.md](HANDOFF-ai-usage-flow-and-reconciliation.md) | `READY_FOR_PLANNING_REVIEW` | AIUsageFlow, conflict candidates, reconciliation, VerifiedProfile | MW-intel-002, MW-intel-004 |
 
 ## Rules

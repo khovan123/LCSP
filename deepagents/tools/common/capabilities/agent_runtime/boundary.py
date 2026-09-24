@@ -1,8 +1,8 @@
-"""Managed Deep Agents boundary base classes.
+"""Deep Agents boundary base classes.
 
-Legacy asynchronous handlers now run as explicit Managed Agent invocation
+Legacy asynchronous handlers now run as explicit Agent Runtime invocation
 boundaries. The boundary base owns no broker connection, health endpoint, retry
-lane, or runtime HTTP bridge; Managed Deep Agents scheduling/invocation owns
+lane, or runtime HTTP bridge; Deep Agents scheduling/invocation owns
 process lifecycle and human approval.
 """
 
@@ -16,7 +16,7 @@ class NonRetryableAgentBoundaryError(RuntimeError):
 
 
 class AgentBoundaryBase:
-    """Base class for one LCSP Managed Agent invocation boundary."""
+    """Base class for one LCSP Agent Runtime invocation boundary."""
 
     boundary_source: str = ""
     source_event: str = ""
@@ -33,5 +33,5 @@ class AgentBoundaryBase:
         return self.__class__.__name__
 
     def handle(self, message: dict[str, Any], correlationId: str) -> None:
-        """Process one Managed Agent invocation payload."""
+        """Process one Agent Runtime invocation payload."""
         raise NotImplementedError

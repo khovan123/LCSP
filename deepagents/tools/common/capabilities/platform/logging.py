@@ -222,7 +222,7 @@ class PartitionedLogWriter:
 
 
 def configure_logging(level: str = "INFO") -> None:
-    """Configure JSON logging for Managed Agent processes.
+    """Configure JSON logging for Agent Runtime processes.
 
     Normal worker events continue to stdout and partitioned run/orchestration
     files. Safe LLM request/response plus EngineeringRule native tool input/result

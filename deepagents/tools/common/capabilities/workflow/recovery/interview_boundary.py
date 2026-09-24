@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 from contracts.handoffs import InterviewResult
 from orchestration.result_validation import SpecialistHandoffValidationError
-from tools.common.capabilities.managed.boundary import AgentBoundaryBase
+from tools.common.capabilities.agent_runtime.boundary import AgentBoundaryBase
 from tools.common.capabilities.platform.api_client import (
     InterviewDecisionRepairableCallbackError,
 )

@@ -9,7 +9,7 @@ from typing import Any
 
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from model_policy import TRIAGE_MODEL_SPEC, create_lcsp_agent as create_agent
-from tools.common.capabilities.managed.skill_loader import load_project_skill
+from tools.common.capabilities.agent_runtime.skill_loader import load_project_skill
 from tools.legal.retrieval.legal_basis.normative_chunk_filter import (
     CHUNK_NORMATIVE_CLASSES,
     is_engineering_rule_source_chunk,

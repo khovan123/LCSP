@@ -60,7 +60,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
     """Plan once, validate deterministically, then investigate selected rules only."""
 
     # Production work uses the current assessment repository database through the
-    # repository-rooted MDA backend. Do not materialize another host-local repo.
+    # repository-rooted sandbox backend. Do not materialize another host-local repo.
     requires_code_workspace = False
 
     def __init__(
@@ -140,7 +140,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 correlationId=correlation_id,
             )
 
-        # Repository exploration happens only through the repository-rooted MDA backend.
+        # Repository exploration happens only through the repository-rooted sandbox backend.
         _ = workspace_path
         (
             catalog_version_id,
@@ -409,7 +409,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             ),
         }
         observability["repository_planning_context"] = {
-            "source": "MDA_REPOSITORY_DATABASE",
+            "source": "LCSP_REPOSITORY_DATABASE",
             "codebaseMemoryMcpOptional": True,
         }
         plan = self._planner.plan(

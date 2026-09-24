@@ -6,13 +6,13 @@ AUTHORITATIVE — LCSP-999 BIG RE-ARCHITECTURE
 
 ## Purpose
 
-LCSP analyzes the commit-pinned repository through a repository-backed Managed Deep Agent, derives a compatibility Program Evidence Graph from inspected source, maps governed legal source chunks to reusable Engineering Rules, and evaluates each Engineering Rule with source-grounded evidence.
+LCSP analyzes the commit-pinned repository through a repository-backed Repository Deep Agent, derives a compatibility Program Evidence Graph from inspected source, maps governed legal source chunks to reusable Engineering Rules, and evaluates each Engineering Rule with source-grounded evidence.
 
 The canonical runtime is code-centric. `TechnicalProfile`, `AIUsageFlow`, `VerifiedProfile`, and `LegalRuleMatch` are no longer execution stages. Historical rows and endpoints may remain temporarily for migration/read compatibility, but new assessments must not depend on them.
 
 ## Ownership
 
-- Managed Repository Analysis Agent owns repository exploration, source-grounded graph derivation, coverage/AI discovery, and technical investigation inputs; downstream workers retain governed legal/evaluation responsibilities.
+- Repository Deep Agent owns repository exploration, source-grounded graph derivation, coverage/AI discovery, and technical investigation inputs; downstream workers retain governed legal/evaluation responsibilities.
 - NestJS owns CQRS persistence/read boundaries, RBAC/authority, HTTP/internal APIs, outbox/events, protected mutations, and persistence of the direct EngineeringRule assessment result.
 - Codebase Memory MCP may accelerate cross-language structural discovery, but direct source inspection is authoritative and no language-specific parser subprocess owns evidence decisions.
 - LLM Gateway remains the only model-provider boundary.

@@ -14,7 +14,7 @@ Domain worker build details live in worker-specific implementation files:
 - `docs/implementation/legal-corpus-ingestion-implementation.md`
 - `docs/implementation/chromadb-vectorless-legal-retriever-implementation.md`
 
-Repository-analysis behavior is owned by `docs/architecture/repository-deep-agent-analysis.md`; this file defines the surrounding Python/Managed Deep Agents platform.
+Repository-analysis behavior is owned by `docs/architecture/repository-deep-agent-analysis.md`; this file defines the surrounding Python/LCSP Agent Runtime platform.
 
 ## Worker Modules
 

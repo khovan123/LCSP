@@ -55,7 +55,7 @@ def validate_lcsp_specialist_task_handoff(
     request: ToolCallRequest,
     handler: Callable[[ToolCallRequest], ToolMessage | Command],
 ) -> ToolMessage | Command:
-    """Fail closed when a managed LCSP subagent returns an invalid handoff."""
+    """Fail closed when a LCSP subagent returns an invalid handoff."""
     return _validate_lcsp_specialist_task_handoff(request, handler)
 
 

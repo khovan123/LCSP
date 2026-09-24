@@ -5,8 +5,8 @@
 # required COPY gate intact.
 FROM ghcr.io/astral-sh/uv:0.10.6 AS uv
 
-# Managed Deep Agents ships a native CLI/runtime binary. Use the newer Debian
-# base for local development so the image satisfies its glibc requirements.
+# Use the newer Debian base for local development so native agent/runtime
+# dependencies satisfy their glibc requirements.
 FROM python:3.11-slim-trixie
 
 RUN apt-get update \
@@ -16,11 +16,17 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=uv /uv /uvx /bin/
 
-# Resolve the managed runtime from the reviewed lockfile before source files are
+# Resolve the Agent Runtime dependencies from the reviewed lockfile before source files are
 # copied so dependency layers retain a stable cache key.
 COPY deepagents/pyproject.toml deepagents/uv.lock /app/deepagents/
 RUN cd /app/deepagents \
     && uv sync --frozen --no-dev --no-install-project
+
+COPY deepagents/sandbox/setup.sh /tmp/lcsp-sandbox-setup.sh
+RUN bash /tmp/lcsp-sandbox-setup.sh \
+    && rm -f /tmp/lcsp-sandbox-setup.sh \
+    && mkdir -p /workspace/repository /workspace/runtime \
+    && chmod -R 1777 /workspace
 
 COPY deepagents /app/deepagents
 

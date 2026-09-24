@@ -25,7 +25,7 @@ NestJS API chịu trách nhiệm HTTP, authentication, PBAC enforcement boundary
 
 ### `deepagents` repository analysis
 
-Managed Deep Agents thread sở hữu repository-analysis lifecycle. Repository Deep Agent dùng native filesystem/search/shell/subagent tools; Codebase Memory MCP 0.11.0 hỗ trợ graph/search/trace/coverage và source trực tiếp vẫn là authority.
+LCSP Agent Runtime sở hữu repository-analysis lifecycle trên local LangGraph Agent Server. Repository Deep Agent dùng native Deep Agents filesystem/search/shell/subagent tools trong Docker sandbox; Codebase Memory MCP 0.11.0 hỗ trợ graph/search/trace/coverage và source trực tiếp vẫn là authority.
 
 ### Python Worker Platform
 
@@ -61,7 +61,7 @@ Lưu immutable legal source snapshots và generated document artifacts. Database
 - Không raw source sang LLM hoặc lưu dài hạn.
 - Deterministic orchestration thay vì autonomous multi-agent control.
 - Python Worker Platform thay thế Node.js downstream domain workers.
-- Managed Deep Agents Repository Deep Agent thay thế static scanner lifecycle.
+- LCSP Agent Runtime Repository Deep Agent thay thế static scanner lifecycle.
 - Real LLM provider thay thế mock happy path.
 - Official-source legal corpus thay thế local JSONL seed.
 - ChromaDB structure-first vectorless legal retriever là retriever chuẩn.

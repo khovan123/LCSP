@@ -35,7 +35,7 @@ As LCSP, I want the Repository Deep Agent to derive technical evidence directly 
 
 ## Tasks / Subtasks
 
-- [ ] Run repository analysis through the Managed Deep Agent definition and managed repository backend.
+- [ ] Run repository analysis through the native Deep Agent graph and LCSP Docker repository backend.
 - [ ] Use native Deep Agents capabilities instead of LCSP-authored language analyzers.
 - [ ] Integrate optional Codebase Memory MCP 0.11.0 as structural memory.
 - [ ] Build source-grounded evidence, coverage, unresolved-frontier, and AI-discovery output.

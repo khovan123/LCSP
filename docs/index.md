@@ -1,6 +1,6 @@
 # LCSP Documentation Index
 
-LCSP is an implemented monorepo with a Next.js web application, NestJS API, shared packages, and a Managed Deep Agents runtime. Product and architecture authority lives under `docs/`; `docs-vn/` provides the Vietnamese summary layer.
+LCSP is an implemented monorepo with a Next.js web application, NestJS API, shared packages, and a self-hosted Deep Agents / LangGraph runtime. Product and architecture authority lives under `docs/`; `docs-vn/` provides the Vietnamese summary layer.
 
 ## Primary entry points
 
@@ -9,7 +9,7 @@ LCSP is an implemented monorepo with a Next.js web application, NestJS API, shar
 - [product/prd.md](./product/prd.md) — product requirements.
 - [specs/](./specs/) — canonical functional, non-functional, domain, event, and evidence contracts.
 - [architecture/architecture.md](./architecture/architecture.md) — system architecture.
-- [architecture/repository-deep-agent-analysis.md](./architecture/repository-deep-agent-analysis.md) — Managed Deep Agents repository-analysis architecture.
+- [architecture/repository-deep-agent-analysis.md](./architecture/repository-deep-agent-analysis.md) — self-hosted Repository Deep Agent analysis architecture.
 - [implementation/README.md](./implementation/README.md) — implementation guidance and operational boundaries.
 - [../docs-vn/README.md](../docs-vn/README.md) — Vietnamese overview.
 
@@ -17,7 +17,7 @@ LCSP is an implemented monorepo with a Next.js web application, NestJS API, shar
 
 - `apps/web` — Next.js Manager-facing application.
 - `apps/api` — NestJS synchronous control plane and persistence boundary.
-- `deepagents` — Managed Deep Agents runtime, repository analysis, assessment reasoning, legal/recovery/reporting workloads, and managed sandbox integration.
+- `deepagents` — native Deep Agents / LangGraph runtime, repository analysis, assessment reasoning, legal/recovery/reporting workloads, and Docker sandbox integration.
 - `packages` — shared contracts, i18n, and supporting packages.
 - `likec4` — architecture model and generated-view source.
 - `scripts` — repository development/release/validation utilities.

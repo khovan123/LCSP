@@ -1,6 +1,6 @@
-"""Root-owned dispatch adapter for specialist invocations outside the Managed task tool.
+"""Root-owned dispatch adapter for specialist invocations outside the task tool.
 
-Managed Deep Agents normally dispatches specialists through the root ``task`` tool. Some
+Deep Agents normally dispatches specialists through the root ``task`` tool. Some
 system events enter through deterministic worker boundaries instead. Those adapters use
 this dispatcher so they still share the same Root Orchestration lifecycle and do not
 create agent-specific orchestrators.

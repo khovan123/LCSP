@@ -5,7 +5,7 @@ from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.billing_metering import BillingAgentRoleMiddleware
 from middleware.interview_runtime_context import inject_interview_runtime_context
 from model_policy import INTERVIEW_MODEL_SPEC
-from tools.common.capabilities.managed.skill_loader import load_project_skill_package
+from tools.common.capabilities.agent_runtime.skill_loader import load_project_skill_package
 
 
 TOOLS = []

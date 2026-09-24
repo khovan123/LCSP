@@ -19,6 +19,10 @@ class LCSPRunContext:
     user_id: str | None = None
     workflow_run_id: str | None = None
     checkpoint_id: str | None = None
+    thread_id: str | None = None
+    snapshot_id: str | None = None
+    scan_job_id: str | None = None
+    commit_sha: str | None = None
     artifact_versions: dict[str, str] = field(default_factory=dict)
     engineering_rule_ids: tuple[str, ...] = ()
     legal_rule_ids: tuple[str, ...] = ()

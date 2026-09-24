@@ -299,7 +299,7 @@ Trusted trigger received from verified webhook, scheduler, backend trigger, or a
 
 | Step | Implementation Contract |
 | --- | --- |
-| Snapshot | Resolve the immutable RepositorySnapshot and hydrate it into the assessment Managed Deep Agents sandbox |
+| Snapshot | Resolve the immutable RepositorySnapshot and hydrate it into the assessment LCSP Docker repository sandbox |
 | Repository database | `/workspace/repository` is the durable thread working tree and Deep Agent filesystem root |
 | Analysis | Repository Deep Agent uses native filesystem/search/shell/planning/subagents; Codebase Memory MCP 0.11.0 is optional structural memory |
 | Source authority | Material claims are verified against direct repository source with bounded path/line anchors |
@@ -553,7 +553,7 @@ Covers authentication, authorization, GitHub App access, scanner isolation, sour
 
 - OAuth/OIDC authenticates LCSP user identity only.
 - GitHub App grants repository scan access only.
-- Raw source exists only inside the assessment-scoped Managed Deep Agents repository sandbox.
+- Raw source exists only inside the assessment-scoped LCSP Docker repository sandbox.
 - LLM Gateway receives sanitized metadata only.
 - Manager authority is server-side enforced.
 
@@ -754,10 +754,10 @@ No service may publish directly to RabbitMQ inside the same transaction.
 | `npm run db:migrate`                             | Local PostgreSQL schema migrated for relational metadata without pgvector requirement.                                                                                  |
 | `npm run dev:api`                                | API starts and reports ready state without logging secrets.                                                                                                             |
 | `npm run dev:worker`                             | NestJS background orchestration workers start and initialize queue bindings.                                                                                            |
-| Managed agent server / worker entrypoint | Repository-analysis runtime starts with Managed Deep Agents definitions and the Python worker orchestration boundary; no static scanner process is required. |
+| Agent Runtime server / worker entrypoint | Repository-analysis runtime starts the local LangGraph Agent Server, native Deep Agents graph and RabbitMQ bridge; no static scanner process is required. |
 | `npm run dev:web`                                | Web app starts and can reach API health endpoint.                                                                                                                       |
 | `npm run test`                                   | Unit and contract test suite passes.                                                                                                                                    |
-| Repository-analysis test suite | Managed repository workspace, source-grounding, coverage-gate, and Codebase Memory integration tests pass. |
+| Repository-analysis test suite | Docker repository sandbox, source-grounding, coverage-gate, LangGraph Agent Server, and Codebase Memory integration tests pass. |
 | `npm run smoke:scan-fixture`                     | Synthetic scan fixture triggers scan job through Python Worker, creates TechnicalEvidenceReport, and verifies downstream command projection or explicit blocked reason. |
 
 ### Smoke Scan Fixture Expected Behavior

@@ -43,8 +43,8 @@ for (const sharedGroup of [false, true]) {
         kill: (pid, signal) => signals.push({ pid, signal }),
       },
       isWindows: false,
-      managedAgentEventsModule:
-        "tools.common.capabilities.managed.rabbitmq_consumer",
+      agentRuntimeEventsModule:
+        "tools.common.capabilities.agent_runtime.rabbitmq_consumer",
       console: { log() {} },
       sleepMs() {},
       listParentPids: () => [99],

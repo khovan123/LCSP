@@ -21,7 +21,7 @@ POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 - `FR-050` không còn là upload Local/CI report; thay bằng Automatic Trusted Scan Initiation.
 - Tất cả asynchronous domain workloads chuyển sang Python Worker Platform.
 - Node.js chỉ còn cho NestJS/Web/tooling; không còn analyzer CLI riêng theo ngôn ngữ.
-- Thiết kế scanner toolchain theo ngôn ngữ đã được supersede. Repository analysis hiện dùng Managed Deep Agents + full Deep Agents harness trên repository commit-pinned; Codebase Memory là structural memory tùy chọn.
+- Thiết kế scanner toolchain theo ngôn ngữ đã được supersede. Repository analysis hiện dùng LangGraph + native Deep Agents harness trên repository commit-pinned trong LCSP Docker sandbox; Codebase Memory là structural memory tùy chọn.
 
 ## Phần đã được propagate rộng
 
@@ -45,7 +45,7 @@ POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 ## Phần carry forward trước stories/readiness
 
 - UX rebase/regeneration vẫn cần hoàn tất trước stories/readiness.
-- Chưa có dedicated Phase 5.2L ADRs cho PBAC, automatic trigger, Python Worker Platform và Managed Deep Agent repository-analysis runtime.
+- Chưa có dedicated Phase 5.2L ADRs cho PBAC, automatic trigger, Python Worker Platform và LCSP Agent Runtime repository-analysis runtime.
 - PBAC engine/topology, trigger retry/DLQ/idempotency và repository-analysis failure/coverage policy vẫn là technical decisions mở trước stories/readiness.
 
 ## Kiến trúc mục tiêu
@@ -54,7 +54,7 @@ POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 NestJS API = synchronous control plane
 Web = product UI
 Python Worker Platform = all asynchronous domain workloads
-Managed Deep Agent = durable assessment thread + sandboxed repository working database
+LCSP Agent Runtime = durable LangGraph thread + Docker repository working database
 ```
 
 Python Worker Platform gồm nhiều consumer/module độc lập cho trigger resolution, scan, profile, AIUsageFlow, reconciliation, legal pipeline, classification, gap analysis và document generation. Audit export là synchronous Backend API operation trong MVP.
@@ -63,7 +63,7 @@ Python Worker Platform gồm nhiều consumer/module độc lập cho trigger re
 
 ```text
 commit-pinned snapshot
--> hydrate repository vào Managed Deep Agents sandbox
+-> hydrate repository vào LCSP Docker sandbox
 -> Repository Deep Agent dùng native filesystem/search/execute/planning/subagents
 -> Codebase Memory index/search khi hữu ích
 -> agent tự xác định evidence graph + unresolved frontiers + coverage + AI discovery gate

@@ -48,7 +48,7 @@ Không được đi tắt từ Wizard sang risk, từ scan sang classification, 
 
 ## Luồng scan
 
-Backend kiểm tra PBAC, nhận trusted trigger và tạo `TrustedScanTrigger`, mapping state, `AuditEvent`, rồi chỉ tạo `RepositoryScanJob` khi context an toàn. Managed Deep Agents thread hydrate snapshot vào repository working database; Repository Deep Agent dùng native repository tools và Codebase Memory MCP tùy chọn để tạo evidence/report source-grounded, chạy gate rồi ghi trạng thái terminal và outbox event.
+Backend kiểm tra PBAC, nhận trusted trigger và tạo `TrustedScanTrigger`, mapping state, `AuditEvent`, rồi chỉ tạo `RepositoryScanJob` khi context an toàn. LCSP Agent Runtime hydrate snapshot vào Docker repository sandbox của durable LangGraph thread; Repository Deep Agent dùng native repository tools và Codebase Memory MCP tùy chọn để tạo evidence/report source-grounded, chạy gate rồi ghi trạng thái terminal và outbox event.
 
 Scan hoàn tất chỉ khi report `QUALITY_VALID` và cleanup đã được xác minh. Mọi rerun tạo job/evidence chain mới, không sửa lịch sử.
 

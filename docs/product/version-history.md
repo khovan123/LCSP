@@ -19,7 +19,7 @@ This document is the canonical product/architecture evolution history for LCSP. 
 
 ### Evidence finding
 
-Earlier LCSP revisions used a deterministic multi-tool static scanner. The active architecture replaces that implementation with repository-backed Managed Deep Agents plus optional Codebase Memory MCP, while preserving provenance-backed TechnicalEvidenceReport compatibility.
+Earlier LCSP revisions used a deterministic multi-tool static scanner. The active architecture replaces that implementation with a repository-backed native Deep Agent, LangGraph runtime, LCSP Docker sandbox, and optional Codebase Memory MCP, while preserving provenance-backed TechnicalEvidenceReport compatibility.
 
 The scanner is not an LLM reading the whole repository. Its role is to create bounded, traceable technical evidence about AI usage, dependencies, invocations, data/decision flows, human review/oversight controls and coverage limitations.
 

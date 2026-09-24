@@ -1,12 +1,8 @@
-"""Managed schedule for proactive legal-intelligence maintenance and triage."""
+"""Legal catalog maintenance prompt for application-owned schedulers."""
 
-from managed_deepagents import define_schedule
-
-
-schedule = define_schedule(
-    cron="0 2 * * *",
-    timezone="Asia/Ho_Chi_Minh",
-    prompt=(
+LEGAL_CATALOG_MAINTENANCE_CRON = "0 2 * * *"
+LEGAL_CATALOG_MAINTENANCE_TIMEZONE = "Asia/Ho_Chi_Minh"
+LEGAL_CATALOG_MAINTENANCE_PROMPT = (
         "Run LCSP in LEGAL_MAINTENANCE mode. Delegate the full legal-preparation cycle "
         "to the `triage` subagent. This is the SCHEDULED trigger. Claim the global Triage "
         "singleton, then call `maintain_legal_catalog` with `max_runs=0` so legal maintenance "
@@ -29,5 +25,11 @@ schedule = define_schedule(
         "Planner, Investigator, Resolver, or any customer assessment flow from Triage reasoning. "
         "Do not use customer assessment context, repository findings, user answers, or targeted "
         "repository reanalysis to make Legal Rule Triage decisions."
-    ),
 )
+
+
+__all__ = [
+    "LEGAL_CATALOG_MAINTENANCE_CRON",
+    "LEGAL_CATALOG_MAINTENANCE_PROMPT",
+    "LEGAL_CATALOG_MAINTENANCE_TIMEZONE",
+]

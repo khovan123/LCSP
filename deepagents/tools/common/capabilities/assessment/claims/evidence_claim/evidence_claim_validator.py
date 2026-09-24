@@ -444,11 +444,11 @@ class EvidenceClaimValidator:
     @staticmethod
     def _verify_repository_source(path: str, start: int, end: int) -> None:
         """Verify citations against the live assessment repository when available."""
-        from tools.common.capabilities.platform.managed_workspace import (
-            current_managed_backend,
+        from tools.common.capabilities.platform.repository_sandbox import (
+            current_repository_backend,
         )
 
-        backend = current_managed_backend()
+        backend = current_repository_backend()
         if backend is None:
             # Deterministic unit/offline flows still validate against pinned graph anchors.
             return

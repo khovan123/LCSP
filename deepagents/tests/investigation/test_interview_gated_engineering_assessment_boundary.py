@@ -10,7 +10,7 @@ from tools.common.capabilities.assessment.investigation.engineering_rule.intervi
 from tools.common.capabilities.assessment.investigation.engineering_rule.managed_targeted_investigator import (
     ManagedTargetedInvestigatorPipeline,
 )
-from tools.common.capabilities.managed.boundary import NonRetryableAgentBoundaryError
+from tools.common.capabilities.agent_runtime.boundary import NonRetryableAgentBoundaryError
 from tools.common.capabilities.platform.api_client import WorkerCallbackError
 
 

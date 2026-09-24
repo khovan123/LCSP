@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.common.capabilities.managed.skill_loader import (
+from tools.common.capabilities.agent_runtime.skill_loader import (
     load_project_skill,
     load_project_skill_package,
 )

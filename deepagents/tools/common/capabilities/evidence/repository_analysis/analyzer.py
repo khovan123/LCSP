@@ -1,7 +1,7 @@
 """Full-harness Deep Agent repository analysis.
 
-Each assessment owns a live repository working tree inside the Managed Deep
-Agents sandbox assigned to its durable thread. The pinned snapshot is only the
+Each assessment owns a live repository working tree inside the LCSP Docker
+sandbox assigned to its durable thread. The pinned snapshot is only the
 immutable baseline for that working database. Repository analysis reuses the same
 repository-rooted backend; it never creates a child sandbox or host-local workspace.
 Language-specific scanners are intentionally not part of this path.
@@ -24,7 +24,7 @@ from middleware.billing_metering import BillingAgentRoleMiddleware
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from model_policy import INVESTIGATOR_MODEL_SPEC, resolve_agent_model
 from orchestration.agent_stream import invoke_with_stream
-from tools.common.capabilities.platform.managed_workspace import current_managed_backend
+from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
 
 from .models import RepositoryAnalysisResult
 
@@ -43,8 +43,8 @@ build systems, generated code, configuration, AI SDKs, HTTP clients, runtime ind
 persistence, decision paths and human-review paths from the evidence you inspect.
 
 The sandbox also contains the pinned upstream Codebase Memory MCP engine as
-`codebase-memory-graph`. Managed Deep Agents cannot attach its stdio transport directly, so use
-the engine's one-shot CLI mode through `execute`; each CLI command invokes the same MCP tool
+`codebase-memory-graph`. Use the engine's one-shot CLI mode through `execute`
+when structural navigation is useful; each CLI command invokes the same MCP tool
 implementation. Start broad analysis by indexing this checkout when useful:
 `codebase-memory-graph cli index_repository --repo-path /workspace/repository --name assessment --mode full`.
 Then use graph tools such as `get_architecture`, `search_graph`, `search_code`, `trace_path`,
@@ -108,13 +108,13 @@ class RepositoryDeepAnalyzer:
         targeted_scope: dict[str, Any] | None = None,
         backend: BackendProtocol | None = None,
     ) -> RepositoryAnalysisArtifact:
-        managed_backend = backend or self._backend or current_managed_backend()
-        if managed_backend is None:
+        repository_backend = backend or self._backend or current_repository_backend()
+        if repository_backend is None:
             raise RuntimeError(
-                "repository analysis requires the current Managed Deep Agents thread backend"
+                "repository analysis requires the current LCSP repository sandbox backend"
             )
         result = self._invoke(
-            managed_backend,
+            repository_backend,
             snapshot_id=snapshot_id,
             commit_sha=commit_sha,
             scan_job_id=scan_job_id,
@@ -123,7 +123,7 @@ class RepositoryDeepAnalyzer:
         return RepositoryAnalysisArtifact(
             result=result,
             evidence_payload=self._evidence_payload(
-                managed_backend,
+                repository_backend,
                 result,
                 snapshot_id=snapshot_id,
                 commit_sha=commit_sha,
@@ -131,7 +131,6 @@ class RepositoryDeepAnalyzer:
             ),
             tools_version={
                 "deepagents": version("deepagents"),
-                "managed-deepagents": version("managed-deepagents"),
                 "repository-analysis": REPOSITORY_ANALYSIS_VERSION,
             },
             config_hash={

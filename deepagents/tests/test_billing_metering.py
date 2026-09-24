@@ -11,8 +11,8 @@ from middleware.billing_metering import (
     extract_provider_usage,
 )
 from middleware.billing_recovery import drain
-from tools.common.capabilities.managed.invocation import _billing_metering_session
-from tools.common.capabilities.managed.rabbitmq_consumer import _with_billing_attempt
+from tools.common.capabilities.agent_runtime.invocation import _billing_metering_session
+from tools.common.capabilities.agent_runtime.rabbitmq_consumer import _with_billing_attempt
 
 
 class FakeClient:

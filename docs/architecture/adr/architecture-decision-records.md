@@ -9,7 +9,7 @@ This document is the active ADR authority index for the A-to-Z runnable MVP. Det
 ```text
 Modular NestJS API synchronous control plane
 + Python Worker Platform for all asynchronous domain workloads
-+ Managed Deep Agents repository analysis
++ native Deep Agents / LangGraph repository analysis
 + PostgreSQL/Prisma for primary persistence
 + ChromaDB structure-first vectorless legal retrieval
 + RabbitMQ/outbox
@@ -44,7 +44,7 @@ The system uses deterministic orchestration, state machines, evidence gates, and
 | ADR              | Active Decision                                                                                                            | Status                                                                                                  |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | ADR-001          | Modular monolith-first API boundary with extractable modules                                                               | Accepted                                                                                                |
-| ADR-002          | Async worker workloads remain outside synchronous API lifecycle                                                            | Partially Superseded: repository-analysis ownership moved to the Managed Deep Agents architecture; downstream async separation retained |
+| ADR-002          | Async worker workloads remain outside synchronous API lifecycle                                                            | Partially Superseded: repository-analysis ownership moved to the native Deep Agents / LangGraph architecture; downstream async separation retained |
 | ADR-003          | Manager-led workflow; Developer invitation/task retired from active MVP                                                    | Accepted                                                                                                |
 | ADR-004          | Evidence-first classification gate                                                                                         | Accepted                                                                                                |
 | ADR-005          | GitHub App Repository Scan is the only active MVP evidence path; Local/CI/manual uploads deferred                          | Superseded by Phase 5.2L for `FR-050`/`FR-051` semantics                                                |

@@ -1,4 +1,4 @@
-"""Role-specific model policy for the LCSP Managed Deep Agents graph."""
+"""Role-specific model policy for the LCSP Deep Agents graph."""
 
 from __future__ import annotations
 
@@ -380,13 +380,13 @@ def create_lcsp_agent(
             *middleware,
         ]
     if "backend" not in kwargs:
-        from tools.common.capabilities.platform.managed_workspace import (
-            current_managed_backend,
+        from tools.common.capabilities.platform.repository_sandbox import (
+            current_repository_backend,
         )
 
-        managed_backend = current_managed_backend()
-        if managed_backend is not None:
-            kwargs["backend"] = managed_backend
+        repository_backend = current_repository_backend()
+        if repository_backend is not None:
+            kwargs["backend"] = repository_backend
     return _deepagents_create_agent(
         model=resolved_model,
         name=langchain_name,

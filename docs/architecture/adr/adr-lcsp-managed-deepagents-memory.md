@@ -1,4 +1,4 @@
-# ADR: LCSP Managed Deep Agents Memory Boundary
+# ADR: LCSP Agent Runtime Memory Boundary
 
 Status: Accepted
 
@@ -6,13 +6,13 @@ Date: 2026-08-30
 
 ## Context
 
-LCSP assessment runs contain tenant, user, repository, legal-corpus, and compliance evidence. Managed Deep Agents thread state is useful execution memory, but deployment-shared durable agent memory is not an LCSP factual authority boundary.
+LCSP assessment runs contain tenant, user, repository, legal-corpus, and compliance evidence. Deep Agents / LangGraph thread state is useful execution memory, but deployment-shared durable agent memory is not an LCSP factual authority boundary.
 
 ## Decision
 
 LCSP uses checkpoint-first, authority-separated memory:
 
-- Managed Deep Agents and LangGraph thread state are execution memory only.
+- Deep Agents and LangGraph thread state are execution memory only.
 - LCSP API/database records and governed artifacts are long-term factual memory.
 - Checked-in prompts, skills, and policy modules are procedural memory.
 - Specialist scratch is transient and private to one invocation.

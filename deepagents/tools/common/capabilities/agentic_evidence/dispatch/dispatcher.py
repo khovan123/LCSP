@@ -22,7 +22,7 @@ from ..entrypoints.legal_tool_entrypoints import (
 )
 
 class ToolRuntimeTarget(str, Enum):
-    NEST_CQRS = "NEST_CQRS"; NEST_COMMAND = "NEST_COMMAND"; MANAGED_AGENT_COMMAND = "MANAGED_AGENT_COMMAND"; PYTHON_LOCAL = "PYTHON_LOCAL"; PROTECTED_API = "PROTECTED_API"
+    NEST_CQRS = "NEST_CQRS"; NEST_COMMAND = "NEST_COMMAND"; AGENT_RUNTIME_COMMAND = "AGENT_RUNTIME_COMMAND"; PYTHON_LOCAL = "PYTHON_LOCAL"; PROTECTED_API = "PROTECTED_API"
 AgenticToolRuntimeTarget = ToolRuntimeTarget
 
 @dataclass(frozen=True)
@@ -35,8 +35,8 @@ AgenticToolBinding = ToolBinding
 def _binding(name, target, entrypoint, downstream): return ToolBinding(name, target, entrypoint, downstream)
 
 ENGINEERING_RULE_AGENTIC_TOOL_BINDINGS = (
-    _binding("resume_waiting_runs", ToolRuntimeTarget.MANAGED_AGENT_COMMAND, resume_waiting_runs, "ResumeWaitingRunsCommand"),
-    _binding("request_targeted_reanalysis", ToolRuntimeTarget.MANAGED_AGENT_COMMAND, request_targeted_reanalysis, "RequestTargetedReanalysisCommand"),
+    _binding("resume_waiting_runs", ToolRuntimeTarget.AGENT_RUNTIME_COMMAND, resume_waiting_runs, "ResumeWaitingRunsCommand"),
+    _binding("request_targeted_reanalysis", ToolRuntimeTarget.AGENT_RUNTIME_COMMAND, request_targeted_reanalysis, "RequestTargetedReanalysisCommand"),
     _binding("propose_gap_remediation", ToolRuntimeTarget.PYTHON_LOCAL, propose_gap_remediation, "Python remediation over GetGapEvidenceTraceQuery"),
     _binding("get_gap_evidence_trace", ToolRuntimeTarget.NEST_CQRS, get_gap_evidence_trace, "GetGapEvidenceTraceQuery"),
     _binding("get_reconciliation_context", ToolRuntimeTarget.NEST_CQRS, get_reconciliation_context, "GetReconciliationContextQuery"),

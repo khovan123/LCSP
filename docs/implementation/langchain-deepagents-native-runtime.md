@@ -1,6 +1,6 @@
-# Managed Deep Agents LangChain Native Runtime Policy
+# LangChain and Deep Agents Native Runtime Policy
 
-LCSP Managed Deep Agents must use the LangChain and Deep Agents framework as the
+LCSP Agent Runtime must use the LangChain and Deep Agents framework as the
 LLM execution layer. Do not add new provider clients, tool-call protocols,
 structured-output parsers, prompt-safety filters, fallback dispatchers, or retry
 loops under a runtime infrastructure LLM package.

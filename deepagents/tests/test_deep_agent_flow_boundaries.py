@@ -254,7 +254,7 @@ def test_tools_tree_contains_only_authored_agent_capabilities() -> None:
         "agentic_evidence",
         "assessment",
         "evidence",
-        "managed",
+            "agent_runtime",
         "package",
         "platform",
         "reporting",

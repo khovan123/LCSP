@@ -5,7 +5,7 @@ from middleware.billing_metering import BillingAgentRoleMiddleware
 from middleware.triage_progress import require_triage_progress
 from model_policy import TRIAGE_MODEL_SPEC
 from contracts.handoffs import TriageResult
-from tools.common.capabilities.managed.skill_loader import load_project_skill
+from tools.common.capabilities.agent_runtime.skill_loader import load_project_skill
 from tools.triage.legal_rule_triage.code import (
     finish_legal_rule_triage_execution,
     get_legal_rule_triage_work_items,

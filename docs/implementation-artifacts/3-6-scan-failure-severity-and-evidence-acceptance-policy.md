@@ -22,7 +22,7 @@ As LCSP, I want repository-analysis failures, coverage limitations, and evidence
    **Then** evidence is insufficient or partial for that conclusion
    **And** absence gates such as `AI_ABSENT_CONFIRMED` remain closed.
 
-4. **Given** Managed Deep Agents, repository hydration, Codebase Memory assistance, or another runtime dependency fails transiently
+4. **Given** LCSP Agent Runtime, repository hydration, Codebase Memory assistance, or another runtime dependency fails transiently
    **When** retry policy permits recovery
    **Then** the run is classified retryable without mutating prior accepted evidence.
 

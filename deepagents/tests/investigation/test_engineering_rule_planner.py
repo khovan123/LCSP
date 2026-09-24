@@ -439,7 +439,7 @@ def test_planned_pipeline_investigates_only_selected_rule(tmp_path) -> None:
     investigator.investigate.assert_called_once()
     planner.plan.assert_called_once()
     assert result.observability["repository_planning_context"] == {
-        "source": "MDA_REPOSITORY_DATABASE",
+        "source": "LCSP_REPOSITORY_DATABASE",
         "codebaseMemoryMcpOptional": True,
     }
     confirmed_arg = planner.plan.call_args.kwargs["confirmed_customer_context"]
@@ -967,7 +967,7 @@ def test_planned_pipeline_uses_repository_planning_context(tmp_path) -> None:
     ]
     assert "openwiki" not in result.observability
     assert result.observability["repository_planning_context"] == {
-        "source": "MDA_REPOSITORY_DATABASE",
+        "source": "LCSP_REPOSITORY_DATABASE",
         "codebaseMemoryMcpOptional": True,
     }
     assert result.observability["candidate_source_hit_distribution"][

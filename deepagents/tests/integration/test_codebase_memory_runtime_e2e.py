@@ -30,7 +30,7 @@ def _run(binary: Path, args: list[str], *, env: dict[str, str]) -> dict:
 def test_codebase_memory_indexes_searches_and_reports_coverage_for_repository(
     tmp_path: Path,
 ) -> None:
-    """Exercise the exact pinned CBM binary used by the MDA sandbox recipe.
+    """Exercise the exact pinned CBM binary used by the sandbox runtime image.
 
     CI/developer environments opt in by setting LCSP_CODEBASE_MEMORY_E2E_BINARY
     to the pre-provisioned 0.11.0 native binary. The normal unit suite remains
@@ -94,7 +94,7 @@ def test_codebase_memory_indexes_searches_and_reports_coverage_for_repository(
         "XDG_CACHE_HOME": str(cache),
         "CBM_CACHE_DIR": str(cache / "codebase-memory-mcp"),
     }
-    project = "lcsp-mda-cbm-e2e"
+    project = "lcsp-agent-runtime-cbm-e2e"
 
     indexed = _run(
         binary,

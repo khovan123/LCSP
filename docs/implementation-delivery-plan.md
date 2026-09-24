@@ -23,7 +23,7 @@ This delivery plan is synchronized to the active module-scoped task catalog. The
 1. Platform foundation: `platform/config`, `platform/audit-writer`, `platform/outbox`, `platform/rbac`.
 2. Workspace foundation: `auth-workspace`, then web sign-in/workspace surfaces.
 3. Assessment and wizard: `assessment`, `wizard`, then wizard web surface.
-4. Repository and scan: `github-integration`, `scan`, Managed Deep Agents repository analysis, `evidence`.
+4. Repository and scan: `github-integration`, `scan`, LCSP Agent Runtime repository analysis, `evidence`.
 5. Intelligence: `python-workers/intelligence`, `ai-usage-flow`, `reconciliation`.
 6. Legal/classification/reporting: `python-workers/legal`, `python-workers/llm`, `classification`, `python-workers/classification`, `document`, `audit`, `python-workers/reporting`.
 7. Acceptance: `qa` module tasks.

@@ -1,28 +1,31 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from tools.common.capabilities.managed import agent_server_client
-from tools.common.capabilities.platform import managed_workspace
+from deepagents.backends.protocol import LsResult, WriteResult
+from tools.common.capabilities.agent_runtime import agent_server_client
+from tools.common.capabilities.platform import docker_sandbox
+from tools.common.capabilities.platform import repository_sandbox
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_same_assessment_reuses_one_managed_thread_across_pipeline_events() -> None:
-    scan = agent_server_client.managed_thread_id(
+def test_same_assessment_reuses_one_agent_thread_across_pipeline_events() -> None:
+    scan = agent_server_client.agent_thread_id(
         "scan_requested",
         {"assessmentId": "assessment-1", "scanJobId": "scan-1"},
         "corr-scan",
     )
-    assessment = agent_server_client.managed_thread_id(
+    assessment = agent_server_client.agent_thread_id(
         "engineering_assessment_requested",
         {"assessmentId": "assessment-1", "workflowRunId": "workflow-2"},
         "corr-assessment",
     )
-    other = agent_server_client.managed_thread_id(
+    other = agent_server_client.agent_thread_id(
         "scan_requested",
         {"assessmentId": "assessment-2", "scanJobId": "scan-9"},
         "corr-other",
@@ -44,14 +47,14 @@ def test_agent_server_dispatch_reuses_thread_and_keeps_event_out_of_prompt(monke
         "commitSha": "abc123",
         "secretInternalField": "must-not-be-copied-to-model-message",
     }
-    result = agent_server_client.dispatch_managed_agent_event(
+    result = agent_server_client.dispatch_agent_runtime_event(
         "scan_requested",
         event,
         "corr-1",
     )
 
     assert result == {"ok": True}
-    thread_id = agent_server_client.managed_thread_id("scan_requested", event, "corr-1")
+    thread_id = agent_server_client.agent_thread_id("scan_requested", event, "corr-1")
     fake_client.threads.create.assert_called_once()
     assert fake_client.threads.create.call_args.kwargs["thread_id"] == thread_id
     assert fake_client.threads.create.call_args.kwargs["if_exists"] == "do_nothing"
@@ -59,8 +62,10 @@ def test_agent_server_dispatch_reuses_thread_and_keeps_event_out_of_prompt(monke
     wait = fake_client.runs.wait.call_args
     assert wait.args[:2] == (thread_id, "lcsp-agent")
     assert wait.kwargs["context"]["system_event"] == event
-    assert wait.kwargs["config"]["configurable"]["snapshot_id"] == "snapshot-1"
-    assert wait.kwargs["config"]["configurable"]["cwd"] == "/workspace/repository"
+    assert "config" not in wait.kwargs
+    assert wait.kwargs["context"]["thread_id"] == thread_id
+    assert wait.kwargs["context"]["snapshot_id"] == "snapshot-1"
+    assert wait.kwargs["context"]["repository_path"] == "/"
     assert wait.kwargs["context"]["repository_path"] == "/"
     prompt = wait.kwargs["input"]["messages"][0]["content"]
     assert "secretInternalField" not in prompt
@@ -68,32 +73,98 @@ def test_agent_server_dispatch_reuses_thread_and_keeps_event_out_of_prompt(monke
     assert wait.kwargs["multitask_strategy"] == "enqueue"
 
 
-def test_managed_backend_activation_is_scoped_to_repository_database() -> None:
+def test_repository_backend_activation_is_scoped_to_repository_database() -> None:
     backend = object()
 
-    assert managed_workspace.current_managed_backend() is None
-    with managed_workspace.activate_managed_backend(backend):
-        active = managed_workspace.current_managed_backend()
-        assert isinstance(active, managed_workspace.AssessmentRepositoryBackend)
+    assert repository_sandbox.current_repository_backend() is None
+    with repository_sandbox.activate_repository_backend(backend):
+        active = repository_sandbox.current_repository_backend()
+        assert isinstance(active, repository_sandbox.AssessmentRepositoryBackend)
         assert active._backend is backend
-    assert managed_workspace.current_managed_backend() is None
+    assert repository_sandbox.current_repository_backend() is None
 
 
-def test_thread_backend_resolver_delegates_to_mda_thread_sandbox(monkeypatch) -> None:
-    import managed_deepagents.runtime as mda_runtime
-    from sandbox import sandbox as sandbox_definition
+def test_runtime_backend_mirrors_native_skills_before_first_read(monkeypatch) -> None:
+    writes = []
+    raw = MagicMock()
+    raw.id = "sandbox-1"
+    raw.write.side_effect = lambda path, content: writes.append(
+        (path, content)
+    ) or WriteResult(path=path)
+    raw.ls.return_value = LsResult(entries=[])
 
-    resolved = object()
-    seen = []
     monkeypatch.setattr(
-        mda_runtime,
-        "_resolve_managed_sandbox",
-        lambda sandbox, config: seen.append((sandbox, config)) or resolved,
+        repository_sandbox,
+        "resolve_repository_thread_backend",
+        lambda config: raw,
     )
-    config = {"configurable": {"thread_id": "thread-1"}}
+    monkeypatch.setattr(
+        repository_sandbox,
+        "get_config",
+        lambda: {"configurable": {"thread_id": "thread-1"}},
+    )
 
-    assert managed_workspace.resolve_managed_thread_backend(config) is resolved
-    assert seen == [(sandbox_definition, config)]
+    backend = repository_sandbox.RuntimeRepositoryBackend()
+    backend.ls(repository_sandbox.REPOSITORY_SKILLS)
+
+    assert any(
+        path == f"{repository_sandbox.REPOSITORY_SKILLS}/lcsp/SKILL.md"
+        and "name: lcsp" in content
+        for path, content in writes
+    )
+    raw.ls.assert_called_once_with(repository_sandbox.REPOSITORY_SKILLS)
+
+
+def test_repository_virtualization_accepts_native_sandbox_repository_paths() -> None:
+    raw = MagicMock()
+    raw.id = "sandbox-1"
+    raw.ls.return_value = LsResult(entries=[])
+
+    backend = repository_sandbox.repository_database_backend(raw)
+    backend.ls(repository_sandbox.REPOSITORY_SKILLS)
+
+    raw.ls.assert_called_once_with(repository_sandbox.REPOSITORY_SKILLS)
+
+
+def test_docker_sandbox_manager_uses_deterministic_secure_container() -> None:
+    calls = []
+
+    def runner(args, input_bytes, timeout):
+        calls.append((list(args), input_bytes, timeout))
+        if args[1] == "inspect":
+            return subprocess.CompletedProcess(args, 1, b"", b"missing")
+        return subprocess.CompletedProcess(args, 0, b"container-id", b"")
+
+    manager = docker_sandbox.DockerSandboxManager(runner=runner)
+    backend = manager.resolve(
+        {
+            "configurable": {
+                "thread_id": "thread-1",
+                "assessment_id": "assessment-1",
+                "snapshot_id": "snapshot-1",
+                "scan_job_id": "scan-1",
+                "commit_sha": "abc123",
+            }
+        }
+    )
+
+    assert backend.id == "lcsp-repository-sandbox-4b0a5fefc328e6b9257bc535"
+    run_args = calls[1][0]
+    assert run_args[:4] == ["docker", "run", "-d", "--name"]
+    assert "--privileged" not in run_args
+    assert "/var/run/docker.sock" not in " ".join(run_args)
+    assert ["--security-opt", "no-new-privileges"] == run_args[
+        run_args.index("--security-opt") : run_args.index("--security-opt") + 2
+    ]
+    assert ["--cap-drop", "ALL"] == run_args[
+        run_args.index("--cap-drop") : run_args.index("--cap-drop") + 2
+    ]
+    assert ["--network", "none"] == run_args[
+        run_args.index("--network") : run_args.index("--network") + 2
+    ]
+    assert ["--user", "1000:1000"] == run_args[
+        run_args.index("--user") : run_args.index("--user") + 2
+    ]
 
 
 def test_repository_analyzer_never_creates_a_child_sandbox() -> None:
@@ -105,12 +176,12 @@ def test_repository_analyzer_never_creates_a_child_sandbox() -> None:
     assert "SandboxClient" not in source
     assert "create_sandbox(" not in source
     assert "RepositoryWorkspace" not in source
-    assert "current_managed_backend()" in source
+    assert "current_repository_backend()" in source
     assert "persistent working database" in source
     assert "repository-rooted backend" in source
 
 
-def test_codebase_memory_is_baked_into_managed_sandbox_without_host_graph_state() -> None:
+def test_codebase_memory_is_baked_into_docker_sandbox_without_host_graph_state() -> None:
     setup = (PROJECT_ROOT / "sandbox" / "setup.sh").read_text(encoding="utf-8")
     analyzer = (
         PROJECT_ROOT
@@ -141,7 +212,7 @@ def test_default_assessment_pipeline_does_not_materialize_a_second_repo() -> Non
     assert PlannedEngineeringInvestigationPipeline.requires_code_workspace is False
 
 
-def test_system_event_middleware_dispatches_inside_resolved_mda_backend(monkeypatch) -> None:
+def test_system_event_middleware_dispatches_inside_resolved_docker_backend(monkeypatch) -> None:
     import middleware.system_event_dispatch as system_dispatch
     from orchestration.context import LCSPRunContext
 
@@ -154,7 +225,7 @@ def test_system_event_middleware_dispatches_inside_resolved_mda_backend(monkeypa
     calls = []
     monkeypatch.setattr(
         system_dispatch,
-        "resolve_managed_thread_backend",
+        "resolve_repository_thread_backend",
         lambda config: calls.append(("resolve", config)) or backend,
     )
     monkeypatch.setattr(
@@ -166,8 +237,8 @@ def test_system_event_middleware_dispatches_inside_resolved_mda_backend(monkeypa
     )
 
     def invoke(boundary, payload, correlation_id):
-        active = managed_workspace.current_managed_backend()
-        assert isinstance(active, managed_workspace.AssessmentRepositoryBackend)
+        active = repository_sandbox.current_repository_backend()
+        assert isinstance(active, repository_sandbox.AssessmentRepositoryBackend)
         assert active._backend is backend
         calls.append(("invoke", boundary, payload, correlation_id))
 
@@ -182,7 +253,7 @@ def test_system_event_middleware_dispatches_inside_resolved_mda_backend(monkeypa
         config={"configurable": {"thread_id": "thread-1"}},
     )
 
-    result = system_dispatch.dispatch_managed_system_event.before_agent({}, runtime)
+    result = system_dispatch.dispatch_agent_runtime_system_event.before_agent({}, runtime)
 
     assert result == {"jump_to": "end"}
     assert calls == [
@@ -190,7 +261,7 @@ def test_system_event_middleware_dispatches_inside_resolved_mda_backend(monkeypa
         ("hydrate", backend, "scan_requested", event),
         ("invoke", "scan_requested", event, "corr-1"),
     ]
-    assert managed_workspace.current_managed_backend() is None
+    assert repository_sandbox.current_repository_backend() is None
 
 
 
@@ -228,7 +299,7 @@ def test_repository_database_backend_virtualizes_repo_as_agent_root() -> None:
     ]
     raw.execute.return_value = ExecuteResponse(output="ok", exit_code=0)
 
-    backend = managed_workspace.repository_database_backend(raw)
+    backend = repository_sandbox.repository_database_backend(raw)
 
     assert backend.ls("/").entries == [{"path": "/src/app.py", "is_dir": False}]
     assert backend.glob("*.py", "/").matches == [
@@ -256,20 +327,35 @@ def test_repository_database_backend_virtualizes_repo_as_agent_root() -> None:
 
 
 def test_repository_database_metadata_lives_inside_repo_and_agent_state_is_reserved() -> None:
-    assert managed_workspace.REPOSITORY_META.startswith(
-        managed_workspace.REPOSITORY_ROOT + "/.lcsp/"
+    assert repository_sandbox.REPOSITORY_META.startswith(
+        repository_sandbox.REPOSITORY_ROOT + "/.lcsp/"
     )
-    assert managed_workspace.REPOSITORY_AGENT_STATE.startswith(
-        managed_workspace.REPOSITORY_ROOT + "/.lcsp/"
+    assert repository_sandbox.REPOSITORY_AGENT_STATE.startswith(
+        repository_sandbox.REPOSITORY_ROOT + "/.lcsp/"
     )
 
 
 def test_repository_database_bootstraps_a_git_baseline() -> None:
     source = (
-        PROJECT_ROOT / "tools/common/capabilities/platform/managed_workspace.py"
+        PROJECT_ROOT / "tools/common/capabilities/platform/repository_sandbox.py"
     ).read_text(encoding="utf-8")
 
-    assert "git init -q" in source
-    assert "git add -A" in source
+    assert "git -C {repository} init -q" in source
+    assert "--git-dir={repository}/.git --work-tree={repository}" in source
+    assert " add -A" in source
     assert "LCSP baseline " in source
     assert ".lcsp/" in source
+
+
+def test_repository_hydration_clears_mount_contents_not_mountpoint() -> None:
+    bootstrap = repository_sandbox._repository_hydration_bootstrap("abc123")
+
+    assert f"rm -rf {repository_sandbox.REPOSITORY_ROOT}" not in bootstrap
+    assert (
+        f"find {repository_sandbox.REPOSITORY_ROOT} -mindepth 1 -maxdepth 1 "
+        "-exec rm -rf -- {} +"
+    ) in bootstrap
+    assert (
+        "tar -xzf /tmp/lcsp-assessment-repository.tar.gz "
+        f"-C {repository_sandbox.REPOSITORY_ROOT}"
+    ) in bootstrap

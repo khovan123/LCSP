@@ -9,7 +9,7 @@ from typing import Any
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from model_policy import PLANNER_MODEL_SPEC, create_lcsp_agent as create_agent
 from tools.common.capabilities.evidence.graph.schema.vocabulary import EDGE_TYPES, NODE_TYPES
-from tools.common.capabilities.managed.skill_loader import load_project_skill
+from tools.common.capabilities.agent_runtime.skill_loader import load_project_skill
 
 from .chunk_triage import LegalChunkEngineeringRuleTriage, TRIAGE_SKILL_NAME
 from ..contract.models import (

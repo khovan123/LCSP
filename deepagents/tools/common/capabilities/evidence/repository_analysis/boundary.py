@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from tools.common.capabilities.managed.boundary import (
+from tools.common.capabilities.agent_runtime.boundary import (
     AgentBoundaryBase,
     NonRetryableAgentBoundaryError,
 )

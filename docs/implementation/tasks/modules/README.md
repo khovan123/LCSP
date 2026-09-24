@@ -74,7 +74,7 @@ auth-workspace (sign-in, mfa, oauth, org, invitation) ← rbac
                                                        ↘
 assessment → wizard → github-integration → scan
                                          ↘
-python-workers/platform → Managed Deep Agents repository analysis → python-workers/intelligence
+python-workers/platform → LCSP Agent Runtime repository analysis → python-workers/intelligence
                                                  ↘
 python-workers/legal → python-workers/llm → python-workers/classification → python-workers/reporting
                                                                            ↘

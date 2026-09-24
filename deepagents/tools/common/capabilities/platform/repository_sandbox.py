@@ -1,4 +1,4 @@
-"""Assessment repository as the persistent working database for Managed Deep Agents."""
+"""Assessment repository as the persistent working database for Deep Agents."""
 
 from __future__ import annotations
 
@@ -24,7 +24,9 @@ from deepagents.backends.protocol import (
     SandboxBackendProtocol,
     WriteResult,
 )
+from langgraph.config import get_config
 from tools.common.capabilities.platform.config import load_config
+from tools.common.capabilities.platform.docker_sandbox import DockerSandboxManager
 from tools.common.capabilities.platform.repository_snapshot_client import (
     RepositoryArchiveRequest,
     RepositorySnapshotClient,
@@ -35,17 +37,20 @@ from tools.common.capabilities.platform.repository_workspace import RepositoryWo
 REPOSITORY_ROOT = "/workspace/repository"
 REPOSITORY_META = f"{REPOSITORY_ROOT}/.lcsp/repository.json"
 REPOSITORY_AGENT_STATE = f"{REPOSITORY_ROOT}/.lcsp/agent"
+REPOSITORY_SKILLS = f"{REPOSITORY_AGENT_STATE}/skills"
 _ARCHIVE_PATH = "/tmp/lcsp-assessment-repository.tar.gz"
 _RESERVED_REPOSITORY_DIRS = {".git", ".lcsp"}
+_CHECKED_IN_SKILLS_ROOT = Path(__file__).resolve().parents[4] / "skills"
 _ACTIVE_BACKEND: ContextVar[object | None] = ContextVar(
-    "lcsp_managed_thread_backend",
+    "lcsp_repository_thread_backend",
     default=None,
 )
+_DOCKER_SANDBOX_MANAGER = DockerSandboxManager()
 
 class AssessmentRepositoryBackend(SandboxBackendProtocol):
     """Expose the assessment repository itself as the Deep Agent filesystem root.
 
-    The physical directory is /workspace/repository in the MDA-owned sandbox.
+    The physical directory is /workspace/repository in the LCSP-owned sandbox.
     Agent-facing / means the repository root, and shell commands execute with
     the repository as their working directory, matching a coding CLI checkout.
     """
@@ -55,7 +60,7 @@ class AssessmentRepositoryBackend(SandboxBackendProtocol):
 
     @property
     def id(self) -> str:
-        backend_id = getattr(self._backend, "id", "managed")
+        backend_id = getattr(self._backend, "id", "repository-sandbox")
         return f"{backend_id}:assessment-repository"
 
     def ls(self, path: str) -> LsResult:
@@ -179,17 +184,71 @@ class AssessmentRepositoryBackend(SandboxBackendProtocol):
         return self._backend.execute(scoped)
 
 
-def resolve_managed_thread_backend(config: object | None) -> object:
-    """Resolve the exact sandbox backend MDA owns for the current durable thread.
+def resolve_repository_thread_backend(config: object | None) -> object:
+    """Resolve the LCSP Docker sandbox backend for the current durable thread."""
+    return _DOCKER_SANDBOX_MANAGER.resolve(config)
 
-    Managed Deep Agents 0.7 does not yet expose the resolved backend on Tool/Agent
-    Runtime. Keep this compatibility call isolated here so an MDA 0.8 public accessor
-    can replace it without changing LCSP orchestration.
-    """
-    from managed_deepagents.runtime import _resolve_managed_sandbox
-    from sandbox import sandbox as sandbox_definition
 
-    return _resolve_managed_sandbox(sandbox_definition, config)
+class RuntimeRepositoryBackend(SandboxBackendProtocol):
+    """Late-bind Deep Agents file tools to the current thread sandbox."""
+
+    @property
+    def id(self) -> str:
+        return "lcsp-runtime-repository"
+
+    def _backend(self) -> AssessmentRepositoryBackend:
+        active = current_repository_backend()
+        if active is not None:
+            return repository_database_backend(active)
+        backend = resolve_repository_thread_backend(get_config())
+        ensure_runtime_skills(backend)
+        return repository_database_backend(backend)
+
+    def ls(self, path: str) -> LsResult:
+        return self._backend().ls(path)
+
+    def read(self, file_path: str, offset: int = 0, limit: int = 2000):
+        return self._backend().read(file_path, offset=offset, limit=limit)
+
+    def grep(
+        self,
+        pattern: str,
+        path: str | None = None,
+        glob: str | None = None,
+        *,
+        max_count: int | None = None,
+    ) -> GrepResult:
+        return self._backend().grep(pattern, path, glob, max_count=max_count)
+
+    def glob(self, pattern: str, path: str | None = None) -> GlobResult:
+        return self._backend().glob(pattern, path)
+
+    def write(self, file_path: str, content: str) -> WriteResult:
+        return self._backend().write(file_path, content)
+
+    def edit(
+        self,
+        file_path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
+    ) -> EditResult:
+        return self._backend().edit(file_path, old_string, new_string, replace_all)
+
+    def delete(self, file_path: str) -> DeleteResult:
+        return self._backend().delete(file_path)
+
+    def upload_files(
+        self,
+        files: list[tuple[str, bytes]],
+    ) -> list[FileUploadResponse]:
+        return self._backend().upload_files(files)
+
+    def download_files(self, paths: list[str]) -> list[FileDownloadResponse]:
+        return self._backend().download_files(paths)
+
+    def execute(self, command: str, *, timeout: int | None = None):
+        return self._backend().execute(command, timeout=timeout)
 
 
 def repository_database_backend(backend: object) -> AssessmentRepositoryBackend:
@@ -199,13 +258,13 @@ def repository_database_backend(backend: object) -> AssessmentRepositoryBackend:
     return AssessmentRepositoryBackend(backend)
 
 
-def current_managed_backend() -> object | None:
+def current_repository_backend() -> object | None:
     """Current repository-rooted backend shared by nested Deep Agents."""
     return _ACTIVE_BACKEND.get()
 
 
 @contextmanager
-def activate_managed_backend(backend: object) -> Iterator[object]:
+def activate_repository_backend(backend: object) -> Iterator[object]:
     """Expose one repository database backend to nested Deep Agent construction."""
     repository_backend = repository_database_backend(backend)
     token = _ACTIVE_BACKEND.set(repository_backend)
@@ -247,37 +306,26 @@ def hydrate_repository(
     write = getattr(backend, "write", None)
     if not callable(upload_files) or not callable(execute) or not callable(write):
         raise RuntimeError(
-            "managed assessment backend does not support sandbox filesystem operations"
+            "repository sandbox backend does not support filesystem operations"
         )
 
     uploads = upload_files([(_ARCHIVE_PATH, sanitized_archive)])
     if not uploads or getattr(uploads[0], "error", None):
-        raise RuntimeError("failed to upload assessment repository into managed sandbox")
+        raise RuntimeError("failed to upload assessment repository into sandbox")
 
     baseline_label = (
         commit_sha.lower()
         if re.fullmatch(r"[0-9a-fA-F]{7,64}", commit_sha or "")
         else "unknown"
     )
-    repository = shlex.quote(REPOSITORY_ROOT)
-    archive_path = shlex.quote(_ARCHIVE_PATH)
-    bootstrap = (
-        f"rm -rf {repository} && mkdir -p {repository} "
-        f"&& tar -xzf {archive_path} -C {repository} "
-        f"&& mkdir -p {shlex.quote(REPOSITORY_AGENT_STATE)} "
-        f"&& cd {repository} "
-        "&& if command -v git >/dev/null 2>&1; then "
-        "git init -q "
-        "&& git config user.email lcsp-managed-agent@local "
-        "&& git config user.name 'LCSP Managed Agent' "
-        "&& git add -A "
-        f"&& git commit -q --allow-empty -m {shlex.quote('LCSP baseline ' + baseline_label)} "
-        "&& printf '\\n.lcsp/\\n' >> .git/info/exclude; "
-        "fi"
-    )
+    bootstrap = _repository_hydration_bootstrap(baseline_label)
     extraction = execute(bootstrap, timeout=120)
     if getattr(extraction, "exit_code", 1) != 0:
-        raise RuntimeError("failed to materialize assessment repository database")
+        output = str(getattr(extraction, "output", "") or "").strip()
+        detail = f": {output}" if output else ""
+        raise RuntimeError(f"failed to materialize assessment repository database{detail}")
+
+    _mirror_checked_in_skills(write)
 
     marker_payload = json.dumps(
         {
@@ -295,6 +343,62 @@ def hydrate_repository(
     write_result = write(REPOSITORY_META, marker_payload)
     if getattr(write_result, "error", None):
         raise RuntimeError("failed to persist repository database metadata")
+
+
+def ensure_runtime_skills(backend: object) -> None:
+    """Ensure native Deep Agents skills exist before SkillsMiddleware reads them."""
+    write = getattr(backend, "write", None)
+    if not callable(write):
+        raise RuntimeError("repository sandbox backend does not support skill mirroring")
+    _mirror_checked_in_skills(write)
+
+
+def _mirror_checked_in_skills(write) -> None:
+    """Mirror canonical checked-in skills into the hydrated sandbox runtime area."""
+    if not _CHECKED_IN_SKILLS_ROOT.is_dir():
+        return
+    for skill_root in sorted(_CHECKED_IN_SKILLS_ROOT.iterdir()):
+        if not skill_root.is_dir():
+            continue
+        skill_file = skill_root / "SKILL.md"
+        if not skill_file.is_file():
+            continue
+        _write_skill_file(write, skill_file, f"{REPOSITORY_SKILLS}/{skill_root.name}/SKILL.md")
+        references_root = skill_root / "references"
+        if references_root.is_dir():
+            for reference in sorted(references_root.glob("*.md")):
+                _write_skill_file(
+                    write,
+                    reference,
+                    f"{REPOSITORY_SKILLS}/{skill_root.name}/references/{reference.name}",
+                )
+
+
+def _write_skill_file(write, source: Path, target: str) -> None:
+    result = write(target, source.read_text(encoding="utf-8"))
+    if getattr(result, "error", None):
+        raise RuntimeError(f"failed to mirror LCSP skill into repository sandbox: {source.name}")
+
+
+def _repository_hydration_bootstrap(baseline_label: str) -> str:
+    repository = shlex.quote(REPOSITORY_ROOT)
+    archive_path = shlex.quote(_ARCHIVE_PATH)
+    git = f"git --git-dir={repository}/.git --work-tree={repository}"
+    return (
+        f"mkdir -p {repository} "
+        f"&& find {repository} -mindepth 1 -maxdepth 1 -exec rm -rf -- {{}} + "
+        f"&& tar -xzf {archive_path} -C {repository} "
+        f"&& mkdir -p {shlex.quote(REPOSITORY_AGENT_STATE)} "
+        "&& if command -v git >/dev/null 2>&1; then "
+        f"git -C {repository} init -q "
+        f"&& {git} config user.email lcsp-agent-runtime@local "
+        f"&& {git} config user.name 'LCSP Agent Runtime' "
+        f"&& {git} add -A "
+        f"&& {git} commit -q --allow-empty "
+        f"-m {shlex.quote('LCSP baseline ' + baseline_label)} "
+        f"&& printf '\\n.lcsp/\\n' >> {repository}/.git/info/exclude; "
+        "fi"
+    )
 
 
 def ensure_repository_for_event(
@@ -349,7 +453,7 @@ def _read_marker(backend: object) -> dict[str, Any]:
     read = getattr(backend, "read", None)
     if not callable(read):
         return {}
-    result = read(REPOSITORY_META, offset=0, limit=200)
+    result = read(REPOSITORY_META, offset=0, limit=4096)
     if getattr(result, "error", None):
         return {}
     file_data = getattr(result, "file_data", None)
@@ -365,7 +469,7 @@ def _read_marker(backend: object) -> dict[str, Any]:
 
 def _sanitize_archive(archive: bytes, *, snapshot_id: str) -> bytes:
     """Apply archive guards and reserve .git/.lcsp for the agent database."""
-    with tempfile.TemporaryDirectory(prefix="lcsp-mda-repo-") as root:
+    with tempfile.TemporaryDirectory(prefix="lcsp-repository-sandbox-") as root:
         workspace = RepositoryWorkspace(Path(root))
         result = workspace.materialize("snapshot", archive, snapshot_id=snapshot_id)
         source_root = _repository_root(result.workspace_path)
@@ -398,6 +502,16 @@ def _real_path(path: str) -> str:
     parts = pure.parts[1:] if pure.is_absolute() else pure.parts
     if any(part in {"..", "~"} for part in parts):
         raise ValueError("repository database paths cannot escape the repository root")
+    if pure.is_absolute():
+        normalized = str(
+            PurePosixPath(
+                "/" + "/".join(part for part in parts if part not in {"", "."})
+            )
+        )
+        if normalized == REPOSITORY_ROOT or normalized.startswith(
+            REPOSITORY_ROOT + "/"
+        ):
+            return normalized
     suffix = "/".join(part for part in parts if part not in {"", "."})
     return REPOSITORY_ROOT if not suffix else f"{REPOSITORY_ROOT}/{suffix}"
 
@@ -409,7 +523,7 @@ def _virtual_path(path: str) -> str:
     prefix = REPOSITORY_ROOT + "/"
     if not normalized.startswith(prefix):
         raise RuntimeError(
-            "managed repository backend returned a path outside repository database"
+            "repository backend returned a path outside repository database"
         )
     return "/" + normalized[len(prefix) :]
 
@@ -433,10 +547,13 @@ __all__ = [
     "REPOSITORY_AGENT_STATE",
     "REPOSITORY_META",
     "REPOSITORY_ROOT",
-    "activate_managed_backend",
-    "current_managed_backend",
+    "REPOSITORY_SKILLS",
+    "RuntimeRepositoryBackend",
+    "activate_repository_backend",
+    "current_repository_backend",
+    "ensure_runtime_skills",
     "ensure_repository_for_event",
     "hydrate_repository",
     "repository_database_backend",
-    "resolve_managed_thread_backend",
+    "resolve_repository_thread_backend",
 ]

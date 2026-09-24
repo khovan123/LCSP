@@ -8,7 +8,7 @@ AUTHORITATIVE — LCSP-999
 
 ## Invariants
 
-1. The commit-pinned repository is materialized inside the Managed Deep Agents assessment sandbox and exposed as the agent filesystem root.
+1. The commit-pinned repository is materialized inside the LCSP Docker assessment sandbox and exposed as the agent filesystem root.
 2. Repository analysis uses the native Deep Agents harness (`ls`, `glob`, `grep`, `read_file`, sandboxed `execute`, planning and forked subagents) rather than predefined language scanners.
 3. Codebase Memory may be used inside the same sandbox as a structural index/memory aid. Its graph is not source authority and is not copied wholesale into LCSP evidence.
 4. The Repository Deep Agent determines graph nodes, edges, source anchors, unresolved frontiers, global coverage and AI-discovery coverage from evidence it actually inspects.
@@ -47,4 +47,4 @@ Retired custom repository graph query tools are not model-callable runtime tools
 
 ## Persistence
 
-`TechnicalEvidenceReport.evidencePayload` carries the sanitized agent-derived Program Evidence Graph and repository-analysis provenance. Current tool provenance includes Deep Agents / Managed Deep Agents versions plus `repository-analysis` version/config hash. Downstream code consumes this contract without depending on the removed static-scanner implementation.
+`TechnicalEvidenceReport.evidencePayload` carries the sanitized agent-derived Program Evidence Graph and repository-analysis provenance. Current tool provenance includes Deep Agents, LCSP Agent Runtime, and `repository-analysis` version/config hash. Downstream code consumes this contract without depending on the removed static-scanner implementation.

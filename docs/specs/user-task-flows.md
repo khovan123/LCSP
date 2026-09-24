@@ -207,7 +207,7 @@ This document defines canonical user-facing and system task flows for the A-to-Z
 
 ```text
 command.scan.requested.v1
--> Managed Deep Agents thread RUNNING
+-> LangGraph Agent Runtime thread RUNNING
 -> pinned snapshot hydrated into /workspace/repository
 -> repository Deep Agent inventories languages/frameworks/build/config/runtime surfaces
 -> native filesystem/search/shell/subagent investigation

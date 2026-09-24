@@ -87,7 +87,7 @@ model RepositoryScanJob {
 3. Validate `Assessment.status` permits scan trigger (e.g., `WIZARD_SUBMITTED` state).
 4. Idempotency: look up `RepositoryScanJob` by `idempotencyKey`. If found → return existing job (200, `is_new = false`).
 5. If not found: create `RepositoryScanJob` with `status = QUEUED`.
-6. Create outbox message `scan.triggered` for repository-analysis Managed Deep Agent.
+6. Create outbox message `scan.triggered` for repository-analysis LCSP Agent Runtime.
 7. Audit event `SCAN_JOB_TRIGGERED`.
 8. Re-run must NOT mutate prior accepted `TechnicalEvidenceReport` or `TechnicalProfile` versions — new job creates new artifact chain.
 
