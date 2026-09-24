@@ -63,7 +63,8 @@ export function AgentStreamTimeline({
 }: AgentStreamTimelineProps) {
   const rows = projectStreamRows(events);
   const labels = streamLabels();
-  const hasRunningActivity = rows.some((row) => row.status === "running");
+  const hasRunningActivity = streamHasRunningActivity(events);
+  const failed = !hasRunningActivity && streamEndedWithFailure(events);
   const duration = streamDuration(events);
   const showHistoryAction =
     ((history?.hasMore === true && history.nextCursor !== null) ||
@@ -82,11 +83,17 @@ export function AgentStreamTimeline({
           <summary className="flex cursor-pointer list-none items-center gap-2 py-1 text-xs font-medium text-muted-foreground select-none">
             {hasRunningActivity ? (
               <LoaderCircle className="size-3.5 animate-spin" />
+            ) : failed ? (
+              <XCircle className="size-3.5 text-destructive" />
             ) : (
               <CheckCircle2 className="size-3.5 text-emerald-500" />
             )}
-            <span>
-              {hasRunningActivity ? labels.thinking : labels.completed}
+            <span className={cn(failed && "text-destructive")}>
+              {hasRunningActivity
+                ? labels.thinking
+                : failed
+                  ? labels.failed
+                  : labels.completed}
               {!hasRunningActivity && duration ? ` · ${duration}` : ""}
             </span>
             <ChevronDown className="ml-0.5 size-3 transition-transform duration-200 group-open:rotate-180" />
@@ -996,6 +1003,81 @@ function reasoningSummaryText(semantic: SemanticRecord): string | null {
     return firstString(result.summary, result.text, null);
   }
   return null;
+}
+
+function streamHasRunningActivity(
+  events: AssessmentAgentStreamEvent[],
+): boolean {
+  const lifecycle = new Map<string, StreamRowStatus>();
+  const ordered = [...events].sort((left, right) => left.sequence - right.sequence);
+
+  for (const event of ordered) {
+    const key = streamLifecycleKey(event);
+    if (!key) continue;
+    lifecycle.set(
+      key,
+      streamRowStatus(
+        event,
+        event.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+      ),
+    );
+  }
+
+  if (lifecycle.size > 0) {
+    return [...lifecycle.values()].some((status) => status === "running");
+  }
+  return ordered.at(-1)?.status === ASSESSMENT_RUNTIME_RUN_STATUSES.running;
+}
+
+function streamEndedWithFailure(events: AssessmentAgentStreamEvent[]): boolean {
+  const terminal = [...events]
+    .sort((left, right) => left.sequence - right.sequence)
+    .filter(
+      (event) =>
+        event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentCompleted ||
+        event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentFailed ||
+        event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted ||
+        event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed,
+    )
+    .at(-1);
+  if (!terminal) {
+    return events.at(-1)?.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed;
+  }
+  return (
+    terminal.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentFailed ||
+    terminal.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed
+  );
+}
+
+function streamLifecycleKey(event: AssessmentAgentStreamEvent): string | null {
+  const namespace = event.namespace.join("/");
+  switch (event.eventType) {
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentStarted:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentCompleted:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentFailed:
+      return `agent:${event.runId}:${event.agentName ?? event.subagentName ?? "agent"}:${namespace}`;
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed:
+      return `boundary:${event.runId}:${event.source ?? "boundary"}:${namespace}`;
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelRequest:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelResult:
+      return `model:${event.runId}:${event.messageId ?? event.nodeName ?? namespace}`;
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallHeartbeat:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout:
+      return `model-call:${modelCallProgressKey(event) ?? event.eventId}`;
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolResult: {
+      const semantic = semanticData(event.data);
+      const identity = toolIdentityKey(event, semantic);
+      return identity ? `tool:${identity}` : null;
+    }
+    default:
+      return null;
+  }
 }
 
 function streamDuration(events: AssessmentAgentStreamEvent[]): string | null {
