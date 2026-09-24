@@ -336,3 +336,52 @@ test("private graph state and PII middleware noise are not rendered", async () =
     1,
   );
 });
+
+
+test("thinking header closes after the matching agent lifecycle completes", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          event(
+            1,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentStarted,
+            null,
+            {
+              agentName: "repository-analyst",
+              toolName: null,
+              toolCallId: null,
+              status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+              emittedAt: "2026-09-20T00:00:00.000Z",
+            },
+          ),
+          event(
+            2,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentCompleted,
+            null,
+            {
+              agentName: "repository-analyst",
+              toolName: null,
+              toolCallId: null,
+              status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+              emittedAt: "2026-09-20T00:00:03.000Z",
+            },
+          ),
+        ]}
+      />,
+    );
+  });
+
+  const timeline = container.querySelector<HTMLDetailsElement>(
+    'details[data-slot="agent-stream-timeline"]',
+  );
+  assert.ok(timeline);
+  assert.equal(timeline.open, false);
+  assert.match(timeline.textContent ?? "", /3s/);
+  assert.doesNotMatch(timeline.textContent ?? "", /Đang suy nghĩ|Thinking/i);
+});
