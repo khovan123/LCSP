@@ -87,7 +87,7 @@ def dispatch_agent_runtime_event(
         if_exists="do_nothing",
         metadata=metadata,
     )
-    run = _find_active_thread_run(client, thread_id)
+    run = _find_active_thread_run(client, thread_id, boundary_name)
     reused_active_run = run is not None
     if run is None:
         run = client.runs.create(
@@ -282,8 +282,12 @@ class _ScanRunObserver:
         self.client.post_scan_runtime_event(self.scan_job_id, payload)
 
 
-def _find_active_thread_run(client: Any, thread_id: str) -> Mapping[str, Any] | None:
-    """Return an already-running run for this thread so redeliveries reattach.
+def _find_active_thread_run(
+    client: Any,
+    thread_id: str,
+    boundary_name: str,
+) -> Mapping[str, Any] | None:
+    """Return an already-running run for this boundary so redeliveries reattach.
 
     RabbitMQ can redeliver the same boundary when the local poller times out even
     though the remote LangGraph run is still alive. Reusing the active run keeps
@@ -295,6 +299,12 @@ def _find_active_thread_run(client: Any, thread_id: str) -> Mapping[str, Any] | 
         return None
     for candidate in runs:
         if not isinstance(candidate, Mapping):
+            continue
+        metadata = candidate.get("metadata")
+        if not isinstance(metadata, Mapping):
+            continue
+        candidate_boundary = metadata.get("lcsp_boundary_name")
+        if candidate_boundary != boundary_name:
             continue
         if _run_status(candidate, "") in _ACTIVE_RUN_STATUSES:
             return candidate
