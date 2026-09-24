@@ -906,8 +906,7 @@ function shouldSuppressEvent(
     return true;
   }
   if (
-    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.toolCallDelta &&
-    semanticToolIds.has(toolIdentityKey(event, null) ?? "")
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.toolCallDelta
   ) {
     return true;
   }
@@ -965,8 +964,8 @@ function modelCallProgressKey(event: AssessmentAgentStreamEvent): string | null 
     event.runId,
     event.agentName ?? "",
     event.nodeName ?? "",
-    firstString(data?.provider, ""),
-    firstString(data?.model, ""),
+    typeof data?.provider === "string" ? data.provider : "",
+    typeof data?.model === "string" ? data.model : "",
   ].join(":");
 }
 
