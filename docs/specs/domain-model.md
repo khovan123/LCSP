@@ -61,6 +61,7 @@ See `docs/specs/legal-rule-catalog-spec.md`.
 - RBAC is the authorization source of truth. Roles are subject attributes/templates only.
 - Python Worker Platform owns all asynchronous domain workloads.
 - Python Scanner Worker owns Repository Scan lifecycle and scanner evidence entities.
+- Repository integration is read-only by default. Write capability belongs only to the Customer-approved remediation action and must be verified immediately before repository mutation.
 - Internal Legal Operator owns corpus review/approval actions through internal API/CLI for MVP.
 - Internal Legal Operator also owns legal rule catalog authoring/approval; a `LegalRule` is never auto-derived from corpus text.
 - Approved LegalCorpusVersion is immutable.
@@ -82,12 +83,14 @@ Relationships: has memberships, users, assessments, repository connections, and 
 
 ### User
 
-| Field       | Type   | Required | Meaning                   |
-| ----------- | ------ | -------: | ------------------------- |
-| userId      | UUIDv7 |      Yes | User identity             |
-| email       | string |      Yes | Login/contact identity    |
-| displayName | string |       No | Human-readable name       |
-| status      | enum   |      Yes | active/disabled lifecycle |
+| Field       | Type   | Required | Meaning                            |
+| ----------- | ------ | -------: | ---------------------------------- |
+| userId      | UUIDv7 |      Yes | User identity                      |
+| email       | string |      Yes | Login/contact identity             |
+| displayName | string |       No | Human-readable name                |
+| status      | enum   |      Yes | ACTIVE/SUSPENDED/INVITED lifecycle |
+
+M11 Admin User Account contract evidence from PR #310 uses `ACTIVE`, `SUSPENDED`, and `INVITED` account statuses; `ADMIN` and `CUSTOMER` role labels; provider metadata; list/detail/search/filter/pagination; role update; and suspension behavior. These labels remain subject attributes for display and policy inputs. Authorization source of truth remains PBAC/RBAC policy evaluation.
 
 ### OrganizationMembership
 
@@ -165,6 +168,8 @@ CREATED -> WIZARD_PROFILE_READY -> REPOSITORY_CONNECTED
 | submittedBy     | UUIDv7   |      Yes | Manager actor              |
 | createdAt       | datetime |      Yes | Submission time            |
 
+Business Context revisions are immutable once consumed by a running assessment. If a Customer edits Business Context while an assessment is `RUNNING`, the system must either block the edit or queue it as a pending revision. The current run continues with its pinned context revision; the queued revision may apply only after completion to a reassessment/new run.
+
 ### RepositoryConnection
 
 | Field                                           | Type   | Required | Meaning                       |
@@ -175,6 +180,27 @@ CREATED -> WIZARD_PROFILE_READY -> REPOSITORY_CONNECTED
 | repositoryOwner / repositoryName / repositoryId | string |      Yes | Selected repository identity  |
 | selectedBranch                                  | string |       No | Default branch                |
 | status                                          | enum   |      Yes | connected/revoked/unavailable |
+
+RepositoryConnection covers read/discovery/snapshot/scan scope by default. It must not imply write capability. Remediation write capability is a separate approval-time check tied to a specific Customer action and credential state.
+
+### RemediationChangeRequest
+
+Required behavior; current implementation evidence is partial.
+
+| Field                                        | Type          | Required | Meaning                                                            |
+| -------------------------------------------- | ------------- | -------: | ------------------------------------------------------------------ |
+| remediationChangeRequestId                   | UUIDv7        |      Yes | Remediation chain identity                                         |
+| assessmentId / gapAnalysisId / findingRef    | UUIDv7/string |      Yes | Scope and source recommendation                                    |
+| proposalRef / patchVersion                   | string        |      Yes | Proposed patch identity                                            |
+| customerDecision                             | enum          |      Yes | UPDATE_GITHUB_PAT/CONTINUE_DETECTED_PR/CREATE_REMEDIATION_PR       |
+| approvalStatus                               | enum          |      Yes | NOT_REQUIRED/PENDING_CUSTOMER/APPROVED/INVALIDATED                 |
+| writeCapabilityCheckRef                      | JSON/string   |       No | Verification result for Contents + Pull requests write capability  |
+| credentialUpdateRef                          | JSON/string   |       No | Safe reference to updated PAT/credential, never the secret         |
+| branch / commitSha / pullRequestNumber / url | string        |       No | Created or detected remediation PR refs                            |
+| patchedScanJobId / reEvaluationRefs          | UUIDv7/JSON   |       No | Patched-commit scan and evaluation linkage                         |
+| auditRefs                                    | JSON          |      Yes | Decision, mutation, scan, evaluation, and history correlation refs |
+
+No branch, commit, or PR mutation may occur before Customer approval and successful write-capability verification. If write capability is missing, the next required action is credential/PAT update, not repository mutation.
 
 ### RepositorySnapshot
 
@@ -368,6 +394,8 @@ Represents a normalized legal hierarchy unit tied to a document and corpus versi
 
 Approved versions are immutable. New changes create a new version; existing assessments retain pinned versions.
 
+Any legal-corpus content change creates a new `LegalCorpusVersion`. Approved versions are immutable; newer versions may supersede older versions for future evaluations, but they never rewrite historical evaluation, report, retrieval, or citation provenance.
+
 ### CorpusApprovalRecord
 
 | Field                              | Type             | Required | Meaning                 |
@@ -439,6 +467,8 @@ Historical persistence artifact for the retired `VerifiedProfile -> legal matchi
 | citationRefs                                                    | JSON/relation |      Yes | Document/article/clause/point/source/hash/version refs                        |
 | status                                                          | enum          |      Yes | COMPLIANT/NON_COMPLIANT/UNKNOWN/BLOCKED                                       |
 | diagnostics                                                     | JSON          |      Yes | Compile failures, missing evidence, citation gaps and source-hit distribution |
+
+Evaluations and downstream reports must persist the exact `legalCorpusVersionId` and human/system `version` used at evaluation time. Newer corpus versions require new evaluations and cannot mutate prior provenance.
 
 ## Classification and Reporting
 
