@@ -374,8 +374,7 @@ function stopDevProcesses() {
     "apps/api/dist/src/main",
     "pnpm --dir apps/web dev",
     "next dev",
-    "uvx --python 3.13 arize-phoenix serve --port 6006",
-    "arize-phoenix serve --port 6006",
+    "arize-phoenix serve",
   ];
   const protectedPids = new Set([
     process.pid,
