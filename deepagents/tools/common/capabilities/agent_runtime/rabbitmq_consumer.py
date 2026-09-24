@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import signal
 from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
-from threading import Event
+from threading import Event, Lock, Timer
 from time import monotonic
 from typing import Any, Callable
 
@@ -27,7 +28,9 @@ from tools.common.capabilities.agent_runtime.invocation import (
     load_boundary,
 )
 from tools.common.capabilities.agent_runtime.agent_server_client import (
+    DEFAULT_AGENT_SERVER_URL,
     dispatch_agent_runtime_event,
+    reconcile_stale_agent_runs,
 )
 from middleware.billing_recovery import start_background_worker
 from tools.common.capabilities.platform.api_client import WorkerApiClient
@@ -42,6 +45,26 @@ DEFAULT_FALLBACK_MAX_REDELIVERIES = 3
 AGENT_RUNTIME_ATTEMPT_HEADER = "x-lcsp-agent-runtime-attempt"
 DEFAULT_API_READY_TIMEOUT_SECONDS = 60.0
 DEFAULT_API_READY_POLL_SECONDS = 0.5
+DEFAULT_BOUNDARY_WORKERS = 4
+DEFAULT_BOUNDARY_TIMEOUT_SECONDS = 900.0
+DEFAULT_SCAN_BOUNDARY_TIMEOUT_SECONDS = 1800.0
+SCAN_FAILURE_AGENT_RUNTIME_BOUNDARY_TIMEOUT = "AGENT_RUNTIME_BOUNDARY_TIMEOUT"
+SCAN_FAILURE_PROVIDER_TIMEOUT = "PROVIDER_TIMEOUT"
+SCAN_FAILURE_REPOSITORY_SANDBOX_FAILURE = "REPOSITORY_SANDBOX_FAILURE"
+SCAN_FAILURE_BILLING_FAILURE = "BILLING_FAILURE"
+SCAN_FAILURE_REPOSITORY_ANALYSIS_FAILED = "REPOSITORY_ANALYSIS_FAILED"
+LEGACY_MDA_QUEUE_PREFIX = "lcsp.mda.boundary"
+LEGACY_RETRY_DELAY_SECONDS = (2.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0)
+
+
+class BoundaryExecutionTimeout(NonRetryableAgentBoundaryError):
+    """Raised when a broker delivery exceeds its configured boundary deadline."""
+
+    def __init__(self, timeout_seconds: float):
+        super().__init__(
+            f"Agent Runtime boundary exceeded {timeout_seconds:.1f}s deadline"
+        )
+        self.timeout_seconds = timeout_seconds
 
 
 @dataclass(frozen=True)
@@ -52,6 +75,15 @@ class BoundaryBinding:
     source_event: str
     queue_name: str
     retry_delays_seconds: tuple[float, ...] = ()
+
+
+@dataclass
+class DeliverySettlementState:
+    """Single-settlement guard for one RabbitMQ delivery."""
+
+    settled: bool = False
+    timer: Timer | None = None
+    lock: Lock = field(default_factory=Lock)
 
 
 def boundary_bindings(
@@ -107,6 +139,7 @@ def run_consumer() -> None:
     exchange = os.getenv("RABBITMQ_EXCHANGE", DEFAULT_EXCHANGE)
     queue_prefix = os.getenv("LCSP_AGENT_RUNTIME_RABBITMQ_QUEUE_PREFIX", DEFAULT_QUEUE_PREFIX)
     prefetch_count = int(os.getenv("LCSP_AGENT_RUNTIME_RABBITMQ_PREFETCH", "1"))
+    worker_count = _executor_worker_count(prefetch_count)
     requeue_on_error = _read_bool("LCSP_AGENT_RUNTIME_RABBITMQ_REQUEUE_ON_ERROR", True)
     reconnect_delay_seconds = float(
         os.getenv(
@@ -168,8 +201,15 @@ def run_consumer() -> None:
     if stopping.is_set():
         return
 
+    _reconcile_local_agent_server_stale_runs(
+        timeout_seconds=api_ready_timeout_seconds,
+        stopping=stopping,
+    )
+    if stopping.is_set():
+        return
+
     with ThreadPoolExecutor(
-        max_workers=prefetch_count,
+        max_workers=worker_count,
         thread_name_prefix="lcsp-agent-runtime-boundary",
     ) as executor:
         while not stopping.is_set():
@@ -192,6 +232,10 @@ def run_consumer() -> None:
                     requeue_on_error=requeue_on_error,
                     requeue_delay_seconds=requeue_delay_seconds,
                     fallback_max_redeliveries=fallback_max_redeliveries,
+                    cleanup_legacy_mda_topology=_read_bool(
+                        "LCSP_AGENT_RUNTIME_CLEANUP_LEGACY_MDA_TOPOLOGY",
+                        True,
+                    ),
                 )
                 LOGGER.info("Starting Agent Runtime RabbitMQ consumer")
                 channel.start_consuming()
@@ -248,6 +292,45 @@ def _wait_for_api_ready(
         stopping.wait(DEFAULT_API_READY_POLL_SECONDS)
 
 
+def _reconcile_local_agent_server_stale_runs(
+    *,
+    timeout_seconds: float,
+    stopping: Event,
+) -> None:
+    """Clear persisted local-dev runs that predate the current Agent Server process."""
+    server_url = os.getenv("LCSP_AGENT_SERVER_URL", DEFAULT_AGENT_SERVER_URL).rstrip("/")
+    default_enabled = server_url.startswith(("http://127.0.0.1:", "http://localhost:"))
+    if not _read_bool(
+        "LCSP_AGENT_RUNTIME_RECONCILE_STALE_RUNS",
+        default_enabled,
+    ):
+        return
+
+    deadline = monotonic() + max(timeout_seconds, 0)
+    last_error: str | None = None
+    while not stopping.is_set():
+        try:
+            response = httpx.get(f"{server_url}/ok", timeout=2.0)
+            if response.status_code == 200:
+                cancelled = reconcile_stale_agent_runs(server_url=server_url)
+                if cancelled:
+                    LOGGER.warning(
+                        "Interrupted %s stale Agent Server run(s) from a previous local process",
+                        cancelled,
+                    )
+                return
+            last_error = f"HTTP {response.status_code}"
+        except Exception as error:
+            last_error = error.__class__.__name__
+
+        if monotonic() >= deadline:
+            raise RuntimeError(
+                "Agent Server was not ready for stale-run reconciliation before "
+                f"starting RabbitMQ consumption: {server_url} ({last_error})"
+            )
+        stopping.wait(DEFAULT_API_READY_POLL_SECONDS)
+
+
 def _configure_channel(
     *,
     connection: pika.BlockingConnection,
@@ -259,6 +342,7 @@ def _configure_channel(
     requeue_on_error: bool,
     requeue_delay_seconds: float,
     fallback_max_redeliveries: int,
+    cleanup_legacy_mda_topology: bool = False,
 ) -> None:
     channel.exchange_declare(
         exchange=exchange,
@@ -267,6 +351,14 @@ def _configure_channel(
     )
     channel.basic_qos(prefetch_count=prefetch_count)
     channel.confirm_delivery()
+
+    if cleanup_legacy_mda_topology:
+        _cleanup_legacy_mda_topology(
+            channel=channel,
+            bindings=bindings,
+            requeue_delay_seconds=requeue_delay_seconds,
+            fallback_max_redeliveries=fallback_max_redeliveries,
+        )
 
     for binding in bindings:
         retry_delays_seconds = _effective_retry_delays(
@@ -299,6 +391,7 @@ def _configure_channel(
                 queue_name=binding.queue_name,
                 requeue_on_error=requeue_on_error,
                 retry_delays_seconds=retry_delays_seconds,
+                timeout_seconds=_boundary_timeout_seconds(binding.boundary_name),
             ),
         )
         LOGGER.info(
@@ -318,6 +411,7 @@ def _delivery_handler(
     queue_name: str | None = None,
     requeue_on_error: bool,
     retry_delays_seconds: tuple[float, ...] = (),
+    timeout_seconds: float | None = None,
 ) -> Callable[[Any, Any, Any, bytes], None]:
     def handle_delivery(
         channel: Any,
@@ -325,14 +419,40 @@ def _delivery_handler(
         properties: Any,
         body: bytes,
     ) -> None:
+        settlement_state = DeliverySettlementState()
         future = executor.submit(
             _dispatch_delivery,
             boundary_name,
             properties,
             body,
+            timeout_seconds,
+            settlement_state,
         )
+        if timeout_seconds is not None and timeout_seconds > 0:
+            timer = Timer(
+                timeout_seconds,
+                lambda: _schedule_delivery_timeout_settlement(
+                    state=settlement_state,
+                    future=future,
+                    connection=connection,
+                    channel=channel,
+                    delivery_tag=method.delivery_tag,
+                    routing_key=getattr(method, "routing_key", ""),
+                    queue_name=queue_name or boundary_name,
+                    boundary_name=boundary_name,
+                    properties=properties,
+                    body=body,
+                    requeue_on_error=requeue_on_error,
+                    retry_delays_seconds=retry_delays_seconds,
+                    timeout_seconds=timeout_seconds,
+                ),
+            )
+            timer.daemon = True
+            settlement_state.timer = timer
+            timer.start()
         future.add_done_callback(
-            lambda completed: _schedule_delivery_settlement(
+            lambda completed: _schedule_delivery_settlement_once(
+                state=settlement_state,
                 connection=connection,
                 channel=channel,
                 delivery_tag=method.delivery_tag,
@@ -350,7 +470,15 @@ def _delivery_handler(
     return handle_delivery
 
 
-def _dispatch_delivery(boundary_name: str, properties: Any, body: bytes) -> None:
+def _dispatch_delivery(
+    boundary_name: str,
+    properties: Any,
+    body: bytes,
+    timeout_seconds: float | None = None,
+    settlement_state: DeliverySettlementState | None = None,
+) -> None:
+    if settlement_state is not None and _delivery_already_settled(settlement_state):
+        raise BoundaryExecutionTimeout(timeout_seconds or 0.0)
     message = _decode_message(body)
     message = _with_billing_attempt(message, _delivery_attempt(properties))
     correlation_id = _correlation_id(
@@ -358,7 +486,13 @@ def _dispatch_delivery(boundary_name: str, properties: Any, body: bytes) -> None
         getattr(properties, "headers", None),
         boundary_name,
     )
-    dispatch_agent_runtime_event(boundary_name, message, correlation_id)
+    _claim_scan_delivery(boundary_name, message, timeout_seconds)
+    dispatch_agent_runtime_event(
+        boundary_name,
+        message,
+        correlation_id,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 def _with_billing_attempt(message: dict[str, Any], attempt: int) -> dict[str, Any]:
@@ -369,6 +503,104 @@ def _with_billing_attempt(message: dict[str, Any], attempt: int) -> dict[str, An
     enriched = dict(message)
     enriched["billing"] = {**billing, "attempt": str(attempt)}
     return enriched
+
+
+def _claim_scan_delivery(
+    boundary_name: str,
+    message: dict[str, Any],
+    timeout_seconds: float | None,
+) -> None:
+    if boundary_name != "scan_requested":
+        return
+    scan_job_id = _message_text(message, "scanJobId", "scan_job_id")
+    if not scan_job_id:
+        return
+    client = _worker_client_or_none()
+    if client is None:
+        return
+    response = client.claim_scan_job(
+        scan_job_id,
+        {
+            "boundary_name": boundary_name,
+            "timeout_seconds": timeout_seconds,
+        },
+    )
+    if response.get("terminal") is True and response.get("claimed") is not True:
+        raise NonRetryableAgentBoundaryError("scan job is already terminal")
+
+
+def _notify_scan_delivery_terminal_failure(
+    *,
+    boundary_name: str,
+    properties: Any | None,
+    body: bytes,
+    reason_code: str,
+    summary: str,
+    timeout_seconds: float | None = None,
+) -> None:
+    if boundary_name != "scan_requested":
+        return
+    try:
+        message = _decode_message(body)
+    except Exception:
+        return
+    scan_job_id = _message_text(message, "scanJobId", "scan_job_id")
+    if not scan_job_id:
+        return
+    client = _worker_client_or_none()
+    if client is None:
+        return
+    client.post_scan_terminal_failure(
+        scan_job_id,
+        {
+            "boundary_name": boundary_name,
+            "reason_code": reason_code,
+            "status": "FAILED",
+            "summary": summary,
+            "timeout_seconds": timeout_seconds,
+            "correlation_id": _correlation_id(
+                message,
+                getattr(properties, "headers", None),
+                boundary_name,
+            ),
+        },
+    )
+
+
+def _worker_client_or_none() -> WorkerApiClient | None:
+    try:
+        config = load_config()
+    except Exception:
+        return None
+    return WorkerApiClient(config.nestjs_api_base_url, config.worker_api_key)
+
+
+def _message_text(message: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = message.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _scan_failure_reason_code(error: BaseException) -> str:
+    if isinstance(error, BoundaryExecutionTimeout):
+        return SCAN_FAILURE_AGENT_RUNTIME_BOUNDARY_TIMEOUT
+    error_names = {type(error).__name__}
+    remote_error_type = getattr(error, "remote_error_type", None)
+    if isinstance(remote_error_type, str) and remote_error_type:
+        error_names.add(remote_error_type)
+    cause = getattr(error, "__cause__", None)
+    if cause is not None:
+        error_names.add(type(cause).__name__)
+    joined = " ".join((*error_names, str(error))).upper()
+    if "BILLING" in joined:
+        return SCAN_FAILURE_BILLING_FAILURE
+    if "TIMEOUT" in joined:
+        return SCAN_FAILURE_PROVIDER_TIMEOUT
+    if "SANDBOX" in joined or "HYDRATION" in joined:
+        return SCAN_FAILURE_REPOSITORY_SANDBOX_FAILURE
+    return SCAN_FAILURE_REPOSITORY_ANALYSIS_FAILED
 
 
 def _schedule_delivery_settlement(
@@ -408,6 +640,89 @@ def _schedule_delivery_settlement(
             boundary_name,
             routing_key,
         )
+
+
+def _schedule_delivery_settlement_once(
+    *,
+    state: DeliverySettlementState,
+    connection: pika.BlockingConnection,
+    channel: Any,
+    delivery_tag: Any,
+    routing_key: str,
+    queue_name: str,
+    boundary_name: str,
+    properties: Any,
+    body: bytes,
+    requeue_on_error: bool,
+    retry_delays_seconds: tuple[float, ...],
+    completed: Future[None],
+) -> None:
+    with state.lock:
+        if state.settled:
+            return
+        state.settled = True
+        if state.timer is not None:
+            state.timer.cancel()
+            state.timer = None
+    _schedule_delivery_settlement(
+        connection=connection,
+        channel=channel,
+        delivery_tag=delivery_tag,
+        routing_key=routing_key,
+        queue_name=queue_name,
+        boundary_name=boundary_name,
+        properties=properties,
+        body=body,
+        requeue_on_error=requeue_on_error,
+        retry_delays_seconds=retry_delays_seconds,
+        completed=completed,
+    )
+
+
+def _schedule_delivery_timeout_settlement(
+    *,
+    state: DeliverySettlementState,
+    future: Future[None] | None = None,
+    connection: pika.BlockingConnection,
+    channel: Any,
+    delivery_tag: Any,
+    routing_key: str,
+    queue_name: str,
+    boundary_name: str,
+    properties: Any,
+    body: bytes,
+    requeue_on_error: bool,
+    retry_delays_seconds: tuple[float, ...],
+    timeout_seconds: float,
+) -> None:
+    with state.lock:
+        if state.settled:
+            return
+        state.settled = True
+        state.timer = None
+    if future is not None:
+        future.cancel()
+    error = BoundaryExecutionTimeout(timeout_seconds)
+    completed: Future[None] = Future()
+    completed.set_exception(error)
+    _schedule_delivery_settlement(
+        connection=connection,
+        channel=channel,
+        delivery_tag=delivery_tag,
+        routing_key=routing_key,
+        queue_name=queue_name,
+        boundary_name=boundary_name,
+        properties=properties,
+        body=body,
+        requeue_on_error=requeue_on_error,
+        retry_delays_seconds=retry_delays_seconds,
+        completed=completed,
+    )
+
+
+def _delivery_already_settled(state: DeliverySettlementState) -> bool:
+    with state.lock:
+        return state.settled
 
 
 def _settle_delivery(
@@ -492,6 +807,23 @@ def _settle_delivery(
                 type(error).__name__,
             )
 
+        timeout_seconds = (
+            error.timeout_seconds
+            if isinstance(error, BoundaryExecutionTimeout)
+            else None
+        )
+        _notify_scan_delivery_terminal_failure(
+            boundary_name=boundary_name,
+            properties=properties,
+            body=body,
+            reason_code=_scan_failure_reason_code(error),
+            summary=(
+                "Agent Runtime boundary timed out"
+                if isinstance(error, BoundaryExecutionTimeout)
+                else "Agent Runtime boundary failed"
+            ),
+            timeout_seconds=timeout_seconds,
+        )
         channel.basic_nack(delivery_tag=delivery_tag, requeue=False)
     except pika.exceptions.AMQPError:
         LOGGER.warning(
@@ -558,6 +890,94 @@ def _effective_retry_delays(
     if retry_delays_seconds:
         return retry_delays_seconds
     return tuple(max(fallback_delay_seconds, 0.0) for _ in range(max(fallback_max_redeliveries, 0)))
+
+
+def _boundary_timeout_seconds(boundary_name: str) -> float:
+    env_name = (
+        "LCSP_AGENT_RUNTIME_BOUNDARY_TIMEOUT_"
+        f"{_env_boundary_name(boundary_name)}_SECONDS"
+    )
+    if os.getenv(env_name) is not None:
+        return _positive_float_env(env_name)
+    if boundary_name == "scan_requested":
+        return _positive_float_env(
+            "LCSP_AGENT_RUNTIME_SCAN_BOUNDARY_TIMEOUT_SECONDS",
+            DEFAULT_SCAN_BOUNDARY_TIMEOUT_SECONDS,
+        )
+    return _positive_float_env(
+        "LCSP_AGENT_RUNTIME_BOUNDARY_TIMEOUT_SECONDS",
+        DEFAULT_BOUNDARY_TIMEOUT_SECONDS,
+    )
+
+
+def _env_boundary_name(boundary_name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]+", "_", boundary_name).strip("_").upper()
+
+
+def _positive_float_env(name: str, default: float | None = None) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        if default is None:
+            raise RuntimeError(f"Missing required env var: {name}")
+        return default
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid numeric env var: {name}") from exc
+    if value <= 0:
+        raise RuntimeError(f"{name} must be > 0")
+    return value
+
+
+def _executor_worker_count(prefetch_count: int) -> int:
+    raw = os.getenv("LCSP_AGENT_RUNTIME_BOUNDARY_WORKERS")
+    if raw is None:
+        return max(prefetch_count, DEFAULT_BOUNDARY_WORKERS)
+    try:
+        configured = int(raw)
+    except ValueError as exc:
+        raise RuntimeError("LCSP_AGENT_RUNTIME_BOUNDARY_WORKERS must be an integer") from exc
+    if configured <= 0:
+        raise RuntimeError("LCSP_AGENT_RUNTIME_BOUNDARY_WORKERS must be > 0")
+    return max(prefetch_count, configured)
+
+
+def _cleanup_legacy_mda_topology(
+    *,
+    channel: Any,
+    bindings: tuple[BoundaryBinding, ...],
+    requeue_delay_seconds: float,
+    fallback_max_redeliveries: int,
+) -> None:
+    for binding in bindings:
+        legacy_queue = f"{LEGACY_MDA_QUEUE_PREFIX}.{binding.boundary_name}"
+        legacy_retry_delays = set(LEGACY_RETRY_DELAY_SECONDS)
+        legacy_retry_delays.update(
+            _effective_retry_delays(
+                binding.retry_delays_seconds,
+                fallback_delay_seconds=requeue_delay_seconds,
+                fallback_max_redeliveries=fallback_max_redeliveries,
+            )
+        )
+        _delete_queue_if_present(channel, legacy_queue)
+        for delay_seconds in sorted(legacy_retry_delays):
+            _delete_queue_if_present(
+                channel,
+                _retry_queue_name(legacy_queue, delay_seconds),
+            )
+
+
+def _delete_queue_if_present(channel: Any, queue_name: str) -> None:
+    if not queue_name.startswith(f"{LEGACY_MDA_QUEUE_PREFIX}."):
+        raise RuntimeError(f"Refusing to delete non-legacy queue: {queue_name}")
+    queue_delete = getattr(channel, "queue_delete", None)
+    if not callable(queue_delete):
+        return
+    try:
+        queue_delete(queue=queue_name, if_unused=False, if_empty=False)
+        LOGGER.info("Deleted legacy MDA RabbitMQ queue queue=%s", queue_name)
+    except pika.exceptions.AMQPError:
+        LOGGER.warning("Legacy MDA RabbitMQ queue cleanup skipped queue=%s", queue_name)
 
 
 def _delay_milliseconds(delay_seconds: float) -> int:

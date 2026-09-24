@@ -177,7 +177,6 @@ class RepositoryDeepAnalyzer:
                 },
             ],
             response_format=RepositoryAnalysisResult,
-            checkpointer=True,
             debug=False,
         )
         scope_text = (

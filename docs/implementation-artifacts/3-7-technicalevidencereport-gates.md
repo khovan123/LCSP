@@ -41,7 +41,7 @@ TechnicalEvidenceReport Gates
 ### Current State and Scope Guardrails
 
 - Epic 3 là bridge từ assessment sang trusted technical evidence. Đây là boundary dễ phá privacy nhất nếu implementation lỏng tay.
-- Story trong epic này phải giữ scanner là static-analysis only và không được kéo scan execution vào web request lifecycle.
+- Story trong epic này phải giữ repository analysis trong LCSP Agent Runtime ở ngoài web request lifecycle; API chỉ orchestration/status và không chạy repository analysis inline.
 - Handoff chính của epic là `RepositorySnapshot`, `TechnicalEvidenceReport`, rồi `TechnicalProfile`; ba artifact này phải giữ boundary rõ.
 
 - Next story dependency seam: `docs/developer/story-handbook/3-8-technicalprofile-generation.md`
@@ -80,7 +80,7 @@ TechnicalEvidenceReport Gates
 ### Architecture Compliance
 
 - NestJS API chỉ tạo trusted trigger, persist status và enqueue command qua outbox; Python Worker Platform sở hữu scan/tool execution và downstream profile work.
-- Scanner worker phải dùng restricted workspace, pinned tools, bounded resources và cleanup verification trước completed event.
+- LCSP Agent Runtime repository analysis phải dùng restricted workspace, pinned tools, bounded resources và cleanup verification trước completed event.
 - TechnicalProfile là artifact kỹ thuật bất biến; không được dùng như AIUsageFlow, VerifiedProfile hay compliance status.
 
 ### Functional and Domain Requirements
@@ -140,7 +140,7 @@ TechnicalEvidenceReport Gates
 - [Source: docs/implementation/tasks/modules/scan/01-scan-job-status-endpoint.md]
 - [Source: docs/implementation/tasks/modules/python-workers/platform/01-worker-platform-bootstrap.md]
 - [Source: docs/implementation/tasks/modules/python-workers/intelligence/01-technical-profile-worker.md]
-- [Source: docs/implementation/handoffs/HANDOFF-scanner-evidence-to-technical-profile.md]
+- [Source: docs/implementation-artifacts/3-4-managed-repository-workspace-and-sandbox.md]
 
 ## Dev Agent Record
 

@@ -146,8 +146,13 @@ export const billingResourceIdSchema = nonEmptyText;
 
 export const billingUsageReservationSchema = z
   .object({
+    workspaceId: flexibleText.optional(),
     assessmentId: flexibleText,
+    scanJobId: flexibleText.optional(),
+    threadId: flexibleText.optional(),
     runId: flexibleText,
+    invocationId: flexibleText.optional(),
+    modelInvocationId: flexibleText.optional(),
     idempotencyKey: flexibleText,
     provider: flexibleText,
     model: flexibleText,

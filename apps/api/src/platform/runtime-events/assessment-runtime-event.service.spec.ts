@@ -366,6 +366,7 @@ describe("AssessmentRuntimeEventService", () => {
       "reasoning-delta",
       "reasoning-summary",
       "model-delta",
+      "model-call-timeout",
       "runtime-log",
       "graph-update",
       "semantic-tool-call",
@@ -403,6 +404,20 @@ describe("AssessmentRuntimeEventService", () => {
       eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
       messageId: "message-1",
       text: "Visible answer chunk",
+    });
+    await firstService.publishAgentStreamEvent({
+      ...baseInput,
+      eventId: "model-call-timeout",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout,
+      nodeName: "model",
+      status: ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+      text: "Model call timed out",
+      data: {
+        provider: "google_genai",
+        model: "gemini-3.5-flash-lite",
+        elapsed_seconds: 30,
+        timeout_seconds: 30,
+      },
     });
     await firstService.publishAgentStreamEvent({
       ...baseInput,
@@ -458,6 +473,7 @@ describe("AssessmentRuntimeEventService", () => {
       ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelReasoningDelta,
       ASSESSMENT_AGENT_STREAM_EVENT_TYPES.customProgress,
       ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
+      ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout,
       ASSESSMENT_AGENT_STREAM_EVENT_TYPES.log,
       ASSESSMENT_AGENT_STREAM_EVENT_TYPES.graphUpdate,
       ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,

@@ -1,5 +1,8 @@
 from pathlib import Path
 from types import SimpleNamespace
+import time
+
+import pytest
 
 from middleware.billing_metering import (
     BillingReservationUnavailable,
@@ -10,7 +13,13 @@ from middleware.billing_metering import (
     activate_billing_metering,
     extract_provider_usage,
 )
-from middleware.billing_recovery import drain
+from middleware.billing_recovery import (
+    drain,
+    enqueue_usage,
+    _normalize_usage_recovery_payload,
+)
+from tools.common.capabilities.platform.api_client import WorkerCallbackError
+from tools.common.capabilities.platform.callback_schemas import SettledUsagePayload
 from tools.common.capabilities.agent_runtime.invocation import _billing_metering_session
 from tools.common.capabilities.agent_runtime.rabbitmq_consumer import _with_billing_attempt
 
@@ -109,6 +118,83 @@ def test_metering_middleware_records_one_payload_for_one_response():
     assert payload.inputTokens == "2"
     assert payload.cachedInputTokens == "1"
     assert payload.model_dump(exclude_none=True).get("reasoningTokens") is None
+
+
+def test_model_call_telemetry_emits_heartbeat_and_completion(monkeypatch):
+    from middleware import billing_metering
+
+    events = []
+    monkeypatch.setattr(billing_metering, "_MODEL_CALL_HEARTBEAT_SECONDS", 0.01)
+    monkeypatch.setattr(
+        billing_metering,
+        "publish_agent_stream_event",
+        lambda event_type, **fields: events.append((event_type, fields)),
+    )
+    client = FakeClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-1",
+        run_id="run-1",
+        reservation_id="reservation-1",
+        agent_role="planner",
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="google_genai", model_name="gemini-test")
+    )
+
+    def slow_provider(_request):
+        time.sleep(0.03)
+        return response()
+
+    with activate_billing_metering(session):
+        BillingMeteringMiddleware().wrap_model_call(request, slow_provider)
+
+    event_types = [event_type for event_type, _ in events]
+    assert "MODEL_CALL_STARTED" in event_types
+    assert "MODEL_CALL_HEARTBEAT" in event_types
+    assert "MODEL_CALL_COMPLETED" in event_types
+    started = next(fields for event_type, fields in events if event_type == "MODEL_CALL_STARTED")
+    assert started["data"]["provider"] == "google_genai"
+    assert started["data"]["model"] == "gemini-test"
+    assert started["data"]["timeout_seconds"] == 30.0
+    assert len(client.payloads) == 1
+
+
+def test_model_call_timeout_event_emits_without_settling_usage(monkeypatch):
+    from middleware import billing_metering
+
+    events = []
+    monkeypatch.setattr(
+        billing_metering,
+        "publish_agent_stream_event",
+        lambda event_type, **fields: events.append((event_type, fields)),
+    )
+    client = FakeClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-timeout",
+        run_id="run-timeout",
+        reservation_id="reservation-timeout",
+        agent_role="planner",
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="google_genai", model_name="gemini-test")
+    )
+
+    with activate_billing_metering(session), pytest.raises(TimeoutError):
+        BillingMeteringMiddleware().wrap_model_call(
+            request,
+            lambda _request: (_ for _ in ()).throw(TimeoutError("provider timed out")),
+        )
+
+    assert [event_type for event_type, _ in events] == [
+        "MODEL_CALL_STARTED",
+        "MODEL_CALL_TIMEOUT",
+    ]
+    timeout = events[-1][1]
+    assert timeout["data"]["provider"] == "google_genai"
+    assert timeout["data"]["error_type"] == "TimeoutError"
+    assert client.payloads == []
 
 
 def test_key_fallback_attempts_charge_only_the_returned_response(monkeypatch):
@@ -226,6 +312,8 @@ def test_output_cap_preserves_authorized_identity_for_settlement():
     assert payload.model == "gpt-test"
     assert payload.inputTokens == "3"
     assert payload.outputTokens == "2"
+    assert payload.occurredAt.endswith("Z")
+    assert "+00:00" not in payload.occurredAt
 
 
 def test_metering_middleware_records_missing_usage_for_terminal_release():
@@ -308,22 +396,33 @@ def test_broker_retry_attempt_is_carried_only_inside_billing_context():
     assert "attempt" not in message["billing"]
 
 
-def test_usage_delivery_failure_is_not_converted_to_provider_fallback():
+def test_usage_delivery_failure_is_queued_and_warned_after_provider_success(
+    tmp_path: Path, monkeypatch
+):
+    from middleware import billing_metering
+
+    events = []
+    monkeypatch.setattr(
+        billing_metering,
+        "publish_agent_stream_event",
+        lambda event_type, **fields: events.append((event_type, fields)),
+    )
     session = BillingMeteringSession(
         api_client=FailingClient(),
         assessment_id="assessment-1",
         run_id="run-1",
         reservation_id="reservation-1",
         agent_role="planner",
+        recovery_store_path=str(tmp_path / "billing.sqlite3"),
     )
     request = SimpleNamespace(
         model=SimpleNamespace(provider="openai", model_name="gpt-test")
     )
 
-    import pytest
-
-    with activate_billing_metering(session), pytest.raises(BillingMeteringError):
+    with activate_billing_metering(session):
         BillingMeteringMiddleware().wrap_model_call(request, lambda _: response())
+    assert [event_type for event_type, _ in events][-1] == "BILLING_CALLBACK_RECOVERY_QUEUED"
+    assert drain(session.recovery_store_path, RecoveryClient()) == 0
 
 
 def test_usage_delivery_failure_is_terminal_for_model_retry():
@@ -362,6 +461,69 @@ def test_recovery_store_failure_is_terminal_after_provider_success(monkeypatch):
     assert not retry_model_error(BillingMeteringError(OSError("recovery-store-failed")))
 
 
+def test_recovery_normalizes_legacy_utc_offset_timestamp() -> None:
+    payload = {
+        "occurredAt": "2026-09-24T16:39:22.123456+00:00",
+        "invocationId": "inv-1",
+    }
+
+    normalized = _normalize_usage_recovery_payload(payload)
+
+    assert normalized["occurredAt"] == "2026-09-24T16:39:22.123456Z"
+    assert normalized["invocationId"] == "inv-1"
+    assert payload["occurredAt"].endswith("+00:00")
+
+
+def test_stale_usage_recovery_is_dead_lettered_once(tmp_path: Path) -> None:
+    import sqlite3
+
+    path = tmp_path / "billing.sqlite3"
+    payload = SettledUsagePayload(
+        assessmentId="stale-assessment",
+        runId="run-1",
+        reservationId="reservation-1",
+        invocationId="invocation-1",
+        agentRole="planner",
+        provider="OPENAI",
+        model="gpt-test",
+        inputTokens="1",
+        outputTokens="1",
+        occurredAt="2026-09-24T16:39:22Z",
+    )
+    enqueue_usage(path, payload)
+
+    class OwnershipMismatchClient:
+        attempts = 0
+
+        def post_settled_usage(self, _payload):
+            self.attempts += 1
+            raise WorkerCallbackError(
+                "BILLING_OWNERSHIP_MISMATCH: Client error",
+                status_code=403,
+            )
+
+    client = OwnershipMismatchClient()
+    assert drain(path, client) == 0
+    assert drain(path, client) == 0
+    assert client.attempts == 1
+
+    db = sqlite3.connect(path)
+    try:
+        row = db.execute(
+            """
+            SELECT state, dead_letter_reason
+            FROM billing_callback_recovery
+            WHERE recovery_key = ?
+            """,
+            ("usage:reservation-1:invocation-1",),
+        ).fetchone()
+    finally:
+        db.close()
+    assert row[0] == "POISON"
+    assert "BILLING_OWNERSHIP_MISMATCH" in row[1]
+
+
+
 def test_usage_failure_is_durable_and_replayed_without_provider_retry(tmp_path: Path):
     client = RecoveryClient()
     session = BillingMeteringSession(
@@ -376,9 +538,7 @@ def test_usage_failure_is_durable_and_replayed_without_provider_retry(tmp_path: 
         model=SimpleNamespace(provider="openai", model_name="gpt-test")
     )
 
-    import pytest
-
-    with activate_billing_metering(session), pytest.raises(BillingMeteringError):
+    with activate_billing_metering(session):
         BillingMeteringMiddleware().wrap_model_call(request, lambda _: response())
     assert len(client.payloads) == 0
 
@@ -402,10 +562,7 @@ def test_release_failure_is_durable_and_replayed_without_model_retry(tmp_path: P
         recovery_store_path=str(tmp_path / "billing.sqlite3"),
     )
 
-    import pytest
-
-    with pytest.raises(RuntimeError):
-        session.release()
+    session.release()
     client.fail_release = False
     assert drain(session.recovery_store_path, client) == 1
     assert client.release_ids == ["reservation-1"]
@@ -461,3 +618,25 @@ def test_priced_token_ceiling_is_enforced_before_provider_handler():
     with activate_billing_metering(session), pytest.raises(BillingUsageUnavailable):
         BillingMeteringMiddleware().wrap_model_call(request, provider_handler)
     assert called is False
+
+
+def test_token_ceiling_is_not_treated_as_the_same_number_of_bytes():
+    client = FakeClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-1",
+        run_id="run-1",
+        reservation_id="reservation-1",
+        agent_role="planner",
+        max_input_tokens=4096,
+        max_input_bytes=16_384,
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="openai", model_name="gpt-test"),
+        messages=[{"role": "user", "content": "x" * 5000}],
+    )
+
+    with activate_billing_metering(session):
+        BillingMeteringMiddleware().wrap_model_call(request, lambda _: response())
+
+    assert len(client.payloads) == 1

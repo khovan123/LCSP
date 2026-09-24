@@ -429,6 +429,7 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
               where: { role, effectiveAt: { lte: occurredAt } },
               orderBy: { effectiveAt: "desc" },
             });
+            if (rows.length === 0) return null;
             const selected = resolveEffectiveRuntimeModel(
               rows,
               role,

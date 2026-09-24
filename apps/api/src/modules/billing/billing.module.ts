@@ -36,6 +36,7 @@ import { ListBillingReconciliationHandler } from "./application/queries/list-bil
 import { GetBillingRevenueSummaryHandler } from "./application/queries/get-billing-revenue-summary/get-billing-revenue-summary.handler.js";
 import { ListBillingTransactionsHandler } from "./application/queries/list-billing-transactions/list-billing-transactions.handler.js";
 import { ResolveBillingAssessmentOwnerHandler } from "./application/queries/resolve-billing-assessment-owner/resolve-billing-assessment-owner.handler.js";
+import { ResolveBillingReservationOwnerHandler } from "./application/queries/resolve-billing-reservation-owner/resolve-billing-reservation-owner.handler.js";
 import { GetBillingAdminDashboardHandler } from "./application/queries/get-admin-billing-dashboard/get-admin-billing-dashboard.handler.js";
 import { GetBillingAdminExportHandler } from "./application/queries/get-admin-billing-export/get-admin-billing-export.handler.js";
 import {
@@ -91,6 +92,7 @@ import {
     RejectBillingPaymentHandler,
     ReleaseBillingReservationHandler,
     ResolveBillingAssessmentOwnerHandler,
+    ResolveBillingReservationOwnerHandler,
     ResolveBillingPaymentHandler,
     ReserveBillingCreditsHandler,
     SettleBillingUsageHandler,

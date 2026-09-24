@@ -594,6 +594,7 @@ describe("OutboxPublisherService", () => {
       ...message.payload,
       billing: {
         assessmentId: "assessment-1",
+        scanJobId: "scan-job-1",
         runId: "scan-job-1",
       },
     });
@@ -655,8 +656,9 @@ describe("OutboxPublisherService", () => {
       GITHUB_INTEGRATION_EVENT_TYPES.scanTriggered,
       expect.objectContaining({
         assessmentId: "assessment-1",
-        billing: {
+        billing: expect.objectContaining({
           assessmentId: "assessment-1",
+          scanJobId: "scan-job-1",
           runId: "scan-job-1",
           amountCredits: "100",
           maxChargeCredits: "100",
@@ -670,7 +672,7 @@ describe("OutboxPublisherService", () => {
           authorizedModels: [{ provider: "OPENAI", model: "gpt-5-nano" }],
           idempotencyKey: "outbox:outbox-1:billing-reservation",
           agentRole: `outbox:${GITHUB_INTEGRATION_EVENT_TYPES.scanTriggered}`,
-        },
+        }),
       }),
     );
   });

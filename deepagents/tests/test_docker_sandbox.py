@@ -111,6 +111,39 @@ def test_delete_allows_repository_workspace_paths() -> None:
     )
 
 
+def test_upload_files_streams_content_over_stdin_not_command_arguments() -> None:
+    calls = []
+    content = b"repository archive bytes" * 10_000
+
+    def runner(args, input_bytes, timeout):
+        calls.append((list(args), input_bytes, timeout))
+        if args[1] == "inspect":
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                b'[{"State":{"Running":true}}]',
+                b"",
+            )
+        return subprocess.CompletedProcess(args, 0, b"", b"")
+
+    backend = DockerSandboxBackend(DockerSandboxSpec("thread-1"), runner=runner)
+    result = backend.upload_files(
+        [("/tmp/lcsp-assessment-repository.tar.gz", content)]
+    )
+
+    assert result[0].error is None
+    exec_calls = [call for call in calls if call[0][1] == "exec"]
+    assert len(exec_calls) == 1
+    exec_args, input_bytes, timeout = exec_calls[0]
+    rendered = " ".join(exec_args)
+    assert "-i" in exec_args
+    assert input_bytes == content
+    assert timeout is not None
+    assert "/tmp/lcsp-assessment-repository.tar.gz" in exec_args
+    assert "repository archive bytes" not in rendered
+    assert "base64" not in rendered
+
+
 def test_existing_container_is_recreated_when_static_security_config_drifts() -> None:
     calls = []
     stale_container = {

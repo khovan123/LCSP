@@ -19,16 +19,26 @@ assert all(c.provider == expected and c.source == "provider_preset" for c in p.e
 assert p.REASONING_EFFORT == "low"
 if expected == "google_genai":
     assert p.ALL_LCSP_MODEL_SPECS == ("google_genai:gemini-3.5-flash-lite",)
-    assert model_provider_profile_for(p.ROOT_MODEL_SPEC).init_kwargs == {"thinking_level": "low"}
+    assert model_provider_profile_for(p.ROOT_MODEL_SPEC).init_kwargs == {
+        "request_timeout": 30.0,
+        "thinking_level": "low",
+    }
     for role in p.REASONING_AGENT_NAMES:
-        assert p.model_init_kwargs_for_agent(agent_name=role, model_spec=p.ROOT_MODEL_SPEC) == {"thinking_level": "low"}
+        assert p.model_init_kwargs_for_agent(agent_name=role, model_spec=p.ROOT_MODEL_SPEC) == {
+            "request_timeout": 30.0,
+            "thinking_level": "low",
+        }
     for role in p.NON_REASONING_AGENT_NAMES:
-        assert p.model_init_kwargs_for_agent(agent_name=role, model_spec=p.NARRATOR_MODEL_SPEC) == {"thinking_level": "minimal"}
+        assert p.model_init_kwargs_for_agent(agent_name=role, model_spec=p.NARRATOR_MODEL_SPEC) == {
+            "request_timeout": 30.0,
+            "thinking_level": "minimal",
+        }
 elif expected == "llm7":
     assert p.ALL_LCSP_MODEL_SPECS == ("openai:gemini-3.1-flash-lite",)
     expected_kwargs = {
         "base_url": "https://api.llm7.io/v1",
         "use_responses_api": False,
+        "timeout": 30.0,
     }
     assert model_provider_profile_for(p.ROOT_MODEL_SPEC).init_kwargs == expected_kwargs
     assert p.model_init_kwargs_for_agent(
@@ -64,6 +74,7 @@ assert profiles["openai"]["api_key"] == "llm7-first"
 assert profiles[p.ROOT_MODEL_SPEC]["api_key"] == "llm7-first"
 assert profiles[p.ROOT_MODEL_SPEC]["base_url"] == "https://api.llm7.io/v1"
 assert profiles[p.ROOT_MODEL_SPEC]["use_responses_api"] is False
+assert profiles[p.ROOT_MODEL_SPEC]["timeout"] == 30.0
 assert profiles[p.ROOT_MODEL_SPEC]["max_retries"] == 0
 assert "reasoning" not in profiles[p.ROOT_MODEL_SPEC]
 assert "output_version" not in profiles[p.ROOT_MODEL_SPEC]

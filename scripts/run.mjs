@@ -43,6 +43,12 @@ const agentRuntimePythonPath = ".";
 const dockerAgentRuntimePythonPath = "/app/deepagents";
 const agentRuntimeEventsModule =
   "tools.common.capabilities.agent_runtime.rabbitmq_consumer";
+const agentRuntimeJobsPerWorker = resolvePositiveInteger(
+  process.env.LCSP_AGENT_RUNTIME_JOBS_PER_WORKER ??
+    rootEnv.LCSP_AGENT_RUNTIME_JOBS_PER_WORKER ??
+    "8",
+  "LCSP_AGENT_RUNTIME_JOBS_PER_WORKER",
+);
 const isDarwin = process.platform === "darwin";
 
 const targets = {
@@ -175,7 +181,14 @@ const targets = {
     cmd: existsSync(workerLangGraph) && !isWindows ? workerLangGraph : "uv",
     args:
       existsSync(workerLangGraph) && !isWindows
-        ? ["dev", "--no-browser", "--no-reload", "--allow-blocking"]
+        ? [
+            "dev",
+            "--no-browser",
+            "--no-reload",
+            "--allow-blocking",
+            "--n-jobs-per-worker",
+            String(agentRuntimeJobsPerWorker),
+          ]
         : [
             "run",
             "--extra",
@@ -185,6 +198,8 @@ const targets = {
             "--no-browser",
             "--no-reload",
             "--allow-blocking",
+            "--n-jobs-per-worker",
+            String(agentRuntimeJobsPerWorker),
           ],
     env: {
       ...rootEnv,
@@ -192,6 +207,7 @@ const targets = {
       UV_CACHE_DIR: rootEnv.UV_CACHE_DIR ?? "/tmp/uv-cache",
       UV_LINK_MODE: rootEnv.UV_LINK_MODE ?? "copy",
       LCSP_LOCAL_GRAPH_DEV: "1",
+      LCSP_AGENT_RUNTIME_JOBS_PER_WORKER: String(agentRuntimeJobsPerWorker),
       ORCHESTRATION_DEBUG: defaultOrchestrationDebug,
       PHOENIX_TRACING: defaultPhoenixTracing,
       PHOENIX_COLLECTOR_ENDPOINT: defaultPhoenixCollectorEndpoint,
@@ -299,11 +315,7 @@ function stopStaleAgentRuntimeProcesses() {
     const pid = Number.parseInt(match[1], 10);
     const command = match[2];
     if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue;
-    if (
-      !/langgraph(?:\.exe)?\s+dev\b|langgraph-cli\[inmem\]/u.test(
-        command,
-      )
-    ) {
+    if (!/langgraph(?:\.exe)?\s+dev\b|langgraph-cli\[inmem\]/u.test(command)) {
       continue;
     }
 
@@ -515,6 +527,22 @@ function sleepMs(durationMs) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, durationMs);
 }
 
+function resolvePositiveInteger(value, name) {
+  const normalized = String(value ?? "").trim();
+  if (!/^[1-9]\d*$/u.test(normalized)) {
+    throw new Error(
+      `[run] ${name} must be a positive integer; received "${normalized}".`,
+    );
+  }
+  const parsed = Number.parseInt(normalized, 10);
+  if (!Number.isSafeInteger(parsed) || parsed > 64) {
+    throw new Error(
+      `[run] ${name} must be between 1 and 64; received "${normalized}".`,
+    );
+  }
+  return parsed;
+}
+
 function loadDotEnv(filePath) {
   if (!existsSync(filePath)) return {};
   const parsed = parse(readFileSync(filePath));
@@ -633,9 +661,9 @@ function buildSpawnEnv(target) {
 }
 
 function hardenLangSmithEnv(env) {
-  const tracingEnabled = String(
-    env.LCSP_LANGSMITH_TRACING ?? "",
-  ).trim().toLowerCase();
+  const tracingEnabled = String(env.LCSP_LANGSMITH_TRACING ?? "")
+    .trim()
+    .toLowerCase();
   if (["1", "true", "yes", "on"].includes(tracingEnabled)) return;
 
   for (const key of Object.keys(env)) {
@@ -755,6 +783,7 @@ function dockerWorkerEnv() {
     "LCSP_NARRATOR_MODEL",
     "LCSP_REASONING_EFFORT",
     "LCSP_LANGSMITH_TRACING",
+    "LCSP_AGENT_RUNTIME_JOBS_PER_WORKER",
     "WORKER_RUNTIME_VERSION",
     "WORKER_RUNTIME_BUILD_REF",
     "PHOENIX_TRACING",

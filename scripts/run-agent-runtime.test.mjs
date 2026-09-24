@@ -47,3 +47,10 @@ test("agent runtime disables LangSmith control-plane env unless explicitly enabl
   assert.match(source, /LANGSMITH_TRACING = "false"/u);
   assert.match(source, /LANGCHAIN_TRACING_V2 = "false"/u);
 });
+
+test("agent runtime sets explicit local LangGraph concurrency", () => {
+  assert.match(source, /LCSP_AGENT_RUNTIME_JOBS_PER_WORKER/u);
+  assert.match(source, /--n-jobs-per-worker/u);
+  assert.match(source, /resolvePositiveInteger/u);
+  assert.match(source, /"8"/u);
+});

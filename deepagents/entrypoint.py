@@ -19,6 +19,7 @@ from tools.common.capabilities.platform.docker_sandbox import DockerSandboxManag
 
 DEFAULT_SANDBOX_REAPER_INTERVAL_SECONDS = 3600
 DEFAULT_SANDBOX_TTL_SECONDS = 86400
+DEFAULT_AGENT_RUNTIME_JOBS_PER_WORKER = 8
 
 
 def main() -> int:
@@ -119,6 +120,8 @@ def _agent_server_command() -> tuple[str, ...]:
         "--no-browser",
         "--no-reload",
         "--allow-blocking",
+        "--n-jobs-per-worker",
+        str(_agent_runtime_jobs_per_worker()),
     )
 
 
@@ -155,6 +158,19 @@ def _agent_runtime_mode() -> str:
     if os.environ.get("NODE_ENV", "").strip().lower() == "production":
         return "production"
     return "development"
+
+
+def _agent_runtime_jobs_per_worker() -> int:
+    raw = os.environ.get(
+        "LCSP_AGENT_RUNTIME_JOBS_PER_WORKER",
+        str(DEFAULT_AGENT_RUNTIME_JOBS_PER_WORKER),
+    ).strip()
+    if not raw.isdigit():
+        raise RuntimeError("LCSP_AGENT_RUNTIME_JOBS_PER_WORKER must be a positive integer")
+    value = int(raw)
+    if value < 1 or value > 64:
+        raise RuntimeError("LCSP_AGENT_RUNTIME_JOBS_PER_WORKER must be between 1 and 64")
+    return value
 
 
 def _agent_runtime_role() -> str:

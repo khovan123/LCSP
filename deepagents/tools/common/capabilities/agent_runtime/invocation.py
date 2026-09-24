@@ -293,7 +293,20 @@ def _billing_metering_session(
             )
         return None
     assessment_id = _find_first_text(billing, ("assessmentId", "assessment_id"))
+    workspace_id = _find_first_text(
+        billing, ("workspaceId", "workspace_id", "tenantId")
+    )
+    scan_job_id = _find_first_text(
+        billing, ("scanJobId", "scan_job_id", "repositoryScanJobId")
+    )
+    thread_id = _find_first_text(
+        billing, ("threadId", "thread_id", "langGraphThreadId")
+    )
     run_id = _find_first_text(billing, ("runId", "run_id", "workflowRunId"))
+    invocation_id = _find_first_text(billing, ("invocationId", "invocation_id"))
+    model_invocation_id = _find_first_text(
+        billing, ("modelInvocationId", "model_invocation_id")
+    )
     amount = _find_first_text(billing, ("amountCredits", "reservationCredits"))
     max_charge = _find_first_text(billing, ("maxChargeCredits",))
     provider = _find_first_text(billing, ("provider",))
@@ -343,8 +356,13 @@ def _billing_metering_session(
         start_background_worker(config.billing_recovery_store_path, client)
     return BillingMeteringSession.reserve(
         api_client=client,
+        workspace_id=workspace_id,
         assessment_id=assessment_id,
+        scan_job_id=scan_job_id,
+        thread_id=thread_id,
         run_id=run_id,
+        invocation_id=invocation_id,
+        model_invocation_id=model_invocation_id,
         agent_role=role,
         amount_credits=amount,
         max_charge_credits=max_charge,

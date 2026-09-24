@@ -15,8 +15,13 @@ export function toReservationInput(
   body: BillingUsageReservationRequest,
 ): BillingUsageReservationInput {
   return {
+    workspaceId: body.workspaceId,
     assessmentId: body.assessmentId,
+    scanJobId: body.scanJobId,
+    threadId: body.threadId,
     runId: body.runId,
+    invocationId: body.invocationId,
+    modelInvocationId: body.modelInvocationId,
     amountCredits: BigInt(body.amountCredits),
     maxChargeCredits: BigInt(body.maxChargeCredits),
     provider: body.provider,

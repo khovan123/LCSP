@@ -1,9 +1,10 @@
 """LCSP-owned LangGraph HTTP runtime for the production Agent Server service.
 
 This server intentionally implements only the LangGraph SDK surface LCSP uses:
-thread creation, synchronous run execution, and thread state reads. It keeps the
-native Deep Agents/LangGraph graph as the runtime authority while avoiding the
-licensed ``langchain/langgraph-api`` image for Fogewise production.
+thread creation, asynchronous run create/poll/cancel, synchronous wait
+compatibility, and thread state reads. It keeps the native Deep Agents/LangGraph
+graph as the runtime authority while avoiding the licensed
+``langchain/langgraph-api`` image for Fogewise production.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import os
 import threading
 import uuid
 from collections.abc import Mapping
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
@@ -42,7 +44,13 @@ class LocalAgentRuntime:
     def __init__(self) -> None:
         self._threads: dict[str, dict[str, Any]] = {}
         self._locks: dict[str, threading.Lock] = {}
+        self._runs: dict[tuple[str, str], dict[str, Any]] = {}
+        self._run_futures: dict[tuple[str, str], Future[None]] = {}
         self._lock = threading.Lock()
+        self._executor = ThreadPoolExecutor(
+            max_workers=_run_worker_count(),
+            thread_name_prefix="lcsp-local-agent-run",
+        )
         self._checkpointer_context = None
         self._checkpointer = None
         self.graph = None
@@ -55,6 +63,7 @@ class LocalAgentRuntime:
         self.graph = create_lcsp_agent(checkpointer=checkpointer)
 
     def close(self) -> None:
+        self._executor.shutdown(wait=False, cancel_futures=True)
         if self._checkpointer_context is not None:
             self._checkpointer_context.__exit__(None, None, None)
             self._checkpointer_context = None
@@ -83,6 +92,66 @@ class LocalAgentRuntime:
     def get_thread(self, thread_id: str) -> dict[str, Any] | None:
         with self._lock:
             return self._threads.get(thread_id)
+
+    def create_run(
+        self,
+        thread_id: str,
+        payload: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Schedule one LangGraph run and return immediately with SDK run state."""
+        self.create_thread({"thread_id": thread_id, "if_exists": "do_nothing"})
+        run_id = str(uuid.uuid4())
+        now = _now()
+        run = {
+            "run_id": run_id,
+            "thread_id": thread_id,
+            "assistant_id": _text(payload.get("assistant_id")) or DEFAULT_ASSISTANT_ID,
+            "created_at": now,
+            "updated_at": now,
+            "status": "pending",
+            "metadata": (
+                dict(payload.get("metadata") or {})
+                if isinstance(payload.get("metadata"), Mapping)
+                else {}
+            ),
+            "multitask_strategy": payload.get("multitask_strategy") or "enqueue",
+        }
+        key = (thread_id, run_id)
+        with self._lock:
+            self._runs[key] = run
+        future = self._executor.submit(
+            self._execute_run,
+            thread_id,
+            run_id,
+            dict(payload),
+        )
+        with self._lock:
+            self._run_futures[key] = future
+        return dict(run)
+
+    def get_run(self, thread_id: str, run_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            run = self._runs.get((thread_id, run_id))
+            return dict(run) if run is not None else None
+
+    def cancel_run(self, thread_id: str, run_id: str) -> dict[str, Any] | None:
+        """Cancel a queued run when possible and record requests for active runs."""
+        key = (thread_id, run_id)
+        with self._lock:
+            run = self._runs.get(key)
+            future = self._run_futures.get(key)
+            if run is None:
+                return None
+        if future is not None and future.cancel():
+            self._set_run_status(thread_id, run_id, "interrupted")
+            self._set_thread_status(thread_id, "idle")
+        else:
+            with self._lock:
+                current = self._runs.get(key)
+                if current is not None:
+                    current["cancel_requested_at"] = _now()
+                    current["updated_at"] = _now()
+        return self.get_run(thread_id, run_id)
 
     def wait_for_run(self, thread_id: str, payload: Mapping[str, Any]) -> Any:
         self.create_thread({"thread_id": thread_id, "if_exists": "do_nothing"})
@@ -118,6 +187,26 @@ class LocalAgentRuntime:
             finally:
                 self._set_thread_status(thread_id, "idle")
 
+    def _execute_run(
+        self,
+        thread_id: str,
+        run_id: str,
+        payload: Mapping[str, Any],
+    ) -> None:
+        self._set_run_status(thread_id, run_id, "running")
+        try:
+            self.wait_for_run(thread_id, payload)
+        except Exception as exc:
+            logger.exception(
+                "LCSP local Agent Server asynchronous run failed",
+                extra={"thread_id": thread_id, "run_id": run_id},
+            )
+            self._update_thread_error(thread_id, exc)
+            self._set_thread_status(thread_id, "error")
+            self._set_run_status(thread_id, run_id, "error")
+            return
+        self._set_run_status(thread_id, run_id, "success")
+
     def get_state(self, thread_id: str) -> dict[str, Any]:
         self.create_thread({"thread_id": thread_id, "if_exists": "do_nothing"})
         graph = self._graph()
@@ -125,6 +214,10 @@ class LocalAgentRuntime:
         try:
             snapshot = graph.get_state(config)
             values = dict(getattr(snapshot, "values", {}) or {})
+            thread = self.get_thread(thread_id) or {}
+            thread_error = (thread.get("values") or {}).get("__error__")
+            if thread_error is not None:
+                values.setdefault("__error__", thread_error)
             metadata = getattr(snapshot, "metadata", {}) or {}
             next_nodes = list(getattr(snapshot, "next", ()) or ())
             checkpoint = _checkpoint_from_config(getattr(snapshot, "config", None))
@@ -195,6 +288,27 @@ class LocalAgentRuntime:
             thread["status"] = status
             thread["updated_at"] = _now()
 
+    def _set_run_status(self, thread_id: str, run_id: str, status: str) -> None:
+        with self._lock:
+            run = self._runs.get((thread_id, run_id))
+            if run is None:
+                return
+            run["status"] = status
+            run["updated_at"] = _now()
+
+    def _update_thread_error(self, thread_id: str, exc: BaseException) -> None:
+        with self._lock:
+            thread = self._threads.get(thread_id)
+            if thread is None:
+                return
+            values = dict(thread.get("values") or {})
+            values["__error__"] = {
+                "error": type(exc).__name__,
+                "message": str(exc),
+            }
+            thread["values"] = values
+            thread["updated_at"] = _now()
+
     def _update_thread_values(self, thread_id: str, values: Mapping[str, Any]) -> None:
         with self._lock:
             thread = self._threads.setdefault(
@@ -258,6 +372,33 @@ async def wait_for_run(request: Request) -> JSONResponse:
     return JSONResponse(_json_ready(result))
 
 
+async def create_run(request: Request) -> JSONResponse:
+    runtime: LocalAgentRuntime = request.app.state.runtime
+    thread_id = request.path_params["thread_id"]
+    payload = await request.json()
+    return JSONResponse(_json_ready(runtime.create_run(thread_id, payload)))
+
+
+async def get_run(request: Request) -> JSONResponse:
+    runtime: LocalAgentRuntime = request.app.state.runtime
+    thread_id = request.path_params["thread_id"]
+    run_id = request.path_params["run_id"]
+    run = runtime.get_run(thread_id, run_id)
+    if run is None:
+        return JSONResponse({"error": "run not found"}, status_code=404)
+    return JSONResponse(_json_ready(run))
+
+
+async def cancel_run(request: Request) -> JSONResponse:
+    runtime: LocalAgentRuntime = request.app.state.runtime
+    thread_id = request.path_params["thread_id"]
+    run_id = request.path_params["run_id"]
+    run = runtime.cancel_run(thread_id, run_id)
+    if run is None:
+        return JSONResponse({"error": "run not found"}, status_code=404)
+    return JSONResponse(_json_ready(run))
+
+
 async def get_state(request: Request) -> JSONResponse:
     runtime: LocalAgentRuntime = request.app.state.runtime
     thread_id = request.path_params["thread_id"]
@@ -271,7 +412,18 @@ app = Starlette(
         Route("/health", ok, methods=["GET"]),
         Route("/threads", create_thread, methods=["POST"]),
         Route("/threads/{thread_id}", get_thread, methods=["GET"]),
+        Route("/threads/{thread_id}/runs", create_run, methods=["POST"]),
         Route("/threads/{thread_id}/runs/wait", wait_for_run, methods=["POST"]),
+        Route(
+            "/threads/{thread_id}/runs/{run_id}",
+            get_run,
+            methods=["GET"],
+        ),
+        Route(
+            "/threads/{thread_id}/runs/{run_id}/cancel",
+            cancel_run,
+            methods=["POST"],
+        ),
         Route("/threads/{thread_id}/state", get_state, methods=["GET"]),
     ],
 )
@@ -337,6 +489,21 @@ def _text(value: object) -> str | None:
 
 def _now() -> str:
     return datetime.now(tz=UTC).isoformat()
+
+
+def _run_worker_count() -> int:
+    raw = os.environ.get("LCSP_AGENT_RUNTIME_JOBS_PER_WORKER", "8").strip()
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError(
+            "LCSP_AGENT_RUNTIME_JOBS_PER_WORKER must be a positive integer"
+        ) from exc
+    if value < 1 or value > 64:
+        raise RuntimeError(
+            "LCSP_AGENT_RUNTIME_JOBS_PER_WORKER must be between 1 and 64"
+        )
+    return value
 
 
 def _production_mode() -> bool:

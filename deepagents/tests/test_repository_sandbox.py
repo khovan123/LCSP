@@ -3,8 +3,9 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
+import pytest
 from deepagents.backends.protocol import LsResult, WriteResult
 from tools.common.capabilities.agent_runtime import agent_server_client
 from tools.common.capabilities.platform import docker_sandbox
@@ -37,8 +38,14 @@ def test_same_assessment_reuses_one_agent_thread_across_pipeline_events() -> Non
 
 def test_agent_server_dispatch_reuses_thread_and_keeps_event_out_of_prompt(monkeypatch) -> None:
     fake_client = MagicMock()
-    fake_client.runs.wait.return_value = {"ok": True}
+    fake_client.runs.create.return_value = {"run_id": "run-1", "status": "pending"}
+    fake_client.runs.get.side_effect = [
+        {"run_id": "run-1", "status": "running"},
+        {"run_id": "run-1", "status": "success"},
+    ]
+    fake_client.threads.get_state.return_value = {"values": {"ok": True}}
     monkeypatch.setattr(agent_server_client, "get_sync_client", lambda **_kwargs: fake_client)
+    monkeypatch.setattr(agent_server_client.time, "sleep", lambda _seconds: None)
 
     event = {
         "assessmentId": "assessment-1",
@@ -59,18 +66,174 @@ def test_agent_server_dispatch_reuses_thread_and_keeps_event_out_of_prompt(monke
     assert fake_client.threads.create.call_args.kwargs["thread_id"] == thread_id
     assert fake_client.threads.create.call_args.kwargs["if_exists"] == "do_nothing"
 
-    wait = fake_client.runs.wait.call_args
-    assert wait.args[:2] == (thread_id, "lcsp-agent")
-    assert wait.kwargs["context"]["system_event"] == event
-    assert "config" not in wait.kwargs
-    assert wait.kwargs["context"]["thread_id"] == thread_id
-    assert wait.kwargs["context"]["snapshot_id"] == "snapshot-1"
-    assert wait.kwargs["context"]["repository_path"] == "/"
-    assert wait.kwargs["context"]["repository_path"] == "/"
-    prompt = wait.kwargs["input"]["messages"][0]["content"]
+    create = fake_client.runs.create.call_args
+    assert create.args[:2] == (thread_id, "lcsp-agent")
+    assert create.kwargs["context"]["system_event"] == event
+    assert "config" not in create.kwargs
+    assert create.kwargs["context"]["thread_id"] == thread_id
+    assert create.kwargs["context"]["snapshot_id"] == "snapshot-1"
+    assert create.kwargs["context"]["repository_path"] == "/"
+    prompt = create.kwargs["input"]["messages"][0]["content"]
     assert "secretInternalField" not in prompt
     assert "trusted lcsp system event" in prompt.lower()
-    assert wait.kwargs["multitask_strategy"] == "enqueue"
+    assert create.kwargs["multitask_strategy"] == "enqueue"
+    assert fake_client.runs.get.call_count == 2
+
+
+def test_agent_server_scan_observer_persists_scheduler_progress(monkeypatch) -> None:
+    posted = []
+
+    class FakeConfig:
+        nestjs_api_base_url = "http://api.local"
+        worker_api_key = "worker-key"
+
+    class FakeClient:
+        def __init__(self, base_url, api_key):
+            assert base_url == "http://api.local"
+            assert api_key == "worker-key"
+
+        def post_scan_runtime_event(self, scan_job_id, payload):
+            posted.append((scan_job_id, payload))
+
+    monkeypatch.setattr(agent_server_client, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(agent_server_client, "WorkerApiClient", FakeClient)
+
+    observer = agent_server_client._ScanRunObserver(
+        {"scanJobId": "scan-1", "assessmentId": "assessment-1"}
+    )
+    observer.emit(
+        event_type="TOOL_STARTED",
+        run_status="RUNNING",
+        summary="LangGraph repository run queued",
+        output_summary={"runId": "run-1", "schedulerState": "pending"},
+    )
+
+    assert posted == [
+        (
+            "scan-1",
+            {
+                "event_type": "TOOL_STARTED",
+                "run_status": "RUNNING",
+                "stage": "SCAN",
+                "tool_name": "langgraph_run",
+                "summary": "LangGraph repository run queued",
+                "output_summary": {
+                    "runId": "run-1",
+                    "schedulerState": "pending",
+                },
+            },
+        )
+    ]
+
+
+def test_agent_server_dispatch_raises_terminal_error_from_run_state(monkeypatch) -> None:
+    fake_client = MagicMock()
+    fake_client.runs.create.return_value = {"run_id": "run-1", "status": "pending"}
+    fake_client.runs.get.return_value = {"run_id": "run-1", "status": "error"}
+    fake_client.threads.get_state.return_value = {
+        "error": {
+            "error": "BillingMeteringError",
+            "message": "Billing usage delivery failed",
+        }
+    }
+    monkeypatch.setattr(agent_server_client, "get_sync_client", lambda **_kwargs: fake_client)
+    monkeypatch.setattr(agent_server_client.time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(agent_server_client.AgentServerRunError) as captured:
+        agent_server_client.dispatch_agent_runtime_event(
+            "scan_requested",
+            {"assessmentId": "assessment-1", "scanJobId": "scan-1"},
+            "corr-1",
+        )
+
+    assert captured.value.remote_error_type == "BillingMeteringError"
+    assert "Billing usage delivery failed" in str(captured.value)
+
+
+
+def test_agent_server_dispatch_cancels_run_at_boundary_deadline(monkeypatch) -> None:
+    fake_client = MagicMock()
+    fake_client.runs.create.return_value = {"run_id": "run-timeout", "status": "pending"}
+    fake_client.runs.get.return_value = {"run_id": "run-timeout", "status": "pending"}
+    monkeypatch.setattr(agent_server_client, "get_sync_client", lambda **_kwargs: fake_client)
+    monotonic_values = iter([0.0, 0.0, 2.0])
+    monkeypatch.setattr(
+        agent_server_client.time,
+        "monotonic",
+        lambda: next(monotonic_values),
+    )
+    monkeypatch.setattr(agent_server_client.time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(agent_server_client.AgentServerRunError) as captured:
+        agent_server_client.dispatch_agent_runtime_event(
+            "scan_requested",
+            {"assessmentId": "assessment-1", "scanJobId": "scan-1"},
+            "corr-timeout",
+            timeout_seconds=1.0,
+        )
+
+    assert captured.value.remote_error_type == "AgentServerRunTimeout"
+    fake_client.runs.cancel.assert_called_once_with(
+        agent_server_client.agent_thread_id(
+            "scan_requested",
+            {"assessmentId": "assessment-1", "scanJobId": "scan-1"},
+            "corr-timeout",
+        ),
+        "run-timeout",
+        wait=False,
+        action="interrupt",
+    )
+
+
+def test_reconcile_stale_agent_runs_interrupts_only_runs_before_current_server(monkeypatch) -> None:
+    fake_client = MagicMock()
+    fake_client.threads.search.return_value = [
+        {"thread_id": "thread-1"},
+        {"thread_id": "thread-2"},
+    ]
+    fake_client.runs.list.side_effect = [
+        [
+            {
+                "run_id": "old-running",
+                "status": "running",
+                "created_at": "2026-09-24T16:00:00+00:00",
+            },
+            {
+                "run_id": "current-pending",
+                "status": "pending",
+                "created_at": "2026-09-24T16:31:00+00:00",
+            },
+        ],
+        [
+            {
+                "run_id": "old-pending",
+                "status": "pending",
+                "created_at": "2026-09-24T15:59:59Z",
+            },
+            {
+                "run_id": "completed",
+                "status": "success",
+                "created_at": "2026-09-24T15:00:00Z",
+            },
+        ],
+    ]
+    response = SimpleNamespace(
+        text="process_start_time_seconds 1790267377.79\n",
+        raise_for_status=lambda: None,
+    )
+    monkeypatch.setattr(agent_server_client.httpx, "get", lambda *_args, **_kwargs: response)
+    monkeypatch.setattr(agent_server_client, "get_sync_client", lambda **_kwargs: fake_client)
+
+    cancelled = agent_server_client.reconcile_stale_agent_runs(
+        server_url="http://127.0.0.1:2024"
+    )
+
+    assert cancelled == 2
+    assert fake_client.runs.cancel.call_args_list == [
+        call("thread-1", "old-running", wait=False, action="interrupt"),
+        call("thread-2", "old-pending", wait=False, action="interrupt"),
+    ]
+
 
 
 def test_repository_backend_activation_is_scoped_to_repository_database() -> None:
@@ -231,10 +394,11 @@ def test_system_event_middleware_dispatches_inside_resolved_docker_backend(monke
     monkeypatch.setattr(
         system_dispatch,
         "ensure_repository_for_event",
-        lambda resolved, boundary, payload: calls.append(
+        lambda resolved, boundary, payload, lifecycle=None: calls.append(
             ("hydrate", resolved, boundary, payload)
         ),
     )
+    monkeypatch.setattr(system_dispatch, "_worker_client", lambda: None)
 
     def invoke(boundary, payload, correlation_id):
         active = repository_sandbox.current_repository_backend()
@@ -261,6 +425,92 @@ def test_system_event_middleware_dispatches_inside_resolved_docker_backend(monke
         ("hydrate", backend, "scan_requested", event),
         ("invoke", "scan_requested", event, "corr-1"),
     ]
+    assert repository_sandbox.current_repository_backend() is None
+
+
+def test_system_event_middleware_fails_scan_when_repository_hydration_crashes(
+    monkeypatch,
+) -> None:
+    import middleware.system_event_dispatch as system_dispatch
+    from orchestration.context import LCSPRunContext
+
+    backend = object()
+    event = {
+        "assessmentId": "assessment-1",
+        "scanJobId": "scan-1",
+        "snapshotId": "snapshot-1",
+    }
+    calls = []
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.runtime_events = []
+            self.callbacks = []
+
+        def post_scan_runtime_event(self, scan_job_id, payload):
+            self.runtime_events.append((scan_job_id, payload))
+
+        def post_scan_callback(self, scan_job_id, payload):
+            self.callbacks.append((scan_job_id, payload))
+
+    client = FakeClient()
+    monkeypatch.setattr(
+        system_dispatch,
+        "resolve_repository_thread_backend",
+        lambda config: calls.append(("resolve", config)) or backend,
+    )
+
+    def fail_hydration(resolved, boundary, payload, lifecycle=None):
+        calls.append(("hydrate", resolved, boundary, payload))
+        assert lifecycle is not None
+        lifecycle("repository_archive_downloading")
+        lifecycle("repository_sandbox_hydrating")
+        raise OSError(7, "Argument list too long", "docker")
+
+    monkeypatch.setattr(
+        system_dispatch,
+        "ensure_repository_for_event",
+        fail_hydration,
+    )
+    monkeypatch.setattr(system_dispatch, "_worker_client", lambda: client)
+    monkeypatch.setattr(
+        system_dispatch,
+        "invoke_boundary",
+        lambda *_args, **_kwargs: calls.append(("invoke",)),
+    )
+    runtime = SimpleNamespace(
+        context=LCSPRunContext(
+            assessment_id="assessment-1",
+            correlation_id="corr-1",
+            system_boundary_name="scan_requested",
+            system_event=event,
+        ),
+        config={"configurable": {"thread_id": "thread-1"}},
+    )
+
+    with pytest.raises(OSError):
+        system_dispatch.dispatch_agent_runtime_system_event.before_agent({}, runtime)
+
+    assert calls == [
+        ("resolve", runtime.config),
+        ("hydrate", backend, "scan_requested", event),
+    ]
+    assert [payload["event_type"] for _, payload in client.runtime_events] == [
+        "RUN_STARTED",
+        "TOOL_STARTED",
+        "TOOL_STARTED",
+        "TOOL_FAILED",
+        "RUN_FAILED",
+    ]
+    assert client.runtime_events[-1][1]["output_summary"] == {
+        "errorCode": "REPOSITORY_SANDBOX_HYDRATION_FAILED"
+    }
+    assert len(client.callbacks) == 1
+    scan_job_id, callback = client.callbacks[0]
+    assert scan_job_id == "scan-1"
+    assert callback.status == "FAILED"
+    assert callback.error_code == "REPOSITORY_SANDBOX_HYDRATION_FAILED"
+    assert callback.privacy_flags["containsSourceCode"] is False
     assert repository_sandbox.current_repository_backend() is None
 
 

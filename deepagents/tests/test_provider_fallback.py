@@ -23,6 +23,11 @@ class QuotaError(Exception):
     status_code = 429
 
 
+class CapacityError(Exception):
+    status_code = 402
+    code = "insufficient_balance"
+
+
 class AuthError(Exception):
     status_code = 401
 
@@ -46,6 +51,15 @@ def _openai_model():
         model="gpt-5-nano",
         use_responses_api=True,
         **credential_init_kwargs("openai"),
+    )
+
+
+def _llm7_model():
+    return ChatOpenAI(
+        model="gemini-3.1-flash-lite",
+        base_url="https://api.llm7.io/v1",
+        use_responses_api=False,
+        **credential_init_kwargs("llm7"),
     )
 
 
@@ -134,6 +148,77 @@ def test_terminal_billing_delivery_failure_does_not_enter_provider_fallback(monk
     assert len(provider_calls) == 1
 
 
+def test_llm7_402_fallback_to_google_settles_single_successful_attempt(monkeypatch):
+    import middleware.provider_fallback as fallback_module
+
+    monkeypatch.setattr(fallback_module, "model_provider", lambda model: model.provider)
+    monkeypatch.setattr(
+        fallback_module,
+        "configured_fallback_providers",
+        lambda: ("google_genai",),
+    )
+    monkeypatch.setattr(
+        fallback_module,
+        "fallback_model",
+        lambda provider: _BillingModel(provider),
+    )
+
+    payloads = []
+    claims = []
+
+    class BillingClient:
+        def claim_billing_invocation(self, reservation_id, payload):
+            claims.append((reservation_id, payload.invocationId))
+
+        def post_settled_usage(self, payload):
+            payloads.append(payload)
+
+    session = BillingMeteringSession(
+        api_client=BillingClient(),
+        assessment_id="assessment-1",
+        run_id="run-1",
+        reservation_id="reservation-1",
+        agent_role="planner",
+        reserved_provider="LLM7",
+        reserved_model="gpt-5-nano",
+        authorized_models={
+            ("LLM7", "gpt-5-nano"),
+            ("GOOGLE_GENAI", "gpt-5-nano"),
+        },
+        max_invocations=2,
+    )
+    provider_calls = []
+
+    def provider_handler(request):
+        provider_calls.append(request.model.provider)
+        if request.model.provider == "llm7":
+            raise CapacityError("insufficient balance")
+        return ModelResponse(result=[])
+
+    request = _BillingRequest(_BillingModel("llm7"))
+    billing = BillingMeteringMiddleware()
+    with activate_billing_metering(session):
+        response = ProviderFallbackMiddleware().wrap_model_call(
+            request,
+            lambda next_request: billing.wrap_model_call(
+                next_request,
+                provider_handler,
+            ),
+        )
+
+    assert isinstance(response, ModelResponse)
+    assert provider_calls == ["llm7", "google_genai"]
+    assert [reservation_id for reservation_id, _ in claims] == [
+        "reservation-1",
+        "reservation-1",
+    ]
+    assert len({invocation_id for _, invocation_id in claims}) == 2
+    assert len(payloads) == 1
+    assert payloads[0].reservationId == "reservation-1"
+    assert payloads[0].provider == "GOOGLE_GENAI"
+    assert payloads[0].invocationId == claims[-1][1]
+
+
 def test_configured_provider_requires_its_own_credentials(monkeypatch):
     monkeypatch.delenv("LLM7_API_KEY", raising=False)
     monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "llm7")
@@ -188,6 +273,34 @@ def test_single_primary_auth_failure_moves_to_llm7(monkeypatch):
         "openai",
         "llm7",
     ]
+
+
+def test_llm7_capacity_failure_rotates_keys_then_moves_to_google(monkeypatch):
+    monkeypatch.setenv("LLM7_API_KEY", "llm7-a,llm7-b")
+    monkeypatch.setenv("GOOGLE_API_KEY", "google-only")
+    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "google_genai")
+    request = ModelRequest(model=_llm7_model(), messages=[], tools=[])
+    response = ModelResponse(result=[])
+    raw_handler = MagicMock(
+        side_effect=[
+            CapacityError("insufficient balance"),
+            CapacityError("insufficient balance"),
+            response,
+        ]
+    )
+
+    assert _sync_chain(request, raw_handler) is response
+    requests = [call.args[0] for call in raw_handler.call_args_list]
+    assert [model_provider(item.model) for item in requests] == [
+        "llm7",
+        "llm7",
+        "google_genai",
+    ]
+    assert [
+        item.model.openai_api_key.get_secret_value()
+        for item in requests[:2]
+    ] == ["llm7-a", "llm7-b"]
+    assert requests[-1].model.google_api_key.get_secret_value() == "google-only"
 
 
 @pytest.mark.asyncio

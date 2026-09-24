@@ -20,6 +20,18 @@ NO_SDK_RETRY_MAX_RETRIES = {
 }
 
 
+def llm_provider_timeout_seconds() -> float:
+    """Return the governed provider request timeout in seconds."""
+    raw = (os.getenv("LLM_PROVIDER_TIMEOUT_SECONDS") or "30").strip()
+    try:
+        value = float(raw)
+    except ValueError as error:
+        raise RuntimeError("LLM_PROVIDER_TIMEOUT_SECONDS must be a number") from error
+    if value <= 0:
+        raise RuntimeError("LLM_PROVIDER_TIMEOUT_SECONDS must be > 0")
+    return value
+
+
 def llm7_base_url() -> str:
     """Return the configured LLM7 OpenAI-compatible endpoint."""
     configured = (os.getenv("LLM7_BASE_URL") or "").strip()
@@ -47,7 +59,7 @@ def credential_init_kwargs(provider: str) -> dict[str, object]:
     if not tokens:
         return {}
     # Explicitly pass one key: SDKs must never receive the comma-separated list.
-    kwargs: dict[str, object] = {"api_key": tokens[0]}
-    if len(tokens) > 1:
-        kwargs["max_retries"] = NO_SDK_RETRY_MAX_RETRIES[provider]
-    return kwargs
+    return {
+        "api_key": tokens[0],
+        "max_retries": NO_SDK_RETRY_MAX_RETRIES[provider],
+    }

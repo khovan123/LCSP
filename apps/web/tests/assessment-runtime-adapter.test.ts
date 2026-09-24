@@ -1136,17 +1136,30 @@ function scannerStepStatus(timeline: AdapterTimelineInput) {
   )?.status;
 }
 
-test("rerunning the scanner shows Scanner running before the worker reports", () => {
-  for (const status of [
-    REPOSITORY_SCAN_JOB_STATUSES.queued,
-    REPOSITORY_SCAN_JOB_STATUSES.running,
-  ]) {
-    assert.equal(
-      scannerStepStatus(rerunTimeline("asm-rerun", status)),
-      NORMALIZED_WORKFLOW_STEP_STATUSES.running,
-      status,
-    );
-  }
+test("queued scanner rerun waits until Agent Runtime claims the job", () => {
+  const queued = normalizeAssessmentRuntime({
+    assessmentId: "asm-rerun-queued",
+    timeline: rerunTimeline(
+      "asm-rerun-queued",
+      REPOSITORY_SCAN_JOB_STATUSES.queued,
+    ),
+  });
+  assert.equal(
+    queued.workflow.steps.find(
+      (step) => step.id === ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.scanner,
+    )?.status,
+    NORMALIZED_WORKFLOW_STEP_STATUSES.waiting,
+  );
+  assert.equal(
+    queued.artifacts.programEvidenceGraph.availability,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting,
+  );
+  assert.equal(
+    scannerStepStatus(
+      rerunTimeline("asm-rerun-running", REPOSITORY_SCAN_JOB_STATUSES.running),
+    ),
+    NORMALIZED_WORKFLOW_STEP_STATUSES.running,
+  );
 });
 
 test("a finished scan job leaves the Scanner row to its runtime events", () => {

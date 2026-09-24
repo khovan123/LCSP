@@ -19,6 +19,7 @@ jobs:
       api: ${{ steps.filter.outputs.api }}
       web: ${{ steps.filter.outputs.web }}
       python: ${{ steps.filter.outputs.python }}
+      release_gate: ${{ steps.filter.outputs.release_gate }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,13 +61,25 @@ jobs:
               - 'scripts/prepare-cli.mjs'
               - 'scripts/run*.mjs'
               - 'package.json'
-  workspace-static:
+            release_gate:
+              - '.github/workflows/test.yml'
+              - 'apps/api/**'
+              - 'apps/web/**'
+              - 'deepagents/**'
+              - 'deepagents-langgraph/**'
+              - 'packages/contracts/**'
+              - 'packages/i18n/**'
+              - 'frozen/interview-agent-frozen/**'
+              - 'scripts/**'
+              - 'tests/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'tsconfig*.json'
+  release-gate-static:
     name: Workspace static checks
     needs: changes
-    if: >-
-      needs.changes.outputs.api == 'true' ||
-      needs.changes.outputs.web == 'true' ||
-      needs.changes.outputs.python == 'true'
+    if: needs.changes.outputs.release_gate == 'true'
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/lcsp_api_test?schema=public
@@ -294,17 +307,6 @@ jobs:
         run: python -m pip install -e ".[dev]"
 
 
-      - name: Provision Codebase Memory 0.11.0
-        run: |
-          python -m pip install --no-cache-dir codebase-memory-mcp==0.11.0
-          CBM_HOME="$RUNNER_TEMP/codebase-memory-home"
-          CBM_CACHE="$RUNNER_TEMP/codebase-memory-cache"
-          mkdir -p "$CBM_HOME" "$CBM_CACHE"
-          HOME="$CBM_HOME" XDG_CACHE_HOME="$CBM_CACHE" codebase-memory-mcp --version
-          CBM_BINARY="$CBM_CACHE/codebase-memory-mcp/0.11.0/codebase-memory-mcp"
-          test -x "$CBM_BINARY"
-          echo "LCSP_CODEBASE_MEMORY_E2E_BINARY=$CBM_BINARY" >> "$GITHUB_ENV"
-
       - name: Validate LangGraph Agent Runtime config
         env:
           OPENAI_API_KEY: ci-import-only
@@ -360,6 +362,7 @@ jobs:
         working-directory: deepagents
         run: >-
           pytest -q
+          tests/integration/test_codebase_memory_runtime_e2e.py
           tests/integration/test_docker_sandbox_e2e.py
           tests/integration/test_local_agent_runtime_e2e.py
           tests/integration/test_production_agent_server_image_e2e.py
@@ -386,6 +389,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55437/lcsp_api_release_test?schema=public
       LCSP_API_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55437/lcsp_api_release_test?schema=public
+      LCSP_TEST_POSTGRES_PORT: 55437
+      LCSP_TEST_POSTGRES_DB: lcsp_api_release_test
       LANGGRAPH_CHECKPOINT_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55437/lcsp_checkpoint_release_test
       LCSP_TEST_CHECKPOINT_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55437/lcsp_checkpoint_release_test
       LCSP_API_BASE_URL: http://127.0.0.1:3101
@@ -431,7 +436,9 @@ jobs:
         run: pnpm --filter @lcsp/api prisma:generate
 
       - name: Apply disposable API schema
-        run: pnpm --filter @lcsp/api exec prisma db push --accept-data-loss --force-reset
+        run: |
+          node apps/api/test/scripts/assert-disposable-database.mjs
+          node apps/api/test/scripts/reset-disposable-database-schema.mjs
 
       - name: Seed release vertical starting state
         run: pnpm --filter @lcsp/api exec tsx test/scripts/seed-lcsp-278-release-vertical.ts

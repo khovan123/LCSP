@@ -282,18 +282,38 @@ class DockerSandboxBackend(SandboxBackendProtocol):
         responses: list[FileUploadResponse] = []
         for path, content in files:
             target = _sandbox_path(path)
-            encoded = base64.b64encode(content)
             script = (
-                "python - <<'PY'\n"
-                "import base64, os\n"
-                f"path={target!r}; data={encoded!r}\n"
+                "import os, sys\n"
+                "path=sys.argv[1]\n"
                 "os.makedirs(os.path.dirname(path), exist_ok=True)\n"
-                "open(path,'wb').write(base64.b64decode(data))\n"
-                "PY"
+                "open(path,'wb').write(sys.stdin.buffer.read())\n"
             )
-            result = self._exec(script)
+            self.ensure_running()
+            result = self._docker(
+                [
+                    "exec",
+                    "-i",
+                    "--workdir",
+                    REPOSITORY_ROOT,
+                    self.spec.container_name,
+                    "python",
+                    "-c",
+                    script,
+                    target,
+                ],
+                check=False,
+                timeout=DEFAULT_EXEC_TIMEOUT,
+                input_bytes=content,
+            )
+            output = (result.stdout + result.stderr).decode(
+                "utf-8",
+                errors="replace",
+            )
             responses.append(
-                FileUploadResponse(path=path, error=None if result.exit_code == 0 else result.output)
+                FileUploadResponse(
+                    path=path,
+                    error=None if result.returncode == 0 else output,
+                )
             )
         return responses
 

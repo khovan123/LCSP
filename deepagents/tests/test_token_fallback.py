@@ -14,6 +14,11 @@ class QuotaError(Exception):
     status_code = 429
 
 
+class CapacityError(Exception):
+    status_code = 402
+    code = "insufficient_balance"
+
+
 class AuthError(Exception):
     status_code = 401
 
@@ -179,6 +184,29 @@ def test_transient_errors_are_recognized_through_wrappers(status, attribute):
     setattr(source, attribute, status)
     wrapper = RuntimeError("model failure")
     wrapper.__cause__ = source
+    assert credential_failure(wrapper)
+
+
+@pytest.mark.parametrize("attribute", ["status_code", "code"])
+def test_provider_capacity_errors_are_credential_failures(attribute):
+    from middleware.failure_policy import is_provider_capacity_failure
+    from middleware.token_fallback import credential_failure
+    source = RuntimeError("insufficient_balance")
+    setattr(source, attribute, 402)
+    wrapper = RuntimeError("model failure")
+    wrapper.__cause__ = source
+    assert is_provider_capacity_failure(wrapper)
+    assert credential_failure(wrapper)
+
+
+def test_provider_capacity_error_codes_are_recognized_without_status():
+    from middleware.failure_policy import is_provider_capacity_failure
+    from middleware.token_fallback import credential_failure
+    source = RuntimeError("provider rejected request")
+    source.code = "insufficient_quota"
+    wrapper = RuntimeError("model failure")
+    wrapper.__cause__ = source
+    assert is_provider_capacity_failure(wrapper)
     assert credential_failure(wrapper)
 
 
@@ -371,6 +399,24 @@ def test_outer_model_retry_does_not_resend_auth_failures(monkeypatch):
         )
     assert handler.call_count == 1
     assert not is_terminal_task_error(AuthError())
+
+
+def test_outer_model_retry_does_not_resend_provider_capacity_failure(monkeypatch):
+    from langchain.agents.middleware import ModelRetryMiddleware
+    from middleware.failure_policy import retry_model_error
+
+    monkeypatch.setenv("LLM7_API_KEY", "only-test-token")
+    model = _llm7_model()
+    handler = MagicMock(side_effect=CapacityError("insufficient balance"))
+    retry = ModelRetryMiddleware(max_retries=2, retry_on=retry_model_error, on_failure="error", initial_delay=0)
+
+    with pytest.raises(CapacityError):
+        retry.wrap_model_call(
+            ModelRequest(model=model, messages=[], tools=[]),
+            lambda r: TokenFallbackMiddleware().wrap_model_call(r, handler),
+        )
+    assert handler.call_count == 1
+    assert not retry_model_error(CapacityError("insufficient balance"))
 
 
 def test_multi_token_primary_disables_sdk_internal_retries(monkeypatch):

@@ -288,7 +288,22 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
     return {
       ...payload,
       billing: {
+        workspaceId: firstPayloadText(payload, [
+          "workspaceId",
+          "workspace_id",
+          "tenantId",
+        ]),
         assessmentId,
+        scanJobId: firstPayloadText(payload, [
+          "scanJobId",
+          "scan_job_id",
+          "repositoryScanJobId",
+        ]),
+        threadId: firstPayloadText(payload, [
+          "threadId",
+          "thread_id",
+          "langGraphThreadId",
+        ]),
         runId:
           firstPayloadText(payload, [
             "runId",

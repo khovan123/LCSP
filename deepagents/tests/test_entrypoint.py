@@ -20,8 +20,27 @@ def test_entrypoint_uses_langgraph_dev_only_for_non_production(monkeypatch) -> N
         "--no-browser",
         "--no-reload",
         "--allow-blocking",
+        "--n-jobs-per-worker",
+        str(entrypoint.DEFAULT_AGENT_RUNTIME_JOBS_PER_WORKER),
     )
     assert entrypoint._uses_langgraph_dev(command) is True
+
+
+def test_entrypoint_accepts_explicit_agent_runtime_concurrency(monkeypatch) -> None:
+    monkeypatch.delenv("LCSP_AGENT_RUNTIME_MODE", raising=False)
+    monkeypatch.delenv("LCSP_AGENT_RUNTIME_SERVER_COMMAND", raising=False)
+    monkeypatch.setenv("LCSP_AGENT_RUNTIME_JOBS_PER_WORKER", "12")
+
+    command = entrypoint._agent_server_command()
+
+    assert command[-2:] == ("--n-jobs-per-worker", "12")
+
+
+def test_entrypoint_rejects_invalid_agent_runtime_concurrency(monkeypatch) -> None:
+    monkeypatch.setenv("LCSP_AGENT_RUNTIME_JOBS_PER_WORKER", "0")
+
+    with pytest.raises(RuntimeError, match="between 1 and 64"):
+        entrypoint._agent_runtime_jobs_per_worker()
 
 
 def test_entrypoint_defaults_to_combined_runtime_role(monkeypatch) -> None:
