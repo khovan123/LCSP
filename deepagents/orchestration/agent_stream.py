@@ -49,6 +49,20 @@ PRIVATE_GRAPH_KEYS = frozenset(
     }
 )
 
+NOISY_STREAM_LOGGER_PREFIXES = (
+    "httpx",
+    "httpcore",
+    "urllib3",
+    "pika",
+    "langchain",
+    "langgraph",
+)
+NOISY_STREAM_LOG_MARKERS = (
+    "PIIMiddleware[",
+    "[HIDDEN_PRIVATE_RUNTIME_STATE]",
+    "private_runtime_state",
+)
+
 
 class BufferedAgentStreamEmitter:
     """Deliver stream payloads in-order off the model execution thread."""
@@ -1152,11 +1166,29 @@ def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def _should_forward_stream_log(record: logging.LogRecord) -> bool:
+    """Keep customer-visible runtime logs high signal without hiding failures."""
+    message = record.getMessage()
+    if any(marker in message for marker in NOISY_STREAM_LOG_MARKERS):
+        return False
+    if record.levelno >= logging.WARNING:
+        return True
+    if record.levelno < logging.INFO:
+        return False
+    logger_name = record.name.lower()
+    return not any(
+        logger_name == prefix or logger_name.startswith(f"{prefix}.")
+        for prefix in NOISY_STREAM_LOGGER_PREFIXES
+    )
+
+
 class AgentStreamLogHandler(logging.Handler):
-    """Forward normal Python logs emitted inside an active agent boundary."""
+    """Forward high-signal Python logs emitted inside an active agent boundary."""
 
     def emit(self, record: logging.LogRecord) -> None:
         if active_agent_stream.get() is None or _emitting_stream_event.get():
+            return
+        if not _should_forward_stream_log(record):
             return
         try:
             publish_agent_stream_event(
@@ -1166,7 +1198,11 @@ class AgentStreamLogHandler(logging.Handler):
                     "level": record.levelname,
                     "logger": record.name,
                 },
-                status="RUNNING",
+                status=(
+                    "FAILED"
+                    if record.levelno >= logging.ERROR
+                    else "RUNNING"
+                ),
             )
         except Exception:
             # Logging must never change agent runtime semantics.
