@@ -53,9 +53,16 @@ class WorkerCallbackError(Exception):
     redelivery, so an unbounded loop spends real money and never converges.
     """
 
-    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        error_code: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.status_code = status_code
+        self.error_code = error_code
         self.callback_client_error = (
             status_code is not None and 400 <= status_code < 500
         )
@@ -196,12 +203,24 @@ class WorkerApiClient:
                             "status": "duplicate",
                             "correlationId": cid,
                         }
-                    logger.error(
-                        CallbackLogEvent.CLIENT_ERROR,
-                        path=path,
-                        status_code=resp.status_code,
-                        error_code=error_code,
-                    )
+                    if (
+                        resp.status_code == 404
+                        and error_code == "SCAN_JOB_NOT_FOUND"
+                        and path.endswith("/claim")
+                    ):
+                        logger.info(
+                            "SCAN_JOB_CLAIM_STALE_DELIVERY",
+                            path=path,
+                            status_code=resp.status_code,
+                            error_code=error_code,
+                        )
+                    else:
+                        logger.error(
+                            CallbackLogEvent.CLIENT_ERROR,
+                            path=path,
+                            status_code=resp.status_code,
+                            error_code=error_code,
+                        )
                     message = client_error_message(resp.status_code)
                     if error_code:
                         message = f"{error_code}: {message}"
@@ -228,7 +247,11 @@ class WorkerApiClient:
                             status_code=resp.status_code,
                             meta=meta,
                         )
-                    raise WorkerCallbackError(message, status_code=resp.status_code)
+                    raise WorkerCallbackError(
+                        message,
+                        status_code=resp.status_code,
+                        error_code=error_code,
+                    )
 
                 if resp.status_code >= 500:
                     if attempt < self._max_retries - 1:
@@ -481,11 +504,20 @@ class WorkerApiClient:
                 timeout=3.0,
             )
             if response.status_code >= 400:
+                error_code = self._response_error_code(response)
+                if response.status_code == 404 and error_code == "SCAN_JOB_NOT_FOUND":
+                    logger.info(
+                        "SCAN_TERMINAL_FAILURE_SKIPPED_STALE_JOB",
+                        scan_job_id=scan_job_id,
+                        status_code=response.status_code,
+                        error_code=error_code,
+                    )
+                    return
                 logger.warning(
                     "SCAN_TERMINAL_FAILURE_REJECTED",
                     scan_job_id=scan_job_id,
                     status_code=response.status_code,
-                    error_code=self._response_error_code(response),
+                    error_code=error_code,
                 )
         except Exception as exc:
             logger.warning(
