@@ -730,3 +730,129 @@ test("runtime TOOL_STARTED and TOOL_COMPLETED merge into one completed activity 
     /TOOL_COMPLETED/,
   );
 });
+
+test("retry reset clears previous scanner activities before the replacement run emits events", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+
+  const oldEvents = [
+    event(
+      1,
+      ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeEvent,
+      {
+        runtimeEventType: "TOOL_COMPLETED",
+        stage: "SCAN",
+      },
+      {
+        eventId: "old-event-1",
+        runId: "scan-old",
+        emittedAt: "2026-09-25T00:00:00.000Z",
+        source: "repository_archive_download",
+        toolName: "repository_archive_download",
+        text: "Repository archive downloaded",
+      },
+    ),
+  ];
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={oldEvents}
+        activeRunId="scan-old"
+      />,
+    );
+  });
+  assert.equal(
+    container.querySelectorAll("details[data-stream-activity]").length,
+    1,
+  );
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={oldEvents}
+        activeRunId="scan-old"
+        reset
+      />,
+    );
+  });
+
+  assert.equal(
+    container.querySelectorAll("details[data-stream-activity]").length,
+    0,
+  );
+  assert.doesNotMatch(
+    container.textContent ?? "",
+    /Downloaded repository source|Đã tải source repository/,
+  );
+});
+
+test("replacement scan shows only the new run and never mixes previous scanner activity", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+
+  const mixedEvents = [
+    event(
+      120,
+      ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeEvent,
+      {
+        runtimeEventType: "TOOL_COMPLETED",
+        stage: "SCAN",
+      },
+      {
+        eventId: "old-event-120",
+        runId: "scan-old",
+        emittedAt: "2026-09-25T00:00:00.000Z",
+        source: "repository_archive_download",
+        toolName: "repository_archive_download",
+        text: "Repository archive downloaded",
+      },
+    ),
+    event(
+      1,
+      ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeEvent,
+      {
+        runtimeEventType: "TOOL_STARTED",
+        stage: "SCAN",
+      },
+      {
+        eventId: "retry-event-1",
+        runId: "scan-retry",
+        emittedAt: "2026-09-25T00:01:00.000Z",
+        source: "repository_sandbox_hydration",
+        toolName: "repository_sandbox_hydration",
+        text: "Hydrating repository archive into Docker sandbox",
+      },
+    ),
+  ];
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={mixedEvents}
+        activeRunId="scan-retry"
+      />,
+    );
+  });
+
+  const activities = container.querySelectorAll(
+    "details[data-stream-activity]",
+  );
+  assert.equal(activities.length, 1);
+  assert.match(
+    activities[0]?.textContent ?? "",
+    /Preparing isolated repository workspace|Đang chuẩn bị workspace phân tích cô lập/,
+  );
+  assert.doesNotMatch(
+    container.textContent ?? "",
+    /Downloaded repository source|Đã tải source repository/,
+  );
+  assert.equal(
+    container.querySelectorAll('[data-stream-status="running"]').length,
+    1,
+  );
+});

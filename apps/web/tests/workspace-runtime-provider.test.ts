@@ -802,3 +802,27 @@ function agentStreamHistoryState(
     ...override,
   };
 }
+
+test("agent stream merge orders a newer retry run after an older run even when sequence restarts", () => {
+  const oldRun = {
+    ...agentStreamEvent(120),
+    eventId: "old-run-event",
+    runId: "scan-old",
+    sequence: 120,
+    emittedAt: "2026-09-25T00:00:00.000Z",
+  };
+  const retryRun = {
+    ...agentStreamEvent(1),
+    eventId: "retry-run-event",
+    runId: "scan-retry",
+    sequence: 1,
+    emittedAt: "2026-09-25T00:01:00.000Z",
+  };
+
+  const merged = mergeAgentStreamEvents([oldRun], [retryRun]);
+
+  assert.deepEqual(
+    merged.map((item) => item.eventId),
+    ["old-run-event", "retry-run-event"],
+  );
+});

@@ -596,10 +596,15 @@ function compareAgentStreamEvents(
   left: AssessmentAgentStreamEvent,
   right: AssessmentAgentStreamEvent,
 ) {
-  const sequence = left.sequence - right.sequence;
-  if (sequence !== 0) return sequence;
+  if (left.runId === right.runId) {
+    const sequence = left.sequence - right.sequence;
+    if (sequence !== 0) return sequence;
+  }
   const emittedAt = left.emittedAt.localeCompare(right.emittedAt);
   if (emittedAt !== 0) return emittedAt;
+  if (left.runId !== right.runId) {
+    return left.runId.localeCompare(right.runId);
+  }
   return left.eventId.localeCompare(right.eventId);
 }
 

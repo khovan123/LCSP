@@ -179,6 +179,8 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
         </>
       }
       scanFailed={flow.scanFailed}
+      activeScanRunId={retryScan.data?.scanJobId ?? scanJob?.id ?? null}
+      resetScannerActivity={retryScan.isPending}
       runtimeKey={[
         snapshot?.id,
         scanJob?.id,
@@ -195,12 +197,16 @@ function AssessmentInterviewFlow({
   interviewEnabled,
   scanner,
   scanFailed,
+  activeScanRunId,
+  resetScannerActivity,
   runtimeKey,
 }: {
   assessmentId: string;
   interviewEnabled: boolean;
   scanner: ReactNode;
   scanFailed: boolean;
+  activeScanRunId: string | null;
+  resetScannerActivity: boolean;
   runtimeKey: string;
 }) {
   const workspaceRuntime = useWorkspaceRuntime();
@@ -530,6 +536,8 @@ function AssessmentInterviewFlow({
         {scanner}
         <AgentStreamTimeline
           events={liveTimeline.agentStreamEvents ?? []}
+          activeRunId={interviewEnabled ? null : activeScanRunId}
+          reset={!interviewEnabled && resetScannerActivity}
           history={liveTimeline.agentStreamHistory}
           onLoadOlder={() => {
             void workspaceRuntime.loadMoreAgentStreamHistory(assessmentId);
