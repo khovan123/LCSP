@@ -492,8 +492,12 @@ export class InternalScanController {
         id: scanJobId,
         status: {
           in: [
-            toPrismaRepositoryScanJobStatus(REPOSITORY_SCAN_JOB_STATUSES.queued),
-            toPrismaRepositoryScanJobStatus(REPOSITORY_SCAN_JOB_STATUSES.running),
+            toPrismaRepositoryScanJobStatus(
+              REPOSITORY_SCAN_JOB_STATUSES.queued,
+            ),
+            toPrismaRepositoryScanJobStatus(
+              REPOSITORY_SCAN_JOB_STATUSES.running,
+            ),
           ],
         },
       },
@@ -1440,9 +1444,7 @@ function scanTerminalFailureReasonCode(value: unknown): string {
     : SCAN_ERROR_CODES.repositoryAnalysisFailed;
 }
 
-function scanTerminalFailureStatus(
-  value: unknown,
-): RepositoryScanJobStatus {
+function scanTerminalFailureStatus(value: unknown): RepositoryScanJobStatus {
   return value === REPOSITORY_SCAN_JOB_STATUSES.blocked
     ? REPOSITORY_SCAN_JOB_STATUSES.blocked
     : REPOSITORY_SCAN_JOB_STATUSES.failed;
