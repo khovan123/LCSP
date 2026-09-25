@@ -574,3 +574,159 @@ test("runtime events map to meaningful activities with per-activity technical de
   assert.match(fallbackTechnical, /google_genai/);
   assert.match(fallbackTechnical, /PROVIDER_FALLBACK/);
 });
+
+test("terminal failure stops orphaned running spinners without failing completed fallback activities", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          event(
+            1,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted,
+            {
+              provider: "google_genai",
+              model: "gemini-3.5-flash-lite",
+              timeout_seconds: 30,
+            },
+            {
+              messageId: "model-orphan",
+              toolCallId: null,
+              text: "model call started",
+            },
+          ),
+          event(
+            2,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.providerFallback,
+            {
+              current_provider: "llm7",
+              fallback_provider: "google_genai",
+              fallback_index: 1,
+            },
+            {
+              source: "scan_requested",
+              toolName: null,
+              toolCallId: null,
+              text: "provider fallback attempt",
+            },
+          ),
+          event(
+            3,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed,
+            {
+              boundary: "scan_requested",
+              exception_type: "BillingReservationUnavailable",
+            },
+            {
+              source: "scan_requested",
+              toolName: null,
+              toolCallId: null,
+              status: ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+              text: "Provider invocation group capacity is exhausted",
+            },
+          ),
+        ]}
+      />,
+    );
+  });
+
+  assert.equal(
+    container.querySelectorAll('[data-stream-status="running"]').length,
+    0,
+  );
+
+  const modelRow = container.querySelector('[data-stream-kind="model"]');
+  assert.ok(modelRow);
+  assert.equal(modelRow.getAttribute("data-stream-status"), "failed");
+
+  const fallbackActivity = [...container.querySelectorAll<HTMLElement>(
+    '[data-stream-status="completed"]',
+  )].find((node) =>
+    /backup AI provider|AI provider dự phòng/.test(node.textContent ?? ""),
+  );
+  assert.ok(fallbackActivity);
+
+  const timeline = container.querySelector<HTMLDetailsElement>(
+    'details[data-slot="agent-stream-timeline"]',
+  );
+  assert.ok(timeline);
+  assert.equal(timeline.open, false);
+  assert.match(
+    timeline.querySelector("summary")?.textContent ?? "",
+    /Failed|Thất bại/,
+  );
+});
+
+test("runtime TOOL_STARTED and TOOL_COMPLETED merge into one completed activity even when outer status stays RUNNING", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          event(
+            1,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeEvent,
+            {
+              runtimeEventType: "TOOL_STARTED",
+              stage: "SCAN",
+            },
+            {
+              source: "repository_archive_download",
+              toolName: "repository_archive_download",
+              nodeName: null,
+              text: "Downloading repository archive",
+            },
+          ),
+          event(
+            2,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeEvent,
+            {
+              runtimeEventType: "TOOL_COMPLETED",
+              stage: "SCAN",
+              outputSummary: { bytes: 1234 },
+            },
+            {
+              source: "repository_archive_download",
+              toolName: "repository_archive_download",
+              nodeName: null,
+              text: "Repository archive downloaded",
+              status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+            },
+          ),
+        ]}
+      />,
+    );
+  });
+
+  const activities = container.querySelectorAll(
+    'details[data-stream-activity]',
+  );
+  assert.equal(activities.length, 1);
+
+  const row = container.querySelector('[data-stream-status="completed"]');
+  assert.ok(row);
+  assert.equal(
+    container.querySelectorAll('[data-stream-status="running"]').length,
+    0,
+  );
+  assert.match(
+    row.textContent ?? "",
+    /Downloaded repository source|Đã tải source repository/,
+  );
+  assert.match(
+    row.querySelector("[data-stream-technical-details]")?.textContent ?? "",
+    /TOOL_STARTED/,
+  );
+  assert.match(
+    row.querySelector("[data-stream-technical-details]")?.textContent ?? "",
+    /TOOL_COMPLETED/,
+  );
+});
