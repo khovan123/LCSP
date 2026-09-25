@@ -37,11 +37,18 @@ def test_provider_constructor_kwargs_are_isolated() -> None:
         "use_responses_api": False,
         "timeout": 30.0,
     }
+    assert provider_init_kwargs("inception") == {
+        "base_url": "https://api.inceptionlabs.ai/v1",
+        "temperature": 0.75,
+        "use_responses_api": False,
+        "timeout": 30.0,
+    }
 
     assert provider_client("openai") == "responses_api"
     assert provider_client("anthropic") == "anthropic"
     assert provider_client("googleai") == "google_genai"
     assert provider_client("llm7") == "openai_compatible_chat_completions"
+    assert provider_client("inception") == "openai_compatible_chat_completions"
 
     openai_kwargs = provider_init_kwargs("openai")
     assert openai_kwargs == {
@@ -54,6 +61,9 @@ def test_provider_constructor_kwargs_are_isolated() -> None:
     assert provider_init_kwargs("llm7")["use_responses_api"] is False
     assert "output_version" not in provider_init_kwargs("llm7")
     assert "reasoning" not in provider_init_kwargs("llm7")
+    assert provider_init_kwargs("inception")["use_responses_api"] is False
+    assert "output_version" not in provider_init_kwargs("inception")
+    assert "reasoning" not in provider_init_kwargs("inception")
 
 
 def test_provider_timeout_env_is_applied_to_all_supported_clients(monkeypatch) -> None:
@@ -61,6 +71,7 @@ def test_provider_timeout_env_is_applied_to_all_supported_clients(monkeypatch) -
 
     assert provider_init_kwargs("openai")["timeout"] == 12.5
     assert provider_init_kwargs("llm7")["timeout"] == 12.5
+    assert provider_init_kwargs("inception")["timeout"] == 12.5
     assert provider_init_kwargs("google_genai")["request_timeout"] == 12.5
 
 

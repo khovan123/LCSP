@@ -1,7 +1,7 @@
 "use client";
 
 import { resolveMessage } from "@lcsp/i18n";
-import { useEffect, useRef, type ReactNode, type UIEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
@@ -20,8 +20,6 @@ type ChatRailProps = {
   className?: string;
 };
 
-const AUTO_FOLLOW_THRESHOLD_PX = 80;
-
 export function AssessmentTranscript({
   children,
   autoScrollKey,
@@ -29,35 +27,27 @@ export function AssessmentTranscript({
   className,
 }: AssessmentTranscriptProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const isFollowingLatestRef = useRef(true);
 
-  function handleScroll(event: UIEvent<HTMLDivElement>) {
-    isFollowingLatestRef.current = isNearLatest(event.currentTarget);
-  }
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (autoScrollKey === undefined) {
       return;
     }
-
     const viewport = viewportRef.current;
     if (!viewport) {
       return;
     }
-
-    if (!isFollowingLatestRef.current && !isNearLatest(viewport)) {
-      return;
-    }
-
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    viewport.scrollTo({
-      top: viewport.scrollHeight,
-      behavior: prefersReducedMotion ? "auto" : "smooth",
-    });
+    scrollToLatest(viewport);
   }, [autoScrollKey]);
 
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(() => scrollToLatest(viewport));
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
   return (
     <div
       ref={viewportRef}
@@ -65,13 +55,14 @@ export function AssessmentTranscript({
       role="log"
       aria-live="polite"
       aria-label={ariaLabel}
-      onScroll={handleScroll}
       className={cn(
         "no-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto",
         className,
       )}
     >
-      <ChatRail className="min-h-full gap-4 py-6">{children}</ChatRail>
+      <ChatRail className="min-h-full justify-end gap-4 pt-6 pb-3">
+        {children}
+      </ChatRail>
     </div>
   );
 }
@@ -90,11 +81,11 @@ export function ChatRail({ children, className }: ChatRailProps) {
   );
 }
 
-function isNearLatest(viewport: HTMLDivElement) {
-  return (
-    viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <=
-    AUTO_FOLLOW_THRESHOLD_PX
-  );
+function scrollToLatest(viewport: HTMLDivElement) {
+  viewport.scrollTo({
+    top: viewport.scrollHeight,
+    behavior: "auto",
+  });
 }
 
 function t(key: string) {

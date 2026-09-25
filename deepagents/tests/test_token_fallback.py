@@ -55,11 +55,22 @@ def test_llm7_credentials_are_isolated_from_openai(monkeypatch):
     }
 
 
+def test_inception_credentials_are_isolated_from_openai(monkeypatch):
+    monkeypatch.setenv("INCEPTION_API_KEY", "inception-one,inception-two")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-must-not-be-used")
+
+    assert provider_tokens("inception") == ("inception-one", "inception-two")
+    assert credential_init_kwargs("inception") == {
+        "api_key": "inception-one",
+        "max_retries": 0,
+    }
+
+
 def test_llm7_chat_openai_rotation_preserves_gateway_policy(monkeypatch):
     monkeypatch.setenv("LLM7_API_KEY", "llm7-first,llm7-second")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-must-not-be-used")
     model = ChatOpenAI(
-        model="gemini-3.1-flash-lite",
+        model="codestral-latest",
         base_url="https://api.llm7.io/v1",
         use_responses_api=False,
         **credential_init_kwargs("llm7"),
@@ -80,6 +91,33 @@ def test_llm7_chat_openai_rotation_preserves_gateway_policy(monkeypatch):
     assert fallback.max_retries == 0
 
 
+def test_inception_chat_openai_rotation_preserves_gateway_policy(monkeypatch):
+    monkeypatch.setenv("INCEPTION_API_KEY", "inception-first,inception-second")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-must-not-be-used")
+    model = ChatOpenAI(
+        model="mercury-2.5",
+        base_url="https://api.inceptionlabs.ai/v1",
+        temperature=0.75,
+        use_responses_api=False,
+        **credential_init_kwargs("inception"),
+    )
+    assert model_provider(model) == "inception"
+
+    request = ModelRequest(model=model, messages=[], tools=[])
+    response = ModelResponse(result=[])
+    handler = MagicMock(side_effect=[QuotaError(), response])
+    result = TokenFallbackMiddleware().wrap_model_call(request, handler)
+
+    assert result is response
+    assert handler.call_count == 2
+    fallback = handler.call_args.args[0].model
+    assert fallback.openai_api_key.get_secret_value() == "inception-second"
+    assert str(fallback.openai_api_base).rstrip("/") == "https://api.inceptionlabs.ai/v1"
+    assert fallback.temperature == 0.75
+    assert fallback.use_responses_api is False
+    assert fallback.max_retries == 0
+
+
 @pytest.fixture(autouse=True)
 def clear_dead_credential_slots():
     from middleware import token_fallback
@@ -91,7 +129,7 @@ def clear_dead_credential_slots():
     token_fallback._RATE_LIMITED_UNTIL.clear()
 
 
-@pytest.mark.parametrize("provider", ["openai", "google_genai", "llm7"])
+@pytest.mark.parametrize("provider", ["openai", "google_genai", "llm7", "inception"])
 @pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.asyncio
 async def test_token_fallback_preserves_model_policy(monkeypatch, provider, asynchronous):
@@ -99,6 +137,7 @@ async def test_token_fallback_preserves_model_policy(monkeypatch, provider, asyn
         "openai": "OPENAI_API_KEY",
         "google_genai": "GOOGLE_API_KEY",
         "llm7": "LLM7_API_KEY",
+        "inception": "INCEPTION_API_KEY",
     }[provider]
     monkeypatch.setenv(name, "first-test-token,second-test-token,")
     if provider == "openai":
@@ -110,8 +149,16 @@ async def test_token_fallback_preserves_model_policy(monkeypatch, provider, asyn
         )
     elif provider == "llm7":
         model = ChatOpenAI(
-            model="gemini-3.1-flash-lite",
+            model="codestral-latest",
             base_url="https://api.llm7.io/v1",
+            use_responses_api=False,
+            **credential_init_kwargs(provider),
+        )
+    elif provider == "inception":
+        model = ChatOpenAI(
+            model="mercury-2.5",
+            base_url="https://api.inceptionlabs.ai/v1",
+            temperature=0.75,
             use_responses_api=False,
             **credential_init_kwargs(provider),
         )
@@ -129,7 +176,11 @@ async def test_token_fallback_preserves_model_policy(monkeypatch, provider, asyn
     assert result is response
     assert handler.call_count == 2
     fallback = handler.call_args.args[0].model
-    key = fallback.openai_api_key if provider in {"openai", "llm7"} else fallback.google_api_key
+    key = (
+        fallback.openai_api_key
+        if provider in {"openai", "llm7", "inception"}
+        else fallback.google_api_key
+    )
     assert key.get_secret_value() == "second-test-token"
     assert fallback is not model
     if provider == "openai":
@@ -138,6 +189,12 @@ async def test_token_fallback_preserves_model_policy(monkeypatch, provider, asyn
         assert fallback.root_client is not model.root_client
     elif provider == "llm7":
         assert str(fallback.openai_api_base).rstrip("/") == "https://api.llm7.io/v1"
+        assert fallback.use_responses_api is False
+        assert fallback.max_retries == 0
+        assert fallback.root_client is not model.root_client
+    elif provider == "inception":
+        assert str(fallback.openai_api_base).rstrip("/") == "https://api.inceptionlabs.ai/v1"
+        assert fallback.temperature == 0.75
         assert fallback.use_responses_api is False
         assert fallback.max_retries == 0
         assert fallback.root_client is not model.root_client
@@ -231,7 +288,7 @@ def _gemini_model():
 
 def _llm7_model():
     return ChatOpenAI(
-        model="gemini-3.1-flash-lite",
+        model="codestral-latest",
         base_url="https://api.llm7.io/v1",
         use_responses_api=False,
         **credential_init_kwargs("llm7"),

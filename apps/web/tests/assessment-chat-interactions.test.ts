@@ -93,7 +93,9 @@ Object.defineProperty(testWindow.HTMLElement.prototype, "scrollTo", {
 Object.defineProperty(testWindow.HTMLTextAreaElement.prototype, "scrollHeight", {
   configurable: true,
   get() {
-    return Math.max(1, this.value.split("\n").length) * 20;
+    // jsdom does not lay out Tailwind padding, so model the textarea's vertical
+    // chrome explicitly to keep row-growth assertions aligned with browsers.
+    return Math.max(1, this.value.split("\n").length) * 20 + 32;
   },
 });
 
@@ -322,31 +324,70 @@ test("assessment composer swaps Resume back to Send after typing", async () => {
   assert.equal(sendButton.disabled, false);
 });
 
-test("assessment composer keeps five visible rows before showing resize", async () => {
+test("assessment composer grows from one to three rows before scrolling and offering expand", async () => {
   const { container, rerender } = await renderElement(
     React.createElement(AssessmentComposer, {
-      value: "https://github.com/khovan123/LCSP",
+      value: "One line",
       onValueChange: () => undefined,
       onSubmit: () => undefined,
     }),
   );
   const textarea = getTextarea(container);
 
-  assert.equal(textarea.getAttribute("rows"), "5");
-  const collapsedHeight = textarea.style.height;
-  assert.ok(Number.parseInt(collapsedHeight, 10) >= 100);
+  assert.equal(textarea.getAttribute("rows"), "1");
+  const oneRowHeight = Number.parseInt(textarea.style.height, 10);
+  assert.ok(oneRowHeight > 0);
+  assert.equal(textarea.style.overflowY, "hidden");
   assert.equal(container.querySelector("button[aria-expanded]"), null);
 
   await rerender(
     React.createElement(AssessmentComposer, {
-      value: "Line\n".repeat(6),
+      value: "One\nTwo\nThree",
       onValueChange: () => undefined,
       onSubmit: () => undefined,
     }),
   );
+  const threeRowHeight = Number.parseInt(
+    getTextarea(container).style.height,
+    10,
+  );
+  assert.ok(threeRowHeight > oneRowHeight);
+  assert.equal(getTextarea(container).style.overflowY, "hidden");
+  assert.equal(container.querySelector("button[aria-expanded]"), null);
 
-  assert.equal(getTextarea(container).style.height, collapsedHeight);
-  assert.ok(container.querySelector("button[aria-expanded]"));
+  await rerender(
+    React.createElement(AssessmentComposer, {
+      value: "One\nTwo\nThree\nFour",
+      onValueChange: () => undefined,
+      onSubmit: () => undefined,
+    }),
+  );
+  const collapsed = getTextarea(container);
+  assert.equal(Number.parseInt(collapsed.style.height, 10), threeRowHeight);
+  assert.equal(collapsed.style.overflowY, "auto");
+  const toggle = container.querySelector<HTMLButtonElement>(
+    "button[aria-expanded]",
+  );
+  assert.ok(toggle);
+
+  await click(toggle);
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
+  assert.ok(
+    Number.parseInt(getTextarea(container).style.height, 10) > threeRowHeight,
+  );
+  assert.equal(getTextarea(container).style.overflowY, "hidden");
+
+  await rerender(
+    React.createElement(AssessmentComposer, {
+      value: "Line\n".repeat(30),
+      onValueChange: () => undefined,
+      onSubmit: () => undefined,
+    }),
+  );
+  const expandedHeight = Number.parseInt(getTextarea(container).style.height, 10);
+  assert.ok(expandedHeight > threeRowHeight);
+  assert.ok(expandedHeight <= 352);
+  assert.equal(getTextarea(container).style.overflowY, "auto");
 });
 
 function thinkingEvent(
@@ -574,7 +615,7 @@ test("chat single select keyboard navigation selects and focuses enabled radios"
   assert.equal(testWindow.document.activeElement, getRadios(container)[0]);
 });
 
-test("assessment transcript follows latest output only while reader is near bottom", async () => {
+test("assessment transcript always anchors to the latest streamed output", async () => {
   const { container, rerender } = await renderElement(
     transcriptElement("Initial", 1),
   );
@@ -586,13 +627,14 @@ test("assessment transcript follows latest output only while reader is near bott
   await rerender(transcriptElement("Next", 2));
   assert.equal(scrollCalls.length, 1);
   assert.equal(scrollCalls[0].top, 1000);
-  assert.equal(scrollCalls[0].behavior, "smooth");
+  assert.equal(scrollCalls[0].behavior, "auto");
 
   scrollState.top = 100;
-  transcript.dispatchEvent(new Event("scroll", { bubbles: true }));
   scrollState.height = 1200;
   await rerender(transcriptElement("Later", 3));
-  assert.equal(scrollCalls.length, 1);
+  assert.equal(scrollCalls.length, 2);
+  assert.equal(scrollCalls[1].top, 1200);
+  assert.equal(scrollCalls[1].behavior, "auto");
 });
 
 test("selection history row keeps completed value visible and non-interactive", async () => {

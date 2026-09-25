@@ -15,6 +15,7 @@ from langchain.chat_models import init_chat_model
 from middleware.billing_metering import BillingAgentRoleMiddleware
 from provider_credentials import (
     credential_init_kwargs,
+    inception_base_url,
     llm7_base_url,
     llm_provider_timeout_seconds,
 )
@@ -87,6 +88,7 @@ PROVIDER_CLIENTS = {
     "anthropic": "anthropic",
     "google_genai": "google_genai",
     "llm7": "openai_compatible_chat_completions",
+    "inception": "openai_compatible_chat_completions",
 }
 
 
@@ -126,8 +128,12 @@ PROVIDER_PRESETS = {
         "google_genai:gemini-3.5-flash-lite",
     ),
     "llm7": ProviderPreset(
-        "openai:gemini-3.1-flash-lite",
-        "openai:gemini-3.1-flash-lite",
+        "openai:codestral-latest",
+        "openai:codestral-latest",
+    ),
+    "inception": ProviderPreset(
+        "openai:mercury-2.5",
+        "openai:mercury-2.5",
     ),
 }
 GOOGLE_THINKING_LEVEL = "low"
@@ -335,7 +341,7 @@ def model_init_kwargs_for_agent(*, agent_name: str, model_spec: str) -> dict[str
     normalized = normalize_model_spec(model_spec)
     provider, _, _ = normalized.partition(":")
     route_provider = route_provider_for_model_spec(normalized)
-    if route_provider == "llm7":
+    if route_provider in {"llm7", "inception"}:
         return provider_init_kwargs(route_provider)
     if normalized == "google_genai:gemini-3.5-flash-lite":
         return {
@@ -432,6 +438,13 @@ def provider_init_kwargs(provider: str) -> dict[str, object]:
     if canonical == "llm7":
         return {
             "base_url": llm7_base_url(),
+            "use_responses_api": False,
+            "timeout": llm_provider_timeout_seconds(),
+        }
+    if canonical == "inception":
+        return {
+            "base_url": inception_base_url(),
+            "temperature": 0.75,
             "use_responses_api": False,
             "timeout": llm_provider_timeout_seconds(),
         }

@@ -63,7 +63,12 @@ class LocalAgentRuntime:
         self.graph = create_lcsp_agent(checkpointer=checkpointer)
 
     def close(self) -> None:
-        self._executor.shutdown(wait=False, cancel_futures=True)
+        # Drain in-flight runs before tearing down the checkpointer/runtime.
+        # Using wait=False allowed model/tool threads to keep emitting stream and
+        # billing callbacks after the HTTP process had already begun shutdown,
+        # which produced a cascade of ConnectError warnings and could lose the
+        # terminal activity for an otherwise valid run.
+        self._executor.shutdown(wait=True, cancel_futures=True)
         if self._checkpointer_context is not None:
             self._checkpointer_context.__exit__(None, None, None)
             self._checkpointer_context = None

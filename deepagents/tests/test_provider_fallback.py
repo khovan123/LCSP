@@ -56,7 +56,7 @@ def _openai_model():
 
 def _llm7_model():
     return ChatOpenAI(
-        model="gemini-3.1-flash-lite",
+        model="codestral-latest",
         base_url="https://api.llm7.io/v1",
         use_responses_api=False,
         **credential_init_kwargs("llm7"),
@@ -99,11 +99,13 @@ async def _async_chain(request, raw_handler):
 def test_configured_provider_chain_is_numeric_ordered_aliased_and_deduplicated(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "google-test-token")
     monkeypatch.setenv("LLM7_API_KEY", "llm7-test-token")
+    monkeypatch.setenv("INCEPTION_API_KEY", "inception-test-token")
     monkeypatch.setenv("LLM_FALLBACK_PROVIDER_20", "llm7")
+    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_10", "inception")
     monkeypatch.setenv("LLM_FALLBACK_PROVIDER_2", "gemini")
     monkeypatch.setenv("LLM_FALLBACK_PROVIDER_3", "google_genai")
 
-    assert configured_fallback_providers() == ("google_genai", "llm7")
+    assert configured_fallback_providers() == ("google_genai", "inception", "llm7")
 
 
 def test_terminal_billing_delivery_failure_does_not_enter_provider_fallback(monkeypatch):
@@ -222,6 +224,12 @@ def test_llm7_402_fallback_to_google_settles_single_successful_attempt(monkeypat
 def test_llm7_402_opens_run_scoped_circuit_and_skips_next_primary(monkeypatch):
     import middleware.provider_fallback as fallback_module
 
+    stream_events = []
+    monkeypatch.setattr(
+        fallback_module,
+        "publish_agent_stream_event",
+        lambda event_type, **fields: stream_events.append((event_type, fields)),
+    )
     monkeypatch.setattr(fallback_module, "model_provider", lambda model: model.provider)
     monkeypatch.setattr(
         fallback_module,
@@ -289,6 +297,10 @@ def test_llm7_402_opens_run_scoped_circuit_and_skips_next_primary(monkeypatch):
     assert session.provider_route_disabled("llm7") is True
     assert len(client.claims) == 3
     assert len(client.payloads) == 2
+    assert [event_type for event_type, _ in stream_events] == [
+        "PROVIDER_FALLBACK",
+        "PROVIDER_FALLBACK",
+    ]
 
 
 def test_configured_provider_requires_its_own_credentials(monkeypatch):
