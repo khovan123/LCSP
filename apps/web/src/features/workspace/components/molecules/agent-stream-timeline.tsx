@@ -44,6 +44,7 @@ type StreamRowStatus = "running" | "completed" | "failed" | "neutral";
 
 type ProjectedStreamRow = {
   id: string;
+  runId: string;
   sequence: number;
   label: string;
   detail: string | null;
@@ -64,7 +65,7 @@ export function AgentStreamTimeline({
 }: AgentStreamTimelineProps) {
   const rows = projectStreamRows(events);
   const labels = streamLabels();
-  const hasRunningActivity = streamHasRunningActivity(events);
+  const hasRunningActivity = rows.some((row) => row.status === "running");
   const failed = !hasRunningActivity && streamEndedWithFailure(events);
   const duration = streamDuration(events);
   const showHistoryAction =
@@ -144,6 +145,8 @@ function projectStreamRows(
   const rows: ProjectedStreamRow[] = [];
   const toolRows = new Map<string, ProjectedStreamRow>();
   const modelProgressRows = new Map<string, ProjectedStreamRow>();
+  const runtimeRows = new Map<string, ProjectedStreamRow>();
+  const lifecycleRows = new Map<string, ProjectedStreamRow>();
   const semanticToolIds = new Set<string>();
   const semanticModelOutputIds = new Set<string>();
   const semanticReasoningIds = new Set<string>();
@@ -262,6 +265,56 @@ function projectStreamRows(
       continue;
     }
 
+    const lifecycleProgressKey = lifecycleEventProgressKey(event);
+    if (lifecycleProgressKey) {
+      const existing = lifecycleRows.get(lifecycleProgressKey);
+      if (existing) {
+        const updated = toStreamRow(event);
+        existing.sequence = event.sequence;
+        existing.label = updated.label;
+        existing.detail = updated.detail;
+        existing.meta = updated.meta;
+        existing.failed = updated.failed;
+        existing.status = updated.status;
+        existing.technical = appendTechnicalDetails(
+          existing.technical,
+          updated.technical,
+        );
+        previousMergeKey = null;
+        continue;
+      }
+      const projected = toStreamRow(event);
+      rows.push(projected);
+      lifecycleRows.set(lifecycleProgressKey, projected);
+      previousMergeKey = null;
+      continue;
+    }
+
+    const runtimeProgressKey = runtimeEventProgressKey(event);
+    if (runtimeProgressKey) {
+      const existing = runtimeRows.get(runtimeProgressKey);
+      if (existing) {
+        const updated = toStreamRow(event);
+        existing.sequence = event.sequence;
+        existing.label = updated.label;
+        existing.detail = updated.detail;
+        existing.meta = updated.meta;
+        existing.failed = updated.failed;
+        existing.status = updated.status;
+        existing.technical = appendTechnicalDetails(
+          existing.technical,
+          updated.technical,
+        );
+        previousMergeKey = null;
+        continue;
+      }
+      const projected = toStreamRow(event);
+      rows.push(projected);
+      runtimeRows.set(runtimeProgressKey, projected);
+      previousMergeKey = null;
+      continue;
+    }
+
     const modelProgressKey = modelCallProgressKey(event);
     if (modelProgressKey) {
       const existing = modelProgressRows.get(modelProgressKey);
@@ -302,7 +355,52 @@ function projectStreamRows(
     previousMergeKey = mergeKey;
   }
 
-  return rows;
+  return finalizeProjectedRows(rows, ordered);
+}
+
+function finalizeProjectedRows(
+  rows: ProjectedStreamRow[],
+  events: AssessmentAgentStreamEvent[],
+): ProjectedStreamRow[] {
+  const outcomes = terminalOutcomesByRun(events);
+  return rows.map((row) => {
+    if (row.status !== "running") return row;
+    const outcome = outcomes.get(row.runId);
+    if (!outcome) return row;
+    return {
+      ...row,
+      status: outcome,
+      failed: outcome === "failed",
+      label:
+        outcome === "failed" && row.kind === "model"
+          ? activityCopy("aiAnalysisFailed")
+          : row.label,
+    };
+  });
+}
+
+function terminalOutcomesByRun(
+  events: AssessmentAgentStreamEvent[],
+): Map<string, "completed" | "failed"> {
+  const outcomes = new Map<string, "completed" | "failed">();
+  for (const event of [...events].sort((left, right) => left.sequence - right.sequence)) {
+    const runtimeType = runtimeEventType(event);
+    if (
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentFailed ||
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed ||
+      runtimeType === "RUN_FAILED"
+    ) {
+      outcomes.set(event.runId, "failed");
+      continue;
+    }
+    if (
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted ||
+      runtimeType === "RUN_COMPLETED"
+    ) {
+      outcomes.set(event.runId, "completed");
+    }
+  }
+  return outcomes;
 }
 
 function deltaMergeKey(event: AssessmentAgentStreamEvent): string | null {
@@ -364,22 +462,32 @@ function toStreamRow(event: AssessmentAgentStreamEvent): ProjectedStreamRow {
       return row(event, meaningfulToolActivity(event.toolName, event.data), null, eventMeta(event));
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.log:
       return row(event, activityCopy("runtimeProgress"), null, eventMeta(event));
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeEvent:
-      return row(
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeEvent: {
+      const projected = row(
         event,
         meaningfulRuntimeActivity(event),
         null,
         eventMeta(event),
         event.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
       );
+      projected.status = runtimeEventStatus(event);
+      projected.failed = projected.status === "failed";
+      return projected;
+    }
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.customProgress:
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.graphUpdate:
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.graphState:
       return row(event, activityCopy("analysisProgressUpdated"), null, eventMeta(event));
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.providerFallback:
-      return row(event, activityCopy("providerFallback"), null, eventMeta(event));
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.credentialRotation:
-      return row(event, activityCopy("credentialRotation"), null, eventMeta(event));
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.providerFallback: {
+      const projected = row(event, activityCopy("providerFallback"), null, eventMeta(event));
+      projected.status = "completed";
+      return projected;
+    }
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.credentialRotation: {
+      const projected = row(event, activityCopy("credentialRotation"), null, eventMeta(event));
+      projected.status = "completed";
+      return projected;
+    }
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.scannerActivity:
       return row(event, activityCopy("repositoryEvidenceInspected"), null, eventMeta(event));
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.engineeringRule:
@@ -598,6 +706,7 @@ function row(
 ): ProjectedStreamRow {
   return {
     id: event.eventId,
+    runId: event.runId,
     sequence: event.sequence,
     label,
     detail,
@@ -1088,6 +1197,83 @@ function toolIdentityKey(
   return null;
 }
 
+function lifecycleEventProgressKey(
+  event: AssessmentAgentStreamEvent,
+): string | null {
+  const namespace = event.namespace.join("/");
+  switch (event.eventType) {
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentStarted:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentCompleted:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentFailed:
+      return [
+        "agent",
+        event.runId,
+        event.agentName ?? event.subagentName ?? "agent",
+        namespace,
+      ].join(":");
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed:
+      return [
+        "boundary",
+        event.runId,
+        event.source ?? event.agentName ?? "boundary",
+        namespace,
+      ].join(":");
+    default:
+      return null;
+  }
+}
+
+function runtimeEventType(event: AssessmentAgentStreamEvent): string | null {
+  if (event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeEvent) {
+    return null;
+  }
+  const data = isSummaryRecord(event.data) ? event.data : null;
+  return typeof data?.runtimeEventType === "string"
+    ? data.runtimeEventType.toUpperCase()
+    : null;
+}
+
+function runtimeEventStatus(event: AssessmentAgentStreamEvent): StreamRowStatus {
+  const type = runtimeEventType(event);
+  if (type === "RUN_FAILED" || type === "TOOL_FAILED") return "failed";
+  if (
+    type === "RUN_COMPLETED" ||
+    type === "TOOL_COMPLETED"
+  ) {
+    return "completed";
+  }
+  if (type === "RUN_STARTED" || type === "TOOL_STARTED") return "running";
+  return streamRowStatus(
+    event,
+    event.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+  );
+}
+
+function runtimeEventProgressKey(
+  event: AssessmentAgentStreamEvent,
+): string | null {
+  const type = runtimeEventType(event);
+  if (
+    type !== "RUN_STARTED" &&
+    type !== "RUN_COMPLETED" &&
+    type !== "RUN_FAILED" &&
+    type !== "TOOL_STARTED" &&
+    type !== "TOOL_COMPLETED" &&
+    type !== "TOOL_FAILED"
+  ) {
+    return null;
+  }
+  const data = isSummaryRecord(event.data) ? event.data : null;
+  const stage = typeof data?.stage === "string" ? data.stage : "";
+  return [
+    event.runId,
+    event.toolName ?? event.source ?? event.nodeName ?? "runtime",
+    stage,
+  ].join(":");
+}
+
 function modelCallProgressKey(event: AssessmentAgentStreamEvent): string | null {
   if (
     event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted &&
@@ -1117,80 +1303,13 @@ function reasoningSummaryText(semantic: SemanticRecord): string | null {
   return null;
 }
 
-function streamHasRunningActivity(
-  events: AssessmentAgentStreamEvent[],
-): boolean {
-  const lifecycle = new Map<string, StreamRowStatus>();
-  const ordered = [...events].sort((left, right) => left.sequence - right.sequence);
-
-  for (const event of ordered) {
-    const key = streamLifecycleKey(event);
-    if (!key) continue;
-    lifecycle.set(
-      key,
-      streamRowStatus(
-        event,
-        event.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
-      ),
-    );
-  }
-
-  if (lifecycle.size > 0) {
-    return [...lifecycle.values()].some((status) => status === "running");
-  }
-  return ordered.at(-1)?.status === ASSESSMENT_RUNTIME_RUN_STATUSES.running;
-}
-
 function streamEndedWithFailure(events: AssessmentAgentStreamEvent[]): boolean {
-  const terminal = [...events]
-    .sort((left, right) => left.sequence - right.sequence)
-    .filter(
-      (event) =>
-        event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentCompleted ||
-        event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentFailed ||
-        event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted ||
-        event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed,
-    )
-    .at(-1);
-  if (!terminal) {
-    return events.at(-1)?.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed;
-  }
-  return (
-    terminal.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentFailed ||
-    terminal.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed
-  );
+  const ordered = [...events].sort((left, right) => left.sequence - right.sequence);
+  const latestRunId = ordered.at(-1)?.runId;
+  if (!latestRunId) return false;
+  return terminalOutcomesByRun(ordered).get(latestRunId) === "failed";
 }
 
-function streamLifecycleKey(event: AssessmentAgentStreamEvent): string | null {
-  const namespace = event.namespace.join("/");
-  switch (event.eventType) {
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentStarted:
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentCompleted:
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentFailed:
-      return `agent:${event.runId}:${event.agentName ?? event.subagentName ?? "agent"}:${namespace}`;
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted:
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted:
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed:
-      return `boundary:${event.runId}:${event.source ?? "boundary"}:${namespace}`;
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelRequest:
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelResult:
-      return `model:${event.runId}:${event.messageId ?? event.nodeName ?? namespace}`;
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted:
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallHeartbeat:
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted:
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed:
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout:
-      return `model-call:${modelCallProgressKey(event) ?? event.eventId}`;
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall:
-    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolResult: {
-      const semantic = semanticData(event.data);
-      const identity = toolIdentityKey(event, semantic);
-      return identity ? `tool:${identity}` : null;
-    }
-    default:
-      return null;
-  }
-}
 
 function streamDuration(events: AssessmentAgentStreamEvent[]): string | null {
   const timestamps = events
