@@ -160,17 +160,43 @@ test("semantic agent stream rows render structured tool model and skill fields",
     );
   });
 
-  const text = container.textContent ?? "";
-  assert.match(text, /AI_MODEL_INVOCATION/);
-  assert.match(text, /obs-42/);
-  assert.match(text, /search_nodes, list_observations/);
-  assert.match(text, /artifact:1/);
-  assert.match(text, /output:final/);
-  assert.match(text, /stop/);
-  assert.match(text, /output_tokens/);
-  assert.match(text, /sha256:abc123/);
-  assert.match(text, /prompt\/v1/);
-  assert.match(text, /\[REDACTED\]/);
+  const activities = container.querySelectorAll<HTMLDetailsElement>(
+    "details[data-stream-activity]",
+  );
+  assert.equal(activities.length, 4);
+
+  const toolSummary = activities[0]?.querySelector("summary")?.textContent ?? "";
+  assert.match(
+    toolSummary,
+    /Searched repository source|Đã tìm kiếm trong source repository/,
+  );
+  assert.doesNotMatch(toolSummary, /search_nodes|AI_MODEL_INVOCATION|obs-42/);
+
+  const technical = activities[0]?.querySelector(
+    "[data-stream-technical-details]",
+  )?.textContent ?? "";
+  assert.match(technical, /search_nodes/);
+  assert.match(technical, /AI_MODEL_INVOCATION/);
+  assert.match(technical, /obs-42/);
+  assert.match(technical, /\[REDACTED\]/);
+
+  const modelRequestTechnical = activities[1]?.querySelector(
+    "[data-stream-technical-details]",
+  )?.textContent ?? "";
+  assert.match(modelRequestTechnical, /list_observations/);
+  assert.match(modelRequestTechnical, /artifact:1/);
+
+  const modelResultTechnical = activities[2]?.querySelector(
+    "[data-stream-technical-details]",
+  )?.textContent ?? "";
+  assert.match(modelResultTechnical, /output:final/);
+  assert.match(modelResultTechnical, /output_tokens/);
+
+  const skillTechnical = activities[3]?.querySelector(
+    "[data-stream-technical-details]",
+  )?.textContent ?? "";
+  assert.match(skillTechnical, /sha256:abc123/);
+  assert.match(skillTechnical, /prompt\/v1/);
 });
 
 test("model call events render provider progress and terminal failures", async () => {
@@ -225,17 +251,33 @@ test("model call events render provider progress and terminal failures", async (
     );
   });
 
-  const text = container.textContent ?? "";
-  assert.match(text, /gemini-3\.5-flash-lite/);
-  assert.doesNotMatch(text, /model call started/);
-  assert.doesNotMatch(text, /model call waiting/);
-  assert.match(text, /model call timed out/);
-  assert.match(text, /provider: google_genai/);
-  assert.match(text, /elapsed seconds: 30/);
-  assert.match(text, /timeout seconds: 30/);
   const modelRows = container.querySelectorAll('[data-stream-kind="model"]');
   assert.equal(modelRows.length, 1);
   assert.equal(modelRows[0]?.getAttribute("data-stream-status"), "failed");
+
+  const activity = modelRows[0]?.querySelector<HTMLDetailsElement>(
+    "details[data-stream-activity]",
+  );
+  assert.ok(activity);
+  assert.equal(activity.open, false);
+
+  const summary = activity.querySelector("summary")?.textContent ?? "";
+  assert.match(
+    summary,
+    /AI provider could not complete this analysis step|AI provider không thể hoàn tất bước phân tích này/,
+  );
+  assert.doesNotMatch(summary, /google_genai|gemini|model call|timeout_seconds/);
+
+  const technical =
+    activity.querySelector("[data-stream-technical-details]")?.textContent ?? "";
+  assert.match(technical, /gemini-3\.5-flash-lite/);
+  assert.match(technical, /google_genai/);
+  assert.match(technical, /MODEL_CALL_STARTED/);
+  assert.match(technical, /MODEL_CALL_HEARTBEAT/);
+  assert.match(technical, /MODEL_CALL_TIMEOUT/);
+  assert.match(technical, /model call timed out/);
+  assert.match(technical, /elapsed_seconds/);
+  assert.match(technical, /timeout_seconds/);
 });
 
 
@@ -278,9 +320,28 @@ test("tool calls pair input and output into one expandable activity row", async 
   const toolRows = container.querySelectorAll('[data-stream-kind="tool"]');
   assert.equal(toolRows.length, 1);
   assert.equal(toolRows[0]?.getAttribute("data-stream-status"), "completed");
-  assert.match(toolRows[0]?.textContent ?? "", /billing/);
-  assert.match(toolRows[0]?.textContent ?? "", /count/);
-  assert.equal(toolRows[0]?.querySelectorAll("details").length, 2);
+
+  const activity = toolRows[0]?.querySelector<HTMLDetailsElement>(
+    "details[data-stream-activity]",
+  );
+  assert.ok(activity);
+  assert.equal(activity.open, false);
+  assert.equal(toolRows[0]?.querySelectorAll("details").length, 1);
+
+  const summary = activity.querySelector("summary")?.textContent ?? "";
+  assert.match(
+    summary,
+    /Searched repository source|Đã tìm kiếm trong source repository/,
+  );
+  assert.doesNotMatch(summary, /billing|count|search_nodes/);
+
+  const technical =
+    activity.querySelector("[data-stream-technical-details]")?.textContent ?? "";
+  assert.match(technical, /billing/);
+  assert.match(technical, /count/);
+  assert.match(technical, /call-1/);
+  assert.match(technical, /SEMANTIC_TOOL_CALL/);
+  assert.match(technical, /SEMANTIC_TOOL_RESULT/);
 });
 
 test("private graph state and PII middleware noise are not rendered", async () => {
@@ -384,4 +445,132 @@ test("thinking header closes after the matching agent lifecycle completes", asyn
   assert.equal(timeline.open, false);
   assert.match(timeline.textContent ?? "", /3s/);
   assert.doesNotMatch(timeline.textContent ?? "", /Đang suy nghĩ|Thinking/i);
+});
+
+test("runtime events map to meaningful activities with per-activity technical details", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          event(
+            1,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeEvent,
+            {
+              runtimeEventType: "RUN_STARTED",
+              stage: "SCAN",
+              inputSummary: {
+                boundaryName: "scan_requested",
+                timeoutSeconds: 1800,
+                attempt: 1,
+              },
+            },
+            {
+              source: "agent_runtime",
+              toolName: "agent_runtime",
+              nodeName: null,
+              text: "Agent Runtime claimed repository scan job",
+            },
+          ),
+          event(
+            2,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeEvent,
+            {
+              runtimeEventType: "TOOL_STARTED",
+              stage: "SCAN",
+              outputSummary: {
+                runId: "01a0-test",
+                schedulerState: "pending",
+              },
+            },
+            {
+              source: "langgraph_run",
+              toolName: "langgraph_run",
+              nodeName: null,
+              text: "LangGraph repository run queued",
+            },
+          ),
+          event(
+            3,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeEvent,
+            {
+              runtimeEventType: "TOOL_STARTED",
+              stage: "SCAN",
+            },
+            {
+              source: "repository_archive_download",
+              toolName: "repository_archive_download",
+              nodeName: null,
+              text: "Downloading repository archive",
+            },
+          ),
+          event(
+            4,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.providerFallback,
+            {
+              current_provider: "llm7",
+              fallback_provider: "google_genai",
+              fallback_index: 1,
+            },
+            {
+              source: "scan_requested",
+              toolName: null,
+              nodeName: null,
+              text: "provider fallback attempt",
+            },
+          ),
+        ]}
+      />,
+    );
+  });
+
+  const activities = container.querySelectorAll<HTMLDetailsElement>(
+    "details[data-stream-activity]",
+  );
+  assert.equal(activities.length, 4);
+
+  const summaries = [...activities].map(
+    (activity) => activity.querySelector("summary")?.textContent ?? "",
+  );
+  assert.match(
+    summaries[0] ?? "",
+    /Started repository scan|Bắt đầu quét repository/,
+  );
+  assert.match(
+    summaries[1] ?? "",
+    /Queued repository analysis|Đã xếp hàng phân tích repository/,
+  );
+  assert.match(
+    summaries[2] ?? "",
+    /Downloading repository source|Đang tải source repository/,
+  );
+  assert.match(
+    summaries[3] ?? "",
+    /Switched to a backup AI provider|Đã chuyển sang AI provider dự phòng/,
+  );
+
+  for (const summary of summaries) {
+    assert.doesNotMatch(
+      summary,
+      /runtimeEventType|langgraph_run|agent_runtime|scan_requested|current_provider|fallback_provider/,
+    );
+  }
+
+  const firstTechnical =
+    activities[0]?.querySelector("[data-stream-technical-details]")?.textContent ??
+    "";
+  assert.match(firstTechnical, /RUN_STARTED/);
+  assert.match(firstTechnical, /scan_requested/);
+  assert.match(firstTechnical, /run-1/);
+
+  const fallbackTechnical =
+    activities[3]?.querySelector("[data-stream-technical-details]")?.textContent ??
+    "";
+  assert.match(fallbackTechnical, /llm7/);
+  assert.match(fallbackTechnical, /google_genai/);
+  assert.match(fallbackTechnical, /PROVIDER_FALLBACK/);
 });
