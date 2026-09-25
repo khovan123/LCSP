@@ -40,6 +40,9 @@ _IDEMPOTENT_CONFLICT_CODES = {
     "PROFILE_ALREADY_EXISTS",
     "RESULT_ALREADY_EXISTS",
 }
+_NON_RETRYABLE_PROVISIONING_ERROR_CODES = frozenset({
+    "BILLING_PRICING_UNAVAILABLE",
+})
 _PRIVACY_FLAG_KEYS = {
     "containsSourceCode",
     "secretsRedacted",
@@ -257,12 +260,26 @@ class WorkerApiClient:
                     )
 
                 if resp.status_code >= 500:
+                    error_code = self._response_error_code(resp)
+                    if error_code in _NON_RETRYABLE_PROVISIONING_ERROR_CODES:
+                        logger.error(
+                            CallbackLogEvent.SERVER_ERROR_TERMINAL,
+                            path=path,
+                            status_code=resp.status_code,
+                            error_code=error_code,
+                        )
+                        raise WorkerCallbackError(
+                            f"{error_code}: {server_error_message(1, resp.status_code)}",
+                            status_code=resp.status_code,
+                            error_code=error_code,
+                        )
                     if attempt < self._max_retries - 1:
                         backoff = 2**attempt
                         logger.warning(
                             CallbackLogEvent.SERVER_ERROR_RETRYING,
                             path=path,
                             status_code=resp.status_code,
+                            error_code=error_code,
                             attempt=attempt + 1,
                             sleep=backoff,
                         )
@@ -272,6 +289,7 @@ class WorkerApiClient:
                         CallbackLogEvent.SERVER_ERROR_TERMINAL,
                         path=path,
                         status_code=resp.status_code,
+                        error_code=error_code,
                     )
                     raise WorkerCallbackError(
                         server_error_message(self._max_retries, resp.status_code)

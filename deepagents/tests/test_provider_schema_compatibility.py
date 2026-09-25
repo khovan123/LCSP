@@ -1,7 +1,11 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from langchain.agents.structured_output import ProviderStrategy, ToolStrategy
+from langchain.agents.structured_output import (
+    AutoStrategy,
+    ProviderStrategy,
+    ToolStrategy,
+)
 from langchain_core.tools import StructuredTool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
@@ -150,6 +154,63 @@ def test_gemini_tool_strategy_switches_to_native_provider_strategy() -> None:
     )
 
 
+def test_gemini_auto_strategy_switches_to_native_provider_strategy() -> None:
+    middleware = ProviderSchemaCompatibilityMiddleware()
+    request = _request(_gemini(), AutoStrategy(InvestigatorResult))
+    handler = MagicMock()
+
+    middleware.wrap_model_call(request, handler)
+
+    forwarded = handler.call_args.args[0].response_format
+    assert isinstance(forwarded, ProviderStrategy)
+    assert forwarded.schema == relax_array_upper_bounds(
+        InvestigatorResult.model_json_schema()
+    )
+
+
+def test_gemini_auto_strategy_switches_to_provider_strategy_without_schema_relaxation() -> None:
+    class MinimalResult(BaseModel):
+        status: str
+
+    canonical_schema = MinimalResult.model_json_schema()
+    middleware = ProviderSchemaCompatibilityMiddleware()
+    request = _request(_gemini(), AutoStrategy(MinimalResult))
+    handler = MagicMock()
+
+    middleware.wrap_model_call(request, handler)
+
+    forwarded = handler.call_args.args[0].response_format
+    assert isinstance(forwarded, ProviderStrategy)
+    assert forwarded.schema == canonical_schema
+
+
+def test_gemini_provider_strategy_without_schema_relaxation_is_preserved() -> None:
+    class MinimalResult(BaseModel):
+        status: str
+
+    response_format = ProviderStrategy(MinimalResult)
+    middleware = ProviderSchemaCompatibilityMiddleware()
+    request = _request(_gemini(), response_format)
+    handler = MagicMock()
+
+    middleware.wrap_model_call(request, handler)
+
+    assert handler.call_args.args[0].response_format is response_format
+
+
+def test_provider_facing_gemini_schema_does_not_mutate_canonical_schema() -> None:
+    canonical_schema = InvestigatorResult.model_json_schema()
+    middleware = ProviderSchemaCompatibilityMiddleware()
+    request = _request(_gemini(), AutoStrategy(InvestigatorResult))
+    handler = MagicMock()
+
+    middleware.wrap_model_call(request, handler)
+
+    forwarded = handler.call_args.args[0].response_format
+    assert isinstance(forwarded, ProviderStrategy)
+    assert InvestigatorResult.model_json_schema() == canonical_schema
+
+
 def test_gemini_tool_schema_strips_unsupported_additional_properties() -> None:
     class SearchInput(BaseModel):
         model_config = ConfigDict(extra="forbid")
@@ -196,7 +257,7 @@ def test_openai_requests_are_forwarded_untouched() -> None:
     assert request.override.call_count == 0
 
 
-def test_a_schema_without_array_upper_bounds_still_disables_gemini_afc() -> None:
+def test_raw_schema_without_array_upper_bounds_still_disables_gemini_afc() -> None:
     middleware = ProviderSchemaCompatibilityMiddleware()
     request = _request(_gemini(), {"type": "object", "properties": {"status": {"type": "string"}}})
     handler = MagicMock()

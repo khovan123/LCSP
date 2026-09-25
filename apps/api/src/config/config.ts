@@ -35,6 +35,24 @@ function findWorkspaceRoot(startDir: string): string {
 
 const SMTP_MAILBOX_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 const SMTP_DISPLAY_NAME_PATTERN = /^([^<>]+)<\s*([^<>]+)\s*>$/;
+const DEFAULT_ROOT_MODEL_SPEC = "openai:gpt-5-nano";
+const PROVIDER_ALIASES = {
+  google: "google_genai",
+  google_ai: "google_genai",
+  googleai: "google_genai",
+  gemini: "google_genai",
+} as const;
+const PROVIDER_PRESET_RUNTIME_MODELS = {
+  openai: { provider: "OPENAI", model: "gpt-5-nano" },
+  google_genai: { provider: "GOOGLE_GENAI", model: "gemini-3.5-flash-lite" },
+  llm7: { provider: "LLM7", model: "codestral-latest" },
+  inception: { provider: "INCEPTION", model: "mercury-2.5" },
+} as const;
+
+type RuntimeModelIdentity = {
+  provider: string;
+  model: string;
+};
 
 function paymentQrTemplateSchema() {
   return Joi.string()
@@ -79,6 +97,129 @@ function isValidSmtpFrom(value: string): boolean {
   return (
     displayName.trim().length > 0 && SMTP_MAILBOX_PATTERN.test(mailbox.trim())
   );
+}
+
+function canonicalModelProvider(value: string): string {
+  const provider = value.trim().toLowerCase().replaceAll("-", "_");
+  return (
+    PROVIDER_ALIASES[provider as keyof typeof PROVIDER_ALIASES] ?? provider
+  );
+}
+
+function runtimeIdentityForProvider(
+  provider: string,
+): RuntimeModelIdentity | null {
+  const canonical = canonicalModelProvider(provider);
+  return (
+    PROVIDER_PRESET_RUNTIME_MODELS[
+      canonical as keyof typeof PROVIDER_PRESET_RUNTIME_MODELS
+    ] ?? null
+  );
+}
+
+function runtimeIdentityForModelSpec(
+  spec: string,
+): RuntimeModelIdentity | null {
+  const [provider, ...modelParts] = spec.trim().split(":");
+  const model = modelParts.join(":").trim();
+  if (!provider?.trim() || !model) return null;
+  const canonical = canonicalModelProvider(provider);
+  return { provider: canonical.toUpperCase(), model };
+}
+
+function primaryRuntimeIdentity(
+  env: Record<string, unknown>,
+): RuntimeModelIdentity | null {
+  const selectedProvider = String(env.LCSP_MODEL_PROVIDER ?? "").trim();
+  if (selectedProvider) return runtimeIdentityForProvider(selectedProvider);
+  return runtimeIdentityForModelSpec(
+    String(env.LCSP_ROOT_AGENT_MODEL ?? DEFAULT_ROOT_MODEL_SPEC),
+  );
+}
+
+function fallbackRuntimeIdentities(
+  env: Record<string, unknown>,
+): RuntimeModelIdentity[] | null {
+  const indexed: Array<[number, RuntimeModelIdentity]> = [];
+  for (const [key, rawValue] of Object.entries(env)) {
+    const match = /^LLM_FALLBACK_PROVIDER_(\d+)$/u.exec(key);
+    if (!match) continue;
+    const provider = String(rawValue ?? "").trim();
+    if (!provider) continue;
+    const identity = runtimeIdentityForProvider(provider);
+    if (!identity) return null;
+    indexed.push([Number(match[1]), identity]);
+  }
+  const seen = new Set<string>();
+  return indexed
+    .sort(([left], [right]) => left - right)
+    .flatMap(([, identity]) => {
+      const key = `${identity.provider}:${identity.model}`;
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [identity];
+    });
+}
+
+function parseBillingAuthorizedRuntimeModels(
+  value: unknown,
+): RuntimeModelIdentity[] | null {
+  const text = String(value ?? "").trim();
+  if (!text) return [];
+  const models: RuntimeModelIdentity[] = [];
+  for (const entry of text.split(",")) {
+    const [provider, ...modelParts] = entry.trim().split(":");
+    const model = modelParts.join(":").trim();
+    if (!provider?.trim() || !model) return null;
+    models.push({ provider: provider.trim().toUpperCase(), model });
+  }
+  return models;
+}
+
+function containsRuntimeIdentity(
+  models: readonly RuntimeModelIdentity[],
+  identity: RuntimeModelIdentity,
+): boolean {
+  return models.some(
+    (candidate) =>
+      candidate.provider === identity.provider &&
+      candidate.model === identity.model,
+  );
+}
+
+function billingRuntimePolicyMatches(
+  env: Record<string, unknown>,
+):
+  | "ok"
+  | "invalidRuntime"
+  | "invalidAuthorizedModels"
+  | "primaryMismatch"
+  | "missingAuthorizedRuntime" {
+  if (env.BILLING_METERING_ENABLED !== true) return "ok";
+  const primary = primaryRuntimeIdentity(env);
+  const fallbacks = fallbackRuntimeIdentities(env);
+  if (!primary || !fallbacks) return "invalidRuntime";
+  const authorized = parseBillingAuthorizedRuntimeModels(
+    env.BILLING_AUTHORIZED_RUNTIME_MODELS,
+  );
+  if (!authorized) return "invalidAuthorizedModels";
+  const billingPrimary = {
+    provider: String(env.BILLING_RUNTIME_PROVIDER ?? "")
+      .trim()
+      .toUpperCase(),
+    model: String(env.BILLING_RUNTIME_MODEL ?? "").trim(),
+  };
+  if (
+    billingPrimary.provider !== primary.provider ||
+    billingPrimary.model !== primary.model
+  )
+    return "primaryMismatch";
+  const required = [primary, ...fallbacks];
+  return required.every((identity) =>
+    containsRuntimeIdentity(authorized, identity),
+  )
+    ? "ok"
+    : "missingAuthorizedRuntime";
 }
 
 export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
@@ -371,6 +512,10 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
       ) {
         return helpers.error("credentialKek.archiveRetrieval");
       }
+      const billingRuntimeStatus = billingRuntimePolicyMatches(env);
+      if (billingRuntimeStatus !== "ok") {
+        return helpers.error(`billingRuntime.${billingRuntimeStatus}`);
+      }
       if (env.GITHUB_CLI_CREDENTIAL_PERSISTENCE_ENABLED !== true) return env;
       const activeVersion = env.GITHUB_CLI_CREDENTIAL_KEK_ACTIVE_VERSION;
       const encodedKeyring = env.GITHUB_CLI_CREDENTIAL_KEK_KEYRING;
@@ -396,6 +541,14 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
         "GitHub CLI snapshot pinning requires credential persistence",
       "credentialKek.archiveRetrieval":
         "GitHub CLI archive retrieval requires credential persistence and snapshot pinning",
+      "billingRuntime.invalidRuntime":
+        "Billing runtime policy must use a supported LCSP model provider",
+      "billingRuntime.invalidAuthorizedModels":
+        "BILLING_AUTHORIZED_RUNTIME_MODELS must use PROVIDER:model entries",
+      "billingRuntime.primaryMismatch":
+        "BILLING_RUNTIME_PROVIDER/BILLING_RUNTIME_MODEL must match the effective LCSP primary runtime model",
+      "billingRuntime.missingAuthorizedRuntime":
+        "BILLING_AUTHORIZED_RUNTIME_MODELS must include the effective LCSP primary and fallback runtime models",
       "string.paymentQrTemplate":
         '"BILLING_SEPAY_QR_URL_TEMPLATE" must include {amountVnd} and {paymentCode} placeholders',
     });

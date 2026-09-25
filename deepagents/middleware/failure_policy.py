@@ -15,6 +15,11 @@ _PROVIDER_CAPACITY_CODES = frozenset(
         "rate_limit_exceeded",
     }
 )
+_PROVIDER_ROUTE_INCOMPATIBILITY_CODES = frozenset(
+    {
+        "upstream_unprocessable_request",
+    }
+)
 
 
 class TerminalCredentialError(RuntimeError):
@@ -75,6 +80,14 @@ def is_provider_capacity_failure(error: BaseException) -> bool:
     if error_status(error) in _PROVIDER_CAPACITY_STATUSES:
         return True
     return bool(_error_codes(error) & _PROVIDER_CAPACITY_CODES)
+
+
+def is_provider_route_incompatibility(error: BaseException) -> bool:
+    """Return whether an external provider route rejected a valid agent turn shape."""
+    return (
+        error_status(error) == 422
+        and bool(_error_codes(error) & _PROVIDER_ROUTE_INCOMPATIBILITY_CODES)
+    )
 
 
 def is_terminal_task_error(error: BaseException) -> bool:

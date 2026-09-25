@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from hashlib import sha256
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.structured_output import StructuredOutputError
@@ -36,6 +37,11 @@ _MAX_RATE_LIMIT_COOLDOWN_SECONDS = 120.0
 _DEAD_CREDENTIAL_SLOTS: dict[tuple[str, str], set[int]] = {}
 _RATE_LIMITED_UNTIL: dict[tuple[str, str], dict[int, float]] = {}
 _monotonic = time.monotonic
+
+
+def _credential_fingerprint(token: str) -> str:
+    """Return a non-secret stable identifier for one configured credential slot."""
+    return sha256(token.encode("utf-8")).hexdigest()[:12]
 
 
 def _error_status(error: BaseException) -> int | None:
@@ -184,12 +190,21 @@ class TokenFallbackMiddleware(AgentMiddleware):
     def _rate_limited_slots(self, provider: str, env_name: str) -> dict[int, float]:
         return _RATE_LIMITED_UNTIL.setdefault((provider, env_name), {})
 
-    def _log_fallback_attempt(self, *, provider: str, env_name: str, index: int, reason: str) -> None:
+    def _log_fallback_attempt(
+        self,
+        *,
+        provider: str,
+        env_name: str,
+        index: int,
+        fingerprint: str,
+        reason: str,
+    ) -> None:
         logger.warning(
             "MODEL_CREDENTIAL_FALLBACK_ATTEMPT",
             provider=provider,
             credential_source=env_name,
             credential_slot=index,
+            credential_fingerprint=fingerprint,
             fallback_enabled=True,
             reason=reason,
         )
@@ -201,16 +216,26 @@ class TokenFallbackMiddleware(AgentMiddleware):
                 "provider": provider,
                 "credential_source": env_name,
                 "credential_slot": index,
+                "credential_fingerprint": fingerprint,
                 "reason": reason,
             },
         )
 
-    def _log_dead_slot(self, *, provider: str, env_name: str, index: int, status: int | None) -> None:
+    def _log_dead_slot(
+        self,
+        *,
+        provider: str,
+        env_name: str,
+        index: int,
+        fingerprint: str,
+        status: int | None,
+    ) -> None:
         logger.warning(
             "MODEL_CREDENTIAL_FALLBACK_SLOT_DEAD",
             provider=provider,
             credential_source=env_name,
             credential_slot=index,
+            credential_fingerprint=fingerprint,
             fallback_enabled=True,
             status_code=status,
         )
@@ -222,28 +247,44 @@ class TokenFallbackMiddleware(AgentMiddleware):
                 "provider": provider,
                 "credential_source": env_name,
                 "credential_slot": index,
+                "credential_fingerprint": fingerprint,
                 "status_code": status,
             },
         )
 
-    def _log_skip_dead_slot(self, *, provider: str, env_name: str, index: int) -> None:
+    def _log_skip_dead_slot(
+        self,
+        *,
+        provider: str,
+        env_name: str,
+        index: int,
+        fingerprint: str,
+    ) -> None:
         logger.warning(
             "MODEL_CREDENTIAL_FALLBACK_SLOT_SKIPPED",
             provider=provider,
             credential_source=env_name,
             credential_slot=index,
+            credential_fingerprint=fingerprint,
             fallback_enabled=True,
             reason="previous_auth_failure",
         )
 
     def _log_rate_limited_slot(
-        self, *, provider: str, env_name: str, index: int, cooldown_seconds: float
+        self,
+        *,
+        provider: str,
+        env_name: str,
+        index: int,
+        fingerprint: str,
+        cooldown_seconds: float,
     ) -> None:
         logger.warning(
             "MODEL_CREDENTIAL_FALLBACK_SLOT_RATE_LIMITED",
             provider=provider,
             credential_source=env_name,
             credential_slot=index,
+            credential_fingerprint=fingerprint,
             fallback_enabled=True,
             cooldown_seconds=cooldown_seconds,
         )
@@ -255,21 +296,39 @@ class TokenFallbackMiddleware(AgentMiddleware):
                 "provider": provider,
                 "credential_source": env_name,
                 "credential_slot": index,
+                "credential_fingerprint": fingerprint,
                 "cooldown_seconds": cooldown_seconds,
             },
         )
 
-    def _mark_dead(self, *, provider: str, env_name: str, index: int, error: BaseException) -> None:
+    def _mark_dead(
+        self,
+        *,
+        provider: str,
+        env_name: str,
+        index: int,
+        token: str,
+        error: BaseException,
+    ) -> None:
         self._dead_slots(provider, env_name).add(index)
         self._rate_limited_slots(provider, env_name).pop(index, None)
         self._log_dead_slot(
             provider=provider,
             env_name=env_name,
             index=index,
+            fingerprint=_credential_fingerprint(token),
             status=_error_status(error),
         )
 
-    def _mark_rate_limited(self, *, provider: str, env_name: str, index: int, error: BaseException) -> None:
+    def _mark_rate_limited(
+        self,
+        *,
+        provider: str,
+        env_name: str,
+        index: int,
+        token: str,
+        error: BaseException,
+    ) -> None:
         retry_after = _retry_after_seconds(error)
         cooldown = min(
             retry_after if retry_after is not None else _DEFAULT_RATE_LIMIT_COOLDOWN_SECONDS,
@@ -280,6 +339,7 @@ class TokenFallbackMiddleware(AgentMiddleware):
             provider=provider,
             env_name=env_name,
             index=index,
+            fingerprint=_credential_fingerprint(token),
             cooldown_seconds=cooldown,
         )
 
@@ -294,7 +354,12 @@ class TokenFallbackMiddleware(AgentMiddleware):
         cooled: list[int] = []
         for index in range(len(tokens)):
             if index in dead:
-                self._log_skip_dead_slot(provider=provider, env_name=env_name, index=index)
+                self._log_skip_dead_slot(
+                    provider=provider,
+                    env_name=env_name,
+                    index=index,
+                    fingerprint=_credential_fingerprint(tokens[index]),
+                )
                 continue
             if cooling.get(index, 0.0) > now:
                 cooled.append(index)
@@ -303,13 +368,33 @@ class TokenFallbackMiddleware(AgentMiddleware):
                 healthy.append(index)
         return healthy + sorted(cooled, key=lambda index: cooling[index])
 
-    def _record_failure(self, *, provider: str, env_name: str, index: int, error: BaseException) -> bool:
+    def _record_failure(
+        self,
+        *,
+        provider: str,
+        env_name: str,
+        index: int,
+        token: str,
+        error: BaseException,
+    ) -> bool:
         """Record slot health for a failed attempt; return whether rotation may continue."""
         if _is_auth_failure(error):
-            self._mark_dead(provider=provider, env_name=env_name, index=index, error=error)
+            self._mark_dead(
+                provider=provider,
+                env_name=env_name,
+                index=index,
+                token=token,
+                error=error,
+            )
             return True
         if _is_rate_limited(error):
-            self._mark_rate_limited(provider=provider, env_name=env_name, index=index, error=error)
+            self._mark_rate_limited(
+                provider=provider,
+                env_name=env_name,
+                index=index,
+                token=token,
+                error=error,
+            )
             return True
         return credential_failure(error)
 
@@ -324,11 +409,23 @@ class TokenFallbackMiddleware(AgentMiddleware):
             self._attempt_order(provider=provider, env_name=env_name, tokens=tokens)
         ):
             if attempt:
-                self._log_fallback_attempt(provider=provider, env_name=env_name, index=index, reason="previous_slot_failure")
+                self._log_fallback_attempt(
+                    provider=provider,
+                    env_name=env_name,
+                    index=index,
+                    fingerprint=_credential_fingerprint(tokens[index]),
+                    reason="previous_slot_failure",
+                )
             try:
                 response = handler(self._candidate_request(request, provider, tokens[index], index))
             except Exception as error:
-                if not self._record_failure(provider=provider, env_name=env_name, index=index, error=error):
+                if not self._record_failure(
+                    provider=provider,
+                    env_name=env_name,
+                    index=index,
+                    token=tokens[index],
+                    error=error,
+                ):
                     raise
                 first_error = first_error or error
                 continue
@@ -342,11 +439,23 @@ class TokenFallbackMiddleware(AgentMiddleware):
             self._attempt_order(provider=provider, env_name=env_name, tokens=tokens)
         ):
             if attempt:
-                self._log_fallback_attempt(provider=provider, env_name=env_name, index=index, reason="previous_slot_failure")
+                self._log_fallback_attempt(
+                    provider=provider,
+                    env_name=env_name,
+                    index=index,
+                    fingerprint=_credential_fingerprint(tokens[index]),
+                    reason="previous_slot_failure",
+                )
             try:
                 response = await handler(self._candidate_request(request, provider, tokens[index], index))
             except Exception as error:
-                if not self._record_failure(provider=provider, env_name=env_name, index=index, error=error):
+                if not self._record_failure(
+                    provider=provider,
+                    env_name=env_name,
+                    index=index,
+                    token=tokens[index],
+                    error=error,
+                ):
                     raise
                 first_error = first_error or error
                 continue

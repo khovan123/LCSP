@@ -1,3 +1,4 @@
+from hashlib import sha256
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -299,6 +300,10 @@ def _api_key(request_call) -> str:
     return request_call.args[0].model.google_api_key.get_secret_value()
 
 
+def _fingerprint(token: str) -> str:
+    return sha256(token.encode("utf-8")).hexdigest()[:12]
+
+
 def test_primary_auth_failure_marks_primary_dead_and_is_not_retried_on_later_calls(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "primary-test-token,secondary-test-token")
     model = _gemini_model()
@@ -423,6 +428,8 @@ def test_retry_after_header_sets_bounded_cooldown(monkeypatch):
     from middleware import token_fallback
 
     monkeypatch.setattr(token_fallback, "_monotonic", lambda: 50.0)
+    logger = _FakeLogger()
+    monkeypatch.setattr(token_fallback, "logger", logger)
 
     class RetryAfterQuotaError(QuotaError):
         def __init__(self, retry_after: str):
@@ -438,6 +445,19 @@ def test_retry_after_header_sets_bounded_cooldown(monkeypatch):
         0: 57.0,
         1: 50.0 + token_fallback._MAX_RATE_LIMIT_COOLDOWN_SECONDS,
     }
+    rate_limited_events = [
+        item
+        for item in logger.events
+        if item[0] == "MODEL_CREDENTIAL_FALLBACK_SLOT_RATE_LIMITED"
+    ]
+    assert rate_limited_events[0][1]["credential_fingerprint"] == _fingerprint(
+        "first-test-token"
+    )
+    assert rate_limited_events[1][1]["credential_fingerprint"] == _fingerprint(
+        "second-test-token"
+    )
+    assert "first-test-token" not in str(logger.events)
+    assert "second-test-token" not in str(logger.events)
 
 
 def test_outer_model_retry_does_not_resend_auth_failures(monkeypatch):
@@ -519,6 +539,9 @@ def test_fallback_auth_failure_marks_dead_and_continues_to_next_token(monkeypatc
     assert dead_events[0][1]["provider"] == "google_genai"
     assert dead_events[0][1]["credential_source"] == "GEMINI_API_KEY"
     assert dead_events[0][1]["credential_slot"] == 1
+    assert dead_events[0][1]["credential_fingerprint"] == _fingerprint(
+        "dead-test-token"
+    )
     assert "dead-test-token" not in str(logger.events)
     assert "working-test-token" not in str(logger.events)
 
@@ -551,6 +574,10 @@ def test_dead_fallback_token_is_skipped_on_later_rotation(monkeypatch):
     assert fallback_model.google_api_key.get_secret_value() == "working-test-token"
     skipped = [item for item in logger.events if item[0] == "MODEL_CREDENTIAL_FALLBACK_SLOT_SKIPPED"]
     assert skipped[-1][1]["credential_slot"] == 1
+    assert skipped[-1][1]["credential_fingerprint"] == _fingerprint(
+        "dead-test-token"
+    )
+    assert "dead-test-token" not in str(logger.events)
 
 
 def test_outer_model_retry_does_not_restart_exhausted_tokens(monkeypatch):
