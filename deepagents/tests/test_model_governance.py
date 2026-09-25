@@ -135,6 +135,27 @@ def test_schema_repair_message_stops_before_next_model_call():
     assert handler.call_count == 1
 
 
+def test_provider_strategy_bypasses_schema_repair_tool_check():
+    from langchain.agents.structured_output import ProviderStrategy
+    from langchain_core.messages import ToolMessage
+    from pydantic import BaseModel
+    from middleware.model_governance import StopSchemaRepairMiddleware
+
+    class Answer(BaseModel):
+        count: int
+
+    response = ModelResponse(result=[ToolMessage(
+        content="native provider strategy should not synthesize repair tools",
+        tool_call_id="one",
+        name="Answer",
+    )])
+    request = MagicMock(response_format=ProviderStrategy(Answer))
+    handler = MagicMock(return_value=response)
+
+    assert StopSchemaRepairMiddleware().wrap_model_call(request, handler) is response
+    assert handler.call_count == 1
+
+
 @pytest.mark.parametrize("invalid_tool", [False, True])
 def test_agent_stops_after_one_malformed_model_response(invalid_tool):
     from langchain.agents import create_agent

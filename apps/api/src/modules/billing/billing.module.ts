@@ -43,6 +43,7 @@ import {
   BILLING_USAGE_KERNEL,
   BillingUsageKernel,
 } from "./application/shared/billing-usage.kernel.js";
+import { BillingPricingPreflightService } from "./application/shared/billing-pricing-preflight.service.js";
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import {
     },
     BillingAccountingKernel,
     BillingPaymentKernel,
+    BillingPricingPreflightService,
     {
       provide: BILLING_USAGE_KERNEL,
       useClass: BillingUsageKernel,

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import time
 
 import pytest
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from middleware.billing_metering import (
     BillingReservationUnavailable,
@@ -197,6 +198,76 @@ def test_model_call_telemetry_emits_heartbeat_and_completion(monkeypatch):
     assert started["data"]["model"] == "gemini-test"
     assert started["data"]["timeout_seconds"] == 30.0
     assert len(client.payloads) == 1
+
+
+def test_model_request_diagnostic_logs_shape_without_prompt_or_tool_content(monkeypatch):
+    import middleware.billing_metering as billing_module
+
+    events = []
+
+    class Logger:
+        def info(self, event, **fields):
+            events.append((event, fields))
+
+    monkeypatch.setattr(billing_module, "logger", Logger())
+    client = FakeClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-diagnostic",
+        run_id="run-diagnostic",
+        reservation_id="reservation-diagnostic",
+        agent_role="investigator",
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="llm7", model_name="codestral-latest"),
+        messages=[
+            HumanMessage(content="private prompt must not be logged"),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "ls",
+                        "args": {"path": "/workspace/repository"},
+                        "id": "call_sensitive_tool_id",
+                    }
+                ],
+            ),
+            ToolMessage(
+                content="private tool result must not be logged",
+                tool_call_id="call_sensitive_tool_id",
+                name="ls",
+            ),
+        ],
+        tools=[SimpleNamespace(name="ls")],
+        tool_choice={"type": "function", "name": "ls"},
+        parallel_tool_calls=True,
+    )
+
+    with activate_billing_metering(session):
+        BillingMeteringMiddleware().wrap_model_call(request, lambda _: response())
+
+    event, fields = next(
+        item for item in events if item[0] == "MODEL_REQUEST_DIAGNOSTIC"
+    )
+    assert event == "MODEL_REQUEST_DIAGNOSTIC"
+    assert fields["provider"] == "llm7"
+    assert fields["model"] == "codestral-latest"
+    assert fields["message_roles"] == ["user", "assistant(tool_calls)", "tool"]
+    assert fields["tool_count"] == 1
+    assert fields["tool_result_count"] == 1
+    assert fields["tool_call_id_shapes"] == [
+        {
+            "length": len("call_sensitive_tool_id"),
+            "has_call_prefix": True,
+            "contains_whitespace": False,
+        }
+    ]
+    assert fields["tool_choice"] is None
+    serialized = str(fields)
+    assert "private prompt" not in serialized
+    assert "private tool result" not in serialized
+    assert "call_sensitive_tool_id" not in serialized
+    assert "/workspace/repository" not in serialized
 
 
 def test_model_call_timeout_event_emits_without_settling_usage(monkeypatch):

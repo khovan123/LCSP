@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock
+
+import pytest
+from deepagents.backends import LocalShellBackend
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from pydantic import Field
 
 from tools.common.capabilities.evidence.repository_analysis import analyzer
 from tools.common.capabilities.evidence.repository_analysis.analyzer import (
@@ -139,3 +147,168 @@ def test_repository_deep_analyzer_allows_more_than_two_model_calls(
     assert "ModelCallLimitMiddleware" not in middleware_names
     assert simulated_model_calls == 3
     assert result.summary == "Repository inspected after extended analysis"
+
+
+def test_repository_deep_analyzer_revalidates_structured_response_contract(
+    monkeypatch,
+) -> None:
+    fake_agent = object()
+    fake_backend = MagicMock()
+
+    monkeypatch.setattr(analyzer, "configure_lcsp_harness", lambda: None)
+    monkeypatch.setattr(
+        analyzer,
+        "resolve_agent_model",
+        lambda *, agent_name, model_spec: "fake-model",
+    )
+    monkeypatch.setattr(
+        analyzer,
+        "create_deep_agent",
+        lambda **_kwargs: fake_agent,
+    )
+    monkeypatch.setattr(
+        analyzer,
+        "invoke_with_stream",
+        lambda *_args, **_kwargs: {
+            "structured_response": {
+                "summary": "Invalid repository result",
+                "coverage_state": "READY",
+                "coverage_notes": [],
+                "languages": [],
+                "frameworks": [],
+                "source_anchors": [],
+                "nodes": [],
+                "edges": [],
+                "unresolved_frontiers": ["not allowed for absent closure"],
+                "ai_discovery": {
+                    "gate": "AI_ABSENT_CONFIRMED",
+                    "coverage_state": "READY",
+                    "findings": [],
+                    "material_unresolved_frontiers": [],
+                },
+            }
+        },
+    )
+
+    with pytest.raises(Exception, match="AI_ABSENT_CONFIRMED"):
+        RepositoryDeepAnalyzer()._invoke(
+            fake_backend,
+            snapshot_id="snapshot-1",
+            commit_sha="abc1234",
+            scan_job_id="scan-invalid",
+            targeted_scope=None,
+        )
+
+
+def test_repository_deep_analyzer_create_deep_agent_smoke_uses_gemini_native_output(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """Exercise the managed repository analyzer graph through a tool turn and final result."""
+
+    class FakeGeminiModel(BaseChatModel):
+        calls: int = 0
+        seen_bind_kwargs: list[dict[str, object]] = Field(default_factory=list)
+        __module__ = "langchain_google_genai.chat_models"
+
+        @property
+        def _llm_type(self) -> str:
+            return "fake-gemini"
+
+        def bind_tools(self, tools, **kwargs):
+            self.seen_bind_kwargs.append(dict(kwargs))
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                message = AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "ls",
+                            "args": {"path": "/"},
+                            "id": "call_ls_1",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            else:
+                message = AIMessage(content=json.dumps(_valid_repository_result()))
+            return ChatResult(generations=[ChatGeneration(message=message)])
+
+    FakeGeminiModel.model_rebuild()
+    model = FakeGeminiModel()
+    monkeypatch.setattr(analyzer, "configure_lcsp_harness", lambda: None)
+    monkeypatch.setattr(
+        analyzer,
+        "resolve_agent_model",
+        lambda *, agent_name, model_spec: model,
+    )
+    (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
+
+    result = RepositoryDeepAnalyzer()._invoke(
+        LocalShellBackend(tmp_path, inherit_env=False, timeout=5),
+        snapshot_id="snapshot-smoke",
+        commit_sha="abc1234",
+        scan_job_id="scan-smoke",
+        targeted_scope=None,
+    )
+
+    assert result.summary == "Tiny repository inspected through managed Deep Agent graph"
+    assert result.ai_discovery.gate == "AI_UNKNOWN"
+    assert model.calls == 2
+    response_formats = [
+        kwargs.get("response_format")
+        for kwargs in model.seen_bind_kwargs
+        if kwargs.get("response_format") is not None
+    ]
+    assert response_formats
+    assert all(item["type"] == "json_schema" for item in response_formats)
+    assert all(
+        "additionalProperties" not in json.dumps(item)
+        for item in response_formats
+    )
+    assert all(
+        kwargs.get("automatic_function_calling") == {"disable": True}
+        for kwargs in model.seen_bind_kwargs
+    )
+
+
+def _valid_repository_result() -> dict[str, object]:
+    return {
+        "summary": "Tiny repository inspected through managed Deep Agent graph",
+        "coverage_state": "PARTIAL",
+        "coverage_notes": ["bounded local smoke"],
+        "languages": ["Python"],
+        "frameworks": [],
+        "source_anchors": [
+            {
+                "anchor_id": "a1",
+                "file_path": "app.py",
+                "start_line": 1,
+                "end_line": 1,
+                "symbol_ref": "app",
+            }
+        ],
+        "nodes": [
+            {
+                "node_id": "n1",
+                "node_type": "MODULE",
+                "label": "app.py",
+                "semantic_types": ["python_module"],
+                "anchor_id": "a1",
+                "resolution_state": "OBSERVED",
+            }
+        ],
+        "edges": [],
+        "unresolved_frontiers": ["bounded local smoke did not run exhaustive scan"],
+        "ai_discovery": {
+            "gate": "AI_UNKNOWN",
+            "coverage_state": "PARTIAL",
+            "findings": [],
+            "material_unresolved_frontiers": [
+                "bounded local smoke did not run exhaustive scan"
+            ],
+        },
+    }

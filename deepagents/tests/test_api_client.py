@@ -14,6 +14,7 @@ from tools.common.capabilities.platform.callback_schemas import (
     ScanCallbackPayload,
     CallbackResponse,
     AIUsageFlowCallbackPayload,
+    BillingReservationPayload,
     ConflictDetectionCallbackPayload,
     TechnicalProfileCallbackPayload,
 )
@@ -137,6 +138,47 @@ def test_t02_5xx_response(client, dummy_payload):
 
         assert "server error 503" in str(exc_info.value)
         assert mock_post.call_count == 3
+
+
+def test_billing_pricing_unavailable_is_not_hot_retried(client):
+    """Missing pricing catalog rows are provisioning errors, not transient API outages."""
+    payload = BillingReservationPayload(
+        assessmentId="assessment-1",
+        runId="run-1",
+        amountCredits="8000",
+        maxChargeCredits="500",
+        provider="LLM7",
+        model="codestral-latest",
+        maxInputTokens="65536",
+        maxInputBytes="262144",
+        maxOutputTokens="4096",
+        maxReasoningTokens="0",
+        maxInvocations="16",
+        authorizedModels=[
+            {"provider": "LLM7", "model": "codestral-latest"},
+            {"provider": "GOOGLE_GENAI", "model": "gemini-3.5-flash-lite"},
+        ],
+        idempotencyKey="billing-reservation-assessment-1",
+    )
+    response = httpx.Response(
+        503,
+        json={
+            "ok": False,
+            "problem": {"code": "BILLING_PRICING_UNAVAILABLE"},
+        },
+    )
+
+    with patch(
+        "tools.common.capabilities.platform.api_client.httpx.post",
+        return_value=response,
+    ) as mock_post:
+        with pytest.raises(WorkerCallbackError) as exc_info:
+            client.reserve_billing_credits(payload)
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.error_code == "BILLING_PRICING_UNAVAILABLE"
+    assert "BILLING_PRICING_UNAVAILABLE" in str(exc_info.value)
+    assert mock_post.call_count == 1
 
 
 def test_t03_422_response(client, dummy_payload):

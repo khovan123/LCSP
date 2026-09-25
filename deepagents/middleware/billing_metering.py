@@ -30,9 +30,11 @@ from tools.common.capabilities.platform.api_client import (
     WorkerCallbackError,
 )
 from tools.common.capabilities.platform.callback_schemas import SettledUsagePayload
+from tools.common.capabilities.platform.logging import get_logger
 
 
 _MODEL_CALL_HEARTBEAT_SECONDS = 10.0
+logger = get_logger(__name__)
 
 
 class BillingUsageUnavailable(RuntimeError):
@@ -498,6 +500,66 @@ class _ModelCallTelemetry:
         self._context.run(publish_agent_stream_event, event_type, **fields)
 
 
+def _message_role_shape(message: Any) -> str:
+    role = (
+        getattr(message, "role", None)
+        or getattr(message, "type", None)
+        or type(message).__name__
+    )
+    normalized = {
+        "ai": "assistant",
+        "human": "user",
+    }.get(str(role), str(role))
+    tool_calls = getattr(message, "tool_calls", None)
+    if normalized == "assistant" and isinstance(tool_calls, list) and tool_calls:
+        return "assistant(tool_calls)"
+    return normalized
+
+
+def _tool_call_id_shape(value: Any) -> dict[str, Any]:
+    text = str(value or "")
+    return {
+        "length": len(text),
+        "has_call_prefix": text.startswith("call_"),
+        "contains_whitespace": any(character.isspace() for character in text),
+    }
+
+
+def _safe_scalar(value: Any) -> Any:
+    return value if isinstance(value, (str, int, float, bool)) or value is None else None
+
+
+def _request_shape_diagnostic(request: Any, model: Any) -> dict[str, Any]:
+    provider, model_name = provider_identity(model)
+    messages = getattr(request, "messages", None)
+    message_list = messages if isinstance(messages, list) else []
+    tools = getattr(request, "tools", None)
+    tool_list = tools if isinstance(tools, list) else []
+    tool_messages = [
+        message
+        for message in message_list
+        if _message_role_shape(message) == "tool"
+    ]
+    tool_call_id_shapes = [
+        _tool_call_id_shape(getattr(message, "tool_call_id", None))
+        for message in tool_messages
+    ]
+    return {
+        "provider": provider.lower(),
+        "model": model_name,
+        "message_count": len(message_list),
+        "message_roles": [_message_role_shape(message) for message in message_list],
+        "tool_count": len(tool_list),
+        "tool_result_count": len(tool_messages),
+        "tool_call_id_shapes": tool_call_id_shapes,
+        "response_format_type": type(getattr(request, "response_format", None)).__name__,
+        "tool_choice": _safe_scalar(getattr(request, "tool_choice", None)),
+        "tool_choice_type": type(getattr(request, "tool_choice", None)).__name__,
+        "parallel_tool_calls": getattr(request, "parallel_tool_calls", None),
+        "stream": getattr(model, "streaming", getattr(model, "stream", None)),
+    }
+
+
 def _is_timeout_error(error: BaseException) -> bool:
     seen: set[int] = set()
     current: BaseException | None = error
@@ -540,6 +602,10 @@ class BillingMeteringMiddleware(AgentMiddleware):
         # returns a RunnableBinding that no longer exposes provider identity.
         billing_model = request.model
         session.assert_model_identity(billing_model)
+        logger.info(
+            "MODEL_REQUEST_DIAGNOSTIC",
+            **_request_shape_diagnostic(request, billing_model),
+        )
         session.claim_provider_invocation(invocation_id)
         if hasattr(request, "override"):
             request = request.override(model=session.bounded_model(billing_model))
@@ -567,6 +633,10 @@ class BillingMeteringMiddleware(AgentMiddleware):
         invocation_id = session.new_invocation_id()
         billing_model = request.model
         session.assert_model_identity(billing_model)
+        logger.info(
+            "MODEL_REQUEST_DIAGNOSTIC",
+            **_request_shape_diagnostic(request, billing_model),
+        )
         session.claim_provider_invocation(invocation_id)
         if hasattr(request, "override"):
             request = request.override(model=session.bounded_model(billing_model))

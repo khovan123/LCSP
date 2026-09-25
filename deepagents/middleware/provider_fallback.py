@@ -13,6 +13,7 @@ from middleware.failure_policy import (
     error_status,
     is_auth_failure,
     is_provider_capacity_failure,
+    is_provider_route_incompatibility,
     is_terminal_task_error,
 )
 from orchestration.agent_stream import publish_agent_stream_event
@@ -75,6 +76,8 @@ def provider_fallback_failure(error: BaseException) -> bool:
     """Return whether a provider-level route may be attempted for this failure."""
     if _contains_terminal_credential_error(error):
         return True
+    if is_provider_route_incompatibility(error):
+        return True
     if is_terminal_task_error(error):
         return False
     return (
@@ -86,7 +89,10 @@ def provider_fallback_failure(error: BaseException) -> bool:
 
 def provider_circuit_breaker_failure(error: BaseException) -> bool:
     """Return whether this provider route should stay disabled for the active run."""
-    return error_status(error) in _PERMANENT_PROVIDER_ROUTE_STATUSES
+    return (
+        error_status(error) in _PERMANENT_PROVIDER_ROUTE_STATUSES
+        or is_provider_route_incompatibility(error)
+    )
 
 
 def _provider_route_disabled(provider: str | None) -> bool:

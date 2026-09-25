@@ -3,12 +3,18 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from langchain.agents.middleware import ModelRequest, ModelResponse
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 
-from middleware.failure_policy import TerminalCredentialError
+from middleware.failure_policy import (
+    TerminalCredentialError,
+    is_provider_route_incompatibility,
+)
 from middleware.provider_fallback import (
     ProviderFallbackMiddleware,
     configured_fallback_providers,
+    provider_circuit_breaker_failure,
+    provider_fallback_failure,
 )
 from middleware.billing_metering import (
     BillingMeteringMiddleware,
@@ -30,6 +36,23 @@ class CapacityError(Exception):
 
 class AuthError(Exception):
     status_code = 401
+
+
+class UpstreamUnprocessableError(Exception):
+    status_code = 422
+    code = "upstream_unprocessable_request"
+    type = "upstream_unprocessable_request"
+    body = {
+        "error": {
+            "code": "upstream_unprocessable_request",
+            "type": "upstream_unprocessable_request",
+        }
+    }
+
+
+class LocalValidationError(Exception):
+    status_code = 422
+    code = "VALIDATION_FAILED"
 
 
 @pytest.fixture(autouse=True)
@@ -64,19 +87,23 @@ def _llm7_model():
 
 
 class _BillingModel:
-    def __init__(self, provider: str):
+    def __init__(self, provider: str, model_name: str = "gpt-5-nano"):
         self.provider = provider
-        self.model_name = "gpt-5-nano"
+        self.model_name = model_name
 
 
 class _BillingRequest:
-    def __init__(self, model):
+    def __init__(self, model, *, messages=None, tools=None):
         self.model = model
-        self.messages = []
-        self.tools = []
+        self.messages = list(messages or [])
+        self.tools = list(tools or [])
 
     def override(self, **kwargs):
-        return _BillingRequest(kwargs.get("model", self.model))
+        return _BillingRequest(
+            kwargs.get("model", self.model),
+            messages=self.messages,
+            tools=self.tools,
+        )
 
 
 def _sync_chain(request, raw_handler):
@@ -301,6 +328,146 @@ def test_llm7_402_opens_run_scoped_circuit_and_skips_next_primary(monkeypatch):
         "PROVIDER_FALLBACK",
         "PROVIDER_FALLBACK",
     ]
+
+
+def test_llm7_upstream_unprocessable_fallback_preserves_tool_continuation_and_opens_circuit(monkeypatch):
+    import middleware.provider_fallback as fallback_module
+
+    stream_events = []
+    monkeypatch.setattr(
+        fallback_module,
+        "publish_agent_stream_event",
+        lambda event_type, **fields: stream_events.append((event_type, fields)),
+    )
+    monkeypatch.setattr(fallback_module, "model_provider", lambda model: model.provider)
+    monkeypatch.setattr(
+        fallback_module,
+        "configured_fallback_providers",
+        lambda: ("google_genai",),
+    )
+    monkeypatch.setattr(
+        fallback_module,
+        "fallback_model",
+        lambda provider: _BillingModel(provider, "gemini-3.5-flash-lite"),
+    )
+
+    class BillingClient:
+        def __init__(self):
+            self.claims = []
+            self.payloads = []
+
+        def claim_billing_invocation(self, reservation_id, payload):
+            self.claims.append((reservation_id, payload.invocationId))
+
+        def post_settled_usage(self, payload):
+            self.payloads.append(payload)
+
+    client = BillingClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-tools",
+        run_id="run-tools",
+        reservation_id="reservation-tools",
+        agent_role="investigator",
+        reserved_provider="LLM7",
+        reserved_model="codestral-latest",
+        authorized_models={
+            ("LLM7", "codestral-latest"),
+            ("GOOGLE_GENAI", "gemini-3.5-flash-lite"),
+        },
+        max_invocations=16,
+    )
+    messages = [
+        HumanMessage(content="inspect the repository"),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "ls",
+                    "args": {"path": "/workspace/repository"},
+                    "id": "call_repository_ls",
+                }
+            ],
+        ),
+        ToolMessage(
+            content='{"entries":["src"]}',
+            tool_call_id="call_repository_ls",
+            name="ls",
+        ),
+    ]
+    request = _BillingRequest(
+        _BillingModel("llm7", "codestral-latest"),
+        messages=messages,
+    )
+    provider_calls = []
+
+    def provider_handler(next_request):
+        provider_calls.append((next_request.model.provider, next_request.messages))
+        if next_request.model.provider == "llm7":
+            raise UpstreamUnprocessableError("upstream provider could not process the request")
+        return ModelResponse(
+            result=[],
+            structured_response={
+                "summary": "Gemini completed the same repository conversation"
+            },
+        )
+
+    fallback = ProviderFallbackMiddleware()
+    billing = BillingMeteringMiddleware()
+
+    with activate_billing_metering(session):
+        first_response = fallback.wrap_model_call(
+            request,
+            lambda next_request: billing.wrap_model_call(
+                next_request,
+                provider_handler,
+            ),
+        )
+        assert isinstance(first_response, ModelResponse)
+        assert first_response.structured_response == {
+            "summary": "Gemini completed the same repository conversation"
+        }
+        second_response = fallback.wrap_model_call(
+            request,
+            lambda next_request: billing.wrap_model_call(
+                next_request,
+                provider_handler,
+            ),
+        )
+        assert isinstance(second_response, ModelResponse)
+
+    assert provider_calls == [
+        ("llm7", messages),
+        ("google_genai", messages),
+        ("google_genai", messages),
+    ]
+    assert session.provider_route_disabled("llm7") is True
+    assert len(client.claims) == 3
+    assert len(client.payloads) == 2
+    assert [payload.provider for payload in client.payloads] == [
+        "GOOGLE_GENAI",
+        "GOOGLE_GENAI",
+    ]
+    assert [event_type for event_type, _ in stream_events] == [
+        "PROVIDER_FALLBACK",
+        "PROVIDER_FALLBACK",
+    ]
+
+
+def test_provider_route_incompatibility_is_fallback_before_generic_422_terminal():
+    error = UpstreamUnprocessableError("upstream provider could not process the request")
+
+    assert is_provider_route_incompatibility(error)
+    assert provider_fallback_failure(error)
+    assert provider_circuit_breaker_failure(error)
+
+
+def test_local_validation_422_remains_terminal_without_provider_fallback():
+    error = LocalValidationError("callback payload invalid")
+
+    assert not is_provider_route_incompatibility(error)
+    assert not provider_fallback_failure(error)
+    assert not provider_circuit_breaker_failure(error)
 
 
 def test_configured_provider_requires_its_own_credentials(monkeypatch):
