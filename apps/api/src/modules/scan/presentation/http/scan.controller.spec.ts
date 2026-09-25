@@ -234,11 +234,9 @@ describe("InternalScanController", () => {
     const updateMany = jest
       .fn<(args: unknown) => Promise<{ count: number }>>()
       .mockResolvedValue({ count: 1 });
-    const findUnique = jest
-      .fn<() => Promise<unknown>>()
-      .mockResolvedValue({
-        status: PrismaRepositoryScanJobStatus.FAILED,
-      });
+    const findUnique = jest.fn<() => Promise<unknown>>().mockResolvedValue({
+      status: PrismaRepositoryScanJobStatus.FAILED,
+    });
     const controller = new InternalScanController(
       {} as unknown as CommandBus,
       { recordRepositoryAnalysisEvent } as never,
