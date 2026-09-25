@@ -4,11 +4,13 @@ from __future__ import annotations
 import os
 
 LLM7_DEFAULT_BASE_URL = "https://api.llm7.io/v1"
+INCEPTION_DEFAULT_BASE_URL = "https://api.inceptionlabs.ai/v1"
 
 PROVIDER_KEY_ENV = {
     "openai": ("OPENAI_API_KEY",),
     "google_genai": ("GOOGLE_API_KEY", "GEMINI_API_KEY"),
     "llm7": ("LLM7_API_KEY",),
+    "inception": ("INCEPTION_API_KEY",),
 }
 # SDK value that disables SDK-internal retries when credential rotation owns retries.
 # langchain_google_genai maps max_retries to HttpRetryOptions(attempts=...): 0 means
@@ -17,6 +19,7 @@ NO_SDK_RETRY_MAX_RETRIES = {
     "openai": 0,
     "google_genai": 1,
     "llm7": 0,
+    "inception": 0,
 }
 
 
@@ -36,6 +39,12 @@ def llm7_base_url() -> str:
     """Return the configured LLM7 OpenAI-compatible endpoint."""
     configured = (os.getenv("LLM7_BASE_URL") or "").strip()
     return (configured or LLM7_DEFAULT_BASE_URL).rstrip("/")
+
+
+def inception_base_url() -> str:
+    """Return the configured Inception Labs OpenAI-compatible endpoint."""
+    configured = (os.getenv("INCEPTION_BASE_URL") or "").strip()
+    return (configured or INCEPTION_DEFAULT_BASE_URL).rstrip("/")
 
 
 def provider_token_source(provider: str) -> tuple[str, tuple[str, ...]] | None:

@@ -408,16 +408,11 @@ def _emit_billing_callback_warning(
     reservation_id: str,
     invocation_id: str | None,
 ) -> None:
-    publish_agent_stream_event(
-        "BILLING_CALLBACK_RECOVERY_QUEUED",
-        status="WAITING",
-        text="billing callback queued for recovery",
-        data={
-            "callback_kind": callback_kind,
-            "reservation_id": reservation_id,
-            **({"invocation_id": invocation_id} if invocation_id else {}),
-        },
-    )
+    # Recovery is an internal durability concern, not a customer-visible activity.
+    # The durable recovery row remains the source of truth. Emitting a bespoke stream
+    # event here previously violated the shared agent-stream contract and produced
+    # HTTP 400 responses in otherwise healthy scan runs.
+    del callback_kind, reservation_id, invocation_id
 
 
 class _ModelCallTelemetry:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware
+from langchain.agents.structured_output import ProviderStrategy, ToolStrategy
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel
 
@@ -80,9 +81,20 @@ def _json_schema_of(schema: Any) -> dict[str, Any] | None:
 
 
 def _rebuild_response_format(output_format: Any, relaxed: dict[str, Any]) -> Any:
-    """Rebuild the same structured-output strategy around the relaxed JSON schema."""
+    """Build the provider-facing structured-output strategy for the relaxed schema.
+
+    LangChain re-adds the original structured-output tools when a ToolStrategy reaches
+    the final model binding step. That bypasses request.tools overrides and reintroduces
+    unsupported keys such as ``additionalProperties`` into Gemini function schemas.
+    Gemini supports native JSON-schema output, so switch only Gemini-facing
+    ToolStrategy requests to ProviderStrategy after relaxation.
+    """
     if isinstance(output_format, (dict, type)):
         return relaxed
+    if isinstance(output_format, ToolStrategy):
+        return ProviderStrategy(relaxed)
+    if isinstance(output_format, ProviderStrategy):
+        return ProviderStrategy(relaxed)
     return type(output_format)(relaxed)
 
 

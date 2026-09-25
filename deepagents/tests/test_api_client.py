@@ -271,6 +271,68 @@ def test_scan_runtime_event_failure_does_not_fail_scan(client):
         mock_post.assert_called_once()
 
 
+def test_agent_stream_network_failure_opens_short_best_effort_backoff(client, monkeypatch):
+    """A dead API must not create one ConnectError per streamed token/tool event."""
+    from tools.common.capabilities.platform import api_client as api_client_module
+
+    clock = {"now": 100.0}
+    monkeypatch.setattr(api_client_module.time, "monotonic", lambda: clock["now"])
+    payload = {
+        "assessment_id": "assessment-1",
+        "run_id": "run-1",
+        "event_type": "MODEL_REQUEST",
+        "client_sequence": 1,
+    }
+
+    with patch(
+        "tools.common.capabilities.platform.api_client.httpx.post",
+        side_effect=httpx.ConnectError("api unavailable"),
+    ) as mock_post:
+        client.post_agent_stream_event(payload)
+        client.post_agent_stream_event({**payload, "client_sequence": 2})
+        assert mock_post.call_count == 1
+
+        clock["now"] += api_client_module._AGENT_STREAM_NETWORK_BACKOFF_SECONDS + 0.01
+        client.post_agent_stream_event({**payload, "client_sequence": 3})
+        assert mock_post.call_count == 2
+
+
+def test_agent_stream_rejection_keeps_safe_event_identity_in_warning(client, monkeypatch):
+    """Rejected stream events log bounded identity instead of dumping the payload."""
+    from tools.common.capabilities.platform import api_client as api_client_module
+
+    fake_logger = MagicMock()
+    monkeypatch.setattr(api_client_module, "logger", fake_logger)
+    response = MagicMock()
+    response.status_code = 400
+    response.json.return_value = {
+        "ok": False,
+        "problem": {"code": "BAD_REQUEST"},
+    }
+    payload = {
+        "assessment_id": "assessment-1",
+        "run_id": "run-1",
+        "event_type": "MODEL_REQUEST",
+        "client_sequence": 7,
+        "text": "must not be logged",
+    }
+
+    with patch(
+        "tools.common.capabilities.platform.api_client.httpx.post",
+        return_value=response,
+    ):
+        client.post_agent_stream_event(payload)
+
+    fake_logger.warning.assert_called_once_with(
+        "AGENT_STREAM_EVENT_REJECTED",
+        status_code=400,
+        error_code="BAD_REQUEST",
+        event_type="MODEL_REQUEST",
+        run_id="run-1",
+        client_sequence=7,
+    )
+
+
 def test_t07_raw_source_code_rejected():
     """T07: Raw source code or extra fields are rejected by Pydantic 'forbid' config."""
     with pytest.raises(ValidationError):

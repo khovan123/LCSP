@@ -435,7 +435,7 @@ def test_broker_retry_attempt_is_carried_only_inside_billing_context():
     assert "attempt" not in message["billing"]
 
 
-def test_usage_delivery_failure_is_queued_and_warned_after_provider_success(
+def test_usage_delivery_failure_is_queued_without_invalid_agent_stream_event(
     tmp_path: Path, monkeypatch
 ):
     from middleware import billing_metering
@@ -460,7 +460,9 @@ def test_usage_delivery_failure_is_queued_and_warned_after_provider_success(
 
     with activate_billing_metering(session):
         BillingMeteringMiddleware().wrap_model_call(request, lambda _: response())
-    assert [event_type for event_type, _ in events][-1] == "BILLING_CALLBACK_RECOVERY_QUEUED"
+    event_types = [event_type for event_type, _ in events]
+    assert "BILLING_CALLBACK_RECOVERY_QUEUED" not in event_types
+    assert event_types == ["MODEL_CALL_STARTED", "MODEL_CALL_COMPLETED"]
     assert drain(session.recovery_store_path, RecoveryClient()) == 0
 
 

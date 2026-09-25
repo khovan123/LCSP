@@ -204,3 +204,26 @@ def test_local_agent_server_config_merges_sdk_context_for_sandbox_resolution() -
     assert config["configurable"]["cwd"] == "/workspace/repository"
     assert "system_event" not in config["configurable"]
     assert config["metadata"]["lcsp_boundary_name"] == "RepositoryAnalysisBoundary"
+
+
+def test_local_agent_runtime_close_drains_runs_before_checkpointer_shutdown() -> None:
+    order: list[object] = []
+
+    class FakeExecutor:
+        def shutdown(self, *, wait: bool, cancel_futures: bool) -> None:
+            order.append(("executor", wait, cancel_futures))
+
+    class FakeCheckpointerContext:
+        def __exit__(self, *_args) -> None:
+            order.append("checkpointer")
+
+    runtime = local_server.LocalAgentRuntime()
+    runtime._executor = FakeExecutor()  # type: ignore[assignment]
+    runtime._checkpointer_context = FakeCheckpointerContext()
+    runtime._checkpointer = object()
+
+    runtime.close()
+
+    assert order == [("executor", True, True), "checkpointer"]
+    assert runtime._checkpointer_context is None
+    assert runtime._checkpointer is None

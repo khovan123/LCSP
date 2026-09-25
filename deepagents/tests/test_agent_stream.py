@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import ast
+import re
+from pathlib import Path
+
 import logging
 from threading import Event
 from time import monotonic
@@ -424,3 +428,38 @@ def test_stream_log_filter_hides_framework_noise_but_keeps_failures():
     assert _should_forward_stream_log(private_info) is False
     assert _should_forward_stream_log(useful_info) is True
     assert _should_forward_stream_log(framework_error) is True
+
+
+def test_literal_agent_stream_event_types_match_shared_typescript_contract() -> None:
+    """Prevent Python emitters from inventing event types the API will reject."""
+    repo_root = Path(__file__).resolve().parents[2]
+    contract_path = repo_root / "packages/contracts/src/evidence/assessment-runtime.ts"
+    contract_text = contract_path.read_text()
+    block = re.search(
+        r"export const ASSESSMENT_AGENT_STREAM_EVENT_TYPES = \{(.*?)\} as const;",
+        contract_text,
+        re.S,
+    )
+    assert block is not None
+    supported = set(re.findall(r':\s*"([A-Z0-9_]+)"', block.group(1)))
+
+    emitted: set[str] = set()
+    for path in (repo_root / "deepagents").rglob("*.py"):
+        if ".mda" in path.parts:
+            continue
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "publish_agent_stream_event"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                emitted.add(node.args[0].value)
+
+    assert emitted <= supported, sorted(emitted - supported)

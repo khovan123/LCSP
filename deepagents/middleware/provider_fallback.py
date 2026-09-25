@@ -107,15 +107,9 @@ def _trip_provider_circuit(provider: str | None, error: BaseException) -> None:
         status_code=error_status(error),
         run_id=session.run_id,
     )
-    publish_agent_stream_event(
-        "PROVIDER_CIRCUIT_OPENED",
-        status="WAITING",
-        text="provider disabled for current run",
-        data={
-            "provider": provider,
-            "status_code": error_status(error),
-        },
-    )
+    # Circuit state is technical provider-routing telemetry. The customer-visible
+    # fallback attempt below already carries the meaningful activity and technical
+    # provider details, so do not emit a second bespoke stream event.
 
 
 def fallback_model(provider: str):
@@ -168,12 +162,8 @@ class ProviderFallbackMiddleware(AgentMiddleware):
     @staticmethod
     def _log_circuit_skip(provider: str) -> None:
         logger.info("MODEL_PROVIDER_CIRCUIT_SKIP", provider=provider)
-        publish_agent_stream_event(
-            "PROVIDER_CIRCUIT_SKIP",
-            status="RUNNING",
-            text="skipping unavailable provider",
-            data={"provider": provider},
-        )
+        # The subsequent PROVIDER_FALLBACK event is the customer-visible activity.
+        # Keep circuit skips in structured logs only to avoid stream-contract drift.
 
     def wrap_model_call(self, request, handler):
         current_provider = model_provider(request.model)

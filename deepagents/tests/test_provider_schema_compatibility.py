@@ -136,14 +136,18 @@ async def test_gemini_receives_a_relaxed_schema_in_the_same_strategy(asynchronou
     }
 
 
-def test_a_tool_strategy_keeps_its_own_strategy_type() -> None:
+def test_gemini_tool_strategy_switches_to_native_provider_strategy() -> None:
     middleware = ProviderSchemaCompatibilityMiddleware()
     request = _request(_gemini(), ToolStrategy(InvestigatorResult))
     handler = MagicMock()
 
     middleware.wrap_model_call(request, handler)
 
-    assert isinstance(handler.call_args.args[0].response_format, ToolStrategy)
+    forwarded = handler.call_args.args[0].response_format
+    assert isinstance(forwarded, ProviderStrategy)
+    assert forwarded.schema == relax_array_upper_bounds(
+        InvestigatorResult.model_json_schema()
+    )
 
 
 def test_gemini_tool_schema_strips_unsupported_additional_properties() -> None:

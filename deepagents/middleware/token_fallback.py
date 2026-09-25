@@ -16,8 +16,10 @@ from middleware.failure_policy import (
 )
 from orchestration.agent_stream import publish_agent_stream_event
 from provider_credentials import (
+    INCEPTION_DEFAULT_BASE_URL,
     LLM7_DEFAULT_BASE_URL,
     NO_SDK_RETRY_MAX_RETRIES,
+    inception_base_url,
     llm7_base_url,
     provider_token_source,
 )
@@ -101,6 +103,14 @@ def model_provider(model) -> str | None:
     module = type(model).__module__
     if module.startswith("langchain_openai."):
         base_url = str(getattr(model, "openai_api_base", "") or "").rstrip("/")
+        configured_inception = inception_base_url()
+        default_inception = INCEPTION_DEFAULT_BASE_URL.rstrip("/")
+        if (
+            base_url == configured_inception
+            or base_url == default_inception
+            or base_url.startswith(f"{default_inception}/")
+        ):
+            return "inception"
         configured_llm7 = llm7_base_url()
         default_llm7 = LLM7_DEFAULT_BASE_URL.rstrip("/")
         if base_url == configured_llm7 or base_url == default_llm7 or base_url.startswith(

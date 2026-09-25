@@ -55,7 +55,7 @@ def model_provider_profile_for(model_spec: str) -> ProviderProfile:
     """Return the exact-model construction profile for LCSP reasoning-capable models."""
     provider = provider_from_model_spec(model_spec)
     route_provider = route_provider_for_model_spec(model_spec)
-    if route_provider == "llm7":
+    if route_provider in {"llm7", "inception"}:
         return ProviderProfile(init_kwargs=provider_init_kwargs(route_provider))
     if model_spec == "google_genai:gemini-3.5-flash-lite":
         return ProviderProfile(init_kwargs=model_init_kwargs_for_agent(

@@ -33,6 +33,8 @@ from tools.common.capabilities.platform.callback_schemas import (
 
 logger = get_logger(__name__)
 
+_AGENT_STREAM_NETWORK_BACKOFF_SECONDS = 2.0
+
 _IDEMPOTENT_CONFLICT_CODES = {
     "FLOW_ALREADY_EXISTS",
     "PROFILE_ALREADY_EXISTS",
@@ -163,6 +165,7 @@ class WorkerApiClient:
         self._api_key = api_key
         self._timeout = 30.0
         self._max_retries = 3
+        self._agent_stream_unavailable_until = 0.0
         from tools.common.capabilities.platform.rbac_client import RbacClient
         self.rbac_client = RbacClient(self._base_url, self._api_key)
 
@@ -570,6 +573,9 @@ class WorkerApiClient:
 
     def post_agent_stream_event(self, payload: dict) -> None:
         """Submit one best-effort live agent event for the workspace chat stream."""
+        now = time.monotonic()
+        if now < self._agent_stream_unavailable_until:
+            return
         url = f"{self._base_url}{CallbackPath.AGENT_STREAM_EVENT}"
         headers = {
             WORKER_API_KEY_HEADER: self._api_key,
@@ -582,16 +588,24 @@ class WorkerApiClient:
                 headers=headers,
                 timeout=3.0,
             )
+            self._agent_stream_unavailable_until = 0.0
             if response.status_code >= 400:
                 logger.warning(
                     "AGENT_STREAM_EVENT_REJECTED",
                     status_code=response.status_code,
                     error_code=self._response_error_code(response),
+                    event_type=payload.get("event_type"),
+                    run_id=payload.get("run_id"),
+                    client_sequence=payload.get("client_sequence"),
                 )
         except Exception as exc:
+            self._agent_stream_unavailable_until = (
+                time.monotonic() + _AGENT_STREAM_NETWORK_BACKOFF_SECONDS
+            )
             logger.warning(
                 "AGENT_STREAM_EVENT_POST_FAILED",
                 error=type(exc).__name__,
+                retry_after_seconds=_AGENT_STREAM_NETWORK_BACKOFF_SECONDS,
             )
 
     def post_decision_model_event(self, payload: dict) -> None:
