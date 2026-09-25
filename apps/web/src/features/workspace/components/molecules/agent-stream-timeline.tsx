@@ -27,6 +27,8 @@ import { AgentMessage, AgentTurn } from "./agent-turn";
 
 type AgentStreamTimelineProps = {
   events: AssessmentAgentStreamEvent[];
+  activeRunId?: string | null;
+  reset?: boolean;
   history?: WorkspaceRuntimeAgentStreamHistoryState;
   onLoadOlder?: () => void;
   className?: string;
@@ -59,15 +61,20 @@ type ProjectedStreamRow = {
 
 export function AgentStreamTimeline({
   events,
+  activeRunId = null,
+  reset = false,
   history,
   onLoadOlder,
   className,
 }: AgentStreamTimelineProps) {
-  const rows = projectStreamRows(events);
+  const visibleEvents = reset
+    ? []
+    : scopeAgentStreamRunEvents(events, activeRunId);
+  const rows = projectStreamRows(visibleEvents);
   const labels = streamLabels();
   const hasRunningActivity = rows.some((row) => row.status === "running");
-  const failed = !hasRunningActivity && streamEndedWithFailure(events);
-  const duration = streamDuration(events);
+  const failed = !hasRunningActivity && streamEndedWithFailure(visibleEvents);
+  const duration = streamDuration(visibleEvents);
   const showHistoryAction =
     ((history?.hasMore === true && history.nextCursor !== null) ||
       history?.error != null) &&
@@ -136,6 +143,37 @@ export function AgentStreamTimeline({
       </AgentMessage>
     </AgentTurn>
   );
+}
+
+function scopeAgentStreamRunEvents(
+  events: AssessmentAgentStreamEvent[],
+  activeRunId: string | null,
+): AssessmentAgentStreamEvent[] {
+  if (activeRunId) {
+    return events.filter((event) => event.runId === activeRunId);
+  }
+  return latestAgentStreamRunEvents(events);
+}
+
+function latestAgentStreamRunEvents(
+  events: AssessmentAgentStreamEvent[],
+): AssessmentAgentStreamEvent[] {
+  if (events.length === 0) return events;
+
+  const latest = events.reduce((current, candidate) => {
+    const emittedAt = candidate.emittedAt.localeCompare(current.emittedAt);
+    if (emittedAt > 0) return candidate;
+    if (emittedAt < 0) return current;
+    if (candidate.runId === current.runId && candidate.sequence > current.sequence) {
+      return candidate;
+    }
+    if (candidate.runId !== current.runId && candidate.eventId > current.eventId) {
+      return candidate;
+    }
+    return current;
+  });
+
+  return events.filter((event) => event.runId === latest.runId);
 }
 
 function projectStreamRows(
