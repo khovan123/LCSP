@@ -2,8 +2,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from langchain.agents.structured_output import ProviderStrategy, ToolStrategy
+from langchain_core.tools import StructuredTool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, ConfigDict
 
 from contracts.handoffs import InvestigatorResult
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
@@ -13,14 +15,19 @@ from middleware.provider_schema import (
 )
 
 
-def _request(model, response_format):
+def _request(model, response_format, tools=None):
     request = MagicMock()
     request.model = model
     request.response_format = response_format
     request.model_settings = {}
+    request.tools = list(tools or [])
 
     def _override(**kwargs):
-        forwarded = _request(model, kwargs.get("response_format", response_format))
+        forwarded = _request(
+            model,
+            kwargs.get("response_format", response_format),
+            kwargs.get("tools", request.tools),
+        )
         forwarded.model_settings = kwargs.get("model_settings", request.model_settings)
         return forwarded
 
@@ -69,6 +76,23 @@ def test_relaxing_removes_every_array_upper_bound_and_keeps_other_constraints() 
         == 1
     )
     assert relaxed["$defs"]["BusinessContextNeed"]["properties"]["resolution_criteria"]["minItems"] == 1
+
+
+def test_gemini_schema_strips_unsupported_additional_properties_recursively() -> None:
+    schema = InvestigatorResult.model_json_schema()
+    relaxed = relax_array_upper_bounds(schema)
+
+    def count_key(node, key: str) -> int:
+        if isinstance(node, dict):
+            return (1 if key in node else 0) + sum(
+                count_key(value, key) for value in node.values()
+            )
+        if isinstance(node, list):
+            return sum(count_key(value, key) for value in node)
+        return 0
+
+    assert count_key(schema, "additionalProperties") > 0
+    assert count_key(relaxed, "additionalProperties") == 0
 
 
 def test_the_relaxed_schema_does_not_widen_the_validated_contract() -> None:
@@ -120,6 +144,40 @@ def test_a_tool_strategy_keeps_its_own_strategy_type() -> None:
     middleware.wrap_model_call(request, handler)
 
     assert isinstance(handler.call_args.args[0].response_format, ToolStrategy)
+
+
+def test_gemini_tool_schema_strips_unsupported_additional_properties() -> None:
+    class SearchInput(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        query: str
+
+    def search_repository(query: str) -> str:
+        return query
+
+    search_tool = StructuredTool.from_function(
+        search_repository,
+        name="search_repository",
+        description="Search repository evidence.",
+        args_schema=SearchInput,
+    )
+    middleware = ProviderSchemaCompatibilityMiddleware()
+    request = _request(_gemini(), None, [search_tool])
+    handler = MagicMock()
+
+    middleware.wrap_model_call(request, handler)
+
+    forwarded_tools = handler.call_args.args[0].tools
+    assert len(forwarded_tools) == 1
+    assert isinstance(forwarded_tools[0], dict)
+
+    def contains_key(node, key: str) -> bool:
+        if isinstance(node, dict):
+            return key in node or any(contains_key(value, key) for value in node.values())
+        if isinstance(node, list):
+            return any(contains_key(value, key) for value in node)
+        return False
+
+    assert contains_key(forwarded_tools[0], "additionalProperties") is False
 
 
 def test_openai_requests_are_forwarded_untouched() -> None:

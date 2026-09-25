@@ -219,6 +219,78 @@ def test_llm7_402_fallback_to_google_settles_single_successful_attempt(monkeypat
     assert payloads[0].invocationId == claims[-1][1]
 
 
+def test_llm7_402_opens_run_scoped_circuit_and_skips_next_primary(monkeypatch):
+    import middleware.provider_fallback as fallback_module
+
+    monkeypatch.setattr(fallback_module, "model_provider", lambda model: model.provider)
+    monkeypatch.setattr(
+        fallback_module,
+        "configured_fallback_providers",
+        lambda: ("google_genai",),
+    )
+    monkeypatch.setattr(
+        fallback_module,
+        "fallback_model",
+        lambda provider: _BillingModel(provider),
+    )
+
+    class BillingClient:
+        def __init__(self):
+            self.claims = []
+            self.payloads = []
+
+        def claim_billing_invocation(self, reservation_id, payload):
+            self.claims.append((reservation_id, payload.invocationId))
+
+        def post_settled_usage(self, payload):
+            self.payloads.append(payload)
+
+    client = BillingClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-circuit",
+        run_id="run-circuit",
+        reservation_id="reservation-circuit",
+        agent_role="investigator",
+        reserved_provider="LLM7",
+        reserved_model="gpt-5-nano",
+        authorized_models={
+            ("LLM7", "gpt-5-nano"),
+            ("GOOGLE_GENAI", "gpt-5-nano"),
+        },
+        max_invocations=1,
+    )
+    provider_calls = []
+
+    def provider_handler(request):
+        provider_calls.append(request.model.provider)
+        if request.model.provider == "llm7":
+            raise CapacityError("insufficient balance")
+        return ModelResponse(result=[])
+
+    request = _BillingRequest(_BillingModel("llm7"))
+    fallback = ProviderFallbackMiddleware()
+    billing = BillingMeteringMiddleware()
+
+    with activate_billing_metering(session):
+        for _ in range(2):
+            assert isinstance(
+                fallback.wrap_model_call(
+                    request,
+                    lambda next_request: billing.wrap_model_call(
+                        next_request,
+                        provider_handler,
+                    ),
+                ),
+                ModelResponse,
+            )
+
+    assert provider_calls == ["llm7", "google_genai", "google_genai"]
+    assert session.provider_route_disabled("llm7") is True
+    assert len(client.claims) == 3
+    assert len(client.payloads) == 2
+
+
 def test_configured_provider_requires_its_own_credentials(monkeypatch):
     monkeypatch.delenv("LLM7_API_KEY", raising=False)
     monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "llm7")

@@ -95,6 +95,7 @@ class BillingMeteringSession:
     authorized_models: set[tuple[str, str]] = field(default_factory=set)
     _provider_invocation_count: int = field(default=0, init=False)
     _invocation_ids: set[str] = field(default_factory=set, init=False)
+    _disabled_provider_routes: set[str] = field(default_factory=set, init=False)
 
     @classmethod
     def reserve(
@@ -211,14 +212,12 @@ class BillingMeteringSession:
         self._invocation_ids.add(invocation_id)
         return invocation_id
 
-    def assert_invocation_capacity(self, invocation_id: str) -> None:
-        if (
-            self.max_invocations is not None
-            and self._provider_invocation_count >= self.max_invocations
-        ):
-            raise BillingReservationUnavailable(
-                "Provider invocation group capacity is exhausted"
-            )
+    def claim_provider_invocation(self, invocation_id: str) -> None:
+        """Track one provider attempt without imposing a run-level call limit.
+
+        max_invocations is reservation sizing/audit metadata only. LCSP is bounded
+        by real credit and token ceilings rather than an arbitrary provider-call count.
+        """
         if self.max_invocations is not None:
             from tools.common.capabilities.platform.callback_schemas import (
                 BillingReservationClaimPayload,
@@ -232,6 +231,15 @@ class BillingMeteringSession:
                 ),
             )
         self._provider_invocation_count += 1
+
+    def disable_provider_route(self, provider: str) -> None:
+        self._disabled_provider_routes.add(provider.strip().lower())
+
+    def provider_route_disabled(self, provider: str | None) -> bool:
+        return bool(
+            provider
+            and provider.strip().lower() in self._disabled_provider_routes
+        )
 
     def assert_model_identity(self, model: Any, response: Any | None = None) -> None:
         if not self.authorized_models and not (
@@ -537,7 +545,7 @@ class BillingMeteringMiddleware(AgentMiddleware):
         # returns a RunnableBinding that no longer exposes provider identity.
         billing_model = request.model
         session.assert_model_identity(billing_model)
-        session.assert_invocation_capacity(invocation_id)
+        session.claim_provider_invocation(invocation_id)
         if hasattr(request, "override"):
             request = request.override(model=session.bounded_model(billing_model))
         telemetry = _ModelCallTelemetry(billing_model)
@@ -564,7 +572,7 @@ class BillingMeteringMiddleware(AgentMiddleware):
         invocation_id = session.new_invocation_id()
         billing_model = request.model
         session.assert_model_identity(billing_model)
-        session.assert_invocation_capacity(invocation_id)
+        session.claim_provider_invocation(invocation_id)
         if hasattr(request, "override"):
             request = request.override(model=session.bounded_model(billing_model))
         telemetry = _ModelCallTelemetry(billing_model)

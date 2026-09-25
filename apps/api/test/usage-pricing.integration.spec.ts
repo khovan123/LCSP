@@ -275,6 +275,18 @@ describe("LCSP-310 usage and pricing foundation", () => {
       reservationId: f.reservation.id,
       invocationId: "INV-MULTI-2",
     });
+    await governedUsage.claimInvocation({
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-MULTI-3",
+    });
+    expect(
+      (
+        await prisma.billingReservation.findUniqueOrThrow({
+          where: { id: f.reservation.id },
+        })
+      ).invocationsStarted,
+    ).toBe(3n);
     await governedUsage.recordAndSettleUsage({
       userId: f.user.id,
       assessmentId: f.assessmentId,
@@ -383,6 +395,39 @@ describe("LCSP-310 usage and pricing foundation", () => {
         where: { id: reservation.id },
       }),
     ).toMatchObject({ status: "RESERVED", remainingCredits: 20n });
+  });
+
+  it("treats maxInvocations as reservation metadata instead of a run call cap", async () => {
+    const f = await fixture();
+    const assessmentId = `assessment-${id()}`;
+    await prisma.assessment.create({
+      data: {
+        id: assessmentId,
+        ownerId: f.user.id,
+        name: "Long-running agent reservation",
+      },
+    });
+
+    const reservation = await governedUsage.reserveForAssessment({
+      assessmentId,
+      runId: `run-${id()}`,
+      amountCredits: 1n,
+      maxChargeCredits: 1n,
+      provider: "OPENAI",
+      model: "MODEL_A",
+      authorizedModels: [{ provider: "OPENAI", model: "MODEL_A" }],
+      maxInputTokens: 1n,
+      maxOutputTokens: 0n,
+      maxReasoningTokens: 0n,
+      maxInvocations: 100n,
+      idempotencyKey: `long-running-reserve-${id()}`,
+    });
+
+    const stored = await prisma.billingReservation.findUniqueOrThrow({
+      where: { id: (reservation as { id: string }).id },
+    });
+    expect(stored.amountCredits).toBe(1n);
+    expect(stored.maxInvocations).toBe(100n);
   });
 
   it("rejects a reservation below the pricing-derived worst-case charge", async () => {
