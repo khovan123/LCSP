@@ -126,7 +126,6 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
                 SET "invocationsStarted" = "invocationsStarted" + 1
                 WHERE "id" = ${i.reservationId}
                   AND "status" = 'RESERVED'
-                  AND "invocationsStarted" < "maxInvocations"
               `);
             if (updated !== 1) {
               await tx.billingReservationInvocationClaim.delete({

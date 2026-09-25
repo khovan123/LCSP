@@ -120,6 +120,45 @@ def test_metering_middleware_records_one_payload_for_one_response():
     assert payload.model_dump(exclude_none=True).get("reasoningTokens") is None
 
 
+def test_billing_invocation_metadata_never_caps_agent_run():
+    class ClaimingClient(FakeClient):
+        def __init__(self):
+            super().__init__()
+            self.claims = []
+
+        def claim_billing_invocation(self, reservation_id, payload):
+            self.claims.append((reservation_id, payload.invocationId))
+
+    client = ClaimingClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-long-run",
+        run_id="run-long",
+        reservation_id="reservation-long",
+        agent_role="investigator",
+        max_invocations=1,
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="google_genai", model_name="gemini-test")
+    )
+    middleware = BillingMeteringMiddleware()
+
+    with activate_billing_metering(session):
+        for index in range(20):
+            result = middleware.wrap_model_call(
+                request,
+                lambda _request, index=index: response(
+                    response_id=f"resp-long-{index}"
+                ),
+            )
+            assert result is not None
+
+    assert len(client.claims) == 20
+    assert len({invocation_id for _, invocation_id in client.claims}) == 20
+    assert len(client.payloads) == 20
+    assert session._provider_invocation_count == 20
+
+
 def test_model_call_telemetry_emits_heartbeat_and_completion(monkeypatch):
     from middleware import billing_metering
 

@@ -5,39 +5,69 @@ from __future__ import annotations
 from typing import Any
 
 from langchain.agents.middleware import AgentMiddleware
+from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel
 
 GEMINI_MODULE_PREFIX = "langchain_google_genai."
 GEMINI_DISABLE_AUTOMATIC_FUNCTION_CALLING = {"disable": True}
+GEMINI_SPECIAL_TOOL_KEYS = frozenset(
+    {
+        "google_search_retrieval",
+        "google_search",
+        "google_maps",
+        "code_execution",
+        "url_context",
+        "computer_use",
+    }
+)
 
 
 def relax_array_upper_bounds(schema: Any) -> Any:
-    """Drop every expansion-costly `maxItems` from a response schema handed to Gemini.
+    """Return the provider-facing Gemini schema without unsupported constraints.
 
-    Gemini materialises a bounded array by expanding its item schema up to `maxItems`
-    times, and rejects the whole request with an opaque 400 INVALID_ARGUMENT once the
-    expanded schema exceeds an internal budget. `InvestigatorResult` crosses it: 200
-    claims each carrying three 100-element reference arrays. No single bound is at fault,
-    so only removing all of them makes the request valid.
+    Gemini expands positive `maxItems` bounds aggressively and the Google SDK warns
+    that `additionalProperties` is unsupported. Both are removed only from the copy
+    sent to Gemini. `maxItems: 0` is preserved because it is a structural "must be
+    empty" contract, not an expansion-cost bound.
 
-    `maxItems: 0` is kept. It costs Gemini nothing to expand (zero items, zero budget),
-    and on the per-claim_type variant models it is not a size tuning bound at all — it is
-    the structural "this claim shape must not carry this ref list" contract (e.g.
-    RULE_SCOPE_NOT_APPLICABLE's evidence/graph/source refs). Stripping it here would
-    silently reopen exactly the class of gap this module exists to close.
-
-    Only the provider-facing copy is relaxed. The Pydantic contract still validates the
-    real bounds when the handoff is parsed, so nothing downstream becomes more permissive.
+    The canonical Pydantic schema is never mutated, so LCSP still validates all array
+    bounds and extra-field constraints after the provider returns structured output.
     """
     if isinstance(schema, dict):
         return {
             key: relax_array_upper_bounds(value)
             for key, value in schema.items()
-            if not (key == "maxItems" and value != 0)
+            if key != "additionalProperties"
+            and not (key == "maxItems" and value != 0)
         }
     if isinstance(schema, list):
         return [relax_array_upper_bounds(value) for value in schema]
     return schema
+
+
+def gemini_compatible_tools(model: Any, tools: list[Any]) -> list[Any] | None:
+    """Return Gemini-bound tool definitions without unsupported JSON Schema keys."""
+    if not type(model).__module__.startswith(GEMINI_MODULE_PREFIX):
+        return None
+    if not tools:
+        return None
+
+    converted: list[Any] = []
+    changed = False
+    for tool in tools:
+        if isinstance(tool, dict) and any(
+            key in tool and tool.get(key) is not None
+            for key in GEMINI_SPECIAL_TOOL_KEYS
+        ):
+            converted.append(tool)
+            continue
+
+        provider_tool = tool if isinstance(tool, dict) else convert_to_openai_tool(tool)
+        relaxed = relax_array_upper_bounds(provider_tool)
+        converted.append(relaxed)
+        changed = changed or relaxed != provider_tool or not isinstance(tool, dict)
+
+    return converted if changed else None
 
 
 def _json_schema_of(schema: Any) -> dict[str, Any] | None:
@@ -98,10 +128,12 @@ class ProviderSchemaCompatibilityMiddleware(AgentMiddleware):
     """Relax the provider-facing response schema where the provider cannot accept it."""
 
     @staticmethod
-    def _override_request(request, replacement):
+    def _override_request(request, replacement, tools_replacement):
         overrides: dict[str, Any] = {}
         if replacement is not None:
             overrides["response_format"] = replacement
+        if tools_replacement is not None:
+            overrides["tools"] = tools_replacement
         settings = gemini_structured_model_settings(
             request.model,
             replacement if replacement is not None else request.response_format,
@@ -115,10 +147,20 @@ class ProviderSchemaCompatibilityMiddleware(AgentMiddleware):
         replacement = gemini_compatible_response_format(
             request.model, request.response_format
         )
-        return handler(self._override_request(request, replacement))
+        tools_replacement = gemini_compatible_tools(
+            request.model, getattr(request, "tools", [])
+        )
+        return handler(
+            self._override_request(request, replacement, tools_replacement)
+        )
 
     async def awrap_model_call(self, request, handler):
         replacement = gemini_compatible_response_format(
             request.model, request.response_format
         )
-        return await handler(self._override_request(request, replacement))
+        tools_replacement = gemini_compatible_tools(
+            request.model, getattr(request, "tools", [])
+        )
+        return await handler(
+            self._override_request(request, replacement, tools_replacement)
+        )

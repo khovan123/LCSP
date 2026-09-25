@@ -156,7 +156,7 @@ export class BillingUsageKernel {
         "Primary runtime model is outside the authorized pricing envelope",
       );
     const userId = await this.resolveAssessmentOwner(input.assessmentId);
-    const worstCase = await this.transactions.runForUser(
+    const oneInvocationWorstCase = await this.transactions.runForUser(
       userId,
       async (repos) => {
         const charges = await Promise.all(
@@ -183,21 +183,15 @@ export class BillingUsageKernel {
             );
           }),
         );
-        const oneInvocation = charges.reduce(
+        return charges.reduce(
           (maximum, charge) => (charge > maximum ? charge : maximum),
           0n,
         );
-        return oneInvocation * input.maxInvocations;
       },
     );
-    const oneInvocationWorstCase = worstCase / input.maxInvocations;
     if (input.maxChargeCredits < oneInvocationWorstCase)
       throw new BillingDomainError(
         "Reservation is below the authoritative worst-case provider charge",
-      );
-    if (input.amountCredits < worstCase)
-      throw new BillingDomainError(
-        "Reservation is below the aggregate worst-case provider charge",
       );
     return this.accounting.reserveCredits({
       userId,

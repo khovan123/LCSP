@@ -269,7 +269,7 @@ export class BillingAccountingKernel {
         );
       if (!(await repos.reservation.claimInvocation(i)))
         throw new BillingConcurrencyError(
-          "Reservation invocation capacity is exhausted",
+          "Reservation invocation claim raced with reservation lifecycle",
         );
       return { reservationId: i.reservationId };
     });

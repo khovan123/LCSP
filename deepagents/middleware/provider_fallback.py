@@ -7,8 +7,10 @@ import re
 from langchain.agents.middleware import AgentMiddleware
 from langchain.chat_models import init_chat_model
 
+from middleware.billing_metering import active_billing_metering
 from middleware.failure_policy import (
     TerminalCredentialError,
+    error_status,
     is_auth_failure,
     is_provider_capacity_failure,
     is_terminal_task_error,
@@ -26,6 +28,7 @@ from tools.common.capabilities.platform.logging import get_logger
 
 logger = get_logger(__name__)
 _FALLBACK_PROVIDER_ENV = re.compile(r"^LLM_FALLBACK_PROVIDER_(\d+)$")
+_PERMANENT_PROVIDER_ROUTE_STATUSES = frozenset({401, 402, 403})
 
 
 def configured_fallback_providers() -> tuple[str, ...]:
@@ -81,6 +84,40 @@ def provider_fallback_failure(error: BaseException) -> bool:
     )
 
 
+def provider_circuit_breaker_failure(error: BaseException) -> bool:
+    """Return whether this provider route should stay disabled for the active run."""
+    return error_status(error) in _PERMANENT_PROVIDER_ROUTE_STATUSES
+
+
+def _provider_route_disabled(provider: str | None) -> bool:
+    session = active_billing_metering()
+    return session is not None and session.provider_route_disabled(provider)
+
+
+def _trip_provider_circuit(provider: str | None, error: BaseException) -> None:
+    if not provider or not provider_circuit_breaker_failure(error):
+        return
+    session = active_billing_metering()
+    if session is None or session.provider_route_disabled(provider):
+        return
+    session.disable_provider_route(provider)
+    logger.warning(
+        "MODEL_PROVIDER_CIRCUIT_OPENED",
+        provider=provider,
+        status_code=error_status(error),
+        run_id=session.run_id,
+    )
+    publish_agent_stream_event(
+        "PROVIDER_CIRCUIT_OPENED",
+        status="WAITING",
+        text="provider disabled for current run",
+        data={
+            "provider": provider,
+            "status_code": error_status(error),
+        },
+    )
+
+
 def fallback_model(provider: str):
     """Construct one provider-preset model using only that provider's credentials."""
     canonical = canonical_provider(provider)
@@ -96,7 +133,8 @@ class ProviderFallbackMiddleware(AgentMiddleware):
     """Move to the next configured provider after the current provider pool fails.
 
     Same-provider key rotation remains the responsibility of TokenFallbackMiddleware,
-    which must be nested inside this middleware in the governance chain.
+    which must be nested inside this middleware in the governance chain. Permanent
+    route failures are remembered only inside the active billing/run session.
     """
 
     @staticmethod
@@ -105,7 +143,7 @@ class ProviderFallbackMiddleware(AgentMiddleware):
         return tuple(
             provider
             for provider in configured_fallback_providers()
-            if provider != current
+            if provider != current and not _provider_route_disabled(provider)
         )
 
     @staticmethod
@@ -127,19 +165,31 @@ class ProviderFallbackMiddleware(AgentMiddleware):
             },
         )
 
-    def wrap_model_call(self, request, handler):
-        routes = self._routes(request)
-        if not routes:
-            return handler(request)
+    @staticmethod
+    def _log_circuit_skip(provider: str) -> None:
+        logger.info("MODEL_PROVIDER_CIRCUIT_SKIP", provider=provider)
+        publish_agent_stream_event(
+            "PROVIDER_CIRCUIT_SKIP",
+            status="RUNNING",
+            text="skipping unavailable provider",
+            data={"provider": provider},
+        )
 
+    def wrap_model_call(self, request, handler):
         current_provider = model_provider(request.model)
+        routes = self._routes(request)
         first_error: BaseException | None = None
-        try:
-            return handler(request)
-        except Exception as error:
-            if not provider_fallback_failure(error):
-                raise
-            first_error = error
+
+        if not _provider_route_disabled(current_provider):
+            try:
+                return handler(request)
+            except Exception as error:
+                if not provider_fallback_failure(error):
+                    raise
+                _trip_provider_circuit(current_provider, error)
+                first_error = error
+        elif current_provider:
+            self._log_circuit_skip(current_provider)
 
         for index, provider in enumerate(routes, start=1):
             self._log_attempt(
@@ -152,6 +202,7 @@ class ProviderFallbackMiddleware(AgentMiddleware):
             except Exception as error:
                 if not provider_fallback_failure(error):
                     raise
+                _trip_provider_circuit(provider, error)
                 first_error = first_error or error
 
         raise TerminalCredentialError(
@@ -159,18 +210,20 @@ class ProviderFallbackMiddleware(AgentMiddleware):
         ) from first_error
 
     async def awrap_model_call(self, request, handler):
-        routes = self._routes(request)
-        if not routes:
-            return await handler(request)
-
         current_provider = model_provider(request.model)
+        routes = self._routes(request)
         first_error: BaseException | None = None
-        try:
-            return await handler(request)
-        except Exception as error:
-            if not provider_fallback_failure(error):
-                raise
-            first_error = error
+
+        if not _provider_route_disabled(current_provider):
+            try:
+                return await handler(request)
+            except Exception as error:
+                if not provider_fallback_failure(error):
+                    raise
+                _trip_provider_circuit(current_provider, error)
+                first_error = error
+        elif current_provider:
+            self._log_circuit_skip(current_provider)
 
         for index, provider in enumerate(routes, start=1):
             self._log_attempt(
@@ -183,6 +236,7 @@ class ProviderFallbackMiddleware(AgentMiddleware):
             except Exception as error:
                 if not provider_fallback_failure(error):
                     raise
+                _trip_provider_circuit(provider, error)
                 first_error = first_error or error
 
         raise TerminalCredentialError(
@@ -194,5 +248,6 @@ __all__ = [
     "ProviderFallbackMiddleware",
     "configured_fallback_providers",
     "fallback_model",
+    "provider_circuit_breaker_failure",
     "provider_fallback_failure",
 ]
