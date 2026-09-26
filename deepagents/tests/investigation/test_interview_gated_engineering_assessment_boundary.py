@@ -1010,3 +1010,56 @@ def test_finding_snippet_ref_is_bounded_to_the_interview_locator_limit(tmp_path)
     snippet_ref = payload["ai_discovery"]["findings"][0]["snippet_ref"]
     assert (snippet_ref["start_line"], snippet_ref["end_line"]) == (30, 36)
     InterviewSnippetRef.model_validate(snippet_ref)
+
+
+def test_api_unauthorized_evidence_ref_is_stripped_and_question_resubmitted() -> None:
+    from tools.common.capabilities.platform.api_client import (
+        InterviewDecisionRepairableCallbackError,
+    )
+
+    source_ref = "packages/api/src/features/ai/service.ts"
+
+    class RejectingApi(FakeApi):
+        def post_interview_initial_question(self, assessment_id, payload):
+            question = payload["activeQuestion"]
+            refs = [*question["whyEvidenceRefs"], *question["frontier"]["evidenceRefs"]]
+            if source_ref in refs:
+                self.seeded.append(("rejected", [*refs]))
+                raise InterviewDecisionRepairableCallbackError(
+                    "INTERVIEW_EVIDENCE_REF_UNAUTHORIZED: client error",
+                    error_code="INTERVIEW_EVIDENCE_REF_UNAUTHORIZED",
+                    status_code=400,
+                    meta={"unauthorizedRef": source_ref},
+                )
+            return super().post_interview_initial_question(assessment_id, payload)
+
+    class SourceRefDispatcher(FakeDispatcher):
+        def dispatch(self, **kwargs):
+            result = super().dispatch(**kwargs)
+            question = result["handoff"]["activeQuestion"]
+            question["whyEvidenceRefs"] = ["technicalEvidenceReport:ter-1", source_ref]
+            question["frontier"]["evidenceRefs"] = [source_ref]
+            return result
+
+    api = RejectingApi(
+        {"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0, "answerHistory": []}
+    )
+    report = _report()
+    # The worker ledger authorizes the tool-visible source locator; the API does not.
+    report["evidence_payload"]["findings"] = [{"evidence_refs": [source_ref]}]
+
+    result = _boundary(api, SourceRefDispatcher())._prepare_interview(
+        evidence_report=report,
+        evidence_report_id="ter-1",
+        assessment_id="assessment-1",
+        correlation_id="00000000-0000-0000-0000-000000000001",
+        workflow_run_id="10000000-0000-0000-0000-000000000001",
+    )
+
+    assert result is None
+    assert api.seeded[0][0] == "rejected"
+    assessment_id, payload = api.seeded[1]
+    assert assessment_id == "assessment-1"
+    question = payload["activeQuestion"]
+    assert question["whyEvidenceRefs"] == ["technicalEvidenceReport:ter-1"]
+    assert question["frontier"]["evidenceRefs"] == ["technicalEvidenceReport:ter-1"]

@@ -2172,3 +2172,41 @@ def test_interview_dispatch_failure_reports_failed_progress_for_the_revision():
     )
 
     api.post_interview_progress.assert_called_once_with("assessment-1", 8, "FAILED")
+
+
+def test_unauthorized_evidence_ref_is_stripped_without_a_specialist_correction() -> None:
+    source_ref = "packages/api/src/features/ai/service.ts"
+    api = RecordingApi()
+    context = api.get_interview_private_context("assessment-1", 2)
+    # The worker ledger authorizes the locator; the API's persisted set does not.
+    context["evidenceRefs"] = [source_ref]
+    api.get_interview_private_context = Mock(return_value=context)
+    api.post_interview_progress = Mock()
+    accepted = {"outcome": "WAITING_FOR_CUSTOMER"}
+    posted_refs = []
+
+    def post(_assessment_id, decision):
+        posted_refs.append(list(decision["activeQuestion"]["frontier"]["evidenceRefs"]))
+        if len(posted_refs) == 1:
+            raise InterviewDecisionRepairableCallbackError(
+                "INTERVIEW_EVIDENCE_REF_UNAUTHORIZED: client error",
+                error_code="INTERVIEW_EVIDENCE_REF_UNAUTHORIZED",
+                status_code=400,
+                meta={"unauthorizedRef": source_ref},
+            )
+        return accepted
+
+    api.post_interview_agent_decision = Mock(side_effect=post)
+    handoff = deepcopy(WAITING_HANDOFF)
+    handoff["activeQuestion"]["frontier"]["evidenceRefs"] = [source_ref]
+    dispatcher = RecordingDispatcher(handoff)
+    boundary = AssessmentInterviewResumeBoundary(
+        SimpleNamespace(), api_client=api, dispatcher=dispatcher
+    )
+    boundary._run_guarded_continuation = Mock()
+
+    boundary.handle(_message(), "corr-1")
+
+    assert len(dispatcher.calls) == 1
+    assert posted_refs == [[source_ref], []]
+    assert boundary._run_guarded_continuation.call_args.kwargs["guarded_state"] is accepted
