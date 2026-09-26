@@ -463,3 +463,50 @@ def test_literal_agent_stream_event_types_match_shared_typescript_contract() -> 
                 emitted.add(node.args[0].value)
 
     assert emitted <= supported, sorted(emitted - supported)
+
+
+def test_invoke_with_stream_returns_final_values_when_nested_in_a_parent_graph_node():
+    """Assessment 7976a135 regression: dispatcher specialists run inside a parent node.
+
+    LangGraph prefixes every chunk of a graph invoked from a parent node with the
+    parent task namespace, so the invoked graph's own final state is never at the
+    empty namespace. The Interview specialist completed but its handoff was rejected.
+    """
+    from typing import TypedDict
+
+    from langgraph.graph import END, START, StateGraph
+
+    class State(TypedDict, total=False):
+        steps: list[str]
+
+    inner_builder = StateGraph(State)
+    inner_builder.add_node("inner_step", lambda state: {"steps": [*state.get("steps", []), "inner"]})
+    inner_builder.add_edge(START, "inner_step")
+    inner_builder.add_edge("inner_step", END)
+    inner = inner_builder.compile()
+
+    child_builder = StateGraph(State)
+    child_builder.add_node("delegate", inner)
+    child_builder.add_node("finish", lambda state: {"steps": [*state["steps"], "child-final"]})
+    child_builder.add_edge(START, "delegate")
+    child_builder.add_edge("delegate", "finish")
+    child_builder.add_edge("finish", END)
+    child = child_builder.compile(name="specialist")
+
+    returned: dict[str, object] = {}
+
+    def parent_node(state):
+        returned["value"] = invoke_with_stream(child, {"steps": []})
+        return {}
+
+    parent_builder = StateGraph(State)
+    parent_builder.add_node("dispatch", parent_node)
+    parent_builder.add_edge(START, "dispatch")
+    parent_builder.add_edge("dispatch", END)
+    parent = parent_builder.compile()
+
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        parent.invoke({"steps": []})
+
+    assert returned["value"] == {"steps": ["inner", "child-final"]}
