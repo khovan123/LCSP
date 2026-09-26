@@ -309,7 +309,7 @@ def test_openai_model_policy_gates_reasoning_by_model_capability() -> None:
     assert openai_responses_base_init_kwargs() == {
         "use_responses_api": True,
         "output_version": "responses/v1",
-        "timeout": 30.0,
+        "timeout": 300.0,
     }
 
     kwargs = openai_responses_init_kwargs("openai:gpt-5-mini")
@@ -317,14 +317,14 @@ def test_openai_model_policy_gates_reasoning_by_model_capability() -> None:
     assert kwargs == {
         "use_responses_api": True,
         "output_version": "responses/v1",
-        "timeout": 30.0,
+        "timeout": 300.0,
         "reasoning": {"effort": REASONING_EFFORT},
     }
     assert "reasoning_effort" not in kwargs
     assert openai_responses_init_kwargs("openai:gpt-4o-mini") == {
         "use_responses_api": True,
         "output_version": "responses/v1",
-        "timeout": 30.0,
+        "timeout": 300.0,
     }
     assert supports_openai_reasoning("openai:gpt-5-mini") is True
     assert supports_openai_reasoning("openai:gpt-5.1") is True
@@ -335,7 +335,7 @@ def test_openai_model_policy_gates_reasoning_by_model_capability() -> None:
     assert openai_responses_init_kwargs("openai:gpt-4.1-nano") == {
         "use_responses_api": True,
         "output_version": "responses/v1",
-        "timeout": 30.0,
+        "timeout": 300.0,
     }
     assert supports_openai_reasoning("anthropic:claude-sonnet-4-6") is False
 

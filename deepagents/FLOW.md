@@ -334,7 +334,8 @@ Google/Gemini, LLM7, Inception, and Anthropic (reachable through an explicit
 `anthropic:` per-agent model override such as `LCSP_INTERVIEW_MODEL`, with keys in
 `ANTHROPIC_API_KEY=token1,token2`) use the same credential health/rotation state machine.
 The Docker worker started by `scripts/run.mjs` forwards every provider key list, base
-URL and `LLM_PROVIDER_TIMEOUT_SECONDS*` override; a test keeps that list in sync with
+URL and the shared `LLM_PROVIDER_TIMEOUT_SECONDS` override (one request timeout for
+every provider, default 300s); a test keeps that list in sync with
 `provider_credentials.PROVIDER_KEY_ENV`.
 LLM7 never falls back to `OPENAI_API_KEY`; its compatible ChatOpenAI client keeps the LLM7
 base URL and Chat Completions mode while rotating only `LLM7_API_KEY` slots. Inception

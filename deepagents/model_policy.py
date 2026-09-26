@@ -314,7 +314,7 @@ def openai_responses_base_init_kwargs() -> dict[str, object]:
     return {
         "use_responses_api": True,
         "output_version": RESPONSES_OUTPUT_VERSION,
-        "timeout": llm_provider_timeout_seconds("openai"),
+        "timeout": llm_provider_timeout_seconds(),
     }
 
 
@@ -465,19 +465,19 @@ def provider_init_kwargs(provider: str) -> dict[str, object]:
         return {
             "base_url": llm7_base_url(),
             "use_responses_api": False,
-            "timeout": llm_provider_timeout_seconds("llm7"),
+            "timeout": llm_provider_timeout_seconds(),
         }
     if canonical == "inception":
         return {
             "base_url": inception_base_url(),
             "temperature": 0.75,
             "use_responses_api": False,
-            "timeout": llm_provider_timeout_seconds("inception"),
+            "timeout": llm_provider_timeout_seconds(),
         }
     if canonical == "openai":
         return openai_responses_base_init_kwargs()
     if canonical == "google_genai":
-        return {"request_timeout": llm_provider_timeout_seconds("google_genai")}
+        return {"request_timeout": llm_provider_timeout_seconds()}
     return {}
 
 

@@ -13,9 +13,9 @@ PROVIDER_KEY_ENV = {
     "inception": ("INCEPTION_API_KEY",),
     "anthropic": ("ANTHROPIC_API_KEY",),
 }
-PROVIDER_TIMEOUT_DEFAULTS_SECONDS = {
-    "google_genai": 90.0,
-}
+# One request timeout for every provider. Large Interview/Investigator prompts on
+# slower routes (e.g. LLM7 GLM) exceeded shorter per-provider limits on every slot.
+DEFAULT_LLM_PROVIDER_TIMEOUT_SECONDS = 300.0
 # SDK value that disables SDK-internal retries when credential rotation owns retries.
 # langchain_google_genai maps max_retries to HttpRetryOptions(attempts=...): 0 means
 # "Google default" (5 retries), so a single attempt is 1 there and 0 for OpenAI.
@@ -38,24 +38,12 @@ def _positive_timeout(raw: str, name: str) -> float:
     return value
 
 
-def llm_provider_timeout_seconds(provider: str | None = None) -> float:
-    """Return the governed provider request timeout in seconds."""
-    canonical = (provider or "").strip().lower()
-    provider_env = (
-        f"LLM_PROVIDER_TIMEOUT_SECONDS_{canonical.upper()}"
-        if canonical
-        else ""
-    )
-    if provider_env:
-        provider_raw = os.getenv(provider_env)
-        if provider_raw is not None and provider_raw.strip():
-            return _positive_timeout(provider_raw.strip(), provider_env)
-    if canonical in PROVIDER_TIMEOUT_DEFAULTS_SECONDS:
-        return PROVIDER_TIMEOUT_DEFAULTS_SECONDS[canonical]
-    global_raw = os.getenv("LLM_PROVIDER_TIMEOUT_SECONDS")
-    if global_raw is not None and global_raw.strip():
-        return _positive_timeout(global_raw.strip(), "LLM_PROVIDER_TIMEOUT_SECONDS")
-    return 30.0
+def llm_provider_timeout_seconds() -> float:
+    """Return the governed request timeout in seconds, shared by all providers."""
+    raw = os.getenv("LLM_PROVIDER_TIMEOUT_SECONDS")
+    if raw is not None and raw.strip():
+        return _positive_timeout(raw.strip(), "LLM_PROVIDER_TIMEOUT_SECONDS")
+    return DEFAULT_LLM_PROVIDER_TIMEOUT_SECONDS
 
 
 def llm7_base_url() -> str:

@@ -685,7 +685,7 @@ class _ModelCallTelemetry:
 
     def __init__(self, model: Any) -> None:
         self.provider, self.model_name = provider_identity(model)
-        self.timeout_seconds = llm_provider_timeout_seconds(self.provider)
+        self.timeout_seconds = llm_provider_timeout_seconds()
         self.model_step_id = active_model_step_id() or str(uuid4())
         self.agent_role = active_billing_agent_role()
         self._started_at = time.monotonic()
