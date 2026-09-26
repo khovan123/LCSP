@@ -9,10 +9,11 @@ from langchain.agents.middleware import (
 )
 from langchain.agents.structured_output import AutoStrategy, ProviderStrategy, ToolStrategy
 from langchain_core.messages import ToolMessage
+from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
 from middleware.provider_fallback import ProviderFallbackMiddleware
 from middleware.provider_schema import ProviderSchemaCompatibilityMiddleware
 from middleware.token_fallback import TokenFallbackMiddleware
-from middleware.billing_metering import BillingMeteringMiddleware
+from middleware.billing_metering import BillingAgentRoleMiddleware, BillingMeteringMiddleware
 from middleware.failure_policy import (
     StructuredOutputRejected,
     TerminalSchemaError,
@@ -107,3 +108,17 @@ MODEL_GOVERNANCE_MIDDLEWARE = (
 )
 
 TRIAGE_MODEL_GOVERNANCE_MIDDLEWARE = MODEL_GOVERNANCE_MIDDLEWARE
+
+
+def governed_general_purpose_subagent(model, *, billing_role: str) -> dict:
+    """Replace Deep Agents' auto-added `general-purpose` subagent with a governed one.
+
+    The default spec inherits only parent middleware that overrides its own slots,
+    so its model calls would bypass credential rotation, provider fallback, retry
+    and billing metering. An explicit spec with the same name overrides it.
+    """
+    return {
+        **GENERAL_PURPOSE_SUBAGENT,
+        "model": model,
+        "middleware": [BillingAgentRoleMiddleware(billing_role), *MODEL_GOVERNANCE_MIDDLEWARE],
+    }

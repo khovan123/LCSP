@@ -21,7 +21,10 @@ from langchain.agents.middleware import TodoListMiddleware
 
 from harness import configure_lcsp_harness
 from middleware.billing_metering import BillingAgentRoleMiddleware
-from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from middleware.model_governance import (
+    MODEL_GOVERNANCE_MIDDLEWARE,
+    governed_general_purpose_subagent,
+)
 from model_policy import INVESTIGATOR_MODEL_SPEC, resolve_agent_model
 from orchestration.agent_stream import invoke_with_stream
 from orchestration.technical_coverage_policy import attach_partial_coverage_policy
@@ -168,6 +171,7 @@ class RepositoryDeepAnalyzer:
                 *MODEL_GOVERNANCE_MIDDLEWARE,
             ],
             subagents=[
+                governed_general_purpose_subagent(model, billing_role="investigator"),
                 {
                     "name": "repository-explorer",
                     "description": (

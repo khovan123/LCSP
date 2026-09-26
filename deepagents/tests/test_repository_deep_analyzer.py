@@ -500,3 +500,160 @@ def test_non_absent_results_are_untouched(tmp_path) -> None:
     original = RepositoryAnalysisResult.model_validate(_valid_repository_result())
 
     assert enforce_ai_absence_backstop(MagicMock(), original) is original
+
+
+def _compiled_subagent_middleware(monkeypatch) -> dict[str, list[str]]:
+    """Record the middleware Deep Agents actually compiles into each subagent."""
+    from deepagents.middleware import subagents as deep_subagents
+
+    compiled: dict[str, list[str]] = {}
+    real_create_agent = deep_subagents.create_agent
+
+    def recording_create_agent(model, **kwargs):
+        compiled[kwargs["name"]] = [type(item).__name__ for item in kwargs["middleware"]]
+        return real_create_agent(model, **kwargs)
+
+    monkeypatch.setattr(deep_subagents, "create_agent", recording_create_agent)
+    return compiled
+
+
+_GOVERNANCE_MIDDLEWARE = {
+    "BillingAgentRoleMiddleware",
+    "ModelRetryMiddleware",
+    "ProviderFallbackMiddleware",
+    "TokenFallbackMiddleware",
+    "BillingMeteringMiddleware",
+}
+
+
+def test_repository_analyst_task_subagents_run_under_model_governance(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """A `task` subagent model call must rotate/fall back/meter like the analyst's own.
+
+    Regression: the auto-added general-purpose subagent inherited none of the
+    LCSP governance middleware, so one provider timeout inside it failed the scan.
+    """
+    compiled = _compiled_subagent_middleware(monkeypatch)
+    monkeypatch.setattr(analyzer, "configure_lcsp_harness", lambda: None)
+    monkeypatch.setattr(
+        analyzer,
+        "resolve_agent_model",
+        lambda *, agent_name, model_spec: _NeverCalledModel(),
+    )
+    monkeypatch.setattr(
+        analyzer,
+        "invoke_with_stream",
+        lambda agent, inputs, *, config: {"structured_response": _valid_repository_result()},
+    )
+
+    RepositoryDeepAnalyzer()._invoke(
+        LocalShellBackend(tmp_path, inherit_env=False, timeout=5),
+        snapshot_id="snapshot-governed",
+        commit_sha="abc1234",
+        scan_job_id="scan-governed",
+        targeted_scope=None,
+    )
+
+    assert {"general-purpose", "repository-explorer"} <= compiled.keys()
+    for name, middleware in compiled.items():
+        missing = _GOVERNANCE_MIDDLEWARE - set(middleware)
+        assert not missing, f"subagent {name} runs without {sorted(missing)}"
+
+
+class _NeverCalledModel(BaseChatModel):
+    @property
+    def _llm_type(self) -> str:
+        return "never-called"
+
+    def bind_tools(self, tools, **kwargs):
+        return self
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        raise AssertionError("graph construction must not call the model")
+
+
+def test_repository_analyst_task_subagent_timeout_falls_back_to_next_provider(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """Scan b09a3da2 regression: a timed-out `task` subagent call uses provider fallback.
+
+    Before the fix the general-purpose subagent had no governance middleware, so
+    the primary provider's OpenAITimeoutError escaped `task` and failed the scan.
+    """
+    import httpx2
+    from langchain_openai.chat_models.base import OpenAITimeoutError
+
+    from middleware import provider_fallback
+
+    subagent_description = "Locate every AI SDK import under src/"
+
+    class ScriptedModel(BaseChatModel):
+        subagent_calls: int = 0
+        parent_calls: int = 0
+        subagent_times_out: bool = False
+        # Native structured output, as in the managed-graph smoke test above.
+        __module__ = "langchain_google_genai.chat_models"
+
+        @property
+        def _llm_type(self) -> str:
+            return "scripted"
+
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            if messages and messages[-1].type == "human" and messages[-1].content == subagent_description:
+                self.subagent_calls += 1
+                if self.subagent_times_out:
+                    raise OpenAITimeoutError(
+                        request=httpx2.Request("POST", "https://provider.invalid/v1/chat/completions")
+                    )
+                message = AIMessage(content="No AI SDK imports under src/.")
+            else:
+                self.parent_calls += 1
+                if self.parent_calls == 1:
+                    message = AIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "task",
+                                "args": {
+                                    "description": subagent_description,
+                                    "subagent_type": "general-purpose",
+                                },
+                                "id": "call_task_1",
+                                "type": "tool_call",
+                            }
+                        ],
+                    )
+                else:
+                    message = AIMessage(content=json.dumps(_valid_repository_result()))
+            return ChatResult(generations=[ChatGeneration(message=message)])
+
+    ScriptedModel.model_rebuild()
+    primary = ScriptedModel(subagent_times_out=True)
+    fallback = ScriptedModel()
+    monkeypatch.setattr(provider_fallback, "configured_fallback_providers", lambda: ("llm7",))
+    monkeypatch.setattr(provider_fallback, "fallback_model", lambda provider: fallback)
+    monkeypatch.setattr(analyzer, "configure_lcsp_harness", lambda: None)
+    monkeypatch.setattr(
+        analyzer,
+        "resolve_agent_model",
+        lambda *, agent_name, model_spec: primary,
+    )
+
+    result = RepositoryDeepAnalyzer()._invoke(
+        LocalShellBackend(tmp_path, inherit_env=False, timeout=5),
+        snapshot_id="snapshot-timeout",
+        commit_sha="abc1234",
+        scan_job_id="scan-timeout",
+        targeted_scope=None,
+    )
+
+    assert result.summary == "Tiny repository inspected through managed Deep Agent graph"
+    assert primary.subagent_calls == 1
+    assert fallback.subagent_calls == 1
+    assert primary.parent_calls == 2

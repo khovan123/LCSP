@@ -431,3 +431,34 @@ def test_harness_exposes_complete_deepagents_builtin_tool_surface() -> None:
 
 def test_harness_does_not_replace_deepagents_filesystem_permissions() -> None:
     assert LCSP_FILESYSTEM_PERMISSIONS == []
+
+
+def test_root_agent_task_subagents_run_under_model_governance(monkeypatch) -> None:
+    """Every `task` subagent of the root agent, general-purpose included, is governed."""
+    from deepagents.middleware import subagents as deep_subagents
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("LLM7_API_KEY", "test-llm7-key")
+    root_agent_module = importlib.import_module("agent")
+    compiled: dict[str, set[str]] = {}
+    real_create_agent = deep_subagents.create_agent
+
+    def recording_create_agent(model, **kwargs):
+        compiled[kwargs["name"]] = {type(item).__name__ for item in kwargs["middleware"]}
+        return real_create_agent(model, **kwargs)
+
+    monkeypatch.setattr(deep_subagents, "create_agent", recording_create_agent)
+
+    root_agent_module.create_lcsp_agent()
+
+    assert "general-purpose" in compiled
+    governance = {
+        "BillingAgentRoleMiddleware",
+        "ModelRetryMiddleware",
+        "ProviderFallbackMiddleware",
+        "TokenFallbackMiddleware",
+        "BillingMeteringMiddleware",
+    }
+    for name, middleware in compiled.items():
+        missing = governance - middleware
+        assert not missing, f"subagent {name} runs without {sorted(missing)}"
