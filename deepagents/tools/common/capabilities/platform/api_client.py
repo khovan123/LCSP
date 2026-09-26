@@ -912,6 +912,14 @@ class WorkerApiClient:
             raise WorkerCallbackError("Interview initial question response was invalid.")
         return data
 
+    def post_assessment_ai_not_detected(self, assessment_id: str, payload: dict) -> dict:
+        """End the assessment as "AI not detected"; the API re-validates the evidence."""
+        path = InternalPath.ASSESSMENT_AI_NOT_DETECTED.format(assessment_id=assessment_id)
+        data = self._post_with_retry(path, payload, redact=False)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("AI not detected response was invalid.")
+        return data
+
     def post_interview_targeted_need(self, assessment_id: str, payload: dict) -> dict:
         """Persist a server-guarded Targeted Interview need and opaque continuation."""
         path = InternalPath.INTERVIEW_TARGETED_NEED.format(assessment_id=assessment_id)

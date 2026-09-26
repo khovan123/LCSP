@@ -34,6 +34,7 @@ import {
   useSubmitAssessmentPostFindingDecisionMutation,
 } from "@/lib/api/assessment-queries";
 import { API_OUTCOME_KINDS } from "@/lib/api/outcome-kinds";
+import { useAssessmentsQuery } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 
 import { useAssessmentRuntimeViewModel } from "../../hooks/use-assessment-runtime-view-model";
@@ -224,7 +225,17 @@ function AssessmentInterviewFlow({
   const workflow = selectWorkflowPresentation(normalized);
   const customerActions = selectCustomerActions(normalized);
   const composerAvailability = selectComposerAvailability(normalized);
-  const interviewHandoff = selectInterviewHandoffPresentation(normalized);
+  const assessmentsQuery = useAssessmentsQuery();
+  const assessmentStatus =
+    assessmentsQuery.data?.kind === API_OUTCOME_KINDS.loaded
+      ? (assessmentsQuery.data.assessments.find(
+          (assessment) => assessment.id === assessmentId,
+        )?.status ?? null)
+      : null;
+  const interviewHandoff = selectInterviewHandoffPresentation(
+    normalized,
+    assessmentStatus,
+  );
   const postFinding = selectPostFindingPresentation(normalized);
   const runtimeThinkingItems = selectRuntimeThinkingItems(normalized);
   const runtimeInterviewState = interviewQuery.data;

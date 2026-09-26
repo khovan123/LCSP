@@ -325,6 +325,7 @@ enum AssessmentStatus {
   SCAN_IN_PROGRESS
   CLASSIFICATION_LOCKED
   READY_FOR_REVIEW
+  AI_NOT_DETECTED
 }
 
 enum ReadinessExportStatus {

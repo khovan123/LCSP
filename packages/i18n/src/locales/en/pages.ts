@@ -996,6 +996,7 @@ export const enPages = {
       SCAN_IN_PROGRESS: "Scan Running",
       CLASSIFICATION_LOCKED: "Classification Locked",
       READY_FOR_REVIEW: "Ready for Review",
+      AI_NOT_DETECTED: "AI not detected",
     },
     nextActions: {
       workflowRun:
@@ -1750,6 +1751,9 @@ export const enPages = {
       pendingDescription:
         "Evidence is ready. Waiting for Interview orchestration to provide the first question.",
       pendingPlaceholder: "Waiting for Interview...",
+      aiNotDetectedDescription:
+        "AI not detected. The technical evidence confirms this repository does not use AI, so the assessment has ended without an Interview.",
+      aiNotDetectedPlaceholder: "Assessment ended: AI not detected",
       progressQueued: "Your answer is queued for evaluation.",
       progressRunning: "Evaluating your answer.",
       progressTool: "Checking supporting information.",

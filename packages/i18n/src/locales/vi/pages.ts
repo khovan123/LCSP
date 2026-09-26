@@ -1003,6 +1003,7 @@ export const viPages = {
       SCAN_IN_PROGRESS: "Đang scan",
       CLASSIFICATION_LOCKED: "Classification đã khóa",
       READY_FOR_REVIEW: "Sẵn sàng review",
+      AI_NOT_DETECTED: "Không phát hiện AI",
     },
     nextActions: {
       workflowRun: "Mở Workflow Run để tiếp tục hoạt động assessment hiện tại.",
@@ -1753,6 +1754,9 @@ export const viPages = {
       pendingDescription:
         "Evidence đã sẵn sàng. Đang chờ orchestration cung cấp câu hỏi Interview đầu tiên.",
       pendingPlaceholder: "Đang chờ Interview...",
+      aiNotDetectedDescription:
+        "Không phát hiện AI. Bằng chứng kỹ thuật xác nhận repository này không sử dụng AI, nên assessment đã kết thúc mà không cần Interview.",
+      aiNotDetectedPlaceholder: "Assessment đã kết thúc: không phát hiện AI",
       progressQueued: "Câu trả lời đang chờ được đánh giá.",
       progressRunning: "Đang đánh giá câu trả lời của bạn.",
       progressTool: "Đang kiểm tra thông tin hỗ trợ.",

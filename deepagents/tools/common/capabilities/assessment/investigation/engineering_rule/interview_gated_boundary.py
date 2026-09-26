@@ -160,6 +160,12 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
         if ai_discovery and ai_discovery.get("gate") == "AI_ABSENT_CONFIRMED":
             if coverage_state == "READY" and ai_discovery.get("coverage_state") == "READY":
                 if not authoritative_customer_ai:
+                    # Terminal outcome: without it the assessment waits forever for an
+                    # Initial Interview question that is never asked.
+                    self._api_client.post_assessment_ai_not_detected(
+                        assessment_id,
+                        {"technicalEvidenceReportId": evidence_report_id},
+                    )
                     return None
             else:
                 self._route_ai_discovery_to_recovery(

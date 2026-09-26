@@ -10,6 +10,7 @@ import { CreateAssessmentHandler } from "./application/commands/create-assessmen
 import { CompleteRepositorySetupHandler } from "./application/commands/complete-repository-setup/complete-repository-setup.handler.js";
 import { DeleteAssessmentHandler } from "./application/commands/delete-assessment/delete-assessment.handler.js";
 import { RenameAssessmentHandler } from "./application/commands/rename-assessment/rename-assessment.handler.js";
+import { MarkAiNotDetectedHandler } from "./application/commands/mark-ai-not-detected/mark-ai-not-detected.handler.js";
 import { GetAssessmentHandler } from "./application/queries/get-assessment/get-assessment.handler.js";
 import { GetAssessmentReadinessHandler } from "./application/queries/get-assessment-readiness/get-assessment-readiness.handler.js";
 import { AssessmentInterviewRuntimeService } from "./application/services/assessment-interview-runtime.service.js";
@@ -39,6 +40,7 @@ import {
     CompleteRepositorySetupHandler,
     DeleteAssessmentHandler,
     RenameAssessmentHandler,
+    MarkAiNotDetectedHandler,
     GetAssessmentHandler,
     GetAssessmentReadinessHandler,
     ListAssessmentsHandler,
