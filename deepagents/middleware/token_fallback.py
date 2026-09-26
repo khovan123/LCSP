@@ -166,12 +166,16 @@ def model_provider(model) -> str | None:
         return "openai"
     if module.startswith("langchain_google_genai."):
         return "google_genai"
+    if module.startswith("langchain_anthropic."):
+        return "anthropic"
     return None
 
 
 def model_with_token(model, provider: str, token: str):
     # Reconstruct SDK clients; model_copy would retain the previous key's clients.
-    settings = model.model_dump(exclude={"openai_api_key", "google_api_key"})
+    settings = model.model_dump(
+        exclude={"openai_api_key", "google_api_key", "anthropic_api_key"}
+    )
     settings["api_key"] = token
     # Fallback rotation owns retry policy. In particular, retrying a 401 with the same
     # dead Gemini key only adds latency and duplicate Unauthorized log lines.

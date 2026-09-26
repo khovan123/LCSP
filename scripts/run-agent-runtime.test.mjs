@@ -67,3 +67,28 @@ test("optional observability failure does not stop Agent Runtime services", () =
     /phoenix: \{[\s\S]*optional: true,/u,
   );
 });
+
+test("docker worker env forwards every provider credential pool the worker rotates", async () => {
+  const credentials = await readFile(
+    new URL("../deepagents/provider_credentials.py", import.meta.url),
+    "utf8",
+  );
+  const table = credentials.slice(
+    credentials.indexOf("PROVIDER_KEY_ENV = {"),
+    credentials.indexOf("}", credentials.indexOf("PROVIDER_KEY_ENV = {")),
+  );
+  const keyEnvNames = [...table.matchAll(/"([A-Z0-9_]+_API_KEY)"/gu)].map(
+    ([, name]) => name,
+  );
+  assert.ok(keyEnvNames.length >= 4, "provider key table must be parsed");
+
+  const start = source.indexOf("function dockerWorkerEnv()");
+  const end = source.indexOf("return {", start);
+  assert.ok(start >= 0 && end > start);
+  const workerEnv = source.slice(start, end);
+  for (const name of keyEnvNames) {
+    assert.match(workerEnv, new RegExp(`"${name}"`, "u"), `${name} is not forwarded`);
+  }
+  assert.match(workerEnv, /"INCEPTION_BASE_URL"/u);
+  assert.match(workerEnv, /LLM_PROVIDER_TIMEOUT_SECONDS/u);
+});
