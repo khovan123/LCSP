@@ -37,6 +37,25 @@ class TerminalSchemaError(ValueError):
     """Structured output repair would repeat a failed task."""
 
 
+class StructuredOutputRejected(TerminalSchemaError):
+    """A provider model's own structured output failed the contract.
+
+    Still terminal for retry, credential rotation and queue delivery (repairing with the
+    same model would repeat it), but provider-specific: another provider may succeed.
+    """
+
+
+def is_structured_output_rejection(error: BaseException) -> bool:
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, StructuredOutputRejected):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
 def error_status(error: BaseException) -> int | None:
     """Return the first integer HTTP-like status found on an exception chain."""
     seen: set[int] = set()

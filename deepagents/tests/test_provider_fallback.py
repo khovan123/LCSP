@@ -660,3 +660,106 @@ def test_current_provider_is_not_reentered_from_fallback_chain(monkeypatch):
         "openai",
         "llm7",
     ]
+
+
+def test_structured_output_rejection_is_provider_scoped_not_retried():
+    from middleware.failure_policy import (
+        StructuredOutputRejected,
+        TerminalSchemaError,
+        is_terminal_task_error,
+        retry_model_error,
+    )
+
+    rejected = StructuredOutputRejected("Structured output schema validation failed")
+    assert is_terminal_task_error(rejected) is True
+    assert retry_model_error(rejected) is False
+    assert provider_fallback_failure(rejected) is True
+    assert provider_circuit_breaker_failure(rejected) is True
+    # Other schema/request failures stay terminal without switching providers.
+    generic = TerminalSchemaError("Tool argument schema validation failed")
+    assert provider_fallback_failure(generic) is False
+    assert provider_circuit_breaker_failure(generic) is False
+
+
+def _rejection_session(monkeypatch, routes=("google_genai",)):
+    import middleware.provider_fallback as fallback_module
+
+    monkeypatch.setattr(fallback_module, "publish_agent_stream_event", lambda *a, **k: None)
+    monkeypatch.setattr(fallback_module, "model_provider", lambda model: model.provider)
+    monkeypatch.setattr(fallback_module, "configured_fallback_providers", lambda: routes)
+    monkeypatch.setattr(fallback_module, "fallback_model", lambda provider: _BillingModel(provider))
+
+    class BillingClient:
+        def claim_billing_invocation(self, reservation_id, payload):
+            pass
+
+        def post_settled_usage(self, payload):
+            pass
+
+    return BillingMeteringSession(
+        api_client=BillingClient(),
+        assessment_id="assessment-rejection",
+        run_id="run-rejection",
+        reservation_id="reservation-rejection",
+        agent_role="investigator",
+        reserved_provider="LLM7",
+        reserved_model="gpt-5-nano",
+        authorized_models={("LLM7", "gpt-5-nano"), ("GOOGLE_GENAI", "gpt-5-nano")},
+        max_invocations=1,
+    )
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_llm7_output_rejection_falls_back_and_opens_circuit(monkeypatch, asynchronous):
+    # Regression: scan 581af151 — codestral (LLM7) returned an invalid
+    # RepositoryAnalysisResult; the rejection killed the scan although Gemini was configured.
+    from middleware.failure_policy import StructuredOutputRejected
+
+    session = _rejection_session(monkeypatch)
+    calls = []
+
+    def provider_handler(request):
+        calls.append(request.model.provider)
+        if request.model.provider == "llm7":
+            raise StructuredOutputRejected("Structured output schema validation failed")
+        return ModelResponse(result=[])
+
+    async def async_handler(request):
+        return provider_handler(request)
+
+    fallback = ProviderFallbackMiddleware()
+    request = _BillingRequest(_BillingModel("llm7"))
+    with activate_billing_metering(session):
+        for _ in range(2):
+            if asynchronous:
+                result = await fallback.awrap_model_call(request, async_handler)
+            else:
+                result = fallback.wrap_model_call(request, provider_handler)
+            assert isinstance(result, ModelResponse)
+
+    assert calls == ["llm7", "google_genai", "google_genai"]
+    assert session.provider_route_disabled("llm7") is True
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_output_rejected_by_every_route_reraises_the_schema_error(monkeypatch, asynchronous):
+    from middleware.failure_policy import StructuredOutputRejected
+
+    session = _rejection_session(monkeypatch)
+
+    def reject(request):
+        raise StructuredOutputRejected(f"{request.model.provider} rejected")
+
+    async def async_reject(request):
+        return reject(request)
+
+    fallback = ProviderFallbackMiddleware()
+    request = _BillingRequest(_BillingModel("llm7"))
+    with activate_billing_metering(session):
+        with pytest.raises(StructuredOutputRejected, match="llm7 rejected"):
+            if asynchronous:
+                await fallback.awrap_model_call(request, async_reject)
+            else:
+                fallback.wrap_model_call(request, reject)
