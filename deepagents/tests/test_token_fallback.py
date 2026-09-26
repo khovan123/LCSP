@@ -1092,3 +1092,28 @@ def test_google_retry_info_governs_the_single_cooldown_wait(monkeypatch):
 
     # Waits the provider-requested 40s for the soonest slot, not the 30s default.
     assert clock.sleeps == [40.0]
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_cooling_pool_defers_to_a_later_provider_route_without_waiting(monkeypatch, asynchronous):
+    from middleware.token_fallback import further_provider_route
+
+    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
+    clock, token_fallback = _install_fake_cooldown_clock(monkeypatch)
+    handler = _handler([QuotaError(), QuotaError()], asynchronous)
+
+    with further_provider_route(True), pytest.raises(TerminalCredentialError):
+        await _call(TokenFallbackMiddleware(), _openai_request(), handler, asynchronous)
+
+    # No cooldown sleep: the provider route takes over, and both slots stay cooling.
+    assert clock.sleeps == [] and clock.async_sleeps == []
+    assert _openai_keys(handler) == ["first-test-token", "second-test-token"]
+    assert set(token_fallback._RATE_LIMITED_UNTIL[("openai", "OPENAI_API_KEY")]) == {0, 1}
+
+    # A later call while the pool is still cooling defers immediately, without a request.
+    later = _handler([], asynchronous)
+    with further_provider_route(True), pytest.raises(TerminalCredentialError):
+        await _call(TokenFallbackMiddleware(), _openai_request(), later, asynchronous)
+    assert later.call_count == 0
+    assert clock.sleeps == [] and clock.async_sleeps == []
