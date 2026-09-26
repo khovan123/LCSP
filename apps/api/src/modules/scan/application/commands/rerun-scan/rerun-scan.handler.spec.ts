@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from "@nestjs/common";
+import { CommandBus } from "@nestjs/cqrs";
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
@@ -15,6 +16,7 @@ import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
+import { ReleaseInactiveScanReservationsCommand } from "../../../../billing/application/commands/release-inactive-scan-reservations/release-inactive-scan-reservations.command.js";
 import { RerunScanCommand } from "./rerun-scan.command.js";
 import { RerunScanHandler } from "./rerun-scan.handler.js";
 
@@ -23,6 +25,9 @@ describe("RerunScanHandler", () => {
   let prisma: any;
   let auditWriter: jest.Mocked<AuditWriterService>;
   let outbox: jest.Mocked<OutboxRepository>;
+  let commandBus: {
+    execute: jest.Mock<(command: unknown) => Promise<unknown>>;
+  };
 
   const defaultRbac = {
     userId: "user-1",
@@ -128,6 +133,14 @@ describe("RerunScanHandler", () => {
             enqueue: jest.fn(),
           },
         },
+        {
+          provide: CommandBus,
+          useValue: {
+            execute: jest
+              .fn<(command: unknown) => Promise<unknown>>()
+              .mockResolvedValue({ releasedReservationIds: [] }),
+          },
+        },
       ],
     }).compile();
 
@@ -135,6 +148,7 @@ describe("RerunScanHandler", () => {
     prisma = module.get(PrismaService);
     auditWriter = module.get(AuditWriterService);
     outbox = module.get(OutboxRepository);
+    commandBus = module.get(CommandBus);
 
     prisma.assessmentRuntimeEvent.findFirst.mockResolvedValue(null);
     prisma.repositoryScanJob.findMany.mockResolvedValue([]);
@@ -327,6 +341,33 @@ describe("RerunScanHandler", () => {
     );
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(auditWriter.write).toHaveBeenCalled();
+    // The replaced scan's reservation can no longer be spent by any worker.
+    expect(commandBus.execute).toHaveBeenCalledWith(
+      new ReleaseInactiveScanReservationsCommand("assessment-1"),
+    );
+  });
+
+  it("keeps a committed rerun when releasing replaced-scan credits fails", async () => {
+    prisma.repositoryScanJob.findUnique.mockResolvedValueOnce(null);
+    prisma.repositorySnapshot.findUnique.mockResolvedValueOnce({
+      id: "snapshot-1",
+      assessmentId: "assessment-1",
+      commitSha: "a".repeat(40),
+    });
+    prisma.assessment.findUnique.mockResolvedValueOnce({
+      id: "assessment-1",
+      ownerId: "user-1",
+      status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
+    });
+    prisma.repositoryScanJob.findFirst.mockResolvedValueOnce(null);
+    prisma.repositoryScanJob.findFirst.mockResolvedValueOnce(null);
+    commandBus.execute.mockRejectedValueOnce(new Error("billing unavailable"));
+
+    const result = await handler.execute(defaultCommand);
+
+    expect(result.status).toBe(REPOSITORY_SCAN_JOB_STATUSES.queued);
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(auditWriter.write).toHaveBeenCalled();
   });
 
   it("throws ConflictException when a scan is already active", async () => {
@@ -352,6 +393,7 @@ describe("RerunScanHandler", () => {
     expect(prisma.repositoryScanJob.create).not.toHaveBeenCalled();
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(outbox.enqueue).not.toHaveBeenCalled();
+    expect(commandBus.execute).not.toHaveBeenCalled();
   });
 
   it("fails stale active scans before creating a rerun", async () => {

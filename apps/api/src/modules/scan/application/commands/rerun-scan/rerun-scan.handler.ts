@@ -1,5 +1,5 @@
-import { HttpStatus } from "@nestjs/common";
-import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+import { HttpStatus, Logger } from "@nestjs/common";
+import { CommandBus, CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { randomUUID } from "node:crypto";
 
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
@@ -33,6 +33,7 @@ import { AuditWriterService } from "../../../../../platform/audit/audit-writer.s
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
 import { problemException } from "../../../../../platform/http/filters/error.factory.js";
 import { failStaleRepositoryScanJobs } from "../../../../../platform/scan/repository-scan-staleness.js";
+import { ReleaseInactiveScanReservationsCommand } from "../../../../billing/application/commands/release-inactive-scan-reservations/release-inactive-scan-reservations.command.js";
 import type { RerunScanResponseDto } from "../../contracts/scan/rerun-scan.contract.js";
 import { RerunScanCommand } from "./rerun-scan.command.js";
 
@@ -41,17 +42,21 @@ import { RerunScanCommand } from "./rerun-scan.command.js";
  */
 @CommandHandler(RerunScanCommand)
 export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
+  private readonly logger = new Logger(RerunScanHandler.name);
+
   /**
    * Creates the rerun handler with scan persistence, audit, and transactional outbox dependencies.
    *
    * @param prisma - Prisma service used for idempotency, snapshot/assessment validation, and scan-job persistence.
    * @param auditWriter - Audit writer used to record successful rerun requests.
    * @param outbox - Transactional outbox used to dispatch the new scan job.
+   * @param commandBus - Command bus used to release credits held by replaced scans.
    */
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditWriter: AuditWriterService,
     private readonly outbox: OutboxRepository,
+    private readonly commandBus: CommandBus,
   ) {}
 
   /**
@@ -251,6 +256,11 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
       throw e;
     }
 
+    await this.releaseReplacedScanCredits(
+      command.assessmentId,
+      command.correlationId,
+    );
+
     await this.auditWriter.write({
       eventType: SCAN_EVENT_TYPES.scanRerunTriggeredAudit,
       actorId: rbac.userId,
@@ -277,6 +287,27 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
       replacedScanJobId,
       command.correlationId,
     );
+  }
+
+  /**
+   * Returns credits still held by scans this rerun replaced or already deleted.
+   *
+   * The sweep is idempotent, so a failure only defers the release to the next
+   * rerun or terminal scan callback; it must not undo a committed rerun.
+   */
+  private async releaseReplacedScanCredits(
+    assessmentId: string,
+    correlationId: string,
+  ): Promise<void> {
+    try {
+      await this.commandBus.execute(
+        new ReleaseInactiveScanReservationsCommand(assessmentId),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not release credits held by replaced scans assessmentId=${assessmentId} correlationId=${correlationId} error=${error instanceof Error ? error.name : "unknown"}`,
+      );
+    }
   }
 
   /**
