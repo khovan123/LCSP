@@ -401,3 +401,55 @@ async def test_model_retry_never_resends_typed_auth_failure_on_same_credential(a
         else:
             retry.wrap_model_call(request, handler)
     assert handler.call_count == 1
+
+
+def test_non_retryable_boundary_failures_are_terminal_at_the_boundary():
+    from tools.common.capabilities.agent_runtime.boundary import NonRetryableAgentBoundaryError
+    from tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary import (
+        TechnicalRecoveryNotStarted,
+    )
+
+    # Never redelivered, so the invocation's billing reservation must be released.
+    assert is_terminal_boundary_error(NonRetryableAgentBoundaryError("scan job is terminal")) is True
+    assert is_terminal_boundary_error(TechnicalRecoveryNotStarted("recovery not requested")) is True
+    # Model-stack routing is unchanged: these are boundary outcomes, not model errors.
+    assert is_terminal_task_error(NonRetryableAgentBoundaryError("scan job is terminal")) is False
+
+
+@pytest.mark.parametrize(
+    ("error_factory", "released"),
+    [
+        (lambda: __import__(
+            "tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary",
+            fromlist=["TechnicalRecoveryNotStarted"],
+        ).TechnicalRecoveryNotStarted("recovery not requested"), True),
+        (lambda: RuntimeError("transient provider outage"), False),
+    ],
+)
+def test_invoke_boundary_releases_reservation_only_for_non_redelivered_failures(
+    monkeypatch, error_factory, released
+):
+    from tools.common.capabilities.agent_runtime import invocation
+
+    class FakeBillingSession:
+        def __init__(self):
+            self.released = 0
+
+        def release(self):
+            self.released += 1
+
+    session = FakeBillingSession()
+    error = error_factory()
+
+    def failing_handler(*_args):
+        raise error
+
+    monkeypatch.setattr(invocation, "build_boundary", lambda _target: object())
+    monkeypatch.setattr(invocation, "_agent_stream_session", lambda *_args: None)
+    monkeypatch.setattr(invocation, "_billing_metering_session", lambda *_args: session)
+    monkeypatch.setattr(invocation, "_run_boundary_handler", failing_handler)
+
+    with pytest.raises(type(error)):
+        invocation.invoke_boundary("engineering_assessment_requested", {}, "corr-release")
+
+    assert session.released == (1 if released else 0)

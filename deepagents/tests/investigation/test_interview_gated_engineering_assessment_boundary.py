@@ -3,8 +3,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 import pytest
 
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
 from tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary import (
     InterviewGatedEngineeringAssessmentBoundary,
+    TechnicalRecoveryNotStarted,
     _has_authoritative_customer_ai_context,
 )
 from tools.common.capabilities.assessment.investigation.engineering_rule.managed_targeted_investigator import (
@@ -60,13 +63,39 @@ class FakeDispatcher:
         }
 
 
+def _reanalysis_call(call_id: str = "call-reanalysis-1") -> AIMessage:
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "id": call_id,
+                "name": "request_targeted_reanalysis",
+                "args": {"analyzerId": "pge", "reason": "coverage recovery"},
+            }
+        ],
+    )
+
+
 class RecordingRoot:
-    def __init__(self) -> None:
+    """Root that requests the approval-gated reanalysis tool (the real recovery action)."""
+
+    def __init__(self, reply=None, history=()) -> None:
         self.calls = []
+        self._reply = reply if reply is not None else [_reanalysis_call()]
+        self._history = list(history)
 
     def invoke(self, payload, config=None):
         self.calls.append((payload, config))
-        return {"status": "ROOT_REENTERED"}
+        instruction = HumanMessage(content=payload["messages"][0]["content"])
+        return {"messages": [*self._history, instruction, *self._reply]}
+
+
+def _text_only_root(history=()) -> RecordingRoot:
+    # Observed in production (LLM7 codestral): a plain refusal with no tool call.
+    return RecordingRoot(
+        reply=[AIMessage(content="I'm sorry, but I currently don't have the necessary tools.")],
+        history=history,
+    )
 
 
 class NoopPipeline:
@@ -723,3 +752,90 @@ def test_existing_waiting_question_never_reboots_initial_interview() -> None:
     )
     assert dispatcher.calls == []
     assert api.seeded == []
+
+
+def _unavailable_report():
+    report = _report()
+    report["evidence_payload"]["evidence_graph"]["coverage_state"] = "UNAVAILABLE"
+    return report
+
+
+def test_coverage_recovery_without_reanalysis_request_fails_loudly() -> None:
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    dispatcher = FakeDispatcher()
+    root = _text_only_root()
+
+    with pytest.raises(TechnicalRecoveryNotStarted) as caught:
+        _boundary(api, dispatcher, root)._prepare_interview(
+            evidence_report=_unavailable_report(),
+            evidence_report_id="ter-1",
+            assessment_id="assessment-1",
+            correlation_id="corr-text-only",
+        )
+
+    # Never redelivered: the same prompt to the same model would repeat the refusal.
+    assert isinstance(caught.value, NonRetryableAgentBoundaryError)
+    assert "TECHNICAL_COVERAGE_RECOVERY_REQUIRED" in str(caught.value)
+    assert dispatcher.calls == []
+    assert api.seeded == []
+    assert len(root.calls) == 1
+
+
+def test_ai_discovery_recovery_without_reanalysis_request_fails_loudly() -> None:
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    dispatcher = FakeDispatcher()
+    finding = _ai_finding(
+        "PROVIDER_REFERENCE", "TARGETED_TECHNICAL_REANALYSIS", owner="TECHNICAL"
+    )
+
+    with pytest.raises(TechnicalRecoveryNotStarted) as caught:
+        _boundary(api, dispatcher, _text_only_root())._prepare_interview(
+            evidence_report=_ai_report("AI_UNKNOWN", [finding]),
+            evidence_report_id="ter-provider-ref",
+            assessment_id="assessment-1",
+            correlation_id="corr-provider-ref",
+            workflow_run_id="workflow-provider-ref",
+        )
+
+    assert "AI_DISCOVERY_REANALYSIS_REQUIRED" in str(caught.value)
+    assert dispatcher.calls == []
+    assert api.seeded == []
+
+
+def test_reanalysis_request_from_an_earlier_run_does_not_count(monkeypatch) -> None:
+    # Recovery threads are persistent; only this invocation's reply is evidence.
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    earlier = [
+        HumanMessage(content="earlier recovery instruction"),
+        _reanalysis_call("call-earlier"),
+        ToolMessage(content="approved", tool_call_id="call-earlier", name="request_targeted_reanalysis"),
+    ]
+
+    with pytest.raises(TechnicalRecoveryNotStarted):
+        _boundary(api, FakeDispatcher(), _text_only_root(history=earlier))._prepare_interview(
+            evidence_report=_unavailable_report(),
+            evidence_report_id="ter-1",
+            assessment_id="assessment-1",
+            correlation_id="corr-stale-history",
+        )
+
+
+def test_executed_reanalysis_tool_result_counts_as_recovery() -> None:
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    root = RecordingRoot(
+        reply=[
+            _reanalysis_call("call-now"),
+            ToolMessage(content="queued", tool_call_id="call-now", name="request_targeted_reanalysis"),
+            AIMessage(content="Targeted reanalysis requested."),
+        ]
+    )
+
+    result = _boundary(api, FakeDispatcher(), root)._prepare_interview(
+        evidence_report=_unavailable_report(),
+        evidence_report_id="ter-1",
+        assessment_id="assessment-1",
+        correlation_id="corr-executed",
+    )
+
+    assert result is None
+    assert len(root.calls) == 1
