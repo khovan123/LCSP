@@ -748,6 +748,76 @@ async def test_wrapped_sdk_timeout_rotates_without_marking_slot_dead(monkeypatch
     assert clock.sleeps == [] and clock.async_sleeps == []
 
 
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_transient_primary_retries_once_after_all_alternates_are_auth_dead(
+    monkeypatch, asynchronous
+):
+    monkeypatch.setenv(
+        "OPENAI_API_KEY",
+        "primary-test-token,dead-test-token-a,dead-test-token-b",
+    )
+    clock, token_fallback = _install_fake_cooldown_clock(monkeypatch)
+    timeout = RuntimeError("model failure")
+    timeout.__cause__ = httpx.ReadTimeout("provider timed out")
+    first_auth = RuntimeError("provider auth failure")
+    first_auth.status_code = 401
+    second_auth = RuntimeError("provider auth failure")
+    second_auth.status_code = 403
+    response = ModelResponse(result=[])
+    handler = _handler([timeout, first_auth, second_auth, response], asynchronous)
+
+    assert (
+        await _call(TokenFallbackMiddleware(), _openai_request(), handler, asynchronous)
+        is response
+    )
+
+    assert _openai_keys(handler) == [
+        "primary-test-token",
+        "dead-test-token-a",
+        "dead-test-token-b",
+        "primary-test-token",
+    ]
+    assert token_fallback._DEAD_CREDENTIAL_SLOTS[("openai", "OPENAI_API_KEY")] == {
+        1,
+        2,
+    }
+    assert clock.sleeps == [] and clock.async_sleeps == []
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_transient_primary_recovery_is_bounded_to_one_extra_attempt(
+    monkeypatch, asynchronous
+):
+    monkeypatch.setenv(
+        "OPENAI_API_KEY",
+        "primary-test-token,dead-test-token-a,dead-test-token-b",
+    )
+    clock, _ = _install_fake_cooldown_clock(monkeypatch)
+    timeout = RuntimeError("model failure")
+    timeout.__cause__ = httpx.ReadTimeout("provider timed out")
+    retry_timeout = RuntimeError("model failure again")
+    retry_timeout.__cause__ = httpx.ReadTimeout("provider timed out again")
+    first_auth = RuntimeError("provider auth failure")
+    first_auth.status_code = 401
+    second_auth = RuntimeError("provider auth failure")
+    second_auth.status_code = 403
+    handler = _handler([timeout, first_auth, second_auth, retry_timeout], asynchronous)
+
+    with pytest.raises(TerminalCredentialError):
+        await _call(TokenFallbackMiddleware(), _openai_request(), handler, asynchronous)
+
+    assert _openai_keys(handler) == [
+        "primary-test-token",
+        "dead-test-token-a",
+        "dead-test-token-b",
+        "primary-test-token",
+    ]
+    assert handler.call_count == 4
+    assert clock.sleeps == [] and clock.async_sleeps == []
+
+
 def test_server_errors_on_every_slot_terminate_without_waiting(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
     clock, token_fallback = _install_fake_cooldown_clock(monkeypatch)

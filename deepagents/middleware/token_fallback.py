@@ -450,16 +450,17 @@ class TokenFallbackMiddleware(AgentMiddleware):
         env_name: str,
         tokens: tuple[str, ...],
         attempted: set[int],
-        waited_for_cooldown: bool,
-    ) -> tuple[list[int], tuple[int, float] | None]:
-        """Plan the next batch of slots, or the single cooldown wait of this model call.
+        transient_retry_index: int | None,
+        saw_auth_failure: bool,
+        recovery_retry_used: bool,
+    ) -> tuple[list[int], tuple[int, float] | None, bool]:
+        """Plan the next slots while keeping one bounded recovery retry per model call.
 
-        Every slot is invoked at most once before the wait. The wait happens at most once
-        per model call, only when no healthy untried slot remains, and targets the
-        soonest-eligible cooling slot. After it, that slot plus any untried slot whose
-        cooldown has also expired are each invoked once more in slot-index order; a
-        further 429 ends the call. A model call therefore makes at most len(tokens) + 1
-        provider invocations.
+        Every slot is invoked at most once initially. Once no healthy untried slot
+        remains, exactly one extra provider invocation may be used either to retry a
+        transiently failed slot when every alternative slot is permanently dead, or to
+        wait for and retry the soonest rate-limited slot. A model call therefore makes
+        at most len(tokens) + 1 provider invocations.
         """
         order = self._attempt_order(
             provider=provider,
@@ -467,9 +468,38 @@ class TokenFallbackMiddleware(AgentMiddleware):
             tokens=tokens,
             attempted=attempted,
         )
-        if order or waited_for_cooldown:
-            return order, None
-        return [], self._next_rate_limited_slot(provider=provider, env_name=env_name, tokens=tokens)
+        if order:
+            return order, None, False
+        if recovery_retry_used:
+            return [], None, False
+
+        # A timeout/5xx does not make a credential unhealthy. If every alternative
+        # credential has now proved permanently unusable (401/403), give the transient
+        # slot one final bounded attempt before declaring the provider pool exhausted.
+        # This is intentionally narrower than retrying arbitrary transient failures:
+        # all-transient pools still fail fast and ModelRetry remains the outer policy.
+        if transient_retry_index is not None and saw_auth_failure:
+            dead = self._dead_slots(provider, env_name)
+            cooling = self._rate_limited_slots(provider, env_name)
+            now = _monotonic()
+            alternatives = [
+                index for index in range(len(tokens)) if index != transient_retry_index
+            ]
+            if (
+                alternatives
+                and all(index in dead for index in alternatives)
+                and transient_retry_index not in dead
+                and cooling.get(transient_retry_index, 0.0) <= now
+            ):
+                cooling.pop(transient_retry_index, None)
+                return [transient_retry_index], None, True
+
+        wait = self._next_rate_limited_slot(
+            provider=provider,
+            env_name=env_name,
+            tokens=tokens,
+        )
+        return [], wait, False
 
     def _end_cooldown_wait(self, *, provider: str, env_name: str, index: int, attempted: set[int]) -> None:
         # The awaited slot is eligible by construction; do not let clock rounding skip it.
@@ -539,19 +569,25 @@ class TokenFallbackMiddleware(AgentMiddleware):
     def _srun_with_fallback(self, request, handler, provider: str, env_name: str, tokens: tuple[str, ...]):
         first_error: BaseException | None = None
         attempted: set[int] = set()
-        waited_for_cooldown = False
+        transient_retry_index: int | None = None
+        saw_auth_failure = False
+        recovery_retry_used = False
         attempt_count = 0
         while True:
-            order, wait = self._next_step(
+            order, wait, transient_recovery = self._next_step(
                 provider=provider,
                 env_name=env_name,
                 tokens=tokens,
                 attempted=attempted,
-                waited_for_cooldown=waited_for_cooldown,
+                transient_retry_index=transient_retry_index,
+                saw_auth_failure=saw_auth_failure,
+                recovery_retry_used=recovery_retry_used,
             )
+            if transient_recovery:
+                recovery_retry_used = True
             if wait is not None:
                 index, wait_seconds = wait
-                waited_for_cooldown = True
+                recovery_retry_used = True
                 self._log_wait_for_rate_limit(
                     provider=provider,
                     env_name=env_name,
@@ -585,6 +621,14 @@ class TokenFallbackMiddleware(AgentMiddleware):
                         error=error,
                     ):
                         raise
+                    if _is_auth_failure(error):
+                        saw_auth_failure = True
+                    if (
+                        transient_retry_index is None
+                        and _is_retryable_transient_error(error)
+                        and not _is_rate_limited(error)
+                    ):
+                        transient_retry_index = index
                     first_error = first_error or error
                     continue
                 self._mark_healthy(provider=provider, env_name=env_name, index=index)
@@ -594,19 +638,25 @@ class TokenFallbackMiddleware(AgentMiddleware):
     async def _arun_with_fallback(self, request, handler, provider: str, env_name: str, tokens: tuple[str, ...]):
         first_error: BaseException | None = None
         attempted: set[int] = set()
-        waited_for_cooldown = False
+        transient_retry_index: int | None = None
+        saw_auth_failure = False
+        recovery_retry_used = False
         attempt_count = 0
         while True:
-            order, wait = self._next_step(
+            order, wait, transient_recovery = self._next_step(
                 provider=provider,
                 env_name=env_name,
                 tokens=tokens,
                 attempted=attempted,
-                waited_for_cooldown=waited_for_cooldown,
+                transient_retry_index=transient_retry_index,
+                saw_auth_failure=saw_auth_failure,
+                recovery_retry_used=recovery_retry_used,
             )
+            if transient_recovery:
+                recovery_retry_used = True
             if wait is not None:
                 index, wait_seconds = wait
-                waited_for_cooldown = True
+                recovery_retry_used = True
                 self._log_wait_for_rate_limit(
                     provider=provider,
                     env_name=env_name,
@@ -640,6 +690,14 @@ class TokenFallbackMiddleware(AgentMiddleware):
                         error=error,
                     ):
                         raise
+                    if _is_auth_failure(error):
+                        saw_auth_failure = True
+                    if (
+                        transient_retry_index is None
+                        and _is_retryable_transient_error(error)
+                        and not _is_rate_limited(error)
+                    ):
+                        transient_retry_index = index
                     first_error = first_error or error
                     continue
                 self._mark_healthy(provider=provider, env_name=env_name, index=index)

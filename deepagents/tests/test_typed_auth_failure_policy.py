@@ -252,13 +252,18 @@ async def test_timeout_then_typed_auth_on_last_slot_ends_with_bounded_credential
     monkeypatch, asynchronous
 ):
     monkeypatch.setenv("GOOGLE_API_KEY", "google-slot-0-test-token,google-slot-1-test-token")
-    side_effect = [_google_timeout(), _google_auth_error()]
+    side_effect = [_google_timeout(), _google_auth_error(), _google_timeout()]
     handler = AsyncMock(side_effect=side_effect) if asynchronous else MagicMock(side_effect=side_effect)
 
     with pytest.raises(TerminalCredentialError) as caught:
         await _call(TokenFallbackMiddleware(), _gemini_request(), handler, asynchronous)
 
-    assert handler.call_count == 2
+    assert handler.call_count == 3
+    assert _google_keys(handler) == [
+        "google-slot-0-test-token",
+        "google-slot-1-test-token",
+        "google-slot-0-test-token",
+    ]
     assert not isinstance(caught.value, GoogleAuthenticationError)
     assert "test-token" not in str(caught.value)
 
@@ -270,7 +275,7 @@ async def test_exhausted_google_pool_with_typed_auth_moves_to_next_provider(monk
     monkeypatch.setenv("LLM7_API_KEY", "llm7-only-test-token")
     monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "llm7")
     response = ModelResponse(result=[])
-    side_effect = [_google_timeout(), _google_auth_error(), response]
+    side_effect = [_google_timeout(), _google_auth_error(), _google_timeout(), response]
     handler = AsyncMock(side_effect=side_effect) if asynchronous else MagicMock(side_effect=side_effect)
     token_fallback = TokenFallbackMiddleware()
     provider_fallback = ProviderFallbackMiddleware()
@@ -289,6 +294,7 @@ async def test_exhausted_google_pool_with_typed_auth_moves_to_next_provider(monk
     assert result is response
     models = [call.args[0].model for call in handler.call_args_list]
     assert [type(model).__name__ for model in models] == [
+        "ChatGoogleGenerativeAI",
         "ChatGoogleGenerativeAI",
         "ChatGoogleGenerativeAI",
         "ChatOpenAI",
