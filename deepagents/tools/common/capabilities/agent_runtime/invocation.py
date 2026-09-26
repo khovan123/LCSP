@@ -218,9 +218,9 @@ def invoke_boundary(
         # Keep a spendable reservation for broker-retryable execution failures.
         # Terminal failures are not going to execute again and can release now.
         if billing_session is not None:
-            from middleware.failure_policy import is_terminal_task_error
+            from middleware.failure_policy import is_terminal_boundary_error
 
-            if is_terminal_task_error(error) and not isinstance(
+            if is_terminal_boundary_error(error) and not isinstance(
                 error, BillingMeteringError
             ):
                 try:

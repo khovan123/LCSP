@@ -101,6 +101,7 @@ def provider_circuit_breaker_failure(error: BaseException) -> bool:
         return False
     return (
         error_status(error) in _PERMANENT_PROVIDER_ROUTE_STATUSES
+        or is_auth_failure(error)
     )
 
 
