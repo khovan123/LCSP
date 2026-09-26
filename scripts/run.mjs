@@ -756,6 +756,15 @@ function dockerWorkerEnv() {
       rootEnv.LCSP_API_BASE_URL ??
       "http://127.0.0.1:4000",
   );
+  // Per-provider request timeouts (LLM_PROVIDER_TIMEOUT_SECONDS_<PROVIDER>) are
+  // optional overrides, so forward whichever ones the operator configured.
+  const providerTimeoutKeys = Array.from(
+    new Set(
+      [...Object.keys(rootEnv), ...Object.keys(process.env)].filter((key) =>
+        /^LLM_PROVIDER_TIMEOUT_SECONDS(_[A-Z0-9_]+)?$/.test(key),
+      ),
+    ),
+  ).sort();
   const fallbackProviderKeys = Array.from(
     new Set(
       [...Object.keys(rootEnv), ...Object.keys(process.env)].filter((key) =>
@@ -785,8 +794,13 @@ function dockerWorkerEnv() {
     "ANTHROPIC_API_KEY",
     "GEMINI_API_KEY",
     "GOOGLE_API_KEY",
+    // Every provider key list is forwarded whole: the worker rotates across the
+    // comma-separated slots, so each configured provider needs its own variable.
     "LLM7_API_KEY",
     "LLM7_BASE_URL",
+    "INCEPTION_API_KEY",
+    "INCEPTION_BASE_URL",
+    ...providerTimeoutKeys,
     ...fallbackProviderKeys,
     "LCSP_ROOT_AGENT_MODEL",
     "LCSP_TRIAGE_MODEL",

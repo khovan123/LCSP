@@ -11,6 +11,7 @@ PROVIDER_KEY_ENV = {
     "google_genai": ("GOOGLE_API_KEY", "GEMINI_API_KEY"),
     "llm7": ("LLM7_API_KEY",),
     "inception": ("INCEPTION_API_KEY",),
+    "anthropic": ("ANTHROPIC_API_KEY",),
 }
 PROVIDER_TIMEOUT_DEFAULTS_SECONDS = {
     "google_genai": 90.0,
@@ -23,6 +24,7 @@ NO_SDK_RETRY_MAX_RETRIES = {
     "google_genai": 1,
     "llm7": 0,
     "inception": 0,
+    "anthropic": 0,
 }
 
 

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 from langchain.agents.middleware import ModelRequest, ModelResponse
+from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -174,7 +175,9 @@ def _install_fake_cooldown_clock(monkeypatch, *, start: float = 1_000.0):
     return clock, token_fallback
 
 
-@pytest.mark.parametrize("provider", ["openai", "google_genai", "llm7", "inception"])
+@pytest.mark.parametrize(
+    "provider", ["openai", "google_genai", "llm7", "inception", "anthropic"]
+)
 @pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.asyncio
 async def test_token_fallback_preserves_model_policy(monkeypatch, provider, asynchronous):
@@ -183,6 +186,7 @@ async def test_token_fallback_preserves_model_policy(monkeypatch, provider, asyn
         "google_genai": "GOOGLE_API_KEY",
         "llm7": "LLM7_API_KEY",
         "inception": "INCEPTION_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
     }[provider]
     monkeypatch.setenv(name, "first-test-token,second-test-token,")
     if provider == "openai":
@@ -207,6 +211,12 @@ async def test_token_fallback_preserves_model_policy(monkeypatch, provider, asyn
             use_responses_api=False,
             **credential_init_kwargs(provider),
         )
+    elif provider == "anthropic":
+        model = ChatAnthropic(
+            model="claude-sonnet-5",
+            temperature=0.2,
+            **credential_init_kwargs(provider),
+        )
     else:
         model = ChatGoogleGenerativeAI(
             model="gemini-3.5-flash-lite",
@@ -224,6 +234,8 @@ async def test_token_fallback_preserves_model_policy(monkeypatch, provider, asyn
     key = (
         fallback.openai_api_key
         if provider in {"openai", "llm7", "inception"}
+        else fallback.anthropic_api_key
+        if provider == "anthropic"
         else fallback.google_api_key
     )
     assert key.get_secret_value() == "second-test-token"
@@ -243,6 +255,11 @@ async def test_token_fallback_preserves_model_policy(monkeypatch, provider, asyn
         assert fallback.use_responses_api is False
         assert fallback.max_retries == 0
         assert fallback.root_client is not model.root_client
+    elif provider == "anthropic":
+        assert model_provider(model) == "anthropic"
+        assert fallback.model == "claude-sonnet-5"
+        assert fallback.temperature == 0.2
+        assert fallback.max_retries == 0
     else:
         assert fallback.reasoning_effort == "minimal"
         assert fallback.thinking_budget is None
