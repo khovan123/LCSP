@@ -1247,3 +1247,67 @@ def test_resume_interview_never_uses_correlation_id_as_workflow_run_id() -> None
             },
             correlationId=str(uuid4()),
         )
+
+
+def _raw_version_ref_boundary(frontier_refs: list[str]):
+    mock_dispatcher = MagicMock()
+    mock_dispatcher.dispatch.return_value = {
+        "handoff": {
+            "outcome": "WAITING_FOR_CUSTOMER",
+            "activeQuestion": {
+                "id": "q-1",
+                "prompt": "Is the AI feature used in production?",
+                "whyEvidenceRefs": list(frontier_refs),
+                "frontier": {
+                    "owner": "CUSTOMER",
+                    "materiality": "MATERIAL",
+                    "description": "Production use of the AI feature",
+                    "evidenceRefs": list(frontier_refs),
+                },
+            },
+        }
+    }
+    boundary = AssessmentInterviewResumeBoundary(
+        config=MagicMock(), api_client=MagicMock(), dispatcher=mock_dispatcher,
+    )
+    asmt_id = str(uuid4())
+
+    def run() -> dict:
+        return boundary._run_interview(
+            assessment_id=asmt_id,
+            thread_id=f"interview:{asmt_id}",
+            question_id="q-1",
+            context_revision=7,
+            resume_reason="INTERVIEW_AGENT_DECISION_REQUIRED",
+            context={
+                "workflowRunId": str(uuid4()),
+                "authenticatedActorId": "customer-1",
+                "sourceVersion": "snap-1:commit1",
+                "pgeVersion": "ter-1:1.0.0",
+                "privateRevision": {"actorId": "customer-1", "governedEvidenceRefs": []},
+            },
+            correlationId=str(uuid4()),
+        )
+
+    return run
+
+
+def test_interview_canonicalizes_raw_turn_version_refs() -> None:
+    """Assessment 7976a135 regression: the specialist cited pgeVersion verbatim as a ref.
+
+    `ter-1:1.0.0` is this turn's own report under its raw version string; the run used to
+    fail with 'unauthorized or fabricated refs'. It is now rewritten to the ledger's
+    canonical `technicalEvidenceReport:ter-1` ref (and the snapshot likewise).
+    """
+    decision = _raw_version_ref_boundary(["ter-1:1.0.0", "snap-1:commit1", "ter-1"])()
+
+    question = decision["activeQuestion"]
+    expected = ["technicalEvidenceReport:ter-1", "repositorySnapshot:snap-1"]
+    assert question["frontier"]["evidenceRefs"] == expected
+    assert question["whyEvidenceRefs"] == expected
+
+
+def test_interview_still_rejects_refs_to_other_artifacts() -> None:
+    """Only this turn's exact identifiers are aliased; another report stays fabricated."""
+    with pytest.raises(ValueError, match="unauthorized or fabricated"):
+        _raw_version_ref_boundary(["ter-2:1.0.0"])()

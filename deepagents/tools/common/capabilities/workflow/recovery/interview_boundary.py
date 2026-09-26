@@ -269,6 +269,56 @@ def _violated_rule_names(error: BaseException) -> str:
     return "; ".join(names) if names else "unknown"
 
 
+def _turn_version_ref_aliases(source_version: str, pge_version: str) -> dict[str, str]:
+    """Map this turn's own raw artifact identifiers to their governed evidence refs.
+
+    The private input shows the specialist `sourceVersion`/`pgeVersion` but never the
+    ledger's canonical ref names, so a model can cite the report it was handed as the raw
+    `<reportId>:<version>` string (assessment 7976a135). Only exact identifiers of this
+    turn's artifacts are aliased; every other unknown ref still fails closed.
+    """
+    aliases: dict[str, str] = {}
+    for raw, prefix in ((source_version, "repositorySnapshot"), (pge_version, "technicalEvidenceReport")):
+        raw = raw.strip()
+        artifact_id = raw.split(":", 1)[0].strip()
+        if not artifact_id:
+            continue
+        canonical = f"{prefix}:{artifact_id}"
+        aliases[raw] = canonical
+        aliases[artifact_id] = canonical
+    return aliases
+
+
+def _canonicalize_ref_list(container: Any, key: str, aliases: dict[str, str]) -> None:
+    if not isinstance(container, dict):
+        return
+    refs = container.get(key)
+    if not isinstance(refs, list):
+        return
+    canonical: list[Any] = []
+    for ref in refs:
+        value = aliases.get(ref.strip(), ref) if isinstance(ref, str) else ref
+        if value not in canonical:
+            canonical.append(value)
+    container[key] = canonical
+
+
+def _canonicalize_handoff_version_refs(handoff: dict[str, Any], aliases: dict[str, str]) -> None:
+    question = handoff.get("activeQuestion")
+    if isinstance(question, dict):
+        for key in ("whyEvidenceRefs", "governedEvidenceRefs"):
+            _canonicalize_ref_list(question, key, aliases)
+        frontier = question.get("frontier")
+        for key in ("evidenceRefs", "evidence_refs"):
+            _canonicalize_ref_list(frontier, key, aliases)
+    confirmed_context = handoff.get("confirmedContext")
+    statements = confirmed_context.get("statements") if isinstance(confirmed_context, dict) else None
+    if isinstance(statements, list):
+        for statement in statements:
+            for key in ("evidenceRefs", "evidence_refs"):
+                _canonicalize_ref_list(statement, key, aliases)
+
+
 def _decision_feedback(error_code: str, rejected_decision: dict[str, Any]) -> dict[str, Any]:
     feedback = {
         "code": error_code,
@@ -1018,6 +1068,9 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         if not isinstance(handoff, dict):
             raise ValueError("Interview specialist did not return a validated handoff")
         handoff["expectedContextRevision"] = context_revision
+        _canonicalize_handoff_version_refs(
+            handoff, _turn_version_ref_aliases(source_version, pge_version),
+        )
         targeted_need = context.get("targetedNeed")
         if isinstance(targeted_need, dict):
             if handoff.get("mode") != "INVESTIGATOR_RESOLUTION":

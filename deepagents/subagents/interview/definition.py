@@ -89,7 +89,8 @@ Return exactly one JSON object matching InterviewResult:
   activeQuestion MUST include a structured frontier object: owner must be CUSTOMER,
   materiality must be MATERIAL, description must name the missing customer-owned business fact, and
   evidenceRefs must contain only authorized governed evidence refs from the private input. Use an
-  empty evidenceRefs array when no governed refs support the question; never invent refs.
+  empty evidenceRefs array when no governed refs support the question; never invent refs, and never
+  cite sourceVersion, pgeVersion or other raw version strings as refs.
   `choices` belongs to SINGLE_SELECT, MULTI_SELECT and CONFIRM_ADJUST only. SINGLE_SELECT and
   MULTI_SELECT require at least one choice. BOOLEAN and FREE_TEXT must leave `choices` empty; the
   yes/no pair is supplied by the runtime, and a BOOLEAN question that carries its own choices is
