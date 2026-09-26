@@ -1,6 +1,6 @@
-"""Root-owned dispatch adapter for specialist invocations outside the Managed task tool.
+"""Root-owned dispatch adapter for specialist invocations outside the task tool.
 
-Managed Deep Agents normally dispatches specialists through the root ``task`` tool. Some
+Deep Agents normally dispatches specialists through the root ``task`` tool. Some
 system events enter through deterministic worker boundaries instead. Those adapters use
 this dispatcher so they still share the same Root Orchestration lifecycle and do not
 create agent-specific orchestrators.
@@ -9,21 +9,32 @@ create agent-specific orchestrators.
 from __future__ import annotations
 
 from collections.abc import Callable
+import json
 import logging
 from typing import Any
+
+from deepagents import create_deep_agent
 
 from decision.shadow import (
     RootRoutingPacket,
     ShadowDecisionObserver,
     observer_from_api_client,
 )
-from model_policy import create_lcsp_agent as create_agent
-from orchestration.agent_stream import invoke_with_stream, publish_agent_stream_event
+from orchestration.agent_stream import (
+    AGENT_STREAM_STAGES,
+    invoke_with_stream,
+    publish_agent_stream_event,
+)
 from subagents import FLOW_SUBAGENTS
+from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
 
 from .context import LCSPRunContext
 from .lifecycle import RootOrchestrationLifecycle
-from .result_validation import repair_targeted_interview_frontier, validate_specialist_handoff
+from .result_validation import (
+    SpecialistHandoffValidationError,
+    repair_targeted_interview_frontier,
+    validate_specialist_handoff,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -36,7 +47,7 @@ class RootSubagentDispatcher:
         self,
         *,
         lifecycle: RootOrchestrationLifecycle | None = None,
-        agent_factory: Callable[..., Any] = create_agent,
+        agent_factory: Callable[..., Any] = create_deep_agent,
         root_agent: Any | None = None,
         root_agent_factory: Callable[[], Any] | None = None,
         subagents: dict[str, dict[str, Any]] | None = None,
@@ -136,9 +147,11 @@ class RootSubagentDispatcher:
         if owner_instruction:
             prompt = f"{owner_instruction}\n\n{prompt}" if prompt else owner_instruction
 
+        # Same construction as the root ``task`` tool: Deep Agents resolves the
+        # definition's model spec through the LCSP provider profiles.
         agent_kwargs: dict[str, Any] = {
-            "agent_name": subagent_type,
             "model": definition["model"],
+            "backend": current_repository_backend(),
             "tools": definition["tools"],
             "system_prompt": definition["system_prompt"],
             "middleware": definition["middleware"],
@@ -176,6 +189,7 @@ class RootSubagentDispatcher:
                 {"messages": [{"role": "user", "content": prompt}]},
                 config=config,
                 context=context,
+                stage=_stream_stage_for_subagent(subagent_type),
             )
             validation_graph = program_graph
             if (
@@ -297,9 +311,15 @@ class RootSubagentDispatcher:
             context.workflow_run_id if context is not None and context.workflow_run_id else thread_id
         )
         config: dict[str, Any] = {"metadata": dict(metadata or {})}
+        configurable: dict[str, str] = {}
         if root_thread_id:
-            config["configurable"] = {"thread_id": root_thread_id}
+            configurable["thread_id"] = root_thread_id
             config["metadata"]["lcsp_thread_id"] = root_thread_id
+        if context is not None:
+            configurable["assessment_id"] = context.assessment_id
+            config["metadata"]["assessment_id"] = context.assessment_id
+        if configurable:
+            config["configurable"] = configurable
         config["metadata"]["lcsp_system_event_subagent"] = subagent_type
         if affected_rule_ids:
             config["metadata"]["affected_rule_ids"] = list(affected_rule_ids)
@@ -317,6 +337,7 @@ class RootSubagentDispatcher:
             {"messages": [{"role": "user", "content": prompt}]},
             config=config,
             context=context,
+            stage=_stream_stage_for_subagent(subagent_type),
         )
         return {
             "status": "ROOT_REENTERED",
@@ -344,11 +365,27 @@ class RootSubagentDispatcher:
     ) -> dict[str, Any] | None:
         if response_format is None:
             return None
-        if not isinstance(invocation_result, dict) or invocation_result.get("structured_response") is None:
-            raise RuntimeError(
+        payload = (
+            invocation_result.get("structured_response")
+            if isinstance(invocation_result, dict)
+            else None
+        )
+        if payload is None:
+            # Tool-strategy providers (e.g. llm7) sometimes answer with the handoff
+            # JSON as plain text instead of calling the structured-output tool. The
+            # recovered object still goes through the same strict validation below.
+            payload = _final_message_json_object(invocation_result)
+            if payload is not None:
+                logger.warning(
+                    "SPECIALIST_HANDOFF_RECOVERED_FROM_TEXT subagent_type=%s",
+                    subagent_type,
+                )
+        if payload is None:
+            # A missing typed handoff is a candidate-shape failure like any other schema
+            # violation, so boundaries with a bounded self-correction can repair it.
+            raise SpecialistHandoffValidationError(
                 f"{subagent_type} did not return a structured_response handoff"
             )
-        payload = invocation_result["structured_response"]
         if subagent_type == "interview":
             payload = repair_targeted_interview_frontier(
                 payload,
@@ -362,6 +399,34 @@ class RootSubagentDispatcher:
             pinned_versions=pinned_versions or {},
         )
         return handoff.model_dump(mode="json")
+
+
+def _final_message_json_object(invocation_result: Any) -> dict[str, Any] | None:
+    """Return the JSON object a final text-only AI message carries, if any."""
+    if not isinstance(invocation_result, dict):
+        return None
+    messages = invocation_result.get("messages")
+    if not isinstance(messages, list) or not messages:
+        return None
+    final = messages[-1]
+    if getattr(final, "type", None) != "ai" or getattr(final, "tool_calls", None):
+        return None
+    content = getattr(final, "content", None)
+    if isinstance(content, list):
+        content = "".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in content
+        )
+    if not isinstance(content, str):
+        return None
+    start, end = content.find("{"), content.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        payload = json.loads(content[start : end + 1])
+    except ValueError:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _load_program_graph_from_metadata(
@@ -403,6 +468,20 @@ def _deterministic_transition_available(metadata: dict[str, Any]) -> bool:
         else metadata.get("deterministicTransitionAvailable")
     )
     return bool(value)
+
+
+def _stream_stage_for_subagent(subagent_type: str) -> str | None:
+    """Customer-visible live-stream stage for one specialist dispatch."""
+    normalized = subagent_type.strip().lower()
+    if normalized == "planner":
+        return AGENT_STREAM_STAGES["planner"]
+    if normalized == "investigator":
+        return AGENT_STREAM_STAGES["investigate"]
+    if normalized == "interview":
+        return AGENT_STREAM_STAGES["interview"]
+    if normalized in {"gate", "classification"}:
+        return AGENT_STREAM_STAGES["gate"]
+    return None
 
 
 def _authoritative_route_for_subagent(subagent_type: str) -> str:

@@ -15,8 +15,13 @@ export function toReservationInput(
   body: BillingUsageReservationRequest,
 ): BillingUsageReservationInput {
   return {
+    workspaceId: body.workspaceId,
     assessmentId: body.assessmentId,
+    scanJobId: body.scanJobId,
+    threadId: body.threadId,
     runId: body.runId,
+    invocationId: body.invocationId,
+    modelInvocationId: body.modelInvocationId,
     amountCredits: BigInt(body.amountCredits),
     maxChargeCredits: BigInt(body.maxChargeCredits),
     provider: body.provider,
@@ -48,6 +53,12 @@ export function toClaimInput(
     assessmentId: body.assessmentId,
     reservationId,
     invocationId: body.invocationId,
+    provider: body.provider?.toUpperCase(),
+    model: body.model,
+    estimatedInputTokens: toBigInt(body.estimatedInputTokens),
+    estimatedInputBytes: toBigInt(body.estimatedInputBytes),
+    maxOutputTokens: toBigInt(body.maxOutputTokens),
+    maxReasoningTokens: toBigInt(body.maxReasoningTokens),
   };
 }
 

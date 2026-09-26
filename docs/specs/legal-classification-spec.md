@@ -12,7 +12,7 @@ Single source of truth for direct EngineeringRule-based legal classification.
 
 - Accepted TechnicalEvidenceReport exists.
 - WizardProfile, when present, is supplemental context and does not replace repository evidence.
-- OpenWiki context, when present, is an unverified retrieval hint only.
+- Repository source is authoritative for technical facts; Codebase Memory MCP may accelerate structural retrieval but does not replace direct source verification.
 - Legal corpus is versioned and citation traceability is available.
 - Approved LegalRules compile to validated EngineeringRules or fail closed with diagnostics.
 

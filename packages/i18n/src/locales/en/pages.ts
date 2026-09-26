@@ -173,8 +173,8 @@ export const enPages = {
       flow: "Flow",
       reasoning: "Reasoning summary",
       output: "Output",
-      toolCall: "Tool call",
-      toolOutput: "Tool output",
+      toolCall: "Input",
+      toolOutput: "Output",
       log: "Log",
       runtime: "Runtime",
       progress: "Progress",
@@ -187,6 +187,68 @@ export const enPages = {
       skill: "Skill",
       model: "Model",
       provenance: "Provenance",
+    },
+    agentStreamTechnicalDetails: "Technical details",
+    agentStreamActivities: {
+      repositoryScanStarted: "Started repository scan",
+      repositoryAnalysisStarted: "Started repository analysis",
+      repositoryAnalysisCompleted: "Completed repository analysis",
+      repositoryAnalysisFailed: "Repository analysis failed",
+      scanWorkflowStarted: "Started repository scan workflow",
+      scanWorkflowCompleted: "Completed repository scan workflow",
+      scanWorkflowFailed: "Repository scan workflow failed",
+      repositoryAnalysisQueued: "Queued repository analysis",
+      repositoryAnalysisRunning: "Repository analysis is running",
+      repositorySourceDownloading: "Downloading repository source",
+      repositorySourceDownloaded: "Downloaded repository source",
+      repositoryWorkspacePreparing: "Preparing isolated repository workspace",
+      repositoryWorkspaceReady: "Prepared isolated repository workspace",
+      repositoryDeepAnalysis: "Analyzing repository structure and behavior",
+      runtimeProgressConnected: "Connected live repository analysis progress",
+      runtimeProgress: "Updated repository analysis runtime",
+      analysisProgressUpdated: "Updated analysis progress",
+      reasoningReviewed: "Reviewed analysis reasoning",
+      modelOutputReviewed: "Reviewed AI analysis output",
+      aiAnalysisRunning: "Analyzing repository with AI",
+      aiAnalysisCompleted: "Completed an AI analysis step",
+      aiAnalysisFailed: "AI provider could not complete this analysis step",
+      providerFallback: "Switched to a backup AI provider",
+      credentialRotation: "Tried another provider credential",
+      repositoryEvidenceInspected: "Inspected repository evidence",
+      engineeringRuleEvaluated: "Evaluated technical evidence rules",
+      analysisSkillApplied: "Applied repository analysis skills",
+      evidenceProvenanceLinked: "Linked evidence to source provenance",
+      repositoryFilesInspected: "Inspected repository files",
+      repositorySourceSearched: "Searched repository source",
+      sourceFilesReviewed: "Reviewed source files",
+      relevantFilesLocated: "Located relevant repository files",
+      repositoryChangesReviewed: "Reviewed repository changes",
+      implementationUpdated: "Updated implementation",
+      targetedTestsRan: "Ran targeted tests",
+      codeQualityValidated: "Validated code quality",
+      typeSafetyValidated: "Validated type safety",
+      changesCommitted: "Committed implementation changes",
+      changesPushed: "Pushed changes to remote repository",
+      repositoryToolRan: "Ran a repository analysis tool",
+      subagentSelected: "Selected a specialized analysis agent",
+      agentReasoning: "Agent reasoning",
+      agentStepOutput: "Agent output",
+      agentBudgetReached: "Step budget reached, finishing with the evidence already inspected",
+      agentBudgetExhausted: "Agent did not finish within its step budget",
+      agentContextTrimmed: "Trimmed older tool results to stay within the context budget",
+    },
+    agentStreamRule: {
+      investigating: "Investigating rule",
+      investigated: "Investigated rule",
+      investigationFailed: "Rule investigation failed",
+      waitingForInput: "Rule is waiting for customer input",
+      planned: "Planned rule",
+      result: "Reasoning result",
+      decision: "Decision",
+      reason: "Reason",
+      confidence: "Confidence",
+      sources: "Sources",
+      limitations: "Limitations",
     },
     agentStreamSelected: "Selected",
     agentStreamLoadOlder: "Load earlier activity",
@@ -952,6 +1014,7 @@ export const enPages = {
       SCAN_IN_PROGRESS: "Scan Running",
       CLASSIFICATION_LOCKED: "Classification Locked",
       READY_FOR_REVIEW: "Ready for Review",
+      AI_NOT_DETECTED: "AI not detected",
     },
     nextActions: {
       workflowRun:
@@ -1706,13 +1769,26 @@ export const enPages = {
       pendingDescription:
         "Evidence is ready. Waiting for Interview orchestration to provide the first question.",
       pendingPlaceholder: "Waiting for Interview...",
+      aiNotDetectedDescription:
+        "AI not detected. The technical evidence confirms this repository does not use AI, so the assessment has ended without an Interview.",
+      aiNotDetectedPlaceholder: "Assessment ended: AI not detected",
       progressQueued: "Your answer is queued for evaluation.",
       progressRunning: "Evaluating your answer.",
       progressTool: "Checking supporting information.",
       progressCompleted:
         "Interview evaluation completed. The result has been saved.",
       progressFailed:
-        "This evaluation attempt failed. Your answer remains saved.",
+        "This evaluation attempt failed. Your answer remains saved. Press Resume to evaluate it again.",
+      resumeFailedPlaceholder:
+        "Press Resume to evaluate your saved answer again",
+      resumeTurnQueued:
+        "Evaluation resumed. Your saved answer is queued again.",
+      resumeTurnLimitReached:
+        "This answer could not be evaluated after several attempts. Please try again later or contact support.",
+      resumeTurnInsufficientCredits:
+        "Your wallet does not have enough credits to evaluate this answer. Top up credits in Billing, then press Resume again.",
+      resumeTurnFailed:
+        "The evaluation could not be resumed right now. Please try again.",
       contextReadyHandoff:
         "The baseline business context has been confirmed. The assessment can now continue to planning and investigation. Additional rule-specific questions may still be asked if needed.",
       contextResolvedHandoff:
@@ -1720,6 +1796,18 @@ export const enPages = {
       continuingDescription:
         "Your answer has been saved. Waiting for the evaluation result or the next question.",
       placeholder: "Describe the project or system...",
+    },
+    pipeline: {
+      continueQueued:
+        "Continuing the assessment from the step where it stopped.",
+      continueAlreadyRunning:
+        "The assessment is still running. If it stops, press Resume again.",
+      continueWaitingForCustomer:
+        "The assessment is waiting for your answer to the current question.",
+      continueCompleted:
+        "This assessment has finished; there is no step left to continue.",
+      continueFailed:
+        "The assessment could not be continued right now. Please try again.",
     },
     technicalEvidence: {
       progress: "Assessment progress",
@@ -2164,20 +2252,15 @@ export const enPages = {
     referencesLabel: "Applicable legal references",
     generateFinalReport: "Generate Final Report",
     generateGapAnalysis: "Generate Gap Analysis",
-    rerunClassification: "Retry classification",
-    rerunSubmitting: "Queueing classification",
     errorTitle: "Unable to load classification status",
     errorDetail: "Please try again in a moment.",
     observability: {
       title: "Runtime diagnostics",
       description:
         "Review the planner and investigator signals that affected this classification run.",
-      openWikiStatus: "OpenWiki",
       compileFailed: "Compile failed",
       candidates: "Candidates",
       claimsWithEvidence: "Claims with evidence",
-      openWikiError: "OpenWiki error",
-      fallback: "Fallback",
       failedLegalRuleIds: "Failed legal rule IDs",
       sourceHitBuckets: "Candidate source hits",
       sourceEvidenceBuckets: "Candidate evidence refs",
@@ -2185,9 +2268,6 @@ export const enPages = {
       sourceNodeTypes: "Source node types",
       evaluationsWithEvidence: "Evaluations with evidence",
       displayableTechnicalEvidence: "Displayable technical evidence",
-      available: "Available",
-      unavailable: "Unavailable",
-      unknown: "Unknown",
       bucket0: "0 hits",
       bucket1: "1 hit",
       bucket2To5: "2-5 hits",
@@ -2281,10 +2361,6 @@ export const enPages = {
         "Technical evidence is still required before classification can proceed.",
       lockedNextSteps:
         "Add the missing technical evidence so the classification can continue and the next step can be prepared.",
-      waitingLegalReadinessTitle: "Preparing legal basis",
-      waitingLegalReadinessBadge: "Preparing legal data",
-      waitingLegalReadinessDescription:
-        "The evidence profile is approved. Orchestration will continue automatically after the official legal corpus, retrieval index, and approved rule catalog are ready.",
       processingTitle: "Classification is in progress",
       processingBadge: "Processing",
       processingDescription: "The classification is still being prepared.",
@@ -2304,12 +2380,6 @@ export const enPages = {
         "The classification could not be completed because the citation basis was missing.",
       blockedSummary:
         "A valid citation basis is required before the next step can proceed.",
-      legalMatchBlockedTitle: "No applicable legal rules found",
-      legalMatchBlockedBadge: "No match",
-      legalMatchBlockedDescription:
-        "The legal matching step completed but found no rules that apply to the verified evidence profile. Classification cannot proceed without an applicable legal basis.",
-      legalMatchBlockedSummary:
-        "Contact your compliance administrator to review the rule catalog or evidence profile before retrying.",
     },
     finalReportRequestedTitle: "Final report request submitted",
     finalReportRequestedDetail:

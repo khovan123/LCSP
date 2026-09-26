@@ -4,8 +4,6 @@ export const apiQueryKeys = {
   auth: {
     settingsProfile: () => ["auth", "settings-profile"] as const,
     sessions: () => ["auth", "sessions"] as const,
-    /** @deprecated Use apiQueryKeys.githubIntegration.repositories() instead */
-    repositories: () => ["auth", "repositories"] as const,
   },
   githubIntegration: {
     providerCredentials: () => ["provider-credentials"] as const,

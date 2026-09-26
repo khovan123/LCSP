@@ -1,4 +1,4 @@
-"""Structured specialist handoff contracts for LCSP Managed Deep Agents."""
+"""Structured specialist handoff contracts for LCSP Deep Agents."""
 
 from __future__ import annotations
 
@@ -81,6 +81,34 @@ class ProvenanceRef(BaseModel):
     source_kind: Literal["PROGRAM_GRAPH", "SOURCE_ANCHOR", "CUSTOMER_CONTEXT", "LEGAL_CHUNK", "SYSTEM"]
     artifact_version: str | None = Field(default=None, max_length=240)
     source_anchor_ref: str | None = Field(default=None, max_length=240)
+
+
+class InvestigatorSourceLocation(BaseModel):
+    """Direct repository citation authored from native Deep Agents inspection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=500)
+    start_line: int = Field(ge=1)
+    end_line: int = Field(ge=1)
+    symbol: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_range(self) -> Self:
+        if self.end_line < self.start_line:
+            raise ValueError("source location end_line must be >= start_line")
+        normalized = self.path.replace("\\", "/").lstrip("/")
+        if (
+            not normalized
+            or normalized == "."
+            or normalized.startswith("../")
+            or "/../" in normalized
+            or normalized.startswith((".git/", ".lcsp/"))
+            or normalized in {".git", ".lcsp"}
+        ):
+            raise ValueError("source location must reference customer repository source")
+        self.path = normalized
+        return self
 
 
 class InterviewQuestionChoice(BaseModel):
@@ -333,12 +361,20 @@ class _InvestigatorDecidedClaim(_InvestigatorClaimIdentity):
     evidence_refs: list[str] = Field(default_factory=list, max_length=100)
     graph_path_refs: list[str] = Field(default_factory=list, max_length=100)
     source_anchor_refs: list[str] = Field(default_factory=list, max_length=100)
+    source_locations: list[InvestigatorSourceLocation] = Field(
+        default_factory=list, max_length=100
+    )
 
     @model_validator(mode="after")
     def validate_has_ref(self) -> Self:
-        if not (self.evidence_refs or self.graph_path_refs or self.source_anchor_refs):
+        if not (
+            self.source_locations
+            or self.evidence_refs
+            or self.graph_path_refs
+            or self.source_anchor_refs
+        ):
             raise ValueError(
-                "decided Investigator claims require at least one evidence, graph-path, or source-anchor ref"
+                "decided Investigator claims require direct source locations or governed refs"
             )
         return self
 
@@ -351,6 +387,9 @@ class _InvestigatorDecidedClaim(_InvestigatorClaimIdentity):
             evidence_refs=tuple(self.evidence_refs),
             graph_path_refs=tuple(self.graph_path_refs),
             source_anchor_refs=tuple(self.source_anchor_refs),
+            source_locations=tuple(
+                location.model_dump() for location in self.source_locations
+            ),
             customer_context_refs=(),
             confidence=self.confidence,
             limitations=tuple(self.limitations),
@@ -388,6 +427,9 @@ class InvestigatorUnresolvedClaim(_InvestigatorClaimIdentity):
     evidence_refs: list[str] = Field(default_factory=list, max_length=100)
     graph_path_refs: list[str] = Field(default_factory=list, max_length=100)
     source_anchor_refs: list[str] = Field(default_factory=list, max_length=100)
+    source_locations: list[InvestigatorSourceLocation] = Field(
+        default_factory=list, max_length=100
+    )
     limitations: list[Literal[*_INVESTIGATOR_LIMITATION_CODE_VALUES]] = Field(
         min_length=1, max_length=50
     )
@@ -401,6 +443,9 @@ class InvestigatorUnresolvedClaim(_InvestigatorClaimIdentity):
             evidence_refs=tuple(self.evidence_refs),
             graph_path_refs=tuple(self.graph_path_refs),
             source_anchor_refs=tuple(self.source_anchor_refs),
+            source_locations=tuple(
+                location.model_dump() for location in self.source_locations
+            ),
             customer_context_refs=(),
             confidence=self.confidence,
             limitations=tuple(self.limitations),
@@ -426,6 +471,9 @@ class InvestigatorScopeNotApplicableClaim(_InvestigatorClaimIdentity):
     evidence_refs: list[str] = Field(default_factory=list, max_length=0)
     graph_path_refs: list[str] = Field(default_factory=list, max_length=0)
     source_anchor_refs: list[str] = Field(default_factory=list, max_length=0)
+    source_locations: list[InvestigatorSourceLocation] = Field(
+        default_factory=list, max_length=0
+    )
     customer_context_refs: list[str] = Field(min_length=1, max_length=100)
 
     def to_evidence_claim(self) -> EvidenceClaim:
@@ -437,6 +485,7 @@ class InvestigatorScopeNotApplicableClaim(_InvestigatorClaimIdentity):
             evidence_refs=(),
             graph_path_refs=(),
             source_anchor_refs=(),
+            source_locations=(),
             customer_context_refs=tuple(self.customer_context_refs),
             confidence=self.confidence,
             limitations=tuple(self.limitations),

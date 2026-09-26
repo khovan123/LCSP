@@ -29,7 +29,10 @@ import {
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { Prisma } from "@prisma/client";
 
-import { isRecord } from "../../../../../common/utils/index.js";
+import {
+  cleanString as clean,
+  isRecord,
+} from "../../../../../common/utils/index.js";
 
 import {
   toPrismaAuditResourceType,
@@ -318,10 +321,6 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
       status,
     });
   }
-}
-
-function clean(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function containsUnsafeProfile(value: unknown): boolean {

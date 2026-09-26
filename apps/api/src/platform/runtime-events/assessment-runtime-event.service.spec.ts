@@ -281,6 +281,7 @@ describe("AssessmentRuntimeEventService", () => {
       runId: "run-a",
       correlationId: "corr-a",
       eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
+      engineeringRuleId: "ER-7",
       agentName: "investigator",
       toolName: "search_nodes",
       toolCallId: "call-1",
@@ -312,6 +313,7 @@ describe("AssessmentRuntimeEventService", () => {
       eventId: "semantic-event-1",
       assessmentId: "assessment-a",
       eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
+      engineeringRuleId: "ER-7",
       data: {
         kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall,
         durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
@@ -366,6 +368,7 @@ describe("AssessmentRuntimeEventService", () => {
       "reasoning-delta",
       "reasoning-summary",
       "model-delta",
+      "model-call-timeout",
       "runtime-log",
       "graph-update",
       "semantic-tool-call",
@@ -403,6 +406,20 @@ describe("AssessmentRuntimeEventService", () => {
       eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
       messageId: "message-1",
       text: "Visible answer chunk",
+    });
+    await firstService.publishAgentStreamEvent({
+      ...baseInput,
+      eventId: "model-call-timeout",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout,
+      nodeName: "model",
+      status: ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+      text: "Model call timed out",
+      data: {
+        provider: "google_genai",
+        model: "gemini-3.5-flash-lite",
+        elapsed_seconds: 30,
+        timeout_seconds: 30,
+      },
     });
     await firstService.publishAgentStreamEvent({
       ...baseInput,
@@ -458,6 +475,7 @@ describe("AssessmentRuntimeEventService", () => {
       ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelReasoningDelta,
       ASSESSMENT_AGENT_STREAM_EVENT_TYPES.customProgress,
       ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
+      ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout,
       ASSESSMENT_AGENT_STREAM_EVENT_TYPES.log,
       ASSESSMENT_AGENT_STREAM_EVENT_TYPES.graphUpdate,
       ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
@@ -1452,7 +1470,7 @@ describe("AssessmentRuntimeEventService", () => {
     });
   });
 
-  it("records scanner-worker runtime events using scan-job tenant context", async () => {
+  it("records repository-analysis-worker runtime events using scan-job tenant context", async () => {
     const assessmentRuntimeEvent = {
       findFirst: jest.fn().mockImplementation(() => Promise.resolve(null)),
       create: jest.fn().mockImplementation(() => Promise.resolve({})),
@@ -1480,15 +1498,15 @@ describe("AssessmentRuntimeEventService", () => {
     const service = new AssessmentRuntimeEventService(prisma as never);
 
     await expect(
-      service.recordScanWorkerEvent({
+      service.recordRepositoryAnalysisEvent({
         scanJobId: "scan-1",
         eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
         runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
         stage: ASSESSMENT_RUNTIME_STAGE_CODES.scan,
-        toolName: "syft",
-        summary: "syft completed with non-blocking failure",
+        toolName: "codebase-memory-graph",
+        summary: "Codebase Memory completed with non-blocking failure",
         outputSummary: { outcome: "tool_failure" },
-        errorSummary: "syft not available",
+        errorSummary: "Codebase Memory unavailable",
         startedAt: new Date("2026-08-14T08:00:00.000Z"),
         completedAt: new Date("2026-08-14T08:00:01.000Z"),
         durationMs: 1000,
@@ -1504,15 +1522,15 @@ describe("AssessmentRuntimeEventService", () => {
         eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
         runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
         stage: ASSESSMENT_RUNTIME_STAGE_CODES.scan,
-        toolName: "syft",
+        toolName: "codebase-memory-graph",
         outputSummaryJson: { outcome: "tool_failure" },
-        errorSummary: "syft not available",
+        errorSummary: "Codebase Memory unavailable",
         durationMs: 1000,
       }),
     });
   });
 
-  it("retries scanner-worker runtime event sequence collisions", async () => {
+  it("retries repository-analysis-worker runtime event sequence collisions", async () => {
     const sequenceCollision = Object.assign(
       new Error(
         'Unique constraint failed on the fields: ("runId", "sequence")',
@@ -1557,13 +1575,13 @@ describe("AssessmentRuntimeEventService", () => {
     const service = new AssessmentRuntimeEventService(prisma as never);
 
     await expect(
-      service.recordScanWorkerEvent({
+      service.recordRepositoryAnalysisEvent({
         scanJobId: "scan-1",
         eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
         runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
         stage: ASSESSMENT_RUNTIME_STAGE_CODES.scan,
-        toolName: "semgrep",
-        summary: "Running semgrep analysis",
+        toolName: "repository-analysis",
+        summary: "Running repository analysis",
       }),
     ).resolves.toEqual({ recorded: true });
 
@@ -1589,7 +1607,7 @@ describe("AssessmentRuntimeEventService", () => {
     });
   });
 
-  it("skips late scanner-worker start events after the scan job is terminal", async () => {
+  it("skips late repository-analysis-worker start events after the scan job is terminal", async () => {
     const assessmentRuntimeEvent = {
       findFirst: jest.fn().mockImplementation(() => Promise.resolve(null)),
       create: jest.fn().mockImplementation(() => Promise.resolve({})),
@@ -1617,7 +1635,7 @@ describe("AssessmentRuntimeEventService", () => {
     const service = new AssessmentRuntimeEventService(prisma as never);
 
     await expect(
-      service.recordScanWorkerEvent({
+      service.recordRepositoryAnalysisEvent({
         scanJobId: "scan-1",
         eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
         runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
@@ -1630,7 +1648,7 @@ describe("AssessmentRuntimeEventService", () => {
     expect(assessmentRuntimeEvent.create).not.toHaveBeenCalled();
   });
 
-  it("records scanner-worker terminal close events after the scan job is terminal", async () => {
+  it("records repository-analysis-worker terminal close events after the scan job is terminal", async () => {
     const assessmentRuntimeEvent = {
       findFirst: jest.fn().mockImplementation(() => Promise.resolve(null)),
       create: jest.fn().mockImplementation(() => Promise.resolve({})),
@@ -1658,7 +1676,7 @@ describe("AssessmentRuntimeEventService", () => {
     const service = new AssessmentRuntimeEventService(prisma as never);
 
     await expect(
-      service.recordScanWorkerEvent({
+      service.recordRepositoryAnalysisEvent({
         scanJobId: "scan-1",
         eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runCompleted,
         runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
@@ -2145,5 +2163,72 @@ describe("AssessmentRuntimeEventService", () => {
         skippedCount: 22,
       });
     });
+  });
+});
+
+describe("AssessmentRuntimeEventService.getPipelineLiveness", () => {
+  const WINDOW_MS = 90_000;
+
+  function serviceWithLatest(latest: Record<string, unknown> | null) {
+    const findMany = jest
+      .fn<(...args: unknown[]) => Promise<unknown[]>>()
+      .mockResolvedValue(latest ? [latest] : []);
+    const service = new AssessmentRuntimeEventService({
+      assessmentRuntimeEvent: { findMany },
+    } as never);
+    return { service, findMany };
+  }
+
+  it("treats a recent non-terminal event such as a model heartbeat as live", async () => {
+    const createdAt = new Date(Date.now() - 5_000);
+    const { service, findMany } = serviceWithLatest({
+      runStatus: "RUNNING",
+      createdAt,
+      outputSummaryJson: {
+        agentStreamEvent: { eventType: "MODEL_CALL_HEARTBEAT" },
+      },
+    });
+
+    await expect(
+      service.getPipelineLiveness("assessment-1", WINDOW_MS),
+    ).resolves.toEqual({ live: true, lastActivityAt: createdAt });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { assessmentId: "assessment-1" },
+        take: 1,
+      }),
+    );
+  });
+
+  it("is not live after the boundary failed, however recent", async () => {
+    const { service } = serviceWithLatest({
+      runStatus: "RUNNING",
+      createdAt: new Date(),
+      outputSummaryJson: { agentStreamEvent: { eventType: "BOUNDARY_FAILED" } },
+    });
+
+    await expect(
+      service.getPipelineLiveness("assessment-1", WINDOW_MS),
+    ).resolves.toMatchObject({ live: false });
+  });
+
+  it("is not live once activity is older than the window", async () => {
+    const { service } = serviceWithLatest({
+      runStatus: "RUNNING",
+      createdAt: new Date(Date.now() - WINDOW_MS - 1_000),
+      outputSummaryJson: null,
+    });
+
+    await expect(
+      service.getPipelineLiveness("assessment-1", WINDOW_MS),
+    ).resolves.toMatchObject({ live: false });
+  });
+
+  it("is not live when the assessment has no runtime activity", async () => {
+    const { service } = serviceWithLatest(null);
+
+    await expect(
+      service.getPipelineLiveness("assessment-1", WINDOW_MS),
+    ).resolves.toEqual({ live: false, lastActivityAt: null });
   });
 });

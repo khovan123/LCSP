@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
-from orchestration.agent_stream import invoke_with_stream
+from orchestration.agent_stream import (
+    AGENT_STREAM_STAGES,
+    agent_stream_rule_scope,
+    agent_stream_stage,
+    invoke_with_stream,
+)
 
 import hashlib
 import json
 import logging
 import re
 import unicodedata
+from functools import partial
 from typing import Any, Callable
 
 from contracts.handoffs import InterviewResult
 from orchestration.result_validation import SpecialistHandoffValidationError
-from tools.common.capabilities.managed.boundary import AgentBoundaryBase
+from tools.common.capabilities.agent_runtime.boundary import AgentBoundaryBase
 from tools.common.capabilities.platform.api_client import (
     InterviewDecisionRepairableCallbackError,
 )
@@ -29,6 +35,7 @@ from tools.common.capabilities.assessment.claims.evidence_claim.models import (
 )
 from tools.common.capabilities.assessment.planning.engineering_rule.engineering_rule_planner import (
     ENGINEERING_RULE_PLAN_REASON_CODES,
+    PLANNER_CONTEXT_REQUIRED,
 )
 from tools.legal.retrieval.legal_basis.rule_applicability_evaluator import (
     RuleApplicabilityEvaluator,
@@ -267,6 +274,56 @@ def _violated_rule_names(error: BaseException) -> str:
         if (match := _VIOLATED_RULE_PATTERN.search(segment))
     ]
     return "; ".join(names) if names else "unknown"
+
+
+def _turn_version_ref_aliases(source_version: str, pge_version: str) -> dict[str, str]:
+    """Map this turn's own raw artifact identifiers to their governed evidence refs.
+
+    The private input shows the specialist `sourceVersion`/`pgeVersion` but never the
+    ledger's canonical ref names, so a model can cite the report it was handed as the raw
+    `<reportId>:<version>` string (assessment 7976a135). Only exact identifiers of this
+    turn's artifacts are aliased; every other unknown ref still fails closed.
+    """
+    aliases: dict[str, str] = {}
+    for raw, prefix in ((source_version, "repositorySnapshot"), (pge_version, "technicalEvidenceReport")):
+        raw = raw.strip()
+        artifact_id = raw.split(":", 1)[0].strip()
+        if not artifact_id:
+            continue
+        canonical = f"{prefix}:{artifact_id}"
+        aliases[raw] = canonical
+        aliases[artifact_id] = canonical
+    return aliases
+
+
+def _canonicalize_ref_list(container: Any, key: str, aliases: dict[str, str]) -> None:
+    if not isinstance(container, dict):
+        return
+    refs = container.get(key)
+    if not isinstance(refs, list):
+        return
+    canonical: list[Any] = []
+    for ref in refs:
+        value = aliases.get(ref.strip(), ref) if isinstance(ref, str) else ref
+        if value not in canonical:
+            canonical.append(value)
+    container[key] = canonical
+
+
+def _canonicalize_handoff_version_refs(handoff: dict[str, Any], aliases: dict[str, str]) -> None:
+    question = handoff.get("activeQuestion")
+    if isinstance(question, dict):
+        for key in ("whyEvidenceRefs", "governedEvidenceRefs"):
+            _canonicalize_ref_list(question, key, aliases)
+        frontier = question.get("frontier")
+        for key in ("evidenceRefs", "evidence_refs"):
+            _canonicalize_ref_list(frontier, key, aliases)
+    confirmed_context = handoff.get("confirmedContext")
+    statements = confirmed_context.get("statements") if isinstance(confirmed_context, dict) else None
+    if isinstance(statements, list):
+        for statement in statements:
+            for key in ("evidenceRefs", "evidence_refs"):
+                _canonicalize_ref_list(statement, key, aliases)
 
 
 def _decision_feedback(error_code: str, rejected_decision: dict[str, Any]) -> dict[str, Any]:
@@ -621,6 +678,19 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             config
         )
 
+    def report_dispatch_failure(
+        self, message: dict[str, Any], correlationId: str, error: BaseException
+    ) -> None:
+        # A turn that could not even reserve billing never reaches handle(), so no
+        # RUNNING/FAILED progress exists and the Customer would wait on QUEUED.
+        # FAILED lets the API offer Resume; the resume preflight then explains why.
+        assessment_id = _required_text(message, "assessmentId")
+        context_revision = _required_int(message, "contextRevision")
+        api_client = self._api_client or self._load_api_client()
+        reporter = getattr(api_client, "post_interview_progress", None)
+        if reporter is not None:
+            reporter(assessment_id, context_revision, "FAILED")
+
     def handle(self, message: dict[str, Any], correlationId: str) -> None:
         assessment_id = _required_text(message, "assessmentId")
         thread_id = _required_text(message, "threadId")
@@ -720,7 +790,9 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
 
         targeted_need = context.get("targetedNeed")
         targeted_mode = isinstance(targeted_need, dict)
-        same_revision_resume = resume_reason == "PROVIDE_MORE_CONTEXT" or targeted_mode
+        same_revision_resume = (
+            resume_reason in _SAME_REVISION_RESUME_REASONS or targeted_mode
+        )
         if not same_revision_resume:
             if status in {DUPLICATE_CONTEXT, STALE_CONTEXT}:
                 return
@@ -757,48 +829,16 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
     def _run_and_persist_decision(self, api_client, assessment_id, thread_id, question_id,
                                   context_revision, resume_reason, context, correlationId,
                                   source_version, pge_version):
-        try:
-            decision = self._run_interview(
-                assessment_id=assessment_id,
-                thread_id=thread_id,
-                question_id=question_id,
-                context_revision=context_revision,
-                resume_reason=resume_reason,
-                context=context,
-                correlationId=correlationId,
-            )
-        except SpecialistHandoffValidationError as exc:
-            # The specialist's candidate violated one of the conditional InterviewResult /
-            # InterviewQuestionResult constraints a provider schema cannot express (e.g. a
-            # malformed CONFIRM_ADJUST choice shape, a missing frontier). None of those
-            # validators are relaxed; give the specialist one bounded chance to see the
-            # exact rule it broke and self-correct instead of crashing the whole turn.
-            rule_names = _violated_rule_names(exc)
-            _LOGGER.warning(
-                "%s assessment_id=%s question_id=%s context_revision=%s rule=%s",
-                _INTERVIEW_HANDOFF_VALIDATION_REPAIRED,
-                assessment_id,
-                question_id,
-                context_revision,
-                rule_names,
-            )
-            repair_context = {
-                **context,
-                "decisionValidationFeedback": {
-                    "code": "INTERVIEW_HANDOFF_SCHEMA_VIOLATION",
-                    "rejectedReason": str(exc),
-                },
-            }
-            # A second violation propagates to terminal delivery settlement.
-            decision = self._run_interview(
-                assessment_id=assessment_id,
-                thread_id=thread_id,
-                question_id=question_id,
-                context_revision=context_revision,
-                resume_reason=resume_reason,
-                context=repair_context,
-                correlationId=correlationId,
-            )
+        run = partial(
+            self._run_interview_with_schema_repair,
+            assessment_id=assessment_id,
+            thread_id=thread_id,
+            question_id=question_id,
+            context_revision=context_revision,
+            resume_reason=resume_reason,
+            correlationId=correlationId,
+        )
+        decision = run(context=context)
         decision, authority_feedback = _apply_authority_preflight(decision, context)
         if authority_feedback is not None:
             _LOGGER.warning(
@@ -814,15 +854,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 **context,
                 "decisionValidationFeedback": authority_feedback,
             }
-            decision = self._run_interview(
-                assessment_id=assessment_id,
-                thread_id=thread_id,
-                question_id=question_id,
-                context_revision=context_revision,
-                resume_reason=resume_reason,
-                context=repair_context,
-                correlationId=correlationId,
-            )
+            decision = run(context=repair_context)
             decision = _confirmation_or_original(decision, context)
 
         try:
@@ -849,6 +881,11 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             missing = getattr(exc, "missing", None)
             if isinstance(missing, str):
                 decision_feedback["missingCriteria"] = missing
+            unauthorized_ref = (getattr(exc, "meta", None) or {}).get("unauthorizedRef")
+            if isinstance(unauthorized_ref, str) and unauthorized_ref.strip():
+                # The exact ref the API refused; the specialist must replace or remove
+                # it with an allowed ref itself. The platform never substitutes refs.
+                decision_feedback["unauthorizedEvidenceRef"] = unauthorized_ref.strip()
             missing_dimensions = (getattr(exc, "meta", None) or {}).get("missingDimensions")
             if isinstance(missing_dimensions, str) and missing_dimensions.strip():
                 decision_feedback["missingDimensions"] = [
@@ -858,15 +895,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 **context,
                 "decisionValidationFeedback": decision_feedback,
             }
-            corrected = self._run_interview(
-                assessment_id=assessment_id,
-                thread_id=thread_id,
-                question_id=question_id,
-                context_revision=context_revision,
-                resume_reason=resume_reason,
-                context=repair_context,
-                correlationId=correlationId,
-            )
+            corrected = run(context=repair_context)
             corrected = _confirmation_or_original(corrected, context)
             # A second rejection propagates to terminal delivery settlement.
             guarded_state = api_client.post_interview_agent_decision(
@@ -883,6 +912,45 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             correlationId=correlationId,
             root_workflow_run_id=context.get("rootWorkflowRunId"),
         )
+
+    def _run_interview_with_schema_repair(self, *, context, **kwargs):
+        """Run one Interview candidate, allowing one bounded schema self-correction.
+
+        The specialist's candidate can violate a conditional InterviewResult /
+        InterviewQuestionResult constraint a provider schema cannot express (e.g. a
+        select control without choices, a malformed CONFIRM_ADJUST choice shape, a
+        missing frontier) or return no structured handoff at all. None of those
+        validators are relaxed; every candidate run, including the platform-guard
+        corrections, gets one chance to see the exact rule it broke instead of
+        crashing the whole turn. A second violation propagates to terminal delivery
+        settlement.
+        """
+        try:
+            return self._run_interview(context=context, **kwargs)
+        except SpecialistHandoffValidationError as exc:
+            _LOGGER.warning(
+                "%s assessment_id=%s question_id=%s context_revision=%s rule=%s",
+                _INTERVIEW_HANDOFF_VALIDATION_REPAIRED,
+                kwargs.get("assessment_id"),
+                kwargs.get("question_id"),
+                kwargs.get("context_revision"),
+                _violated_rule_names(exc),
+            )
+            schema_feedback = {
+                "code": "INTERVIEW_HANDOFF_SCHEMA_VIOLATION",
+                "rejectedReason": str(exc),
+            }
+            prior_feedback = context.get("decisionValidationFeedback")
+            feedback = (
+                # Keep the guard correction being answered; add the structural rule.
+                {**prior_feedback, "schemaViolation": schema_feedback}
+                if isinstance(prior_feedback, dict) and prior_feedback
+                else schema_feedback
+            )
+            return self._run_interview(
+                context={**context, "decisionValidationFeedback": feedback},
+                **kwargs,
+            )
 
     def _run_interview(
         self,
@@ -901,10 +969,12 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             TurnEvidenceLedger,
             build_why_are_we_asking_explanation,
             evaluate_question_eligibility,
+            evidence_ref_correction_reason,
             extract_governed_evidence_refs,
             reset_active_turn_evidence_ledger,
             sanitize_customer_facing_text,
             set_active_turn_evidence_ledger,
+            unauthorized_candidate_refs,
             validate_evidence_refs,
         )
 
@@ -950,8 +1020,11 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         invocation_key = (
             f"assessment-interview:{assessment_id}:{context_revision}:{resume_reason}"
         )
-        if context.get("decisionValidationFeedback"):
+        feedback = context.get("decisionValidationFeedback")
+        if feedback:
             invocation_key += ":resolution-correction:1"
+            if isinstance(feedback, dict) and feedback.get("schemaViolation"):
+                invocation_key += ":schema-correction:1"
 
         run_context = LCSPRunContext(
             assessment_id=assessment_id,
@@ -1018,6 +1091,9 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         if not isinstance(handoff, dict):
             raise ValueError("Interview specialist did not return a validated handoff")
         handoff["expectedContextRevision"] = context_revision
+        _canonicalize_handoff_version_refs(
+            handoff, _turn_version_ref_aliases(source_version, pge_version),
+        )
         targeted_need = context.get("targetedNeed")
         if isinstance(targeted_need, dict):
             if handoff.get("mode") != "INVESTIGATOR_RESOLUTION":
@@ -1030,6 +1106,18 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 targeted_need.get("needId"),
             }:
                 raise ValueError("Targeted Interview question escaped its registered need")
+
+        # Evidence refs must be exact: an unauthorized ref is a repairable candidate
+        # violation (one bounded specialist correction listing the allowed refs),
+        # never something the platform drops or substitutes.
+        rejected_refs = unauthorized_candidate_refs(
+            [handoff.get("activeQuestion"), handoff.get("confirmedContext")],
+            ledger.authorized_refs,
+        )
+        if rejected_refs:
+            raise SpecialistHandoffValidationError(
+                evidence_ref_correction_reason(rejected_refs, ledger.authorized_refs)
+            )
 
         # Validate candidate question and evidence refs emitted by the Interview specialist
         question = handoff.get("activeQuestion")
@@ -1369,6 +1457,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                     "trigger": "INTERVIEW_DOWNSTREAM_IMPACT_REEVALUATION",
                 },
             },
+            stage=AGENT_STREAM_STAGES["investigate"],
         )
 
     def _resume_exact_investigator(
@@ -1406,15 +1495,29 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
 
             resumer = resume_managed_investigator
 
-        result = resumer(
-            config=self._config,
-            api_client=api_client,
-            assessment_id=assessment_id,
-            context_revision=context_revision,
-            continuation=continuation,
-            confirmed_context=confirmed_context,
-            correlation_id=correlationId,
+        affected_rule_ids = continuation.get("affectedRuleIds")
+        resumed_rule_id = (
+            str(affected_rule_ids[0])
+            if isinstance(affected_rule_ids, list) and len(affected_rule_ids) == 1
+            else None
         )
+        # The resumed Investigator streams under the same rule section that paused
+        # for the Customer, so its activity and result stay grouped with that rule.
+        with agent_stream_stage(AGENT_STREAM_STAGES["investigate"]), agent_stream_rule_scope(
+            resumed_rule_id
+        ) as rule_stream:
+            result = resumer(
+                config=self._config,
+                api_client=api_client,
+                assessment_id=assessment_id,
+                context_revision=context_revision,
+                continuation=continuation,
+                confirmed_context=confirmed_context,
+                correlation_id=correlationId,
+            )
+            resumed_handoff = result.get("handoff") if isinstance(result, dict) else None
+            if rule_stream is not None and isinstance(resumed_handoff, dict):
+                rule_stream.complete(resumed_handoff.get("claims") or ())
         if not isinstance(result, dict):
             raise RuntimeError("exact Investigator resume returned an invalid result")
         if result.get("executionId") != continuation.get("investigatorExecutionId"):
@@ -1506,6 +1609,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                     "trigger": "ASSESSMENT_INTERVIEW_REVALIDATION_REQUIRED",
                 },
             },
+            stage=AGENT_STREAM_STAGES["interview"],
         )
 
     def _reenter_root_for_coverage_recovery(
@@ -1544,6 +1648,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                     "trigger": "ASSESSMENT_INTERVIEW_COVERAGE_RECOVERY_REQUIRED",
                 },
             },
+            stage=AGENT_STREAM_STAGES["interview"],
         )
 
     def _load_api_client(self):
@@ -1706,6 +1811,13 @@ def _profile_with_confirmed_context_facts(
         fact_refs[target_field] = [statement.statement_id]
     return {"mergedProfile": merged, "factEvidenceRefs": fact_refs}
 
+# Resumes that author a follow-up question at the current revision instead of
+# processing a new Customer answer.
+_SAME_REVISION_RESUME_REASONS = frozenset(
+    {"PROVIDE_MORE_CONTEXT", PLANNER_CONTEXT_REQUIRED}
+)
+
+
 def _terminal_guarded_state(context: dict[str, Any]) -> bool:
     state = context.get("publicState")
     return isinstance(state, dict) and str(state.get("outcome") or "") in _TERMINAL_GUARDED_OUTCOMES
@@ -1814,6 +1926,10 @@ def _interview_instruction(
         "priorAnswerHistoryOmittedCount": context.get("priorAnswerHistoryOmittedCount") or 0,
         "targetedNeed": targeted_need,
     }
+    planner_need = context.get("plannerContextNeed")
+    if resume_reason == PLANNER_CONTEXT_REQUIRED and isinstance(planner_need, dict):
+        # Business fact the Planner could not decide rule selection without.
+        bounded_payload["plannerContextNeed"] = planner_need
     if context.get("decisionValidationFeedback"):
         bounded_payload["decisionValidationFeedback"] = context["decisionValidationFeedback"]
     return (
@@ -1833,7 +1949,15 @@ def _interview_instruction(
         "return only the typed InterviewResult candidate. HTTP persistence is not proof "
         "of sufficiency. PROVIDE_MORE_CONTEXT means author the next bounded question from "
         "the existing thread; do not restart a targeted Interview. "
-        "Never return outcome=CONTEXT_READY while publicThreadState.contextAuthority is "
+        + (
+            "PLANNER_CONTEXT_REQUIRED means the Planner cannot select EngineeringRules "
+            "without the business fact in plannerContextNeed: author one bounded Customer "
+            "question that resolves its resolutionCriteria, reuse confirmed context, and "
+            "never mention rule IDs, legal citations or internal systems. "
+            if "plannerContextNeed" in bounded_payload
+            else ""
+        )
+        + "Never return outcome=CONTEXT_READY while publicThreadState.contextAuthority is "
         "CUSTOMER_STATED; the platform requires CUSTOMER_CONFIRMED authority for "
         "CONTEXT_READY and rejects an unauthoritative CONTEXT_READY with no automatic "
         "recovery beyond one bounded correction. Provenance rule: CUSTOMER_CONFIRMED "
@@ -1860,6 +1984,7 @@ def _interview_instruction(
         "rejectedReason names the exact structural rule the prior candidate broke (for "
         "example a malformed CONFIRM_ADJUST choice shape or an invalid outcome/mode "
         "combination): fix only that violation, changing nothing else about the candidate. "
+        "If it also has schemaViolation, fix that rejectedReason rule too. "
         "Do not invent confirmation or treat validation feedback as customer evidence. "
         "If evidence is missing, return WAITING_FOR_CUSTOMER with a bounded clarification, "
         "or BLOCKED_OR_UNRESOLVED when the customer cannot supply it. Because provider "

@@ -1,6 +1,6 @@
 # LCSP Deep-Agent Orchestration
 
-This document defines the LCSP v3 Managed Deep Agents boundary.
+This document defines the LCSP v3 native Deep Agents / LangGraph boundary.
 
 The root is a **supervisor/orchestrator**, not another investigation worker. It
 owns bounded runtime context, thread/checkpoint execution memory, and the todo
@@ -63,7 +63,7 @@ authoritative value by a model.
 
 ### Memory
 
-Managed Deep Agents/LangGraph thread checkpointing is the supervisor's execution
+Deep Agents/LangGraph thread checkpointing is the supervisor's execution
 memory for the current run and resume point.
 
 LCSP authoritative data remains in the API/database:
@@ -75,10 +75,11 @@ LCSP authoritative data remains in the API/database:
 - deterministic evaluation outcomes;
 - report/audit artifacts.
 
-The project intentionally does **not** define root `memory.py`. Managed Deep
-Agents deployment-shared long-term memory is therefore not used for tenant or
-assessment data. This absence is the MDA memory declaration and the LCSP
-API/database remains the authority boundary.
+The runtime uses LangGraph checkpoint state as execution memory only. It must
+never become storage for assessment/customer state, repository source, legal
+conclusions, authorization decisions, or other tenant-scoped authority. The
+LCSP API/database and commit-pinned repository workspace remain the authority
+boundaries for those values.
 
 ### Todos
 
@@ -179,13 +180,13 @@ Investigator cannot fetch Interview/legal context, change EngineeringRules, or e
 
 Defaults live in `model_policy.py` and can be overridden by deployment env vars.
 
-| Role | Default model | Workload |
-| --- | --- | --- |
-| Root orchestrator | `openai:gpt-5-nano` | coordination, delegation, todo/state management |
-| Legal triage | `openai:gpt-5-nano` | legal work-item triage |
-| Interview | `openai:gpt-5-nano` | Customer business-context reasoning and clarification |
-| Planner | `openai:gpt-5-nano` | high-reasoning scope construction |
-| Investigator | `openai:gpt-5-nano` | repeated tool-heavy technical investigation |
+| Role                | Default model         | Workload                                                       |
+| ------------------- | --------------------- | -------------------------------------------------------------- |
+| Root orchestrator   | `openai:gpt-5-nano`   | coordination, delegation, todo/state management                |
+| Legal triage        | `openai:gpt-5-nano`   | legal work-item triage                                         |
+| Interview           | `openai:gpt-5-nano`   | Customer business-context reasoning and clarification          |
+| Planner             | `openai:gpt-5-nano`   | high-reasoning scope construction                              |
+| Investigator        | `openai:gpt-5-nano`   | repeated tool-heavy technical investigation                    |
 | Narrators/proposers | `openai:gpt-4.1-nano` | bounded narration and proposal fields without reasoning kwargs |
 
 OpenAI `provider:model` specs are constructed through an LCSP provider profile
@@ -216,6 +217,7 @@ Select all role models together with a code-owned preset:
 LCSP_MODEL_PROVIDER=openai
 # Or: LCSP_MODEL_PROVIDER=google_genai
 # Or: LCSP_MODEL_PROVIDER=llm7
+# Or: LCSP_MODEL_PROVIDER=inception
 ```
 
 OpenAI uses GPT-5 nano with low reasoning for reasoning roles and GPT-4.1 nano
@@ -224,10 +226,14 @@ reasoning roles receive `thinking_level="low"`; narrators/proposers receive `"mi
 Minimal reduces thinking but does not guarantee zero thinking tokens.
 The exact Google harness profile supports the reasoning root and subagents;
 narrators/proposers use the agent-scoped constructor with minimal thinking. LLM7 uses
-`gemini-3.1-flash-lite` for every role through its OpenAI-compatible endpoint. The
+`GLM-5.3-Flash` for every role through its OpenAI-compatible endpoint. The
 transport remains LangChain OpenAI, but LCSP forces `use_responses_api=False`, routes
 credentials only from `LLM7_API_KEY`, and defaults to `https://api.llm7.io/v1`
-(`LLM7_BASE_URL` may override the endpoint).
+(`LLM7_BASE_URL` may override the endpoint). Inception uses `mercury-2.5` for
+every role through its OpenAI-compatible endpoint with `temperature=0.75`,
+`use_responses_api=False`, credentials only from `INCEPTION_API_KEY`, and default
+base URL `https://api.inceptionlabs.ai/v1` (`INCEPTION_BASE_URL` may override the
+endpoint).
 
 An explicit provider preset takes precedence over legacy per-role model and
 reasoning environment variables. Unset `LCSP_MODEL_PROVIDER` to retain legacy
@@ -318,14 +324,26 @@ OPENAI_API_KEY=token1,token2,token3,
 # For LLM7 instead:
 # LCSP_MODEL_PROVIDER=llm7
 # LLM7_API_KEY=token1,token2,token3,
+# For Inception instead:
+# LCSP_MODEL_PROVIDER=inception
+# INCEPTION_API_KEY=token1,token2,token3,
 ```
 
 Google also accepts `GEMINI_API_KEY` when `GOOGLE_API_KEY` is unset. OpenAI,
-Google/Gemini, and LLM7 use the same credential health/rotation state machine.
+Google/Gemini, LLM7, Inception, and Anthropic (reachable through an explicit
+`anthropic:` per-agent model override such as `LCSP_INTERVIEW_MODEL`, with keys in
+`ANTHROPIC_API_KEY=token1,token2`) use the same credential health/rotation state machine.
+The Docker worker started by `scripts/run.mjs` forwards every provider key list, base
+URL and the shared `LLM_PROVIDER_TIMEOUT_SECONDS` override (one request timeout for
+every provider, default 300s); a test keeps that list in sync with
+`provider_credentials.PROVIDER_KEY_ENV`.
 LLM7 never falls back to `OPENAI_API_KEY`; its compatible ChatOpenAI client keeps the LLM7
-base URL and Chat Completions mode while rotating only `LLM7_API_KEY` slots. Whitespace,
-empty entries and duplicate keys are removed; a non-empty list containing only
-commas/whitespace is invalid. A single key retains normal SDK behavior.
+base URL and Chat Completions mode while rotating only `LLM7_API_KEY` slots. Inception
+likewise never falls back to `OPENAI_API_KEY`; its compatible ChatOpenAI client keeps
+the Inception base URL, temperature, and Chat Completions mode while rotating only
+`INCEPTION_API_KEY` slots. Whitespace, empty entries and duplicate keys are removed;
+a non-empty list containing only commas/whitespace is invalid. A single key retains
+normal SDK behavior.
 
 For multiple keys, each model call tries keys in order on HTTP 401/403/429
 (including wrapped provider errors). SDK retries are disabled for these lists.
@@ -349,6 +367,9 @@ GOOGLE_API_KEY=google1,google2
 
 LLM_FALLBACK_PROVIDER_2=llm7
 LLM7_API_KEY=llm7a,llm7b
+
+LLM_FALLBACK_PROVIDER_3=inception
+INCEPTION_API_KEY=inception1,inception2
 ```
 
 `LLM_FALLBACK_PROVIDER_<number>` entries are sorted numerically and accept the
@@ -362,7 +383,8 @@ credential, quota, transient HTTP, timeout, or connection failures. The next
 provider then performs its own full key rotation before the chain advances
 again. Schema/request failures and HTTP 400/404/422 never cross providers. A
 configured fallback provider must have its own credential environment variable;
-LLM7 always uses `LLM7_API_KEY` and never borrows `OPENAI_API_KEY`.
+LLM7 always uses `LLM7_API_KEY` and Inception always uses `INCEPTION_API_KEY`; neither
+borrows `OPENAI_API_KEY`.
 
 ## Live Deep Agents stream to workspace Chat
 
@@ -384,7 +406,7 @@ they leave the worker. Provider fallback and key rotation keep their existing re
 semantics; streaming only reports those transitions.
 
 ```text
-Managed Agent / LangGraph
+Agent Runtime / LangGraph
         │ ordered buffered events
         ▼
 WorkerApiClient
@@ -419,5 +441,6 @@ collection startup it discovers the keys declared by that `.env` without importi
 their values into tests, removes those keys from the pytest process, and clears them
 again before and after each test. Tests that need provider/model credentials or other
 runtime configuration must set them explicitly through `monkeypatch` or a fixture.
-This prevents a local `LCSP_MODEL_PROVIDER`, `LLM7_API_KEY`, or similar setting from
-changing later model-policy tests or causing accidental real-provider access.
+This prevents a local `LCSP_MODEL_PROVIDER`, `LLM7_API_KEY`, `INCEPTION_API_KEY`, or
+similar setting from changing later model-policy tests or causing accidental
+real-provider access.

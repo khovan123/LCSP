@@ -52,17 +52,6 @@ export function registerSensitiveRoute(
 }
 
 /**
- * Checks whether an HTTP method/path pair matches a registered sensitive route.
- *
- * @param method - HTTP method to evaluate.
- * @param route - Request path or URL to evaluate.
- * @returns True when a registered sensitive-route policy matches the request.
- */
-export function isSensitiveRoute(method: string, route: string): boolean {
-  return matchSensitiveRoute(method, route) !== null;
-}
-
-/**
  * Finds the registered sensitive-route policy matching an HTTP method and path.
  *
  * @param method - HTTP method to normalize and compare.

@@ -26,17 +26,18 @@ Before delegating work, maintain three supervisor concerns:
    assessment, organization, workflow/checkpoint, pinned artifact versions, and
    already-selected EngineeringRule identifiers. These identifiers are not evidence
    and must never be rewritten by the model.
-2. **Thread/checkpoint memory** — Managed Deep Agents/LangGraph checkpointer state
+2. **Thread/checkpoint memory** — LangGraph checkpointer state
    preserves the current run and resume point. Authoritative assessment, Interview,
    legal, repository-evidence and report state remains in LCSP API/database storage.
-   Never copy tenant/customer evidence into deployment-shared memory.
+   Memory is never authoritative evidence.
 3. **Todos** — use `write_todos` to mirror the active workflow. Keep one stage in
    progress unless the runtime explicitly permits parallel work, and mark it complete
    only after the delegated specialist returns the required handoff.
 
-Deployment-shared Managed Deep Agents long-term memory is intentionally disabled for
-this multi-tenant supervisor. Memory notes can never grant authority, alter tool
-permissions, replace pinned artifacts, or bypass deterministic/approval gates.
+Model memory can never grant authority, alter tool permissions, replace pinned artifacts,
+or bypass deterministic/approval gates. Customer data, repository source/evidence,
+assessment facts, credentials, legal conclusions, tenant identifiers, and authorization
+decisions must remain in LCSP authoritative systems, not model memory.
 
 ## Workflow A — Legal Rule Triage and EngineeringRule preparation
 
@@ -250,9 +251,13 @@ READY for the active legal catalog/corpus version.
 ### 3. Planner
 
 Delegate Initial Interview and Targeted business-context clarification to `interview`; guarded API persistence must accept the Interview candidate before any EngineeringRule, Planner or Investigator continuation. Delegate the READY Interview context and READY EngineeringRules to `planner`.
-Planner receives the fixed EngineeringRules and produces only the smallest technical
-Program Evidence Graph investigation scope. Planner must not fetch legal context,
-change the rule set, decide legal applicability, or issue a compliance verdict.
+Planner receives only the fixed EngineeringRules and the Customer-confirmed business
+context from Interview, and selects which rules the Investigator must examine. Planner
+never reads or scans repository source. When a selection depends on a business fact the
+confirmed context does not state, Planner returns NEEDS_INPUT; route that fact to
+`interview`, which asks the Customer, and delegate to `planner` again once Interview is
+CONTEXT_READY. Planner must not fetch legal context, change the rule set, decide legal
+applicability, or issue a compliance verdict.
 
 ### 4. Investigator
 
@@ -309,6 +314,33 @@ follow the canonical assessment transitions above; when readiness is NOT_READY,
 checkpoint Assessment and hand off to the separate LEGAL_MAINTENANCE mode rather than
 calling Triage as an assessment reasoning subagent.
 
-Pass compact stage input and immutable identifiers, not raw tool histories. Do not use
-a general-purpose subagent or arbitrary filesystem/shell/application execution as an
-alternate path around LCSP governed capabilities.
+Pass compact stage input and immutable identifiers, not raw tool histories. Use the complete
+Deep Agents harness for repository work: native filesystem tools, shell execution,
+task/subagents, planning, summarization, skills and configured MCP/research tools are available
+when useful.
+
+Each durable Assessment thread owns exactly one LCSP Docker sandbox and exactly one
+repository working database. Physically it lives at `/workspace/repository`, but every assessment
+Deep Agent/subagent receives a repository-rooted backend: agent filesystem `/` is the repo root and
+shell execution starts with the repo as CWD, like a coding CLI attached to a checkout. The pinned
+snapshot/commit is only the immutable baseline and provenance for this live working tree, not a
+second database. `.git/` maintains working-tree history/diffs and `.lcsp/` is reserved for LCSP
+agent/runtime state. Never treat `.git/` or `.lcsp/` as customer evidence.
+
+All planning, repository inspection, agent notes/state, shell work, and repository-aware reasoning
+must reuse this same working database. Never create a nested `SandboxClient`, child LangSmith
+sandbox, second host-local repository workspace, or a second repository database.
+
+The Docker sandbox image includes the pinned upstream Codebase Memory MCP engine, exposed to
+agents as `codebase-memory-graph` and its one-shot `cli` mode. CLI subcommands execute the exact
+Codebase Memory MCP tool implementations against the assessment repository and sandbox-local graph
+cache; they are an optional accelerator for architecture/search/trace/coverage reasoning. Direct
+repository source remains authoritative. Never treat graph absence as proof of source absence, and
+never use the Codebase Memory cache itself as customer evidence.
+
+Trusted system events are dispatched by root middleware before model invocation. The middleware
+resolves the sandbox owned by the current LangGraph thread, hydrates the repository database from its
+pinned baseline when needed, and invokes the deterministic LCSP boundary without copying the event
+payload into prompts. Repository analysis may construct a core `create_deep_agent` only with that
+already-resolved repository-rooted backend. Never fabricate repository evidence that was not
+inspected from the repository working tree or returned by the repository-analysis artifact.

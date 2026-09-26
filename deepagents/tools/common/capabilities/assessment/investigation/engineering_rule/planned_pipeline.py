@@ -2,34 +2,40 @@
 from __future__ import annotations
 
 from collections import Counter
-from pathlib import Path
 from typing import Any
 
 from model_policy import INVESTIGATOR_MODEL_SPEC, PLANNER_MODEL_SPEC
 from tools.common.capabilities.platform.api_client import WorkerCallbackError
 from middleware.billing_metering import BillingMeteringError
+from orchestration.agent_stream import (
+    AGENT_STREAM_STAGES,
+    agent_stream_rule_scope,
+    agent_stream_stage,
+    publish_rule_decision,
+    publish_rule_waiting,
+)
 from tools.common.capabilities.platform.logging import get_logger
 from tools.common.capabilities.evidence.graph.schema.source_roles import filter_program_evidence_graph
 
-from tools.common.capabilities.assessment.investigation.engineering_rule.code_context import CodeContextSession
-from tools.common.capabilities.assessment.investigation.engineering_rule.code_context_investigator import CodeContextLawGuidedInvestigator
-from tools.common.capabilities.assessment.investigation.engineering_rule.deterministic_investigator import DeterministicCodeContextLawGuidedInvestigator
 from tools.common.capabilities.assessment.planning.engineering_rule.confirmed_business_context import (
     ConfirmedStructuredBusinessContext,
     coerce_confirmed_structured_business_context,
 )
 from tools.common.capabilities.assessment.planning.engineering_rule.engineering_rule_planner import (
+    PLANNER_CONTEXT_REQUIRED,
     EngineeringRulePlan,
     EngineeringRulePlanDecisionAudit,
     EngineeringRulePlanner,
+    PlannerContextNeed,
+    PlannerContextPending,
 )
 from tools.common.capabilities.assessment.planning.engineering_rule.material_scope import material_planning_packet
+from tools.common.capabilities.assessment.investigation.engineering_rule.investigator import LawGuidedInvestigator
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_EVIDENCE_CLAIM_TYPES,
     ENGINEERING_LIMITATION_CODES,
     EvidenceClaim,
 )
-from tools.common.capabilities.assessment.investigation.engineering_rule.openwiki_context import OpenWikiContextProvider, OpenWikiContextRequiredError
 from .pipeline import EngineeringInvestigationPipeline, EngineeringInvestigationResult
 from .managed_targeted_investigator import TargetedInterviewPending
 from tools.common.capabilities.assessment.planning.engineering_rule.plan_audit_result import PlannedEngineeringInvestigationResult
@@ -38,7 +44,6 @@ from tools.common.capabilities.assessment.planning.engineering_rule.planning_bus
     BusinessAwareScopedMaterialEngineeringRulePlanner,
     RulePlanningBusinessScopeProjector,
 )
-from .selected_rule_orchestration import augment_selected_rule_packet
 
 
 logger = get_logger(__name__)
@@ -64,6 +69,10 @@ LEGAL_RULE_ONLY_RECOVERY_REASONS = frozenset(
 class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
     """Plan once, validate deterministically, then investigate selected rules only."""
 
+    # Production work uses the current assessment repository database through the
+    # repository-rooted sandbox backend. Do not materialize another host-local repo.
+    requires_code_workspace = False
+
     def __init__(
         self,
         *,
@@ -85,9 +94,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             retriever=retriever,
             rule_service=rule_service,
             query_executor=query_executor,
-            investigator=(
-                investigator or DeterministicCodeContextLawGuidedInvestigator(model)
-            ),
+            investigator=(investigator or LawGuidedInvestigator(model)),
             evaluator=evaluator,
         )
         self._planner = planner or BusinessAwareScopedMaterialEngineeringRulePlanner(
@@ -143,10 +150,8 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 correlationId=correlation_id,
             )
 
-        # CodeContextSession is built only after the runtime graph has been cleaned,
-        # so search_code/repo_map/get_symbol/get_code cannot surface test/spec symbols
-        # even when a classification rerun references an older persisted graph.
-        code_context = CodeContextSession(graph, workspace_path=workspace_path)
+        # Repository exploration happens only through the repository-rooted sandbox backend.
+        _ = workspace_path
         (
             catalog_version_id,
             corpus_version_id,
@@ -352,7 +357,6 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
 
         return self._run_planned_investigation(
             graph=graph,
-            code_context=code_context,
             rules=rules,
             prepared=prepared,
             preparation_observability=preparation_observability,
@@ -374,7 +378,6 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         self,
         *,
         graph,
-        code_context: CodeContextSession,
         rules: list[dict[str, Any]],
         prepared: list[tuple[Any, Any]],
         preparation_observability: dict[str, Any],
@@ -415,93 +418,30 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 candidates
             ),
         }
-        if not getattr(self._planner, "requires_openwiki_context", True):
-            # A deterministic planner (exact targeted resume) never reads planner hints.
-            # Generating OpenWiki here would cost time, and its SELECT-ALL fallback on
-            # unavailability would silently widen an exact-resume scope to every rule.
-            observability["openwiki"] = {
-                "available": False,
-                "skipped": "DETERMINISTIC_PLANNER_DOES_NOT_USE_OPENWIKI",
-            }
-            plan = self._planner.plan(
-                candidates=candidates,
-                confirmed_customer_context=confirmed_customer_context,
-                graph=graph,
-                workflow_run_id=workflow_run_id,
-                correlation_id=correlation_id,
-                openwiki_context=None,
+        observability["repository_planning_context"] = {
+            "source": "LCSP_REPOSITORY_DATABASE",
+            "codebaseMemoryMcpOptional": True,
+        }
+        plan = self._planner.plan(
+            candidates=candidates,
+            confirmed_customer_context=confirmed_customer_context,
+            graph=graph,
+            workflow_run_id=workflow_run_id,
+            correlation_id=correlation_id,
+        )
+        if plan.context_needs and self._request_planner_context(
+            plan.context_needs[0],
+            assessment_id=assessment_id,
+            user_id=user_id,
+            workflow_run_id=workflow_run_id,
+        ):
+            raise PlannerContextPending(
+                "Planner reopened Interview for Customer business context"
             )
-        else:
-            try:
-                openwiki_context = OpenWikiContextProvider(
-                    workspace_path or Path.cwd()
-                ).collect_required_for_candidates(candidates)
-                observability["openwiki"] = {
-                    "available": True,
-                    "hint_count": int(openwiki_context.get("hintCount") or 0),
-                    "authority": str(openwiki_context.get("authority") or ""),
-                }
-                logger.info(
-                    "OPENWIKI_PLANNER_HINTS_READY",
-                    hint_count=openwiki_context.get("hintCount", 0),
-                    authority=openwiki_context.get("authority"),
-                    workflow_run_id=workflow_run_id,
-                    correlationId=correlation_id,
-                )
-                plan = self._planner.plan(
-                    candidates=candidates,
-                    confirmed_customer_context=confirmed_customer_context,
-                    graph=graph,
-                    workflow_run_id=workflow_run_id,
-                    correlation_id=correlation_id,
-                    openwiki_context=openwiki_context,
-                )
-            except OpenWikiContextRequiredError as error:
-                observability["openwiki"] = {
-                    "available": False,
-                    "error": str(error),
-                    "fallback": "OPENWIKI_REQUIRED_FALLBACK_ALL",
-                }
-                logger.warning(
-                    "OPENWIKI_PLANNER_HINTS_REQUIRED_FALLBACK_ALL",
-                    reason=str(error),
-                    candidate_count=len(candidates),
-                    workflow_run_id=workflow_run_id,
-                    correlationId=correlation_id,
-                )
-                plan = EngineeringRulePlan(
-                    selected_rule_ids=tuple(
-                        candidate.engineering_rule_id for candidate in candidates
-                    ),
-                    skipped_rule_ids=(),
-                    fallback_used=True,
-                    decision_audit=tuple(
-                        EngineeringRulePlanDecisionAudit(
-                            engineering_rule_id=candidate.engineering_rule_id,
-                            requested_decision="FALLBACK",
-                            final_decision="SELECT",
-                            reason_code="OPENWIKI_REQUIRED_CONTEXT_UNAVAILABLE",
-                            basis=(),
-                            validation_override="OPENWIKI_REQUIRED_FALLBACK_ALL",
-                            interview_context_revision_used=(
-                                confirmed_customer_context.context_revision
-                            ),
-                            confirmed_statement_refs_used=(
-                                confirmed_customer_context.confirmed_statement_refs
-                            ),
-                            context_limitations_used=confirmed_customer_context.limitations,
-                            source_version_ref=confirmed_customer_context.source_version_ref,
-                            pge_version=confirmed_customer_context.pge_version,
-                            guidance_version=confirmed_customer_context.guidance_version,
-                        )
-                        for candidate in candidates
-                    ),
-                )
 
         # Existing implementation continues below in this helper.
         return self._finish_planned_investigation(
             graph=graph,
-            code_context=code_context,
             prepared=prepared,
             candidates=candidates,
             plan=plan,
@@ -520,11 +460,53 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             scan_job_id=scan_job_id,
         )
 
+    def _request_planner_context(
+        self,
+        need: PlannerContextNeed,
+        *,
+        assessment_id: str | None,
+        user_id: str | None,
+        workflow_run_id: str,
+    ) -> bool:
+        """Ask Root Orchestration to route one missing business fact to Interview.
+
+        Returns False when the need cannot be asked (no trusted assessment/user, or it
+        was already asked once): the plan then proceeds and keeps the affected rules
+        selected, so an unanswerable fact never blocks or silently narrows the scope.
+        """
+        register = getattr(self._api_client, "post_interview_planner_context_need", None)
+        if not callable(register) or not assessment_id or not user_id:
+            return False
+        result = register(
+            assessment_id,
+            {
+                "actorId": user_id,
+                "needId": need.need_id,
+                "businessContextNeed": need.business_context_need,
+                "resolutionCriteria": list(need.resolution_criteria),
+                "whyNeeded": need.why_needed,
+                "affectedRuleIds": list(need.engineering_rule_ids),
+                "workflowRunId": workflow_run_id,
+            },
+        )
+        registered = isinstance(result, dict) and result.get("registered") is True
+        logger.info(
+            "ENGINEERING_RULE_PLAN_CONTEXT_NEED",
+            need_id=need.need_id,
+            engineering_rule_ids=list(need.engineering_rule_ids),
+            registered=registered,
+            workflow_run_id=workflow_run_id,
+        )
+        if registered:
+            with agent_stream_stage(AGENT_STREAM_STAGES["planner"]):
+                for rule_id in need.engineering_rule_ids:
+                    publish_rule_waiting(rule_id, reason_code=PLANNER_CONTEXT_REQUIRED)
+        return registered
+
     def _finish_planned_investigation(
         self,
         *,
         graph,
-        code_context: CodeContextSession,
         prepared: list[tuple[Any, Any]],
         candidates: tuple[Any, ...],
         plan: EngineeringRulePlan,
@@ -655,6 +637,13 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 workflow_run_id=workflow_run_id,
                 correlationId=correlation_id,
             )
+            with agent_stream_stage(AGENT_STREAM_STAGES["planner"]):
+                publish_rule_decision(
+                    audit.engineering_rule_id,
+                    decision=audit.final_decision,
+                    reason_code=audit.reason_code,
+                    basis=audit.basis,
+                )
             self._emit_runtime_activity(
                 scan_job_id=scan_job_id,
                 event_type=(
@@ -714,33 +703,25 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             if engineering_rule.engineering_rule_id not in selected_ids:
                 continue
 
-            # P1 deterministic orchestration: only selected rules receive a few bounded
-            # contract-owned graph traces before the first LLM turn. This reduces model
-            # tool retries/invalid ref calls and gives the model enough concrete topology
-            # to finish naturally without restoring the old eager fan-out.
-            packet = augment_selected_rule_packet(
-                packet,
-                graph,
-                workflow_run_id=workflow_run_id,
-                correlation_id=correlation_id,
-            )
             investigation_failed = False
             try:
-                if isinstance(self._investigator, CodeContextLawGuidedInvestigator):
+                with agent_stream_stage(
+                    AGENT_STREAM_STAGES["investigate"]
+                ), agent_stream_rule_scope(
+                    engineering_rule.engineering_rule_id,
+                    concept=packet.concept,
+                    required_evidence=packet.required_evidence,
+                    investigation_goals=packet.investigation_goals,
+                    waiting_on=(TargetedInterviewPending,),
+                ) as rule_stream:
                     rule_claims = self._investigator.investigate(
                         packet=packet,
                         graph=graph,
                         workflow_run_id=workflow_run_id,
                         correlation_id=correlation_id,
-                        code_context=code_context,
                     )
-                else:
-                    rule_claims = self._investigator.investigate(
-                        packet=packet,
-                        graph=graph,
-                        workflow_run_id=workflow_run_id,
-                        correlation_id=correlation_id,
-                    )
+                    if rule_stream is not None:
+                        rule_stream.complete(rule_claims)
             except TargetedInterviewPending:
                 self._emit_runtime_activity(
                     scan_job_id=scan_job_id,

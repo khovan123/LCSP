@@ -28,3 +28,46 @@ process.env.BILLING_SEPAY_BANK_ACCOUNT_NUMBER ??= "1234567890";
 process.env.BILLING_SEPAY_ACCOUNT_HOLDER ??= "LCSP TEST";
 process.env.BILLING_SEPAY_QR_URL_TEMPLATE ??=
   "https://payments.test/qr?amount={amountVnd}&content={paymentCode}";
+process.env.LCSP_MODEL_PRICING_SNAPSHOTS ??= JSON.stringify([
+  {
+    provider: "OPENAI",
+    model: "gpt-4.1-nano",
+    version: 1,
+    effectiveAt: "2026-01-01T00:00:00.000Z",
+    inputPricePerMillion: "0.10000000",
+    cachedInputPricePerMillion: "0.02500000",
+    outputPricePerMillion: "0.40000000",
+    providerCurrency: "USD",
+    customerCurrency: "VND",
+    markupBps: "2000",
+    fxRateVndNumerator: "26000",
+    fxRateVndDenominator: "1",
+  },
+  {
+    provider: "LLM7",
+    model: "GLM-5.3-Flash",
+    version: 1,
+    effectiveAt: "2026-01-01T00:00:00.000Z",
+    inputPricePerMillion: "0.15000000",
+    outputPricePerMillion: "1.25000000",
+    providerCurrency: "USD",
+    customerCurrency: "VND",
+    markupBps: "2000",
+    fxRateVndNumerator: "26000",
+    fxRateVndDenominator: "1",
+  },
+  {
+    provider: "GOOGLE_GENAI",
+    model: "gemini-3.5-flash-lite",
+    version: 1,
+    effectiveAt: "2026-01-01T00:00:00.000Z",
+    inputPricePerMillion: "0.15000000",
+    cachedInputPricePerMillion: "0.15000000",
+    outputPricePerMillion: "1.25000000",
+    providerCurrency: "USD",
+    customerCurrency: "VND",
+    markupBps: "2000",
+    fxRateVndNumerator: "26000",
+    fxRateVndDenominator: "1",
+  },
+]);

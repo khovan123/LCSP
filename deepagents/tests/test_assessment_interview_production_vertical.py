@@ -415,7 +415,7 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
             instructions=investigator_instructions,
         )(**kwargs)
 
-    monkeypatch.setattr(managed, "create_agent", create_agent_with_report)
+    monkeypatch.setattr(managed, "create_deep_agent", create_agent_with_report)
 
     boundary = InterviewGatedEngineeringAssessmentBoundary(
         config,
@@ -693,7 +693,7 @@ def test_release_gate_blocks_unresolved_targeted_context_without_resume(
             need_id=BLOCKED_NEED_ID,
         )(**kwargs)
 
-    monkeypatch.setattr(managed, "create_agent", create_agent_with_report)
+    monkeypatch.setattr(managed, "create_deep_agent", create_agent_with_report)
 
     boundary = InterviewGatedEngineeringAssessmentBoundary(
         config,
@@ -787,8 +787,8 @@ def _post_scan_callback(
         ScanCallbackPayload(
             scan_job_id=scan_job_id,
             status="SUCCESS",
-            tools_version={"scanner": "lcsp-278-release"},
-            config_hash={"scanner": "sha256:lcsp-278-release"},
+            tools_version={"deepagents": "0.7.17", "repository-analysis": "1.0.0"},
+            config_hash={"repository-analysis": "sha256:lcsp-278-release"},
             evidence_payload={"evidence_graph": _program_graph(snapshot_id)},
             privacy_flags={
                 "containsSourceCode": False,
@@ -888,7 +888,7 @@ def _program_graph(snapshot_id: str = SNAPSHOT_ID) -> dict[str, Any]:
                 "attributes": {"purpose": "recommendation approval authority"},
                 "semantic_types": ["approval_authority", "recommendation"],
                 "evidence_refs": [EVIDENCE_REF],
-                "origin": "STATIC_ANALYSIS",
+                "origin": "DEEP_AGENT",
                 "resolution_state": "OBSERVED",
                 "support_refs": [],
             }

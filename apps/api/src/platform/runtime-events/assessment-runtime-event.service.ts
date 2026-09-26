@@ -1,5 +1,8 @@
+import { asRecord } from "../../common/utils/index.js";
 import { randomUUID } from "node:crypto";
 import {
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES,
+  ASSESSMENT_AGENT_STREAM_STAGES,
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   ASSESSMENT_RUNTIME_ENGINEERING_PROGRESS_TOOL_NAMES,
   ASSESSMENT_RUNTIME_ENGINEERING_RULE_TOOL_PREFIXES,
@@ -8,6 +11,7 @@ import {
   ASSESSMENT_RUNTIME_STAGE_CODES,
   ASSESSMENT_RUNTIME_SYNTHETIC_TOOL_NAMES,
   isAssessmentAgentStreamEventType,
+  isAssessmentAgentStreamStage,
   isPostFindingRuntimePhase,
   isRemediationDecision,
   REMEDIATION_APPROVAL_STATUSES,
@@ -15,6 +19,7 @@ import {
   FINAL_ASSESSMENT_RESULT_STATUSES,
   type AssessmentAgentStreamEvent,
   type AssessmentAgentStreamEventType,
+  type AssessmentAgentStreamStage,
   type AssessmentPostFindingActivity,
   type AssessmentPostFindingRuntimeState,
   type AssessmentRuntimeEventType,
@@ -81,6 +86,8 @@ export type PublishAgentStreamEventInput = {
   runId: string;
   correlationId: string;
   eventType: AssessmentAgentStreamEventType;
+  stage?: AssessmentAgentStreamStage | null;
+  engineeringRuleId?: string | null;
   source?: string | null;
   agentName?: string | null;
   subagentName?: string | null;
@@ -387,12 +394,12 @@ export class AssessmentRuntimeEventService {
   }
 
   /**
-   * Records a scanner-worker runtime progress event after resolving tenant and assessment identity from the scan job.
+   * Records a repository-analysis-worker runtime progress event after resolving tenant and assessment identity from the scan job.
    *
    * @param input - Worker supplied runtime metadata plus the scan-job identifier.
    * @returns A promise that resolves after the sanitized runtime event is persisted, or after the scan job is ignored because it is absent/inactive.
    */
-  async recordScanWorkerEvent(
+  async recordRepositoryAnalysisEvent(
     input: RecordWorkerRuntimeEventInput,
   ): Promise<RecordWorkerRuntimeEventResult> {
     const scanJob = await this.prisma.repositoryScanJob.findUnique({
@@ -437,7 +444,8 @@ export class AssessmentRuntimeEventService {
       assessmentId: scanJob.assessmentId,
       runId: scanJob.id,
       correlationId: scanJob.correlationId,
-      eventType: "RUNTIME_EVENT",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeEvent,
+      stage: ASSESSMENT_AGENT_STREAM_STAGES.scanner,
       source: "runtime-event",
       toolName: input.toolName ?? null,
       status: input.runStatus,
@@ -478,6 +486,8 @@ export class AssessmentRuntimeEventService {
         sanitizeAgentStreamIdentifier(input.correlationId) ??
         input.correlationId,
       eventType: input.eventType,
+      stage: input.stage ?? null,
+      engineeringRuleId: sanitizeAgentStreamIdentifier(input.engineeringRuleId),
       source: sanitizeAgentStreamIdentifier(input.source),
       agentName: sanitizeAgentStreamIdentifier(input.agentName),
       subagentName: sanitizeAgentStreamIdentifier(input.subagentName),
@@ -866,6 +876,71 @@ export class AssessmentRuntimeEventService {
       })),
       postFindingStates,
     };
+  }
+
+  /**
+   * Reports whether a worker still owns this assessment's pipeline: the newest
+   * persisted runtime event (model heartbeats included) is recent and does not
+   * end a run. Queued work counts as live so a second Continue cannot enqueue
+   * the same step twice while the first is waiting for a worker.
+   *
+   * @param assessmentId - Assessment whose pipeline liveness is checked.
+   * @param windowMs - Maximum age of the newest event that still counts as live.
+   * @returns Whether the pipeline is live, with the newest event time when present.
+   */
+  async getPipelineLiveness(
+    assessmentId: string,
+    windowMs: number,
+  ): Promise<{ live: boolean; lastActivityAt: Date | null }> {
+    const [latest] = await this.safeFindMany({
+      where: { assessmentId },
+      orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
+      take: 1,
+    });
+    if (!latest) return { live: false, lastActivityAt: null };
+    const agentEventType = asRecord(
+      asRecord(latest.outputSummaryJson)?.agentStreamEvent,
+    )?.eventType;
+    const endsRun =
+      latest.runStatus === ASSESSMENT_RUNTIME_RUN_STATUSES.failed ||
+      latest.runStatus === ASSESSMENT_RUNTIME_RUN_STATUSES.completed ||
+      agentEventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed ||
+      agentEventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted;
+    const recent = Date.now() - latest.createdAt.getTime() < windowMs;
+    return { live: recent && !endsRun, lastActivityAt: latest.createdAt };
+  }
+
+  /**
+   * Returns the latest Interview progress phase recorded for one context revision.
+   * The web composer derives its Resume affordance from the same events, so the
+   * API resume guard reads them too instead of relying only on thread state.
+   *
+   * @param assessmentId - Assessment that owns the Interview thread.
+   * @param toolName - Interview runtime tool name that carries interviewProgress.
+   * @param contextRevision - Interview context revision to look up.
+   * @returns The newest recorded phase for that revision, or null when none exists.
+   */
+  async getLatestInterviewProgressPhase(
+    assessmentId: string,
+    toolName: string,
+    contextRevision: number,
+  ): Promise<string | null> {
+    const events = await this.safeFindMany({
+      where: { assessmentId, toolName },
+      orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
+      take: 50,
+    });
+    for (const event of events) {
+      const output = asRecord(event.outputSummaryJson);
+      const progress = asRecord(output?.interviewProgress);
+      if (
+        progress?.contextRevision === contextRevision &&
+        typeof progress.phase === "string"
+      ) {
+        return progress.phase;
+      }
+    }
+    return null;
   }
 
   async getLatestPostFindingState(
@@ -2123,6 +2198,8 @@ function agentStreamJournalEventFromRow(
     runId: stringValue(event.runId) ?? row.runId,
     correlationId: stringValue(event.correlationId) ?? row.correlationId,
     eventType: event.eventType as AssessmentAgentStreamEventType,
+    stage: isAssessmentAgentStreamStage(event.stage) ? event.stage : null,
+    engineeringRuleId: stringValue(event.engineeringRuleId),
     source: stringValue(event.source),
     agentName: stringValue(event.agentName),
     subagentName: stringValue(event.subagentName),

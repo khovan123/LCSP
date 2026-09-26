@@ -234,6 +234,15 @@ export const ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS = {
 export type AssessmentInterviewWorkflowEvent =
   (typeof ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS)[keyof typeof ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS];
 
+/** Why the Interview agent is resumed without a new Customer answer. */
+export const ASSESSMENT_INTERVIEW_RESUME_REASONS = {
+  investigatorResolutionRequired: "INVESTIGATOR_RESOLUTION_REQUIRED",
+  plannerContextRequired: "PLANNER_CONTEXT_REQUIRED",
+} as const;
+
+export type AssessmentInterviewResumeReason =
+  (typeof ASSESSMENT_INTERVIEW_RESUME_REASONS)[keyof typeof ASSESSMENT_INTERVIEW_RESUME_REASONS];
+
 export const ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS = {
   provideMoreContext: "PROVIDE_MORE_CONTEXT",
   checkInternally: "CHECK_INTERNALLY",
@@ -822,6 +831,52 @@ export type ContextRevision = {
 export type AssessmentInterviewBlockedInput = {
   action: AssessmentInterviewBlockedAction;
   draft?: string;
+};
+
+/** Customer retries allowed for one failed Interview Agent turn (per context revision). */
+export const ASSESSMENT_INTERVIEW_RESUME_MAX_ATTEMPTS = 3;
+
+export const ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES = {
+  notAvailable: "INTERVIEW_RESUME_NOT_AVAILABLE",
+  limitReached: "INTERVIEW_RESUME_LIMIT_REACHED",
+  revisionStale: "INTERVIEW_SESSION_REVISION_STALE",
+} as const;
+
+export type AssessmentInterviewResumeProblemCode =
+  (typeof ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES)[keyof typeof ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES];
+
+/** Customer request to re-run an Interview Agent turn that failed after the answer was saved. */
+export type AssessmentInterviewResumeInput = {
+  expectedSessionRevision?: number;
+};
+
+/** What a Customer "Continue" did to a paused or stopped assessment pipeline. */
+export const ASSESSMENT_PIPELINE_CONTINUE_ACTIONS = {
+  interviewTurnResumed: "INTERVIEW_TURN_RESUMED",
+  downstreamRequeued: "DOWNSTREAM_REQUEUED",
+} as const;
+
+export type AssessmentPipelineContinueAction =
+  (typeof ASSESSMENT_PIPELINE_CONTINUE_ACTIONS)[keyof typeof ASSESSMENT_PIPELINE_CONTINUE_ACTIONS];
+
+export const ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES = {
+  alreadyRunning: "PIPELINE_ALREADY_RUNNING",
+  waitingForCustomer: "PIPELINE_WAITING_FOR_CUSTOMER",
+  completed: "PIPELINE_COMPLETED",
+} as const;
+
+export type AssessmentPipelineContinueProblemCode =
+  (typeof ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES)[keyof typeof ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES];
+
+/** Audit reason recorded when Continue re-sends accepted technical evidence. */
+export const ASSESSMENT_PIPELINE_CONTINUE_RERUN_REASON =
+  "CUSTOMER_PIPELINE_CONTINUE";
+
+/** Runtime activity newer than this means a worker still owns the pipeline. */
+export const ASSESSMENT_PIPELINE_LIVENESS_WINDOW_SECONDS = 90;
+
+export type AssessmentPipelineContinueResult = {
+  action: AssessmentPipelineContinueAction;
 };
 
 type StringLiteralRecord = Record<string, string>;

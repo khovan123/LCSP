@@ -51,7 +51,7 @@ def _program_graph() -> dict:
                 "attributes": {},
                 "semantic_types": [],
                 "evidence_refs": [],
-                "origin": "STATIC_ANALYSIS",
+                "origin": "DEEP_AGENT",
                 "resolution_state": "CORROBORATED",
                 "support_refs": [],
             }
@@ -489,3 +489,42 @@ def test_root_dispatcher_fails_policy_when_structured_handoff_is_missing(result)
 
     lifecycle.fail_subagent.assert_called_once_with(reservation)
     lifecycle.complete_subagent.assert_not_called()
+
+
+@pytest.mark.parametrize("subagent_type", ["triage", "interview", "planner", "investigator"])
+def test_default_agent_factory_builds_each_specialist_definition(monkeypatch, subagent_type) -> None:
+    """Assessment 7976a135 regression: the real factory must accept real definitions.
+
+    Specialists are built with Deep Agents' own ``create_deep_agent`` from the same
+    definition dict the root ``task`` tool uses, so each role and budget middleware
+    appears exactly once and the model spec resolves through the LCSP profiles.
+    """
+    import deepagents.graph as deep_graph
+    from deepagents import create_deep_agent
+
+    from subagents import FLOW_SUBAGENTS
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("LLM7_API_KEY", "test-llm7-key")
+    compiled: dict[str, list[str]] = {}
+    real_create_agent = deep_graph.create_agent
+
+    def recording_create_agent(model, **kwargs):
+        compiled[kwargs["name"]] = [middleware.name for middleware in kwargs["middleware"]]
+        return real_create_agent(model, **kwargs)
+
+    monkeypatch.setattr(deep_graph, "create_agent", recording_create_agent)
+    definition = next(item for item in FLOW_SUBAGENTS if item["name"] == subagent_type)
+
+    factory = RootSubagentDispatcher()._agent_factory
+    assert factory is create_deep_agent
+    factory(
+        model=definition["model"],
+        tools=definition["tools"],
+        system_prompt=definition["system_prompt"],
+        middleware=definition["middleware"],
+        name=f"lcsp-{subagent_type}-root-dispatch",
+    )
+
+    stack = compiled[f"lcsp-{subagent_type}-root-dispatch"]
+    assert stack.count("BillingAgentRoleMiddleware") == 1

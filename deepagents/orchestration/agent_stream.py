@@ -1,8 +1,11 @@
 """Bridge LangGraph/Deep Agents streaming events into the LCSP live chat runtime.
 
-The bridge deliberately exposes only provider/framework-visible streaming content.
-It never synthesizes or exposes hidden chain-of-thought. All payloads are bounded
-and credential-redacted before they leave the worker process.
+The bridge deliberately exposes only provider/framework-visible streaming content:
+the reasoning a provider returns to the caller (reasoning summaries, or the
+``reasoning_content`` channel of OpenAI-compatible reasoning routes), each tool call,
+and the visible model output. It never synthesizes reasoning and never forwards the
+raw thinking text of a content block that also carries a summary. All payloads are
+bounded and credential-redacted before they leave the worker process.
 """
 
 from __future__ import annotations
@@ -18,12 +21,14 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Iterator
 from uuid import uuid4
 
-from langchain_core.messages import AIMessageChunk, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 
 from middleware.redaction import redact_dict, redact_string
 
 
 MAX_STREAM_TEXT_CHARS = 65_536
+# Durable reasoning is journaled per model step; keep each entry readable.
+MAX_REASONING_SUMMARY_CHARS = 8_000
 MAX_STREAM_COLLECTION_ITEMS = 50
 MAX_STREAM_DEPTH = 6
 STREAM_MODES = ("messages", "updates", "custom", "values")
@@ -47,6 +52,31 @@ PRIVATE_GRAPH_KEYS = frozenset(
         "thought",
         "thoughts",
     }
+)
+
+# Customer-visible pipeline stage an event belongs to. Mirrors
+# ASSESSMENT_AGENT_STREAM_STAGES in packages/contracts so the workspace renders
+# one live timeline per stage (Scanner, Interview, Planner, Investigate, Gate).
+AGENT_STREAM_STAGES = {
+    "scanner": "SCANNER",
+    "interview": "INTERVIEW",
+    "planner": "PLANNER",
+    "investigate": "INVESTIGATE",
+    "gate": "GATE",
+}
+
+NOISY_STREAM_LOGGER_PREFIXES = (
+    "httpx",
+    "httpcore",
+    "urllib3",
+    "pika",
+    "langchain",
+    "langgraph",
+)
+NOISY_STREAM_LOG_MARKERS = (
+    "PIIMiddleware[",
+    "[HIDDEN_PRIVATE_RUNTIME_STATE]",
+    "private_runtime_state",
 )
 
 
@@ -133,9 +163,14 @@ class AgentStreamSession:
     correlation_id: str
     boundary_name: str
     emit_payload: Callable[[dict[str, Any]], None]
+    stage: str | None = None
     sequence: int = field(default=0, init=False)
     emitted_model_requests: set[str] = field(default_factory=set, init=False)
     model_output_chunks: dict[str, list[str]] = field(
+        default_factory=dict,
+        init=False,
+    )
+    model_reasoning_chunks: dict[str, list[str]] = field(
         default_factory=dict,
         init=False,
     )
@@ -158,6 +193,12 @@ class AgentStreamSession:
             "source": self.boundary_name,
             **fields,
         }
+        stage = active_agent_stream_stage.get() or self.stage
+        if stage and "stage" not in fields:
+            payload["stage"] = stage
+        rule_id = active_agent_stream_rule.get()
+        if rule_id and "engineering_rule_id" not in fields:
+            payload["engineering_rule_id"] = rule_id
         self.emit_payload(_sanitize_payload(payload))
 
 
@@ -180,6 +221,228 @@ active_agent_stream: ContextVar[AgentStreamSession | None] = ContextVar(
 _emitting_stream_event: ContextVar[bool] = ContextVar(
     "emitting_agent_stream_event", default=False
 )
+active_agent_stream_stage: ContextVar[str | None] = ContextVar(
+    "active_agent_stream_stage", default=None
+)
+active_agent_stream_rule: ContextVar[str | None] = ContextVar(
+    "active_agent_stream_rule", default=None
+)
+
+
+@contextmanager
+def agent_stream_stage(stage: str | None) -> Iterator[None]:
+    """Attribute every live event emitted in this block to one pipeline stage.
+
+    Nested stages win, so an Interview dispatched from inside the engineering
+    assessment boundary streams as Interview, not as the enclosing stage.
+    """
+    if not stage:
+        yield
+        return
+    token = active_agent_stream_stage.set(stage)
+    try:
+        yield
+    finally:
+        active_agent_stream_stage.reset(token)
+
+
+class AgentStreamRuleScope:
+    """Handle for one EngineeringRule investigation inside the live stream."""
+
+    def __init__(self, rule_id: str) -> None:
+        self.rule_id = rule_id
+        self.finished = False
+
+    def complete(self, claims: Any = (), *, text: str | None = None) -> None:
+        """Publish the rule's reasoning result: one line per criterion claim."""
+        summaries = [_claim_summary(claim) for claim in claims or ()]
+        summaries = [item for item in summaries if item][:MAX_STREAM_COLLECTION_ITEMS]
+        self.finished = True
+        publish_agent_stream_event(
+            "ENGINEERING_RULE",
+            status="COMPLETED",
+            text=text or "engineering rule investigation completed",
+            data=_semantic_payload(
+                "ENGINEERING_RULE",
+                durability=DURABLE,
+                engineeringRuleId=self.rule_id,
+                claimCount=len(summaries),
+                decision=_rule_decision(summaries),
+                resultSummary={"claims": summaries} if summaries else {},
+                status="COMPLETED",
+            ),
+        )
+
+    def fail(self, error: BaseException, *, status: str = "FAILED") -> None:
+        self.finished = True
+        publish_agent_stream_event(
+            "ENGINEERING_RULE",
+            status=status,
+            text=redact_string(str(error))[:MAX_STREAM_TEXT_CHARS],
+            data=_semantic_payload(
+                "ENGINEERING_RULE",
+                durability=DURABLE,
+                engineeringRuleId=self.rule_id,
+                reasonCode=type(error).__name__,
+                status=status,
+            ),
+        )
+
+
+@contextmanager
+def agent_stream_rule_scope(
+    rule_id: str | None,
+    *,
+    concept: str | None = None,
+    required_evidence: Any = (),
+    investigation_goals: Any = (),
+    waiting_on: tuple[type[BaseException], ...] = (),
+) -> Iterator[AgentStreamRuleScope | None]:
+    """Attribute every live event in this block to one EngineeringRule.
+
+    The workspace renders each rule as its own section: which rule is being
+    investigated, then that rule's model/tool/reasoning activity, then its result.
+    Exceptions listed in ``waiting_on`` pause the rule (WAITING) instead of failing it.
+    """
+    if not rule_id:
+        yield None
+        return
+    scope = AgentStreamRuleScope(rule_id)
+    token = active_agent_stream_rule.set(rule_id)
+    try:
+        publish_agent_stream_event(
+            "ENGINEERING_RULE",
+            status="RUNNING",
+            text="engineering rule investigation started",
+            data=_semantic_payload(
+                "ENGINEERING_RULE",
+                durability=DURABLE,
+                engineeringRuleId=rule_id,
+                concept=_text(concept),
+                requiredEvidence=_string_list(list(required_evidence or ())),
+                investigationGoals=_string_list(list(investigation_goals or ())),
+                status="RUNNING",
+            ),
+        )
+        try:
+            yield scope
+        except BaseException as error:
+            # Intentional pauses (TargetedInterviewPending) are BaseExceptions so
+            # generic failure handlers skip them; the rule then waits, not fails.
+            if not scope.finished and isinstance(error, waiting_on):
+                scope.fail(error, status="WAITING")
+            elif not scope.finished and isinstance(error, Exception):
+                scope.fail(error, status="FAILED")
+            raise
+        if not scope.finished:
+            scope.complete()
+    finally:
+        active_agent_stream_rule.reset(token)
+
+
+def publish_rule_decision(
+    rule_id: str,
+    *,
+    decision: str,
+    reason_code: str | None = None,
+    basis: Any = (),
+) -> None:
+    """Publish one Planner decision as its own entry under that rule."""
+    token = active_agent_stream_rule.set(rule_id)
+    try:
+        publish_agent_stream_event(
+            "ENGINEERING_RULE",
+            status="COMPLETED",
+            text="engineering rule planning decision",
+            data=_semantic_payload(
+                "ENGINEERING_RULE",
+                durability=DURABLE,
+                engineeringRuleId=rule_id,
+                decision=_text(decision),
+                reasonCode=_text(reason_code),
+                resultSummary={"basis": _string_list(list(basis or ()))},
+                status="COMPLETED",
+            ),
+        )
+    finally:
+        active_agent_stream_rule.reset(token)
+
+
+def publish_rule_waiting(rule_id: str, *, reason_code: str) -> None:
+    """Publish that one rule waits for Customer context before it can be planned."""
+    token = active_agent_stream_rule.set(rule_id)
+    try:
+        publish_agent_stream_event(
+            "ENGINEERING_RULE",
+            status="WAITING",
+            text="engineering rule waiting for customer context",
+            data=_semantic_payload(
+                "ENGINEERING_RULE",
+                durability=DURABLE,
+                engineeringRuleId=rule_id,
+                reasonCode=_text(reason_code),
+                status="WAITING",
+            ),
+        )
+    finally:
+        active_agent_stream_rule.reset(token)
+
+
+def _claim_summary(claim: Any) -> dict[str, Any]:
+    def field_value(*names: str) -> Any:
+        for name in names:
+            value = (
+                claim.get(name) if isinstance(claim, dict) else getattr(claim, name, None)
+            )
+            if value not in (None, "", (), []):
+                return value
+        return None
+
+    claim_type = _text(field_value("claim_type", "claimType"))
+    if not claim_type:
+        return {}
+    summary: dict[str, Any] = {"claimType": claim_type}
+    criterion = _text(field_value("criterion"))
+    if criterion:
+        summary["criterion"] = criterion[:500]
+    confidence = field_value("confidence")
+    if isinstance(confidence, (int, float)) and not isinstance(confidence, bool):
+        summary["confidence"] = round(float(confidence), 3)
+    limitations = field_value("limitations")
+    if isinstance(limitations, (list, tuple)):
+        summary["limitations"] = _string_list(list(limitations))
+    locations = field_value("source_locations", "sourceLocations")
+    if isinstance(locations, (list, tuple)):
+        # One flat string keeps the claim inside the stream's bounded nesting depth.
+        refs = [
+            _source_location_ref(location)
+            for location in list(locations)[:MAX_STREAM_COLLECTION_ITEMS]
+        ]
+        if any(refs):
+            summary["sourceLocations"] = ", ".join(ref for ref in refs if ref)
+    return summary
+
+
+def _source_location_ref(location: Any) -> str:
+    if not isinstance(location, dict):
+        return ""
+    path = _text(location.get("path"))
+    if not path:
+        return ""
+    start = location.get("start_line") or location.get("startLine")
+    end = location.get("end_line") or location.get("endLine")
+    if isinstance(start, int) and isinstance(end, int) and end != start:
+        return f"{path}#L{start}-L{end}"
+    if isinstance(start, int):
+        return f"{path}#L{start}"
+    return path
+
+
+def _rule_decision(summaries: list[dict[str, Any]]) -> str:
+    """The shared claim type when every criterion agrees; per-claim lines otherwise."""
+    claim_types = {summary.get("claimType") for summary in summaries}
+    claim_types.discard(None)
+    return str(next(iter(claim_types))) if len(claim_types) == 1 else ""
 
 
 @contextmanager
@@ -209,6 +472,27 @@ def publish_agent_stream_event(event_type: str, **fields: Any) -> None:
         _emitting_stream_event.reset(token)
 
 
+class _FinalValues:
+    """Track the invoked graph's own final state across its multi-mode stream.
+
+    A graph invoked from inside a parent graph node streams every chunk under the
+    parent task namespace, and its subgraphs always stream deeper. The shortest
+    namespace seen is therefore this invocation's own level, empty or not.
+    """
+
+    def __init__(self) -> None:
+        self.namespace: tuple[str, ...] | None = None
+        self.value: Any = None
+        self.seen = False
+
+    def offer(self, namespace: tuple[str, ...], data: Any) -> None:
+        if self.namespace is None or len(namespace) < len(self.namespace):
+            self.namespace = namespace
+        if namespace == self.namespace:
+            self.value = data
+            self.seen = True
+
+
 def invoke_with_stream(
     agent: Any,
     input_value: Any,
@@ -216,12 +500,32 @@ def invoke_with_stream(
     config: Any | None = None,
     context: Any | None = None,
     agent_name: str | None = None,
+    stage: str | None = None,
 ) -> Any:
     """Invoke one LangGraph/Deep Agent while forwarding its v2 multi-mode stream.
 
     The final ``values`` projection is returned so existing business code receives
-    the same final graph state it previously obtained from ``invoke``.
+    the same final graph state it previously obtained from ``invoke``. ``stage``
+    attributes the whole stream to one customer-visible pipeline stage.
     """
+    with agent_stream_stage(stage):
+        return _invoke_with_stream(
+            agent,
+            input_value,
+            config=config,
+            context=context,
+            agent_name=agent_name,
+        )
+
+
+def _invoke_with_stream(
+    agent: Any,
+    input_value: Any,
+    *,
+    config: Any | None,
+    context: Any | None,
+    agent_name: str | None,
+) -> Any:
     session = active_agent_stream.get()
     if session is None or not callable(getattr(agent, "stream", None)):
         invoke_kwargs: dict[str, Any] = {}
@@ -243,8 +547,7 @@ def invoke_with_stream(
         status="RUNNING",
     )
 
-    final_value: Any = None
-    saw_values = False
+    final = _FinalValues()
     try:
         stream_kwargs: dict[str, Any] = {
             "stream_mode": list(STREAM_MODES),
@@ -262,9 +565,7 @@ def invoke_with_stream(
             namespace = _namespace(chunk.get("ns"))
             data = chunk.get("data")
             if mode == "values":
-                if not namespace:
-                    final_value = data
-                    saw_values = True
+                final.offer(namespace, data)
                 _emit_values_metadata(
                     data,
                     namespace=namespace,
@@ -303,7 +604,7 @@ def invoke_with_stream(
         )
         raise
 
-    if not saw_values:
+    if not final.seen:
         raise RuntimeError(
             "LCSP streamed agent invocation completed without a final values projection"
         )
@@ -313,7 +614,7 @@ def invoke_with_stream(
         agent_name=resolved_name,
         status="COMPLETED",
     )
-    return final_value
+    return final.value
 
 
 
@@ -323,15 +624,31 @@ def invoke_graph_with_stream(
     *,
     config: Any | None = None,
     graph_name: str = "workflow",
+    stage: str | None = None,
 ) -> Any:
     """Run a LangGraph workflow with live node/custom/state events and preserve invoke semantics."""
+    with agent_stream_stage(stage):
+        return _invoke_graph_with_stream(
+            graph,
+            input_value,
+            config=config,
+            graph_name=graph_name,
+        )
+
+
+def _invoke_graph_with_stream(
+    graph: Any,
+    input_value: Any,
+    *,
+    config: Any | None,
+    graph_name: str,
+) -> Any:
     if active_agent_stream.get() is None or not callable(getattr(graph, "stream", None)):
         if config is None:
             return graph.invoke(input_value)
         return graph.invoke(input_value, config)
 
-    final_value: Any = None
-    saw_values = False
+    final = _FinalValues()
     publish_agent_stream_event(
         "AGENT_STARTED",
         agent_name=graph_name,
@@ -352,9 +669,7 @@ def invoke_graph_with_stream(
             namespace = _namespace(chunk.get("ns"))
             data = chunk.get("data")
             if mode == "values":
-                if not namespace:
-                    final_value = data
-                    saw_values = True
+                final.offer(namespace, data)
                 _emit_values_metadata(
                     data,
                     namespace=namespace,
@@ -384,7 +699,7 @@ def invoke_graph_with_stream(
         )
         raise
 
-    if not saw_values:
+    if not final.seen:
         raise RuntimeError(
             "LCSP streamed workflow completed without a final root values projection"
         )
@@ -394,7 +709,7 @@ def invoke_graph_with_stream(
         status="COMPLETED",
         data={"kind": "workflow"},
     )
-    return final_value
+    return final.value
 
 def _emit_message_event(
     data: Any,
@@ -446,49 +761,32 @@ def _emit_message_event(
         )
         return
 
-    if not isinstance(message, AIMessageChunk):
+    if not isinstance(message, AIMessage):
         return
 
     model_context = _model_context_from_metadata(safe_metadata)
-    model_request_key = _model_request_key(
-        message_id=message_id,
+    _emit_model_request_once(
+        message,
         namespace=namespace,
         agent_name=agent_name,
+        message_id=message_id,
+        safe_metadata=safe_metadata,
         model_context=model_context,
     )
-    if model_context and (
-        session is None or model_request_key not in session.emitted_model_requests
-    ):
-        if session is not None:
-            session.emitted_model_requests.add(model_request_key)
-        publish_agent_stream_event(
-            "MODEL_REQUEST",
+
+    if not isinstance(message, AIMessageChunk):
+        # A non-streaming provider call (stream=False) arrives as one complete
+        # message. Surface its reasoning, each tool call and its visible output as
+        # separate entries instead of dropping the whole step from the stream.
+        _emit_complete_model_message(
+            message,
+            namespace=namespace,
             agent_name=agent_name,
-            namespace=list(namespace),
-            node_name=model_context.get("nodeName"),
             message_id=message_id,
-            text="model request summary",
-            data=_semantic_payload(
-                "MODEL_REQUEST",
-                durability=DURABLE,
-                agentName=agent_name,
-                agentRole=agent_name,
-                requestId=message_id,
-                messageId=message_id,
-                availableToolNames=_available_tool_names(
-                    safe_metadata,
-                    getattr(message, "tool_call_chunks", None),
-                ),
-                inputArtifactRefs=_input_artifact_refs(
-                    safe_metadata,
-                    message_id=message_id,
-                    model_context=model_context,
-                ),
-                promptVersion=_text(safe_metadata.get("prompt_version")),
-                **model_context,
-            ),
-            status="RUNNING",
+            safe_metadata=safe_metadata,
+            model_context=model_context,
         )
+        return
 
     for tool_call in message.tool_call_chunks or []:
         if not isinstance(tool_call, dict):
@@ -529,6 +827,13 @@ def _emit_message_event(
                 agent_name=agent_name,
                 text=text,
             )
+        else:
+            _record_model_reasoning_delta(
+                message_id=message_id,
+                namespace=namespace,
+                agent_name=agent_name,
+                text=text,
+            )
         publish_agent_stream_event(
             kind,
             agent_name=agent_name,
@@ -538,31 +843,26 @@ def _emit_message_event(
             data=safe_metadata,
             status="RUNNING",
         )
-        if kind == "MODEL_REASONING_DELTA":
-            publish_agent_stream_event(
-                "CUSTOM_PROGRESS",
-                agent_name=agent_name,
-                namespace=list(namespace),
-                message_id=message_id,
-                text="provider reasoning summary",
-                data=_semantic_payload(
-                    "REASONING_SUMMARY",
-                    durability=BEST_EFFORT,
-                    resultSummary={"summary": text},
-                    status="RUNNING",
-                    requestId=message_id,
-                    messageId=message_id,
-                    **model_context,
-                ),
-                status="RUNNING",
-            )
 
-    finish_reason = _text(safe_metadata.get("finish_reason"))
+    finish_reason = _text(safe_metadata.get("finish_reason")) or _text(
+        (getattr(message, "response_metadata", None) or {}).get("finish_reason")
+    )
     if finish_reason:
         _flush_pending_tool_calls_for_message(
             message_id=message_id,
             namespace=namespace,
             agent_name=agent_name,
+        )
+        _emit_reasoning_summary(
+            _pop_model_reasoning(
+                message_id=message_id,
+                namespace=namespace,
+                agent_name=agent_name,
+            ),
+            namespace=namespace,
+            agent_name=agent_name,
+            message_id=message_id,
+            model_context=model_context,
         )
         publish_agent_stream_event(
             "MODEL_RESULT",
@@ -592,15 +892,21 @@ def _emit_message_event(
         )
 
 
-def _content_deltas(message: AIMessageChunk) -> list[tuple[str, str]]:
+def _content_deltas(message: AIMessage) -> list[tuple[str, str]]:
+    deltas: list[tuple[str, str]] = []
+    # OpenAI-compatible reasoning models (GLM, DeepSeek, Qwen via llm7 and similar
+    # routes) return provider-visible reasoning beside the content, not inside it.
+    provider_reasoning = _additional_reasoning_text(message)
+    if provider_reasoning:
+        deltas.append(("MODEL_REASONING_DELTA", provider_reasoning))
+
     content = getattr(message, "content", None)
     if isinstance(content, str):
         text = _safe_text(content)
-        return [("MODEL_CONTENT_DELTA", text)] if text else []
+        return [*deltas, ("MODEL_CONTENT_DELTA", text)] if text else deltas
     if not isinstance(content, list):
-        return []
+        return deltas
 
-    deltas: list[tuple[str, str]] = []
     for block in content:
         if isinstance(block, str):
             text = _safe_text(block)
@@ -611,11 +917,15 @@ def _content_deltas(message: AIMessageChunk) -> list[tuple[str, str]]:
             continue
         block_type = _text(block.get("type")).lower()
         if "reason" in block_type or "thinking" in block_type:
+            # Content blocks carry both a provider summary and raw thinking; only
+            # the summary is customer-visible.
             text = _safe_text(
-                block.get("summary")
-                or block.get("summary_text")
-                or block.get("reasoning_summary")
-                or ""
+                _reasoning_value_text(
+                    block.get("summary")
+                    or block.get("summary_text")
+                    or block.get("reasoning_summary")
+                    or ""
+                )
             )
             if text:
                 deltas.append(("MODEL_REASONING_DELTA", text))
@@ -627,6 +937,195 @@ def _content_deltas(message: AIMessageChunk) -> list[tuple[str, str]]:
             if text:
                 deltas.append(("MODEL_CONTENT_DELTA", text))
     return deltas
+
+
+def _additional_reasoning_text(message: Any) -> str:
+    kwargs = getattr(message, "additional_kwargs", None)
+    if not isinstance(kwargs, dict):
+        return ""
+    for key in ("reasoning_content", "reasoning"):
+        text = _reasoning_value_text(kwargs.get(key))
+        if text:
+            return _safe_text(text)
+    return ""
+
+
+def _reasoning_value_text(value: Any) -> str:
+    """Flatten provider reasoning shapes (text, summary lists, summary dicts)."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        for key in ("text", "summary", "summary_text", "content"):
+            text = _reasoning_value_text(value.get(key))
+            if text:
+                return text
+        return ""
+    if isinstance(value, (list, tuple)):
+        parts = [
+            _reasoning_value_text(item)
+            for item in list(value)[:MAX_STREAM_COLLECTION_ITEMS]
+        ]
+        return "\n".join(part for part in parts if part)
+    return ""
+
+
+def _emit_model_request_once(
+    message: AIMessage,
+    *,
+    namespace: tuple[str, ...],
+    agent_name: str,
+    message_id: str,
+    safe_metadata: dict[str, Any],
+    model_context: dict[str, Any],
+) -> None:
+    session = active_agent_stream.get()
+    model_request_key = _model_request_key(
+        message_id=message_id,
+        namespace=namespace,
+        agent_name=agent_name,
+        model_context=model_context,
+    )
+    if not model_context or (
+        session is not None and model_request_key in session.emitted_model_requests
+    ):
+        return
+    if session is not None:
+        session.emitted_model_requests.add(model_request_key)
+    publish_agent_stream_event(
+        "MODEL_REQUEST",
+        agent_name=agent_name,
+        namespace=list(namespace),
+        node_name=model_context.get("nodeName"),
+        message_id=message_id,
+        text="model request summary",
+        data=_semantic_payload(
+            "MODEL_REQUEST",
+            durability=DURABLE,
+            agentName=agent_name,
+            agentRole=agent_name,
+            requestId=message_id,
+            messageId=message_id,
+            availableToolNames=_available_tool_names(
+                safe_metadata,
+                getattr(message, "tool_call_chunks", None)
+                or getattr(message, "tool_calls", None),
+            ),
+            inputArtifactRefs=_input_artifact_refs(
+                safe_metadata,
+                message_id=message_id,
+                model_context=model_context,
+            ),
+            promptVersion=_text(safe_metadata.get("prompt_version")),
+            **model_context,
+        ),
+        status="RUNNING",
+    )
+
+
+def _emit_complete_model_message(
+    message: AIMessage,
+    *,
+    namespace: tuple[str, ...],
+    agent_name: str,
+    message_id: str,
+    safe_metadata: dict[str, Any],
+    model_context: dict[str, Any],
+) -> None:
+    deltas = _content_deltas(message)
+    reasoning = "\n".join(text for kind, text in deltas if kind == "MODEL_REASONING_DELTA")
+    output = "".join(text for kind, text in deltas if kind == "MODEL_CONTENT_DELTA")
+    _emit_reasoning_summary(
+        reasoning,
+        namespace=namespace,
+        agent_name=agent_name,
+        message_id=message_id,
+        model_context=model_context,
+    )
+
+    for index, tool_call in enumerate(getattr(message, "tool_calls", None) or []):
+        if not isinstance(tool_call, dict):
+            continue
+        tool_name = _text(tool_call.get("name"))
+        tool_call_id = _text(tool_call.get("id"))
+        pending = PendingToolCall(
+            key=_tool_call_key(
+                message_id=message_id,
+                namespace=namespace,
+                agent_name=agent_name,
+                tool_call_id=tool_call_id,
+                index=index,
+            ),
+            agent_name=agent_name,
+            namespace=namespace,
+            message_id=message_id,
+            tool_name=tool_name,
+            tool_call_id=tool_call_id,
+            request_id=message_id,
+            model_context=model_context,
+        )
+        _emit_completed_tool_call(pending, _safe_value(tool_call.get("args") or {}))
+
+    response_metadata = getattr(message, "response_metadata", None)
+    finish_reason = _text(safe_metadata.get("finish_reason")) or (
+        _text(response_metadata.get("finish_reason"))
+        if isinstance(response_metadata, dict)
+        else ""
+    )
+    publish_agent_stream_event(
+        "MODEL_RESULT",
+        agent_name=agent_name,
+        namespace=list(namespace),
+        node_name=model_context.get("nodeName"),
+        message_id=message_id,
+        text="model result summary",
+        data=_semantic_payload(
+            "MODEL_OUTPUT",
+            durability=DURABLE,
+            requestId=message_id,
+            messageId=message_id,
+            finishReason=finish_reason,
+            usage=_usage_metadata(message, safe_metadata),
+            outputRefs=_output_refs(safe_metadata, message_id=message_id),
+            resultSummary={"text": _safe_text(output)} if output else {},
+            status="COMPLETED",
+            **model_context,
+        ),
+        status="COMPLETED",
+    )
+
+
+def _emit_reasoning_summary(
+    reasoning: str,
+    *,
+    namespace: tuple[str, ...],
+    agent_name: str,
+    message_id: str,
+    model_context: dict[str, Any],
+) -> None:
+    """Publish one reasoning entry per model step, never one per token."""
+    text = _safe_text(reasoning).strip()
+    if not text:
+        return
+    if len(text) > MAX_REASONING_SUMMARY_CHARS:
+        text = text[:MAX_REASONING_SUMMARY_CHARS].rstrip() + "…"
+    publish_agent_stream_event(
+        "CUSTOM_PROGRESS",
+        agent_name=agent_name,
+        namespace=list(namespace),
+        node_name=model_context.get("nodeName"),
+        message_id=message_id,
+        text="provider reasoning summary",
+        data=_semantic_payload(
+            "REASONING_SUMMARY",
+            durability=DURABLE,
+            resultSummary={"summary": text},
+            status="COMPLETED",
+            requestId=message_id,
+            messageId=message_id,
+            **model_context,
+        ),
+        status="COMPLETED",
+    )
 
 
 def _emit_update_event(
@@ -939,6 +1438,44 @@ def _record_model_output_delta(
     chunks.append(text[:remaining])
 
 
+def _record_model_reasoning_delta(
+    *,
+    message_id: str,
+    namespace: tuple[str, ...],
+    agent_name: str,
+    text: str,
+) -> None:
+    session = active_agent_stream.get()
+    if session is None or not text:
+        return
+    key = _model_message_key(
+        message_id=message_id,
+        namespace=namespace,
+        agent_name=agent_name,
+    )
+    chunks = session.model_reasoning_chunks.setdefault(key, [])
+    remaining = MAX_REASONING_SUMMARY_CHARS - sum(len(chunk) for chunk in chunks)
+    if remaining > 0:
+        chunks.append(text[:remaining])
+
+
+def _pop_model_reasoning(
+    *,
+    message_id: str,
+    namespace: tuple[str, ...],
+    agent_name: str,
+) -> str:
+    session = active_agent_stream.get()
+    if session is None:
+        return ""
+    key = _model_message_key(
+        message_id=message_id,
+        namespace=namespace,
+        agent_name=agent_name,
+    )
+    return "".join(session.model_reasoning_chunks.pop(key, []))
+
+
 def _available_tool_names(
     metadata: dict[str, Any],
     tool_call_chunks: Any,
@@ -1152,11 +1689,29 @@ def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def _should_forward_stream_log(record: logging.LogRecord) -> bool:
+    """Keep customer-visible runtime logs high signal without hiding failures."""
+    message = record.getMessage()
+    if any(marker in message for marker in NOISY_STREAM_LOG_MARKERS):
+        return False
+    if record.levelno >= logging.WARNING:
+        return True
+    if record.levelno < logging.INFO:
+        return False
+    logger_name = record.name.lower()
+    return not any(
+        logger_name == prefix or logger_name.startswith(f"{prefix}.")
+        for prefix in NOISY_STREAM_LOGGER_PREFIXES
+    )
+
+
 class AgentStreamLogHandler(logging.Handler):
-    """Forward normal Python logs emitted inside an active agent boundary."""
+    """Forward high-signal Python logs emitted inside an active agent boundary."""
 
     def emit(self, record: logging.LogRecord) -> None:
         if active_agent_stream.get() is None or _emitting_stream_event.get():
+            return
+        if not _should_forward_stream_log(record):
             return
         try:
             publish_agent_stream_event(
@@ -1166,7 +1721,11 @@ class AgentStreamLogHandler(logging.Handler):
                     "level": record.levelname,
                     "logger": record.name,
                 },
-                status="RUNNING",
+                status=(
+                    "FAILED"
+                    if record.levelno >= logging.ERROR
+                    else "RUNNING"
+                ),
             )
         except Exception:
             # Logging must never change agent runtime semantics.
@@ -1182,12 +1741,20 @@ def install_agent_stream_log_handler() -> None:
 
 
 __all__ = [
+    "AGENT_STREAM_STAGES",
+    "AgentStreamRuleScope",
     "AgentStreamSession",
     "BufferedAgentStreamEmitter",
     "activate_agent_stream",
     "active_agent_stream",
+    "active_agent_stream_rule",
+    "active_agent_stream_stage",
+    "agent_stream_rule_scope",
+    "agent_stream_stage",
     "install_agent_stream_log_handler",
     "invoke_graph_with_stream",
     "invoke_with_stream",
     "publish_agent_stream_event",
+    "publish_rule_decision",
+    "publish_rule_waiting",
 ]

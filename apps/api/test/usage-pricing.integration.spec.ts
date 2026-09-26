@@ -12,7 +12,11 @@ import { randomUUID } from "node:crypto";
 import { BillingAccountingKernel } from "../src/modules/billing/application/shared/billing-accounting.kernel.js";
 import { BillingUsageKernel } from "../src/modules/billing/application/shared/billing-usage.kernel.js";
 import { calculateUsageChargeCredits } from "../src/modules/billing/domain/usage-pricing.js";
-import { PricingSnapshotUnavailableError } from "../src/modules/billing/domain/billing.errors.js";
+import {
+  BillingIdempotencyConflictError,
+  InsufficientCreditError,
+  PricingSnapshotUnavailableError,
+} from "../src/modules/billing/domain/billing.errors.js";
 import { PrismaBillingTransaction } from "../src/modules/billing/infrastructure/persistence/prisma-billing-transaction.js";
 import type {
   BillingTransactionPort,
@@ -150,7 +154,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
     return { user, wallet, reservation, pricing };
   }
 
-  async function governedFixture(amountCredits = 20n) {
+  async function governedFixture(amountCredits = 20n, maxInvocations = 1n) {
     const f = await fixture();
     const assessmentId = `assessment-${id()}`;
     const runId = `run-${id()}`;
@@ -171,10 +175,367 @@ describe("LCSP-310 usage and pricing foundation", () => {
       assessmentId,
       runId,
       amountCredits,
+      maxInvocations,
       idempotencyKey: `governed-reserve-${id()}`,
     });
     return { ...f, assessmentId, runId, reservation };
   }
+
+  it("persists reservation owner context and rejects stale callback context without consuming it", async () => {
+    const f = await fixture();
+    const assessmentId = `assessment-${id()}`;
+    const staleAssessmentId = `assessment-${id()}`;
+    const runId = `run-${id()}`;
+    await prisma.assessment.createMany({
+      data: [
+        { id: assessmentId, ownerId: f.user.id, name: "Bounded usage" },
+        { id: staleAssessmentId, ownerId: f.user.id, name: "Stale usage" },
+      ],
+    });
+    const reservation = await governedUsage.reserveForAssessment({
+      workspaceId: "workspace-1",
+      assessmentId,
+      scanJobId: "scan-job-1",
+      threadId: "thread-1",
+      runId,
+      invocationId: "reservation-envelope-1",
+      modelInvocationId: "model-envelope-1",
+      amountCredits: 20n,
+      maxChargeCredits: 10n,
+      provider: runtimeModel.provider,
+      model: runtimeModel.model,
+      maxInputTokens: 1n,
+      maxOutputTokens: 1n,
+      maxReasoningTokens: 0n,
+      maxInvocations: 2n,
+      authorizedModels: [
+        { provider: runtimeModel.provider, model: runtimeModel.model },
+      ],
+      idempotencyKey: `reservation-context-${id()}`,
+    });
+    const stored = await prisma.billingReservation.findUniqueOrThrow({
+      where: { id: (reservation as { id: string }).id },
+    });
+    expect(stored.workspaceId).toBe("workspace-1");
+    expect(stored.assessmentId).toBe(assessmentId);
+    expect(stored.scanJobId).toBe("scan-job-1");
+    expect(stored.threadId).toBe("thread-1");
+    expect(stored.runId).toBe(runId);
+    expect(stored.provider).toBe(runtimeModel.provider);
+    expect(stored.model).toBe(runtimeModel.model);
+    expect(stored.invocationId).toBe("reservation-envelope-1");
+    expect(stored.modelInvocationId).toBe("model-envelope-1");
+
+    const settlement = {
+      userId: f.user.id,
+      reservationId: stored.id,
+      invocationId: "INV-STABLE-CALLBACK",
+      agentRole: "TEST_USAGE",
+      effectiveRuntimeModel: runtimeModel,
+      provider: runtimeModel.provider,
+      model: runtimeModel.model,
+      inputTokens: 1n,
+      outputTokens: 0n,
+    };
+    await expect(
+      governedUsage.recordAndSettleUsage({
+        ...settlement,
+        assessmentId: staleAssessmentId,
+        runId,
+      }),
+    ).rejects.toThrow("Usage callback assessment does not match reservation");
+    expect(
+      await prisma.llmUsageEvent.count({
+        where: { invocationId: settlement.invocationId },
+      }),
+    ).toBe(0);
+    expect(
+      (
+        await prisma.billingReservation.findUniqueOrThrow({
+          where: { id: stored.id },
+        })
+      ).status,
+    ).toBe("RESERVED");
+
+    const event = await governedUsage.recordAndSettleUsage({
+      ...settlement,
+      assessmentId,
+      runId,
+    });
+    expect(event.reservationId).toBe(stored.id);
+    expect(event.assessmentId).toBe(assessmentId);
+  });
+
+  it("settles multiple model invocations for the same reservation-bound scan run", async () => {
+    const f = await governedFixture(20n, 2n);
+
+    await governedUsage.claimInvocation({
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-MULTI-1",
+    });
+    await governedUsage.claimInvocation({
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-MULTI-2",
+    });
+    await governedUsage.claimInvocation({
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-MULTI-3",
+    });
+    expect(
+      (
+        await prisma.billingReservation.findUniqueOrThrow({
+          where: { id: f.reservation.id },
+        })
+      ).invocationsStarted,
+    ).toBe(3n);
+    await governedUsage.recordAndSettleUsage({
+      userId: f.user.id,
+      assessmentId: f.assessmentId,
+      runId: f.runId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-MULTI-1",
+      agentRole: "TEST_USAGE",
+      effectiveRuntimeModel: runtimeModel,
+      provider: "OPENAI",
+      model: "MODEL_A",
+      inputTokens: 1n,
+      outputTokens: 0n,
+    });
+    await governedUsage.recordAndSettleUsage({
+      userId: f.user.id,
+      assessmentId: f.assessmentId,
+      runId: f.runId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-MULTI-2",
+      agentRole: "TEST_USAGE",
+      effectiveRuntimeModel: runtimeModel,
+      provider: "OPENAI",
+      model: "MODEL_A",
+      inputTokens: 1n,
+      outputTokens: 0n,
+    });
+
+    expect(
+      await prisma.llmUsageEvent.count({
+        where: { reservationId: f.reservation.id },
+      }),
+    ).toBe(2);
+    expect(
+      await prisma.creditLedgerEntry.count({
+        where: { source: "LLM_USAGE_DEBIT", referenceId: { not: null } },
+      }),
+    ).toBe(2);
+  });
+
+  it("authorizes metric-bearing invocation claims against remaining reserved credits", async () => {
+    const f = await governedFixture(20n, 2n);
+
+    await governedUsage.claimInvocation({
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-AUTHORIZED-1",
+      provider: "OPENAI",
+      model: "MODEL_A",
+      estimatedInputTokens: 1_000n,
+      estimatedInputBytes: 4_000n,
+      maxOutputTokens: 1n,
+      maxReasoningTokens: 0n,
+    });
+    await expect(
+      governedUsage.claimInvocation({
+        assessmentId: f.assessmentId,
+        reservationId: f.reservation.id,
+        invocationId: "INV-AUTHORIZED-2",
+        provider: "OPENAI",
+        model: "MODEL_A",
+        estimatedInputTokens: 30_000_000n,
+        estimatedInputBytes: 120_000_000n,
+        maxOutputTokens: 0n,
+        maxReasoningTokens: 0n,
+      }),
+    ).rejects.toBeInstanceOf(InsufficientCreditError);
+
+    expect(
+      (
+        await prisma.billingReservation.findUniqueOrThrow({
+          where: { id: f.reservation.id },
+        })
+      ).invocationsStarted,
+    ).toBe(1n);
+  });
+
+  it("holds worst-case invocation credits without imposing a call-count limit", async () => {
+    const f = await governedFixture(10n, 1n);
+    const first = {
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-HOLD-1",
+      provider: "OPENAI",
+      model: "MODEL_A",
+      estimatedInputTokens: 6_000_000n,
+      estimatedInputBytes: 24_000_000n,
+      maxOutputTokens: 0n,
+      maxReasoningTokens: 0n,
+    };
+
+    await governedUsage.claimInvocation(first);
+    await governedUsage.claimInvocation(first);
+
+    await expect(
+      governedUsage.claimInvocation({
+        ...first,
+        invocationId: "INV-HOLD-2",
+        estimatedInputTokens: 4_500_000n,
+        estimatedInputBytes: 18_000_000n,
+      }),
+    ).rejects.toBeInstanceOf(InsufficientCreditError);
+
+    expect(
+      (
+        await prisma.billingReservation.findUniqueOrThrow({
+          where: { id: f.reservation.id },
+        })
+      ).invocationsStarted,
+    ).toBe(1n);
+    expect(
+      await prisma.billingReservationInvocationClaim.count({
+        where: { reservationId: f.reservation.id, settledAt: null },
+      }),
+    ).toBe(1);
+
+    await governedUsage.recordAndSettleUsage({
+      userId: f.user.id,
+      assessmentId: f.assessmentId,
+      runId: f.runId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-HOLD-1",
+      agentRole: "GOVERNED_PLANNER",
+      effectiveRuntimeModel: runtimeModel,
+      provider: "OPENAI",
+      model: "MODEL_A",
+      inputTokens: 1_000_000n,
+      outputTokens: 0n,
+    });
+
+    const settledClaim =
+      await prisma.billingReservationInvocationClaim.findUniqueOrThrow({
+        where: {
+          reservationId_invocationId: {
+            reservationId: f.reservation.id,
+            invocationId: "INV-HOLD-1",
+          },
+        },
+      });
+    expect(settledClaim.authorizedChargeCredits).toBe(6n);
+    expect(settledClaim.settledAt).not.toBeNull();
+
+    await governedUsage.claimInvocation({
+      ...first,
+      invocationId: "INV-HOLD-2",
+      estimatedInputTokens: 4_500_000n,
+      estimatedInputBytes: 18_000_000n,
+    });
+    expect(
+      (
+        await prisma.billingReservation.findUniqueOrThrow({
+          where: { id: f.reservation.id },
+        })
+      ).invocationsStarted,
+    ).toBe(2n);
+  });
+
+  it("settles an authorized fallback model against its matching runtime policy", async () => {
+    const f = await governedFixture(20n, 2n);
+    const fallbackPolicy = await prisma.runtimeModelPolicySnapshot.create({
+      data: {
+        role: "GOVERNED_PLANNER",
+        provider: "GOOGLE_GENAI",
+        model: "MODEL_FALLBACK",
+        policyVersion: "usage-test-fallback-v1",
+        effectiveAt: new Date(runtimeModel.effectiveAt),
+      },
+    });
+    await prisma.modelPricingSnapshot.create({
+      data: {
+        provider: "GOOGLE_GENAI",
+        model: "MODEL_FALLBACK",
+        version: Math.floor(Math.random() * 1_000_000_000),
+        inputPricePerMillion: "1.00000000",
+        outputPricePerMillion: "2.00000000",
+        providerCurrency: "VND",
+        customerCurrency: "VND",
+        markupBps: 0n,
+        effectiveAt: new Date(Date.now() - 1_000),
+      },
+    });
+
+    await governedUsage.claimInvocation({
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-FALLBACK-POLICY",
+      provider: "GOOGLE_GENAI",
+      model: "MODEL_FALLBACK",
+      estimatedInputTokens: 1_000_000n,
+      estimatedInputBytes: 4_000_000n,
+      maxOutputTokens: 0n,
+      maxReasoningTokens: 0n,
+    });
+    const event = await governedUsage.recordAndSettleUsage({
+      userId: f.user.id,
+      assessmentId: f.assessmentId,
+      runId: f.runId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-FALLBACK-POLICY",
+      agentRole: "GOVERNED_PLANNER",
+      provider: "GOOGLE_GENAI",
+      model: "MODEL_FALLBACK",
+      inputTokens: 1_000_000n,
+      outputTokens: 0n,
+    });
+
+    expect(event.status).toBe("SETTLED");
+    expect(event.runtimePolicySnapshotId).toBe(fallbackPolicy.id);
+    expect(event.chargedCredits).toBe(1n);
+    expect(
+      (
+        await prisma.billingReservationInvocationClaim.findUniqueOrThrow({
+          where: {
+            reservationId_invocationId: {
+              reservationId: f.reservation.id,
+              invocationId: "INV-FALLBACK-POLICY",
+            },
+          },
+        })
+      ).settledAt,
+    ).not.toBeNull();
+  });
+
+  it("rejects a replay when invocation authorization metrics change", async () => {
+    const f = await governedFixture(20n, 1n);
+    const base = {
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+      invocationId: "INV-HOLD-REPLAY",
+      provider: "OPENAI",
+      model: "MODEL_A",
+      estimatedInputTokens: 1_000n,
+      estimatedInputBytes: 4_000n,
+      maxOutputTokens: 1n,
+      maxReasoningTokens: 0n,
+    };
+
+    await governedUsage.claimInvocation(base);
+
+    await expect(
+      governedUsage.claimInvocation({
+        ...base,
+        estimatedInputTokens: 2_000n,
+      }),
+    ).rejects.toBeInstanceOf(BillingIdempotencyConflictError);
+  });
 
   it("calculates exact deterministic charges with ceil rounding", () => {
     const pricing = {
@@ -245,6 +606,39 @@ describe("LCSP-310 usage and pricing foundation", () => {
         where: { id: reservation.id },
       }),
     ).toMatchObject({ status: "RESERVED", remainingCredits: 20n });
+  });
+
+  it("treats maxInvocations as reservation metadata instead of a run call cap", async () => {
+    const f = await fixture();
+    const assessmentId = `assessment-${id()}`;
+    await prisma.assessment.create({
+      data: {
+        id: assessmentId,
+        ownerId: f.user.id,
+        name: "Long-running agent reservation",
+      },
+    });
+
+    const reservation = await governedUsage.reserveForAssessment({
+      assessmentId,
+      runId: `run-${id()}`,
+      amountCredits: 1n,
+      maxChargeCredits: 1n,
+      provider: "OPENAI",
+      model: "MODEL_A",
+      authorizedModels: [{ provider: "OPENAI", model: "MODEL_A" }],
+      maxInputTokens: 1n,
+      maxOutputTokens: 0n,
+      maxReasoningTokens: 0n,
+      maxInvocations: 100n,
+      idempotencyKey: `long-running-reserve-${id()}`,
+    });
+
+    const stored = await prisma.billingReservation.findUniqueOrThrow({
+      where: { id: (reservation as { id: string }).id },
+    });
+    expect(stored.amountCredits).toBe(1n);
+    expect(stored.maxInvocations).toBe(100n);
   });
 
   it("rejects a reservation below the pricing-derived worst-case charge", async () => {
@@ -438,6 +832,17 @@ describe("LCSP-310 usage and pricing foundation", () => {
       model: "MODEL_A",
       agentRole: "GOVERNED_PLANNER",
     };
+    await governedUsage.claimInvocation({
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+      invocationId: base.invocationId,
+      provider: base.provider,
+      model: base.model,
+      estimatedInputTokens: 1_000n,
+      estimatedInputBytes: 4_000n,
+      maxOutputTokens: 1n,
+      maxReasoningTokens: 0n,
+    });
     const unavailable = await governedUsage.recordAndSettleUsage(base);
     expect(unavailable.status).toBe("UNAVAILABLE");
     expect(unavailable.chargedCredits).toBe(0n);
@@ -446,6 +851,18 @@ describe("LCSP-310 usage and pricing foundation", () => {
         where: { source: "LLM_USAGE_DEBIT", referenceId: unavailable.id },
       }),
     ).toBe(0);
+    expect(
+      (
+        await prisma.billingReservationInvocationClaim.findUniqueOrThrow({
+          where: {
+            reservationId_invocationId: {
+              reservationId: f.reservation.id,
+              invocationId: base.invocationId,
+            },
+          },
+        })
+      ).settledAt,
+    ).not.toBeNull();
     await governedUsage.releaseForAssessment({
       assessmentId: f.assessmentId,
       reservationId: f.reservation.id,
@@ -497,7 +914,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
     ).toBe(1n);
   });
 
-  it("rejects governed usage when the assessment belongs to another user", async () => {
+  it("rejects governed usage when callback assessment conflicts with reservation context", async () => {
     const f = await governedFixture();
     const other = {
       id: `usage-other-${id()}`,
@@ -535,7 +952,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
         inputTokens: 1_000_000n,
         outputTokens: 0n,
       }),
-    ).rejects.toThrow("Assessment does not belong to the billing user");
+    ).rejects.toThrow("Usage callback assessment does not match reservation");
     expect(
       await prisma.llmUsageEvent.count({
         where: { invocationId: "GOVERNED-CROSS-ACCOUNT" },
@@ -643,21 +1060,8 @@ describe("LCSP-310 usage and pricing foundation", () => {
     expect(event.totalTokens).toBe(1_000_000n);
   });
 
-  it("rejects a priced provider/model that is not the effective runtime policy", async () => {
+  it("rejects callback runtime-policy metadata that differs from the server snapshot", async () => {
     const f = await fixture();
-    await prisma.modelPricingSnapshot.create({
-      data: {
-        provider: "OPENAI",
-        model: "MODEL_NOT_EFFECTIVE",
-        version: Math.floor(Math.random() * 1_000_000_000),
-        inputPricePerMillion: "1.00000000",
-        outputPricePerMillion: "2.00000000",
-        providerCurrency: "VND",
-        customerCurrency: "VND",
-        markupBps: 0n,
-        effectiveAt: new Date(Date.now() - 1_000),
-      },
-    });
     const tx = new PrismaBillingTransaction(new PrismaService());
     const strictUsage = new BillingUsageKernel(
       tx,
@@ -671,7 +1075,7 @@ describe("LCSP-310 usage and pricing foundation", () => {
         agentRole: "TEST_USAGE",
         effectiveRuntimeModel: {
           ...runtimeModel,
-          model: "MODEL_NOT_EFFECTIVE",
+          policyVersion: "forged-policy-version",
         },
         inputTokens: 1n,
       }),

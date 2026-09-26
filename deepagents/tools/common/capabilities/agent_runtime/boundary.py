@@ -1,0 +1,46 @@
+"""Deep Agents boundary base classes.
+
+Legacy asynchronous handlers now run as explicit Agent Runtime invocation
+boundaries. The boundary base owns no broker connection, health endpoint, retry
+lane, or runtime HTTP bridge; Deep Agents scheduling/invocation owns
+process lifecycle and human approval.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+class NonRetryableAgentBoundaryError(RuntimeError):
+    """Signals a terminal boundary failure already represented in domain state."""
+
+
+class AgentBoundaryBase:
+    """Base class for one LCSP Agent Runtime invocation boundary."""
+
+    boundary_source: str = ""
+    source_event: str = ""
+    requires_rbac: bool = True
+    retry_delays_seconds: tuple[int, ...] = ()
+
+    def __init__(self, config: Any, rbac_client: Any | None = None) -> None:
+        self._config = config
+        self._rbac = rbac_client
+
+    @property
+    def boundary_name(self) -> str:
+        """Return the stable boundary name used in logs and invocation manifests."""
+        return self.__class__.__name__
+
+    def handle(self, message: dict[str, Any], correlationId: str) -> None:
+        """Process one Agent Runtime invocation payload."""
+        raise NotImplementedError
+
+    def report_dispatch_failure(
+        self, message: dict[str, Any], correlationId: str, error: BaseException
+    ) -> None:
+        """Surface a failure raised before ``handle`` ran (e.g. billing reservation).
+
+        Boundaries whose domain state shows live progress override this so the
+        customer is not left on a QUEUED state for work that never started.
+        """

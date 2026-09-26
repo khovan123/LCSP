@@ -101,6 +101,7 @@ export class BillingAccountingKernel {
     i: {
       userId: string;
       reservationId: string;
+      invocationId: string;
       usageEventId: string;
       chargedCredits: bigint;
     },
@@ -129,6 +130,17 @@ export class BillingAccountingKernel {
         throw new InvalidReservationTransitionError(
           "Reservation is not reservable",
         );
+      const claim = await repos.reservation.findInvocationClaim(
+        i.reservationId,
+        i.invocationId,
+      );
+      if (
+        claim?.authorizationFingerprint &&
+        i.chargedCredits > claim.authorizedChargeCredits
+      )
+        throw new BillingDomainError(
+          "Usage charge exceeds the authorized invocation hold",
+        );
       if (i.chargedCredits < 0n || i.chargedCredits > r.remainingCredits)
         throw new BillingDomainError("Invalid charge amount");
       const w = await repos.wallet.findForUser(i.userId);
@@ -153,6 +165,16 @@ export class BillingAccountingKernel {
         },
         true,
       );
+      if (
+        claim &&
+        !(await repos.reservation.settleInvocationClaim({
+          reservationId: i.reservationId,
+          invocationId: i.invocationId,
+        }))
+      )
+        throw new BillingConcurrencyError(
+          "Invocation authorization hold could not be settled",
+        );
       await this.reconcile(repos.wallet, repos.ledger, repos.reservation, w);
       return { reservationId: r.id, chargedCredits: i.chargedCredits };
     })();
@@ -161,8 +183,15 @@ export class BillingAccountingKernel {
     userId: string;
     amountCredits: bigint;
     idempotencyKey: string;
+    workspaceId?: string;
     assessmentId?: string;
+    scanJobId?: string;
+    threadId?: string;
     runId?: string;
+    provider?: string;
+    model?: string;
+    invocationId?: string;
+    modelInvocationId?: string;
     maxInvocations?: bigint;
   }) {
     if (i.amountCredits <= 0n)
@@ -191,8 +220,15 @@ export class BillingAccountingKernel {
       if (old) {
         if (
           old.amountCredits !== i.amountCredits ||
+          old.workspaceId !== (i.workspaceId ?? null) ||
           old.assessmentId !== (i.assessmentId ?? null) ||
+          old.scanJobId !== (i.scanJobId ?? null) ||
+          old.threadId !== (i.threadId ?? null) ||
           old.runId !== (i.runId ?? null) ||
+          old.provider !== (i.provider ?? null) ||
+          old.model !== (i.model ?? null) ||
+          old.invocationId !== (i.invocationId ?? null) ||
+          old.modelInvocationId !== (i.modelInvocationId ?? null) ||
           (i.maxInvocations !== undefined &&
             old.maxInvocations !== i.maxInvocations)
         )
@@ -210,8 +246,15 @@ export class BillingAccountingKernel {
         userId: i.userId,
         walletId: w.id,
         amountCredits: i.amountCredits,
+        workspaceId: i.workspaceId,
         assessmentId: i.assessmentId,
+        scanJobId: i.scanJobId,
+        threadId: i.threadId,
         runId: i.runId,
+        provider: i.provider,
+        model: i.model,
+        invocationId: i.invocationId,
+        modelInvocationId: i.modelInvocationId,
         idempotencyKey: i.idempotencyKey,
         maxInvocations: i.maxInvocations,
       });
@@ -248,7 +291,7 @@ export class BillingAccountingKernel {
         );
       if (!(await repos.reservation.claimInvocation(i)))
         throw new BillingConcurrencyError(
-          "Reservation invocation capacity is exhausted",
+          "Reservation invocation claim raced with reservation lifecycle",
         );
       return { reservationId: i.reservationId };
     });

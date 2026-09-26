@@ -6,15 +6,15 @@ AUTHORITATIVE — LCSP-999 BIG RE-ARCHITECTURE
 
 ## Purpose
 
-LCSP scans the complete statically resolvable repository, builds an immutable Program Evidence Graph, maps governed legal source chunks to reusable Engineering Rules, lets a bounded LLM investigator query that graph, and deterministically evaluates each Engineering Rule as `COMPLIANT`, `NON_COMPLIANT`, or `UNKNOWN`.
+LCSP analyzes the commit-pinned repository through a repository-backed Repository Deep Agent, derives a compatibility Program Evidence Graph from inspected source, maps governed legal source chunks to reusable Engineering Rules, and evaluates each Engineering Rule with source-grounded evidence.
 
 The canonical runtime is code-centric. `TechnicalProfile`, `AIUsageFlow`, `VerifiedProfile`, and `LegalRuleMatch` are no longer execution stages. Historical rows and endpoints may remain temporarily for migration/read compatibility, but new assessments must not depend on them.
 
 ## Ownership
 
-- Python Worker owns scanner execution, semantic IR, graph construction/query, legal-to-engineering compilation, graph investigation, EvidenceClaim validation, EngineeringRule evaluation, remediation synthesis, and document generation inputs.
+- Repository Deep Agent owns repository exploration, source-grounded graph derivation, coverage/AI discovery, and technical investigation inputs; downstream workers retain governed legal/evaluation responsibilities.
 - NestJS owns CQRS persistence/read boundaries, RBAC/authority, HTTP/internal APIs, outbox/events, protected mutations, and persistence of the direct EngineeringRule assessment result.
-- TypeScript/JavaScript semantic parsing may run as a `ts-morph` subprocess owned and invoked by the Python Scanner Worker; it does not own orchestration or evidence decisions.
+- Codebase Memory MCP may accelerate cross-language structural discovery, but direct source inspection is authoritative and no language-specific parser subprocess owns evidence decisions.
 - LLM Gateway remains the only model-provider boundary.
 
 ## Canonical end-to-end flow

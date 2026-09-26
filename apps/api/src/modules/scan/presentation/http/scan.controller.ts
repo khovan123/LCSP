@@ -17,6 +17,10 @@ import {
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { DecisionModelDecisionStatus, Prisma } from "@prisma/client";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import {
+  REPOSITORY_SCAN_JOB_STATUSES,
+  type RepositoryScanJobStatus,
+} from "@lcsp/contracts/github-integration";
 
 import { isRecord } from "../../../../common/utils/index.js";
 import {
@@ -26,6 +30,7 @@ import {
   ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS,
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   isAssessmentAgentStreamEventType,
+  isAssessmentAgentStreamStage,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   ASSESSMENT_RUNTIME_STAGE_CODES,
   type AssessmentRuntimeEventType,
@@ -57,6 +62,7 @@ import type { ScanCallbackRequest } from "../../application/contracts/scan/scan-
 import { ProcessScanCallbackCommand } from "../../application/commands/process-scan-callback/process-scan-callback.command.js";
 import { GetScanJobQuery } from "../../application/queries/get-scan-job/get-scan-job.query.js";
 import { RerunScanCommand } from "../../application/commands/rerun-scan/rerun-scan.command.js";
+import { ReleaseInactiveScanReservationsCommand } from "../../../billing/application/commands/release-inactive-scan-reservations/release-inactive-scan-reservations.command.js";
 import { RequestTargetedReanalysisCommand } from "../../application/commands/request-targeted-reanalysis/request-targeted-reanalysis.command.js";
 import type { RerunScanRequestDto } from "../../application/contracts/scan/rerun-scan.contract.js";
 import { WorkerApiKeyGuard } from "./worker-api-key.guard.js";
@@ -67,6 +73,10 @@ import { problemException } from "../../../../platform/http/filters/error.factor
 import { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import { ORCHESTRATION_RUNTIME_LOG_EVENTS } from "../../../../platform/logging/orchestration-runtime-log.js";
 import { formatOrchestrationRuntimeLog } from "../../../../platform/logging/orchestration-runtime-log.js";
+import {
+  fromPrismaRepositoryScanJobStatus,
+  toPrismaRepositoryScanJobStatus,
+} from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
 
 interface ScanStatusRequest {
   rbacContext: RbacRequestContext;
@@ -99,6 +109,8 @@ interface WorkerAgentStreamEventRequest {
   run_id?: unknown;
   correlation_id?: unknown;
   event_type?: unknown;
+  stage?: unknown;
+  engineering_rule_id?: unknown;
   source?: unknown;
   agent_name?: unknown;
   subagent_name?: unknown;
@@ -126,6 +138,17 @@ interface WorkerRuntimeEventRequest {
   duration_ms?: unknown;
   attempt?: unknown;
   waiting_reason?: unknown;
+}
+
+interface WorkerScanClaimRequest {
+  boundary_name?: unknown;
+  timeout_seconds?: unknown;
+}
+
+interface WorkerScanTerminalFailureRequest extends WorkerScanClaimRequest {
+  reason_code?: unknown;
+  status?: unknown;
+  summary?: unknown;
 }
 
 interface WorkerDecisionModelClaimRequest {
@@ -298,7 +321,7 @@ export class InternalScanController {
   ) {}
 
   /**
-   * Accepts a scanner-worker callback for one repository scan job.
+   * Accepts a repository-analysis-worker callback for one repository scan job.
    *
    * @param scanJobId - Scan-job identifier from the callback route.
    * @param payload - Scanner callback payload containing terminal status and sanitized evidence.
@@ -325,7 +348,7 @@ export class InternalScanController {
   }
 
   /**
-   * Accepts privacy-safe scanner-worker runtime progress metadata for one active scan job.
+   * Accepts privacy-safe repository-analysis-worker runtime progress metadata for one active scan job.
    *
    * @param scanJobId - Scan-job identifier whose tenant and assessment context is resolved server-side.
    * @param payload - Sanitized runtime progress payload using shared runtime value sets.
@@ -338,7 +361,7 @@ export class InternalScanController {
     @Param("scanJobId") scanJobId: string,
     @Body() payload: WorkerRuntimeEventRequest,
   ) {
-    const result = await this.runtimeEvents.recordScanWorkerEvent({
+    const result = await this.runtimeEvents.recordRepositoryAnalysisEvent({
       scanJobId,
       ...parseWorkerRuntimeEventPayload(payload, "scan-runtime-event"),
     });
@@ -360,6 +383,191 @@ export class InternalScanController {
       );
     }
     return resultEnvelope({ recorded: true });
+  }
+
+  /**
+   * Atomically marks a queued scan as accepted by Agent Runtime execution.
+   *
+   * @param scanJobId - Scan-job identifier being claimed by the worker.
+   * @param payload - Bounded worker metadata for observability only.
+   * @returns The standard result envelope describing idempotent claim status.
+   */
+  @Post(":scanJobId/claim")
+  @HttpCode(202)
+  @UseGuards(WorkerApiKeyGuard)
+  async claimScanJob(
+    @Param("scanJobId") scanJobId: string,
+    @Body() payload: WorkerScanClaimRequest,
+  ) {
+    const scanJob = await this.prisma.repositoryScanJob.findUnique({
+      where: { id: scanJobId },
+      select: { id: true, status: true, attemptCount: true },
+    });
+    if (!scanJob) {
+      throw problemException(SCAN_ERROR_CODES.jobNotFound, "scan-claim", {
+        status: HttpStatus.NOT_FOUND,
+      });
+    }
+    const currentStatus = fromPrismaRepositoryScanJobStatus(scanJob.status);
+    if (isTerminalRepositoryScanStatus(currentStatus)) {
+      return resultEnvelope({
+        claimed: false,
+        terminal: true,
+        status: currentStatus,
+      });
+    }
+    if (currentStatus === REPOSITORY_SCAN_JOB_STATUSES.running) {
+      return resultEnvelope({
+        claimed: true,
+        terminal: false,
+        status: currentStatus,
+      });
+    }
+    if (currentStatus !== REPOSITORY_SCAN_JOB_STATUSES.queued) {
+      throw problemException(SCAN_ERROR_CODES.jobWrongState, "scan-claim", {
+        status: HttpStatus.CONFLICT,
+      });
+    }
+
+    const claimed = await this.prisma.repositoryScanJob.updateMany({
+      where: {
+        id: scanJobId,
+        status: toPrismaRepositoryScanJobStatus(
+          REPOSITORY_SCAN_JOB_STATUSES.queued,
+        ),
+      },
+      data: {
+        status: toPrismaRepositoryScanJobStatus(
+          REPOSITORY_SCAN_JOB_STATUSES.running,
+        ),
+        blockedReason: null,
+        attemptCount: { increment: 1 },
+      },
+    });
+    const updated = await this.prisma.repositoryScanJob.findUnique({
+      where: { id: scanJobId },
+      select: { status: true, attemptCount: true },
+    });
+    const nextStatus = updated
+      ? fromPrismaRepositoryScanJobStatus(updated.status)
+      : REPOSITORY_SCAN_JOB_STATUSES.running;
+    if (claimed.count > 0) {
+      await this.runtimeEvents.recordRepositoryAnalysisEvent({
+        scanJobId,
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runStarted,
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.scan,
+        toolName: "agent_runtime",
+        summary: "Agent Runtime claimed repository scan job",
+        inputSummary: {
+          boundaryName: optionalRuntimeString(payload.boundary_name),
+          timeoutSeconds: numberFromJson(payload.timeout_seconds),
+        },
+        attempt: updated?.attemptCount ?? scanJob.attemptCount + 1,
+      });
+    }
+    return resultEnvelope({
+      claimed:
+        claimed.count > 0 ||
+        nextStatus === REPOSITORY_SCAN_JOB_STATUSES.running,
+      terminal: false,
+      status: nextStatus,
+    });
+  }
+
+  /**
+   * Marks an active scan terminal after Agent Runtime cannot finish the boundary.
+   *
+   * @param scanJobId - Scan-job identifier whose lifecycle should be closed.
+   * @param payload - Safe failure code and bounded worker metadata.
+   * @returns The standard result envelope describing idempotent terminalization.
+   */
+  @Post(":scanJobId/terminal-failure")
+  @HttpCode(202)
+  @UseGuards(WorkerApiKeyGuard)
+  async markScanJobTerminalFailure(
+    @Param("scanJobId") scanJobId: string,
+    @Body() payload: WorkerScanTerminalFailureRequest,
+  ) {
+    const reasonCode = scanTerminalFailureReasonCode(payload.reason_code);
+    const terminalStatus = scanTerminalFailureStatus(payload.status);
+    const terminalized = await this.prisma.repositoryScanJob.updateMany({
+      where: {
+        id: scanJobId,
+        status: {
+          in: [
+            toPrismaRepositoryScanJobStatus(
+              REPOSITORY_SCAN_JOB_STATUSES.queued,
+            ),
+            toPrismaRepositoryScanJobStatus(
+              REPOSITORY_SCAN_JOB_STATUSES.running,
+            ),
+          ],
+        },
+      },
+      data: {
+        status: toPrismaRepositoryScanJobStatus(terminalStatus),
+        blockedReason: reasonCode,
+      },
+    });
+    const current = await this.prisma.repositoryScanJob.findUnique({
+      where: { id: scanJobId },
+      select: { status: true, assessmentId: true },
+    });
+    if (!current) {
+      throw problemException(
+        SCAN_ERROR_CODES.jobNotFound,
+        "scan-terminal-failure",
+        { status: HttpStatus.NOT_FOUND },
+      );
+    }
+    const currentStatus = fromPrismaRepositoryScanJobStatus(current.status);
+    await this.releaseTerminalScanCredits(current.assessmentId, scanJobId);
+    if (terminalized.count > 0) {
+      await this.runtimeEvents.recordRepositoryAnalysisEvent({
+        scanJobId,
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runFailed,
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.scan,
+        toolName: "agent_runtime",
+        summary:
+          optionalRuntimeString(payload.summary) ??
+          "Agent Runtime repository scan failed",
+        errorSummary: reasonCode,
+        outputSummary: {
+          errorCode: reasonCode,
+          boundaryName: optionalRuntimeString(payload.boundary_name),
+          timeoutSeconds: numberFromJson(payload.timeout_seconds),
+        },
+      });
+    }
+    return resultEnvelope({
+      terminalized: terminalized.count > 0,
+      status: currentStatus,
+      reasonCode,
+    });
+  }
+
+  /**
+   * Returns credits the worker kept for a redelivery that will never happen.
+   *
+   * Retryable boundary failures keep their reservation for the next attempt; once
+   * the scan is terminal nothing else releases it. The sweep is idempotent, so a
+   * failure here is retried by the next terminal callback or rerun.
+   */
+  private async releaseTerminalScanCredits(
+    assessmentId: string,
+    scanJobId: string,
+  ): Promise<void> {
+    try {
+      await this.commandBus.execute(
+        new ReleaseInactiveScanReservationsCommand(assessmentId),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not release credits held by terminal scan scanJobId=${scanJobId} error=${error instanceof Error ? error.name : "unknown"}`,
+      );
+    }
   }
 
   /** Accepts one live Deep Agents/LangGraph stream event from the trusted worker. */
@@ -398,6 +606,8 @@ export class InternalScanController {
         headerCorrelationId?.trim() ??
         randomUUID(),
       eventType: payload.event_type,
+      stage: isAssessmentAgentStreamStage(payload.stage) ? payload.stage : null,
+      engineeringRuleId: optionalText(payload.engineering_rule_id),
       source: optionalText(payload.source),
       agentName: optionalText(payload.agent_name),
       subagentName: optionalText(payload.subagent_name),
@@ -598,10 +808,7 @@ export class InternalScanController {
 }
 
 const TARGETED_REANALYSIS_ANALYZERS = new Set([
-  "RUN_SEMGREP_RULES",
-  "RUN_PYTHON_SEMANTIC_ANALYSIS",
-  "RUN_TS_JS_SEMANTIC_ANALYSIS",
-  "RUN_STRUCTURAL_AUGMENTATION",
+  "DEEP_AGENT_REPOSITORY_ANALYSIS",
 ]);
 const EVIDENCE_REPORT_ID = /^ter_[A-Za-z0-9_-]{8,120}$/;
 const REASON_REQUIREMENT_ID = /^requirement:[A-Za-z0-9_-]{1,120}$/;
@@ -1251,6 +1458,36 @@ function parseWorkerRuntimeEventPayload(
   };
 }
 
+const SCAN_TERMINAL_FAILURE_REASON_CODES: ReadonlySet<string> = new Set([
+  SCAN_ERROR_CODES.agentRuntimeBoundaryTimeout,
+  SCAN_ERROR_CODES.providerTimeout,
+  SCAN_ERROR_CODES.repositorySandboxFailure,
+  SCAN_ERROR_CODES.billingFailure,
+  SCAN_ERROR_CODES.repositoryAnalysisFailed,
+]);
+
+function scanTerminalFailureReasonCode(value: unknown): string {
+  return typeof value === "string" &&
+    SCAN_TERMINAL_FAILURE_REASON_CODES.has(value)
+    ? value
+    : SCAN_ERROR_CODES.repositoryAnalysisFailed;
+}
+
+function scanTerminalFailureStatus(value: unknown): RepositoryScanJobStatus {
+  return value === REPOSITORY_SCAN_JOB_STATUSES.blocked
+    ? REPOSITORY_SCAN_JOB_STATUSES.blocked
+    : REPOSITORY_SCAN_JOB_STATUSES.failed;
+}
+
+function isTerminalRepositoryScanStatus(status: string): boolean {
+  return (
+    status === REPOSITORY_SCAN_JOB_STATUSES.completed ||
+    status === REPOSITORY_SCAN_JOB_STATUSES.failed ||
+    status === REPOSITORY_SCAN_JOB_STATUSES.blocked ||
+    status === REPOSITORY_SCAN_JOB_STATUSES.blockedMapping
+  );
+}
+
 function readRuntimeValue(
   value: unknown,
   values: Record<string, string>,
@@ -1585,7 +1822,7 @@ export class InternalTargetedReanalysisController {
   ): Promise<void> {
     await this.auditWriter.write({
       eventType,
-      actorId: AUDIT_ACTOR_IDS.scannerWorker,
+      actorId: AUDIT_ACTOR_IDS.repositoryAnalysisWorker,
       assessmentId: request.assessmentId,
       resourceType: AUDIT_RESOURCE_TYPES.workerTask,
       resourceId: requestId,
@@ -1594,7 +1831,7 @@ export class InternalTargetedReanalysisController {
       result: eventType,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
       actor: {
-        id: AUDIT_ACTOR_IDS.scannerWorker,
+        id: AUDIT_ACTOR_IDS.repositoryAnalysisWorker,
         type: AUDIT_ACTOR_TYPES.service,
       },
       payload: { requestId },

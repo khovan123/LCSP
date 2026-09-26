@@ -7,8 +7,6 @@ defined separately under ``tools/<node>/<tool-name>/code.py``.
 from __future__ import annotations
 
 from deepagents import (
-    FilesystemPermission,
-    GeneralPurposeSubagentProfile,
     HarnessProfile,
     ProviderProfile,
     register_harness_profile,
@@ -20,6 +18,7 @@ from provider_credentials import credential_init_kwargs
 from model_policy import (
     ALL_LCSP_MODEL_SPECS,
     model_init_kwargs_for_agent,
+    model_profile_init_kwargs,
     ROOT_MODEL_SPEC,
     canonical_provider,
     openai_responses_base_init_kwargs,
@@ -54,55 +53,38 @@ def provider_profile_for(provider: str) -> ProviderProfile:
 
 
 def model_provider_profile_for(model_spec: str) -> ProviderProfile:
-    """Return the exact-model construction profile for LCSP reasoning-capable models."""
+    """Return the exact-model construction profile for LCSP reasoning-capable models.
+
+    Deep Agents builds every string model spec (root, ``task`` subagents and
+    directly dispatched specialists) from this profile, so it also carries the
+    model's context window for summarization, context trimming and billing guards.
+    """
     provider = provider_from_model_spec(model_spec)
     route_provider = route_provider_for_model_spec(model_spec)
-    if route_provider == "llm7":
-        return ProviderProfile(init_kwargs=provider_init_kwargs(route_provider))
+    _, _, model_name = model_spec.partition(":")
+    context_window = model_profile_init_kwargs(route_provider, model_name)
+    if route_provider in {"llm7", "inception"}:
+        return ProviderProfile(
+            init_kwargs={**provider_init_kwargs(route_provider), **context_window}
+        )
     if model_spec == "google_genai:gemini-3.5-flash-lite":
         return ProviderProfile(init_kwargs=model_init_kwargs_for_agent(
             agent_name="lcsp-agent", model_spec=model_spec
         ))
     if provider == "openai" and supports_openai_reasoning(model_spec):
-        return ProviderProfile(init_kwargs=openai_responses_init_kwargs(model_spec))
-    return ProviderProfile(init_kwargs=provider_init_kwargs(provider))
+        return ProviderProfile(
+            init_kwargs={**openai_responses_init_kwargs(model_spec), **context_window}
+        )
+    return ProviderProfile(init_kwargs={**provider_init_kwargs(provider), **context_window})
 
 
-# Deep Agents injects filesystem tools in addition to authored tools. LCSP keeps
-# only read_file visible because Managed Skills use it for progressive disclosure.
-# All other filesystem / execution tools are outside the assessment flow.
-HIDDEN_BUILTIN_TOOLS = frozenset(
-    {
-        "ls",
-        "write_file",
-        "edit_file",
-        "delete",
-        "glob",
-        "grep",
-        "execute",
-    }
-)
-
-LCSP_HARNESS_PROFILE = HarnessProfile(
-    excluded_tools=HIDDEN_BUILTIN_TOOLS,
-    general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
-)
-
-# read_file remains visible only for Managed Skills. No repository/code access is
-# granted through the Deep Agents filesystem; repository evidence must come from
-# LCSP governed application tools.
-LCSP_FILESYSTEM_PERMISSIONS = [
-    FilesystemPermission(
-        operations=["read"],
-        paths=["/skills/**"],
-        mode="allow",
-    ),
-    FilesystemPermission(
-        operations=["read", "write"],
-        paths=["/**"],
-        mode="deny",
-    ),
-]
+# LCSP intentionally uses the complete Deep Agents harness. Repository analysis runs
+# inside an isolated backend per assessment, so filesystem, shell, task/subagent,
+# summarization, skills and human-in-the-loop capabilities remain available instead
+# of being reimplemented as LCSP-authored repository analyzers.
+HIDDEN_BUILTIN_TOOLS = frozenset()
+LCSP_HARNESS_PROFILE = HarnessProfile()
+LCSP_FILESYSTEM_PERMISSIONS: list = []
 
 
 def configure_lcsp_harness() -> None:

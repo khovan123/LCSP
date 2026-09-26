@@ -1,3 +1,4 @@
+import { asRecord } from "../../../../common/utils/index.js";
 import type { TechnicalEvidenceDisplayDto } from "../contracts/assessment/assessment-detail.contract.js";
 
 const MAX_TECHNICAL_EVIDENCE_DISPLAY_ITEMS = 12;
@@ -187,12 +188,6 @@ function sourcePath(value: string | null): string | null {
 function fileName(value: string | null): string | null {
   if (!value) return null;
   return value.replaceAll("\\", "/").split("/").filter(Boolean).at(-1) ?? null;
-}
-
-function asRecord(value: unknown): JsonRecord | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as JsonRecord)
-    : null;
 }
 
 function asRecords(value: unknown): JsonRecord[] {

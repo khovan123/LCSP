@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+import ast
+import re
+from pathlib import Path
+
+import logging
 from threading import Event
 from time import monotonic
 
 from langchain_core.messages import AIMessageChunk, ToolMessage
 
 from orchestration.agent_stream import (
+    AGENT_STREAM_STAGES,
     AgentStreamSession,
     BufferedAgentStreamEmitter,
     activate_agent_stream,
+    agent_stream_stage,
     invoke_graph_with_stream,
     invoke_with_stream,
+    _should_forward_stream_log,
 )
 
 
@@ -378,3 +386,337 @@ def test_buffered_emitter_never_blocks_agent_on_backpressure():
     elapsed = monotonic() - started
     assert elapsed < 0.1
     release_delivery.set()
+
+
+def test_stream_log_filter_hides_framework_noise_but_keeps_failures():
+    noisy_info = logging.LogRecord(
+        "httpx",
+        logging.INFO,
+        __file__,
+        1,
+        "HTTP Request: POST /internal/scan-jobs",
+        (),
+        None,
+    )
+    private_info = logging.LogRecord(
+        "lcsp.agent",
+        logging.INFO,
+        __file__,
+        1,
+        "PIIMiddleware[email].before_model",
+        (),
+        None,
+    )
+    useful_info = logging.LogRecord(
+        "lcsp.repository",
+        logging.INFO,
+        __file__,
+        1,
+        "Repository index completed",
+        (),
+        None,
+    )
+    framework_error = logging.LogRecord(
+        "httpx",
+        logging.ERROR,
+        __file__,
+        1,
+        "Provider request failed",
+        (),
+        None,
+    )
+
+    assert _should_forward_stream_log(noisy_info) is False
+    assert _should_forward_stream_log(private_info) is False
+    assert _should_forward_stream_log(useful_info) is True
+    assert _should_forward_stream_log(framework_error) is True
+
+
+def test_literal_agent_stream_event_types_match_shared_typescript_contract() -> None:
+    """Prevent Python emitters from inventing event types the API will reject."""
+    repo_root = Path(__file__).resolve().parents[2]
+    contract_path = repo_root / "packages/contracts/src/evidence/assessment-runtime.ts"
+    contract_text = contract_path.read_text()
+    block = re.search(
+        r"export const ASSESSMENT_AGENT_STREAM_EVENT_TYPES = \{(.*?)\} as const;",
+        contract_text,
+        re.S,
+    )
+    assert block is not None
+    supported = set(re.findall(r':\s*"([A-Z0-9_]+)"', block.group(1)))
+
+    emitted: set[str] = set()
+    for path in (repo_root / "deepagents").rglob("*.py"):
+        if ".mda" in path.parts:
+            continue
+        try:
+            tree = ast.parse(path.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "publish_agent_stream_event"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                emitted.add(node.args[0].value)
+
+    assert emitted <= supported, sorted(emitted - supported)
+
+
+def test_invoke_with_stream_returns_final_values_when_nested_in_a_parent_graph_node():
+    """Assessment 7976a135 regression: dispatcher specialists run inside a parent node.
+
+    LangGraph prefixes every chunk of a graph invoked from a parent node with the
+    parent task namespace, so the invoked graph's own final state is never at the
+    empty namespace. The Interview specialist completed but its handoff was rejected.
+    """
+    from typing import TypedDict
+
+    from langgraph.graph import END, START, StateGraph
+
+    class State(TypedDict, total=False):
+        steps: list[str]
+
+    inner_builder = StateGraph(State)
+    inner_builder.add_node("inner_step", lambda state: {"steps": [*state.get("steps", []), "inner"]})
+    inner_builder.add_edge(START, "inner_step")
+    inner_builder.add_edge("inner_step", END)
+    inner = inner_builder.compile()
+
+    child_builder = StateGraph(State)
+    child_builder.add_node("delegate", inner)
+    child_builder.add_node("finish", lambda state: {"steps": [*state["steps"], "child-final"]})
+    child_builder.add_edge(START, "delegate")
+    child_builder.add_edge("delegate", "finish")
+    child_builder.add_edge("finish", END)
+    child = child_builder.compile(name="specialist")
+
+    returned: dict[str, object] = {}
+
+    def parent_node(state):
+        returned["value"] = invoke_with_stream(child, {"steps": []})
+        return {}
+
+    parent_builder = StateGraph(State)
+    parent_builder.add_node("dispatch", parent_node)
+    parent_builder.add_edge(START, "dispatch")
+    parent_builder.add_edge("dispatch", END)
+    parent = parent_builder.compile()
+
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        parent.invoke({"steps": []})
+
+    assert returned["value"] == {"steps": ["inner", "child-final"]}
+
+
+def test_invoke_with_stream_tags_every_event_with_its_pipeline_stage():
+    """Interview, Planner and Investigate stream on their own timeline, like Scanner."""
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        invoke_with_stream(
+            FakeAgent(),
+            {"messages": []},
+            stage=AGENT_STREAM_STAGES["planner"],
+        )
+        planner_count = len(events)
+        invoke_with_stream(FakeAgent(), {"messages": []})
+
+    assert planner_count
+    assert {event.get("stage") for event in events[:planner_count]} == {"PLANNER"}
+    assert events[planner_count:]
+    assert all("stage" not in event for event in events[planner_count:])
+
+
+def test_nested_stage_wins_over_session_default_and_enclosing_stage():
+    events = []
+    session = stream_session(events)
+    session.stage = AGENT_STREAM_STAGES["scanner"]
+    boundaries = []
+    with activate_agent_stream(session):
+        with agent_stream_stage(AGENT_STREAM_STAGES["investigate"]):
+            invoke_with_stream(
+                FakeAgent(),
+                {"messages": []},
+                stage=AGENT_STREAM_STAGES["interview"],
+            )
+            boundaries.append(len(events))
+            invoke_with_stream(FakeAgent(), {"messages": []})
+            boundaries.append(len(events))
+        invoke_with_stream(FakeAgent(), {"messages": []})
+
+    stages = [event["stage"] for event in events]
+    first, second = boundaries
+    assert set(stages[:first]) == {"INTERVIEW"}
+    assert set(stages[first:second]) == {"INVESTIGATE"}
+    assert set(stages[second:]) == {"SCANNER"}
+
+
+def test_agent_stream_stages_match_shared_typescript_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    contract_text = (
+        repo_root / "packages/contracts/src/evidence/assessment-runtime.ts"
+    ).read_text()
+    block = re.search(
+        r"export const ASSESSMENT_AGENT_STREAM_STAGES = \{(.*?)\} as const;",
+        contract_text,
+        re.S,
+    )
+    assert block is not None
+    assert set(re.findall(r':\s*"([A-Z0-9_]+)"', block.group(1))) == set(
+        AGENT_STREAM_STAGES.values()
+    )
+
+
+class NonStreamingToolCallAgent:
+    """A provider called with stream=False yields one complete AIMessage per step."""
+
+    name = "planner"
+
+    def stream(self, input_value, **kwargs):
+        from langchain_core.messages import AIMessage
+
+        yield {
+            "type": "messages",
+            "ns": (),
+            "data": (
+                AIMessage(
+                    id="msg-complete",
+                    content="I will read the auth module to check token validation.",
+                    additional_kwargs={
+                        "reasoning_content": "Token validation lives in auth/."
+                    },
+                    tool_calls=[
+                        {
+                            "name": "read_file",
+                            "args": {"file_path": "/auth/tokens.py"},
+                            "id": "call-read",
+                        }
+                    ],
+                    response_metadata={"finish_reason": "tool_calls"},
+                ),
+                {
+                    "langgraph_node": "model",
+                    "ls_provider": "openai",
+                    "ls_model_name": "gpt-test",
+                },
+            ),
+        }
+        yield {"type": "values", "ns": (), "data": {"result": "done"}}
+
+
+def test_non_streaming_model_step_surfaces_reasoning_tool_calls_and_output():
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        invoke_with_stream(NonStreamingToolCallAgent(), {"messages": []})
+
+    kinds = [
+        (event["event_type"], (event.get("data") or {}).get("kind"))
+        for event in events
+    ]
+    assert ("MODEL_REQUEST", "MODEL_REQUEST") in kinds
+    assert ("CUSTOM_PROGRESS", "REASONING_SUMMARY") in kinds
+    assert ("SEMANTIC_TOOL_CALL", "TOOL_CALL") in kinds
+    assert ("MODEL_RESULT", "MODEL_OUTPUT") in kinds
+
+    reasoning = next(
+        event
+        for event in events
+        if (event.get("data") or {}).get("kind") == "REASONING_SUMMARY"
+    )
+    assert reasoning["data"]["resultSummary"] == {
+        "summary": "Token validation lives in auth/."
+    }
+    assert reasoning["data"]["durability"] == "DURABLE"
+
+    tool_call = next(
+        event for event in events if event["event_type"] == "SEMANTIC_TOOL_CALL"
+    )
+    assert tool_call["tool_call_id"] == "call-read"
+    assert tool_call["data"]["parameters"] == {"file_path": "/auth/tokens.py"}
+
+    result = next(event for event in events if event["event_type"] == "MODEL_RESULT")
+    assert result["data"]["finishReason"] == "tool_calls"
+    assert result["data"]["resultSummary"] == {
+        "text": "I will read the auth module to check token validation."
+    }
+
+
+def test_streamed_reasoning_is_one_summary_per_step_not_one_per_token():
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        invoke_with_stream(StreamingFinalEmptyAgent(), {"messages": []})
+
+    summaries = [
+        event
+        for event in events
+        if (event.get("data") or {}).get("kind") == "REASONING_SUMMARY"
+    ]
+    assert len(summaries) == 1
+    assert summaries[0]["data"]["resultSummary"] == {"summary": "provider summary"}
+
+
+def test_rule_scope_attributes_activity_and_reports_the_reasoning_result():
+    from orchestration.agent_stream import agent_stream_rule_scope, publish_agent_stream_event
+
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        with agent_stream_rule_scope(
+            "ER-7",
+            concept="Token validation",
+            required_evidence=("Tokens are validated",),
+        ) as rule_stream:
+            publish_agent_stream_event("LOG", text="inside rule")
+            rule_stream.complete(
+                [
+                    {
+                        "claim_type": "RULE_REQUIREMENT_MET",
+                        "criterion": "Tokens are validated",
+                        "confidence": 0.9,
+                        "source_locations": [
+                            {"path": "auth/tokens.py", "start_line": 3, "end_line": 9}
+                        ],
+                    }
+                ]
+            )
+        publish_agent_stream_event("LOG", text="after rule")
+
+    started, activity, completed, after = events
+    assert started["event_type"] == "ENGINEERING_RULE"
+    assert started["status"] == "RUNNING"
+    assert started["data"]["concept"] == "Token validation"
+    assert activity["engineering_rule_id"] == "ER-7"
+    assert completed["status"] == "COMPLETED"
+    assert completed["data"]["decision"] == "RULE_REQUIREMENT_MET"
+    assert completed["data"]["resultSummary"]["claims"] == [
+        {
+            "claimType": "RULE_REQUIREMENT_MET",
+            "criterion": "Tokens are validated",
+            "confidence": 0.9,
+            "sourceLocations": "auth/tokens.py#L3-L9",
+        }
+    ]
+    assert "engineering_rule_id" not in after
+
+
+def test_rule_scope_reports_failed_and_waiting_rules():
+    from orchestration.agent_stream import agent_stream_rule_scope
+
+    class Pending(BaseException):
+        """Like TargetedInterviewPending: an intentional pause, not a failure."""
+
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        for error in (RuntimeError("boom"), Pending("needs input")):
+            try:
+                with agent_stream_rule_scope("ER-9", waiting_on=(Pending,)):
+                    raise error
+            except BaseException:
+                pass
+
+    statuses = [event["status"] for event in events]
+    assert statuses == ["RUNNING", "FAILED", "RUNNING", "WAITING"]

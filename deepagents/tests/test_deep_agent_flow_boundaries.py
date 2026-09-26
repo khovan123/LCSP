@@ -30,13 +30,7 @@ TRIAGE_TOOL_NAMES: tuple[str, ...] = (
     "persist_legal_rule_triage_result",
     "finish_legal_rule_triage_execution",
 )
-INTERVIEW_TOOL_NAMES: tuple[str, ...] = (
-    "search_program_graph",
-    "get_scan_coverage",
-    "inspect_decision_path",
-    "inspect_data_path",
-    "inspect_human_review_path",
-)
+INTERVIEW_TOOL_NAMES: tuple[str, ...] = ()
 TRIAGE_TOOL_PACKAGES: set[str] = {
     "maintain_legal_catalog",
     "legal_rule_triage",
@@ -45,23 +39,14 @@ COMMON_TOOL_NAMES: tuple[str, ...] = (
     "get_legal_corpus_readiness",
     "retrieve_verified_episodes",
     "retrieve_legal_basis",
-    "search_program_graph",
 )
 ORCHESTRATION_TOOL_NAMES: tuple[str, ...] = ("request_targeted_reanalysis",)
 EXPECTED_ROLE_TOOL_NAMES: dict[str, tuple[str, ...]] = {
-    "interview": INTERVIEW_TOOL_NAMES,
-    "planner": ("retrieve_verified_episodes", "search_program_graph", "get_scan_coverage"),
-    "investigator": (
-        "retrieve_verified_episodes",
-        "search_program_graph",
-        "trace_static_flow",
-        "inspect_data_path",
-        "inspect_decision_path",
-        "inspect_human_review_path",
-        "get_symbol_context",
-        "find_provider_invocations",
-    ),
+    "interview": (),
+    "planner": ("retrieve_verified_episodes",),
+    "investigator": ("retrieve_verified_episodes",),
 }
+
 
 
 def _names(tools: list[object]) -> tuple[str, ...]:
@@ -87,15 +72,6 @@ def _implementation_files(path: Path) -> set[str]:
 def _assessment_authored_tool_layout() -> dict[str, tuple[str, ...]]:
     return {
         "common": COMMON_TOOL_NAMES,
-        "planner": ("get_scan_coverage",),
-        "investigator": (
-            "trace_static_flow",
-            "inspect_data_path",
-            "inspect_decision_path",
-            "inspect_human_review_path",
-            "get_symbol_context",
-            "find_provider_invocations",
-        ),
         "orchestration": ORCHESTRATION_TOOL_NAMES,
     }
 
@@ -166,7 +142,6 @@ def test_common_and_orchestration_tools_are_classified_explicitly() -> None:
         "get_legal_corpus_readiness",
         "retrieve_verified_episodes",
         "retrieve_legal_basis",
-        "search_program_graph",
     )
     assert ORCHESTRATION_TOOL_NAMES == ("request_targeted_reanalysis",)
     for tool_name in ORCHESTRATION_TOOL_NAMES:
@@ -269,8 +244,6 @@ def test_tools_tree_contains_only_authored_agent_capabilities() -> None:
     assert _directory_names(PROJECT_ROOT / "tools") == {
         "common",
         "legal",
-        "planner",
-        "investigator",
         "orchestration",
         "triage",
     }
@@ -281,21 +254,12 @@ def test_tools_tree_contains_only_authored_agent_capabilities() -> None:
         "agentic_evidence",
         "assessment",
         "evidence",
-        "managed",
+            "agent_runtime",
         "package",
         "platform",
         "reporting",
         "scripts",
         "workflow",
-    }
-    assert _directory_names(PROJECT_ROOT / "tools" / "planner") == {"get_scan_coverage"}
-    assert _directory_names(PROJECT_ROOT / "tools" / "investigator") == {
-        "trace_static_flow",
-        "inspect_data_path",
-        "inspect_decision_path",
-        "inspect_human_review_path",
-        "get_symbol_context",
-        "find_provider_invocations",
     }
     assert not (PROJECT_ROOT / "tools" / "resolver").exists()
     assert _directory_names(PROJECT_ROOT / "tools" / "orchestration") == set(
@@ -316,7 +280,7 @@ def test_common_tools_own_non_model_callable_implementation_domains() -> None:
         "retrieval",
         "sources",
     }
-    assert _directory_names(evidence) == {"graph", "scanner"}
+    assert _directory_names(evidence) == {"graph", "repository_analysis"}
     assert _directory_names(assessment) == {
         "planning",
         "investigation",
@@ -356,7 +320,7 @@ def test_common_tools_own_non_model_callable_implementation_domains() -> None:
 
     assert (evidence / "graph" / "query" / "query_engine.py").is_file()
     assert (
-        evidence / "scanner" / "scanning" / "scan_boundary.py"
+        evidence / "repository_analysis" / "boundary.py"
     ).is_file()
     assert not (evidence / "scanner" / "program_graph").exists()
     assert (
@@ -457,36 +421,44 @@ def test_generic_boundary_invocation_is_not_root_agent_surface() -> None:
     assert "resume_waiting_runs" not in agent_source
 
 
-def test_default_general_purpose_subagent_is_disabled() -> None:
-    assert LCSP_HARNESS_PROFILE.general_purpose_subagent is not None
-    assert LCSP_HARNESS_PROFILE.general_purpose_subagent.enabled is False
+def test_default_general_purpose_subagent_uses_deepagents_default() -> None:
+    assert LCSP_HARNESS_PROFILE.general_purpose_subagent is None
 
 
-def test_harness_hides_non_skill_filesystem_and_execute_tools() -> None:
-    assert HIDDEN_BUILTIN_TOOLS == frozenset(
-        {
-            "ls",
-            "write_file",
-            "edit_file",
-            "delete",
-            "glob",
-            "grep",
-            "execute",
-        }
-    )
-    assert "read_file" not in HIDDEN_BUILTIN_TOOLS
-    assert "task" not in HIDDEN_BUILTIN_TOOLS
-    assert "write_todos" not in HIDDEN_BUILTIN_TOOLS
+def test_harness_exposes_complete_deepagents_builtin_tool_surface() -> None:
+    assert HIDDEN_BUILTIN_TOOLS == frozenset()
 
 
-def test_filesystem_permissions_only_allow_reading_managed_skills() -> None:
-    assert len(LCSP_FILESYSTEM_PERMISSIONS) == 2
+def test_harness_does_not_replace_deepagents_filesystem_permissions() -> None:
+    assert LCSP_FILESYSTEM_PERMISSIONS == []
 
-    skill_read, deny_all = LCSP_FILESYSTEM_PERMISSIONS
-    assert skill_read.operations == ["read"]
-    assert skill_read.paths == ["/skills/**"]
-    assert skill_read.mode == "allow"
 
-    assert deny_all.operations == ["read", "write"]
-    assert deny_all.paths == ["/**"]
-    assert deny_all.mode == "deny"
+def test_root_agent_task_subagents_run_under_model_governance(monkeypatch) -> None:
+    """Every `task` subagent of the root agent, general-purpose included, is governed."""
+    from deepagents.middleware import subagents as deep_subagents
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("LLM7_API_KEY", "test-llm7-key")
+    root_agent_module = importlib.import_module("agent")
+    compiled: dict[str, set[str]] = {}
+    real_create_agent = deep_subagents.create_agent
+
+    def recording_create_agent(model, **kwargs):
+        compiled[kwargs["name"]] = {type(item).__name__ for item in kwargs["middleware"]}
+        return real_create_agent(model, **kwargs)
+
+    monkeypatch.setattr(deep_subagents, "create_agent", recording_create_agent)
+
+    root_agent_module.create_root_agent()
+
+    assert "general-purpose" in compiled
+    governance = {
+        "BillingAgentRoleMiddleware",
+        "ModelRetryMiddleware",
+        "ProviderFallbackMiddleware",
+        "TokenFallbackMiddleware",
+        "BillingMeteringMiddleware",
+    }
+    for name, middleware in compiled.items():
+        missing = governance - middleware
+        assert not missing, f"subagent {name} runs without {sorted(missing)}"

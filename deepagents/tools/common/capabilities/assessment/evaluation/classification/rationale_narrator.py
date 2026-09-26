@@ -1,9 +1,12 @@
 """Narrate an already-computed classification decision without changing it."""
 
-from orchestration.agent_stream import invoke_with_stream
+from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
-from middleware.billing_metering import BillingMeteringError
-from model_policy import NARRATOR_MODEL_SPEC, create_lcsp_agent as create_agent
+from middleware.billing_metering import BillingAgentRoleMiddleware, BillingMeteringError
+from deepagents import create_deep_agent
+from middleware.agent_run_budget import AgentRunBudgetMiddleware
+from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
+from model_policy import NARRATOR_MODEL_SPEC, resolve_agent_model
 
 
 class RationaleNarrator:
@@ -61,14 +64,21 @@ class RationaleNarrator:
         """
 
         try:
-            agent = create_agent(
-                agent_name="lcsp-classification-rationale-narrator",
-                model=self._model,
+            agent = create_deep_agent(
+                name="lcsp-classification-rationale-narrator",
+                model=resolve_agent_model(
+                    agent_name="lcsp-classification-rationale-narrator", model_spec=self._model
+                ),
+                backend=current_repository_backend(),
                 system_prompt=(
                     "You explain an existing LCSP decision without changing it or "
                     "making legal conclusions."
                 ),
-                middleware=MODEL_GOVERNANCE_MIDDLEWARE,
+                middleware=[
+                    AgentRunBudgetMiddleware(),
+                    BillingAgentRoleMiddleware("narrator"),
+                    *MODEL_GOVERNANCE_MIDDLEWARE,
+                ],
             )
             result = invoke_with_stream(agent,
                 {"messages": [{"role": "user", "content": prompt}]},
@@ -80,6 +90,7 @@ class RationaleNarrator:
                     },
                     "configurable": {"thread_id": workflow_run_id},
                 },
+                stage=AGENT_STREAM_STAGES["gate"],
             )
             messages = result.get("messages") or []
             if not messages:

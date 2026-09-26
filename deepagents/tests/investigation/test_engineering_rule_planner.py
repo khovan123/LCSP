@@ -15,6 +15,7 @@ from tools.common.capabilities.assessment.planning.engineering_rule.engineering_
     EngineeringRulePlanDecisionAudit,
     EngineeringRulePlanner,
     EngineeringRulePlanningCandidate,
+    PlannerContextNeed,
 )
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_LIMITATION_CODES,
@@ -27,6 +28,15 @@ from tools.common.capabilities.assessment.planning.engineering_rule.confirmed_bu
     ConfirmedStructuredBusinessContext,
 )
 from tools.common.capabilities.evidence.graph.schema.models import ProgramEvidenceGraph
+
+
+@pytest.fixture(autouse=True)
+def _offline_agent_models(monkeypatch):
+    """Keep planner model construction offline."""
+    monkeypatch.setattr(
+        "tools.common.capabilities.assessment.planning.engineering_rule.engineering_rule_planner.resolve_agent_model",
+        lambda *, agent_name, model_spec: f"model:{agent_name}",
+    )
 
 
 def _graph() -> ProgramEvidenceGraph:
@@ -127,13 +137,22 @@ def native_agent(monkeypatch):
     monkeypatch.setattr(
         sys.modules[EngineeringRulePlanner.__module__],
         "create_agent",
-        lambda **_kwargs: agent,
+        lambda *_args, **_kwargs: agent,
     )
     return agent
 
 
 def _structured_response(decisions: list[dict]):
     return {"structured_response": {"decisions": decisions}}
+
+
+def _decision(rule_id: str, decision: str, reason_code: str, basis: list[str]) -> dict:
+    return {
+        "engineeringRuleId": rule_id,
+        "decision": decision,
+        "reasonCode": reason_code,
+        "basis": basis,
+    }
 
 
 def _prompt_payload(prompt: str) -> dict:
@@ -272,7 +291,6 @@ def test_planner_prompt_contains_legal_reasoning_contract() -> None:
     prompt = EngineeringRulePlanner._prompt(
         (_candidate("eng-contract", source_hits=0),),
         confirmed_customer_context=_confirmed_context(),
-        graph=_graph(),
     )
 
     assert "LegalReasoningContract" in prompt
@@ -317,34 +335,119 @@ def test_planner_prompt_contains_legal_reasoning_contract() -> None:
     ]
 
 
-def test_planner_prompt_treats_openwiki_as_unverified_hint_only() -> None:
+def test_planner_input_is_only_rules_and_confirmed_customer_context() -> None:
     prompt = EngineeringRulePlanner._prompt(
-        (_candidate("eng-contract", source_hits=0),),
+        (_candidate("eng-contract", source_hits=4),),
         confirmed_customer_context=_confirmed_context(),
-        graph=_graph(),
-        openwiki_context={
-            "source": "openwiki",
-            "available": True,
-            "authority": "UNVERIFIED_ARCHITECTURE_HINT",
-            "policy": "May prioritize planner investigation only.",
-            "hintCount": 1,
-            "hints": [
-                {
-                    "path": "openwiki/architecture/overview.md",
-                    "title": "Architecture",
-                    "snippet": "AI review workflow uses human oversight.",
-                    "matchedTerms": ["AI", "review"],
-                    "authority": "UNVERIFIED_ARCHITECTURE_HINT",
-                    "policy": "May prioritize planner investigation only.",
-                }
-            ],
-        },
     )
 
-    assert "openWikiArchitectureHints" in prompt
-    assert "UNVERIFIED_ARCHITECTURE_HINT" in prompt
-    assert "not SOURCE basis" in prompt
-    assert "not proof of compliance" in prompt
+    payload = _prompt_payload(prompt)
+    assert set(payload) == {"confirmedStructuredBusinessContext", "engineeringRules"}
+    assert "sourceSeed" not in payload["engineeringRules"][0]
+    assert "cannot read or scan repository source" in prompt
+    assert "businessContextNeed" in prompt
+
+
+def test_planner_is_one_tool_free_pass(monkeypatch) -> None:
+    captured: dict = {}
+    agent = MagicMock()
+    agent.invoke.return_value = _structured_response(
+        [
+            _decision("eng-1", "SELECT", "CUSTOMER_CONTEXT_SCOPE_MATCH", ["CUSTOMER_CONTEXT"]),
+            _decision("eng-2", "SELECT", "CUSTOMER_CONTEXT_SCOPE_MATCH", ["CUSTOMER_CONTEXT"]),
+        ]
+    )
+
+    def fake_create_agent(model, **kwargs):
+        captured.update(kwargs, model=model)
+        return agent
+
+    monkeypatch.setattr(
+        sys.modules[EngineeringRulePlanner.__module__], "create_agent", fake_create_agent
+    )
+    EngineeringRulePlanner("test:model").plan(
+        candidates=(_candidate("eng-1", source_hits=0), _candidate("eng-2", source_hits=0)),
+        confirmed_customer_context=_confirmed_context(),
+        graph=_graph(),
+        workflow_run_id="run-1",
+    )
+
+    assert captured["tools"] == []
+    assert "backend" not in captured
+    assert "cannot read repository source" in captured["system_prompt"]
+
+
+def test_business_context_need_keeps_rules_selected_and_is_asked_once(native_agent) -> None:
+    need = {
+        "engineeringRuleIds": ["eng-2", "eng-1", "unknown-rule"],
+        "businessContextNeed": "Whether the product is offered to patients.",
+        "whyNeeded": "It decides which safeguards apply.",
+        "resolutionCriteria": ["Customer states whether patients use the product"],
+    }
+    native_agent.invoke.return_value = {
+        "structured_response": {
+            "decisions": [
+                _decision("eng-1", "SKIP", "NO_CUSTOMER_CONTEXT_OR_SOURCE_SCOPE_SIGNAL", []),
+                _decision("eng-2", "SELECT", "UNCERTAIN_SCOPE_INVESTIGATE", ["RULE_CONTRACT"]),
+                _decision("eng-3", "SELECT", "BASELINE_CONTROL_RELEVANT", ["RULE_CONTRACT"]),
+            ],
+            "businessContextNeeds": [need],
+        }
+    }
+
+    plan = EngineeringRulePlanner("test:model").plan(
+        candidates=tuple(_candidate(rule_id, source_hits=0) for rule_id in ("eng-1", "eng-2", "eng-3")),
+        confirmed_customer_context=_confirmed_context(),
+        graph=_graph(),
+        workflow_run_id="run-1",
+    )
+
+    assert plan.selected_rule_ids == ("eng-1", "eng-2", "eng-3")
+    overrides = {row.engineering_rule_id: row.validation_override for row in plan.decision_audit}
+    assert overrides["eng-1"] == "BUSINESS_CONTEXT_NEEDED"
+    (context_need,) = plan.context_needs
+    assert context_need.engineering_rule_ids == ("eng-1", "eng-2")
+    assert context_need.business_context_need == need["businessContextNeed"]
+    # The identity depends only on the affected rules, so the same gap is never
+    # re-asked after the Customer answered it.
+    reworded = EngineeringRulePlanner("test:model")._validate_plan(
+        tuple(_candidate(rule_id, source_hits=0) for rule_id in ("eng-1", "eng-2")),
+        {
+            "decisions": [],
+            "businessContextNeeds": [
+                {**need, "engineeringRuleIds": ["eng-1", "eng-2"], "businessContextNeed": "Other words."}
+            ],
+        },
+        confirmed_context=_confirmed_context(),
+    )
+    assert reworded.context_needs[0].need_id == context_need.need_id
+
+
+def test_business_context_need_that_leaks_internal_details_is_dropped(native_agent) -> None:
+    native_agent.invoke.return_value = {
+        "structured_response": {
+            "decisions": [
+                _decision("eng-1", "SELECT", "BASELINE_CONTROL_RELEVANT", ["RULE_CONTRACT"]),
+                _decision("eng-2", "SELECT", "BASELINE_CONTROL_RELEVANT", ["RULE_CONTRACT"]),
+            ],
+            "businessContextNeeds": [
+                {
+                    "engineeringRuleIds": ["eng-1"],
+                    "businessContextNeed": "Confirm checkpoint ckpt-123 for EngineeringRule eng-1.",
+                    "resolutionCriteria": ["checkpoint"],
+                }
+            ],
+        }
+    }
+
+    plan = EngineeringRulePlanner("test:model").plan(
+        candidates=(_candidate("eng-1", source_hits=0), _candidate("eng-2", source_hits=0)),
+        confirmed_customer_context=_confirmed_context(),
+        graph=_graph(),
+        workflow_run_id="run-1",
+    )
+
+    assert plan.context_needs == ()
 
 
 def _engineering_rule(rule_id: str):
@@ -382,13 +485,6 @@ def _packet(rule_id: str) -> InvestigationPacket:
 
 
 def test_planned_pipeline_investigates_only_selected_rule(tmp_path) -> None:
-    wiki = tmp_path / "openwiki" / "architecture"
-    wiki.mkdir(parents=True)
-    (wiki / "overview.md").write_text(
-        "# Architecture\n\nAI model invocation flows through a review surface.",
-        encoding="utf-8",
-    )
-
     api_client = MagicMock()
     api_client.get_active_legal_rule_catalog.return_value = {
         "versionId": "catalog-v1",
@@ -462,11 +558,10 @@ def test_planned_pipeline_investigates_only_selected_rule(tmp_path) -> None:
     assert result.evaluations[0].engineering_rule_id == "eng-1"
     investigator.investigate.assert_called_once()
     planner.plan.assert_called_once()
-    assert planner.plan.call_args.kwargs["openwiki_context"]["available"] is True
-    assert (
-        planner.plan.call_args.kwargs["openwiki_context"]["authority"]
-        == "UNVERIFIED_ARCHITECTURE_HINT"
-    )
+    assert result.observability["repository_planning_context"] == {
+        "source": "LCSP_REPOSITORY_DATABASE",
+        "codebaseMemoryMcpOptional": True,
+    }
     confirmed_arg = planner.plan.call_args.kwargs["confirmed_customer_context"]
     assert confirmed_arg.context_revision == 3
     assert confirmed_arg.confirmed_statement_refs == ("stmt-sector",)
@@ -475,13 +570,6 @@ def test_planned_pipeline_investigates_only_selected_rule(tmp_path) -> None:
 def test_planned_pipeline_streams_planner_and_investigator_activity_when_scan_job_id_given(
     tmp_path,
 ) -> None:
-    wiki = tmp_path / "openwiki" / "architecture"
-    wiki.mkdir(parents=True)
-    (wiki / "overview.md").write_text(
-        "# Architecture\n\nAI model invocation flows through a review surface.",
-        encoding="utf-8",
-    )
-
     api_client = MagicMock()
     api_client.get_active_legal_rule_catalog.return_value = {
         "versionId": "catalog-v1",
@@ -644,13 +732,6 @@ def test_planned_pipeline_streams_planner_and_investigator_activity_when_scan_jo
 def test_planned_pipeline_streams_investigation_failure_as_runtime_activity(
     tmp_path,
 ) -> None:
-    wiki = tmp_path / "openwiki" / "architecture"
-    wiki.mkdir(parents=True)
-    (wiki / "overview.md").write_text(
-        "# Architecture\n\nAI model invocation flows through a review surface.",
-        encoding="utf-8",
-    )
-
     api_client = MagicMock()
     api_client.get_active_legal_rule_catalog.return_value = {
         "versionId": "catalog-v1",
@@ -811,13 +892,6 @@ def test_planned_pipeline_execution_failure_is_runtime_error_not_domain_limitati
 
 
 def test_planned_pipeline_omits_runtime_activity_without_scan_job_id(tmp_path) -> None:
-    wiki = tmp_path / "openwiki" / "architecture"
-    wiki.mkdir(parents=True)
-    (wiki / "overview.md").write_text(
-        "# Architecture\n\nAI model invocation flows through a review surface.",
-        encoding="utf-8",
-    )
-
     api_client = MagicMock()
     api_client.get_active_legal_rule_catalog.return_value = {
         "versionId": "catalog-v1",
@@ -866,6 +940,11 @@ def test_planned_pipeline_omits_runtime_activity_without_scan_job_id(tmp_path) -
         engineering_rule_id="eng-1",
         status="COMPLIANT",
         evidence_refs=("evidence:ai:1",),
+    )
+    planner = MagicMock()
+    planner.plan.return_value = EngineeringRulePlan(
+        selected_rule_ids=("eng-1",),
+        skipped_rule_ids=(),
     )
 
     pipeline = PlannedEngineeringInvestigationPipeline(
@@ -918,12 +997,7 @@ def test_planned_pipeline_blocks_without_confirmed_structured_context(tmp_path) 
     planner.plan.assert_not_called()
 
 
-def test_planned_pipeline_falls_back_all_when_openwiki_runtime_context_missing(
-    tmp_path,
-    monkeypatch,
-) -> None:
-    monkeypatch.setenv("OPENWIKI_RUNTIME_COMMAND", "missing-openwiki-runtime-command")
-
+def test_planned_pipeline_uses_repository_planning_context(tmp_path) -> None:
     api_client = MagicMock()
     api_client.get_active_legal_rule_catalog.return_value = {
         "versionId": "catalog-v1",
@@ -945,6 +1019,10 @@ def test_planned_pipeline_falls_back_all_when_openwiki_runtime_context_missing(
     query_executor = MagicMock()
     query_executor.execute.side_effect = [_packet("eng-1"), _packet("eng-2")]
     planner = MagicMock()
+    planner.plan.return_value = EngineeringRulePlan(
+        selected_rule_ids=("eng-1", "eng-2"),
+        skipped_rule_ids=(),
+    )
 
     investigator = MagicMock()
     investigator.investigate.side_effect = [
@@ -1001,30 +1079,29 @@ def test_planned_pipeline_falls_back_all_when_openwiki_runtime_context_missing(
         workspace_path=tmp_path,
     )
 
-    planner.plan.assert_not_called()
+    planner.plan.assert_called_once()
     assert result.engineering_rules_executed == 2
     assert [item.engineering_rule_id for item in result.evaluations] == [
         "eng-1",
         "eng-2",
     ]
-    assert result.observability["openwiki"] == {
-        "available": False,
-        "error": "OPENWIKI_RUNTIME_COMMAND_UNAVAILABLE",
-        "fallback": "OPENWIKI_REQUIRED_FALLBACK_ALL",
+    assert "openwiki" not in result.observability
+    assert result.observability["repository_planning_context"] == {
+        "source": "LCSP_REPOSITORY_DATABASE",
+        "codebaseMemoryMcpOptional": True,
     }
     assert result.observability["candidate_source_hit_distribution"][
         "candidate_count"
     ] == 2
     assert result.observability["planner_decision_distribution"][
         "validation_override_counts"
-    ] == {"OPENWIKI_REQUIRED_FALLBACK_ALL": 2}
+    ] == {}
 
 
 def test_planned_pipeline_persists_compile_failure_observability(
     tmp_path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("OPENWIKI_RUNTIME_COMMAND", "missing-openwiki-runtime-command")
 
     api_client = MagicMock()
     api_client.get_active_legal_rule_catalog.return_value = {
@@ -1063,6 +1140,11 @@ def test_planned_pipeline_persists_compile_failure_observability(
         status="COMPLIANT",
         evidence_refs=("evidence:ai:1",),
     )
+    planner = MagicMock()
+    planner.plan.return_value = EngineeringRulePlan(
+        selected_rule_ids=("eng-ok",),
+        skipped_rule_ids=(),
+    )
 
     pipeline = PlannedEngineeringInvestigationPipeline(
         api_client=api_client,
@@ -1072,7 +1154,7 @@ def test_planned_pipeline_persists_compile_failure_observability(
         query_executor=query_executor,
         investigator=investigator,
         evaluator=evaluator,
-        planner=MagicMock(),
+        planner=planner,
     )
 
     result = pipeline.run(
@@ -1101,7 +1183,6 @@ def test_planned_pipeline_recovers_corpus_sources_and_retries_when_no_rules_prep
     tmp_path,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("OPENWIKI_RUNTIME_COMMAND", "missing-openwiki-runtime-command")
 
     api_client = MagicMock()
     api_client.get_active_legal_rule_catalog.return_value = {
@@ -1144,6 +1225,11 @@ def test_planned_pipeline_recovers_corpus_sources_and_retries_when_no_rules_prep
         status="COMPLIANT",
         evidence_refs=("evidence:ai:1",),
     )
+    planner = MagicMock()
+    planner.plan.return_value = EngineeringRulePlan(
+        selected_rule_ids=("eng-1",),
+        skipped_rule_ids=(),
+    )
 
     pipeline = PlannedEngineeringInvestigationPipeline(
         api_client=api_client,
@@ -1153,7 +1239,7 @@ def test_planned_pipeline_recovers_corpus_sources_and_retries_when_no_rules_prep
         query_executor=query_executor,
         investigator=investigator,
         evaluator=evaluator,
-        planner=MagicMock(),
+        planner=planner,
         corpus_recovery_driver=recovery_driver,
     )
 
@@ -1450,3 +1536,60 @@ def test_planned_pipeline_stops_before_planner_when_engineering_rule_triage_find
     assert rule_service.get_or_compile.call_count == 2
     planner.plan.assert_not_called()
     investigator.investigate.assert_not_called()
+
+
+def _context_need() -> PlannerContextNeed:
+    return PlannerContextNeed(
+        need_id="planner:abc",
+        engineering_rule_ids=("eng-1",),
+        business_context_need="Whether the product is offered to patients.",
+        resolution_criteria=("Customer states whether patients use the product",),
+    )
+
+
+@pytest.mark.parametrize("registered", [True, False])
+def test_pipeline_routes_planner_context_need_to_interview(registered) -> None:
+    api_client = MagicMock()
+    api_client.post_interview_planner_context_need.return_value = {
+        "registered": registered
+    }
+    pipeline = PlannedEngineeringInvestigationPipeline.__new__(
+        PlannedEngineeringInvestigationPipeline
+    )
+    pipeline._api_client = api_client
+
+    asked = pipeline._request_planner_context(
+        _context_need(),
+        assessment_id="assessment-1",
+        user_id="user-1",
+        workflow_run_id="run-1",
+    )
+
+    assert asked is registered
+    api_client.post_interview_planner_context_need.assert_called_once_with(
+        "assessment-1",
+        {
+            "actorId": "user-1",
+            "needId": "planner:abc",
+            "businessContextNeed": "Whether the product is offered to patients.",
+            "resolutionCriteria": ["Customer states whether patients use the product"],
+            "whyNeeded": None,
+            "affectedRuleIds": ["eng-1"],
+            "workflowRunId": "run-1",
+        },
+    )
+
+
+def test_pipeline_never_asks_without_trusted_assessment_user() -> None:
+    pipeline = PlannedEngineeringInvestigationPipeline.__new__(
+        PlannedEngineeringInvestigationPipeline
+    )
+    pipeline._api_client = MagicMock()
+
+    assert (
+        pipeline._request_planner_context(
+            _context_need(), assessment_id="assessment-1", user_id=None, workflow_run_id="run-1"
+        )
+        is False
+    )
+    pipeline._api_client.post_interview_planner_context_need.assert_not_called()

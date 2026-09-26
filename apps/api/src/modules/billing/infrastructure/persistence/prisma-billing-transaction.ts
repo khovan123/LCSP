@@ -104,6 +104,32 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
                 maxInvocations: i.maxInvocations ?? 1n,
               },
             }),
+          findInvocationClaim: async (reservationId, invocationId) => {
+            const claim = await tx.billingReservationInvocationClaim.findUnique(
+              {
+                where: {
+                  reservationId_invocationId: { reservationId, invocationId },
+                },
+              },
+            );
+            return claim
+              ? {
+                  reservationId: claim.reservationId,
+                  invocationId: claim.invocationId,
+                  authorizedChargeCredits: claim.authorizedChargeCredits,
+                  authorizationFingerprint: claim.authorizationFingerprint,
+                  settledAt: claim.settledAt,
+                }
+              : null;
+          },
+          sumUnsettledAuthorizedChargeCredits: async (reservationId) => {
+            const aggregate =
+              await tx.billingReservationInvocationClaim.aggregate({
+                where: { reservationId, settledAt: null },
+                _sum: { authorizedChargeCredits: true },
+              });
+            return aggregate._sum.authorizedChargeCredits ?? 0n;
+          },
           claimInvocation: async (i) => {
             const existing =
               await tx.billingReservationInvocationClaim.findUnique({
@@ -119,6 +145,8 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
               data: {
                 reservationId: i.reservationId,
                 invocationId: i.invocationId,
+                authorizedChargeCredits: i.authorizedChargeCredits ?? 0n,
+                authorizationFingerprint: i.authorizationFingerprint ?? null,
               },
             });
             const updated = await tx.$executeRaw(Prisma.sql`
@@ -126,7 +154,6 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
                 SET "invocationsStarted" = "invocationsStarted" + 1
                 WHERE "id" = ${i.reservationId}
                   AND "status" = 'RESERVED'
-                  AND "invocationsStarted" < "maxInvocations"
               `);
             if (updated !== 1) {
               await tx.billingReservationInvocationClaim.delete({
@@ -140,6 +167,28 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
               return false;
             }
             return true;
+          },
+          settleInvocationClaim: async (i) => {
+            const updated =
+              await tx.billingReservationInvocationClaim.updateMany({
+                where: {
+                  reservationId: i.reservationId,
+                  invocationId: i.invocationId,
+                  settledAt: null,
+                },
+                data: { settledAt: new Date() },
+              });
+            if (updated.count === 1) return true;
+            const existing =
+              await tx.billingReservationInvocationClaim.findUnique({
+                where: {
+                  reservationId_invocationId: {
+                    reservationId: i.reservationId,
+                    invocationId: i.invocationId,
+                  },
+                },
+              });
+            return existing?.settledAt != null;
           },
           listReservedForWallet: (walletId) =>
             tx.billingReservation.findMany({
@@ -424,11 +473,17 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
           },
         },
         runtimePolicy: {
-          findApplicable: async (role, occurredAt) => {
+          findApplicable: async (role, provider, model, occurredAt) => {
             const rows = await tx.runtimeModelPolicySnapshot.findMany({
-              where: { role, effectiveAt: { lte: occurredAt } },
+              where: {
+                role,
+                provider,
+                model,
+                effectiveAt: { lte: occurredAt },
+              },
               orderBy: { effectiveAt: "desc" },
             });
+            if (rows.length === 0) return null;
             const selected = resolveEffectiveRuntimeModel(
               rows,
               role,

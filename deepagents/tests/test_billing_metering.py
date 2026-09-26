@@ -1,18 +1,29 @@
 from pathlib import Path
 from types import SimpleNamespace
+import time
+
+import pytest
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from middleware.billing_metering import (
+    BillingBudgetExhausted,
     BillingReservationUnavailable,
     BillingMeteringError,
     BillingMeteringMiddleware,
     BillingMeteringSession,
-    BillingUsageUnavailable,
+    ModelContextWindowExceeded,
     activate_billing_metering,
     extract_provider_usage,
 )
-from middleware.billing_recovery import drain
-from tools.common.capabilities.managed.invocation import _billing_metering_session
-from tools.common.capabilities.managed.rabbitmq_consumer import _with_billing_attempt
+from middleware.billing_recovery import (
+    drain,
+    enqueue_usage,
+    _normalize_usage_recovery_payload,
+)
+from tools.common.capabilities.platform.api_client import WorkerCallbackError
+from tools.common.capabilities.platform.callback_schemas import SettledUsagePayload
+from tools.common.capabilities.agent_runtime.invocation import _billing_metering_session
+from tools.common.capabilities.agent_runtime.rabbitmq_consumer import _with_billing_attempt
 
 
 class FakeClient:
@@ -109,6 +120,297 @@ def test_metering_middleware_records_one_payload_for_one_response():
     assert payload.inputTokens == "2"
     assert payload.cachedInputTokens == "1"
     assert payload.model_dump(exclude_none=True).get("reasoningTokens") is None
+
+
+def test_billing_invocation_metadata_never_caps_agent_run():
+    class ClaimingClient(FakeClient):
+        def __init__(self):
+            super().__init__()
+            self.claims = []
+
+        def claim_billing_invocation(self, reservation_id, payload):
+            self.claims.append((reservation_id, payload.invocationId))
+
+    client = ClaimingClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-long-run",
+        run_id="run-long",
+        reservation_id="reservation-long",
+        agent_role="investigator",
+        max_input_tokens=1,
+        max_input_bytes=1,
+        max_invocations=1,
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="google_genai", model_name="gemini-test"),
+        messages=[
+            HumanMessage(content="large managed history " * 2000),
+            ToolMessage(
+                content="large repository tool result " * 2000,
+                tool_call_id="call-large-history",
+                name="read_file",
+            ),
+        ],
+    )
+    middleware = BillingMeteringMiddleware()
+
+    with activate_billing_metering(session):
+        for index in range(20):
+            result = middleware.wrap_model_call(
+                request,
+                lambda _request, index=index: response(
+                    response_id=f"resp-long-{index}"
+                ),
+            )
+            assert result is not None
+
+    assert len(client.claims) == 20
+    assert len({invocation_id for _, invocation_id in client.claims}) == 20
+    assert len(client.payloads) == 20
+    assert session._provider_invocation_count == 20
+
+
+def test_known_provider_context_window_exceeded_is_not_billing_usage_error():
+    client = FakeClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-context",
+        run_id="run-context",
+        reservation_id="reservation-context",
+        agent_role="investigator",
+        max_invocations=1,
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(
+            provider="google_genai",
+            model_name="gemini-test",
+            profile={"max_input_tokens": 10},
+        ),
+        messages=[HumanMessage(content="known context overflow " * 100)],
+    )
+
+    with activate_billing_metering(session), pytest.raises(
+        ModelContextWindowExceeded,
+        match="active provider context window",
+    ):
+        BillingMeteringMiddleware().wrap_model_call(
+            request,
+            lambda _request: response(),
+        )
+
+    assert client.payloads == []
+
+
+def test_provider_input_limit_does_not_include_output_budget():
+    client = FakeClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-context-budget",
+        run_id="run-context-budget",
+        reservation_id="reservation-context-budget",
+        agent_role="investigator",
+        max_output_tokens=4096,
+        max_reasoning_tokens=1024,
+        max_invocations=1,
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(
+            provider="google_genai",
+            model_name="gemini-test",
+            profile={"max_input_tokens": 100},
+        ),
+        messages=[HumanMessage(content="small input")],
+    )
+
+    metrics = session.authorize_request_context(request, request.model)
+
+    assert metrics.estimated_input_tokens <= 100
+    assert metrics.max_output_tokens == 4096
+    assert metrics.max_reasoning_tokens == 1024
+
+
+def test_billing_claim_budget_failure_happens_before_provider_call():
+    class BudgetClient(FakeClient):
+        def claim_billing_invocation(self, _reservation_id, payload):
+            assert payload.provider == "GOOGLE_GENAI"
+            assert payload.model == "gemini-test"
+            assert int(payload.estimatedInputTokens) > 0
+            raise WorkerCallbackError("BILLING_INSUFFICIENT_CREDITS", status_code=402)
+
+    session = BillingMeteringSession(
+        api_client=BudgetClient(),
+        assessment_id="assessment-budget",
+        run_id="run-budget",
+        reservation_id="reservation-budget",
+        agent_role="investigator",
+        max_output_tokens=4096,
+        max_reasoning_tokens=0,
+        max_invocations=1,
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="google_genai", model_name="gemini-test"),
+        messages=[HumanMessage(content="bill this invocation")],
+    )
+    provider_called = False
+
+    def provider_handler(_request):
+        nonlocal provider_called
+        provider_called = True
+        return response()
+
+    with activate_billing_metering(session), pytest.raises(BillingBudgetExhausted):
+        BillingMeteringMiddleware().wrap_model_call(request, provider_handler)
+
+    assert provider_called is False
+    assert session.api_client.payloads == []
+
+
+def test_model_call_telemetry_emits_heartbeat_and_completion(monkeypatch):
+    from middleware import billing_metering
+
+    events = []
+    monkeypatch.setattr(billing_metering, "_MODEL_CALL_HEARTBEAT_SECONDS", 0.01)
+    monkeypatch.setattr(
+        billing_metering,
+        "publish_agent_stream_event",
+        lambda event_type, **fields: events.append((event_type, fields)),
+    )
+    client = FakeClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-1",
+        run_id="run-1",
+        reservation_id="reservation-1",
+        agent_role="planner",
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="google_genai", model_name="gemini-test")
+    )
+
+    def slow_provider(_request):
+        time.sleep(0.03)
+        return response()
+
+    with activate_billing_metering(session):
+        BillingMeteringMiddleware().wrap_model_call(request, slow_provider)
+
+    event_types = [event_type for event_type, _ in events]
+    assert "MODEL_CALL_STARTED" in event_types
+    assert "MODEL_CALL_HEARTBEAT" in event_types
+    assert "MODEL_CALL_COMPLETED" in event_types
+    started = next(fields for event_type, fields in events if event_type == "MODEL_CALL_STARTED")
+    assert started["data"]["provider"] == "google_genai"
+    assert started["data"]["model"] == "gemini-test"
+    assert started["data"]["timeout_seconds"] == 300.0
+    assert len(client.payloads) == 1
+
+
+def test_model_request_diagnostic_logs_shape_without_prompt_or_tool_content(monkeypatch):
+    import middleware.billing_metering as billing_module
+
+    events = []
+
+    class Logger:
+        def info(self, event, **fields):
+            events.append((event, fields))
+
+    monkeypatch.setattr(billing_module, "logger", Logger())
+    client = FakeClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-diagnostic",
+        run_id="run-diagnostic",
+        reservation_id="reservation-diagnostic",
+        agent_role="investigator",
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="llm7", model_name="GLM-5.3-Flash"),
+        messages=[
+            HumanMessage(content="private prompt must not be logged"),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "ls",
+                        "args": {"path": "/workspace/repository"},
+                        "id": "call_sensitive_tool_id",
+                    }
+                ],
+            ),
+            ToolMessage(
+                content="private tool result must not be logged",
+                tool_call_id="call_sensitive_tool_id",
+                name="ls",
+            ),
+        ],
+        tools=[SimpleNamespace(name="ls")],
+        tool_choice={"type": "function", "name": "ls"},
+        parallel_tool_calls=True,
+    )
+
+    with activate_billing_metering(session):
+        BillingMeteringMiddleware().wrap_model_call(request, lambda _: response())
+
+    event, fields = next(
+        item for item in events if item[0] == "MODEL_REQUEST_DIAGNOSTIC"
+    )
+    assert event == "MODEL_REQUEST_DIAGNOSTIC"
+    assert fields["provider"] == "llm7"
+    assert fields["model"] == "GLM-5.3-Flash"
+    assert fields["message_roles"] == ["user", "assistant(tool_calls)", "tool"]
+    assert fields["tool_count"] == 1
+    assert fields["tool_result_count"] == 1
+    assert fields["tool_call_id_shapes"] == [
+        {
+            "length": len("call_sensitive_tool_id"),
+            "has_call_prefix": True,
+            "contains_whitespace": False,
+        }
+    ]
+    assert fields["tool_choice"] is None
+    serialized = str(fields)
+    assert "private prompt" not in serialized
+    assert "private tool result" not in serialized
+    assert "call_sensitive_tool_id" not in serialized
+    assert "/workspace/repository" not in serialized
+
+
+def test_model_call_timeout_event_emits_without_settling_usage(monkeypatch):
+    from middleware import billing_metering
+
+    events = []
+    monkeypatch.setattr(
+        billing_metering,
+        "publish_agent_stream_event",
+        lambda event_type, **fields: events.append((event_type, fields)),
+    )
+    client = FakeClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-timeout",
+        run_id="run-timeout",
+        reservation_id="reservation-timeout",
+        agent_role="planner",
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="google_genai", model_name="gemini-test")
+    )
+
+    with activate_billing_metering(session), pytest.raises(TimeoutError):
+        BillingMeteringMiddleware().wrap_model_call(
+            request,
+            lambda _request: (_ for _ in ()).throw(TimeoutError("provider timed out")),
+        )
+
+    assert [event_type for event_type, _ in events] == [
+        "MODEL_CALL_STARTED",
+        "MODEL_CALL_TIMEOUT",
+    ]
+    timeout = events[-1][1]
+    assert timeout["data"]["provider"] == "google_genai"
+    assert timeout["data"]["error_type"] == "TimeoutError"
+    assert client.payloads == []
 
 
 def test_key_fallback_attempts_charge_only_the_returned_response(monkeypatch):
@@ -226,6 +528,8 @@ def test_output_cap_preserves_authorized_identity_for_settlement():
     assert payload.model == "gpt-test"
     assert payload.inputTokens == "3"
     assert payload.outputTokens == "2"
+    assert payload.occurredAt.endswith("Z")
+    assert "+00:00" not in payload.occurredAt
 
 
 def test_metering_middleware_records_missing_usage_for_terminal_release():
@@ -308,22 +612,35 @@ def test_broker_retry_attempt_is_carried_only_inside_billing_context():
     assert "attempt" not in message["billing"]
 
 
-def test_usage_delivery_failure_is_not_converted_to_provider_fallback():
+def test_usage_delivery_failure_is_queued_without_invalid_agent_stream_event(
+    tmp_path: Path, monkeypatch
+):
+    from middleware import billing_metering
+
+    events = []
+    monkeypatch.setattr(
+        billing_metering,
+        "publish_agent_stream_event",
+        lambda event_type, **fields: events.append((event_type, fields)),
+    )
     session = BillingMeteringSession(
         api_client=FailingClient(),
         assessment_id="assessment-1",
         run_id="run-1",
         reservation_id="reservation-1",
         agent_role="planner",
+        recovery_store_path=str(tmp_path / "billing.sqlite3"),
     )
     request = SimpleNamespace(
         model=SimpleNamespace(provider="openai", model_name="gpt-test")
     )
 
-    import pytest
-
-    with activate_billing_metering(session), pytest.raises(BillingMeteringError):
+    with activate_billing_metering(session):
         BillingMeteringMiddleware().wrap_model_call(request, lambda _: response())
+    event_types = [event_type for event_type, _ in events]
+    assert "BILLING_CALLBACK_RECOVERY_QUEUED" not in event_types
+    assert event_types == ["MODEL_CALL_STARTED", "MODEL_CALL_COMPLETED"]
+    assert drain(session.recovery_store_path, RecoveryClient()) == 0
 
 
 def test_usage_delivery_failure_is_terminal_for_model_retry():
@@ -362,6 +679,69 @@ def test_recovery_store_failure_is_terminal_after_provider_success(monkeypatch):
     assert not retry_model_error(BillingMeteringError(OSError("recovery-store-failed")))
 
 
+def test_recovery_normalizes_legacy_utc_offset_timestamp() -> None:
+    payload = {
+        "occurredAt": "2026-09-24T16:39:22.123456+00:00",
+        "invocationId": "inv-1",
+    }
+
+    normalized = _normalize_usage_recovery_payload(payload)
+
+    assert normalized["occurredAt"] == "2026-09-24T16:39:22.123456Z"
+    assert normalized["invocationId"] == "inv-1"
+    assert payload["occurredAt"].endswith("+00:00")
+
+
+def test_stale_usage_recovery_is_dead_lettered_once(tmp_path: Path) -> None:
+    import sqlite3
+
+    path = tmp_path / "billing.sqlite3"
+    payload = SettledUsagePayload(
+        assessmentId="stale-assessment",
+        runId="run-1",
+        reservationId="reservation-1",
+        invocationId="invocation-1",
+        agentRole="planner",
+        provider="OPENAI",
+        model="gpt-test",
+        inputTokens="1",
+        outputTokens="1",
+        occurredAt="2026-09-24T16:39:22Z",
+    )
+    enqueue_usage(path, payload)
+
+    class OwnershipMismatchClient:
+        attempts = 0
+
+        def post_settled_usage(self, _payload):
+            self.attempts += 1
+            raise WorkerCallbackError(
+                "BILLING_OWNERSHIP_MISMATCH: Client error",
+                status_code=403,
+            )
+
+    client = OwnershipMismatchClient()
+    assert drain(path, client) == 0
+    assert drain(path, client) == 0
+    assert client.attempts == 1
+
+    db = sqlite3.connect(path)
+    try:
+        row = db.execute(
+            """
+            SELECT state, dead_letter_reason
+            FROM billing_callback_recovery
+            WHERE recovery_key = ?
+            """,
+            ("usage:reservation-1:invocation-1",),
+        ).fetchone()
+    finally:
+        db.close()
+    assert row[0] == "POISON"
+    assert "BILLING_OWNERSHIP_MISMATCH" in row[1]
+
+
+
 def test_usage_failure_is_durable_and_replayed_without_provider_retry(tmp_path: Path):
     client = RecoveryClient()
     session = BillingMeteringSession(
@@ -376,9 +756,7 @@ def test_usage_failure_is_durable_and_replayed_without_provider_retry(tmp_path: 
         model=SimpleNamespace(provider="openai", model_name="gpt-test")
     )
 
-    import pytest
-
-    with activate_billing_metering(session), pytest.raises(BillingMeteringError):
+    with activate_billing_metering(session):
         BillingMeteringMiddleware().wrap_model_call(request, lambda _: response())
     assert len(client.payloads) == 0
 
@@ -402,19 +780,25 @@ def test_release_failure_is_durable_and_replayed_without_model_retry(tmp_path: P
         recovery_store_path=str(tmp_path / "billing.sqlite3"),
     )
 
-    import pytest
-
-    with pytest.raises(RuntimeError):
-        session.release()
+    session.release()
     client.fail_release = False
     assert drain(session.recovery_store_path, client) == 1
     assert client.release_ids == ["reservation-1"]
     assert drain(session.recovery_store_path, client) == 0
 
 
-def test_input_ceiling_fails_before_provider_handler():
+def test_reservation_input_byte_ceiling_does_not_cap_provider_context():
+    class ClaimClient(FakeClient):
+        def __init__(self):
+            super().__init__()
+            self.claim = None
+
+        def claim_billing_invocation(self, _reservation_id, payload):
+            self.claim = payload
+
+    client = ClaimClient()
     session = BillingMeteringSession(
-        api_client=FakeClient(),
+        api_client=client,
         assessment_id="assessment-1",
         run_id="run-1",
         reservation_id="reservation-1",
@@ -422,8 +806,12 @@ def test_input_ceiling_fails_before_provider_handler():
         max_input_bytes=1,
         max_output_tokens=1,
         max_reasoning_tokens=0,
+        max_invocations=1,
     )
-    request = SimpleNamespace(messages=[{"role": "user", "content": "too long"}])
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="openai", model_name="gpt-test"),
+        messages=[{"role": "user", "content": "too long"}],
+    )
     called = False
 
     def provider_handler(_request):
@@ -431,24 +819,37 @@ def test_input_ceiling_fails_before_provider_handler():
         called = True
         return response()
 
-    import pytest
-
-    with activate_billing_metering(session), pytest.raises(BillingUsageUnavailable):
+    with activate_billing_metering(session):
         BillingMeteringMiddleware().wrap_model_call(request, provider_handler)
-    assert called is False
+    assert called is True
+    assert client.claim is not None
+    assert int(client.claim.estimatedInputBytes) > 1
 
 
-def test_priced_token_ceiling_is_enforced_before_provider_handler():
+def test_reservation_token_ceiling_does_not_cap_provider_context():
+    class ClaimClient(FakeClient):
+        def __init__(self):
+            super().__init__()
+            self.claim = None
+
+        def claim_billing_invocation(self, _reservation_id, payload):
+            self.claim = payload
+
+    client = ClaimClient()
     session = BillingMeteringSession(
-        api_client=FakeClient(),
+        api_client=client,
         assessment_id="assessment-1",
         run_id="run-1",
         reservation_id="reservation-1",
         agent_role="planner",
         max_input_tokens=4,
         max_input_bytes=16_384,
+        max_invocations=1,
     )
-    request = SimpleNamespace(messages=[{"role": "user", "content": "12345"}])
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="openai", model_name="gpt-test"),
+        messages=[{"role": "user", "content": "12345"}],
+    )
     called = False
 
     def provider_handler(_request):
@@ -456,8 +857,58 @@ def test_priced_token_ceiling_is_enforced_before_provider_handler():
         called = True
         return response()
 
-    import pytest
-
-    with activate_billing_metering(session), pytest.raises(BillingUsageUnavailable):
+    with activate_billing_metering(session):
         BillingMeteringMiddleware().wrap_model_call(request, provider_handler)
-    assert called is False
+    assert called is True
+    assert client.claim is not None
+    assert int(client.claim.estimatedInputTokens) > 4
+
+
+def test_token_ceiling_is_not_treated_as_the_same_number_of_bytes():
+    client = FakeClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-1",
+        run_id="run-1",
+        reservation_id="reservation-1",
+        agent_role="planner",
+        max_input_tokens=4096,
+        max_input_bytes=16_384,
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="openai", model_name="gpt-test"),
+        messages=[{"role": "user", "content": "x" * 5000}],
+    )
+
+    with activate_billing_metering(session):
+        BillingMeteringMiddleware().wrap_model_call(request, lambda _: response())
+
+    assert len(client.payloads) == 1
+
+
+def test_request_shape_diagnostic_stays_bounded_for_long_runs():
+    from middleware.billing_metering import _request_shape_diagnostic
+
+    messages = [HumanMessage(content="start")]
+    for index in range(200):
+        call_id = f"call_{index:04d}"
+        messages.append(
+            AIMessage(content="", tool_calls=[{"name": "ls", "args": {}, "id": call_id}])
+        )
+        messages.append(ToolMessage(content="result", tool_call_id=call_id, name="ls"))
+    request = SimpleNamespace(messages=messages, tools=[])
+
+    fields = _request_shape_diagnostic(
+        request, SimpleNamespace(provider="llm7", model_name="GLM-5.3-Flash")
+    )
+
+    assert fields["message_count"] == 401
+    assert len(fields["message_roles"]) == 8
+    assert fields["message_roles"][-1] == "tool"
+    assert fields["message_roles_omitted"] == 393
+    assert fields["tool_result_count"] == 200
+    # Every id has the same shape, so it is reported once.
+    assert fields["tool_call_id_shapes"] == [
+        {"length": len("call_0000"), "has_call_prefix": True, "contains_whitespace": False}
+    ]
+    assert len(str(fields)) < 1_000

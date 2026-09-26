@@ -204,11 +204,18 @@ export const ASSESSMENT_AGENT_STREAM_EVENT_TYPES = {
   agentStarted: "AGENT_STARTED",
   agentCompleted: "AGENT_COMPLETED",
   agentFailed: "AGENT_FAILED",
+  agentBudgetReached: "AGENT_BUDGET_REACHED",
+  agentContextTrimmed: "AGENT_CONTEXT_TRIMMED",
   subagentSelected: "SUBAGENT_SELECTED",
   modelContentDelta: "MODEL_CONTENT_DELTA",
   modelReasoningDelta: "MODEL_REASONING_DELTA",
   modelRequest: "MODEL_REQUEST",
   modelResult: "MODEL_RESULT",
+  modelCallStarted: "MODEL_CALL_STARTED",
+  modelCallHeartbeat: "MODEL_CALL_HEARTBEAT",
+  modelCallCompleted: "MODEL_CALL_COMPLETED",
+  modelCallFailed: "MODEL_CALL_FAILED",
+  modelCallTimeout: "MODEL_CALL_TIMEOUT",
   decisionModelRequest: "DECISION_MODEL_REQUEST",
   decisionModelResult: "DECISION_MODEL_RESULT",
   decisionThresholdApplied: "DECISION_THRESHOLD_APPLIED",
@@ -241,6 +248,26 @@ export function isAssessmentAgentStreamEventType(
   );
 }
 
+/** Customer-visible pipeline stage one live agent stream event belongs to. */
+export const ASSESSMENT_AGENT_STREAM_STAGES = {
+  scanner: "SCANNER",
+  interview: "INTERVIEW",
+  planner: "PLANNER",
+  investigate: "INVESTIGATE",
+  gate: "GATE",
+} as const;
+
+export type AssessmentAgentStreamStage =
+  (typeof ASSESSMENT_AGENT_STREAM_STAGES)[keyof typeof ASSESSMENT_AGENT_STREAM_STAGES];
+
+export function isAssessmentAgentStreamStage(
+  value: unknown,
+): value is AssessmentAgentStreamStage {
+  return Object.values(ASSESSMENT_AGENT_STREAM_STAGES).includes(
+    value as AssessmentAgentStreamStage,
+  );
+}
+
 export type AssessmentAgentStreamEvent = {
   eventId: string;
   sequence: number;
@@ -250,6 +277,9 @@ export type AssessmentAgentStreamEvent = {
   runId: string;
   correlationId: string;
   eventType: AssessmentAgentStreamEventType;
+  stage: AssessmentAgentStreamStage | null;
+  /** EngineeringRule this event's activity belongs to, while one is investigated. */
+  engineeringRuleId: string | null;
   source: string | null;
   agentName: string | null;
   subagentName: string | null;

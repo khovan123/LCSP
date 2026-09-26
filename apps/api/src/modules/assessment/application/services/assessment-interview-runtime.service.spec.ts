@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
+import {
+  ASSESSMENT_ERROR_CODES,
+  ASSESSMENT_EVENT_TYPES,
+} from "@lcsp/contracts/assessment";
 import {
   ASSESSMENT_CONTEXT_AUTHORITY_STATUSES,
   ASSESSMENT_INTERVIEW_ANSWER_ACTIONS,
@@ -10,12 +13,16 @@ import {
   ASSESSMENT_INTERVIEW_MODES,
   ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS,
   ASSESSMENT_INTERVIEW_OUTCOMES,
+  ASSESSMENT_INTERVIEW_RESUME_REASONS,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
+  ASSESSMENT_INTERVIEW_RESUME_MAX_ATTEMPTS,
+  ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES,
   ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES,
   INTERVIEW_FRONTIER_MATERIALITIES,
   INTERVIEW_FRONTIER_OWNERS,
+  INTERVIEW_PROGRESS_PHASES,
   INTERVIEW_TECHNICAL_CONTRACT_VERSION,
   LEGACY_ASSESSMENT_INTERVIEW_MODES,
   POST_FINDING_RUNTIME_PHASES,
@@ -27,13 +34,17 @@ import {
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { BILLING_ERROR_CODES } from "@lcsp/contracts/billing";
 import { INTERVIEW_TECHNICAL_COVERAGE_STATES } from "@lcsp/contracts/audit";
 
 import type { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import type { OutboxRepository } from "../../../../platform/outbox/outbox.repository.js";
 import type { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import type { InterviewAuditService } from "../../../audit/application/services/interview-audit.service.js";
+import type { BillingAccountingKernel } from "../../../billing/application/shared/billing-accounting.kernel.js";
+import type { ConfigService } from "@nestjs/config";
 import { AssessmentInterviewRuntimeService } from "./assessment-interview-runtime.service.js";
+import { AssessmentModelCreditPreflight } from "./assessment-model-credit-preflight.js";
 import { missingInitialPlanningContextDimensions } from "./interview-minimum-planning-context.js";
 
 const TEST_GUIDANCE_VERSION = "interview-context-test-v1";
@@ -335,6 +346,9 @@ type MockRuntimeEvents = {
   recordToolWaitingInput: jest.Mock<(...args: unknown[]) => Promise<void>>;
   recordToolCompleted: jest.Mock<(...args: unknown[]) => Promise<void>>;
   recordToolFailed: jest.Mock<(...args: unknown[]) => Promise<void>>;
+  getLatestInterviewProgressPhase: jest.Mock<
+    (...args: unknown[]) => Promise<string | null>
+  >;
   getLatestPostFindingState: jest.Mock<
     () => Promise<AssessmentPostFindingRuntimeState | null>
   >;
@@ -608,6 +622,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       recordToolFailed: jest
         .fn<(...args: unknown[]) => Promise<void>>()
         .mockResolvedValue(undefined),
+      getLatestInterviewProgressPhase: jest
+        .fn<(...args: unknown[]) => Promise<string | null>>()
+        .mockResolvedValue(null),
       getLatestPostFindingState: jest
         .fn<() => Promise<AssessmentPostFindingRuntimeState | null>>()
         .mockResolvedValue(null),
@@ -1495,6 +1512,392 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         }),
         mockTx,
       );
+    });
+  });
+
+  describe("failed turn resume", () => {
+    const actor = {
+      userId: "user-1",
+      sessionId: "session-1",
+      role: AUTH_USER_ROLES.customer,
+      scope: "assessment:assessment-1",
+    };
+
+    function failedTurnThread(
+      privateOverrides: Record<string, unknown> = {},
+    ): Record<string, unknown> {
+      return {
+        assessmentId: "assessment-1",
+        contextRevision: 2,
+        processedRevision: 1,
+        activeQuestionId: null,
+        stateJson: {
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+          contextRevision: 2,
+        },
+        privateContextJson: {
+          revisions: [
+            {
+              questionId: "q-1",
+              answer: { questionId: "q-1", freeText: "Answer." },
+              actorId: "user-1",
+              answeredAt: "2026-09-08T00:00:00.000Z",
+              contextRevision: 2,
+              priorRevision: 1,
+              authority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
+              questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+              questionControl: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+              sourceVersion: "snap-1:sha-123456",
+              pgeVersion: "report-1:v1",
+              governedEvidenceRefs: [],
+            },
+          ],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+          failedDecisionRevision: 2,
+          ...privateOverrides,
+        },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+      };
+    }
+
+    it("remembers the failed revision when the worker reports FAILED", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        failedTurnThread({ failedDecisionRevision: undefined }),
+      );
+
+      await expect(
+        service.recordWorkerProgress(
+          "assessment-1",
+          { contextRevision: 2, phase: INTERVIEW_PROGRESS_PHASES.failed },
+          "corr-progress-failed",
+        ),
+      ).resolves.toEqual({ recorded: true });
+
+      expect(mockTx.assessmentInterviewThread.updateMany).toHaveBeenCalledWith({
+        where: {
+          assessmentId: "assessment-1",
+          contextRevision: 2,
+          processedRevision: 1,
+        },
+        data: {
+          privateContextJson: expect.objectContaining({
+            failedDecisionRevision: 2,
+          }),
+        },
+      });
+      expect(mockRuntimeEvents.recordToolFailed).toHaveBeenCalledTimes(1);
+    });
+
+    it("re-queues the same revision with a distinct outbox key and reports QUEUED", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        failedTurnThread(),
+      );
+
+      const result = await service.resumeFailedTurn({
+        assessmentId: "assessment-1",
+        actor,
+        correlationId: "corr-resume-1",
+        resume: { expectedSessionRevision: 2 },
+      });
+
+      expect(result.contextRevision).toBe(2);
+      expect(mockTx.assessmentInterviewThread.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            contextRevision: 2,
+            processedRevision: 1,
+            activeQuestionId: null,
+          }),
+          data: {
+            privateContextJson: expect.objectContaining({
+              failedDecisionRevision: undefined,
+              resumeAttempts: { contextRevision: 2, count: 1 },
+            }),
+          },
+        }),
+      );
+      expect(mockOutboxRepository.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox,
+          idempotencyKey: expect.stringMatching(/:resume-1$/),
+          payload: expect.objectContaining({
+            contextRevision: 2,
+            questionId: "q-1",
+            resumeReason: "INTERVIEW_AGENT_DECISION_REQUIRED",
+            workflowRunId: "10000000-0000-4000-8000-000000000001",
+          }),
+        }),
+        mockTx,
+      );
+      expect(mockRuntimeEvents.recordToolWaitingInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outputSummary: expect.objectContaining({
+            interviewProgress: {
+              contextRevision: 2,
+              phase: INTERVIEW_PROGRESS_PHASES.queued,
+            },
+          }),
+        }),
+      );
+    });
+
+    it("accepts a FAILED progress event recorded before the thread persisted the failure", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        failedTurnThread({ failedDecisionRevision: undefined }),
+      );
+      mockRuntimeEvents.getLatestInterviewProgressPhase.mockResolvedValue(
+        INTERVIEW_PROGRESS_PHASES.failed,
+      );
+
+      await service.resumeFailedTurn({
+        assessmentId: "assessment-1",
+        actor,
+        correlationId: "corr-resume-legacy-failure",
+        resume: { expectedSessionRevision: 2 },
+      });
+
+      expect(
+        mockRuntimeEvents.getLatestInterviewProgressPhase,
+      ).toHaveBeenCalledWith("assessment-1", "assessment_interview", 2);
+      expect(mockOutboxRepository.enqueue).toHaveBeenCalledTimes(1);
+    });
+
+    it("refuses resume with 402 when the owner wallet cannot cover the worker reservation", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        failedTurnThread(),
+      );
+      const rebuildProjection = jest
+        .fn<(userId: string) => Promise<{ availableBalance: bigint }>>()
+        .mockResolvedValue({ availableBalance: 10n });
+      const config = {
+        get: jest.fn((key: string, fallback?: unknown) =>
+          key === "billing.meteringEnabled"
+            ? true
+            : key === "billing.reservationCredits"
+              ? "100"
+              : fallback,
+        ),
+      };
+      Object.defineProperty(service, "creditPreflight", {
+        configurable: true,
+        value: new AssessmentModelCreditPreflight(
+          { assessment: mockTx.assessment } as unknown as PrismaService,
+          {
+            rebuildProjection,
+          } as unknown as BillingAccountingKernel,
+          config as unknown as ConfigService,
+        ),
+      });
+
+      await expect(
+        service.resumeFailedTurn({
+          assessmentId: "assessment-1",
+          actor,
+          correlationId: "corr-resume-no-credits",
+          resume: {},
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          ok: false,
+          problem: {
+            status: 402,
+            code: BILLING_ERROR_CODES.insufficientCredits,
+            meta: { requiredCredits: "100", availableCredits: "10" },
+          },
+        },
+      });
+      expect(rebuildProjection).toHaveBeenCalledWith("user-1");
+      expect(mockOutboxRepository.enqueue).not.toHaveBeenCalled();
+      expect(
+        mockTx.assessmentInterviewThread.updateMany,
+      ).not.toHaveBeenCalled();
+    });
+
+    it("rejects resume when the current revision has not failed", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        failedTurnThread({ failedDecisionRevision: undefined }),
+      );
+
+      await expect(
+        service.resumeFailedTurn({
+          assessmentId: "assessment-1",
+          actor,
+          correlationId: "corr-resume-unavailable",
+          resume: {},
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          ok: false,
+          problem: {
+            status: 409,
+            code: ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.notAvailable,
+          },
+        },
+      });
+      expect(mockOutboxRepository.enqueue).not.toHaveBeenCalled();
+    });
+
+    it("rejects a stale expected session revision", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        failedTurnThread(),
+      );
+
+      await expect(
+        service.resumeFailedTurn({
+          assessmentId: "assessment-1",
+          actor,
+          correlationId: "corr-resume-stale",
+          resume: { expectedSessionRevision: 1 },
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          problem: {
+            code: ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.revisionStale,
+          },
+        },
+      });
+      expect(mockOutboxRepository.enqueue).not.toHaveBeenCalled();
+    });
+
+    it("caps customer retries for one failed revision", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        failedTurnThread({
+          resumeAttempts: {
+            contextRevision: 2,
+            count: ASSESSMENT_INTERVIEW_RESUME_MAX_ATTEMPTS,
+          },
+        }),
+      );
+
+      await expect(
+        service.resumeFailedTurn({
+          assessmentId: "assessment-1",
+          actor,
+          correlationId: "corr-resume-limit",
+          resume: {},
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          problem: {
+            code: ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.limitReached,
+          },
+        },
+      });
+      expect(mockOutboxRepository.enqueue).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("registerPlannerContextNeedForWorker", () => {
+    const plannerNeed = {
+      actorId: "user-1",
+      needId: "planner:abc",
+      businessContextNeed: "Whether the product is offered to patients.",
+      resolutionCriteria: ["Customer states whether patients use the product"],
+      whyNeeded: "It decides which safeguards apply.",
+      affectedRuleIds: ["rule-1", "rule-2"],
+      workflowRunId: "10000000-0000-4000-8000-000000000010",
+    };
+
+    function mockThread(
+      state: AssessmentInterviewRuntimeState,
+      privateContextJson: Record<string, unknown> = {},
+    ) {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
+        assessmentId: "assessment-1",
+        contextRevision: 2,
+        processedRevision: 2,
+        activeQuestionId: null,
+        stateJson: state,
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+          ...privateContextJson,
+        },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+      });
+    }
+
+    it("reopens a ready Interview and resumes the Interview agent for the Planner need", async () => {
+      mockThread({
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+        contextRevision: 2,
+      });
+
+      const result = await service.registerPlannerContextNeedForWorker({
+        assessmentId: "assessment-1",
+        correlationId: "corr-planner-1",
+        need: plannerNeed,
+      });
+
+      expect(result.registered).toBe(true);
+      expect(result.state.outcome).toBe(
+        ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      );
+      expect(
+        mockTx.assessmentInterviewThread.upsert as jest.Mock<
+          (input: unknown) => Promise<Record<string, unknown>>
+        >,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({
+            privateContextJson: expect.objectContaining({
+              plannerContextNeed: expect.objectContaining({
+                needId: "planner:abc",
+                affectedRuleIds: ["rule-1", "rule-2"],
+              }),
+              plannerContextNeedIds: ["planner:abc"],
+            }),
+          }),
+        }),
+      );
+      expect(mockOutboxRepository.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: "command.assessment-interview.resume-agent.v1",
+          payload: expect.objectContaining({
+            // The Interview thread keeps its own root workflow run.
+            workflowRunId: "10000000-0000-4000-8000-000000000001",
+            questionId: "planner:abc",
+            resumeReason:
+              ASSESSMENT_INTERVIEW_RESUME_REASONS.plannerContextRequired,
+          }),
+        }),
+        mockTx,
+      );
+    });
+
+    it("never asks the same Planner need twice", async () => {
+      mockThread(
+        {
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+          contextRevision: 3,
+        },
+        { plannerContextNeedIds: ["planner:abc"] },
+      );
+
+      const result = await service.registerPlannerContextNeedForWorker({
+        assessmentId: "assessment-1",
+        correlationId: "corr-planner-2",
+        need: plannerNeed,
+      });
+
+      expect(result.registered).toBe(false);
+      expect(mockOutboxRepository.enqueue).not.toHaveBeenCalled();
+    });
+
+    it("rejects an incomplete Planner need", async () => {
+      await expect(
+        service.registerPlannerContextNeedForWorker({
+          assessmentId: "assessment-1",
+          correlationId: "corr-planner-3",
+          need: { ...plannerNeed, resolutionCriteria: [] },
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          problem: { code: "INTERVIEW_PLANNER_NEED_INVALID", status: 400 },
+        },
+      });
     });
   });
 

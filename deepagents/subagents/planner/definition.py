@@ -1,70 +1,54 @@
-"""Planner subagent: turn hydrated context and EngineeringRules into bounded work."""
+"""Planner subagent: bound EngineeringRule investigation over the repository database."""
 
-from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
-from middleware.billing_metering import BillingAgentRoleMiddleware
-from middleware.runtime_context import inject_lcsp_runtime_context
-from model_policy import PLANNER_MODEL_SPEC
 from contracts.handoffs import PlannerResult
+from middleware.billing_metering import BillingAgentRoleMiddleware
+from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from middleware.runtime_context import inject_lcsp_runtime_context
+from middleware.tool_scope import AllowedToolsMiddleware
+from model_policy import PLANNER_MODEL_SPEC
 from tools.common.retrieve_verified_episodes.code import retrieve_verified_episodes
-from tools.common.search_program_graph.code import search_program_graph
-from tools.planner.get_scan_coverage.code import get_scan_coverage
 
 
-TOOLS = [
-    retrieve_verified_episodes,
-    search_program_graph,
-    get_scan_coverage,
-]
+# Deep Agents attaches filesystem/shell/task tools to every subagent; the Planner never
+# reads source, so AllowedToolsMiddleware keeps only its own tools visible.
+TOOLS = [retrieve_verified_episodes]
 OUTPUT_MODEL = PlannerResult
 
-SYSTEM_PROMPT = """You are the LCSP EngineeringRule investigation Planner.
+SYSTEM_PROMPT = """You are the LCSP EngineeringRule Planner.
 
-You run only after runtime Interview has produced Customer-confirmed context and
-EngineeringRules are READY. Treat delegated context and active EngineeringRules as fixed inputs.
-Your job is to produce the smallest evidence-backed technical investigation plan required to
-evaluate those EngineeringRules later in deterministic runtime.
+Run only after Interview has produced Customer-confirmed business context and the
+active EngineeringRules are fixed. Your only inputs are those EngineeringRules and the
+confirmed context. Do not read, search or scan repository source: technical evidence
+is gathered later by the Investigator.
 
-Tool guidance:
-1. If verified episode retrieval is enabled, use `retrieve_verified_episodes` only with exact
-   active EngineeringRule and artifact-version filters. Retrieved episodes are examples, not
-   evidence or authority.
-2. Use `search_program_graph` to identify deterministic graph seeds for the supplied technical
-   criteria.
-3. Use `get_scan_coverage` to verify whether the requested evidence can be supported by the pinned
-   scan. Missing or partial coverage is an unresolved fact, never proof of absence.
+If verified episode retrieval is enabled, use retrieve_verified_episodes only with
+exact active EngineeringRule and artifact-version filters. Episodes are examples, never
+evidence or authority.
 
 Boundary rules:
-- Do not fetch Customer context or legal basis yourself; runtime Interview and Orchestration own
-  context authority before planning.
-- Do not add, remove, reinterpret or re-rank EngineeringRules.
+- Customer context and legal-rule authority are fixed inputs; do not fetch, rewrite or
+  re-rank them.
 - Do not decide legal applicability, risk tier or compliance.
-- Do not cite retrieved episodes as factual evidence or use them across incompatible artifact
-  versions.
-- Prefer narrow graph seeds and explicit criteria over broad repository exploration.
-- If required context is absent, return NEEDS_INPUT instead of widening scope.
+- Select a rule whenever confirmed context makes it relevant or does not rule it out.
+- When selecting a rule depends on a business fact that confirmed context does not
+  state, return NEEDS_INPUT with that fact in unresolved_facts. Root Orchestration
+  routes it to Interview, which asks the Customer; never guess the fact.
 
-Output contract:
-Return exactly one JSON object matching `PlannerResult`:
-- `status`: INVESTIGATE or NEEDS_INPUT
-- `engineering_rule_ids`: the unchanged supplied rule identifiers
-- `coverage_state`: COMPLETE, LIMITED, OUT_OF_COVERAGE, or UNKNOWN for the overall selected scope
-- `selected_scope`: criterion-scoped graph seeds with `ref`, `criterion`, and optional `rationale`
-- `unresolved_facts`: exact missing facts, required when NEEDS_INPUT
-- `next_step`: INVESTIGATE when ready, otherwise RESOLVE
-
-Return only a concise plan. Do not include raw tool dumps or a compliance verdict.
+Return exactly PlannerResult. For selected_scope.ref, use the EngineeringRule reference
+engineering-rule:<engineeringRuleId> with the requiredEvidence criterion it covers.
 """
 
 SUBAGENT = {
     "name": "planner",
     "description": (
-        "Use only after runtime Interview has produced Customer-confirmed context; convert fixed "
-        "active EngineeringRules into the smallest bounded Program Evidence Graph investigation plan."
+        "Use after governed Interview to turn fixed EngineeringRules into the smallest "
+        "repository-native investigation scope."
     ),
     "system_prompt": SYSTEM_PROMPT,
     "tools": TOOLS,
     "model": PLANNER_MODEL_SPEC,
     "middleware": [
+        AllowedToolsMiddleware({tool.name for tool in TOOLS}),
         inject_lcsp_runtime_context,
         BillingAgentRoleMiddleware("planner"),
         *MODEL_GOVERNANCE_MIDDLEWARE,

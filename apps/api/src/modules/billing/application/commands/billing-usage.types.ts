@@ -1,8 +1,13 @@
 import type { EffectiveRuntimeModel } from "@lcsp/contracts/billing";
 
 export type BillingUsageReservationInput = {
+  workspaceId?: string;
   assessmentId: string;
+  scanJobId?: string;
+  threadId?: string;
   runId: string;
+  invocationId?: string;
+  modelInvocationId?: string;
   amountCredits: bigint;
   maxChargeCredits: bigint;
   provider: string;
@@ -24,6 +29,12 @@ export type BillingUsageClaimInput = {
   assessmentId: string;
   reservationId: string;
   invocationId: string;
+  provider?: string;
+  model?: string;
+  estimatedInputTokens?: bigint;
+  estimatedInputBytes?: bigint;
+  maxOutputTokens?: bigint;
+  maxReasoningTokens?: bigint;
 };
 
 export type BillingUsageSettlementInput = {

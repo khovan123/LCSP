@@ -22,12 +22,14 @@ import { CreateAssessmentCommand } from "../../application/commands/create-asses
 import { CompleteRepositorySetupCommand } from "../../application/commands/complete-repository-setup/complete-repository-setup.command.js";
 import { DeleteAssessmentCommand } from "../../application/commands/delete-assessment/delete-assessment.command.js";
 import { RenameAssessmentCommand } from "../../application/commands/rename-assessment/rename-assessment.command.js";
+import { MarkAiNotDetectedCommand } from "../../application/commands/mark-ai-not-detected/mark-ai-not-detected.command.js";
 import { GetAssessmentQuery } from "../../application/queries/get-assessment/get-assessment.query.js";
 import { GetAssessmentReadinessQuery } from "../../application/queries/get-assessment-readiness/get-assessment-readiness.query.js";
 import { ListAssessmentsQuery } from "../../application/queries/list-assessments/list-assessments.query.js";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { AssessmentInterviewRuntimeService } from "../../application/services/assessment-interview-runtime.service.js";
 import { AssessmentInterviewSnippetService } from "../../application/services/assessment-interview-snippet.service.js";
+import { AssessmentPipelineContinuationService } from "../../application/services/assessment-pipeline-continuation.service.js";
 import { CreateAssessmentRequest } from "./dto/create-assessment.request.js";
 
 /**
@@ -46,6 +48,7 @@ export class AssessmentController {
     private readonly queryBus: QueryBus,
     private readonly interviewRuntime: AssessmentInterviewRuntimeService,
     private readonly interviewSnippet: AssessmentInterviewSnippetService,
+    private readonly pipelineContinuation: AssessmentPipelineContinuationService,
   ) {}
 
   /**
@@ -270,6 +273,40 @@ export class AssessmentController {
     );
   }
 
+  @Post(":assessmentId/interview/resume")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
+  async resumeInterviewTurn(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.interviewRuntime.resumeFailedTurn({
+        assessmentId,
+        actor: request.rbacContext,
+        correlationId: request.correlationId ?? "worker-interview-context",
+        resume: body as never,
+      }),
+    );
+  }
+
+  @Post(":assessmentId/pipeline/continue")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
+  async continuePipeline(
+    @Param("assessmentId") assessmentId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.pipelineContinuation.continuePipeline({
+        assessmentId,
+        actor: request.rbacContext,
+        correlationId: request.correlationId ?? "customer-pipeline-continue",
+      }),
+    );
+  }
+
   @Post(":assessmentId/post-finding/decisions")
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.customer)
@@ -315,7 +352,30 @@ export class AssessmentController {
 export class InternalAssessmentInterviewController {
   constructor(
     private readonly interviewRuntime: AssessmentInterviewRuntimeService,
+    private readonly commandBus: CommandBus,
   ) {}
+
+  @Post(":assessmentId/ai-not-detected")
+  async markAiNotDetected(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const technicalEvidenceReportId =
+      body && typeof body === "object"
+        ? (body as { technicalEvidenceReportId?: unknown })
+            .technicalEvidenceReportId
+        : undefined;
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new MarkAiNotDetectedCommand(
+          assessmentId,
+          technicalEvidenceReportId,
+          request.correlationId ?? "worker-interview-context",
+        ),
+      ),
+    );
+  }
 
   @Get(":assessmentId/state")
   async getWorkerState(@Param("assessmentId") assessmentId: string) {
@@ -337,6 +397,21 @@ export class InternalAssessmentInterviewController {
         contextRevision: Number(contextRevision),
         sourceVersion,
         pgeVersion,
+      }),
+    );
+  }
+
+  @Post(":assessmentId/planner-context-needs")
+  async registerPlannerContextNeed(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.interviewRuntime.registerPlannerContextNeedForWorker({
+        assessmentId,
+        correlationId: request.correlationId ?? "worker-interview-context",
+        need: body as never,
       }),
     );
   }

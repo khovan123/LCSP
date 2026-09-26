@@ -176,7 +176,13 @@ def sample_ts_repo(workspace_dir: Path) -> Path:
 @pytest.fixture
 def no_secrets_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure tests run without real API keys in environment."""
-    for key in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "LLM7_API_KEY", "GITHUB_TOKEN"]:
+    for key in [
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "LLM7_API_KEY",
+        "INCEPTION_API_KEY",
+        "GITHUB_TOKEN",
+    ]:
         monkeypatch.delenv(key, raising=False)
 
 

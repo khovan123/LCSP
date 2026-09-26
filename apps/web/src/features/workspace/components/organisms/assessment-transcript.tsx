@@ -1,7 +1,7 @@
 "use client";
 
 import { resolveMessage } from "@lcsp/i18n";
-import { useEffect, useRef, type ReactNode, type UIEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode, type Ref } from "react";
 
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
@@ -18,9 +18,8 @@ type AssessmentTranscriptProps = {
 type ChatRailProps = {
   children: ReactNode;
   className?: string;
+  elementRef?: Ref<HTMLDivElement>;
 };
-
-const AUTO_FOLLOW_THRESHOLD_PX = 80;
 
 export function AssessmentTranscript({
   children,
@@ -29,35 +28,27 @@ export function AssessmentTranscript({
   className,
 }: AssessmentTranscriptProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const isFollowingLatestRef = useRef(true);
+  const railRef = useRef<HTMLDivElement | null>(null);
 
-  function handleScroll(event: UIEvent<HTMLDivElement>) {
-    isFollowingLatestRef.current = isNearLatest(event.currentTarget);
-  }
-
-  useEffect(() => {
-    if (autoScrollKey === undefined) {
-      return;
-    }
-
+  useLayoutEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) {
       return;
     }
-
-    if (!isFollowingLatestRef.current && !isNearLatest(viewport)) {
-      return;
-    }
-
-    const prefersReducedMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    viewport.scrollTo({
-      top: viewport.scrollHeight,
-      behavior: prefersReducedMotion ? "auto" : "smooth",
-    });
+    scrollToLatest(viewport);
   }, [autoScrollKey]);
 
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const rail = railRef.current;
+    if (!viewport || !rail || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(() => scrollToLatest(viewport));
+    observer.observe(viewport);
+    observer.observe(rail);
+    return () => observer.disconnect();
+  }, []);
   return (
     <div
       ref={viewportRef}
@@ -65,20 +56,25 @@ export function AssessmentTranscript({
       role="log"
       aria-live="polite"
       aria-label={ariaLabel}
-      onScroll={handleScroll}
       className={cn(
-        "no-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto",
+        "no-scrollbar flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto",
         className,
       )}
     >
-      <ChatRail className="min-h-full gap-4 py-6">{children}</ChatRail>
+      <ChatRail
+        elementRef={railRef}
+        className="shrink-0 gap-4 pt-6 pb-4"
+      >
+        {children}
+      </ChatRail>
     </div>
   );
 }
 
-export function ChatRail({ children, className }: ChatRailProps) {
+export function ChatRail({ children, className, elementRef }: ChatRailProps) {
   return (
     <div
+      ref={elementRef}
       data-slot="chat-rail"
       className={cn(
         "mx-auto flex w-full max-w-170 min-w-0 flex-col px-4 sm:px-0",
@@ -90,11 +86,14 @@ export function ChatRail({ children, className }: ChatRailProps) {
   );
 }
 
-function isNearLatest(viewport: HTMLDivElement) {
-  return (
-    viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <=
-    AUTO_FOLLOW_THRESHOLD_PX
-  );
+function scrollToLatest(viewport: HTMLDivElement) {
+  if (viewport.scrollHeight <= viewport.clientHeight) {
+    return;
+  }
+  viewport.scrollTo({
+    top: viewport.scrollHeight,
+    behavior: "auto",
+  });
 }
 
 function t(key: string) {

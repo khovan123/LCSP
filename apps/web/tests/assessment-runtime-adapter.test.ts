@@ -20,9 +20,11 @@ import {
   ASSESSMENT_RUNTIME_STEP_SKIP_REASONS,
   ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS,
   ASSESSMENT_TECHNICAL_COVERAGE_STATES,
+  INTERVIEW_PROGRESS_PHASES,
   type AssessmentInterviewAuditRef,
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
+import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 import { PROGRAM_EVIDENCE_METRIC_FORMATS } from "../src/features/assessment-flow/types/assessment-flow.types.ts";
 
@@ -1136,17 +1138,30 @@ function scannerStepStatus(timeline: AdapterTimelineInput) {
   )?.status;
 }
 
-test("rerunning the scanner shows Scanner running before the worker reports", () => {
-  for (const status of [
-    REPOSITORY_SCAN_JOB_STATUSES.queued,
-    REPOSITORY_SCAN_JOB_STATUSES.running,
-  ]) {
-    assert.equal(
-      scannerStepStatus(rerunTimeline("asm-rerun", status)),
-      NORMALIZED_WORKFLOW_STEP_STATUSES.running,
-      status,
-    );
-  }
+test("queued scanner rerun waits until Agent Runtime claims the job", () => {
+  const queued = normalizeAssessmentRuntime({
+    assessmentId: "asm-rerun-queued",
+    timeline: rerunTimeline(
+      "asm-rerun-queued",
+      REPOSITORY_SCAN_JOB_STATUSES.queued,
+    ),
+  });
+  assert.equal(
+    queued.workflow.steps.find(
+      (step) => step.id === ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.scanner,
+    )?.status,
+    NORMALIZED_WORKFLOW_STEP_STATUSES.waiting,
+  );
+  assert.equal(
+    queued.artifacts.programEvidenceGraph.availability,
+    ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting,
+  );
+  assert.equal(
+    scannerStepStatus(
+      rerunTimeline("asm-rerun-running", REPOSITORY_SCAN_JOB_STATUSES.running),
+    ),
+    NORMALIZED_WORKFLOW_STEP_STATUSES.running,
+  );
 });
 
 test("a finished scan job leaves the Scanner row to its runtime events", () => {
@@ -2015,6 +2030,127 @@ test("LCSP-272 HANDOFF: evidence ready without orchestration request stays truth
   );
 });
 
+test("LCSP-999 HANDOFF: a failed Interview turn offers Resume until a new progress phase arrives", () => {
+  const progressEvent = (
+    sequence: number,
+    phase: string,
+    eventType: WorkspaceRuntimeActivityItem["eventType"],
+  ) =>
+    runtimeActivity("asm-failed-turn", sequence, "Interview progress", {
+      runId: "run-interview",
+      eventType,
+      stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+      outputSummary: { interviewProgress: { contextRevision: 2, phase } },
+    });
+  const failedRuntime = (recentActivity: WorkspaceRuntimeActivityItem[]) =>
+    normalizeAssessmentRuntime({
+      assessmentId: "asm-failed-turn",
+      interviewState: {
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        contextRevision: 2,
+        orchestrationRequested: true,
+        answerHistory: [
+          {
+            questionId: "q-1",
+            answeredAt: "2026-09-05T08:00:00.000Z",
+            summary: "Saved answer",
+          },
+        ],
+      },
+      timeline: {
+        currentRun: null,
+        recentActivity,
+        latestRunId: "run-interview",
+        connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+        lastEmittedAt: "2026-09-05T08:05:00.000Z",
+      },
+    });
+
+  const failed = selectInterviewHandoffPresentation(
+    failedRuntime([
+      progressEvent(
+        1,
+        INTERVIEW_PROGRESS_PHASES.running,
+        ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
+      ),
+      progressEvent(
+        2,
+        INTERVIEW_PROGRESS_PHASES.failed,
+        ASSESSMENT_RUNTIME_EVENT_TYPES.toolFailed,
+      ),
+    ]),
+  );
+  assert.equal(failed.canResumeFailedTurn, true);
+  assert.equal(
+    failed.messageKey,
+    "pages.assessmentFlow.interview.progressFailed",
+  );
+  assert.equal(
+    failed.placeholderKey,
+    "pages.assessmentFlow.interview.resumeFailedPlaceholder",
+  );
+
+  const requeued = selectInterviewHandoffPresentation(
+    failedRuntime([
+      progressEvent(
+        2,
+        INTERVIEW_PROGRESS_PHASES.failed,
+        ASSESSMENT_RUNTIME_EVENT_TYPES.toolFailed,
+      ),
+      progressEvent(
+        3,
+        INTERVIEW_PROGRESS_PHASES.queued,
+        ASSESSMENT_RUNTIME_EVENT_TYPES.toolWaitingInput,
+      ),
+    ]),
+  );
+  assert.equal(requeued.canResumeFailedTurn, false);
+  assert.equal(
+    requeued.messageKey,
+    "pages.assessmentFlow.interview.progressQueued",
+  );
+});
+
+test("LCSP-999 HANDOFF: AI not detected ends the assessment instead of waiting for Interview", () => {
+  const normalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-ai-not-detected",
+    interviewState: {
+      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      orchestrationRequested: false,
+    },
+    timeline: {
+      currentRun: null,
+      recentActivity: [],
+      latestRunId: "run-scan",
+      connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+      lastEmittedAt: "2026-09-26T10:00:00.000Z",
+    },
+  });
+
+  const waiting = selectInterviewHandoffPresentation(
+    normalized,
+    ASSESSMENT_STATUS_CODES.wizardSubmitted,
+  );
+  assert.equal(
+    waiting.messageKey,
+    "pages.assessmentFlow.interview.pendingDescription",
+  );
+
+  const ended = selectInterviewHandoffPresentation(
+    normalized,
+    ASSESSMENT_STATUS_CODES.aiNotDetected,
+  );
+  assert.equal(ended.isStartupPending, false);
+  assert.equal(
+    ended.messageKey,
+    "pages.assessmentFlow.interview.aiNotDetectedDescription",
+  );
+  assert.equal(
+    ended.placeholderKey,
+    "pages.assessmentFlow.interview.aiNotDetectedPlaceholder",
+  );
+});
+
 test("LCSP-272 HANDOFF: active runtime question produces the real F04 projection", () => {
   const normalized = normalizeAssessmentRuntime({
     assessmentId: "asm-f04-active",
@@ -2389,7 +2525,6 @@ test("context ready and resolved handoffs resolve deterministic i18n copy withou
   }
 });
 
-
 test("artifact cards derive Business Context and Investigation Notes readiness only from artifact API state", () => {
   const normalized = normalizeAssessmentRuntime({
     assessmentId: "asm-artifacts",
@@ -2443,7 +2578,10 @@ test("artifact cards derive Business Context and Investigation Notes readiness o
     ASSESSMENT_ARTIFACT_AVAILABILITIES.updating,
   );
   assert.equal(normalized.artifacts.businessContext.customerSafeSummary, null);
-  assert.equal(normalized.artifacts.investigationNotes.customerSafeSummary, null);
+  assert.equal(
+    normalized.artifacts.investigationNotes.customerSafeSummary,
+    null,
+  );
 });
 
 test("completed workflow stages cannot fabricate READY textual artifacts when the artifact API says unavailable", () => {

@@ -14,6 +14,7 @@ from tools.common.capabilities.platform.callback_schemas import (
     ScanCallbackPayload,
     CallbackResponse,
     AIUsageFlowCallbackPayload,
+    BillingReservationPayload,
     ConflictDetectionCallbackPayload,
     TechnicalProfileCallbackPayload,
 )
@@ -139,6 +140,47 @@ def test_t02_5xx_response(client, dummy_payload):
         assert mock_post.call_count == 3
 
 
+def test_billing_pricing_unavailable_is_not_hot_retried(client):
+    """Missing pricing catalog rows are provisioning errors, not transient API outages."""
+    payload = BillingReservationPayload(
+        assessmentId="assessment-1",
+        runId="run-1",
+        amountCredits="8000",
+        maxChargeCredits="500",
+        provider="LLM7",
+        model="GLM-5.3-Flash",
+        maxInputTokens="65536",
+        maxInputBytes="262144",
+        maxOutputTokens="4096",
+        maxReasoningTokens="0",
+        maxInvocations="16",
+        authorizedModels=[
+            {"provider": "LLM7", "model": "GLM-5.3-Flash"},
+            {"provider": "GOOGLE_GENAI", "model": "gemini-3.5-flash-lite"},
+        ],
+        idempotencyKey="billing-reservation-assessment-1",
+    )
+    response = httpx.Response(
+        503,
+        json={
+            "ok": False,
+            "problem": {"code": "BILLING_PRICING_UNAVAILABLE"},
+        },
+    )
+
+    with patch(
+        "tools.common.capabilities.platform.api_client.httpx.post",
+        return_value=response,
+    ) as mock_post:
+        with pytest.raises(WorkerCallbackError) as exc_info:
+            client.reserve_billing_credits(payload)
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.error_code == "BILLING_PRICING_UNAVAILABLE"
+    assert "BILLING_PRICING_UNAVAILABLE" in str(exc_info.value)
+    assert mock_post.call_count == 1
+
+
 def test_t03_422_response(client, dummy_payload):
     """T03: 422 response is NOT retried, raises WorkerCallbackError immediately."""
     with patch("tools.common.capabilities.platform.api_client.httpx.post") as mock_post:
@@ -196,8 +238,8 @@ def test_scan_runtime_event_posts_best_effort_metadata(client):
                 "event_type": "TOOL_STARTED",
                 "run_status": "RUNNING",
                 "stage": "SCAN",
-                "tool_name": "semgrep_secret_detect",
-                "summary": "Starting secret detection",
+                "tool_name": "repository-analysis",
+                "summary": "Starting repository analysis",
                 "input_summary": {"api_key": "secret-token"},
             },
         )
@@ -271,6 +313,68 @@ def test_scan_runtime_event_failure_does_not_fail_scan(client):
         mock_post.assert_called_once()
 
 
+def test_agent_stream_network_failure_opens_short_best_effort_backoff(client, monkeypatch):
+    """A dead API must not create one ConnectError per streamed token/tool event."""
+    from tools.common.capabilities.platform import api_client as api_client_module
+
+    clock = {"now": 100.0}
+    monkeypatch.setattr(api_client_module.time, "monotonic", lambda: clock["now"])
+    payload = {
+        "assessment_id": "assessment-1",
+        "run_id": "run-1",
+        "event_type": "MODEL_REQUEST",
+        "client_sequence": 1,
+    }
+
+    with patch(
+        "tools.common.capabilities.platform.api_client.httpx.post",
+        side_effect=httpx.ConnectError("api unavailable"),
+    ) as mock_post:
+        client.post_agent_stream_event(payload)
+        client.post_agent_stream_event({**payload, "client_sequence": 2})
+        assert mock_post.call_count == 1
+
+        clock["now"] += api_client_module._AGENT_STREAM_NETWORK_BACKOFF_SECONDS + 0.01
+        client.post_agent_stream_event({**payload, "client_sequence": 3})
+        assert mock_post.call_count == 2
+
+
+def test_agent_stream_rejection_keeps_safe_event_identity_in_warning(client, monkeypatch):
+    """Rejected stream events log bounded identity instead of dumping the payload."""
+    from tools.common.capabilities.platform import api_client as api_client_module
+
+    fake_logger = MagicMock()
+    monkeypatch.setattr(api_client_module, "logger", fake_logger)
+    response = MagicMock()
+    response.status_code = 400
+    response.json.return_value = {
+        "ok": False,
+        "problem": {"code": "BAD_REQUEST"},
+    }
+    payload = {
+        "assessment_id": "assessment-1",
+        "run_id": "run-1",
+        "event_type": "MODEL_REQUEST",
+        "client_sequence": 7,
+        "text": "must not be logged",
+    }
+
+    with patch(
+        "tools.common.capabilities.platform.api_client.httpx.post",
+        return_value=response,
+    ):
+        client.post_agent_stream_event(payload)
+
+    fake_logger.warning.assert_called_once_with(
+        "AGENT_STREAM_EVENT_REJECTED",
+        status_code=400,
+        error_code="BAD_REQUEST",
+        event_type="MODEL_REQUEST",
+        run_id="run-1",
+        client_sequence=7,
+    )
+
+
 def test_t07_raw_source_code_rejected():
     """T07: Raw source code or extra fields are rejected by Pydantic 'forbid' config."""
     with pytest.raises(ValidationError):
@@ -321,8 +425,8 @@ def test_scan_callback_preserves_boolean_privacy_flags(client):
     payload = ScanCallbackPayload(
         status="PARTIAL",
         scan_job_id="job123",
-        tools_version={"scanner": "1.0.0"},
-        config_hash={"scanner": "sha256:test"},
+        tools_version={"deepagents": "0.7.17", "repository-analysis": "1.0.0"},
+        config_hash={"repository-analysis": "sha256:test"},
         evidence_payload={"coverage_notes": []},
         privacy_flags={
             "containsSourceCode": False,
@@ -343,12 +447,12 @@ def test_scan_callback_preserves_boolean_privacy_flags(client):
         assert kwargs["json"]["privacy_flags"] == payload.privacy_flags
 
 
-def test_scan_callback_preserves_secret_detection_tool_provenance(client):
+def test_scan_callback_preserves_repository_analysis_tool_provenance(client):
     payload = ScanCallbackPayload(
         status="SUCCESS",
         scan_job_id="job123",
-        tools_version={"semgrep_secret_detect": "1.173.0"},
-        config_hash={"semgrep_secret_detect": "sha256:abc123"},
+        tools_version={"repository-analysis": "1.0.0"},
+        config_hash={"repository-analysis": "sha256:abc123"},
         evidence_payload={"metadata": {"api_key": "secret-key-value"}},
         privacy_flags={"containsSourceCode": False, "secretsRedacted": True},
     )
@@ -364,10 +468,10 @@ def test_scan_callback_preserves_secret_detection_tool_provenance(client):
         _, kwargs = mock_post.call_args
         serialized_payload = kwargs["json"]
         assert serialized_payload["tools_version"] == {
-            "semgrep_secret_detect": "1.173.0"
+            "repository-analysis": "1.0.0"
         }
         assert serialized_payload["config_hash"] == {
-            "semgrep_secret_detect": "sha256:abc123"
+            "repository-analysis": "sha256:abc123"
         }
         assert serialized_payload["evidence_payload"]["metadata"]["api_key"] == ""
 
@@ -782,3 +886,28 @@ def test_decision_model_claim_conflict_suppresses_duplicate_provider_call(client
         )
 
     assert claimed is False
+
+
+def test_scan_claim_not_found_preserves_typed_error_code(client):
+    response = httpx.Response(
+        404,
+        json={
+            "ok": False,
+            "problem": {"code": "SCAN_JOB_NOT_FOUND"},
+        },
+    )
+
+    with patch(
+        "tools.common.capabilities.platform.api_client.httpx.post",
+        return_value=response,
+    ) as post:
+        with pytest.raises(WorkerCallbackError) as caught:
+            client.claim_scan_job(
+                "scan-deleted",
+                {"boundary_name": "scan_requested", "timeout_seconds": 1800},
+            )
+
+    assert caught.value.status_code == 404
+    assert caught.value.error_code == "SCAN_JOB_NOT_FOUND"
+    assert caught.value.callback_client_error is True
+    post.assert_called_once()

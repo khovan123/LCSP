@@ -12,7 +12,7 @@ from orchestration.result_validation import SpecialistHandoffValidationError
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_LIMITATION_CODES,
 )
-from tools.common.capabilities.managed.invocation import invocation_boundary_manifest
+from tools.common.capabilities.agent_runtime.invocation import invocation_boundary_manifest
 from tools.common.capabilities.platform.api_client import (
     InterviewContextReadyAuthorityCallbackError,
     InterviewDecisionRepairableCallbackError,
@@ -1056,6 +1056,61 @@ def test_handoff_schema_violation_gets_one_correction_before_continuation(caplog
     boundary._run_guarded_continuation.assert_called_once()
     assert boundary._run_guarded_continuation.call_args.kwargs["guarded_state"]["outcome"] == corrected["outcome"]
     assert all(call.args[-1] != "FAILED" for call in api.post_interview_progress.call_args_list)
+
+
+def test_schema_violation_during_guard_correction_gets_its_own_repair(caplog):
+    api = RecordingApi()
+    api.post_interview_progress = Mock()
+    rejected = {
+        **deepcopy(WAITING_HANDOFF),
+        "mode": "INITIAL_INTERVIEW",
+        "outcome": "CONTEXT_READY",
+        "contextAuthority": "CUSTOMER_STATED",
+        "activeQuestion": None,
+    }
+    corrected = {**deepcopy(WAITING_HANDOFF), "mode": "INITIAL_INTERVIEW"}
+    schema_error = SpecialistHandoffValidationError(
+        "interview handoff failed schema validation: "
+        "activeQuestion: Value error, select Interview controls require choices"
+    )
+    dispatcher = RecordingDispatcher()
+    dispatcher.dispatch = Mock(
+        side_effect=[{"handoff": rejected}, schema_error, {"handoff": corrected}]
+    )
+    api.post_interview_agent_decision = Mock(return_value={"outcome": "WAITING_FOR_CUSTOMER"})
+    boundary = AssessmentInterviewResumeBoundary(
+        SimpleNamespace(), api_client=api, dispatcher=dispatcher
+    )
+    boundary._run_guarded_continuation = Mock()
+
+    with caplog.at_level(
+        "WARNING", logger="tools.common.capabilities.workflow.recovery.interview_boundary"
+    ):
+        boundary.handle(_message(), "corr-1")
+
+    _, guard_correction, schema_correction = [
+        call.kwargs for call in dispatcher.dispatch.call_args_list
+    ]
+    feedback = json.loads(schema_correction["instruction"].split("\n\n", 1)[1])[
+        "decisionValidationFeedback"
+    ]
+    assert feedback["code"] == "INTERVIEW_CONTEXT_READY_REQUIRES_AUTHORITY"
+    assert feedback["schemaViolation"]["code"] == "INTERVIEW_HANDOFF_SCHEMA_VIOLATION"
+    assert "require choices" in feedback["schemaViolation"]["rejectedReason"]
+    assert schema_correction["idempotency_key"] != guard_correction["idempotency_key"]
+    assert "rule=select Interview controls require choices" in caplog.text
+    api.post_interview_agent_decision.assert_called_once()
+    boundary._run_guarded_continuation.assert_called_once()
+    assert all(call.args[-1] != "FAILED" for call in api.post_interview_progress.call_args_list)
+
+
+def test_missing_structured_response_is_a_repairable_handoff_error():
+    with pytest.raises(SpecialistHandoffValidationError, match="structured_response"):
+        RootSubagentDispatcher._validated_handoff(
+            subagent_type="interview",
+            response_format=object(),
+            invocation_result={"messages": []},
+        )
 
 
 def test_handoff_schema_violation_repair_is_bounded():
@@ -2103,3 +2158,99 @@ def test_empty_initial_context_ready_is_missing_every_dimension():
     assert _missing_initial_planning_context_dimensions(_readiness_decision()) == (
         _ALL_PLANNING_DIMENSIONS
     )
+
+
+def test_interview_dispatch_failure_reports_failed_progress_for_the_revision():
+    api = RecordingApi()
+    api.post_interview_progress = Mock()
+    boundary = AssessmentInterviewResumeBoundary(
+        SimpleNamespace(), api_client=api, dispatcher=RecordingDispatcher()
+    )
+
+    boundary.report_dispatch_failure(
+        _message(revision=8), "corr-1", RuntimeError("BILLING_INSUFFICIENT_CREDITS")
+    )
+
+    api.post_interview_progress.assert_called_once_with("assessment-1", 8, "FAILED")
+
+
+def test_api_unauthorized_evidence_ref_is_fed_back_to_the_specialist_verbatim() -> None:
+    source_ref = "packages/api/src/features/ai/service.ts"
+    api = RecordingApi()
+    api.post_interview_progress = Mock()
+    accepted = {"outcome": "WAITING_FOR_CUSTOMER"}
+    rejected_decision = deepcopy(WAITING_HANDOFF)
+    corrected_decision = deepcopy(WAITING_HANDOFF)
+    dispatcher = RecordingDispatcher()
+    dispatcher.dispatch = Mock(side_effect=[
+        {"handoff": rejected_decision},
+        {"handoff": corrected_decision},
+    ])
+    api.post_interview_agent_decision = Mock(side_effect=[
+        InterviewDecisionRepairableCallbackError(
+            "INTERVIEW_EVIDENCE_REF_UNAUTHORIZED: client error",
+            error_code="INTERVIEW_EVIDENCE_REF_UNAUTHORIZED",
+            status_code=400,
+            meta={"unauthorizedRef": source_ref},
+        ),
+        accepted,
+    ])
+    boundary = AssessmentInterviewResumeBoundary(
+        SimpleNamespace(), api_client=api, dispatcher=dispatcher
+    )
+    boundary._run_guarded_continuation = Mock()
+
+    boundary.handle(_message(), "corr-1")
+
+    repair = dispatcher.dispatch.call_args_list[1].kwargs
+    payload = json.loads(repair["instruction"].split("\n\n", 1)[1])
+    feedback = payload["decisionValidationFeedback"]
+    assert feedback["code"] == "INTERVIEW_EVIDENCE_REF_UNAUTHORIZED"
+    assert feedback["unauthorizedEvidenceRef"] == source_ref
+    assert api.post_interview_agent_decision.call_count == 2
+    boundary._run_guarded_continuation.assert_called_once()
+
+
+def test_text_only_handoff_json_is_recovered_and_strictly_validated():
+    from langchain_core.messages import AIMessage
+
+    text = "Here is the handoff:\n```json\n" + json.dumps(WAITING_HANDOFF) + "\n```"
+    handoff = RootSubagentDispatcher._validated_handoff(
+        subagent_type="interview",
+        response_format=object(),
+        invocation_result={"messages": [AIMessage(content=text)]},
+    )
+
+    assert handoff["outcome"] == "WAITING_FOR_CUSTOMER"
+    assert handoff["activeQuestion"]["id"] == "agent-question-next"
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "I will ask the customer about deployment.",
+        '{"outcome": "WAITING_FOR_CUSTOMER"',
+    ],
+)
+def test_text_without_a_json_handoff_still_fails_repairably(content):
+    from langchain_core.messages import AIMessage
+
+    with pytest.raises(SpecialistHandoffValidationError, match="structured_response"):
+        RootSubagentDispatcher._validated_handoff(
+            subagent_type="interview",
+            response_format=object(),
+            invocation_result={"messages": [AIMessage(content=content)]},
+        )
+
+
+def test_text_json_violating_the_handoff_schema_is_rejected():
+    from langchain_core.messages import AIMessage
+
+    broken = {**deepcopy(WAITING_HANDOFF), "activeQuestion": None}
+
+    with pytest.raises(SpecialistHandoffValidationError):
+        RootSubagentDispatcher._validated_handoff(
+            subagent_type="interview",
+            response_format=object(),
+            invocation_result={"messages": [AIMessage(content=json.dumps(broken))]},
+        )

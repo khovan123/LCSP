@@ -1,3 +1,4 @@
+import { asRecord as objectRecord } from "../../../../common/utils/index.js";
 import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import { createGunzip } from "node:zlib";
@@ -216,12 +217,6 @@ function isGovernedSnippetRef(
       candidate.snippet_policy === ref.snippet_policy
     );
   });
-}
-
-function objectRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
 }
 
 function assertSnippetRef(ref: AiDiscoverySnippetRef): void {

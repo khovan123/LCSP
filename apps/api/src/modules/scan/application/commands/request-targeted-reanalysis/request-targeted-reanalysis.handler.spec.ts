@@ -69,7 +69,7 @@ describe("RequestTargetedReanalysisHandler admission", () => {
         {
           assessmentId: "assessment-1",
           inputArtifactVersion: "ter-1",
-          analyzerId: "RUN_PYTHON_SEMANTIC_ANALYSIS",
+          analyzerId: "DEEP_AGENT_REPOSITORY_ANALYSIS",
           scope: { pathPrefixes: ["src/"] },
           reasonRequirementId: "requirement:1",
           idempotencyKey: "idempotency-key-0001",
@@ -148,7 +148,7 @@ describe("RequestTargetedReanalysisHandler admission", () => {
         {
           assessmentId: "assessment-1",
           inputArtifactVersion: "ter-1",
-          analyzerId: "RUN_PYTHON_SEMANTIC_ANALYSIS",
+          analyzerId: "DEEP_AGENT_REPOSITORY_ANALYSIS",
           scope: { subjectRefs: ["finding:finding-12345678"] },
           reasonRequirementId: "requirement:1",
           idempotencyKey: "idempotency-key-subject-0001",
@@ -224,7 +224,7 @@ describe("RequestTargetedReanalysisHandler admission", () => {
           {
             assessmentId: "assessment-1",
             inputArtifactVersion: "ter-1",
-            analyzerId: "RUN_PYTHON_SEMANTIC_ANALYSIS",
+            analyzerId: "DEEP_AGENT_REPOSITORY_ANALYSIS",
             scope: { pathPrefixes: ["src/"] },
             reasonRequirementId: "requirement:1",
             idempotencyKey: "idempotency-key-queued-cap-0001",

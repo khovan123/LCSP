@@ -5,17 +5,16 @@ import {
   ASSESSMENT_REPOSITORY_PROVIDERS,
 } from "@lcsp/contracts/assessment";
 import {
+  ASSESSMENT_AGENT_STREAM_STAGES,
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
   ASSESSMENT_INTERVIEW_CONTROLS,
-  ASSESSMENT_RUNTIME_RUN_STATUSES,
-  ASSESSMENT_RUNTIME_STAGE_CODES,
   type AssessmentInterviewBlockedAction,
   type RemediationDecision,
 } from "@lcsp/contracts/evidence";
 import { REPOSITORY_CONNECTION_STATUSES } from "@lcsp/contracts/github-integration";
 import { resolveMessage } from "@lcsp/i18n";
 import { SaveIcon, TextCursorInputIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { RepositorySetupConversation } from "@/features/assessment-flow/components/organisms/repository-setup-conversation";
@@ -26,18 +25,26 @@ import { deriveRepositorySetupAnswer } from "@/features/assessment-flow/utils/re
 import {
   useAssessmentInterviewBlockedActionMutation,
   useAssessmentInterviewStateQuery,
+  useContinueAssessmentPipelineMutation,
   useProgramEvidenceGraphOverviewQuery,
   useReadinessStatusQuery,
-  useRerunClassificationMutation,
   useRerunRepositoryScanMutation,
   useSubmitAssessmentInterviewAnswerMutation,
   useSubmitAssessmentPostFindingDecisionMutation,
 } from "@/lib/api/assessment-queries";
 import { API_OUTCOME_KINDS } from "@/lib/api/outcome-kinds";
+import { useAssessmentsQuery } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 
+import {
+  PIPELINE_CONTINUE_FAILED_MESSAGE_KEY,
+  PIPELINE_CONTINUE_FINISHED_STATUSES,
+  pipelineContinueMessageKey,
+} from "../../config/pipeline-continue";
 import { useAssessmentRuntimeViewModel } from "../../hooks/use-assessment-runtime-view-model";
 import type { AssessmentOverviewProps } from "../../types/assessment-overview.types";
+import { RUNTIME_THINKING_PHASES } from "../../types/workspace-runtime.types";
+import { groupAgentStreamEventsByStage } from "../../utils/agent-stream-stages";
 import {
   selectComposerAvailability,
   selectCustomerActions,
@@ -179,6 +186,8 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
         </>
       }
       scanFailed={flow.scanFailed}
+      activeScanRunId={retryScan.data?.scanJobId ?? scanJob?.id ?? null}
+      resetScannerActivity={retryScan.isPending}
       runtimeKey={[
         snapshot?.id,
         scanJob?.id,
@@ -195,12 +204,16 @@ function AssessmentInterviewFlow({
   interviewEnabled,
   scanner,
   scanFailed,
+  activeScanRunId,
+  resetScannerActivity,
   runtimeKey,
 }: {
   assessmentId: string;
   interviewEnabled: boolean;
   scanner: ReactNode;
   scanFailed: boolean;
+  activeScanRunId: string | null;
+  resetScannerActivity: boolean;
   runtimeKey: string;
 }) {
   const workspaceRuntime = useWorkspaceRuntime();
@@ -218,15 +231,35 @@ function AssessmentInterviewFlow({
   const workflow = selectWorkflowPresentation(normalized);
   const customerActions = selectCustomerActions(normalized);
   const composerAvailability = selectComposerAvailability(normalized);
-  const interviewHandoff = selectInterviewHandoffPresentation(normalized);
+  const assessmentsQuery = useAssessmentsQuery();
+  const assessmentStatus =
+    assessmentsQuery.data?.kind === API_OUTCOME_KINDS.loaded
+      ? (assessmentsQuery.data.assessments.find(
+          (assessment) => assessment.id === assessmentId,
+        )?.status ?? null)
+      : null;
+  const interviewHandoff = selectInterviewHandoffPresentation(
+    normalized,
+    assessmentStatus,
+  );
   const postFinding = selectPostFindingPresentation(normalized);
   const runtimeThinkingItems = selectRuntimeThinkingItems(normalized);
+  const plannerThinkingItems = runtimeThinkingItems.filter(
+    (item) => item.phase === RUNTIME_THINKING_PHASES.planner,
+  );
+  const investigatorThinkingItems = runtimeThinkingItems.filter(
+    (item) => item.phase === RUNTIME_THINKING_PHASES.investigator,
+  );
+  const stageEvents = useMemo(
+    () => groupAgentStreamEventsByStage(liveTimeline.agentStreamEvents ?? []),
+    [liveTimeline.agentStreamEvents],
+  );
   const runtimeInterviewState = interviewQuery.data;
   const interviewTurnTimestamp = normalized.identity.audit?.timestamp;
   const submitAnswer = useSubmitAssessmentInterviewAnswerMutation(assessmentId);
   const recordBlockedAction =
     useAssessmentInterviewBlockedActionMutation(assessmentId);
-  const resumeAssessmentPipeline = useRerunClassificationMutation(assessmentId);
+  const continuePipeline = useContinueAssessmentPipelineMutation(assessmentId);
   const submitPostFindingDecision =
     useSubmitAssessmentPostFindingDecisionMutation(assessmentId);
 
@@ -491,26 +524,35 @@ function AssessmentInterviewFlow({
     (activeQuestion?.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust &&
       !activeDraft.isAdjusting);
   const hasComposerDraft = composerValue.trim().length > 0;
-  const canResumeAssessmentPipeline =
+  // Continue is offered whenever the pipeline is not waiting on the Customer:
+  // the API decides whether a failed/stalled Interview turn or the downstream
+  // assessment restarts, and refuses while a worker still owns the pipeline.
+  const canContinuePipeline =
     interviewEnabled &&
     !scanFailed &&
-    workflow.activeStatus === ASSESSMENT_RUNTIME_RUN_STATUSES.waiting &&
-    workflow.activeStage === ASSESSMENT_RUNTIME_STAGE_CODES.legalRetrieval &&
     !hasComposerDraft &&
+    !(customerActions.canAnswerQuestion && activeQuestion) &&
+    !customerActions.canSubmitBlockedAction &&
+    !(
+      assessmentStatus !== null &&
+      PIPELINE_CONTINUE_FINISHED_STATUSES.has(assessmentStatus)
+    ) &&
     !submitAnswer.isPending &&
     !recordBlockedAction.isPending &&
-    !submitPostFindingDecision.isPending &&
-    !resumeAssessmentPipeline.isPending;
+    !submitPostFindingDecision.isPending;
   const composerDisabled =
-    isComposerDisabled && !canResumeAssessmentPipeline && !hasComposerDraft;
+    isComposerDisabled && !canContinuePipeline && !hasComposerDraft;
 
-  function handleResumeAssessmentPipeline() {
-    if (!canResumeAssessmentPipeline) {
+  function handleContinuePipeline() {
+    if (!canContinuePipeline || continuePipeline.isPending) {
       return;
     }
-    resumeAssessmentPipeline.mutate(undefined, {
-      onSuccess: () => {
-        setLastSavedMessage(t("pages.assessment.resumeQueued"));
+    continuePipeline.mutate(undefined, {
+      onSuccess: (outcome) => {
+        setLastSavedMessage(t(pipelineContinueMessageKey(outcome)));
+      },
+      onError: () => {
+        setLastSavedMessage(t(PIPELINE_CONTINUE_FAILED_MESSAGE_KEY));
       },
     });
   }
@@ -529,7 +571,9 @@ function AssessmentInterviewFlow({
       <AssessmentTranscript autoScrollKey={autoScrollKey}>
         {scanner}
         <AgentStreamTimeline
-          events={liveTimeline.agentStreamEvents ?? []}
+          events={stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.scanner]}
+          activeRunId={activeScanRunId}
+          reset={resetScannerActivity}
           history={liveTimeline.agentStreamHistory}
           onLoadOlder={() => {
             void workspaceRuntime.loadMoreAgentStreamHistory(assessmentId);
@@ -545,9 +589,34 @@ function AssessmentInterviewFlow({
               />
             ))}
 
-            {runtimeThinkingItems.map((item) => (
+            <AgentStreamTimeline
+              events={
+                stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.interview]
+              }
+            />
+
+            {plannerThinkingItems.map((item) => (
               <RuntimeThinkingActivity key={item.id} item={item} />
             ))}
+            <AgentStreamTimeline
+              events={
+                stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.planner]
+              }
+            />
+
+            {investigatorThinkingItems.map((item) => (
+              <RuntimeThinkingActivity key={item.id} item={item} />
+            ))}
+            <AgentStreamTimeline
+              events={
+                stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.investigate]
+              }
+            />
+
+            <AgentStreamTimeline
+              events={stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.gate]}
+            />
+            <AgentStreamTimeline events={stageEvents.unstaged} />
 
             {interview.questionTurnProps ? (
               <AgentTurn
@@ -712,7 +781,9 @@ function AssessmentInterviewFlow({
               </AgentTurn>
             ) : null}
           </>
-        ) : null}
+        ) : (
+          <AgentStreamTimeline events={stageEvents.unstaged} />
+        )}
       </AssessmentTranscript>
 
       <AssessmentComposer
@@ -720,13 +791,13 @@ function AssessmentInterviewFlow({
         disabled={composerDisabled}
         submitReady={isSubmitReady}
         submitting={submitAnswer.isPending || recordBlockedAction.isPending}
-        resuming={resumeAssessmentPipeline.isPending}
-        resumeAvailable={canResumeAssessmentPipeline}
+        resuming={continuePipeline.isPending}
+        resumeAvailable={canContinuePipeline || continuePipeline.isPending}
         resumeLabel={t("pages.assessment.resumePipeline")}
         placeholder={t(composerPlaceholderKey)}
         onValueChange={handleComposerValueChange}
         onSubmit={handleSubmit}
-        onResume={handleResumeAssessmentPipeline}
+        onResume={handleContinuePipeline}
       />
     </main>
   );

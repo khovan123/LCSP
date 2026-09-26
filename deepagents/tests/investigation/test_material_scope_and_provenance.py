@@ -99,7 +99,7 @@ def test_test_source_path_policy_covers_common_python_and_js_specs() -> None:
     assert is_test_source_path("deepagents/fixtures/sample.py")
     assert not is_test_source_path("apps/api/src/foo.handler.ts")
     assert not is_test_source_path(
-        "deepagents/tools/common/capabilities/managed/invocation.py"
+        "deepagents/tools/common/capabilities/agent_runtime/invocation.py"
     )
 
 

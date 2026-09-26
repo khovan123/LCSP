@@ -3,14 +3,17 @@ from __future__ import annotations
 from types import SimpleNamespace
 import pytest
 
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
 from tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary import (
     InterviewGatedEngineeringAssessmentBoundary,
+    TechnicalRecoveryNotStarted,
     _has_authoritative_customer_ai_context,
 )
 from tools.common.capabilities.assessment.investigation.engineering_rule.managed_targeted_investigator import (
     ManagedTargetedInvestigatorPipeline,
 )
-from tools.common.capabilities.managed.boundary import NonRetryableAgentBoundaryError
+from tools.common.capabilities.agent_runtime.boundary import NonRetryableAgentBoundaryError
 from tools.common.capabilities.platform.api_client import WorkerCallbackError
 
 
@@ -18,6 +21,11 @@ class FakeApi:
     def __init__(self, state):
         self.state = state
         self.seeded = []
+        self.ai_not_detected = []
+
+    def post_assessment_ai_not_detected(self, assessment_id, payload):
+        self.ai_not_detected.append((assessment_id, payload))
+        return {"assessment_id": assessment_id, "status": "AI_NOT_DETECTED"}
 
     def get_interview_worker_state(self, assessment_id):
         assert assessment_id == "assessment-1"
@@ -60,13 +68,39 @@ class FakeDispatcher:
         }
 
 
+def _reanalysis_call(call_id: str = "call-reanalysis-1") -> AIMessage:
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "id": call_id,
+                "name": "request_targeted_reanalysis",
+                "args": {"analyzerId": "pge", "reason": "coverage recovery"},
+            }
+        ],
+    )
+
+
 class RecordingRoot:
-    def __init__(self) -> None:
+    """Root that requests the approval-gated reanalysis tool (the real recovery action)."""
+
+    def __init__(self, reply=None, history=()) -> None:
         self.calls = []
+        self._reply = reply if reply is not None else [_reanalysis_call()]
+        self._history = list(history)
 
     def invoke(self, payload, config=None):
         self.calls.append((payload, config))
-        return {"status": "ROOT_REENTERED"}
+        instruction = HumanMessage(content=payload["messages"][0]["content"])
+        return {"messages": [*self._history, instruction, *self._reply]}
+
+
+def _text_only_root(history=()) -> RecordingRoot:
+    # Observed in production (LLM7 codestral): a plain refusal with no tool call.
+    return RecordingRoot(
+        reply=[AIMessage(content="I'm sorry, but I currently don't have the necessary tools.")],
+        history=history,
+    )
 
 
 class NoopPipeline:
@@ -322,6 +356,10 @@ def test_ready_no_ai_gate_short_circuits_before_interview_dispatch() -> None:
     assert dispatcher.calls == []
     assert api.seeded == []
     assert root.calls == []
+    # The assessment ends as "AI not detected" instead of waiting for a question.
+    assert api.ai_not_detected == [
+        ("assessment-1", {"technicalEvidenceReportId": "ter-no-ai"})
+    ]
 
 
 def test_unrelated_customer_business_model_does_not_block_no_ai_gate() -> None:
@@ -369,6 +407,26 @@ def test_ready_no_ai_gate_early_stops_with_unrelated_customer_business_model() -
     )
     assert result is None
     assert dispatcher.calls == []
+    assert api.ai_not_detected == [
+        ("assessment-1", {"technicalEvidenceReportId": "ter-business-model"})
+    ]
+
+
+def test_ai_not_detected_rejection_fails_the_boundary_instead_of_waiting() -> None:
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+
+    def reject(*_args):
+        raise WorkerCallbackError("absence not proven", status_code=409)
+
+    api.post_assessment_ai_not_detected = reject
+
+    with pytest.raises(WorkerCallbackError):
+        _boundary(api, FakeDispatcher())._prepare_interview(
+            evidence_report=_ai_report("AI_ABSENT_CONFIRMED", []),
+            evidence_report_id="ter-stale",
+            assessment_id="assessment-1",
+            correlation_id="corr-stale",
+        )
 
 
 def test_explicit_customer_external_ai_context_blocks_no_ai_gate() -> None:
@@ -437,6 +495,7 @@ def test_no_ai_gate_does_not_override_authoritative_customer_confirmed_ai_contex
     assert result is not None
     assert result.context_revision == 3
     assert result.confirmed_statement_refs == ("stmt-ai-usage",)
+    assert api.ai_not_detected == []
 
 
 def test_mixed_customer_and_technical_ai_uncertainty_routes_to_reanalysis_before_ready_context() -> None:
@@ -723,3 +782,380 @@ def test_existing_waiting_question_never_reboots_initial_interview() -> None:
     )
     assert dispatcher.calls == []
     assert api.seeded == []
+
+
+def _unavailable_report():
+    report = _report()
+    report["evidence_payload"]["evidence_graph"]["coverage_state"] = "UNAVAILABLE"
+    return report
+
+
+def test_coverage_recovery_without_reanalysis_request_fails_loudly() -> None:
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    dispatcher = FakeDispatcher()
+    root = _text_only_root()
+
+    with pytest.raises(TechnicalRecoveryNotStarted) as caught:
+        _boundary(api, dispatcher, root)._prepare_interview(
+            evidence_report=_unavailable_report(),
+            evidence_report_id="ter-1",
+            assessment_id="assessment-1",
+            correlation_id="corr-text-only",
+        )
+
+    # Never redelivered: the same prompt to the same model would repeat the refusal.
+    assert isinstance(caught.value, NonRetryableAgentBoundaryError)
+    assert "TECHNICAL_COVERAGE_RECOVERY_REQUIRED" in str(caught.value)
+    assert dispatcher.calls == []
+    assert api.seeded == []
+    assert len(root.calls) == 1
+
+
+def test_ai_discovery_recovery_without_reanalysis_request_fails_loudly() -> None:
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    dispatcher = FakeDispatcher()
+    finding = _ai_finding(
+        "PROVIDER_REFERENCE", "TARGETED_TECHNICAL_REANALYSIS", owner="TECHNICAL"
+    )
+
+    with pytest.raises(TechnicalRecoveryNotStarted) as caught:
+        _boundary(api, dispatcher, _text_only_root())._prepare_interview(
+            evidence_report=_ai_report("AI_UNKNOWN", [finding]),
+            evidence_report_id="ter-provider-ref",
+            assessment_id="assessment-1",
+            correlation_id="corr-provider-ref",
+            workflow_run_id="workflow-provider-ref",
+        )
+
+    assert "AI_DISCOVERY_REANALYSIS_REQUIRED" in str(caught.value)
+    assert dispatcher.calls == []
+    assert api.seeded == []
+
+
+def test_reanalysis_request_from_an_earlier_run_does_not_count(monkeypatch) -> None:
+    # Recovery threads are persistent; only this invocation's reply is evidence.
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    earlier = [
+        HumanMessage(content="earlier recovery instruction"),
+        _reanalysis_call("call-earlier"),
+        ToolMessage(content="approved", tool_call_id="call-earlier", name="request_targeted_reanalysis"),
+    ]
+
+    with pytest.raises(TechnicalRecoveryNotStarted):
+        _boundary(api, FakeDispatcher(), _text_only_root(history=earlier))._prepare_interview(
+            evidence_report=_unavailable_report(),
+            evidence_report_id="ter-1",
+            assessment_id="assessment-1",
+            correlation_id="corr-stale-history",
+        )
+
+
+def test_executed_reanalysis_tool_result_counts_as_recovery() -> None:
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    root = RecordingRoot(
+        reply=[
+            _reanalysis_call("call-now"),
+            ToolMessage(content="queued", tool_call_id="call-now", name="request_targeted_reanalysis"),
+            AIMessage(content="Targeted reanalysis requested."),
+        ]
+    )
+
+    result = _boundary(api, FakeDispatcher(), root)._prepare_interview(
+        evidence_report=_unavailable_report(),
+        evidence_report_id="ter-1",
+        assessment_id="assessment-1",
+        correlation_id="corr-executed",
+    )
+
+    assert result is None
+    assert len(root.calls) == 1
+
+
+def test_api_client_posts_ai_not_detected_to_internal_route(monkeypatch) -> None:
+    from tools.common.capabilities.platform.api_client import WorkerApiClient
+
+    client = WorkerApiClient("http://api.test", "worker-key")
+    calls = []
+
+    def fake_post(path, payload, **kwargs):
+        calls.append((path, payload, kwargs))
+        return {"assessment_id": "assessment-1", "status": "AI_NOT_DETECTED"}
+
+    monkeypatch.setattr(client, "_post_with_retry", fake_post)
+
+    result = client.post_assessment_ai_not_detected(
+        "assessment-1", {"technicalEvidenceReportId": "ter-1"}
+    )
+
+    assert result["status"] == "AI_NOT_DETECTED"
+    assert calls == [
+        (
+            "/internal/assessment-interviews/assessment-1/ai-not-detected",
+            {"technicalEvidenceReportId": "ter-1"},
+            {"redact": False},
+        )
+    ]
+
+
+def test_backstop_sdk_references_start_interview_instead_of_parked_reanalysis(tmp_path) -> None:
+    """Assessment 7976a135 regression: backstop findings must reach the Customer.
+
+    The scanner claimed AI absence, the deterministic backstop found AI SDKs in
+    product code, and routing that to technical recovery parked the pipeline on an
+    approval-gated reanalysis that nothing approves. The scanner already failed to
+    trace a call, so whether the SDK is used is one bounded Customer question.
+    """
+    from deepagents.backends import LocalShellBackend
+
+    from tools.common.capabilities.evidence.repository_analysis.analyzer import (
+        enforce_ai_absence_backstop,
+    )
+    from tools.common.capabilities.evidence.repository_analysis.models import (
+        RepositoryAnalysisResult,
+    )
+
+    (tmp_path / "app.py").write_text("from langchain_openai import ChatOpenAI\n", encoding="utf-8")
+    absent = RepositoryAnalysisResult.model_validate(
+        {
+            "summary": "No AI usage found",
+            "coverage_state": "READY",
+            "ai_discovery": {"gate": "AI_ABSENT_CONFIRMED", "coverage_state": "READY"},
+        }
+    )
+    discovery = enforce_ai_absence_backstop(
+        LocalShellBackend(root_dir=str(tmp_path), virtual_mode=True), absent
+    ).ai_discovery.model_dump()
+    report = _ai_report("AI_UNKNOWN", discovery["findings"])
+    report["evidence_payload"]["ai_discovery"]["material_unresolved_frontiers"] = discovery[
+        "material_unresolved_frontiers"
+    ]
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    root = RecordingRoot()
+    dispatcher = FakeDispatcher()
+
+    result = _boundary(api, dispatcher, root)._prepare_interview(
+        evidence_report=report,
+        evidence_report_id="ter-1",
+        assessment_id="assessment-1",
+        correlation_id="corr",
+        workflow_run_id="workflow-1",
+    )
+
+    assert result is None
+    assert root.calls == []
+    assert dispatcher.calls == []
+    assert len(api.seeded) == 1
+    question = api.seeded[0][1]["activeQuestion"]
+    assert question["control"] == "SINGLE_SELECT"
+    assert [choice["id"] for choice in question["choices"]] == ["YES", "NO", "UNSURE"]
+    assert "SDK" in question["prompt"]
+    assert "outbound API call" not in question["prompt"]
+    assert question["frontier"]["owner"] == "CUSTOMER"
+
+
+def test_finding_snippet_ref_is_bounded_to_the_interview_locator_limit(tmp_path) -> None:
+    """Assessment 7976a135 regression: symbol-wide anchors broke the interview handoff.
+
+    Anchors cover whole symbols (lines 30-80), but the Interview contract and the API
+    snippet resolver accept at most seven lines, so the copied locator failed schema
+    validation and the engineering assessment run errored.
+    """
+    from deepagents.backends import LocalShellBackend
+
+    from contracts.handoffs import InterviewSnippetRef
+    from tools.common.capabilities.evidence.repository_analysis.analyzer import (
+        RepositoryDeepAnalyzer,
+    )
+    from tools.common.capabilities.evidence.repository_analysis.models import (
+        RepositoryAnalysisResult,
+    )
+
+    (tmp_path / "model_policy.py").write_text("x = 1\n" * 90, encoding="utf-8")
+    result = RepositoryAnalysisResult.model_validate(
+        {
+            "summary": "AI invocation",
+            "coverage_state": "READY",
+            "source_anchors": [
+                {
+                    "anchor_id": "anchor-1",
+                    "file_path": "model_policy.py",
+                    "start_line": 30,
+                    "end_line": 80,
+                }
+            ],
+            "ai_discovery": {
+                "gate": "AI_CONFIRMED",
+                "coverage_state": "READY",
+                "findings": [
+                    {
+                        "evidence_id": "finding-1",
+                        "state": "CONFIRMED_AI_CALL",
+                        "resolution_state": "OBSERVED",
+                        "kind": "SDK_INVOCATION",
+                        "anchor_id": "anchor-1",
+                    }
+                ],
+            },
+        }
+    )
+
+    payload = RepositoryDeepAnalyzer._evidence_payload(
+        LocalShellBackend(root_dir=str(tmp_path), virtual_mode=True),
+        result,
+        snapshot_id="snapshot-1",
+        commit_sha="abc123",
+        scan_job_id="scan-1",
+    )
+
+    snippet_ref = payload["ai_discovery"]["findings"][0]["snippet_ref"]
+    assert (snippet_ref["start_line"], snippet_ref["end_line"]) == (30, 36)
+    InterviewSnippetRef.model_validate(snippet_ref)
+
+
+def test_inexact_evidence_ref_gets_one_specialist_correction_never_a_substitute() -> None:
+    source_ref = "packages/api/src/features/ai/service.ts"
+
+    class CorrectingDispatcher(FakeDispatcher):
+        def dispatch(self, **kwargs):
+            result = super().dispatch(**kwargs)
+            question = result["handoff"]["activeQuestion"]
+            if len(self.calls) == 1:
+                # Authorized by the turn ledger (tool-visible) but not persistable.
+                question["whyEvidenceRefs"] = [source_ref]
+                question["frontier"]["evidenceRefs"] = ["ev-agent-loop"]
+            else:
+                question["whyEvidenceRefs"] = ["node-ref-1"]
+                question["frontier"]["evidenceRefs"] = ["node-ref-1"]
+            return result
+
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0, "answerHistory": []})
+    report = _report()
+    report["evidence_payload"]["evidence_graph"]["nodes"] = [{"evidence_refs": ["node-ref-1"]}]
+    report["evidence_payload"]["findings"] = [{"evidence_refs": [source_ref]}]
+    dispatcher = CorrectingDispatcher()
+
+    result = _boundary(api, dispatcher)._prepare_interview(
+        evidence_report=report,
+        evidence_report_id="ter-1",
+        assessment_id="assessment-1",
+        correlation_id="00000000-0000-0000-0000-000000000001",
+        workflow_run_id="10000000-0000-0000-0000-000000000001",
+    )
+
+    assert result is None
+    first, correction = dispatcher.calls
+    assert '"node-ref-1"' in first["instruction"]
+    assert source_ref not in first["instruction"]
+    assert correction["idempotency_key"].endswith(":schema-correction:1")
+    assert "ev-agent-loop" in correction["instruction"]
+    assert source_ref in correction["instruction"]
+    assert len(api.seeded) == 1
+    question = api.seeded[0][1]["activeQuestion"]
+    # The specialist's corrected refs are persisted verbatim; nothing substituted.
+    assert question["whyEvidenceRefs"] == ["node-ref-1"]
+    assert question["frontier"]["evidenceRefs"] == ["node-ref-1"]
+
+
+def test_repeated_inexact_evidence_ref_fails_closed() -> None:
+    from orchestration.result_validation import SpecialistHandoffValidationError
+
+    class FabricatingDispatcher(FakeDispatcher):
+        def dispatch(self, **kwargs):
+            result = super().dispatch(**kwargs)
+            result["handoff"]["activeQuestion"]["frontier"]["evidenceRefs"] = ["ev-agent-loop"]
+            return result
+
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0, "answerHistory": []})
+    dispatcher = FabricatingDispatcher()
+
+    with pytest.raises(SpecialistHandoffValidationError, match="ev-agent-loop"):
+        _boundary(api, dispatcher)._prepare_interview(**_initial_interview_kwargs())
+
+    assert len(dispatcher.calls) == 2
+    assert api.seeded == []
+
+
+def _initial_interview_kwargs():
+    return {
+        "evidence_report": _report(),
+        "evidence_report_id": "ter-1",
+        "assessment_id": "assessment-1",
+        "correlation_id": "00000000-0000-0000-0000-000000000001",
+        "workflow_run_id": "10000000-0000-0000-0000-000000000001",
+    }
+
+
+def test_missing_initial_handoff_gets_one_bounded_schema_correction() -> None:
+    from orchestration.result_validation import SpecialistHandoffValidationError
+
+    class FlakyDispatcher(FakeDispatcher):
+        def dispatch(self, **kwargs):
+            if not self.calls:
+                self.calls.append(kwargs)
+                raise SpecialistHandoffValidationError(
+                    "interview did not return a structured_response handoff"
+                )
+            return super().dispatch(**kwargs)
+
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0, "answerHistory": []})
+    dispatcher = FlakyDispatcher()
+
+    assert _boundary(api, dispatcher)._prepare_interview(**_initial_interview_kwargs()) is None
+
+    first, repair = dispatcher.calls
+    assert repair["idempotency_key"] == f"{first['idempotency_key']}:schema-correction:1"
+    assert repair["instruction"].startswith(first["instruction"])
+    assert "INTERVIEW_HANDOFF_SCHEMA_VIOLATION" in repair["instruction"]
+    assert "did not return a structured_response handoff" in repair["instruction"]
+    assert "INTERVIEW_HANDOFF_SCHEMA_VIOLATION" not in first["instruction"]
+    assert len(api.seeded) == 1
+
+
+def test_second_initial_handoff_violation_propagates() -> None:
+    from orchestration.result_validation import SpecialistHandoffValidationError
+
+    class BrokenDispatcher(FakeDispatcher):
+        def dispatch(self, **kwargs):
+            self.calls.append(kwargs)
+            raise SpecialistHandoffValidationError(
+                "interview did not return a structured_response handoff"
+            )
+
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0, "answerHistory": []})
+    dispatcher = BrokenDispatcher()
+
+    with pytest.raises(SpecialistHandoffValidationError):
+        _boundary(api, dispatcher)._prepare_interview(**_initial_interview_kwargs())
+
+    assert len(dispatcher.calls) == 2
+    assert api.seeded == []
+
+
+def test_persistable_refs_mirror_the_api_governed_evidence_refs() -> None:
+    from tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary import (
+        _persistable_evidence_refs,
+    )
+
+    report = {
+        "snapshot_id": "snap-1",
+        "evidence_payload": {
+            "evidence_refs": ["payload-ref"],
+            "findings": [{"evidence_refs": ["finding-only-ref"]}],
+            "evidence_graph": {
+                "evidenceRefs": ["graph-ref"],
+                "nodes": [{"evidence_refs": ["node-ref"]}, {"evidenceRefs": ["node-camel-ref"]}],
+                "edges": [{"evidence_refs": ["edge-ref", ""]}],
+            },
+        },
+    }
+
+    assert _persistable_evidence_refs(report, "ter-1") == {
+        "technicalEvidenceReport:ter-1",
+        "repositorySnapshot:snap-1",
+        "interviewRuntime:assessment-interview-runtime-v1",
+        "payload-ref",
+        "graph-ref",
+        "node-ref",
+        "node-camel-ref",
+        "edge-ref",
+    }

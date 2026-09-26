@@ -45,6 +45,12 @@ async function main() {
   await run(pnpmCommand, ["run", "prepare:cli"]);
   await run(pnpmCommand, ["run", "build:runtime-packages"]);
   await run(pnpmCommand, ["--filter", "@lcsp/api", "prisma:migrate:deploy"]);
+  await run(pnpmCommand, ["--filter", "@lcsp/api", "bootstrap:model-pricing"]);
+  await run(pnpmCommand, [
+    "--filter",
+    "@lcsp/api",
+    "bootstrap:runtime-model-policies",
+  ]);
 
   if (mode === "docker") {
     console.log("[dev] Building the Docker worker image (Docker cache is reused).");

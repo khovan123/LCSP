@@ -585,7 +585,10 @@ function normalizeWorkflowSteps({
     steps.set(id, {
       id,
       label: existingStep?.label ?? stageLabel(id),
-      status: NORMALIZED_WORKFLOW_STEP_STATUSES.running,
+      status:
+        latestScanJob.status === REPOSITORY_SCAN_JOB_STATUSES.queued
+          ? NORMALIZED_WORKFLOW_STEP_STATUSES.waiting
+          : NORMALIZED_WORKFLOW_STEP_STATUSES.running,
       detail: existingStep?.detail ?? null,
     });
   }
@@ -941,13 +944,11 @@ function latestSnapshotScanJob(
   );
 }
 
-/** Mirrors the scanner checklist: any scan job that has not ended is running. */
+/** Mirrors the scanner checklist: queued waits for a worker; running means claimed. */
 function isActiveScanJob(job: WorkspaceRuntimeScanJob): boolean {
   return (
-    job.status !== REPOSITORY_SCAN_JOB_STATUSES.completed &&
-    job.status !== REPOSITORY_SCAN_JOB_STATUSES.failed &&
-    job.status !== REPOSITORY_SCAN_JOB_STATUSES.blocked &&
-    job.status !== REPOSITORY_SCAN_JOB_STATUSES.blockedMapping
+    job.status === REPOSITORY_SCAN_JOB_STATUSES.queued ||
+    job.status === REPOSITORY_SCAN_JOB_STATUSES.running
   );
 }
 
@@ -978,6 +979,7 @@ function normalizeProgramEvidenceAvailability({
 
   switch (latestJob.status) {
     case REPOSITORY_SCAN_JOB_STATUSES.queued:
+      return ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting;
     case REPOSITORY_SCAN_JOB_STATUSES.running:
       return ASSESSMENT_ARTIFACT_AVAILABILITIES.updating;
     case REPOSITORY_SCAN_JOB_STATUSES.pendingMapping:

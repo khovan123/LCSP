@@ -3,7 +3,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from langchain.agents.middleware import ModelResponse, ModelRetryMiddleware, PIIMiddleware
 
-from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from middleware.model_governance import (
+    MODEL_GOVERNANCE_MIDDLEWARE,
+    TRIAGE_MODEL_GOVERNANCE_MIDDLEWARE,
+)
 from middleware.billing_metering import BillingMeteringMiddleware
 from middleware.provider_fallback import ProviderFallbackMiddleware
 from middleware.token_fallback import TokenFallbackMiddleware
@@ -51,7 +54,17 @@ def test_billing_metering_is_the_innermost_governed_model_boundary() -> None:
         for index, item in enumerate(MODEL_GOVERNANCE_MIDDLEWARE)
         if isinstance(item, BillingMeteringMiddleware)
     )
-    assert metering_index == len(MODEL_GOVERNANCE_MIDDLEWARE) - 2
+    assert metering_index == len(MODEL_GOVERNANCE_MIDDLEWARE) - 1
+
+
+def test_lcsp_effective_middleware_has_no_model_call_limit() -> None:
+    middleware = (
+        *MODEL_GOVERNANCE_MIDDLEWARE,
+        *TRIAGE_MODEL_GOVERNANCE_MIDDLEWARE,
+    )
+    assert "ModelCallLimitMiddleware" not in {
+        type(item).__name__ for item in middleware
+    }
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
@@ -117,8 +130,33 @@ def test_schema_repair_message_stops_before_next_model_call():
     handler = MagicMock(return_value=ModelResponse(result=[ToolMessage(
         content="Please fix the validation error", tool_call_id="one", name="Answer"
     )]))
-    with pytest.raises(TerminalSchemaError):
+    with pytest.raises(TerminalSchemaError) as caught:
         StopSchemaRepairMiddleware().wrap_model_call(request, handler)
+    assert handler.call_count == 1
+    # A provider model's own rejected output is provider-specific: fallback may move on.
+    from middleware.failure_policy import StructuredOutputRejected
+
+    assert isinstance(caught.value, StructuredOutputRejected)
+
+
+def test_provider_strategy_bypasses_schema_repair_tool_check():
+    from langchain.agents.structured_output import ProviderStrategy
+    from langchain_core.messages import ToolMessage
+    from pydantic import BaseModel
+    from middleware.model_governance import StopSchemaRepairMiddleware
+
+    class Answer(BaseModel):
+        count: int
+
+    response = ModelResponse(result=[ToolMessage(
+        content="native provider strategy should not synthesize repair tools",
+        tool_call_id="one",
+        name="Answer",
+    )])
+    request = MagicMock(response_format=ProviderStrategy(Answer))
+    handler = MagicMock(return_value=response)
+
+    assert StopSchemaRepairMiddleware().wrap_model_call(request, handler) is response
     assert handler.call_count == 1
 
 
@@ -169,3 +207,69 @@ def test_agent_stops_after_one_malformed_model_response(invalid_tool):
     with pytest.raises(TerminalSchemaError):
         agent.invoke({"messages": [{"role": "user", "content": "count"}]})
     assert model.calls == 1
+
+
+@pytest.mark.parametrize("strategy_type", ["tool", "auto"])
+@pytest.mark.parametrize(
+    "content",
+    [
+        "I would ask the customer about the deployment.",
+        '{"count": "not-an-integer"}',
+        'Here you go: {"count": 3}',
+    ],
+)
+def test_text_only_answer_without_exact_schema_json_is_a_provider_rejection(strategy_type, content):
+    from langchain.agents.structured_output import AutoStrategy, ToolStrategy
+    from langchain_core.messages import AIMessage
+    from pydantic import BaseModel
+    from middleware.failure_policy import StructuredOutputRejected, is_structured_output_rejection
+    from middleware.model_governance import StopSchemaRepairMiddleware
+
+    class Answer(BaseModel):
+        count: int
+
+    strategy = ToolStrategy(Answer) if strategy_type == "tool" else AutoStrategy(Answer)
+    request = MagicMock(response_format=strategy)
+    handler = MagicMock(return_value=ModelResponse(result=[AIMessage(content=content)]))
+
+    with pytest.raises(StructuredOutputRejected) as caught:
+        StopSchemaRepairMiddleware().wrap_model_call(request, handler)
+    # Provider fallback treats this as provider-specific and moves to the next route.
+    assert is_structured_output_rejection(caught.value)
+
+
+@pytest.mark.parametrize("content", ['{"count": 3}', '```json\n{"count": 3}\n```'])
+def test_text_only_answer_that_is_exact_schema_json_becomes_the_structured_response(content):
+    from langchain.agents.structured_output import ToolStrategy
+    from langchain_core.messages import AIMessage
+    from pydantic import BaseModel
+    from middleware.model_governance import StopSchemaRepairMiddleware
+
+    class Answer(BaseModel):
+        count: int
+
+    message = AIMessage(content=content)
+    request = MagicMock(response_format=ToolStrategy(Answer))
+    handler = MagicMock(return_value=ModelResponse(result=[message]))
+
+    response = StopSchemaRepairMiddleware().wrap_model_call(request, handler)
+
+    assert response.structured_response == Answer(count=3)
+    assert response.result == [message]
+
+
+def test_tool_calling_answer_is_left_to_the_agent_loop():
+    from langchain.agents.structured_output import ToolStrategy
+    from langchain_core.messages import AIMessage
+    from pydantic import BaseModel
+    from middleware.model_governance import StopSchemaRepairMiddleware
+
+    class Answer(BaseModel):
+        count: int
+
+    response = ModelResponse(result=[AIMessage(content="", tool_calls=[
+        {"name": "read_evidence", "args": {}, "id": "call-1", "type": "tool_call"},
+    ])])
+    request = MagicMock(response_format=ToolStrategy(Answer))
+
+    assert StopSchemaRepairMiddleware().wrap_model_call(request, MagicMock(return_value=response)) is response

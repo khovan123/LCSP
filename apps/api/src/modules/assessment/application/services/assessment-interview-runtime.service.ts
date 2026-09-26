@@ -1,3 +1,4 @@
+import { asRecord as objectRecord } from "../../../../common/utils/index.js";
 import { randomUUID } from "node:crypto";
 import {
   ASSESSMENT_ERROR_CODES,
@@ -25,6 +26,9 @@ import {
   ASSESSMENT_INTERVIEW_OUTCOMES,
   ASSESSMENT_INTERVIEW_FLAGS,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
+  ASSESSMENT_INTERVIEW_RESUME_MAX_ATTEMPTS,
+  ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES,
+  ASSESSMENT_INTERVIEW_RESUME_REASONS,
   ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS,
   ASSESSMENT_RUNTIME_STAGE_CODES,
   CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES,
@@ -40,6 +44,7 @@ import {
   type AssessmentInterviewAnswerHistoryItem,
   type AssessmentInterviewAnswerInput,
   type AssessmentInterviewBlockedInput,
+  type AssessmentInterviewResumeInput,
   type AssessmentInterviewControl,
   type AssessmentInterviewOrchestratorAction,
   type CanonicalAssessmentInterviewMode,
@@ -65,6 +70,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
@@ -74,6 +80,7 @@ import { problemException } from "../../../../platform/http/filters/error.factor
 import { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
 import { InterviewAuditService } from "../../../audit/application/services/interview-audit.service.js";
+import { AssessmentModelCreditPreflight } from "./assessment-model-credit-preflight.js";
 import {
   normalizeStrategy,
   updateInterviewWorkingStrategy,
@@ -96,6 +103,8 @@ const PUBLIC_REDACTED_ANSWER_SUMMARY =
 const PUBLIC_REDACTED_DRAFT_SUMMARY =
   "Customer draft persisted for Interview resume.";
 const INTERVIEW_AGENT_DECISION_REQUIRED = "INTERVIEW_AGENT_DECISION_REQUIRED";
+const INVESTIGATOR_RESOLUTION_REQUIRED =
+  ASSESSMENT_INTERVIEW_RESUME_REASONS.investigatorResolutionRequired;
 // Worker-only private answer history (never merged into publicState, which stays
 // the sanitized customer projection). Bounded so a long-running Interview thread
 // cannot grow the model prompt unboundedly: only the most recent
@@ -215,6 +224,32 @@ type TargetedInterviewContinuation = {
   pgeVersion: string;
 };
 
+/**
+ * Business fact the Planner needs before it can select EngineeringRules. The
+ * Interview asks the Customer; once context is ready again the engineering
+ * assessment re-runs and the Planner decides with the answer.
+ */
+type PlannerContextNeed = {
+  needId: string;
+  businessContextNeed: string;
+  resolutionCriteria: string[];
+  whyNeeded?: string;
+  affectedRuleIds: string[];
+  workflowRunId: string;
+  sourceVersion: string;
+  pgeVersion: string;
+};
+
+type PlannerContextNeedRegistrationInput = {
+  actorId: string;
+  needId: string;
+  businessContextNeed: string;
+  resolutionCriteria: string[];
+  whyNeeded?: string;
+  affectedRuleIds: string[];
+  workflowRunId: string;
+};
+
 type PrivateInterviewStore = {
   revisions: PrivateInterviewAnswerRevision[];
   submittedAnswerRequests?: InterviewAnswerIdempotencyRecord[];
@@ -222,7 +257,19 @@ type PrivateInterviewStore = {
   workingStrategy?: InterviewWorkingStrategy;
   targetedNeed?: TargetedInterviewNeed;
   targetedContinuation?: TargetedInterviewContinuation;
+  plannerContextNeed?: PlannerContextNeed;
+  // Every Planner need ever registered; a Planner never asks the same need twice.
+  plannerContextNeedIds?: string[];
   partialCoveragePolicyDecision?: PartialCoveragePolicyDecision;
+  // Context revision whose Interview Agent decision run reported FAILED.
+  failedDecisionRevision?: number;
+  // Customer-triggered resume attempts for the failed context revision.
+  resumeAttempts?: InterviewResumeAttempts;
+};
+
+type InterviewResumeAttempts = {
+  contextRevision: number;
+  count: number;
 };
 
 type TargetedNeedRegistrationInput = {
@@ -262,6 +309,8 @@ type WorkerPrivateContext = {
   priorAnswerHistory: WorkerPriorAnswerHistoryItem[];
   priorAnswerHistoryOmittedCount: number;
   targetedNeed?: TargetedInterviewNeed;
+  // Business fact the Planner asked for; Interview authors one question for it.
+  plannerContextNeed?: PlannerContextNeed;
   guidanceVersion: string;
   workingStrategy: InterviewWorkingStrategy;
 };
@@ -326,6 +375,8 @@ export class AssessmentInterviewRuntimeService {
     private readonly runtimeEvents: AssessmentRuntimeEventService,
     private readonly outboxRepository: OutboxRepository,
     private readonly interviewAudit: InterviewAuditService,
+    @Optional()
+    private readonly creditPreflight?: AssessmentModelCreditPreflight,
   ) {}
 
   async getState(
@@ -496,6 +547,20 @@ export class AssessmentInterviewRuntimeService {
       },
     };
     if (input.phase === INTERVIEW_PROGRESS_PHASES.failed) {
+      // Remember the failed revision so the Customer can resume the same turn.
+      await this.prisma.assessmentInterviewThread.updateMany({
+        where: {
+          assessmentId,
+          contextRevision: thread.contextRevision,
+          processedRevision: thread.processedRevision,
+        },
+        data: {
+          privateContextJson: toJson({
+            ...thread.privateStore,
+            failedDecisionRevision: thread.contextRevision,
+          }),
+        },
+      });
       await this.runtimeEvents.recordToolFailed(event);
     } else {
       await this.runtimeEvents.recordToolStarted(event);
@@ -836,6 +901,215 @@ export class AssessmentInterviewRuntimeService {
     return publicState(next.state);
   }
 
+  /**
+   * Summarises the Interview thread for pipeline Continue after the caller has
+   * checked visibility: whether the Customer owes an answer, and whether an
+   * answered turn is still waiting for its Interview Agent decision.
+   */
+  async pipelineInterviewStatus(assessmentId: string): Promise<{
+    awaitingCustomer: boolean;
+    pendingTurn: boolean;
+  }> {
+    const thread = await this.readThread(assessmentId);
+    // A blocked Interview waits for the Customer's blocked-action choice.
+    const awaitingCustomer = Boolean(
+      thread.activeQuestionId ||
+      thread.state.activeQuestion ||
+      thread.state.outcome ===
+        ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved,
+    );
+    return {
+      awaitingCustomer,
+      pendingTurn:
+        thread.exists &&
+        !awaitingCustomer &&
+        thread.processedRevision < thread.contextRevision,
+    };
+  }
+
+  /**
+   * Re-queues the Interview Agent decision for the current context revision
+   * after the worker reported FAILED. The Customer answer is already persisted,
+   * so the retry reuses the same revision instead of asking for a new answer.
+   */
+  async resumeFailedTurn(input: {
+    assessmentId: string;
+    actor: RbacRequestContext;
+    correlationId: string;
+    resume: AssessmentInterviewResumeInput;
+    // Pipeline Continue has already proven no worker owns the turn, so a turn
+    // that stalled without reporting FAILED (worker crash) is resumable too.
+    allowStalled?: boolean;
+  }): Promise<AssessmentInterviewRuntimeState> {
+    const resume = parseResumeInput(input.resume, input.correlationId);
+    await this.assertAssessmentVisible(input.assessmentId, input.actor);
+    await this.creditPreflight?.assertAvailable(
+      input.assessmentId,
+      input.correlationId,
+    );
+    const provenance = await this.assessmentProvenance(input.assessmentId);
+    const currentRevision = (await this.readThread(input.assessmentId))
+      .contextRevision;
+    // Failures reported before the thread persisted failedDecisionRevision are
+    // still visible as the latest FAILED progress event, which the composer uses.
+    const latestProgressPhase =
+      await this.runtimeEvents.getLatestInterviewProgressPhase(
+        input.assessmentId,
+        INTERVIEW_TOOL_NAME,
+        currentRevision,
+      );
+    const next = await this.runInterviewTransaction(async (tx) => {
+      const thread = await this.readThread(input.assessmentId, tx);
+      const turnFailed =
+        input.allowStalled === true ||
+        thread.privateStore.failedDecisionRevision === thread.contextRevision ||
+        (thread.contextRevision === currentRevision &&
+          latestProgressPhase === INTERVIEW_PROGRESS_PHASES.failed);
+      if (
+        resume.expectedSessionRevision !== undefined &&
+        resume.expectedSessionRevision !== thread.contextRevision
+      ) {
+        throw problemException(
+          ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.revisionStale,
+          input.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
+      }
+      const answered = [...thread.privateRevisions]
+        .reverse()
+        .find(
+          (revision) => revision.contextRevision === thread.contextRevision,
+        );
+      const targetedNeed = thread.privateStore.targetedNeed;
+      const target = answered
+        ? {
+            questionId: answered.questionId,
+            resumeReason: INTERVIEW_AGENT_DECISION_REQUIRED,
+          }
+        : targetedNeed
+          ? {
+              questionId: targetedNeed.needId,
+              resumeReason: INVESTIGATOR_RESOLUTION_REQUIRED,
+            }
+          : undefined;
+      const workflowRunId =
+        thread.privateStore.targetedContinuation?.workflowRunId ??
+        thread.privateStore.workflowRunId;
+      if (
+        !target ||
+        !workflowRunId ||
+        thread.activeQuestionId ||
+        thread.state.activeQuestion ||
+        thread.processedRevision >= thread.contextRevision ||
+        !turnFailed
+      ) {
+        throw problemException(
+          ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.notAvailable,
+          input.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
+      }
+      const priorAttempts =
+        thread.privateStore.resumeAttempts?.contextRevision ===
+        thread.contextRevision
+          ? thread.privateStore.resumeAttempts.count
+          : 0;
+      if (priorAttempts >= ASSESSMENT_INTERVIEW_RESUME_MAX_ATTEMPTS) {
+        throw problemException(
+          ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.limitReached,
+          input.correlationId,
+          {
+            status: HttpStatus.CONFLICT,
+            meta: { maxAttempts: ASSESSMENT_INTERVIEW_RESUME_MAX_ATTEMPTS },
+          },
+        );
+      }
+      const attempt = priorAttempts + 1;
+      const updated = await tx.assessmentInterviewThread.updateMany({
+        where: {
+          assessmentId: input.assessmentId,
+          contextRevision: thread.contextRevision,
+          processedRevision: thread.processedRevision,
+          activeQuestionId: null,
+        },
+        data: {
+          privateContextJson: toJson({
+            ...thread.privateStore,
+            failedDecisionRevision: undefined,
+            resumeAttempts: {
+              contextRevision: thread.contextRevision,
+              count: attempt,
+            },
+          }),
+        },
+      });
+      if (updated.count !== 1) {
+        throw problemException(
+          ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.notAvailable,
+          input.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
+      }
+      await this.outboxRepository.enqueue(
+        this.interviewAgentResumeCommand({
+          assessmentId: input.assessmentId,
+          workflowRunId,
+          actorId: input.actor.userId,
+          correlationId: input.correlationId,
+          contextRevision: thread.contextRevision,
+          questionId: target.questionId,
+          sourceVersion: provenance.sourceVersion,
+          pgeVersion: provenance.pgeVersion,
+          guidanceVersion:
+            thread.guidanceVersion ?? this.resolveGuidanceVersion(),
+          resumeReason: target.resumeReason,
+          resumeAttempt: attempt,
+        }),
+        tx,
+      );
+      return {
+        state: thread.state,
+        revision: thread.contextRevision,
+        questionId: target.questionId,
+        workflowRunId,
+        attempt,
+        partialCoveragePolicyDecision:
+          provenance.partialCoveragePolicyDecision ??
+          thread.privateStore.partialCoveragePolicyDecision,
+      };
+    });
+
+    await this.runtimeEvents.recordToolWaitingInput({
+      assessmentId: input.assessmentId,
+      runId: next.workflowRunId,
+      correlationId: input.correlationId,
+      stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+      toolName: INTERVIEW_TOOL_NAME,
+      summary:
+        "Customer resumed a failed Interview turn; Interview Agent sufficiency decision re-queued.",
+      inputSummary: {
+        questionId: next.questionId,
+        resumeAttempt: next.attempt,
+      },
+      outputSummary: {
+        assessmentInterview: publicState(next.state),
+        interviewProgress: {
+          contextRevision: next.revision,
+          phase: INTERVIEW_PROGRESS_PHASES.queued,
+        },
+        interviewWorkflowEvent:
+          ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewContextUpdated,
+        partialCoveragePolicyDecision:
+          next.partialCoveragePolicyDecision ?? null,
+      },
+      waitingReason:
+        ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewContextUpdated,
+      startedAt: new Date(),
+    });
+
+    return publicState(next.state);
+  }
+
   async recordBlockedAction(input: {
     assessmentId: string;
     actor: RbacRequestContext;
@@ -1132,9 +1406,107 @@ export class AssessmentInterviewRuntimeService {
       priorAnswerHistory,
       priorAnswerHistoryOmittedCount,
       targetedNeed: target,
+      plannerContextNeed: thread.privateStore.plannerContextNeed,
       guidanceVersion: thread.guidanceVersion ?? this.resolveGuidanceVersion(),
       workingStrategy: normalizeStrategy(thread.privateStore.workingStrategy),
     };
+  }
+
+  /**
+   * Reopens Interview for one business fact the Planner needs to select
+   * EngineeringRules. The Planner never inspects source code; missing Customer
+   * context goes back through Root Orchestration to Interview and the Customer.
+   */
+  async registerPlannerContextNeedForWorker(input: {
+    assessmentId: string;
+    correlationId: string;
+    need: PlannerContextNeedRegistrationInput;
+  }): Promise<{ registered: boolean; state: AssessmentInterviewRuntimeState }> {
+    const need = parsePlannerContextNeedRegistration(
+      input.need,
+      input.correlationId,
+    );
+    const provenance = await this.assessmentProvenance(input.assessmentId);
+    const result = await this.runInterviewTransaction(async (tx) => {
+      await this.lockInterviewThread(input.assessmentId, tx);
+      const thread = await this.readThread(input.assessmentId, tx);
+      const askedNeedIds = thread.privateStore.plannerContextNeedIds ?? [];
+      if (
+        askedNeedIds.includes(need.needId) ||
+        thread.state.outcome !== ASSESSMENT_INTERVIEW_OUTCOMES.contextReady
+      ) {
+        // Already asked, or Interview is no longer at a ready context: the
+        // Planner must decide with what it has (uncertain scope is selected).
+        return { registered: false, state: thread.state };
+      }
+      const plannerContextNeed: PlannerContextNeed = {
+        ...need,
+        sourceVersion: provenance.sourceVersion,
+        pgeVersion: provenance.pgeVersion,
+      };
+      const nextState: AssessmentInterviewRuntimeState = {
+        ...thread.state,
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        activeQuestion: undefined,
+        orchestrationRequested: true,
+      };
+      await this.persistThreadState(input.assessmentId, nextState, tx, {
+        contextRevision: thread.contextRevision,
+        activeQuestionId: null,
+        processedRevision: thread.processedRevision,
+        privateStore: {
+          ...thread.privateStore,
+          plannerContextNeed,
+          plannerContextNeedIds: [...askedNeedIds, need.needId],
+        },
+        sourceVersion: provenance.sourceVersion,
+        pgeVersion: provenance.pgeVersion,
+        guidanceVersion:
+          thread.guidanceVersion ?? this.resolveGuidanceVersion(),
+      });
+      await this.outboxRepository.enqueue(
+        this.interviewAgentResumeCommand({
+          assessmentId: input.assessmentId,
+          // The Interview thread keeps its own root workflow run; the worker
+          // rejects a resume command pinned to any other run.
+          workflowRunId:
+            thread.privateStore.workflowRunId ?? need.workflowRunId,
+          actorId: need.actorId,
+          correlationId: input.correlationId,
+          contextRevision: thread.contextRevision,
+          questionId: need.needId,
+          sourceVersion: provenance.sourceVersion,
+          pgeVersion: provenance.pgeVersion,
+          guidanceVersion:
+            thread.guidanceVersion ?? this.resolveGuidanceVersion(),
+          resumeReason:
+            ASSESSMENT_INTERVIEW_RESUME_REASONS.plannerContextRequired,
+        }),
+        tx,
+      );
+      return { registered: true, state: nextState };
+    });
+
+    if (result.registered) {
+      await this.runtimeEvents.recordToolWaitingInput({
+        assessmentId: input.assessmentId,
+        runId: need.workflowRunId,
+        correlationId: input.correlationId,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+        toolName: INTERVIEW_TOOL_NAME,
+        summary: "Planner requested Customer business context.",
+        inputSummary: { affectedRuleCount: need.affectedRuleIds.length },
+        outputSummary: {
+          assessmentInterview: publicState(result.state),
+          interviewWorkflowEvent:
+            ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewWaitingForCustomer,
+        },
+        waitingReason:
+          ASSESSMENT_INTERVIEW_RESUME_REASONS.plannerContextRequired,
+        startedAt: new Date(),
+      });
+    }
+    return { registered: result.registered, state: publicState(result.state) };
   }
 
   async registerTargetedNeedForWorker(input: {
@@ -1231,7 +1603,7 @@ export class AssessmentInterviewRuntimeService {
           pgeVersion: initialProvenance.pgeVersion,
           guidanceVersion:
             thread.guidanceVersion ?? this.resolveGuidanceVersion(),
-          resumeReason: "INVESTIGATOR_RESOLUTION_REQUIRED",
+          resumeReason: INVESTIGATOR_RESOLUTION_REQUIRED,
         }),
         tx,
       );
@@ -1461,12 +1833,23 @@ export class AssessmentInterviewRuntimeService {
           ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
         !thread.activeQuestionId &&
         !!thread.privateStore.targetedNeed;
+      // The Planner reopened a ready context: the follow-up question is authored
+      // at the same revision, like a Customer "provide more context" request.
+      const isPlannerContextFollowup =
+        decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
+        thread.state.outcome ===
+          ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
+        !thread.activeQuestionId &&
+        !!thread.privateStore.plannerContextNeed;
       assertGuardedDecision(
         decision,
         latestPrivate,
         thread,
         input.correlationId,
-        { isBlockedFollowup, isTargetedBootstrap },
+        {
+          isBlockedFollowup: isBlockedFollowup || isPlannerContextFollowup,
+          isTargetedBootstrap,
+        },
       );
       const transition = orchestratorInterviewTransition(
         decision,
@@ -1532,7 +1915,7 @@ export class AssessmentInterviewRuntimeService {
           contextRevision: decision.expectedContextRevision,
           activeQuestionId: thread.activeQuestionId,
           processedRevision:
-            isBlockedFollowup || isTargetedBootstrap
+            isBlockedFollowup || isTargetedBootstrap || isPlannerContextFollowup
               ? thread.processedRevision
               : { lt: decision.expectedContextRevision },
         },
@@ -1544,6 +1927,12 @@ export class AssessmentInterviewRuntimeService {
           privateContextJson: toJson({
             ...thread.privateStore,
             revisions,
+            // A ready context answers the Planner need; the re-run Planner
+            // decides with it.
+            plannerContextNeed:
+              state.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextReady
+                ? undefined
+                : thread.privateStore.plannerContextNeed,
           }),
         },
       });
@@ -2008,7 +2397,7 @@ export class AssessmentInterviewRuntimeService {
     }
   }
 
-  private async assertAssessmentVisible(
+  async assertAssessmentVisible(
     assessmentId: string,
     actor: RbacRequestContext,
   ): Promise<void> {
@@ -2130,7 +2519,12 @@ export class AssessmentInterviewRuntimeService {
     pgeVersion: string;
     guidanceVersion: string;
     resumeReason: string;
+    // Customer resume attempt; distinct outbox key so the retry is not deduplicated.
+    resumeAttempt?: number;
   }) {
+    const attemptSuffix = input.resumeAttempt
+      ? `:resume-${input.resumeAttempt}`
+      : "";
     return buildOutboxMessageInput({
       aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
       aggregateId: input.assessmentId,
@@ -2141,7 +2535,7 @@ export class AssessmentInterviewRuntimeService {
       actor: { id: input.actorId, type: AUDIT_ACTOR_TYPES.user },
       result: ASSESSMENT_EVENT_TYPES.interviewAnswerSubmitted,
       redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
-      idempotencyKey: `${input.assessmentId}:${input.contextRevision}:${input.resumeReason}:${input.questionId}:${ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox}`,
+      idempotencyKey: `${input.assessmentId}:${input.contextRevision}:${input.resumeReason}:${input.questionId}:${ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox}${attemptSuffix}`,
       payload: {
         assessmentId: input.assessmentId,
         threadId: this.threadId(input.assessmentId),
@@ -3036,6 +3430,30 @@ function parseStoredInterviewState(
   return record as AssessmentInterviewRuntimeState;
 }
 
+function parseResumeInput(
+  value: unknown,
+  correlationId: string,
+): AssessmentInterviewResumeInput {
+  const record =
+    value === undefined || value === null ? {} : objectRecord(value);
+  const expected = record?.expectedSessionRevision;
+  if (
+    !record ||
+    Object.keys(record).some((key) => key !== "expectedSessionRevision") ||
+    (expected !== undefined &&
+      (typeof expected !== "number" ||
+        !Number.isSafeInteger(expected) ||
+        expected < 0))
+  ) {
+    throw problemException(
+      ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.notAvailable,
+      correlationId,
+      { status: HttpStatus.BAD_REQUEST },
+    );
+  }
+  return expected === undefined ? {} : { expectedSessionRevision: expected };
+}
+
 function parsePrivateStore(value: unknown): PrivateInterviewStore {
   if (Array.isArray(value)) {
     return { revisions: value.filter(isPrivateRevision) };
@@ -3062,12 +3480,119 @@ function parsePrivateStore(value: unknown): PrivateInterviewStore {
         : undefined,
     targetedNeed,
     targetedContinuation,
+    plannerContextNeed: parseStoredPlannerContextNeed(
+      record.plannerContextNeed,
+    ),
+    plannerContextNeedIds: Array.isArray(record.plannerContextNeedIds)
+      ? record.plannerContextNeedIds.filter(
+          (item): item is string => typeof item === "string" && item.length > 0,
+        )
+      : undefined,
     partialCoveragePolicyDecision: parsePartialCoveragePolicyDecision(
       record.partialCoveragePolicyDecision,
     ),
     workingStrategy: normalizeStrategy(
       record.workingStrategy as Partial<InterviewWorkingStrategy> | undefined,
     ),
+    failedDecisionRevision: positiveSafeInteger(record.failedDecisionRevision),
+    resumeAttempts: parseResumeAttempts(record.resumeAttempts),
+  };
+}
+
+function positiveSafeInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? value
+    : undefined;
+}
+
+function parseResumeAttempts(
+  value: unknown,
+): InterviewResumeAttempts | undefined {
+  const record = objectRecord(value);
+  const contextRevision = positiveSafeInteger(record?.contextRevision);
+  const count = positiveSafeInteger(record?.count);
+  return contextRevision && count ? { contextRevision, count } : undefined;
+}
+
+function parseStoredPlannerContextNeed(
+  value: unknown,
+): PlannerContextNeed | undefined {
+  const record = objectRecord(value);
+  if (
+    !record ||
+    typeof record.needId !== "string" ||
+    typeof record.businessContextNeed !== "string" ||
+    !Array.isArray(record.resolutionCriteria) ||
+    !Array.isArray(record.affectedRuleIds) ||
+    typeof record.workflowRunId !== "string" ||
+    typeof record.sourceVersion !== "string" ||
+    typeof record.pgeVersion !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    needId: record.needId,
+    businessContextNeed: record.businessContextNeed,
+    resolutionCriteria: record.resolutionCriteria.filter(
+      (item): item is string => typeof item === "string",
+    ),
+    whyNeeded:
+      typeof record.whyNeeded === "string" ? record.whyNeeded : undefined,
+    affectedRuleIds: record.affectedRuleIds.filter(
+      (item): item is string => typeof item === "string",
+    ),
+    workflowRunId: record.workflowRunId,
+    sourceVersion: record.sourceVersion,
+    pgeVersion: record.pgeVersion,
+  };
+}
+
+function parsePlannerContextNeedRegistration(
+  value: unknown,
+  correlationId: string,
+): PlannerContextNeedRegistrationInput {
+  const record = objectRecord(value);
+  const text = (key: string, max: number) => {
+    const item = record?.[key];
+    return typeof item === "string" && item.trim() && item.trim().length <= max
+      ? item.trim()
+      : null;
+  };
+  const list = (key: string, max: number) => {
+    const items = record?.[key];
+    if (!Array.isArray(items)) return null;
+    const cleaned = items
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+    return cleaned.length > 0 && cleaned.length <= max ? cleaned : null;
+  };
+  const actorId = text("actorId", 200);
+  const needId = text("needId", 200);
+  const businessContextNeed = text("businessContextNeed", 1_000);
+  const workflowRunId = text("workflowRunId", 200);
+  const resolutionCriteria = list("resolutionCriteria", 10);
+  const affectedRuleIds = list("affectedRuleIds", 100);
+  if (
+    !actorId ||
+    !needId ||
+    !businessContextNeed ||
+    !workflowRunId ||
+    !resolutionCriteria ||
+    !affectedRuleIds
+  ) {
+    throw problemException("INTERVIEW_PLANNER_NEED_INVALID", correlationId, {
+      status: HttpStatus.BAD_REQUEST,
+    });
+  }
+  return {
+    actorId,
+    needId,
+    businessContextNeed,
+    resolutionCriteria,
+    whyNeeded: text("whyNeeded", 1_000) ?? undefined,
+    affectedRuleIds,
+    workflowRunId,
   };
 }
 
@@ -4059,12 +4584,6 @@ function parseAiDiscoverySnippetRef(
     evidence_hash: evidenceHash,
     snippet_policy: "PINNED_SNAPSHOT_BOUNDED_REDACTED_V1",
   };
-}
-
-function objectRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
 }
 
 function sameStringSet(left: string[], right: string[]): boolean {

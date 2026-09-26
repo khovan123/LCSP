@@ -8,8 +8,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
-from model_policy import TRIAGE_MODEL_SPEC, create_lcsp_agent as create_agent
-from tools.common.capabilities.managed.skill_loader import load_project_skill
+from deepagents import create_deep_agent
+from middleware.agent_run_budget import AgentRunBudgetMiddleware
+from middleware.billing_metering import BillingAgentRoleMiddleware
+from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
+from model_policy import TRIAGE_MODEL_SPEC, resolve_agent_model
+from tools.common.capabilities.agent_runtime.skill_loader import load_project_skill
 from tools.legal.retrieval.legal_basis.normative_chunk_filter import (
     CHUNK_NORMATIVE_CLASSES,
     is_engineering_rule_source_chunk,
@@ -58,9 +62,12 @@ class LegalChunkEngineeringRuleTriage:
             )
         )
         triage_skill = load_project_skill(TRIAGE_SKILL_NAME)
-        agent = create_agent(
-            agent_name="lcsp-legal-chunk-triage",
-            model=self._model,
+        agent = create_deep_agent(
+            name="lcsp-legal-chunk-triage",
+            model=resolve_agent_model(
+                agent_name="lcsp-legal-chunk-triage", model_spec=self._model
+            ),
+            backend=current_repository_backend(),
             system_prompt=(
                 "Classify approved legal chunks only. Do not make legal applicability, "
                 "compliance, or customer-specific conclusions and do not invent repository "
@@ -69,7 +76,11 @@ class LegalChunkEngineeringRuleTriage:
                 f"{triage_skill}"
             ),
             response_format=_triage_response_schema(chunk_ids),
-            middleware=MODEL_GOVERNANCE_MIDDLEWARE,
+            middleware=[
+                AgentRunBudgetMiddleware(),
+                BillingAgentRoleMiddleware("triage"),
+                *MODEL_GOVERNANCE_MIDDLEWARE,
+            ],
         )
         result = invoke_with_stream(agent,
             {"messages": [{"role": "user", "content": self._prompt(legal_rule, legal_context)}]},

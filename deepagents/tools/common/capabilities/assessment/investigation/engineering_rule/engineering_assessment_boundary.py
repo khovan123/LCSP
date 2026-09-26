@@ -16,12 +16,12 @@ from orchestration.waiting_assessments import WaitingAssessmentRegistry
 from tools.common.capabilities.platform.api_client import WorkerApiClient, WorkerCallbackError
 from tools.common.capabilities.platform.callback_schemas import ClassificationCallbackPayload
 from tools.common.capabilities.platform.logging import get_logger
-from tools.common.capabilities.managed.boundary import AgentBoundaryBase, NonRetryableAgentBoundaryError
-from tools.common.capabilities.evidence.scanner.snapshot.snapshot_service_client import (
-    SnapshotArchiveRequest,
-    SnapshotServiceClient,
+from tools.common.capabilities.agent_runtime.boundary import AgentBoundaryBase, NonRetryableAgentBoundaryError
+from tools.common.capabilities.platform.repository_snapshot_client import (
+    RepositoryArchiveRequest,
+    RepositorySnapshotClient,
 )
-from tools.common.capabilities.evidence.scanner.snapshot.workspace import ScannerWorkspace
+from tools.common.capabilities.platform.repository_workspace import RepositoryWorkspace
 from tools.triage.legal_rule_triage.contracts import LEGAL_RULE_TRIAGE_REQUEST_COMMAND
 
 from .pipeline import EngineeringInvestigationPipeline
@@ -62,8 +62,8 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
         model: str = INVESTIGATOR_MODEL_SPEC,
         planner_model: str = PLANNER_MODEL_SPEC,
         investigation_pipeline: EngineeringInvestigationPipeline | None = None,
-        snapshot_client: SnapshotServiceClient | None = None,
-        code_workspace: ScannerWorkspace | None = None,
+        snapshot_client: RepositorySnapshotClient | None = None,
+        code_workspace: RepositoryWorkspace | None = None,
         triage_trigger_publisher: Callable[[dict[str, Any]], None] | None = None,
         waiting_registry: WaitingAssessmentRegistry | None = None,
     ) -> None:
@@ -72,11 +72,11 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
             config.nestjs_api_base_url,
             config.worker_api_key,
         )
-        self._snapshot_client = snapshot_client or SnapshotServiceClient(
+        self._snapshot_client = snapshot_client or RepositorySnapshotClient(
             config.nestjs_api_base_url,
             config.worker_api_key,
         )
-        self._code_workspace = code_workspace or ScannerWorkspace()
+        self._code_workspace = code_workspace or RepositoryWorkspace()
         self._triage_trigger_publisher = (
             triage_trigger_publisher or self._publish_legal_triage_command
         )
@@ -252,11 +252,11 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
             )
             return None
         try:
-            archive = self._snapshot_client.download_snapshot_archive(
-                SnapshotArchiveRequest(
+            archive = self._snapshot_client.download_archive(
+                RepositoryArchiveRequest(
                     snapshot_id=snapshot_id,
                     scan_job_id=scan_job_id,
-                    correlationId=correlation_id,
+                    correlation_id=correlation_id,
                 )
             )
             materialized = self._code_workspace.materialize(

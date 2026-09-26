@@ -1,7 +1,7 @@
 import * as assert from "node:assert/strict";
 
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { BillingReservationStatus, PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 
@@ -16,6 +16,7 @@ import {
 import { SCAN_EVENT_TYPES } from "@lcsp/contracts/scan";
 
 import { AppModule } from "../src/app.module.js";
+import { BillingAccountingKernel } from "../src/modules/billing/application/shared/billing-accounting.kernel.js";
 import type { SignInSuccess } from "../src/modules/auth/application/contracts/auth/sign-in.contract.js";
 import type { RerunScanResponseDto } from "../src/modules/scan/application/contracts/scan/rerun-scan.contract.js";
 import {
@@ -48,6 +49,11 @@ describe("Re-Run Scan Endpoint (e2e) [MW-scan-003]", () => {
   });
 
   beforeEach(async () => {
+    await prisma.billingReservationInvocationClaim.deleteMany();
+    await prisma.llmUsageEvent.deleteMany();
+    await prisma.billingReservation.deleteMany();
+    await prisma.creditLedgerEntry.deleteMany();
+    await prisma.billingWallet.deleteMany();
     await prisma.outboxMessage.deleteMany({
       where: { eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanTriggered },
     });
@@ -132,6 +138,83 @@ describe("Re-Run Scan Endpoint (e2e) [MW-scan-003]", () => {
       },
     });
     assert.ok(audit);
+  });
+
+  it("T06: re-run releases credits still held by replaced or deleted scans", async () => {
+    const billing = app.get(BillingAccountingKernel);
+    const wallet = await billing.getOrCreateWallet("user-1");
+    await billing.appendLedger({
+      userId: "user-1",
+      walletId: wallet.id,
+      deltaCredits: 1_000n,
+      idempotencyKey: "rerun-release-seed",
+      source: "TEST",
+    });
+    await prisma.repositoryScanJob.create({
+      data: {
+        id: "prior-scan-job",
+        assessmentId: "assessment-1",
+        snapshotId: "snapshot-1",
+        idempotencyKey: "scan-request:assessment-1:snapshot-1:0",
+        triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.manual,
+        status: REPOSITORY_SCAN_JOB_STATUSES.failed,
+        attemptCount: 1,
+        correlationId: "prior-corr",
+      },
+    });
+    // A retryable worker failure keeps its reservation for redelivery; once the
+    // scan is terminal (or already replaced) nothing else will ever release it.
+    const replacedScanHold = await billing.reserveCredits({
+      userId: "user-1",
+      assessmentId: "assessment-1",
+      runId: "prior-scan-job",
+      scanJobId: "prior-scan-job",
+      amountCredits: 300n,
+      idempotencyKey: "hold-prior-scan-job",
+    });
+    const deletedScanHold = await billing.reserveCredits({
+      userId: "user-1",
+      assessmentId: "assessment-1",
+      runId: "deleted-scan-job",
+      scanJobId: "deleted-scan-job",
+      amountCredits: 200n,
+      idempotencyKey: "hold-deleted-scan-job",
+    });
+    const unscopedHold = await billing.reserveCredits({
+      userId: "user-1",
+      amountCredits: 50n,
+      idempotencyKey: "hold-without-scan",
+    });
+
+    const response = await triggerRerun(app, managerToken);
+
+    assert.equal(response.status, 201);
+    const holds = await prisma.billingReservation.findMany({
+      where: {
+        id: {
+          in: [replacedScanHold.id, deletedScanHold.id, unscopedHold.id],
+        },
+      },
+      select: { id: true, status: true },
+    });
+    const statusById = new Map(holds.map((hold) => [hold.id, hold.status]));
+    assert.equal(
+      statusById.get(replacedScanHold.id),
+      BillingReservationStatus.RELEASED,
+    );
+    assert.equal(
+      statusById.get(deletedScanHold.id),
+      BillingReservationStatus.RELEASED,
+    );
+    assert.equal(
+      statusById.get(unscopedHold.id),
+      BillingReservationStatus.RESERVED,
+    );
+    const walletAfter = await prisma.billingWallet.findUniqueOrThrow({
+      where: { userId: "user-1" },
+    });
+    assert.equal(walletAfter.reservedCredits, 50n);
+    assert.equal(walletAfter.availableCredits, 950n);
   });
 
   it("T02: Same idempotency_key returns existing re-run job", async () => {

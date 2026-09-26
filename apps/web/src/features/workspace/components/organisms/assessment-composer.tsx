@@ -25,6 +25,10 @@ import {
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
+const COLLAPSED_MAX_ROWS = 3;
+const EXPANDED_MAX_VIEWPORT_RATIO = 0.42;
+const EXPANDED_MAX_HEIGHT_PX = 352;
+
 type AssessmentComposerProps = {
   value: string;
   onValueChange: (value: string) => void;
@@ -70,11 +74,24 @@ export function AssessmentComposer({
       const border =
         cssPixels(style.borderTopWidth, 0) +
         cssPixels(style.borderBottomWidth, 0);
-      const collapsedHeight = Math.ceil(lineHeight * 5 + padding + border);
+      const oneRowHeight = Math.ceil(lineHeight + padding + border);
+      const collapsedHeight = Math.ceil(
+        lineHeight * COLLAPSED_MAX_ROWS + padding + border,
+      );
+      const expandedHeightLimit = Math.max(
+        collapsedHeight,
+        Math.min(
+          Math.floor(window.innerHeight * EXPANDED_MAX_VIEWPORT_RATIO),
+          EXPANDED_MAX_HEIGHT_PX,
+        ),
+      );
       textarea.style.height = "0px";
-      const nextHeight = expanded ? textarea.scrollHeight : collapsedHeight;
-      textarea.style.height = `${nextHeight}px`;
-      setCanResize(textarea.scrollHeight > collapsedHeight + 1);
+      const contentHeight = Math.max(oneRowHeight, textarea.scrollHeight);
+      const heightLimit = expanded ? expandedHeightLimit : collapsedHeight;
+      textarea.style.height = `${Math.min(contentHeight, heightLimit)}px`;
+      textarea.style.overflowY =
+        contentHeight > heightLimit ? "auto" : "hidden";
+      setCanResize(contentHeight > collapsedHeight + 1);
     };
     resize();
     window.addEventListener("resize", resize);
@@ -127,13 +144,13 @@ export function AssessmentComposer({
       onSubmit={handleSubmit}
       className={cn(
         "relative mx-auto mb-4 w-full max-w-180 shrink-0 rounded-[18px] border border-input bg-card shadow-sm",
-        expanded && "flex h-[min(70dvh,48rem)] flex-col",
+        expanded && "max-h-[min(42dvh,22rem)]",
         className,
       )}
     >
       <Textarea
         ref={textareaRef}
-        rows={5}
+        rows={1}
         value={value}
         disabled={disabled || submitting}
         onChange={(event) => onValueChange(event.target.value)}
@@ -141,8 +158,7 @@ export function AssessmentComposer({
         placeholder={placeholder}
         aria-label={placeholder}
         className={cn(
-          "min-h-19 max-h-[min(35dvh,20rem)] resize-none overflow-y-auto border-0 bg-transparent px-4.5 py-6.5 pr-14 text-sm leading-5 shadow-none placeholder:text-muted-foreground focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent",
-          expanded && "min-h-0 max-h-none flex-1",
+          "min-h-11 resize-none overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-0 bg-transparent px-4.5 py-3 pr-14 text-sm leading-5 shadow-none placeholder:text-muted-foreground focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent",
         )}
       />
       {canResize || expanded ? (
@@ -163,7 +179,7 @@ export function AssessmentComposer({
                   setExpanded(!expanded);
                   textareaRef.current?.focus();
                 }}
-                className="absolute right-3 top-1.5 size-7"
+                className="absolute right-3 top-2 size-7"
               >
                 {expanded ? (
                   <Minimize2Icon aria-hidden="true" />
@@ -189,7 +205,7 @@ export function AssessmentComposer({
           disabled={resumeDisabled}
           aria-label={resumeLabel}
           onClick={handleResume}
-          className="absolute bottom-1.5 right-3 h-8 rounded-full px-3"
+          className="absolute bottom-2 right-3 h-8 rounded-full px-3"
         >
           <RotateCcwIcon aria-hidden="true" />
           {resumeLabel}
@@ -200,7 +216,7 @@ export function AssessmentComposer({
           size="icon"
           disabled={sendDisabled}
           aria-label={sendLabel}
-          className="absolute bottom-1.5 right-3 size-8 rounded-full bg-transparent text-foreground hover:bg-accent disabled:bg-transparent"
+          className="absolute bottom-2 right-3 size-8 rounded-full bg-transparent text-foreground hover:bg-accent disabled:bg-transparent"
         >
           <CornerDownLeftIcon aria-hidden="true" />
         </Button>

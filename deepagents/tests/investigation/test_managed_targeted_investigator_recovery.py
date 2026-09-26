@@ -46,7 +46,7 @@ def _program_graph() -> dict[str, Any]:
                 "attributes": {},
                 "semantic_types": [],
                 "evidence_refs": ["EV-RECOVERY-1"],
-                "origin": "STATIC_ANALYSIS",
+                "origin": "DEEP_AGENT",
                 "resolution_state": "CORROBORATED",
                 "support_refs": [],
             }
@@ -686,3 +686,72 @@ def test_structured_error_metadata_is_never_empty_for_schema_rejections() -> Non
     error = StructuredOutputError("Tool argument schema validation failed")
 
     assert managed._structured_error_metadata(error)["exception_type"] == "StructuredOutputError"
+
+
+def test_resumed_investigation_streams_under_the_rule_that_waited() -> None:
+    """After the Customer answers, the resumed Investigator keeps its rule section."""
+    from orchestration.agent_stream import (
+        AgentStreamSession,
+        activate_agent_stream,
+        publish_agent_stream_event,
+    )
+
+    events: list[dict[str, Any]] = []
+    handoff = {
+        "status": "READY",
+        "claims": [
+            {
+                "claim_id": "claim-1",
+                "engineering_rule_id": "ENG-RECOVERY-1",
+                "claim_type": "RULE_REQUIREMENT_MET",
+                "criterion": "Tokens are validated",
+                "confidence": 0.8,
+            }
+        ],
+    }
+
+    def resumer(**_kwargs):
+        publish_agent_stream_event("LOG", text="resumed investigator step")
+        return {
+            "executionId": "exec-1",
+            "threadId": "investigator:exec-1",
+            "fromCheckpointId": "checkpoint-1",
+            "handoff": handoff,
+        }
+
+    boundary = AssessmentInterviewResumeBoundary(
+        SimpleNamespace(),
+        api_client=SimpleNamespace(),
+        investigator_resumer=resumer,
+        investigation_completer=lambda **_kwargs: None,
+    )
+    session = AgentStreamSession(
+        assessment_id="assessment-1",
+        run_id="run-1",
+        correlation_id="corr-1",
+        boundary_name="assessment_interview_resume_requested",
+        emit_payload=events.append,
+    )
+    with activate_agent_stream(session):
+        boundary._resume_exact_investigator(
+            assessment_id="assessment-1",
+            context_revision=3,
+            continuation={
+                "investigatorExecutionId": "exec-1",
+                "workflowRunId": "investigator:exec-1",
+                "checkpointId": "checkpoint-1",
+                "affectedRuleIds": ["ENG-RECOVERY-1"],
+            },
+            confirmed_context=SimpleNamespace(),
+            correlationId="corr-1",
+        )
+
+    assert [event["status"] for event in events if event["event_type"] == "ENGINEERING_RULE"] == [
+        "RUNNING",
+        "COMPLETED",
+    ]
+    step = next(event for event in events if event["event_type"] == "LOG")
+    assert step["engineering_rule_id"] == "ENG-RECOVERY-1"
+    assert step["stage"] == "INVESTIGATE"
+    completed = [event for event in events if event["event_type"] == "ENGINEERING_RULE"][-1]
+    assert completed["data"]["decision"] == "RULE_REQUIREMENT_MET"

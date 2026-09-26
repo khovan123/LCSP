@@ -325,6 +325,7 @@ enum AssessmentStatus {
   SCAN_IN_PROGRESS
   CLASSIFICATION_LOCKED
   READY_FOR_REVIEW
+  AI_NOT_DETECTED
 }
 
 enum ReadinessExportStatus {
@@ -1351,8 +1352,15 @@ model BillingReservation {
   id             String                   @id @default(uuid())
   userId         String
   walletId       String
+  workspaceId    String?
   assessmentId   String?
+  scanJobId      String?
+  threadId       String?
   runId          String?
+  provider       String?
+  model          String?
+  invocationId   String?
+  modelInvocationId String?
   amountCredits  BigInt
   remainingCredits BigInt                 @default(0)
   maxInvocations BigInt                   @default(1)
@@ -1371,19 +1379,27 @@ model BillingReservation {
 
   @@unique([userId, idempotencyKey])
   @@index([assessmentId, runId])
+  @@index([scanJobId])
+  @@index([threadId])
+  @@index([invocationId])
+  @@index([modelInvocationId])
   @@index([userId, status, createdAt])
   @@index([walletId, status])
 }
 
 model BillingReservationInvocationClaim {
-  id            String              @id @default(uuid())
-  reservationId String
-  invocationId  String
-  createdAt     DateTime            @default(now())
-  reservation   BillingReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  id                        String              @id @default(uuid())
+  reservationId             String
+  invocationId              String
+  authorizedChargeCredits   BigInt              @default(0)
+  authorizationFingerprint  String?
+  settledAt                 DateTime?
+  createdAt                 DateTime            @default(now())
+  reservation               BillingReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
 
   @@unique([reservationId, invocationId])
   @@index([invocationId])
+  @@index([reservationId, settledAt])
 }
 
 model ModelPricingSnapshot {

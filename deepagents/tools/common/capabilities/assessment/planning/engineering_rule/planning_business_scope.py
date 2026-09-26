@@ -260,7 +260,7 @@ class RulePlanningBusinessScopeProjector:
         if is_internal_llm_runtime_node(node):
             return False
         state = str(node.get("resolution_state") or "OBSERVED")
-        origin = str(node.get("origin") or "STATIC_ANALYSIS")
+        origin = str(node.get("origin") or "DEEP_AGENT")
         if state not in _STRONG_RESOLUTION_STATES:
             return False
         if origin == "LLM_SEMANTIC_ENRICHMENT":
@@ -456,7 +456,6 @@ class BusinessAwareScopedMaterialEngineeringRulePlanner(
         candidates,
         confirmed_customer_context: ConfirmedStructuredBusinessContext,
         graph: ProgramEvidenceGraph,
-        openwiki_context: dict[str, Any] | None = None,
     ) -> str:
         return (
             "Business-scope rule: use each rule's planningBusinessScope to distinguish "
@@ -472,6 +471,5 @@ class BusinessAwareScopedMaterialEngineeringRulePlanner(
                 candidates,
                 confirmed_customer_context,
                 graph,
-                openwiki_context,
             )
         )

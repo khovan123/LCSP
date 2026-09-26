@@ -238,6 +238,7 @@ class EvidenceClaimValidator:
             if isinstance(graph, ProgramEvidenceGraph)
             else ProgramEvidenceGraph.from_dict(graph)
         )
+        claim = self._resolve_source_locations(claim, value)
         anchors = {str(anchor["anchor_id"]) for anchor in value.source_anchors}
         nodes = {str(node["node_id"]) for node in value.nodes}
         edges = {str(edge["edge_id"]) for edge in value.edges}
@@ -249,7 +250,9 @@ class EvidenceClaimValidator:
             *claim.source_anchor_refs,
         }
         if not supplied_refs:
-            raise EvidenceClaimValidationError("claim requires graph/source evidence refs")
+            raise EvidenceClaimValidationError(
+                "claim source locations did not resolve to governed repository provenance"
+            )
 
         missing = [ref for ref in claim.evidence_refs if ref not in known]
         if missing:
@@ -301,6 +304,210 @@ class EvidenceClaimValidator:
             graph_path_refs=selected["graph"],
             source_anchor_refs=selected["anchor"],
         )
+
+    @classmethod
+    def _resolve_source_locations(
+        cls,
+        claim: EvidenceClaim,
+        graph: ProgramEvidenceGraph,
+    ) -> EvidenceClaim:
+        """Resolve direct repo citations internally; models never need graph IDs."""
+        if not claim.source_locations:
+            return claim
+
+        normalized: list[dict[str, Any]] = []
+        anchors: set[str] = set(claim.source_anchor_refs)
+        evidence: set[str] = set(claim.evidence_refs)
+        seed_nodes: set[str] = set()
+
+        anchor_rows = [
+            row
+            for row in graph.source_anchors
+            if isinstance(row, dict) and row.get("file_path")
+        ]
+        node_by_id = {
+            str(node.get("node_id")): node
+            for node in graph.nodes
+            if isinstance(node, dict) and node.get("node_id")
+        }
+
+        for raw in claim.source_locations:
+            if not isinstance(raw, dict):
+                raise EvidenceClaimValidationError("source location must be an object")
+            path = cls._normalize_source_path(raw.get("path") or raw.get("file_path"))
+            try:
+                start = int(raw.get("start_line") or raw.get("startLine"))
+                end = int(raw.get("end_line") or raw.get("endLine"))
+            except (TypeError, ValueError) as error:
+                raise EvidenceClaimValidationError(
+                    "source location requires integer start/end lines"
+                ) from error
+            if start < 1 or end < start:
+                raise EvidenceClaimValidationError("source location line range is invalid")
+            symbol = str(raw.get("symbol") or raw.get("symbol_ref") or "").strip() or None
+            cls._verify_repository_source(path, start, end)
+            normalized.append(
+                {
+                    "path": path,
+                    "start_line": start,
+                    "end_line": end,
+                    **({"symbol": symbol} if symbol else {}),
+                }
+            )
+
+            matched = False
+            for anchor in anchor_rows:
+                if cls._normalize_source_path(anchor.get("file_path")) != path:
+                    continue
+                if symbol and anchor.get("symbol_ref") and str(anchor.get("symbol_ref")) != symbol:
+                    continue
+                if not cls._ranges_overlap(
+                    start,
+                    end,
+                    anchor.get("start_line"),
+                    anchor.get("end_line"),
+                ):
+                    continue
+                matched = True
+                anchor_id = str(anchor.get("anchor_id") or "")
+                node_id = str(anchor.get("graph_node_id") or "")
+                if anchor_id:
+                    anchors.add(anchor_id)
+                if node_id:
+                    seed_nodes.add(node_id)
+                    node = node_by_id.get(node_id)
+                    if node:
+                        evidence.update(str(ref) for ref in node.get("evidence_refs") or [] if str(ref))
+
+            # Historical graphs can contain node source locations without a materialized
+            # source-anchor row. Preserve deterministic compatibility without exposing
+            # node IDs to the model.
+            if not matched:
+                for node_id, node in node_by_id.items():
+                    source = node.get("source")
+                    if not isinstance(source, dict):
+                        continue
+                    if cls._normalize_source_path(
+                        source.get("file_path") or source.get("filePath")
+                    ) != path:
+                        continue
+                    if not cls._ranges_overlap(
+                        start,
+                        end,
+                        source.get("start_line") or source.get("startLine"),
+                        source.get("end_line") or source.get("endLine"),
+                    ):
+                        continue
+                    seed_nodes.add(node_id)
+                    evidence.update(str(ref) for ref in node.get("evidence_refs") or [] if str(ref))
+
+        graph_refs = set(claim.graph_path_refs)
+        if topology_criterion_kind(claim.criterion) and seed_nodes:
+            graph_refs.update(cls._bounded_graph_refs(graph, seed_nodes))
+
+        return replace(
+            claim,
+            evidence_refs=tuple(sorted(evidence)),
+            graph_path_refs=tuple(sorted(graph_refs)),
+            source_anchor_refs=tuple(sorted(anchors)),
+            source_locations=tuple(normalized),
+        )
+
+    @staticmethod
+    def _normalize_source_path(value: Any) -> str:
+        path = str(value or "").replace("\\", "/").lstrip("/")
+        parts = [part for part in path.split("/") if part not in {"", "."}]
+        if (
+            not parts
+            or any(part == ".." for part in parts)
+            or parts[0] in {".git", ".lcsp"}
+        ):
+            raise EvidenceClaimValidationError(
+                "source location must remain inside customer repository source"
+            )
+        return "/".join(parts)
+
+    @staticmethod
+    def _ranges_overlap(
+        start: int,
+        end: int,
+        other_start: Any,
+        other_end: Any,
+    ) -> bool:
+        try:
+            left = int(other_start) if other_start is not None else 1
+            right = int(other_end) if other_end is not None else left
+        except (TypeError, ValueError):
+            return True
+        return not (end < left or start > right)
+
+    @staticmethod
+    def _verify_repository_source(path: str, start: int, end: int) -> None:
+        """Verify citations against the live assessment repository when available."""
+        from tools.common.capabilities.platform.repository_sandbox import (
+            current_repository_backend,
+        )
+
+        backend = current_repository_backend()
+        if backend is None:
+            # Deterministic unit/offline flows still validate against pinned graph anchors.
+            return
+        responses = backend.download_files([f"/{path}"])
+        if not responses or responses[0].error or responses[0].content is None:
+            raise EvidenceClaimValidationError(
+                f"source location does not exist in repository database: {path}"
+            )
+        try:
+            line_count = len(responses[0].content.decode("utf-8").splitlines())
+        except UnicodeDecodeError as error:
+            raise EvidenceClaimValidationError(
+                f"source location is not UTF-8 source text: {path}"
+            ) from error
+        if start > max(1, line_count) or end > max(1, line_count):
+            raise EvidenceClaimValidationError(
+                f"source location exceeds repository file bounds: {path}:{start}-{end}"
+            )
+
+    @staticmethod
+    def _bounded_graph_refs(
+        graph: ProgramEvidenceGraph,
+        seed_nodes: set[str],
+        *,
+        max_depth: int = 8,
+        max_edges: int = 100,
+    ) -> set[str]:
+        """Derive legacy topology refs internally from source-cited graph nodes."""
+        edges = [
+            edge
+            for edge in graph.edges
+            if isinstance(edge, dict)
+            and edge.get("edge_id")
+            and edge.get("source_node_id")
+            and edge.get("target_node_id")
+        ]
+        frontier = set(seed_nodes)
+        visited = set(seed_nodes)
+        refs: set[str] = set()
+        for _ in range(max_depth):
+            if not frontier or len(refs) >= max_edges:
+                break
+            next_frontier: set[str] = set()
+            for edge in edges:
+                source = str(edge.get("source_node_id"))
+                target = str(edge.get("target_node_id"))
+                if source not in frontier and target not in frontier:
+                    continue
+                refs.add(str(edge.get("edge_id")))
+                if len(refs) >= max_edges:
+                    break
+                if source not in visited:
+                    next_frontier.add(source)
+                if target not in visited:
+                    next_frontier.add(target)
+            visited.update(next_frontier)
+            frontier = next_frontier
+        return refs
+
 
     @classmethod
     def _criterion_scoped_material_refs(

@@ -1,4 +1,4 @@
-"""Role-specific model policy for the LCSP Managed Deep Agents graph."""
+"""Role-specific model policy for the LCSP Deep Agents graph."""
 
 from __future__ import annotations
 
@@ -10,10 +10,14 @@ from langsmith_bootstrap import disable_langsmith_tracing_by_default
 
 disable_langsmith_tracing_by_default()
 
-from langchain.agents import create_agent as _langchain_create_agent
 from langchain.chat_models import init_chat_model
-from middleware.billing_metering import BillingAgentRoleMiddleware
-from provider_credentials import credential_init_kwargs, llm7_base_url
+from langchain_core.language_models.model_profile import ModelProfile
+from provider_credentials import (
+    credential_init_kwargs,
+    inception_base_url,
+    llm7_base_url,
+    llm_provider_timeout_seconds,
+)
 
 
 DEFAULT_ROOT_MODEL_SPEC = "openai:gpt-5-nano"
@@ -83,6 +87,7 @@ PROVIDER_CLIENTS = {
     "anthropic": "anthropic",
     "google_genai": "google_genai",
     "llm7": "openai_compatible_chat_completions",
+    "inception": "openai_compatible_chat_completions",
 }
 
 
@@ -122,11 +127,25 @@ PROVIDER_PRESETS = {
         "google_genai:gemini-3.5-flash-lite",
     ),
     "llm7": ProviderPreset(
-        "openai:gemini-3.1-flash-lite",
-        "openai:gemini-3.1-flash-lite",
+        "openai:GLM-5.3-Flash",
+        "openai:GLM-5.3-Flash",
+    ),
+    "inception": ProviderPreset(
+        "openai:mercury-2.5",
+        "openai:mercury-2.5",
     ),
 }
 GOOGLE_THINKING_LEVEL = "low"
+MODEL_CONTEXT_WINDOWS = {
+    ("google_genai", "gemini-3.5-flash-lite"): 1_000_000,
+    ("llm7", "GLM-5.3-Flash"): 256_000,
+    ("inception", "mercury-2.5"): 128_000,
+}
+MODEL_OUTPUT_WINDOWS = {
+    ("google_genai", "gemini-3.5-flash-lite"): 8_192,
+    ("llm7", "GLM-5.3-Flash"): 8_192,
+    ("inception", "mercury-2.5"): 8_192,
+}
 
 
 def _selected_provider() -> str | None:
@@ -295,6 +314,7 @@ def openai_responses_base_init_kwargs() -> dict[str, object]:
     return {
         "use_responses_api": True,
         "output_version": RESPONSES_OUTPUT_VERSION,
+        "timeout": llm_provider_timeout_seconds(),
     }
 
 
@@ -330,23 +350,95 @@ def model_init_kwargs_for_agent(*, agent_name: str, model_spec: str) -> dict[str
     normalized = normalize_model_spec(model_spec)
     provider, _, _ = normalized.partition(":")
     route_provider = route_provider_for_model_spec(normalized)
-    if route_provider == "llm7":
-        return provider_init_kwargs(route_provider)
+    _, _, model_name = normalized.partition(":")
+    if route_provider in {"llm7", "inception"}:
+        return {
+            **provider_init_kwargs(route_provider),
+            **model_profile_init_kwargs(route_provider, model_name),
+        }
     if normalized == "google_genai:gemini-3.5-flash-lite":
-        return {"thinking_level": GOOGLE_THINKING_LEVEL if reasoning_policy_for_agent(
-            agent_name=agent_name, model_spec=normalized
-        ) == "enabled" else "minimal"}
+        return {
+            **provider_init_kwargs(provider),
+            **model_profile_init_kwargs(route_provider, model_name),
+            "thinking_level": GOOGLE_THINKING_LEVEL if reasoning_policy_for_agent(
+                agent_name=agent_name, model_spec=normalized
+            ) == "enabled" else "minimal",
+        }
     if provider != "openai":
-        return provider_init_kwargs(provider)
+        return {
+            **provider_init_kwargs(provider),
+            **model_profile_init_kwargs(route_provider, model_name),
+        }
 
-    return openai_responses_init_kwargs(
+    return {
+        **openai_responses_init_kwargs(
         normalized,
         reasoning=reasoning_policy_for_agent(
             agent_name=agent_name,
             model_spec=normalized,
         )
         == "enabled",
+        ),
+        **model_profile_init_kwargs(route_provider, model_name),
+    }
+
+
+def model_profile_init_kwargs(provider: str, model: str) -> dict[str, object]:
+    """Return model profile metadata used by native Deep Agents context management."""
+    profile = model_profile_for_route(provider, model)
+    return {"profile": profile} if profile is not None else {}
+
+
+def model_profile_for_route(provider: str, model: str) -> ModelProfile | None:
+    canonical = canonical_provider(provider)
+    model_name = model.strip()
+    max_input_tokens = _model_profile_limit(
+        "LCSP_MODEL_CONTEXT_WINDOW_TOKENS",
+        canonical,
+        model_name,
+        MODEL_CONTEXT_WINDOWS.get((canonical, model_name)),
     )
+    if max_input_tokens is None:
+        return None
+    max_output_tokens = _model_profile_limit(
+        "LCSP_MODEL_MAX_OUTPUT_TOKENS",
+        canonical,
+        model_name,
+        MODEL_OUTPUT_WINDOWS.get((canonical, model_name), 8192),
+    )
+    profile: ModelProfile = {
+        "name": model_name,
+        "max_input_tokens": max_input_tokens,
+    }
+    if max_output_tokens is not None:
+        profile["max_output_tokens"] = max_output_tokens
+    return profile
+
+
+def _model_profile_limit(
+    prefix: str,
+    provider: str,
+    model: str,
+    default: int | None,
+) -> int | None:
+    specific = f"{prefix}_{_env_key(provider)}_{_env_key(model)}"
+    provider_default = f"{prefix}_{_env_key(provider)}"
+    for name in (specific, provider_default):
+        raw = (os.getenv(name) or "").strip()
+        if not raw:
+            continue
+        try:
+            value = int(raw)
+        except ValueError as error:
+            raise RuntimeError(f"{name} must be a positive integer") from error
+        if value <= 0:
+            raise RuntimeError(f"{name} must be a positive integer")
+        return value
+    return default
+
+
+def _env_key(value: str) -> str:
+    return "".join(character if character.isalnum() else "_" for character in value.upper())
 
 
 def resolve_agent_model(*, agent_name: str, model_spec: str):
@@ -358,50 +450,6 @@ def resolve_agent_model(*, agent_name: str, model_spec: str):
         **model_init_kwargs_for_agent(agent_name=agent_name, model_spec=normalized),
         **credential_init_kwargs(route_provider),
     )
-
-
-def create_lcsp_agent(
-    *,
-    agent_name: str,
-    model: Any,
-    **kwargs: Any,
-):
-    """Create a LangChain agent with LCSP agent-scoped model policy applied."""
-    resolved_model = (
-        resolve_agent_model(agent_name=agent_name, model_spec=model)
-        if isinstance(model, str)
-        else model
-    )
-    langchain_name = kwargs.pop("name", agent_name)
-    middleware = kwargs.get("middleware")
-    if middleware is not None:
-        kwargs["middleware"] = [
-            BillingAgentRoleMiddleware(billing_role_for_agent(agent_name)),
-            *middleware,
-        ]
-    return _langchain_create_agent(
-        model=resolved_model,
-        name=langchain_name,
-        **kwargs,
-    )
-
-
-def billing_role_for_agent(agent_name: str) -> str:
-    """Map implementation agent names to the runtime pricing-policy roles."""
-    normalized = agent_name.strip().lower()
-    if normalized in {"lcsp-agent", "root"}:
-        return "root"
-    if "triage" in normalized:
-        return "triage"
-    if "planner" in normalized:
-        return "planner"
-    if "interview" in normalized:
-        return "interview"
-    if "investigator" in normalized:
-        return "investigator"
-    if normalized in NON_REASONING_AGENT_NAMES or "narrator" in normalized:
-        return "narrator"
-    return normalized
 
 
 def provider_init_kwargs(provider: str) -> dict[str, object]:
@@ -417,9 +465,19 @@ def provider_init_kwargs(provider: str) -> dict[str, object]:
         return {
             "base_url": llm7_base_url(),
             "use_responses_api": False,
+            "timeout": llm_provider_timeout_seconds(),
+        }
+    if canonical == "inception":
+        return {
+            "base_url": inception_base_url(),
+            "temperature": 0.75,
+            "use_responses_api": False,
+            "timeout": llm_provider_timeout_seconds(),
         }
     if canonical == "openai":
         return openai_responses_base_init_kwargs()
+    if canonical == "google_genai":
+        return {"request_timeout": llm_provider_timeout_seconds()}
     return {}
 
 

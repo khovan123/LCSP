@@ -571,14 +571,15 @@ describe("OutboxPublisherService", () => {
         "billing.meteringEnabled": true,
         "billing.reservationCredits": "100",
         "billing.maxInvocationChargeCredits": "100",
-        "billing.runtimeProvider": "openai",
-        "billing.runtimeModel": "gpt-5-nano",
+        "billing.runtimeProvider": "llm7",
+        "billing.runtimeModel": "GLM-5.3-Flash",
         "billing.maxInputTokens": "4096",
         "billing.maxInputBytes": "16384",
         "billing.maxOutputTokens": "1024",
         "billing.maxReasoningTokens": "1024",
         "billing.maxInvocationsPerGroup": "1",
-        "billing.authorizedRuntimeModels": "OPENAI:gpt-5-nano",
+        "billing.authorizedRuntimeModels":
+          "LLM7:GLM-5.3-Flash,GOOGLE_GENAI:gemini-3.5-flash-lite",
       }),
       makeAuditWriter(),
       makeSnapshotCreatedAutoScanService(),
@@ -594,6 +595,7 @@ describe("OutboxPublisherService", () => {
       ...message.payload,
       billing: {
         assessmentId: "assessment-1",
+        scanJobId: "scan-job-1",
         runId: "scan-job-1",
       },
     });
@@ -635,14 +637,15 @@ describe("OutboxPublisherService", () => {
         "billing.meteringEnabled": true,
         "billing.reservationCredits": "100",
         "billing.maxInvocationChargeCredits": "100",
-        "billing.runtimeProvider": "openai",
-        "billing.runtimeModel": "gpt-5-nano",
+        "billing.runtimeProvider": "llm7",
+        "billing.runtimeModel": "GLM-5.3-Flash",
         "billing.maxInputTokens": "4096",
         "billing.maxInputBytes": "16384",
         "billing.maxOutputTokens": "1024",
         "billing.maxReasoningTokens": "1024",
         "billing.maxInvocationsPerGroup": "1",
-        "billing.authorizedRuntimeModels": "OPENAI:gpt-5-nano",
+        "billing.authorizedRuntimeModels":
+          "LLM7:GLM-5.3-Flash,GOOGLE_GENAI:gemini-3.5-flash-lite",
       }),
       makeAuditWriter(),
       makeSnapshotCreatedAutoScanService(),
@@ -655,22 +658,88 @@ describe("OutboxPublisherService", () => {
       GITHUB_INTEGRATION_EVENT_TYPES.scanTriggered,
       expect.objectContaining({
         assessmentId: "assessment-1",
-        billing: {
+        billing: expect.objectContaining({
           assessmentId: "assessment-1",
+          scanJobId: "scan-job-1",
           runId: "scan-job-1",
           amountCredits: "100",
           maxChargeCredits: "100",
-          provider: "OPENAI",
-          model: "gpt-5-nano",
+          provider: "LLM7",
+          model: "GLM-5.3-Flash",
           maxInputTokens: "4096",
           maxInputBytes: "16384",
           maxOutputTokens: "1024",
           maxReasoningTokens: "1024",
           maxInvocations: "1",
-          authorizedModels: [{ provider: "OPENAI", model: "gpt-5-nano" }],
+          authorizedModels: [
+            { provider: "LLM7", model: "GLM-5.3-Flash" },
+            { provider: "GOOGLE_GENAI", model: "gemini-3.5-flash-lite" },
+          ],
           idempotencyKey: "outbox:outbox-1:billing-reservation",
-          agentRole: `outbox:${GITHUB_INTEGRATION_EVENT_TYPES.scanTriggered}`,
-        },
+          agentRole: "root",
+        }) as unknown,
+      }),
+    );
+  });
+
+  it("uses the repository-analysis billing role for targeted reanalysis worker events", async () => {
+    const message = makeMessage({
+      aggregateType: OUTBOX_AGGREGATE_TYPES.targetedReanalysisRequest,
+      aggregateId: "reanalysis-1",
+      eventType: GITHUB_INTEGRATION_EVENT_TYPES.targetedReanalysisRequested,
+      payload: {
+        scanJobId: "scan-job-1",
+        assessmentId: "assessment-1",
+        correlationId: "corr-1",
+      },
+    });
+    const publish = jest.fn<PublishFn>().mockResolvedValue(undefined);
+    const service = new OutboxPublisherService(
+      makeOutboxRepository({
+        withPendingBatch: jest
+          .fn<WithPendingBatchFn>()
+          .mockImplementation(async (_batchSize, handler) =>
+            handler([message], {} as Prisma.TransactionClient),
+          ),
+        markPublished: jest.fn<MarkPublishedFn>().mockResolvedValue(undefined),
+      }),
+      makeRabbitMqClient({
+        ensureConnected: jest
+          .fn<EnsureConnectedFn>()
+          .mockResolvedValue(undefined),
+        publish,
+      }),
+      makeConfigService({
+        "billing.meteringEnabled": true,
+        "billing.reservationCredits": "100",
+        "billing.maxInvocationChargeCredits": "100",
+        "billing.runtimeProvider": "llm7",
+        "billing.runtimeModel": "GLM-5.3-Flash",
+        "billing.maxInputTokens": "4096",
+        "billing.maxInputBytes": "16384",
+        "billing.maxOutputTokens": "1024",
+        "billing.maxReasoningTokens": "1024",
+        "billing.maxInvocationsPerGroup": "1",
+        "billing.authorizedRuntimeModels":
+          "LLM7:GLM-5.3-Flash,GOOGLE_GENAI:gemini-3.5-flash-lite",
+      }),
+      makeAuditWriter(),
+      makeSnapshotCreatedAutoScanService(),
+    );
+
+    await service.poll();
+
+    expect(publish).toHaveBeenCalledWith(
+      "lcsp.events",
+      GITHUB_INTEGRATION_EVENT_TYPES.targetedReanalysisRequested,
+      expect.objectContaining({
+        assessmentId: "assessment-1",
+        billing: expect.objectContaining({
+          assessmentId: "assessment-1",
+          scanJobId: "scan-job-1",
+          runId: "scan-job-1",
+          agentRole: "root",
+        }) as unknown,
       }),
     );
   });

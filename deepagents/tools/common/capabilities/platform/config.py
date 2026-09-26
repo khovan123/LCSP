@@ -1,4 +1,4 @@
-"""Load and validate Managed Deep Agent, agentic, RBAC, and checkpoint configuration."""
+"""Load and validate Agent Runtime, agentic, RBAC, and checkpoint configuration."""
 
 import os
 from dataclasses import dataclass
@@ -39,7 +39,7 @@ class TracingConfig:
 
 @dataclass(frozen=True)
 class WorkerConfig:
-    """Complete immutable runtime configuration shared by Managed Agent tools."""
+    """Complete immutable runtime configuration shared by Agent Runtime tools."""
 
     nestjs_api_base_url: str
     worker_api_key: str

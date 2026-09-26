@@ -1,3 +1,4 @@
+import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import {
   ASSESSMENT_INTERVIEW_OUTCOMES,
   INTERVIEW_PROGRESS_PHASES,
@@ -28,6 +29,7 @@ import {
   type NormalizedAssessmentRuntime,
 } from "../types/assessment-runtime-adapter.types";
 import { projectRuntimeThinking } from "./runtime-thinking-projection";
+import type { AssessmentStatus } from "../types/workspace.types";
 import type {
   RuntimeThinkingItem,
   WorkspaceRuntimeRepositorySnapshot,
@@ -352,7 +354,17 @@ export function selectComposerAvailability(
 
 export function selectInterviewHandoffPresentation(
   normalized: NormalizedAssessmentRuntime,
+  assessmentStatus: AssessmentStatus | null = null,
 ) {
+  if (assessmentStatus === ASSESSMENT_STATUS_CODES.aiNotDetected) {
+    // Terminal: governed evidence proved no AI use, so no Interview question follows.
+    return {
+      isStartupPending: false,
+      canResumeFailedTurn: false,
+      messageKey: "pages.assessmentFlow.interview.aiNotDetectedDescription",
+      placeholderKey: "pages.assessmentFlow.interview.aiNotDetectedPlaceholder",
+    } as const;
+  }
   const interview = selectInterviewPresentation(normalized);
   const hasCustomerVisibleTurn =
     Boolean(interview.questionTurnProps) || interview.isBlocked;
@@ -404,12 +416,21 @@ export function selectInterviewHandoffPresentation(
                 ? "pages.assessmentFlow.interview.startingDescription"
                 : "pages.assessmentFlow.interview.pendingDescription";
 
+  // The answer is saved but the Interview Agent turn failed: offer Resume.
+  const canResumeFailedTurn =
+    isStartupPending &&
+    progress?.phase === INTERVIEW_PROGRESS_PHASES.failed &&
+    messageKey === progressKey;
+
   return {
     isStartupPending,
+    canResumeFailedTurn,
     messageKey,
-    placeholderKey: interview.orchestrationRequested
-      ? "pages.assessmentFlow.interview.startingPlaceholder"
-      : "pages.assessmentFlow.interview.pendingPlaceholder",
+    placeholderKey: canResumeFailedTurn
+      ? "pages.assessmentFlow.interview.resumeFailedPlaceholder"
+      : interview.orchestrationRequested
+        ? "pages.assessmentFlow.interview.startingPlaceholder"
+        : "pages.assessmentFlow.interview.pendingPlaceholder",
   };
 }
 

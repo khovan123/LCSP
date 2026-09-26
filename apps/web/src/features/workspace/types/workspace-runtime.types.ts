@@ -1,6 +1,7 @@
 import type { MessageKey } from "@lcsp/i18n";
 import type {
   AssessmentAgentStreamEvent,
+  AssessmentAgentStreamStage,
   AssessmentPostFindingRuntimeState,
   AssessmentRuntimeEngineeringProgress,
 } from "@lcsp/contracts/evidence";
@@ -112,7 +113,7 @@ export type WorkspaceRuntimeAgentStreamHistoryState = {
   hasHydratedCompleteHistory: boolean;
 };
 
-export type WorkspaceRuntimeSnapshot = {
+type WorkspaceRuntimeSnapshot = {
   emittedAt: string | null;
   runs: WorkspaceRuntimeRun[];
   recentActivity: WorkspaceRuntimeActivityItem[];
@@ -143,6 +144,13 @@ export type WorkspaceRuntimeContextValue = WorkspaceRuntimeSnapshot & {
   ) => WorkspaceRuntimeAssessmentTimeline;
   subscribeAssessmentRuntime: (assessmentId: string) => () => void;
   loadMoreAgentStreamHistory: (assessmentId: string) => Promise<boolean>;
+};
+
+/** Live agent events split into one timeline per customer-visible pipeline stage. */
+export type AgentStreamStageEvents = {
+  byStage: Record<AssessmentAgentStreamStage, AssessmentAgentStreamEvent[]>;
+  /** Events the worker did not attribute to a stage (pipeline-level or legacy history). */
+  unstaged: AssessmentAgentStreamEvent[];
 };
 
 export const RUNTIME_THINKING_PHASES = {

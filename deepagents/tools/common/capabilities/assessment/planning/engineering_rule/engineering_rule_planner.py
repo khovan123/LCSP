@@ -1,16 +1,20 @@
 """LLM-assisted EngineeringRule planning with deterministic fail-closed validation."""
 from __future__ import annotations
 
-from orchestration.agent_stream import invoke_with_stream
+from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
 
+import hashlib
 import json
 from collections import Counter
 from dataclasses import dataclass, replace
 from typing import Any, Iterable
 
+from langchain.agents import create_agent
+
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
-from middleware.billing_metering import BillingMeteringError
-from model_policy import PLANNER_MODEL_SPEC, create_lcsp_agent as create_agent
+from middleware.billing_metering import BillingAgentRoleMiddleware, BillingMeteringError
+from middleware.specialist_handoff_validation import _assert_neutral_targeted_text
+from model_policy import PLANNER_MODEL_SPEC, resolve_agent_model
 from tools.legal.corpus.engineering_rules.contract.models import EngineeringRule
 from tools.common.capabilities.platform.logging import get_logger
 from tools.common.capabilities.evidence.graph.schema.models import ProgramEvidenceGraph
@@ -47,6 +51,10 @@ ENGINEERING_RULE_PLAN_BASIS = {
     "source": "SOURCE",
     "rule_contract": "RULE_CONTRACT",
 }
+
+# A Planner may name at most this many business facts per run; the Interview asks
+# one question at a time.
+MAX_PLANNER_CONTEXT_NEEDS = 3
 
 _SELECT_REASONS = {
     ENGINEERING_RULE_PLAN_REASON_CODES["customer_context_scope_match"],
@@ -142,11 +150,6 @@ class EngineeringRulePlanningCandidate:
             "legalReasoningContract": self.legal_reasoning_contract,
             "startingNodeTypes": list(self.starting_node_types),
             "targetNodeTypes": list(self.target_node_types),
-            "sourceSeed": {
-                "hitCount": self.source_hit_count,
-                "evidenceRefCount": self.source_evidence_count,
-                "nodeTypes": list(self.source_node_types),
-            },
         }
 
 
@@ -168,6 +171,33 @@ class EngineeringRulePlanDecisionAudit:
     guidance_version: str | None = None
 
 
+PLANNER_CONTEXT_REQUIRED = "PLANNER_CONTEXT_REQUIRED"
+
+
+class PlannerContextPending(BaseException):
+    """Intentional stop: the Planner reopened Interview for a Customer fact.
+
+    A BaseException like TargetedInterviewPending, so no generic failure handler
+    records it as a failed run. Once Interview reaches CONTEXT_READY again, the
+    engineering assessment re-runs and the Planner decides with the answer.
+    """
+
+
+@dataclass(frozen=True)
+class PlannerContextNeed:
+    """One Customer business fact the Planner needs before selecting some rules.
+
+    ``need_id`` depends only on the affected rules, so a Planner that still lacks the
+    fact after the Customer answered cannot ask the same question again.
+    """
+
+    need_id: str
+    engineering_rule_ids: tuple[str, ...]
+    business_context_need: str
+    resolution_criteria: tuple[str, ...]
+    why_needed: str | None = None
+
+
 @dataclass(frozen=True)
 class EngineeringRulePlan:
     """Validated plan consumed by the deterministic investigation pipeline."""
@@ -176,6 +206,7 @@ class EngineeringRulePlan:
     skipped_rule_ids: tuple[str, ...]
     fallback_used: bool = False
     decision_audit: tuple[EngineeringRulePlanDecisionAudit, ...] = ()
+    context_needs: tuple[PlannerContextNeed, ...] = ()
 
     @property
     def context_provenance(self) -> dict[str, Any]:
@@ -219,8 +250,11 @@ class EngineeringRulePlanner:
         graph: ProgramEvidenceGraph,
         workflow_run_id: str,
         correlation_id: str | None = None,
-        openwiki_context: dict[str, Any] | None = None,
     ) -> EngineeringRulePlan:
+        # The evidence graph stays in the planning interface for the deterministic
+        # pipeline, but it is never shown to the Planner: it decides from rules and
+        # confirmed Customer context only.
+        del graph
         rows = tuple(candidates)
         if not rows:
             return EngineeringRulePlan((), ())
@@ -246,27 +280,34 @@ class EngineeringRulePlanner:
             )
 
         try:
+            # One decision pass with no tools: the Planner decides only from the fixed
+            # EngineeringRules and Customer-confirmed context and never reads source.
             agent = create_agent(
-                agent_name="lcsp-engineering-rule-planner",
-                model=self._model,
+                resolve_agent_model(
+                    agent_name="lcsp-engineering-rule-planner", model_spec=self._model
+                ),
+                tools=[],
+                name="lcsp-engineering-rule-planner",
                 system_prompt=(
-                    "Plan the bounded technical investigation only. Do not make "
+                    "Select which fixed EngineeringRules the Investigator must examine, "
+                    "using only the rules and the Customer-confirmed business context you "
+                    "are given. You cannot read repository source. When a selection "
+                    "depends on a business fact the confirmed context does not state, "
+                    "request it as a businessContextNeed instead of guessing. Do not make "
                     "legal applicability, risk, or compliance decisions."
                 ),
                 response_format=self._plan_response_schema(),
-                middleware=MODEL_GOVERNANCE_MIDDLEWARE,
+                middleware=[
+                    BillingAgentRoleMiddleware("planner"),
+                    *MODEL_GOVERNANCE_MIDDLEWARE,
+                ],
             )
             response = invoke_with_stream(agent,
                 {
                     "messages": [
                         {
                             "role": "user",
-                            "content": self._prompt(
-                                rows,
-                                confirmed_context,
-                                graph,
-                                openwiki_context,
-                            ),
+                            "content": self._prompt(rows, confirmed_context),
                         }
                     ]
                 },
@@ -278,6 +319,7 @@ class EngineeringRulePlanner:
                     },
                     "configurable": {"thread_id": workflow_run_id},
                 },
+                stage=AGENT_STREAM_STAGES["planner"],
             )
             plan = self._validate_plan(
                 rows,
@@ -376,6 +418,10 @@ class EngineeringRulePlanner:
 
         if invalid_ids:
             raise ValueError("planner returned unknown EngineeringRule IDs")
+        context_needs = _planner_context_needs(payload.get("businessContextNeeds"), known)
+        needs_context = {
+            rule_id for need in context_needs for rule_id in need.engineering_rule_ids
+        }
 
         selected: list[str] = []
         skipped: list[str] = []
@@ -405,6 +451,23 @@ class EngineeringRulePlanner:
         for candidate in candidates:
             rule_id = candidate.engineering_rule_id
             row = decisions.get(rule_id)
+            # A rule whose relevance waits on a Customer fact is never skipped: if the
+            # Customer cannot answer, the uncertain scope is still investigated.
+            if rule_id in needs_context:
+                decision, reason_code, decision_basis = row or ("MISSING", "MISSING", set())
+                choose(
+                    rule_id=rule_id,
+                    requested=decision,
+                    final="SELECT",
+                    reason_code=reason_code,
+                    basis=decision_basis,
+                    override=(
+                        None
+                        if decision == ENGINEERING_RULE_PLAN_DECISIONS["select"]
+                        else "BUSINESS_CONTEXT_NEEDED"
+                    ),
+                )
+                continue
             # Missing or duplicate decisions fail closed to SELECT rather than
             # allowing a model formatting mistake to suppress an investigation.
             if row is None:
@@ -526,82 +589,48 @@ class EngineeringRulePlanner:
             tuple(selected),
             tuple(skipped),
             decision_audit=tuple(audits[row.engineering_rule_id] for row in candidates),
+            context_needs=context_needs,
         )
-
-    @staticmethod
-    def _graph_summary(graph: ProgramEvidenceGraph) -> dict[str, Any]:
-        node_types = Counter(
-            str(node.get("node_type"))
-            for node in graph.nodes
-            if isinstance(node, dict) and node.get("node_type")
-        )
-        semantic_types = Counter(
-            str(value)
-            for node in graph.nodes
-            if isinstance(node, dict)
-            for value in (node.get("semantic_types") or [])
-            if value
-        )
-        return {
-            "coverageState": graph.coverage_state,
-            "nodeCount": graph.node_count,
-            "edgeCount": graph.edge_count,
-            "nodeTypes": dict(node_types.most_common(40)),
-            "semanticTypes": dict(semantic_types.most_common(40)),
-            "unresolvedFrontierCount": len(graph.unresolved_frontiers),
-        }
 
     @classmethod
     def _prompt(
         cls,
         candidates: tuple[EngineeringRulePlanningCandidate, ...],
         confirmed_customer_context: ConfirmedStructuredBusinessContext,
-        graph: ProgramEvidenceGraph,
-        openwiki_context: dict[str, Any] | None = None,
     ) -> str:
         payload = {
             "confirmedStructuredBusinessContext": (
                 confirmed_customer_context.to_prompt_dict()
             ),
-            "repositoryEvidenceSummary": cls._graph_summary(graph),
-            "openWikiArchitectureHints": openwiki_context or {
-                "source": "openwiki",
-                "available": False,
-                "authority": "UNVERIFIED_ARCHITECTURE_HINT",
-                "policy": (
-                    "May prioritize planner investigation only. Must not satisfy "
-                    "legal citations, source evidence, compliance, or gap classification."
-                ),
-                "hintCount": 0,
-                "hints": [],
-            },
             "engineeringRules": [row.to_prompt_dict() for row in candidates],
         }
         return (
-            "You are the LCSP EngineeringRule Planner. Select only the technical "
-            "EngineeringRules that should be investigated for this assessment using "
-            "both confirmed structured business context and repository evidence summaries. "
+            "You are the LCSP EngineeringRule Planner. Decide which EngineeringRules the "
+            "Investigator must examine for this assessment. Your only inputs are the "
+            "fixed EngineeringRules and the Customer-confirmed structured business "
+            "context below; you cannot read or scan repository source, which the "
+            "Investigator does later. "
             "Use only confirmedStructuredBusinessContext.statements where source is "
             "CUSTOMER_CONFIRMED and resolutionState is CONFIRMED. This is an "
             "investigation-scope plan, not a legal applicability or legal risk-tier "
             "decision. Never invent rule IDs. Never create, rewrite, or promote Customer "
             "context; never use raw Interview turns, model strategy traces, learning signals, "
             "legacy wizard-derived fields, CUSTOMER_STATED, UNCERTAIN, CONFLICTED, "
-            "or SUPERSEDED as factual planning input. Never treat "
-            "Customer context as stronger "
-            "than contradictory repository evidence. If scope is uncertain, SELECT "
-            "the rule. Treat LegalReasoningContract as the only legal authority: "
-            "citationSet, version IDs, jurisdiction, applicabilityCriteria, "
-            "requiredEvidence, acceptedEvidenceTypes, negativeEvidenceTypes, and "
-            "validationPolicy bound what may be investigated. Do not create legal "
-            "claims or compliance conclusions. OpenWiki architecture hints, when "
-            "present, are unverified documentation hints for prioritizing search "
-            "only; they are not SOURCE basis, citation evidence, source anchors, "
-            "and not proof of compliance. Domain-specific "
-            "rules such as healthcare, education, public-sector, high-risk, or "
-            "medium-risk should be SKIP only when neither Customer context nor source "
-            "signals make their technical requirement materially relevant. For every "
-            "rule submit one decision and use only the declared reason codes/basis.\n\n"
+            "or SUPERSEDED as factual planning input. "
+            "Treat LegalReasoningContract as the only legal authority: citationSet, "
+            "version IDs, jurisdiction, applicabilityCriteria, requiredEvidence, "
+            "acceptedEvidenceTypes, negativeEvidenceTypes, and validationPolicy bound what "
+            "may be investigated. Do not create legal claims or compliance conclusions. "
+            "SELECT a rule when confirmed context makes it relevant or does not rule it "
+            "out. SKIP a domain-specific rule (healthcare, education, public-sector, "
+            "high-risk, medium-risk) only when confirmed context rules it out. "
+            "When the decision for a rule depends on a business fact the confirmed context "
+            "does not state, add one businessContextNeed naming that fact: a neutral, "
+            "Customer-answerable description with resolutionCriteria, never mentioning "
+            "rule IDs, legal citations, code, or internal system details. Root "
+            "Orchestration routes it to Interview, which asks the Customer. At most "
+            f"{MAX_PLANNER_CONTEXT_NEEDS} needs. Still submit one decision for every "
+            "rule and use only the declared reason codes/basis.\n\n"
             + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         )
 
@@ -642,7 +671,39 @@ class EngineeringRulePlanner:
                             },
                         },
                     },
-                }
+                },
+                "businessContextNeeds": {
+                    "type": "array",
+                    "maxItems": MAX_PLANNER_CONTEXT_NEEDS,
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": [
+                            "engineeringRuleIds",
+                            "businessContextNeed",
+                            "resolutionCriteria",
+                        ],
+                        "properties": {
+                            "engineeringRuleIds": {
+                                "type": "array",
+                                "minItems": 1,
+                                "items": {"type": "string", "minLength": 1},
+                            },
+                            "businessContextNeed": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1000,
+                            },
+                            "whyNeeded": {"type": "string", "maxLength": 1000},
+                            "resolutionCriteria": {
+                                "type": "array",
+                                "minItems": 1,
+                                "maxItems": 10,
+                                "items": {"type": "string", "minLength": 1},
+                            },
+                        },
+                    },
+                },
             },
         }
 
@@ -658,3 +719,53 @@ def _context_audit_kwargs(
         "pge_version": confirmed_context.pge_version,
         "guidance_version": confirmed_context.guidance_version,
     }
+
+
+def _planner_context_needs(
+    value: Any,
+    known: dict[str, EngineeringRulePlanningCandidate],
+) -> tuple[PlannerContextNeed, ...]:
+    """Keep only well-formed, Customer-safe needs about known rules."""
+    if not isinstance(value, list):
+        return ()
+    needs: list[PlannerContextNeed] = []
+    for item in value[:MAX_PLANNER_CONTEXT_NEEDS]:
+        if not isinstance(item, dict):
+            continue
+        rule_ids = tuple(
+            sorted(
+                {
+                    str(rule_id)
+                    for rule_id in item.get("engineeringRuleIds") or []
+                    if str(rule_id) in known
+                }
+            )
+        )
+        business_need = str(item.get("businessContextNeed") or "").strip()
+        criteria = tuple(
+            str(entry).strip()
+            for entry in item.get("resolutionCriteria") or []
+            if str(entry).strip()
+        )
+        why_needed = str(item.get("whyNeeded") or "").strip() or None
+        if not rule_ids or not business_need or not criteria:
+            continue
+        try:
+            _assert_neutral_targeted_text(business_need, why_needed, *criteria)
+        except RuntimeError:
+            logger.warning(
+                "ENGINEERING_RULE_PLAN_CONTEXT_NEED_NOT_NEUTRAL",
+                engineering_rule_ids=list(rule_ids),
+            )
+            continue
+        needs.append(
+            PlannerContextNeed(
+                need_id="planner:"
+                + hashlib.sha256("|".join(rule_ids).encode()).hexdigest()[:24],
+                engineering_rule_ids=rule_ids,
+                business_context_need=business_need,
+                resolution_criteria=criteria,
+                why_needed=why_needed,
+            )
+        )
+    return tuple(needs)

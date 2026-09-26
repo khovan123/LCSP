@@ -137,7 +137,7 @@ class WaitingAssessmentRegistry:
         """
         checkpoints = self.take_all()
         if invoker is None:
-            from tools.common.capabilities.managed.invocation import invoke_boundary
+            from tools.common.capabilities.agent_runtime.invocation import invoke_boundary
 
             invoker = invoke_boundary
         correlation_id_factory = correlation_id_factory or (
@@ -166,9 +166,9 @@ class WaitingAssessmentRegistry:
                 )
                 resumed += 1
             except Exception as error:
-                from middleware.failure_policy import is_terminal_task_error
+                from middleware.failure_policy import is_terminal_boundary_error
 
-                if is_terminal_task_error(error):
+                if is_terminal_boundary_error(error):
                     stopped += 1
                     logger.error(
                         "WAITING_ENGINEERING_ASSESSMENT_STOPPED",

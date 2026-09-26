@@ -9,7 +9,7 @@ before deterministic evaluation or the outer assessment callback can continue.
 
 from __future__ import annotations
 
-from orchestration.agent_stream import invoke_with_stream
+from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
 
 import hashlib
 import json
@@ -22,7 +22,8 @@ from langchain.agents.structured_output import StructuredOutputError
 from contracts.handoffs import InvestigatorResult
 from middleware.failure_policy import TerminalSchemaError
 from middleware.specialist_handoff_validation import _persist_targeted_interview_need
-from model_policy import create_lcsp_agent as create_agent
+from deepagents import create_deep_agent
+from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
 from orchestration.context import LCSPRunContext
 from orchestration.result_validation import (
     SpecialistHandoffValidationError,
@@ -314,8 +315,6 @@ class ResumedManagedInvestigatorPipeline:
 class _ExactResumePlanner:
     """Deterministically reconstruct the already-pinned targeted rule scope."""
 
-    requires_openwiki_context = False
-
     def __init__(self, affected_rule_ids: tuple[str, ...]) -> None:
         self._affected_rule_ids = affected_rule_ids
 
@@ -327,13 +326,11 @@ class _ExactResumePlanner:
         graph: Any,
         workflow_run_id: str,
         correlation_id: str | None = None,
-        openwiki_context: dict[str, Any] | None = None,
     ) -> EngineeringRulePlan:
         _ = (
             graph,
             workflow_run_id,
             correlation_id,
-            openwiki_context,
         )
         rows = tuple(candidates)
         available = {str(item.engineering_rule_id) for item in rows}
@@ -732,7 +729,10 @@ def _invoke_managed_investigator(
                             )
                             return recovered.model_dump(mode="json"), latest_checkpoint
 
-        configurable: dict[str, str] = {"thread_id": thread_id}
+        configurable: dict[str, str] = {
+            "thread_id": thread_id,
+            "assessment_id": context.assessment_id,
+        }
         if checkpoint_id:
             configurable["checkpoint_id"] = checkpoint_id
         current_instruction = instruction
@@ -755,6 +755,7 @@ def _invoke_managed_investigator(
                         },
                     },
                     context=context,
+                    stage=AGENT_STREAM_STAGES["investigate"],
                 )
                 if not isinstance(invocation, dict) or "structured_response" not in invocation:
                     raise SpecialistHandoffValidationError(
@@ -1087,9 +1088,10 @@ def _is_failed_investigator_handoff(handoff: dict[str, Any]) -> bool:
 
 def _durable_investigator_agent(checkpointer: Any):
     definition = INVESTIGATOR_SUBAGENT
-    return create_agent(
-        agent_name="lcsp-investigator-durable-execution",
+    return create_deep_agent(
+        name="lcsp-investigator-durable-execution",
         model=definition["model"],
+        backend=current_repository_backend(),
         tools=definition["tools"],
         system_prompt=definition["system_prompt"],
         middleware=definition["middleware"],

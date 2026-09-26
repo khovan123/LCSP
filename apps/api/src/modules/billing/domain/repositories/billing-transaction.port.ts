@@ -23,11 +23,26 @@ export type ReservationRecord = {
   remainingCredits: bigint;
   maxInvocations: bigint;
   invocationsStarted: bigint;
+  workspaceId: string | null;
   assessmentId: string | null;
+  scanJobId: string | null;
+  threadId: string | null;
   runId: string | null;
+  provider: string | null;
+  model: string | null;
+  invocationId: string | null;
+  modelInvocationId: string | null;
   idempotencyKey: string | null;
   status: string;
 };
+export type InvocationClaimRecord = {
+  reservationId: string;
+  invocationId: string;
+  authorizedChargeCredits: bigint;
+  authorizationFingerprint: string | null;
+  settledAt: Date | null;
+};
+
 export type OrderRecord = {
   id: string;
   userId: string;
@@ -144,12 +159,30 @@ export interface BillingReservationPort {
     userId: string;
     walletId: string;
     amountCredits: bigint;
+    workspaceId?: string;
     assessmentId?: string;
+    scanJobId?: string;
+    threadId?: string;
     runId?: string;
+    provider?: string;
+    model?: string;
+    invocationId?: string;
+    modelInvocationId?: string;
     idempotencyKey: string;
     maxInvocations?: bigint;
   }): Promise<ReservationRecord>;
+  findInvocationClaim(
+    reservationId: string,
+    invocationId: string,
+  ): Promise<InvocationClaimRecord | null>;
+  sumUnsettledAuthorizedChargeCredits(reservationId: string): Promise<bigint>;
   claimInvocation(input: {
+    reservationId: string;
+    invocationId: string;
+    authorizedChargeCredits?: bigint;
+    authorizationFingerprint?: string;
+  }): Promise<boolean>;
+  settleInvocationClaim(input: {
     reservationId: string;
     invocationId: string;
   }): Promise<boolean>;
@@ -300,6 +333,8 @@ export interface PricingSnapshotPort {
 export interface RuntimeModelPolicyPort {
   findApplicable(
     role: string,
+    provider: string,
+    model: string,
     occurredAt: Date,
   ): Promise<RuntimeModelPolicyRecord | null>;
 }

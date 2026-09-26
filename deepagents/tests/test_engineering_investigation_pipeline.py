@@ -546,3 +546,31 @@ def test_rule_evaluator_treats_scope_claim_as_not_applicable() -> None:
 
     assert evaluation.status == "NOT_APPLICABLE"
     assert evaluation.evidence_refs == ()
+
+
+def test_graph_without_stored_hash_is_content_addressed_not_rejected():
+    import pytest
+
+    graph = {
+        "graph_id": "deep-agent:scan-legacy",
+        "snapshot_id": "snap-1",
+        "commit_sha": "abc",
+        "nodes": [{"node_id": "n1", "node_type": "MODULE"}],
+        "edges": [],
+        "graph_hash": "",
+    }
+    report = {"evidence_payload": {"evidence_graph": graph}}
+
+    first = EngineeringInvestigationPipeline._graph(report)
+    second = EngineeringInvestigationPipeline._graph(report)
+
+    assert first.graph_hash.startswith("sha256:")
+    assert first.graph_hash == second.graph_hash
+    with pytest.raises(ValueError, match="provenance is incomplete"):
+        EngineeringInvestigationPipeline._graph(
+            {"evidence_payload": {"evidence_graph": {**graph, "graph_id": ""}}}
+        )
+    with pytest.raises(ValueError, match="provenance is incomplete"):
+        EngineeringInvestigationPipeline._graph(
+            {"evidence_payload": {"evidence_graph": {**graph, "nodes": []}}}
+        )

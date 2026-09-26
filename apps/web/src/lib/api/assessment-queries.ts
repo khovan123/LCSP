@@ -11,6 +11,7 @@ import type {
 import { getAssessmentArtifactAvailability } from "./assessment-artifact-client";
 import {
   buildSubmitInterviewAnswerCommand,
+  continueAssessmentPipeline,
   getAssessmentInterviewState,
   recordAssessmentInterviewBlockedAction,
   submitAssessmentInterviewAnswer,
@@ -114,6 +115,24 @@ export function useAssessmentInterviewBlockedActionMutation(
   });
 }
 
+export function useContinueAssessmentPipelineMutation(assessmentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => continueAssessmentPipeline(assessmentId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.assessment.interview(assessmentId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.assessment.classification(assessmentId),
+        }),
+      ]);
+    },
+  });
+}
+
 export function useSubmitAssessmentPostFindingDecisionMutation(
   assessmentId: string,
 ) {
@@ -184,9 +203,6 @@ export function useStartRepositoryAnalysisMutation(assessmentId: string) {
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: apiQueryKeys.assessment.readiness(assessmentId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: apiQueryKeys.auth.repositories(),
         }),
       ]);
     },

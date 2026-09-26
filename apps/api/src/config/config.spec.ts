@@ -1,5 +1,5 @@
-import { config, createConfigValidationSchema } from "./config.js";
 import { resolve } from "node:path";
+import { config, createConfigValidationSchema } from "./config.js";
 
 const VALIDATION_WORKSPACE_ROOT = resolve("test-workspace");
 const configValidationSchema = createConfigValidationSchema(
@@ -230,6 +230,75 @@ describe("configValidationSchema", () => {
     });
     expect(result.error?.message).toContain(
       "archive retrieval requires credential persistence and snapshot pinning",
+    );
+  });
+
+  it("accepts billing metering when LLM7 primary and Google fallback are authorized", () => {
+    const result = validate({
+      ...VALID_ENV,
+      BILLING_METERING_ENABLED: "true",
+      BILLING_RESERVATION_CREDITS: "8000",
+      BILLING_MAX_INVOCATION_CHARGE_CREDITS: "500",
+      BILLING_RUNTIME_PROVIDER: "llm7",
+      BILLING_RUNTIME_MODEL: "GLM-5.3-Flash",
+      BILLING_MAX_INPUT_TOKENS: "65536",
+      BILLING_MAX_INPUT_BYTES: "262144",
+      BILLING_MAX_OUTPUT_TOKENS: "4096",
+      BILLING_MAX_REASONING_TOKENS: "0",
+      BILLING_MAX_INVOCATIONS_PER_GROUP: "16",
+      BILLING_AUTHORIZED_RUNTIME_MODELS:
+        "LLM7:GLM-5.3-Flash,GOOGLE_GENAI:gemini-3.5-flash-lite",
+      LCSP_MODEL_PROVIDER: "llm7",
+      LLM_FALLBACK_PROVIDER_1: "google_genai",
+    });
+
+    expect(result.error).toBeUndefined();
+  });
+
+  it("rejects billing metering when the primary pricing envelope is stale", () => {
+    const result = validate({
+      ...VALID_ENV,
+      BILLING_METERING_ENABLED: "true",
+      BILLING_RESERVATION_CREDITS: "8000",
+      BILLING_MAX_INVOCATION_CHARGE_CREDITS: "500",
+      BILLING_RUNTIME_PROVIDER: "llm7",
+      BILLING_RUNTIME_MODEL: "gemini-3.1-flash-lite",
+      BILLING_MAX_INPUT_TOKENS: "65536",
+      BILLING_MAX_INPUT_BYTES: "262144",
+      BILLING_MAX_OUTPUT_TOKENS: "4096",
+      BILLING_MAX_REASONING_TOKENS: "0",
+      BILLING_MAX_INVOCATIONS_PER_GROUP: "16",
+      BILLING_AUTHORIZED_RUNTIME_MODELS:
+        "LLM7:gemini-3.1-flash-lite,GOOGLE_GENAI:gemini-3.5-flash-lite",
+      LCSP_MODEL_PROVIDER: "llm7",
+      LLM_FALLBACK_PROVIDER_1: "google_genai",
+    });
+
+    expect(result.error?.message).toContain(
+      "must match the effective LCSP primary runtime model",
+    );
+  });
+
+  it("rejects billing metering when a configured fallback model is not authorized", () => {
+    const result = validate({
+      ...VALID_ENV,
+      BILLING_METERING_ENABLED: "true",
+      BILLING_RESERVATION_CREDITS: "8000",
+      BILLING_MAX_INVOCATION_CHARGE_CREDITS: "500",
+      BILLING_RUNTIME_PROVIDER: "llm7",
+      BILLING_RUNTIME_MODEL: "GLM-5.3-Flash",
+      BILLING_MAX_INPUT_TOKENS: "65536",
+      BILLING_MAX_INPUT_BYTES: "262144",
+      BILLING_MAX_OUTPUT_TOKENS: "4096",
+      BILLING_MAX_REASONING_TOKENS: "0",
+      BILLING_MAX_INVOCATIONS_PER_GROUP: "16",
+      BILLING_AUTHORIZED_RUNTIME_MODELS: "LLM7:GLM-5.3-Flash",
+      LCSP_MODEL_PROVIDER: "llm7",
+      LLM_FALLBACK_PROVIDER_1: "google_genai",
+    });
+
+    expect(result.error?.message).toContain(
+      "must include the effective LCSP primary and fallback runtime models",
     );
   });
 
