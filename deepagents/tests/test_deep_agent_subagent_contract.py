@@ -7,6 +7,7 @@ import pytest
 
 import harness
 import model_policy
+from middleware.agent_run_budget import AgentRunBudgetMiddleware
 from middleware.interview_runtime_context import inject_interview_runtime_context
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE, TRIAGE_MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.billing_metering import BillingAgentRoleMiddleware
@@ -91,6 +92,10 @@ def test_subagents_follow_deep_agents_dictionary_contract() -> None:
             expected_prefix = [inject_lcsp_runtime_context]
             expected_governance = MODEL_GOVERNANCE_MIDDLEWARE
         middleware = subagent["middleware"]
+        if name in {"planner", "investigator"}:
+            # Repository-exploring roles are bounded so their ReAct loop converges.
+            assert isinstance(middleware[0], AgentRunBudgetMiddleware)
+            middleware = middleware[1:]
         assert middleware[:1] == expected_prefix
         role_middleware = middleware[1]
         assert isinstance(role_middleware, BillingAgentRoleMiddleware)

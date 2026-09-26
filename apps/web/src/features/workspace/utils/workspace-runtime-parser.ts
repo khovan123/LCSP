@@ -52,6 +52,7 @@ export function parseAgentStreamEvent(
     correlationId: item.correlation_id,
     eventType: item.event_type,
     stage: isAssessmentAgentStreamStage(item.stage) ? item.stage : null,
+    engineeringRuleId: optionalString(item.engineering_rule_id),
     source: optionalString(item.source),
     agentName: optionalString(item.agent_name),
     subagentName: optionalString(item.subagent_name),

@@ -214,6 +214,7 @@ function toAgentStreamPayload(event: AssessmentAgentStreamEvent) {
     correlation_id: event.correlationId,
     event_type: event.eventType,
     stage: event.stage,
+    engineering_rule_id: event.engineeringRuleId,
     source: event.source,
     agent_name: event.agentName,
     subagent_name: event.subagentName,

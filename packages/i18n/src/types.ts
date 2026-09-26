@@ -257,6 +257,24 @@ export type PagesMessages = {
       changesPushed: string;
       repositoryToolRan: string;
       subagentSelected: string;
+      agentReasoning: string;
+      agentStepOutput: string;
+      agentBudgetReached: string;
+      agentBudgetExhausted: string;
+      agentContextTrimmed: string;
+    };
+    agentStreamRule: {
+      investigating: string;
+      investigated: string;
+      investigationFailed: string;
+      waitingForInput: string;
+      planned: string;
+      result: string;
+      decision: string;
+      reason: string;
+      confidence: string;
+      sources: string;
+      limitations: string;
     };
     agentStreamSelected: string;
     agentStreamLoadOlder: string;

@@ -335,6 +335,7 @@ describe("WorkspaceRuntimeEventsController", () => {
             correlationId: "corr-101",
             eventType: "MODEL_CONTENT_DELTA",
             stage: null,
+            engineeringRuleId: null,
             source: "engineering",
             agentName: "investigator",
             subagentName: null,

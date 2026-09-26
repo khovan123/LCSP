@@ -776,6 +776,7 @@ function agentStreamEvent(sequence: number): AssessmentAgentStreamEvent {
     correlationId: "corr-101",
     eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
     stage: null,
+    engineeringRuleId: null,
     source: "engineering",
     agentName: "investigator",
     subagentName: null,

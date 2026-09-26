@@ -110,6 +110,7 @@ interface WorkerAgentStreamEventRequest {
   correlation_id?: unknown;
   event_type?: unknown;
   stage?: unknown;
+  engineering_rule_id?: unknown;
   source?: unknown;
   agent_name?: unknown;
   subagent_name?: unknown;
@@ -606,6 +607,7 @@ export class InternalScanController {
         randomUUID(),
       eventType: payload.event_type,
       stage: isAssessmentAgentStreamStage(payload.stage) ? payload.stage : null,
+      engineeringRuleId: optionalText(payload.engineering_rule_id),
       source: optionalText(payload.source),
       agentName: optionalText(payload.agent_name),
       subagentName: optionalText(payload.subagent_name),

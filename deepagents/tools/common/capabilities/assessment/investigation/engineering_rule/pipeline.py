@@ -12,6 +12,11 @@ from model_policy import INVESTIGATOR_MODEL_SPEC, PLANNER_MODEL_SPEC
 from tools.common.capabilities.platform.api_client import WorkerApiClient
 from tools.common.capabilities.platform.logging import get_logger
 from middleware.billing_metering import BillingMeteringError
+from orchestration.agent_stream import (
+    AGENT_STREAM_STAGES,
+    agent_stream_rule_scope,
+    agent_stream_stage,
+)
 from tools.common.capabilities.evidence.graph.schema.models import (
     ProgramEvidenceGraph,
     program_graph_content_hash,
@@ -286,12 +291,22 @@ class EngineeringInvestigationPipeline:
                         confirmed_customer_context=confirmed_customer_context,
                     )
                     try:
-                        rule_claims = self._investigator.investigate(
-                            packet=packet,
-                            graph=graph,
-                            workflow_run_id=workflow_run_id,
-                            correlation_id=correlation_id,
-                        )
+                        with agent_stream_stage(
+                            AGENT_STREAM_STAGES["investigate"]
+                        ), agent_stream_rule_scope(
+                            engineering_rule.engineering_rule_id,
+                            concept=packet.concept,
+                            required_evidence=packet.required_evidence,
+                            investigation_goals=packet.investigation_goals,
+                        ) as rule_stream:
+                            rule_claims = self._investigator.investigate(
+                                packet=packet,
+                                graph=graph,
+                                workflow_run_id=workflow_run_id,
+                                correlation_id=correlation_id,
+                            )
+                            if rule_stream is not None:
+                                rule_stream.complete(rule_claims)
                     except BillingMeteringError:
                         raise
                     except Exception as error:

@@ -37,6 +37,14 @@ class TerminalSchemaError(ValueError):
     """Structured output repair would repeat a failed task."""
 
 
+class AgentRunBudgetExceeded(RuntimeError):
+    """One agent run used its whole model-call budget without finishing.
+
+    Terminal for retry, credential rotation and queue delivery: replaying the same
+    run would walk the same unbounded loop and spend the same budget again.
+    """
+
+
 class StructuredOutputRejected(TerminalSchemaError):
     """A provider model's own structured output failed the contract.
 
@@ -137,7 +145,7 @@ def is_terminal_task_error(error: BaseException) -> bool:
     current: BaseException | None = error
     while current is not None and id(current) not in seen:
         seen.add(id(current))
-        if isinstance(current, (TypeError, ValidationError, StructuredOutputError, TerminalSchemaError, TerminalCredentialError)):
+        if isinstance(current, (TypeError, ValidationError, StructuredOutputError, TerminalSchemaError, TerminalCredentialError, AgentRunBudgetExceeded)):
             return True
         if type(current).__name__ == "BillingBudgetExhausted":
             return True

@@ -1,6 +1,7 @@
 """Planner subagent: bound EngineeringRule investigation over the repository database."""
 
 from contracts.handoffs import PlannerResult
+from middleware.agent_run_budget import AgentRunBudgetMiddleware
 from middleware.billing_metering import BillingAgentRoleMiddleware
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.runtime_context import inject_lcsp_runtime_context
@@ -53,6 +54,7 @@ SUBAGENT = {
     "tools": TOOLS,
     "model": PLANNER_MODEL_SPEC,
     "middleware": [
+        AgentRunBudgetMiddleware(),
         inject_lcsp_runtime_context,
         BillingAgentRoleMiddleware("planner"),
         *MODEL_GOVERNANCE_MIDDLEWARE,

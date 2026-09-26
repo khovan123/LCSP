@@ -87,6 +87,7 @@ export type PublishAgentStreamEventInput = {
   correlationId: string;
   eventType: AssessmentAgentStreamEventType;
   stage?: AssessmentAgentStreamStage | null;
+  engineeringRuleId?: string | null;
   source?: string | null;
   agentName?: string | null;
   subagentName?: string | null;
@@ -486,6 +487,7 @@ export class AssessmentRuntimeEventService {
         input.correlationId,
       eventType: input.eventType,
       stage: input.stage ?? null,
+      engineeringRuleId: sanitizeAgentStreamIdentifier(input.engineeringRuleId),
       source: sanitizeAgentStreamIdentifier(input.source),
       agentName: sanitizeAgentStreamIdentifier(input.agentName),
       subagentName: sanitizeAgentStreamIdentifier(input.subagentName),
@@ -2197,6 +2199,7 @@ function agentStreamJournalEventFromRow(
     correlationId: stringValue(event.correlationId) ?? row.correlationId,
     eventType: event.eventType as AssessmentAgentStreamEventType,
     stage: isAssessmentAgentStreamStage(event.stage) ? event.stage : null,
+    engineeringRuleId: stringValue(event.engineeringRuleId),
     source: stringValue(event.source),
     agentName: stringValue(event.agentName),
     subagentName: stringValue(event.subagentName),

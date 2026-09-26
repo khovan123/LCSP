@@ -180,6 +180,11 @@ def model_with_token(model, provider: str, token: str):
     # Fallback rotation owns retry policy. In particular, retrying a 401 with the same
     # dead Gemini key only adds latency and duplicate Unauthorized log lines.
     settings["max_retries"] = NO_SDK_RETRY_MAX_RETRIES[provider]
+    # ``profile`` is excluded from model_dump; without it a rotated slot loses the
+    # context window that context trimming and the billing guard rely on.
+    profile = getattr(model, "profile", None)
+    if profile is not None:
+        settings["profile"] = profile
     return type(model)(**settings)
 
 

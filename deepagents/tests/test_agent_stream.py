@@ -570,3 +570,153 @@ def test_agent_stream_stages_match_shared_typescript_contract() -> None:
     assert set(re.findall(r':\s*"([A-Z0-9_]+)"', block.group(1))) == set(
         AGENT_STREAM_STAGES.values()
     )
+
+
+class NonStreamingToolCallAgent:
+    """A provider called with stream=False yields one complete AIMessage per step."""
+
+    name = "planner"
+
+    def stream(self, input_value, **kwargs):
+        from langchain_core.messages import AIMessage
+
+        yield {
+            "type": "messages",
+            "ns": (),
+            "data": (
+                AIMessage(
+                    id="msg-complete",
+                    content="I will read the auth module to check token validation.",
+                    additional_kwargs={
+                        "reasoning_content": "Token validation lives in auth/."
+                    },
+                    tool_calls=[
+                        {
+                            "name": "read_file",
+                            "args": {"file_path": "/auth/tokens.py"},
+                            "id": "call-read",
+                        }
+                    ],
+                    response_metadata={"finish_reason": "tool_calls"},
+                ),
+                {
+                    "langgraph_node": "model",
+                    "ls_provider": "openai",
+                    "ls_model_name": "gpt-test",
+                },
+            ),
+        }
+        yield {"type": "values", "ns": (), "data": {"result": "done"}}
+
+
+def test_non_streaming_model_step_surfaces_reasoning_tool_calls_and_output():
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        invoke_with_stream(NonStreamingToolCallAgent(), {"messages": []})
+
+    kinds = [
+        (event["event_type"], (event.get("data") or {}).get("kind"))
+        for event in events
+    ]
+    assert ("MODEL_REQUEST", "MODEL_REQUEST") in kinds
+    assert ("CUSTOM_PROGRESS", "REASONING_SUMMARY") in kinds
+    assert ("SEMANTIC_TOOL_CALL", "TOOL_CALL") in kinds
+    assert ("MODEL_RESULT", "MODEL_OUTPUT") in kinds
+
+    reasoning = next(
+        event
+        for event in events
+        if (event.get("data") or {}).get("kind") == "REASONING_SUMMARY"
+    )
+    assert reasoning["data"]["resultSummary"] == {
+        "summary": "Token validation lives in auth/."
+    }
+    assert reasoning["data"]["durability"] == "DURABLE"
+
+    tool_call = next(
+        event for event in events if event["event_type"] == "SEMANTIC_TOOL_CALL"
+    )
+    assert tool_call["tool_call_id"] == "call-read"
+    assert tool_call["data"]["parameters"] == {"file_path": "/auth/tokens.py"}
+
+    result = next(event for event in events if event["event_type"] == "MODEL_RESULT")
+    assert result["data"]["finishReason"] == "tool_calls"
+    assert result["data"]["resultSummary"] == {
+        "text": "I will read the auth module to check token validation."
+    }
+
+
+def test_streamed_reasoning_is_one_summary_per_step_not_one_per_token():
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        invoke_with_stream(StreamingFinalEmptyAgent(), {"messages": []})
+
+    summaries = [
+        event
+        for event in events
+        if (event.get("data") or {}).get("kind") == "REASONING_SUMMARY"
+    ]
+    assert len(summaries) == 1
+    assert summaries[0]["data"]["resultSummary"] == {"summary": "provider summary"}
+
+
+def test_rule_scope_attributes_activity_and_reports_the_reasoning_result():
+    from orchestration.agent_stream import agent_stream_rule_scope, publish_agent_stream_event
+
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        with agent_stream_rule_scope(
+            "ER-7",
+            concept="Token validation",
+            required_evidence=("Tokens are validated",),
+        ) as rule_stream:
+            publish_agent_stream_event("LOG", text="inside rule")
+            rule_stream.complete(
+                [
+                    {
+                        "claim_type": "RULE_REQUIREMENT_MET",
+                        "criterion": "Tokens are validated",
+                        "confidence": 0.9,
+                        "source_locations": [
+                            {"path": "auth/tokens.py", "start_line": 3, "end_line": 9}
+                        ],
+                    }
+                ]
+            )
+        publish_agent_stream_event("LOG", text="after rule")
+
+    started, activity, completed, after = events
+    assert started["event_type"] == "ENGINEERING_RULE"
+    assert started["status"] == "RUNNING"
+    assert started["data"]["concept"] == "Token validation"
+    assert activity["engineering_rule_id"] == "ER-7"
+    assert completed["status"] == "COMPLETED"
+    assert completed["data"]["decision"] == "RULE_REQUIREMENT_MET"
+    assert completed["data"]["resultSummary"]["claims"] == [
+        {
+            "claimType": "RULE_REQUIREMENT_MET",
+            "criterion": "Tokens are validated",
+            "confidence": 0.9,
+            "sourceLocations": "auth/tokens.py#L3-L9",
+        }
+    ]
+    assert "engineering_rule_id" not in after
+
+
+def test_rule_scope_reports_failed_and_waiting_rules():
+    from orchestration.agent_stream import agent_stream_rule_scope
+
+    class Pending(Exception):
+        pass
+
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        for error in (RuntimeError("boom"), Pending("needs input")):
+            try:
+                with agent_stream_rule_scope("ER-9", waiting_on=(Pending,)):
+                    raise error
+            except Exception:
+                pass
+
+    statuses = [event["status"] for event in events]
+    assert statuses == ["RUNNING", "FAILED", "RUNNING", "WAITING"]

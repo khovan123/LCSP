@@ -8,6 +8,7 @@ import {
   ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   type AssessmentAgentStreamEvent,
+  type AssessmentRuntimeSummaryValue,
 } from "@lcsp/contracts/evidence";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
@@ -66,6 +67,7 @@ function event(
     correlationId: "corr-1",
     eventType,
     stage: null,
+    engineeringRuleId: null,
     source: "engineering",
     agentName: "investigator",
     subagentName: null,
@@ -965,5 +967,235 @@ test("replacement scan shows only the new run and never mixes previous scanner a
   assert.equal(
     container.querySelectorAll('[data-stream-status="running"]').length,
     1,
+  );
+});
+
+function engineeringRuleEvent(
+  sequence: number,
+  ruleId: string,
+  status: AssessmentAgentStreamEvent["status"],
+  semantic: Record<string, AssessmentRuntimeSummaryValue>,
+): AssessmentAgentStreamEvent {
+  return event(
+    sequence,
+    ASSESSMENT_AGENT_STREAM_EVENT_TYPES.engineeringRule,
+    {
+      schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+      kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.engineeringRule,
+      durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+      engineeringRuleId: ruleId,
+      ...semantic,
+    },
+    {
+      engineeringRuleId: ruleId,
+      status,
+      toolName: null,
+      toolCallId: null,
+      messageId: null,
+    },
+  );
+}
+
+test("investigation renders one section per rule with its own activity and reasoning result", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          engineeringRuleEvent(1, "ER-1", ASSESSMENT_RUNTIME_RUN_STATUSES.running, {
+            concept: "Token validation",
+            status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+          }),
+          event(
+            2,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.customProgress,
+            {
+              schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+              kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.reasoningSummary,
+              durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+              resultSummary: { summary: "Token checks live in auth/tokens.py." },
+            },
+            {
+              engineeringRuleId: "ER-1",
+              messageId: "m-1",
+              toolName: null,
+              toolCallId: null,
+            },
+          ),
+          event(
+            3,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
+            {
+              schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+              kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall,
+              durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+              toolName: "read_file",
+              toolCallId: "call-read",
+              parameters: { file_path: "/auth/tokens.py" },
+            },
+            {
+              engineeringRuleId: "ER-1",
+              toolName: "read_file",
+              toolCallId: "call-read",
+            },
+          ),
+          event(
+            4,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelResult,
+            {
+              schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+              kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.modelOutput,
+              durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+              resultSummary: { text: "Tokens are validated before use." },
+            },
+            {
+              engineeringRuleId: "ER-1",
+              messageId: "m-2",
+              toolName: null,
+              toolCallId: null,
+              status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+            },
+          ),
+          engineeringRuleEvent(5, "ER-1", ASSESSMENT_RUNTIME_RUN_STATUSES.completed, {
+            decision: "RULE_REQUIREMENT_MET",
+            resultSummary: {
+              claims: [
+                {
+                  claimType: "RULE_REQUIREMENT_MET",
+                  criterion: "Tokens are validated",
+                  confidence: 0.9,
+                  sourceLocations: "auth/tokens.py#L3-L9",
+                },
+              ],
+            },
+          }),
+          engineeringRuleEvent(6, "ER-2", ASSESSMENT_RUNTIME_RUN_STATUSES.running, {
+            concept: "Audit logging",
+          }),
+        ]}
+      />,
+    );
+  });
+
+  const rules = container.querySelectorAll<HTMLElement>("[data-stream-rule]");
+  assert.deepEqual(
+    [...rules].map((rule) => [
+      rule.getAttribute("data-stream-rule"),
+      rule.getAttribute("data-stream-rule-status"),
+    ]),
+    [
+      ["ER-1", ASSESSMENT_RUNTIME_RUN_STATUSES.completed],
+      ["ER-2", ASSESSMENT_RUNTIME_RUN_STATUSES.running],
+    ],
+  );
+
+  const firstRule = rules[0];
+  assert.ok(firstRule);
+  assert.match(firstRule.textContent ?? "", /Token validation/);
+  const activities = firstRule.querySelectorAll("details[data-stream-activity]");
+  assert.equal(activities.length, 3);
+  assert.equal(
+    firstRule.querySelector('[data-stream-kind="reasoning"]')?.textContent?.includes(
+      "Token checks live in auth/tokens.py.",
+    ),
+    true,
+  );
+  assert.match(firstRule.textContent ?? "", /Tokens are validated before use\./);
+
+  const result = firstRule.querySelector("[data-stream-rule-result]")?.textContent ?? "";
+  assert.match(result, /RULE_REQUIREMENT_MET/);
+  assert.match(result, /Tokens are validated/);
+  assert.match(result, /90%/);
+  assert.match(result, /auth\/tokens\.py#L3-L9/);
+
+  // Lifecycle events are the section itself, never separate rows.
+  assert.equal(
+    container.querySelectorAll(":scope details[data-stream-activity]").length,
+    3,
+  );
+});
+
+test("each agent model step renders as its own row instead of one merged row", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const step = (
+    sequence: number,
+    eventType: AssessmentAgentStreamEvent["eventType"],
+    modelStepId: string,
+  ) =>
+    event(
+      sequence,
+      eventType,
+      {
+        provider: "llm7",
+        model: "GLM-5.3-Flash",
+        elapsed_seconds: 1,
+        model_step_id: modelStepId,
+      },
+      { toolName: null, toolCallId: null },
+    );
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          step(1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted, "step-1"),
+          step(2, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted, "step-1"),
+          step(3, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted, "step-2"),
+          step(4, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallHeartbeat, "step-2"),
+        ]}
+      />,
+    );
+  });
+
+  const modelRows = container.querySelectorAll('[data-stream-kind="model"]');
+  assert.deepEqual(
+    [...modelRows].map((row) => row.getAttribute("data-stream-status")),
+    ["completed", "running"],
+  );
+});
+
+test("budget and context trimming render as their own progress rows", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          event(
+            1,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentContextTrimmed,
+            { cleared_tool_results: 4 },
+            { toolName: null, toolCallId: null, status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed },
+          ),
+          event(
+            2,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentBudgetReached,
+            { reason: "MODEL_CALL_BUDGET", model_calls: 24 },
+            { toolName: null, toolCallId: null },
+          ),
+        ]}
+      />,
+    );
+  });
+
+  const progress = container.querySelectorAll('[data-stream-kind="progress"]');
+  assert.equal(progress.length, 2);
+  assert.match(
+    progress[0]?.textContent ?? "",
+    /Trimmed older tool results|Đã lược bớt kết quả tool cũ/,
+  );
+  assert.match(
+    progress[1]?.textContent ?? "",
+    /Step budget reached|Đã chạm giới hạn số bước/,
   );
 });
