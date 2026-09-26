@@ -93,7 +93,7 @@ def _openai_model():
 
 def _llm7_model():
     return ChatOpenAI(
-        model="codestral-latest",
+        model="GLM-5.3-Flash",
         base_url="https://api.llm7.io/v1",
         use_responses_api=False,
         **credential_init_kwargs("llm7"),
@@ -383,9 +383,9 @@ def test_llm7_upstream_unprocessable_fallback_preserves_tool_continuation_and_op
         reservation_id="reservation-tools",
         agent_role="investigator",
         reserved_provider="LLM7",
-        reserved_model="codestral-latest",
+        reserved_model="GLM-5.3-Flash",
         authorized_models={
-            ("LLM7", "codestral-latest"),
+            ("LLM7", "GLM-5.3-Flash"),
             ("GOOGLE_GENAI", "gemini-3.5-flash-lite"),
         },
         max_invocations=16,
@@ -409,7 +409,7 @@ def test_llm7_upstream_unprocessable_fallback_preserves_tool_continuation_and_op
         ),
     ]
     request = _BillingRequest(
-        _BillingModel("llm7", "codestral-latest"),
+        _BillingModel("llm7", "GLM-5.3-Flash"),
         messages=messages,
     )
     provider_calls = []

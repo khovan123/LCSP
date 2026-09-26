@@ -951,3 +951,62 @@ def test_backstop_sdk_references_start_interview_instead_of_parked_reanalysis(tm
     assert "SDK" in question["prompt"]
     assert "outbound API call" not in question["prompt"]
     assert question["frontier"]["owner"] == "CUSTOMER"
+
+
+def test_finding_snippet_ref_is_bounded_to_the_interview_locator_limit(tmp_path) -> None:
+    """Assessment 7976a135 regression: symbol-wide anchors broke the interview handoff.
+
+    Anchors cover whole symbols (lines 30-80), but the Interview contract and the API
+    snippet resolver accept at most seven lines, so the copied locator failed schema
+    validation and the engineering assessment run errored.
+    """
+    from deepagents.backends import LocalShellBackend
+
+    from contracts.handoffs import InterviewSnippetRef
+    from tools.common.capabilities.evidence.repository_analysis.analyzer import (
+        RepositoryDeepAnalyzer,
+    )
+    from tools.common.capabilities.evidence.repository_analysis.models import (
+        RepositoryAnalysisResult,
+    )
+
+    (tmp_path / "model_policy.py").write_text("x = 1\n" * 90, encoding="utf-8")
+    result = RepositoryAnalysisResult.model_validate(
+        {
+            "summary": "AI invocation",
+            "coverage_state": "READY",
+            "source_anchors": [
+                {
+                    "anchor_id": "anchor-1",
+                    "file_path": "model_policy.py",
+                    "start_line": 30,
+                    "end_line": 80,
+                }
+            ],
+            "ai_discovery": {
+                "gate": "AI_CONFIRMED",
+                "coverage_state": "READY",
+                "findings": [
+                    {
+                        "evidence_id": "finding-1",
+                        "state": "CONFIRMED_AI_CALL",
+                        "resolution_state": "OBSERVED",
+                        "kind": "SDK_INVOCATION",
+                        "anchor_id": "anchor-1",
+                    }
+                ],
+            },
+        }
+    )
+
+    payload = RepositoryDeepAnalyzer._evidence_payload(
+        LocalShellBackend(root_dir=str(tmp_path), virtual_mode=True),
+        result,
+        snapshot_id="snapshot-1",
+        commit_sha="abc123",
+        scan_job_id="scan-1",
+    )
+
+    snippet_ref = payload["ai_discovery"]["findings"][0]["snippet_ref"]
+    assert (snippet_ref["start_line"], snippet_ref["end_line"]) == (30, 36)
+    InterviewSnippetRef.model_validate(snippet_ref)

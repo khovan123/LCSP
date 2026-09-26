@@ -34,6 +34,9 @@ from .models import AiFinding, RepositoryAnalysisResult, SourceAnchor
 
 
 REPOSITORY_ANALYSIS_VERSION = "1.0.0"
+# Interview snippet locators are bounded to seven lines by the handoff contract and the
+# API snippet resolver; anchors may span a whole symbol, so findings point at its head.
+SNIPPET_REF_MAX_LINES = 7
 
 SYSTEM_PROMPT = """You are LCSP's repository evidence analyst running as a full Deep Agent.
 
@@ -304,7 +307,10 @@ class RepositoryDeepAnalyzer:
                     "file_path": anchor["file_path"],
                     "symbol": anchor["symbol_ref"],
                     "start_line": anchor["start_line"],
-                    "end_line": anchor["end_line"],
+                    "end_line": min(
+                        anchor["end_line"],
+                        anchor["start_line"] + SNIPPET_REF_MAX_LINES - 1,
+                    ),
                     "evidence_hash": anchor["source_hash"],
                     "snippet_policy": "PINNED_SNAPSHOT_BOUNDED_REDACTED_V1",
                 }

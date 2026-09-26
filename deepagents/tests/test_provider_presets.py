@@ -38,7 +38,7 @@ if expected == "google_genai":
             "thinking_level": "minimal",
         }
 elif expected == "llm7":
-    assert p.ALL_LCSP_MODEL_SPECS == ("openai:codestral-latest",)
+    assert p.ALL_LCSP_MODEL_SPECS == ("openai:GLM-5.3-Flash",)
     expected_kwargs = {
         "base_url": "https://api.llm7.io/v1",
         "use_responses_api": False,
@@ -47,7 +47,7 @@ elif expected == "llm7":
     assert model_provider_profile_for(p.ROOT_MODEL_SPEC).init_kwargs == expected_kwargs
     expected_kwargs = {
         **expected_kwargs,
-        "profile": p.model_profile_for_route("llm7", "codestral-latest"),
+        "profile": p.model_profile_for_route("llm7", "GLM-5.3-Flash"),
     }
     assert p.model_init_kwargs_for_agent(
         agent_name="law_guided_investigator", model_spec=p.ROOT_MODEL_SPEC
@@ -96,7 +96,7 @@ harness.register_provider_profile = lambda key, profile: registrations.append((k
 harness.register_harness_profile = lambda *_: None
 harness.configure_lcsp_harness()
 profiles = {key: dict(profile.init_kwargs) for key, profile in registrations}
-assert p.ALL_LCSP_MODEL_SPECS == ("openai:codestral-latest",)
+assert p.ALL_LCSP_MODEL_SPECS == ("openai:GLM-5.3-Flash",)
 assert profiles["openai"]["api_key"] == "llm7-first"
 assert profiles[p.ROOT_MODEL_SPEC]["api_key"] == "llm7-first"
 assert profiles[p.ROOT_MODEL_SPEC]["base_url"] == "https://api.llm7.io/v1"
