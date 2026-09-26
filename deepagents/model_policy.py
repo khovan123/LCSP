@@ -468,7 +468,11 @@ def create_lcsp_agent(
     )
     langchain_name = kwargs.pop("name", agent_name)
     middleware = kwargs.get("middleware")
-    if middleware is not None:
+    # Specialist definitions declare their own role; a second instance with the same
+    # middleware name makes create_agent reject the whole stack.
+    if middleware is not None and not any(
+        isinstance(item, BillingAgentRoleMiddleware) for item in middleware
+    ):
         kwargs["middleware"] = [
             BillingAgentRoleMiddleware(billing_role_for_agent(agent_name)),
             *middleware,
