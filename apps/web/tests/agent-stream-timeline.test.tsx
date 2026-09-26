@@ -171,7 +171,8 @@ test("semantic agent stream rows render structured tool model and skill fields",
   const activities = container.querySelectorAll<HTMLDetailsElement>(
     "details[data-stream-activity]",
   );
-  assert.equal(activities.length, 4);
+  // The model request and its result are one AI analysis row.
+  assert.equal(activities.length, 3);
 
   const toolSummary =
     activities[0]?.querySelector("summary")?.textContent ?? "";
@@ -189,20 +190,16 @@ test("semantic agent stream rows render structured tool model and skill fields",
   assert.match(technical, /obs-42/);
   assert.match(technical, /\[REDACTED\]/);
 
-  const modelRequestTechnical =
+  const modelTechnical =
     activities[1]?.querySelector("[data-stream-technical-details]")
       ?.textContent ?? "";
-  assert.match(modelRequestTechnical, /list_observations/);
-  assert.match(modelRequestTechnical, /artifact:1/);
-
-  const modelResultTechnical =
-    activities[2]?.querySelector("[data-stream-technical-details]")
-      ?.textContent ?? "";
-  assert.match(modelResultTechnical, /output:final/);
-  assert.match(modelResultTechnical, /output_tokens/);
+  assert.match(modelTechnical, /list_observations/);
+  assert.match(modelTechnical, /artifact:1/);
+  assert.match(modelTechnical, /output:final/);
+  assert.match(modelTechnical, /output_tokens/);
 
   const skillTechnical =
-    activities[3]?.querySelector("[data-stream-technical-details]")
+    activities[2]?.querySelector("[data-stream-technical-details]")
       ?.textContent ?? "";
   assert.match(skillTechnical, /sha256:abc123/);
   assert.match(skillTechnical, /prompt\/v1/);
@@ -346,7 +343,12 @@ test("tool calls pair input and output into one expandable activity row", async 
     summary,
     /Searched repository source|Đã tìm kiếm trong source repository/,
   );
-  assert.doesNotMatch(summary, /billing|count|search_nodes/);
+  // The summary names the activity and its current target, never raw tool data.
+  assert.doesNotMatch(summary, /count|search_nodes/);
+  assert.equal(
+    activity.querySelector("[data-stream-target]")?.textContent,
+    "billing",
+  );
 
   const technical =
     activity.querySelector("[data-stream-technical-details]")?.textContent ??
@@ -406,10 +408,8 @@ test("private graph state and PII middleware noise are not rendered", async () =
   assert.doesNotMatch(text, /HIDDEN_PRIVATE_RUNTIME_STATE/);
   assert.doesNotMatch(text, /PIIMiddleware/);
   assert.match(text, /Checking repository architecture/);
-  assert.equal(
-    container.querySelectorAll('[data-stream-kind="reasoning"]').length,
-    1,
-  );
+  // Reasoning streams into the single AI analysis row.
+  assert.equal(container.querySelectorAll('[data-stream-kind="model"]').length, 1);
 });
 
 test("thinking header closes after the matching agent lifecycle completes", async () => {
@@ -1098,14 +1098,12 @@ test("investigation renders one section per rule with its own activity and reaso
   assert.ok(firstRule);
   assert.match(firstRule.textContent ?? "", /Token validation/);
   const activities = firstRule.querySelectorAll("details[data-stream-activity]");
-  assert.equal(activities.length, 3);
-  assert.equal(
-    firstRule.querySelector('[data-stream-kind="reasoning"]')?.textContent?.includes(
-      "Token checks live in auth/tokens.py.",
-    ),
-    true,
-  );
-  assert.match(firstRule.textContent ?? "", /Tokens are validated before use\./);
+  // One AI analysis row (reasoning, then output replaces it) and one tool row.
+  assert.equal(activities.length, 2);
+  const aiDetail =
+    firstRule.querySelector('[data-stream-kind="model"] [data-stream-detail]')
+      ?.textContent ?? "";
+  assert.equal(aiDetail, "Tokens are validated before use.");
 
   const result = firstRule.querySelector("[data-stream-rule-result]")?.textContent ?? "";
   assert.match(result, /RULE_REQUIREMENT_MET/);
@@ -1116,11 +1114,11 @@ test("investigation renders one section per rule with its own activity and reaso
   // Lifecycle events are the section itself, never separate rows.
   assert.equal(
     container.querySelectorAll(":scope details[data-stream-activity]").length,
-    3,
+    2,
   );
 });
 
-test("each agent model step renders as its own row instead of one merged row", async () => {
+test("every AI step streams into one analysis row with a step count", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -1148,17 +1146,26 @@ test("each agent model step renders as its own row instead of one merged row", a
         events={[
           step(1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted, "step-1"),
           step(2, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted, "step-1"),
-          step(3, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted, "step-2"),
-          step(4, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallHeartbeat, "step-2"),
+          step(3, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.credentialRotation, "step-2"),
+          step(4, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted, "step-2"),
+          step(5, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallHeartbeat, "step-2"),
         ]}
       />,
     );
   });
 
   const modelRows = container.querySelectorAll('[data-stream-kind="model"]');
-  assert.deepEqual(
-    [...modelRows].map((row) => row.getAttribute("data-stream-status")),
-    ["completed", "running"],
+  assert.equal(modelRows.length, 1);
+  assert.equal(modelRows[0]?.getAttribute("data-stream-status"), "running");
+  assert.equal(
+    modelRows[0]?.querySelector("[data-stream-repeat-count]")?.getAttribute(
+      "data-stream-repeat-count",
+    ),
+    "2",
+  );
+  assert.equal(
+    container.querySelectorAll("details[data-stream-activity]").length,
+    1,
   );
 });
 
@@ -1201,7 +1208,7 @@ test("budget and context trimming render as their own progress rows", async () =
   );
 });
 
-test("repeated calls on the same tool target replace input and output in one row", async () => {
+test("repeated calls of one tool stream their latest target into one row", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -1258,17 +1265,18 @@ test("repeated calls on the same tool target replace input and output in one row
   });
 
   const toolRows = container.querySelectorAll<HTMLElement>('[data-stream-kind="tool"]');
-  assert.equal(toolRows.length, 2);
-  const appRow = toolRows[0];
-  assert.ok(appRow);
-  assert.equal(appRow.getAttribute("data-stream-status"), "completed");
+  assert.equal(toolRows.length, 1);
+  const readRow = toolRows[0];
+  assert.ok(readRow);
+  assert.equal(readRow.getAttribute("data-stream-status"), "completed");
   assert.equal(
-    appRow.querySelector("[data-stream-repeat-count]")?.getAttribute("data-stream-repeat-count"),
-    "3",
+    readRow.querySelector("[data-stream-repeat-count]")?.getAttribute("data-stream-repeat-count"),
+    "4",
   );
-  const text = appRow.textContent ?? "";
+  // The row's target and input/output follow the latest call.
+  assert.equal(readRow.querySelector("[data-stream-target]")?.textContent, "/src/app.py");
+  const text = readRow.textContent ?? "";
   assert.match(text, /third page/);
   assert.match(text, /"offset": 200/);
-  assert.doesNotMatch(text, /first page|second page/);
-  assert.equal(toolRows[1]?.querySelector("[data-stream-repeat-count]"), null);
+  assert.doesNotMatch(text, /first page|second page|other file/);
 });

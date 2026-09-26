@@ -70,8 +70,10 @@ type ProjectedStreamRow = {
   input: AssessmentRuntimeSummaryValue | null;
   output: AssessmentRuntimeSummaryValue | null;
   technical: AssessmentRuntimeSummaryValue | null;
-  /** Calls folded into this row because they hit the same tool target. */
+  /** Tool calls or AI steps folded into this row; its content shows the latest. */
   repeatCount: number;
+  /** What the latest tool call acts on (file, pattern, command), shown inline. */
+  target: string | null;
 };
 
 export function AgentStreamTimeline({
@@ -219,8 +221,10 @@ function projectStreamRows(
   const ordered = [...events].sort((left, right) => left.sequence - right.sequence);
   const rows: ProjectedStreamRow[] = [];
   const toolRows = new Map<string, ProjectedStreamRow>();
-  const toolTargetRows = new Map<string, ProjectedStreamRow>();
-  const modelProgressRows = new Map<string, ProjectedStreamRow>();
+  const toolGroupRows = new Map<string, ProjectedStreamRow>();
+  const aiRows = new Map<string, ProjectedStreamRow>();
+  const aiSteps = new Map<ProjectedStreamRow, Set<string>>();
+  const aiStreamedText = new Map<string, string>();
   const runtimeRows = new Map<string, ProjectedStreamRow>();
   const lifecycleRows = new Map<string, ProjectedStreamRow>();
   const semanticToolIds = new Set<string>();
@@ -304,34 +308,40 @@ function projectStreamRows(
         continue;
       }
 
-      const targetKey =
-        semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall
-          ? toolTargetKey(event, semantic)
-          : null;
-      const sameTarget = targetKey ? toolTargetRows.get(targetKey) : undefined;
-      if (sameTarget) {
-        // Same tool on the same target: replace this row's input/output instead
-        // of appending another row for a repeated read or search.
-        sameTarget.sequence = event.sequence;
-        sameTarget.repeatCount += 1;
-        sameTarget.failed = false;
-        sameTarget.status = "running";
-        sameTarget.meta = semanticMeta(event, semantic);
-        sameTarget.input = cleanedStreamValue(semantic.parameters);
-        sameTarget.output = null;
-        sameTarget.technical = technicalEventDetails(event);
-        toolRows.set(toolIdentity, sameTarget);
+      const label = meaningfulToolActivity(
+        typeof semantic.toolName === "string" ? semantic.toolName : event.toolName,
+        semantic.parameters ?? semantic.resultSummary ?? null,
+      );
+      const groupKey = toolGroupKey(event, semantic, label);
+      const group = toolGroupRows.get(groupKey);
+      if (group) {
+        // Same activity again (another file read, another search): stream the new
+        // target and its input/output into the existing row instead of a new one.
+        group.sequence = event.sequence;
+        group.meta = semanticMeta(event, semantic);
+        group.technical = technicalEventDetails(event);
+        if (semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall) {
+          group.repeatCount += 1;
+          group.failed = false;
+          group.status = "running";
+          group.input = cleanedStreamValue(semantic.parameters);
+          group.output = null;
+          group.target = toolTarget(semantic.parameters);
+        } else {
+          group.failed = event.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed;
+          group.status = group.failed ? "failed" : "completed";
+          group.output = cleanedStreamValue(semantic.resultSummary);
+        }
+        toolRows.set(toolIdentity, group);
         previousMergeKey = null;
         continue;
       }
 
       const projected = toStreamRow(event);
       projected.kind = "tool";
-      projected.label = meaningfulToolActivity(
-        typeof semantic.toolName === "string" ? semantic.toolName : event.toolName,
-        semantic.parameters ?? semantic.resultSummary ?? null,
-      );
+      projected.label = label;
       projected.detail = null;
+      projected.target = toolTarget(semantic.parameters);
       projected.input =
         semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall
           ? cleanedStreamValue(semantic.parameters)
@@ -348,24 +358,25 @@ function projectStreamRows(
           : "running";
       rows.push(projected);
       toolRows.set(toolIdentity, projected);
-      if (targetKey) toolTargetRows.set(targetKey, projected);
+      toolGroupRows.set(groupKey, projected);
       previousMergeKey = null;
       continue;
     }
 
-    if (
-      semantic?.kind ===
-      ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.reasoningSummary
-    ) {
-      const projected = toStreamRow(event);
-      projected.kind = "reasoning";
-      projected.label = activityCopy("agentReasoning");
-      projected.detail =
-        reasoningSummaryText(semantic) ??
-        event.text ??
-        streamLabels().running;
-      projected.meta = semanticMeta(event, semantic);
-      rows.push(projected);
+    const aiKey = aiActivityKey(event, semantic);
+    if (aiKey) {
+      // Every model step of one scope streams into a single AI analysis row: its
+      // status, step count and latest reasoning/output replace the previous ones.
+      let aiRow = aiRows.get(aiKey);
+      if (!aiRow) {
+        aiRow = toStreamRow(event);
+        aiRow.kind = "model";
+        aiRow.detail = null;
+        rows.push(aiRow);
+        aiRows.set(aiKey, aiRow);
+        aiSteps.set(aiRow, new Set());
+      }
+      applyAiActivity(aiRow, event, semantic, aiSteps.get(aiRow), aiStreamedText);
       previousMergeKey = null;
       continue;
     }
@@ -416,31 +427,6 @@ function projectStreamRows(
       const projected = toStreamRow(event);
       rows.push(projected);
       runtimeRows.set(runtimeProgressKey, projected);
-      previousMergeKey = null;
-      continue;
-    }
-
-    const modelProgressKey = modelCallProgressKey(event);
-    if (modelProgressKey) {
-      const existing = modelProgressRows.get(modelProgressKey);
-      if (existing) {
-        const updated = toStreamRow(event);
-        existing.sequence = event.sequence;
-        existing.label = updated.label;
-        existing.detail = updated.detail;
-        existing.meta = updated.meta;
-        existing.failed = updated.failed;
-        existing.status = updated.status;
-        existing.technical = startAndLatestDetails(
-          existing.technical,
-          updated.technical,
-        );
-        previousMergeKey = null;
-        continue;
-      }
-      const projected = toStreamRow(event);
-      rows.push(projected);
-      modelProgressRows.set(modelProgressKey, projected);
       previousMergeKey = null;
       continue;
     }
@@ -878,6 +864,7 @@ function row(
     output: null,
     technical: technicalEventDetails(event),
     repeatCount: 1,
+    target: null,
   };
 }
 
@@ -1193,13 +1180,23 @@ function StreamRowView({
       >
         <summary className="flex cursor-pointer list-none items-center gap-2 select-none">
           <StreamKindIcon kind={row.kind} />
-          <span
-            className={cn(
-              "min-w-0 flex-1 truncate font-medium text-foreground",
-              row.failed && "text-destructive",
-            )}
-          >
-            {row.label}
+          <span className="flex min-w-0 flex-1 items-baseline gap-2">
+            <span
+              className={cn(
+                "shrink-0 truncate font-medium text-foreground",
+                row.failed && "text-destructive",
+              )}
+            >
+              {row.label}
+            </span>
+            {row.target ? (
+              <span
+                data-stream-target
+                className="min-w-0 truncate font-mono text-xs text-muted-foreground"
+              >
+                {row.target}
+              </span>
+            ) : null}
           </span>
           {row.repeatCount > 1 ? (
             <span
@@ -1224,7 +1221,7 @@ function StreamRowView({
         </summary>
 
         {row.detail ? (
-          <div className="mt-2 whitespace-pre-wrap break-words wrap-anywhere text-xs leading-5 text-foreground/90">
+          <div data-stream-detail className="mt-2 whitespace-pre-wrap break-words wrap-anywhere text-xs leading-5 text-foreground/90">
             {row.detail}
           </div>
         ) : null}
@@ -1251,7 +1248,7 @@ function StreamKindIcon({ kind }: { kind: StreamRowKind }) {
   if (kind === "tool") {
     return <Wrench aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />;
   }
-  if (kind === "reasoning") {
+  if (kind === "reasoning" || kind === "model") {
     return <Brain aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />;
   }
   if (kind === "log") {
@@ -1423,38 +1420,170 @@ function toolIdentityKey(
   return null;
 }
 
-// Arguments that name what a tool acts on. Paging arguments (offset, limit) are
-// deliberately excluded so re-reading another page of one file stays one row.
+// Arguments that name what a tool acts on, in display priority order.
 const TOOL_TARGET_PARAMETER_KEYS = [
   "file_path",
   "path",
-  "url",
-  "command",
   "pattern",
   "glob",
-  "include",
+  "command",
   "query",
-  "nodeType",
+  "url",
 ] as const;
 
-function toolTargetKey(
+const MAX_TOOL_TARGET_CHARS = 160;
+
+/** One row per activity (e.g. "reviewed source files") within a run and rule. */
+function toolGroupKey(
   event: AssessmentAgentStreamEvent,
   semantic: SemanticRecord,
-): string | null {
-  const toolName = firstString(semantic.toolName, event.toolName);
-  const parameters = isSummaryRecord(semantic.parameters) ? semantic.parameters : null;
-  if (parameters === null) return null;
-  const target = TOOL_TARGET_PARAMETER_KEYS.flatMap((key) =>
-    parameters[key] === undefined ? [] : [[key, parameters[key]] as const],
-  );
+  label: string,
+): string {
   return [
+    "tool",
     event.runId,
     event.engineeringRuleId ?? "",
-    event.agentName ?? "",
-    event.namespace.join("/"),
-    toolName,
-    JSON.stringify(target.length > 0 ? target : parameters),
+    firstString(semantic.toolName, event.toolName),
+    label,
   ].join(":");
+}
+
+function toolTarget(
+  parameters: AssessmentRuntimeSummaryValue | undefined,
+): string | null {
+  if (!isSummaryRecord(parameters)) return null;
+  for (const key of TOOL_TARGET_PARAMETER_KEYS) {
+    const value = parameters[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      const target = value.trim();
+      return target.length > MAX_TOOL_TARGET_CHARS
+        ? `${target.slice(0, MAX_TOOL_TARGET_CHARS)}…`
+        : target;
+    }
+  }
+  return null;
+}
+
+const AI_ACTIVITY_EVENT_TYPES = new Set<string>([
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted,
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallHeartbeat,
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted,
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed,
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout,
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelRequest,
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelResult,
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelReasoningDelta,
+  // Retrying another credential is part of the same step; switching provider
+  // stays its own row because it changes which AI analyses the repository.
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES.credentialRotation,
+]);
+
+/** All model activity of one run and rule shares a single AI analysis row. */
+function aiActivityKey(
+  event: AssessmentAgentStreamEvent,
+  semantic: SemanticRecord | null,
+): string | null {
+  const reasoning =
+    semantic?.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.reasoningSummary;
+  if (!reasoning && !AI_ACTIVITY_EVENT_TYPES.has(event.eventType)) return null;
+  return ["ai", event.runId, event.engineeringRuleId ?? ""].join(":");
+}
+
+const AI_STEP_PREFIXES = { call: "call:", request: "request:" } as const;
+
+function applyAiActivity(
+  row: ProjectedStreamRow,
+  event: AssessmentAgentStreamEvent,
+  semantic: SemanticRecord | null,
+  steps: Set<string> | undefined,
+  streamedText: Map<string, string>,
+): void {
+  const data = isSummaryRecord(event.data) ? event.data : null;
+  row.sequence = event.sequence;
+  row.technical =
+    row.id === event.eventId
+      ? technicalEventDetails(event)
+      : startAndLatestDetails(row.technical, technicalEventDetails(event));
+  row.meta = modelCallMeta(event);
+
+  if (steps) {
+    if (
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted &&
+      typeof data?.model_step_id === "string"
+    ) {
+      steps.add(`${AI_STEP_PREFIXES.call}${data.model_step_id}`);
+    }
+    if (
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelRequest &&
+      event.messageId
+    ) {
+      steps.add(`${AI_STEP_PREFIXES.request}${event.messageId}`);
+    }
+    // Billing telemetry counts provider steps; request events are the fallback
+    // when a run streams without telemetry.
+    const identities = [...steps];
+    const calls = identities.filter((id) => id.startsWith(AI_STEP_PREFIXES.call));
+    row.repeatCount = Math.max(1, calls.length || identities.length);
+  }
+
+  switch (event.eventType) {
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallHeartbeat:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelRequest:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelReasoningDelta:
+      row.status = "running";
+      row.failed = false;
+      break;
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelResult:
+      row.status = "completed";
+      row.failed = false;
+      break;
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout:
+      row.status = "failed";
+      row.failed = true;
+      break;
+    default:
+      // Credential rotation, provider fallback and reasoning summaries update
+      // the row's content without changing its step status.
+      break;
+  }
+  row.label = activityCopy(
+    row.status === "failed"
+      ? "aiAnalysisFailed"
+      : row.status === "running"
+        ? "aiAnalysisRunning"
+        : "aiAnalysisCompleted",
+  );
+
+  const latestText =
+    semantic?.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.reasoningSummary
+      ? reasoningSummaryText(semantic)
+      : semantic?.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.modelOutput
+        ? modelOutputText(semantic)
+        : streamedDeltaText(event, streamedText);
+  if (latestText) row.detail = latestText;
+}
+
+/** Accumulate one message's streamed tokens; the row shows the text so far. */
+function streamedDeltaText(
+  event: AssessmentAgentStreamEvent,
+  streamedText: Map<string, string>,
+): string | null {
+  if (
+    (event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta &&
+      event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelReasoningDelta) ||
+    !event.text
+  ) {
+    return null;
+  }
+  const key = [event.eventType, event.messageId ?? "", event.namespace.join("/")].join(":");
+  const text = `${streamedText.get(key) ?? ""}${event.text}`;
+  streamedText.set(key, text);
+  return text;
 }
 
 function lifecycleEventProgressKey(
