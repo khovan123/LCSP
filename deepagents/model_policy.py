@@ -13,6 +13,7 @@ disable_langsmith_tracing_by_default()
 from deepagents import create_deep_agent as _deepagents_create_agent
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models.model_profile import ModelProfile
+from middleware.agent_run_budget import with_agent_run_budget
 from middleware.billing_metering import BillingAgentRoleMiddleware
 from provider_credentials import (
     credential_init_kwargs,
@@ -473,10 +474,13 @@ def create_lcsp_agent(
     if middleware is not None and not any(
         isinstance(item, BillingAgentRoleMiddleware) for item in middleware
     ):
-        kwargs["middleware"] = [
+        middleware = [
             BillingAgentRoleMiddleware(billing_role_for_agent(agent_name)),
             *middleware,
         ]
+    # Every LCSP agent run is bounded: an unbounded ReAct loop never returns and
+    # keeps re-sending a growing context until the provider rate-limits it.
+    kwargs["middleware"] = with_agent_run_budget(middleware)
     if "backend" not in kwargs:
         from tools.common.capabilities.platform.repository_sandbox import (
             current_repository_backend,

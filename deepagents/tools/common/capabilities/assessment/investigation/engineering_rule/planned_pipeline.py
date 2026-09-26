@@ -7,6 +7,12 @@ from typing import Any
 from model_policy import INVESTIGATOR_MODEL_SPEC, PLANNER_MODEL_SPEC
 from tools.common.capabilities.platform.api_client import WorkerCallbackError
 from middleware.billing_metering import BillingMeteringError
+from orchestration.agent_stream import (
+    AGENT_STREAM_STAGES,
+    agent_stream_rule_scope,
+    agent_stream_stage,
+    publish_rule_decision,
+)
 from tools.common.capabilities.platform.logging import get_logger
 from tools.common.capabilities.evidence.graph.schema.source_roles import filter_program_evidence_graph
 
@@ -575,6 +581,13 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 workflow_run_id=workflow_run_id,
                 correlationId=correlation_id,
             )
+            with agent_stream_stage(AGENT_STREAM_STAGES["planner"]):
+                publish_rule_decision(
+                    audit.engineering_rule_id,
+                    decision=audit.final_decision,
+                    reason_code=audit.reason_code,
+                    basis=audit.basis,
+                )
             self._emit_runtime_activity(
                 scan_job_id=scan_job_id,
                 event_type=(
@@ -636,12 +649,23 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
 
             investigation_failed = False
             try:
-                rule_claims = self._investigator.investigate(
-                    packet=packet,
-                    graph=graph,
-                    workflow_run_id=workflow_run_id,
-                    correlation_id=correlation_id,
-                )
+                with agent_stream_stage(
+                    AGENT_STREAM_STAGES["investigate"]
+                ), agent_stream_rule_scope(
+                    engineering_rule.engineering_rule_id,
+                    concept=packet.concept,
+                    required_evidence=packet.required_evidence,
+                    investigation_goals=packet.investigation_goals,
+                    waiting_on=(TargetedInterviewPending,),
+                ) as rule_stream:
+                    rule_claims = self._investigator.investigate(
+                        packet=packet,
+                        graph=graph,
+                        workflow_run_id=workflow_run_id,
+                        correlation_id=correlation_id,
+                    )
+                    if rule_stream is not None:
+                        rule_stream.complete(rule_claims)
             except TargetedInterviewPending:
                 self._emit_runtime_activity(
                     scan_job_id=scan_job_id,

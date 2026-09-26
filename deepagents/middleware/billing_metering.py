@@ -83,6 +83,12 @@ class BillingFinalizationError(WorkerCallbackError):
 _active_agent_role: ContextVar[str | None] = ContextVar(
     "active_billing_agent_role", default=None
 )
+# One logical agent step. Retries, credential rotation and provider fallback of
+# the same step share it, so the live stream shows one row per step instead of
+# folding every model call of a run into a single ever-growing row.
+_active_model_step_id: ContextVar[str | None] = ContextVar(
+    "active_model_step_id", default=None
+)
 
 
 @dataclass
@@ -498,6 +504,19 @@ def estimate_invocation_authorization_metrics(
     )
 
 
+def estimate_messages_input_tokens(messages: Any) -> int:
+    """Estimate prompt tokens for a message list with the billing guard's estimator."""
+    message_list = list(messages) if isinstance(messages, (list, tuple)) else []
+    return _estimate_input_tokens(
+        _safe_json_bytes([_message_estimation_payload(message) for message in message_list])
+    )
+
+
+def provider_context_limit_tokens(model: Any) -> int | None:
+    """Return the model profile's input window, when the profile declares one."""
+    return _provider_context_limit_tokens(model)
+
+
 def _safe_json_bytes(value: Any) -> bytes:
     return json.dumps(
         _jsonable(value),
@@ -634,6 +653,20 @@ def active_billing_agent_role() -> str | None:
     return _active_agent_role.get()
 
 
+@contextmanager
+def activate_model_step(step_id: str | None = None) -> Iterator[str]:
+    resolved = step_id or str(uuid4())
+    token = _active_model_step_id.set(resolved)
+    try:
+        yield resolved
+    finally:
+        _active_model_step_id.reset(token)
+
+
+def active_model_step_id() -> str | None:
+    return _active_model_step_id.get()
+
+
 def _emit_billing_callback_warning(
     callback_kind: str,
     *,
@@ -653,6 +686,8 @@ class _ModelCallTelemetry:
     def __init__(self, model: Any) -> None:
         self.provider, self.model_name = provider_identity(model)
         self.timeout_seconds = llm_provider_timeout_seconds(self.provider)
+        self.model_step_id = active_model_step_id() or str(uuid4())
+        self.agent_role = active_billing_agent_role()
         self._started_at = time.monotonic()
         self._stop = Event()
         self._context = copy_context()
@@ -719,12 +754,16 @@ class _ModelCallTelemetry:
         return max(0, int(time.monotonic() - self._started_at))
 
     def _data(self, *, elapsed_seconds: int) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "provider": self.provider.lower(),
             "model": self.model_name,
             "timeout_seconds": self.timeout_seconds,
             "elapsed_seconds": elapsed_seconds,
+            "model_step_id": self.model_step_id,
         }
+        if self.agent_role:
+            data["agent_role"] = self.agent_role
+        return data
 
     def _emit(self, event_type: str, **fields: Any) -> None:
         self._context.run(publish_agent_stream_event, event_type, **fields)
@@ -811,11 +850,11 @@ class BillingAgentRoleMiddleware(AgentMiddleware):
         self.agent_role = agent_role
 
     def wrap_model_call(self, request, handler):
-        with activate_billing_agent_role(self.agent_role):
+        with activate_billing_agent_role(self.agent_role), activate_model_step():
             return handler(request)
 
     async def awrap_model_call(self, request, handler):
-        with activate_billing_agent_role(self.agent_role):
+        with activate_billing_agent_role(self.agent_role), activate_model_step():
             return await handler(request)
 
 
@@ -836,6 +875,7 @@ class BillingMeteringMiddleware(AgentMiddleware):
             "MODEL_CONTEXT_DIAGNOSTIC",
             provider=metrics.provider.lower(),
             model=metrics.model,
+            agent_role=active_billing_agent_role(),
             message_count=metrics.message_count,
             tool_result_count=metrics.tool_result_count,
             estimated_input_tokens=metrics.estimated_input_tokens,
@@ -879,6 +919,7 @@ class BillingMeteringMiddleware(AgentMiddleware):
             "MODEL_CONTEXT_DIAGNOSTIC",
             provider=metrics.provider.lower(),
             model=metrics.model,
+            agent_role=active_billing_agent_role(),
             message_count=metrics.message_count,
             tool_result_count=metrics.tool_result_count,
             estimated_input_tokens=metrics.estimated_input_tokens,

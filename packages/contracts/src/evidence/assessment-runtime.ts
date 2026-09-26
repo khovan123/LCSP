@@ -204,6 +204,8 @@ export const ASSESSMENT_AGENT_STREAM_EVENT_TYPES = {
   agentStarted: "AGENT_STARTED",
   agentCompleted: "AGENT_COMPLETED",
   agentFailed: "AGENT_FAILED",
+  agentBudgetReached: "AGENT_BUDGET_REACHED",
+  agentContextTrimmed: "AGENT_CONTEXT_TRIMMED",
   subagentSelected: "SUBAGENT_SELECTED",
   modelContentDelta: "MODEL_CONTENT_DELTA",
   modelReasoningDelta: "MODEL_REASONING_DELTA",
@@ -276,6 +278,8 @@ export type AssessmentAgentStreamEvent = {
   correlationId: string;
   eventType: AssessmentAgentStreamEventType;
   stage: AssessmentAgentStreamStage | null;
+  /** EngineeringRule this event's activity belongs to, while one is investigated. */
+  engineeringRuleId: string | null;
   source: string | null;
   agentName: string | null;
   subagentName: string | null;

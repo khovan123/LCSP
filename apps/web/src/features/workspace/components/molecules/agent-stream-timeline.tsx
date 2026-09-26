@@ -22,7 +22,17 @@ import { Button } from "@/components/ui/button";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
+import {
+  AGENT_STREAM_SEGMENT_KINDS,
+  type AgentStreamRuleHeader,
+} from "../../types/agent-stream-rule.types";
 import type { WorkspaceRuntimeAgentStreamHistoryState } from "../../types/workspace-runtime.types";
+import {
+  isAgentStreamRuleLifecycleEvent,
+  projectAgentStreamRuleHeaders,
+  segmentAgentStreamRowsByRule,
+} from "../../utils/agent-stream-rule-groups";
+import { AgentStreamRuleGroup } from "./agent-stream-rule-group";
 import { AgentMessage, AgentTurn } from "./agent-turn";
 
 type AgentStreamTimelineProps = {
@@ -47,6 +57,7 @@ type StreamRowStatus = "running" | "completed" | "failed" | "neutral";
 type ProjectedStreamRow = {
   id: string;
   runId: string;
+  ruleId: string | null;
   sequence: number;
   label: string;
   detail: string | null;
@@ -71,15 +82,24 @@ export function AgentStreamTimeline({
     ? []
     : scopeAgentStreamRunEvents(events, activeRunId);
   const rows = projectStreamRows(visibleEvents);
+  const ruleHeaders = finalizeRuleHeaders(
+    projectAgentStreamRuleHeaders(visibleEvents),
+    visibleEvents,
+  );
+  const segments = segmentAgentStreamRowsByRule(rows, ruleHeaders);
   const labels = streamLabels();
-  const hasRunningActivity = rows.some((row) => row.status === "running");
+  const hasRunningActivity =
+    rows.some((row) => row.status === "running") ||
+    [...ruleHeaders.values()].some(
+      (header) => header.status === ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+    );
   const failed = !hasRunningActivity && streamEndedWithFailure(visibleEvents);
   const duration = streamDuration(visibleEvents);
   const showHistoryAction =
     ((history?.hasMore === true && history.nextCursor !== null) ||
       history?.error != null) &&
     onLoadOlder !== undefined;
-  if (rows.length === 0 && !showHistoryAction) return null;
+  if (segments.length === 0 && !showHistoryAction) return null;
 
   return (
     <AgentTurn className={className}>
@@ -134,9 +154,22 @@ export function AgentStreamTimeline({
                 aria-hidden="true"
                 className="absolute bottom-3 left-[7px] top-3 w-px bg-border/60"
               />
-              {rows.map((row) => (
-                <StreamRowView key={row.id} row={row} labels={labels} />
-              ))}
+              {segments.map((segment) =>
+                segment.kind === AGENT_STREAM_SEGMENT_KINDS.rule ? (
+                  <AgentStreamRuleGroup
+                    key={`rule:${segment.header.ruleId}`}
+                    header={segment.header}
+                  >
+                    {segment.rows.length > 0
+                      ? segment.rows.map((row) => (
+                          <StreamRowView key={row.id} row={row} labels={labels} />
+                        ))
+                      : null}
+                  </AgentStreamRuleGroup>
+                ) : (
+                  <StreamRowView key={segment.row.id} row={segment.row} labels={labels} />
+                ),
+              )}
             </div>
           </div>
         </details>
@@ -217,6 +250,11 @@ function projectStreamRows(
 
   let previousMergeKey: string | null = null;
   for (const event of ordered) {
+    if (isAgentStreamRuleLifecycleEvent(event)) {
+      // Rendered as the rule's own section header and result, not as a row.
+      previousMergeKey = null;
+      continue;
+    }
     if (
       shouldSuppressEvent(
         event,
@@ -294,7 +332,7 @@ function projectStreamRows(
     ) {
       const projected = toStreamRow(event);
       projected.kind = "reasoning";
-      projected.label = activityCopy("reasoningReviewed");
+      projected.label = activityCopy("agentReasoning");
       projected.detail =
         reasoningSummaryText(semantic) ??
         event.text ??
@@ -419,6 +457,31 @@ function finalizeProjectedRows(
   });
 }
 
+function finalizeRuleHeaders(
+  headers: Map<string, AgentStreamRuleHeader>,
+  events: AssessmentAgentStreamEvent[],
+): Map<string, AgentStreamRuleHeader> {
+  const outcomes = terminalOutcomesByRun(events);
+  const runId = events.at(-1)?.runId;
+  const outcome = runId ? outcomes.get(runId) : undefined;
+  if (!outcome) return headers;
+  // A run that ended cannot still be investigating one of its rules.
+  return new Map(
+    [...headers].map(([ruleId, header]) => [
+      ruleId,
+      header.status === ASSESSMENT_RUNTIME_RUN_STATUSES.running
+        ? {
+            ...header,
+            status:
+              outcome === "failed"
+                ? ASSESSMENT_RUNTIME_RUN_STATUSES.failed
+                : ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+          }
+        : header,
+    ]),
+  );
+}
+
 function terminalOutcomesByRun(
   events: AssessmentAgentStreamEvent[],
 ): Map<string, "completed" | "failed"> {
@@ -467,12 +530,18 @@ function toStreamRow(event: AssessmentAgentStreamEvent): ProjectedStreamRow {
     const failed =
       event.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed ||
       semantic.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed;
+    const outputText =
+      semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.modelOutput
+        ? modelOutputText(semantic)
+        : null;
     return row(
       event,
-      meaningfulSemanticActivity(event, semantic),
+      outputText
+        ? activityCopy("agentStepOutput")
+        : meaningfulSemanticActivity(event, semantic),
       semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.reasoningSummary
         ? reasoningSummaryText(semantic) ?? event.text
-        : null,
+        : outputText,
       semanticMeta(event, semantic),
       failed,
     );
@@ -518,6 +587,23 @@ function toStreamRow(event: AssessmentAgentStreamEvent): ProjectedStreamRow {
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.graphUpdate:
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.graphState:
       return row(event, activityCopy("analysisProgressUpdated"), null, eventMeta(event));
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentBudgetReached: {
+      const exhausted = event.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed;
+      const projected = row(
+        event,
+        activityCopy(exhausted ? "agentBudgetExhausted" : "agentBudgetReached"),
+        null,
+        eventMeta(event),
+        exhausted,
+      );
+      projected.status = exhausted ? "failed" : "completed";
+      return projected;
+    }
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentContextTrimmed: {
+      const projected = row(event, activityCopy("agentContextTrimmed"), null, eventMeta(event));
+      projected.status = "completed";
+      return projected;
+    }
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.providerFallback: {
       const projected = row(event, activityCopy("providerFallback"), null, eventMeta(event));
       projected.status = "completed";
@@ -568,7 +654,7 @@ function meaningfulSemanticActivity(
         semantic.parameters ?? semantic.resultSummary ?? null,
       );
     case ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.reasoningSummary:
-      return activityCopy("reasoningReviewed");
+      return activityCopy("agentReasoning");
     case ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.modelRequest:
     case ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.decisionModel:
       return activityCopy("aiAnalysisRunning");
@@ -729,6 +815,11 @@ function streamActivityLabels() {
     changesPushed: t("pages.appShell.agentStreamActivities.changesPushed"),
     repositoryToolRan: t("pages.appShell.agentStreamActivities.repositoryToolRan"),
     subagentSelected: t("pages.appShell.agentStreamActivities.subagentSelected"),
+    agentReasoning: t("pages.appShell.agentStreamActivities.agentReasoning"),
+    agentStepOutput: t("pages.appShell.agentStreamActivities.agentStepOutput"),
+    agentBudgetReached: t("pages.appShell.agentStreamActivities.agentBudgetReached"),
+    agentBudgetExhausted: t("pages.appShell.agentStreamActivities.agentBudgetExhausted"),
+    agentContextTrimmed: t("pages.appShell.agentStreamActivities.agentContextTrimmed"),
   };
 }
 
@@ -747,6 +838,7 @@ function row(
   return {
     id: event.eventId,
     runId: event.runId,
+    ruleId: event.engineeringRuleId,
     sequence: event.sequence,
     label,
     detail,
@@ -781,6 +873,8 @@ function streamRowKind(event: AssessmentAgentStreamEvent): StreamRowKind {
       return "log";
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.customProgress:
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.scannerActivity:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentBudgetReached:
+    case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentContextTrimmed:
       return "progress";
     default:
       return "activity";
@@ -1380,7 +1474,17 @@ function modelCallProgressKey(event: AssessmentAgentStreamEvent): string | null 
     event.nodeName ?? "",
     typeof data?.provider === "string" ? data.provider : "",
     typeof data?.model === "string" ? data.model : "",
+    // One row per agent step: without the step identity every model call of a
+    // run folds into one ever-growing row.
+    typeof data?.model_step_id === "string" ? data.model_step_id : "",
   ].join(":");
+}
+
+function modelOutputText(semantic: SemanticRecord): string | null {
+  const result = semantic.resultSummary;
+  if (!isSummaryRecord(result)) return null;
+  const text = result.text;
+  return typeof text === "string" && text.trim().length > 0 ? text : null;
 }
 
 function reasoningSummaryText(semantic: SemanticRecord): string | null {

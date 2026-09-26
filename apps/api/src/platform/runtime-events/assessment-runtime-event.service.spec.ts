@@ -281,6 +281,7 @@ describe("AssessmentRuntimeEventService", () => {
       runId: "run-a",
       correlationId: "corr-a",
       eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
+      engineeringRuleId: "ER-7",
       agentName: "investigator",
       toolName: "search_nodes",
       toolCallId: "call-1",
@@ -312,6 +313,7 @@ describe("AssessmentRuntimeEventService", () => {
       eventId: "semantic-event-1",
       assessmentId: "assessment-a",
       eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
+      engineeringRuleId: "ER-7",
       data: {
         kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall,
         durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,

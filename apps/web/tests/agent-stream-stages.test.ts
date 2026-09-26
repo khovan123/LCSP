@@ -24,6 +24,7 @@ function event(
     correlationId: "corr-1",
     eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
     stage,
+    engineeringRuleId: null,
     source: null,
     agentName: null,
     subagentName: null,

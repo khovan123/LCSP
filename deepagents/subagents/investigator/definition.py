@@ -1,6 +1,7 @@
 """Investigator subagent: repository-native technical evidence investigation."""
 
 from contracts.handoffs import InvestigatorResult
+from middleware.agent_run_budget import AgentRunBudgetMiddleware
 from middleware.billing_metering import BillingAgentRoleMiddleware
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.runtime_context import inject_lcsp_runtime_context
@@ -68,6 +69,7 @@ SUBAGENT = {
     "tools": TOOLS,
     "model": INVESTIGATOR_MODEL_SPEC,
     "middleware": [
+        AgentRunBudgetMiddleware(),
         inject_lcsp_runtime_context,
         BillingAgentRoleMiddleware("investigator"),
         *MODEL_GOVERNANCE_MIDDLEWARE,
