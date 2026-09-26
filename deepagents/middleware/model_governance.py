@@ -13,7 +13,11 @@ from middleware.provider_fallback import ProviderFallbackMiddleware
 from middleware.provider_schema import ProviderSchemaCompatibilityMiddleware
 from middleware.token_fallback import TokenFallbackMiddleware
 from middleware.billing_metering import BillingMeteringMiddleware
-from middleware.failure_policy import TerminalSchemaError, retry_model_error
+from middleware.failure_policy import (
+    StructuredOutputRejected,
+    TerminalSchemaError,
+    retry_model_error,
+)
 
 from middleware.redaction import (
     ANTHROPIC_KEY_PATTERN,
@@ -38,7 +42,9 @@ class StopSchemaRepairMiddleware(AgentMiddleware):
         strategy = output_format if isinstance(output_format, ToolStrategy) else ToolStrategy(schema)
         names = {spec.name for spec in strategy.schema_specs}
         if any(isinstance(message, ToolMessage) and message.name in names for message in response.result):
-            raise TerminalSchemaError("Structured output schema validation failed; automatic repair disabled")
+            raise StructuredOutputRejected(
+                "Structured output schema validation failed; automatic repair disabled"
+            )
         return response
 
     @staticmethod

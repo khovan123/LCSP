@@ -130,9 +130,13 @@ def test_schema_repair_message_stops_before_next_model_call():
     handler = MagicMock(return_value=ModelResponse(result=[ToolMessage(
         content="Please fix the validation error", tool_call_id="one", name="Answer"
     )]))
-    with pytest.raises(TerminalSchemaError):
+    with pytest.raises(TerminalSchemaError) as caught:
         StopSchemaRepairMiddleware().wrap_model_call(request, handler)
     assert handler.call_count == 1
+    # A provider model's own rejected output is provider-specific: fallback may move on.
+    from middleware.failure_policy import StructuredOutputRejected
+
+    assert isinstance(caught.value, StructuredOutputRejected)
 
 
 def test_provider_strategy_bypasses_schema_repair_tool_check():

@@ -14,6 +14,7 @@ from middleware.failure_policy import (
     is_auth_failure,
     is_provider_capacity_failure,
     is_provider_route_incompatibility,
+    is_structured_output_rejection,
     is_terminal_task_error,
 )
 from orchestration.agent_stream import publish_agent_stream_event
@@ -84,6 +85,9 @@ def provider_fallback_failure(error: BaseException) -> bool:
         return True
     if is_provider_route_incompatibility(error):
         return True
+    # The provider's model could not produce the contract; another provider may.
+    if is_structured_output_rejection(error):
+        return True
     if is_terminal_task_error(error):
         return False
     return (
@@ -93,9 +97,16 @@ def provider_fallback_failure(error: BaseException) -> bool:
     )
 
 
+def _exhaustion_error(errors: list[BaseException]) -> BaseException:
+    """Report exhaustion truthfully: a contract failure on every route stays a schema error."""
+    if errors and all(is_structured_output_rejection(error) for error in errors):
+        return errors[0]
+    return TerminalCredentialError("All configured LLM provider routes exhausted; task stopped")
+
+
 def provider_circuit_breaker_failure(error: BaseException) -> bool:
     """Return whether this provider route should stay disabled for the active run."""
-    if is_provider_route_incompatibility(error):
+    if is_provider_route_incompatibility(error) or is_structured_output_rejection(error):
         return True
     if is_terminal_task_error(error):
         return False
@@ -195,6 +206,7 @@ class ProviderFallbackMiddleware(AgentMiddleware):
         current_provider = model_provider(request.model)
         routes = self._routes(request)
         first_error: BaseException | None = None
+        errors: list[BaseException] = []
 
         if not _provider_route_disabled(current_provider):
             try:
@@ -204,6 +216,7 @@ class ProviderFallbackMiddleware(AgentMiddleware):
                     raise
                 _trip_provider_circuit(current_provider, error)
                 first_error = error
+                errors.append(error)
         elif current_provider:
             self._log_circuit_skip(current_provider)
 
@@ -220,15 +233,18 @@ class ProviderFallbackMiddleware(AgentMiddleware):
                     raise
                 _trip_provider_circuit(provider, error)
                 first_error = first_error or error
+                errors.append(error)
 
-        raise TerminalCredentialError(
-            "All configured LLM provider routes exhausted; task stopped"
-        ) from first_error
+        exhausted = _exhaustion_error(errors)
+        if exhausted is first_error:
+            raise exhausted
+        raise exhausted from first_error
 
     async def awrap_model_call(self, request, handler):
         current_provider = model_provider(request.model)
         routes = self._routes(request)
         first_error: BaseException | None = None
+        errors: list[BaseException] = []
 
         if not _provider_route_disabled(current_provider):
             try:
@@ -238,6 +254,7 @@ class ProviderFallbackMiddleware(AgentMiddleware):
                     raise
                 _trip_provider_circuit(current_provider, error)
                 first_error = error
+                errors.append(error)
         elif current_provider:
             self._log_circuit_skip(current_provider)
 
@@ -254,10 +271,12 @@ class ProviderFallbackMiddleware(AgentMiddleware):
                     raise
                 _trip_provider_circuit(provider, error)
                 first_error = first_error or error
+                errors.append(error)
 
-        raise TerminalCredentialError(
-            "All configured LLM provider routes exhausted; task stopped"
-        ) from first_error
+        exhausted = _exhaustion_error(errors)
+        if exhausted is first_error:
+            raise exhausted
+        raise exhausted from first_error
 
 
 __all__ = [
