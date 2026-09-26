@@ -72,7 +72,7 @@ def test_llm7_chat_openai_rotation_preserves_gateway_policy(monkeypatch):
     monkeypatch.setenv("LLM7_API_KEY", "llm7-first,llm7-second")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-must-not-be-used")
     model = ChatOpenAI(
-        model="codestral-latest",
+        model="GLM-5.3-Flash",
         base_url="https://api.llm7.io/v1",
         use_responses_api=False,
         **credential_init_kwargs("llm7"),
@@ -194,7 +194,7 @@ async def test_token_fallback_preserves_model_policy(monkeypatch, provider, asyn
         )
     elif provider == "llm7":
         model = ChatOpenAI(
-            model="codestral-latest",
+            model="GLM-5.3-Flash",
             base_url="https://api.llm7.io/v1",
             use_responses_api=False,
             **credential_init_kwargs(provider),
@@ -344,7 +344,7 @@ def _gemini_model():
 
 def _llm7_model():
     return ChatOpenAI(
-        model="codestral-latest",
+        model="GLM-5.3-Flash",
         base_url="https://api.llm7.io/v1",
         use_responses_api=False,
         **credential_init_kwargs("llm7"),

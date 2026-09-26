@@ -1,5 +1,5 @@
-import { config, createConfigValidationSchema } from "./config.js";
 import { resolve } from "node:path";
+import { config, createConfigValidationSchema } from "./config.js";
 
 const VALIDATION_WORKSPACE_ROOT = resolve("test-workspace");
 const configValidationSchema = createConfigValidationSchema(
@@ -240,14 +240,14 @@ describe("configValidationSchema", () => {
       BILLING_RESERVATION_CREDITS: "8000",
       BILLING_MAX_INVOCATION_CHARGE_CREDITS: "500",
       BILLING_RUNTIME_PROVIDER: "llm7",
-      BILLING_RUNTIME_MODEL: "codestral-latest",
+      BILLING_RUNTIME_MODEL: "GLM-5.3-Flash",
       BILLING_MAX_INPUT_TOKENS: "65536",
       BILLING_MAX_INPUT_BYTES: "262144",
       BILLING_MAX_OUTPUT_TOKENS: "4096",
       BILLING_MAX_REASONING_TOKENS: "0",
       BILLING_MAX_INVOCATIONS_PER_GROUP: "16",
       BILLING_AUTHORIZED_RUNTIME_MODELS:
-        "LLM7:codestral-latest,GOOGLE_GENAI:gemini-3.5-flash-lite",
+        "LLM7:GLM-5.3-Flash,GOOGLE_GENAI:gemini-3.5-flash-lite",
       LCSP_MODEL_PROVIDER: "llm7",
       LLM_FALLBACK_PROVIDER_1: "google_genai",
     });
@@ -286,13 +286,13 @@ describe("configValidationSchema", () => {
       BILLING_RESERVATION_CREDITS: "8000",
       BILLING_MAX_INVOCATION_CHARGE_CREDITS: "500",
       BILLING_RUNTIME_PROVIDER: "llm7",
-      BILLING_RUNTIME_MODEL: "codestral-latest",
+      BILLING_RUNTIME_MODEL: "GLM-5.3-Flash",
       BILLING_MAX_INPUT_TOKENS: "65536",
       BILLING_MAX_INPUT_BYTES: "262144",
       BILLING_MAX_OUTPUT_TOKENS: "4096",
       BILLING_MAX_REASONING_TOKENS: "0",
       BILLING_MAX_INVOCATIONS_PER_GROUP: "16",
-      BILLING_AUTHORIZED_RUNTIME_MODELS: "LLM7:codestral-latest",
+      BILLING_AUTHORIZED_RUNTIME_MODELS: "LLM7:GLM-5.3-Flash",
       LCSP_MODEL_PROVIDER: "llm7",
       LLM_FALLBACK_PROVIDER_1: "google_genai",
     });

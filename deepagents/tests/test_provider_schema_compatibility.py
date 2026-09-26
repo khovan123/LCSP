@@ -272,7 +272,7 @@ def test_raw_schema_without_array_upper_bounds_still_disables_gemini_afc() -> No
 
 def _llm7() -> ChatOpenAI:
     return ChatOpenAI(
-        model="codestral-latest",
+        model="GLM-5.3-Flash",
         base_url="https://api.llm7.io/v1",
         api_key="llm7-test-token",
         use_responses_api=False,

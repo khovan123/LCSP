@@ -180,13 +180,13 @@ Investigator cannot fetch Interview/legal context, change EngineeringRules, or e
 
 Defaults live in `model_policy.py` and can be overridden by deployment env vars.
 
-| Role | Default model | Workload |
-| --- | --- | --- |
-| Root orchestrator | `openai:gpt-5-nano` | coordination, delegation, todo/state management |
-| Legal triage | `openai:gpt-5-nano` | legal work-item triage |
-| Interview | `openai:gpt-5-nano` | Customer business-context reasoning and clarification |
-| Planner | `openai:gpt-5-nano` | high-reasoning scope construction |
-| Investigator | `openai:gpt-5-nano` | repeated tool-heavy technical investigation |
+| Role                | Default model         | Workload                                                       |
+| ------------------- | --------------------- | -------------------------------------------------------------- |
+| Root orchestrator   | `openai:gpt-5-nano`   | coordination, delegation, todo/state management                |
+| Legal triage        | `openai:gpt-5-nano`   | legal work-item triage                                         |
+| Interview           | `openai:gpt-5-nano`   | Customer business-context reasoning and clarification          |
+| Planner             | `openai:gpt-5-nano`   | high-reasoning scope construction                              |
+| Investigator        | `openai:gpt-5-nano`   | repeated tool-heavy technical investigation                    |
 | Narrators/proposers | `openai:gpt-4.1-nano` | bounded narration and proposal fields without reasoning kwargs |
 
 OpenAI `provider:model` specs are constructed through an LCSP provider profile
@@ -226,7 +226,7 @@ reasoning roles receive `thinking_level="low"`; narrators/proposers receive `"mi
 Minimal reduces thinking but does not guarantee zero thinking tokens.
 The exact Google harness profile supports the reasoning root and subagents;
 narrators/proposers use the agent-scoped constructor with minimal thinking. LLM7 uses
-`codestral-latest` for every role through its OpenAI-compatible endpoint. The
+`GLM-5.3-Flash` for every role through its OpenAI-compatible endpoint. The
 transport remains LangChain OpenAI, but LCSP forces `use_responses_api=False`, routes
 credentials only from `LLM7_API_KEY`, and defaults to `https://api.llm7.io/v1`
 (`LLM7_BASE_URL` may override the endpoint). Inception uses `mercury-2.5` for

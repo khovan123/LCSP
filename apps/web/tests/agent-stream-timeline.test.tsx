@@ -36,9 +36,8 @@ Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
 });
 
 const { createRoot } = await import("react-dom/client");
-const { AgentStreamTimeline } = await import(
-  "../src/features/workspace/components/molecules/agent-stream-timeline.tsx"
-);
+const { AgentStreamTimeline } =
+  await import("../src/features/workspace/components/molecules/agent-stream-timeline.tsx");
 
 const roots: ReturnType<typeof createRoot>[] = [];
 
@@ -140,7 +139,10 @@ test("semantic agent stream rows render structured tool model and skill fields",
               usage: { input_tokens: 11, output_tokens: 13 },
               outputRefs: ["output:final"],
             },
-            { toolName: null, status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed },
+            {
+              toolName: null,
+              status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+            },
           ),
           event(
             5,
@@ -153,7 +155,10 @@ test("semantic agent stream rows render structured tool model and skill fields",
               skillVersionOrHash: "sha256:abc123",
               promptVersion: "prompt/v1",
             },
-            { toolName: null, status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed },
+            {
+              toolName: null,
+              status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+            },
           ),
         ]}
       />,
@@ -165,36 +170,37 @@ test("semantic agent stream rows render structured tool model and skill fields",
   );
   assert.equal(activities.length, 4);
 
-  const toolSummary = activities[0]?.querySelector("summary")?.textContent ?? "";
+  const toolSummary =
+    activities[0]?.querySelector("summary")?.textContent ?? "";
   assert.match(
     toolSummary,
     /Searched repository source|Đã tìm kiếm trong source repository/,
   );
   assert.doesNotMatch(toolSummary, /search_nodes|AI_MODEL_INVOCATION|obs-42/);
 
-  const technical = activities[0]?.querySelector(
-    "[data-stream-technical-details]",
-  )?.textContent ?? "";
+  const technical =
+    activities[0]?.querySelector("[data-stream-technical-details]")
+      ?.textContent ?? "";
   assert.match(technical, /search_nodes/);
   assert.match(technical, /AI_MODEL_INVOCATION/);
   assert.match(technical, /obs-42/);
   assert.match(technical, /\[REDACTED\]/);
 
-  const modelRequestTechnical = activities[1]?.querySelector(
-    "[data-stream-technical-details]",
-  )?.textContent ?? "";
+  const modelRequestTechnical =
+    activities[1]?.querySelector("[data-stream-technical-details]")
+      ?.textContent ?? "";
   assert.match(modelRequestTechnical, /list_observations/);
   assert.match(modelRequestTechnical, /artifact:1/);
 
-  const modelResultTechnical = activities[2]?.querySelector(
-    "[data-stream-technical-details]",
-  )?.textContent ?? "";
+  const modelResultTechnical =
+    activities[2]?.querySelector("[data-stream-technical-details]")
+      ?.textContent ?? "";
   assert.match(modelResultTechnical, /output:final/);
   assert.match(modelResultTechnical, /output_tokens/);
 
-  const skillTechnical = activities[3]?.querySelector(
-    "[data-stream-technical-details]",
-  )?.textContent ?? "";
+  const skillTechnical =
+    activities[3]?.querySelector("[data-stream-technical-details]")
+      ?.textContent ?? "";
   assert.match(skillTechnical, /sha256:abc123/);
   assert.match(skillTechnical, /prompt\/v1/);
 });
@@ -266,10 +272,14 @@ test("model call events render provider progress and terminal failures", async (
     summary,
     /AI provider could not complete this analysis step|AI provider không thể hoàn tất bước phân tích này/,
   );
-  assert.doesNotMatch(summary, /google_genai|gemini|model call|timeout_seconds/);
+  assert.doesNotMatch(
+    summary,
+    /google_genai|gemini|model call|timeout_seconds/,
+  );
 
   const technical =
-    activity.querySelector("[data-stream-technical-details]")?.textContent ?? "";
+    activity.querySelector("[data-stream-technical-details]")?.textContent ??
+    "";
   assert.match(technical, /gemini-3\.5-flash-lite/);
   assert.match(technical, /google_genai/);
   assert.match(technical, /MODEL_CALL_STARTED/);
@@ -279,7 +289,6 @@ test("model call events render provider progress and terminal failures", async (
   assert.match(technical, /elapsed_seconds/);
   assert.match(technical, /timeout_seconds/);
 });
-
 
 test("tool calls pair input and output into one expandable activity row", async () => {
   const container = document.createElement("div");
@@ -336,7 +345,8 @@ test("tool calls pair input and output into one expandable activity row", async 
   assert.doesNotMatch(summary, /billing|count|search_nodes/);
 
   const technical =
-    activity.querySelector("[data-stream-technical-details]")?.textContent ?? "";
+    activity.querySelector("[data-stream-technical-details]")?.textContent ??
+    "";
   assert.match(technical, /billing/);
   assert.match(technical, /count/);
   assert.match(technical, /call-1/);
@@ -398,7 +408,6 @@ test("private graph state and PII middleware noise are not rendered", async () =
   );
 });
 
-
 test("thinking header closes after the matching agent lifecycle completes", async () => {
   const container = document.createElement("div");
   document.body.append(container);
@@ -409,30 +418,20 @@ test("thinking header closes after the matching agent lifecycle completes", asyn
     root.render(
       <AgentStreamTimeline
         events={[
-          event(
-            1,
-            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentStarted,
-            null,
-            {
-              agentName: "repository-analyst",
-              toolName: null,
-              toolCallId: null,
-              status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
-              emittedAt: "2026-09-20T00:00:00.000Z",
-            },
-          ),
-          event(
-            2,
-            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentCompleted,
-            null,
-            {
-              agentName: "repository-analyst",
-              toolName: null,
-              toolCallId: null,
-              status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
-              emittedAt: "2026-09-20T00:00:03.000Z",
-            },
-          ),
+          event(1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentStarted, null, {
+            agentName: "repository-analyst",
+            toolName: null,
+            toolCallId: null,
+            status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+            emittedAt: "2026-09-20T00:00:00.000Z",
+          }),
+          event(2, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentCompleted, null, {
+            agentName: "repository-analyst",
+            toolName: null,
+            toolCallId: null,
+            status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+            emittedAt: "2026-09-20T00:00:03.000Z",
+          }),
         ]}
       />,
     );
@@ -561,15 +560,15 @@ test("runtime events map to meaningful activities with per-activity technical de
   }
 
   const firstTechnical =
-    activities[0]?.querySelector("[data-stream-technical-details]")?.textContent ??
-    "";
+    activities[0]?.querySelector("[data-stream-technical-details]")
+      ?.textContent ?? "";
   assert.match(firstTechnical, /RUN_STARTED/);
   assert.match(firstTechnical, /scan_requested/);
   assert.match(firstTechnical, /run-1/);
 
   const fallbackTechnical =
-    activities[3]?.querySelector("[data-stream-technical-details]")?.textContent ??
-    "";
+    activities[3]?.querySelector("[data-stream-technical-details]")
+      ?.textContent ?? "";
   assert.match(fallbackTechnical, /llm7/);
   assert.match(fallbackTechnical, /google_genai/);
   assert.match(fallbackTechnical, /PROVIDER_FALLBACK/);
@@ -643,9 +642,11 @@ test("terminal failure stops orphaned running spinners without failing completed
   assert.ok(modelRow);
   assert.equal(modelRow.getAttribute("data-stream-status"), "failed");
 
-  const fallbackActivity = [...container.querySelectorAll<HTMLElement>(
-    '[data-stream-status="completed"]',
-  )].find((node) =>
+  const fallbackActivity = [
+    ...container.querySelectorAll<HTMLElement>(
+      '[data-stream-status="completed"]',
+    ),
+  ].find((node) =>
     /backup AI provider|AI provider dự phòng/.test(node.textContent ?? ""),
   );
   assert.ok(fallbackActivity);
@@ -676,7 +677,7 @@ test("recovered provider attempts do not render as repeated terminal failures", 
             ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted,
             {
               provider: "llm7",
-              model: "codestral-latest",
+              model: "GLM-5.3-Flash",
               timeout_seconds: 30,
             },
             {
@@ -690,7 +691,7 @@ test("recovered provider attempts do not render as repeated terminal failures", 
             ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed,
             {
               provider: "llm7",
-              model: "codestral-latest",
+              model: "GLM-5.3-Flash",
               elapsed_seconds: 1,
               error_type: "UnprocessableEntityError",
             },
@@ -826,7 +827,7 @@ test("runtime TOOL_STARTED and TOOL_COMPLETED merge into one completed activity 
   });
 
   const activities = container.querySelectorAll(
-    'details[data-stream-activity]',
+    "details[data-stream-activity]",
   );
   assert.equal(activities.length, 1);
 
@@ -877,10 +878,7 @@ test("retry reset clears previous scanner activities before the replacement run 
 
   await act(async () => {
     root.render(
-      <AgentStreamTimeline
-        events={oldEvents}
-        activeRunId="scan-old"
-      />,
+      <AgentStreamTimeline events={oldEvents} activeRunId="scan-old" />,
     );
   });
   assert.equal(
@@ -890,11 +888,7 @@ test("retry reset clears previous scanner activities before the replacement run 
 
   await act(async () => {
     root.render(
-      <AgentStreamTimeline
-        events={oldEvents}
-        activeRunId="scan-old"
-        reset
-      />,
+      <AgentStreamTimeline events={oldEvents} activeRunId="scan-old" reset />,
     );
   });
 
@@ -951,10 +945,7 @@ test("replacement scan shows only the new run and never mixes previous scanner a
 
   await act(async () => {
     root.render(
-      <AgentStreamTimeline
-        events={mixedEvents}
-        activeRunId="scan-retry"
-      />,
+      <AgentStreamTimeline events={mixedEvents} activeRunId="scan-retry" />,
     );
   });
 

@@ -45,7 +45,7 @@ const PROVIDER_ALIASES = {
 const PROVIDER_PRESET_RUNTIME_MODELS = {
   openai: { provider: "OPENAI", model: "gpt-5-nano" },
   google_genai: { provider: "GOOGLE_GENAI", model: "gemini-3.5-flash-lite" },
-  llm7: { provider: "LLM7", model: "codestral-latest" },
+  llm7: { provider: "LLM7", model: "GLM-5.3-Flash" },
   inception: { provider: "INCEPTION", model: "mercury-2.5" },
 } as const;
 

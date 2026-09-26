@@ -129,8 +129,8 @@ PROVIDER_PRESETS = {
         "google_genai:gemini-3.5-flash-lite",
     ),
     "llm7": ProviderPreset(
-        "openai:codestral-latest",
-        "openai:codestral-latest",
+        "openai:GLM-5.3-Flash",
+        "openai:GLM-5.3-Flash",
     ),
     "inception": ProviderPreset(
         "openai:mercury-2.5",
@@ -140,12 +140,12 @@ PROVIDER_PRESETS = {
 GOOGLE_THINKING_LEVEL = "low"
 MODEL_CONTEXT_WINDOWS = {
     ("google_genai", "gemini-3.5-flash-lite"): 1_000_000,
-    ("llm7", "codestral-latest"): 256_000,
+    ("llm7", "GLM-5.3-Flash"): 256_000,
     ("inception", "mercury-2.5"): 128_000,
 }
 MODEL_OUTPUT_WINDOWS = {
     ("google_genai", "gemini-3.5-flash-lite"): 8_192,
-    ("llm7", "codestral-latest"): 8_192,
+    ("llm7", "GLM-5.3-Flash"): 8_192,
     ("inception", "mercury-2.5"): 8_192,
 }
 

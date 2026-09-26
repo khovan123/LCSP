@@ -50,13 +50,13 @@ describe("BillingPricingPreflightService", () => {
 
   it("passes when primary LLM7 and Google fallback pricing snapshots exist", async () => {
     const prisma = makePrismaService(
-      new Set(["LLM7:codestral-latest", "GOOGLE_GENAI:gemini-3.5-flash-lite"]),
+      new Set(["LLM7:GLM-5.3-Flash", "GOOGLE_GENAI:gemini-3.5-flash-lite"]),
     );
     const service = new BillingPricingPreflightService(
       makeConfigService({
         "billing.meteringEnabled": true,
         "billing.authorizedRuntimeModels":
-          "LLM7:codestral-latest,GOOGLE_GENAI:gemini-3.5-flash-lite",
+          "LLM7:GLM-5.3-Flash,GOOGLE_GENAI:gemini-3.5-flash-lite",
       }),
       prisma as never,
     );
@@ -74,13 +74,11 @@ describe("BillingPricingPreflightService", () => {
       makeConfigService({
         "billing.meteringEnabled": true,
         "billing.authorizedRuntimeModels":
-          "LLM7:codestral-latest,GOOGLE_GENAI:gemini-3.5-flash-lite",
+          "LLM7:GLM-5.3-Flash,GOOGLE_GENAI:gemini-3.5-flash-lite",
       }),
       prisma as never,
     );
 
-    await expect(service.onModuleInit()).rejects.toThrow(
-      "LLM7/codestral-latest",
-    );
+    await expect(service.onModuleInit()).rejects.toThrow("LLM7/GLM-5.3-Flash");
   });
 });

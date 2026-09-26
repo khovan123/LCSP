@@ -235,7 +235,7 @@ def test_t14_billing_invocation_authorization_metrics_survive_redaction_intact()
         "assessmentId": "4b9b3224-f70a-4b22-8b92-09683b9d1d6b",
         "invocationId": "invocation-1",
         "provider": "LLM7",
-        "model": "codestral-latest",
+        "model": "GLM-5.3-Flash",
         "estimatedInputTokens": "10670",
         "estimatedInputBytes": "32008",
         "maxOutputTokens": "4096",

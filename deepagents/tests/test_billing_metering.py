@@ -325,7 +325,7 @@ def test_model_request_diagnostic_logs_shape_without_prompt_or_tool_content(monk
         agent_role="investigator",
     )
     request = SimpleNamespace(
-        model=SimpleNamespace(provider="llm7", model_name="codestral-latest"),
+        model=SimpleNamespace(provider="llm7", model_name="GLM-5.3-Flash"),
         messages=[
             HumanMessage(content="private prompt must not be logged"),
             AIMessage(
@@ -357,7 +357,7 @@ def test_model_request_diagnostic_logs_shape_without_prompt_or_tool_content(monk
     )
     assert event == "MODEL_REQUEST_DIAGNOSTIC"
     assert fields["provider"] == "llm7"
-    assert fields["model"] == "codestral-latest"
+    assert fields["model"] == "GLM-5.3-Flash"
     assert fields["message_roles"] == ["user", "assistant(tool_calls)", "tool"]
     assert fields["tool_count"] == 1
     assert fields["tool_result_count"] == 1
