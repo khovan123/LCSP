@@ -2210,3 +2210,48 @@ def test_unauthorized_evidence_ref_is_stripped_without_a_specialist_correction()
     assert len(dispatcher.calls) == 1
     assert posted_refs == [[source_ref], []]
     assert boundary._run_guarded_continuation.call_args.kwargs["guarded_state"] is accepted
+
+
+def test_text_only_handoff_json_is_recovered_and_strictly_validated():
+    from langchain_core.messages import AIMessage
+
+    text = "Here is the handoff:\n```json\n" + json.dumps(WAITING_HANDOFF) + "\n```"
+    handoff = RootSubagentDispatcher._validated_handoff(
+        subagent_type="interview",
+        response_format=object(),
+        invocation_result={"messages": [AIMessage(content=text)]},
+    )
+
+    assert handoff["outcome"] == "WAITING_FOR_CUSTOMER"
+    assert handoff["activeQuestion"]["id"] == "agent-question-next"
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "I will ask the customer about deployment.",
+        '{"outcome": "WAITING_FOR_CUSTOMER"',
+    ],
+)
+def test_text_without_a_json_handoff_still_fails_repairably(content):
+    from langchain_core.messages import AIMessage
+
+    with pytest.raises(SpecialistHandoffValidationError, match="structured_response"):
+        RootSubagentDispatcher._validated_handoff(
+            subagent_type="interview",
+            response_format=object(),
+            invocation_result={"messages": [AIMessage(content=content)]},
+        )
+
+
+def test_text_json_violating_the_handoff_schema_is_rejected():
+    from langchain_core.messages import AIMessage
+
+    broken = {**deepcopy(WAITING_HANDOFF), "activeQuestion": None}
+
+    with pytest.raises(SpecialistHandoffValidationError):
+        RootSubagentDispatcher._validated_handoff(
+            subagent_type="interview",
+            response_format=object(),
+            invocation_result={"messages": [AIMessage(content=json.dumps(broken))]},
+        )
