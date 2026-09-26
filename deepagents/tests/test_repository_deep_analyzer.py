@@ -312,3 +312,66 @@ def _valid_repository_result() -> dict[str, object]:
             ],
         },
     }
+
+
+def _evidence_payload_for(tmp_path, result: dict[str, object]) -> dict[str, object]:
+    from tools.common.capabilities.evidence.repository_analysis.models import (
+        RepositoryAnalysisResult,
+    )
+
+    (tmp_path / "app.py").write_text("app = object()\n", encoding="utf-8")
+    return RepositoryDeepAnalyzer._evidence_payload(
+        LocalShellBackend(root_dir=str(tmp_path), virtual_mode=True),
+        RepositoryAnalysisResult.model_validate(result),
+        snapshot_id="snapshot-1",
+        commit_sha="abc1234",
+        scan_job_id="scan-1",
+    )
+
+
+def test_partial_evidence_payload_carries_interview_coverage_policy(tmp_path) -> None:
+    # Regression: the Deep Agent scanner migration dropped the scanner-workflow
+    # policy, so PARTIAL reports could never start Initial Interview.
+    from tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary import (
+        _can_start_initial_interview,
+        _technical_coverage,
+    )
+
+    payload = _evidence_payload_for(tmp_path, _valid_repository_result())
+
+    policy = payload["partialCoveragePolicyDecision"]
+    assert policy["permittedForInterview"] is True
+    assert policy["policyVersion"] == "initial-interview-bounded-evidence-v1"
+    assert policy["policyDecisionRef"].startswith("coverage-policy:")
+    assert policy["limitations"] == ["bounded local smoke"]
+    report = {"evidence_payload": payload}
+    coverage_state, coverage_notes = _technical_coverage(report)
+    assert coverage_state == "PARTIAL"
+    assert _can_start_initial_interview(coverage_state, coverage_notes, report) is True
+
+
+def test_partial_evidence_payload_without_evidence_does_not_permit_interview(tmp_path) -> None:
+    from tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary import (
+        _can_start_initial_interview,
+        _technical_coverage,
+    )
+
+    result = _valid_repository_result()
+    result["source_anchors"] = []
+    result["nodes"] = []
+
+    payload = _evidence_payload_for(tmp_path, result)
+
+    assert payload["partialCoveragePolicyDecision"]["permittedForInterview"] is False
+    report = {"evidence_payload": payload}
+    coverage_state, coverage_notes = _technical_coverage(report)
+    assert _can_start_initial_interview(coverage_state, coverage_notes, report) is False
+
+
+def test_ready_evidence_payload_needs_no_partial_coverage_policy(tmp_path) -> None:
+    result = _valid_repository_result()
+    result["coverage_state"] = "READY"
+
+    payload = _evidence_payload_for(tmp_path, result)
+
+    assert "partialCoveragePolicyDecision" not in payload

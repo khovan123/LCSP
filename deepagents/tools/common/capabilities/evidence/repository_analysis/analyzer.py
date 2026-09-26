@@ -24,6 +24,7 @@ from middleware.billing_metering import BillingAgentRoleMiddleware
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from model_policy import INVESTIGATOR_MODEL_SPEC, resolve_agent_model
 from orchestration.agent_stream import invoke_with_stream
+from orchestration.technical_coverage_policy import attach_partial_coverage_policy
 from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
 
 from .models import RepositoryAnalysisResult
@@ -327,7 +328,7 @@ class RepositoryDeepAnalyzer:
             "graph_hash": "",
             "schema_version": "deep-agent-1.0.0",
         }
-        return {
+        payload = {
             "summary": result.summary,
             "languages": result.languages,
             "frameworks": result.frameworks,
@@ -342,6 +343,9 @@ class RepositoryDeepAnalyzer:
                 "material_unresolved_frontiers": result.ai_discovery.material_unresolved_frontiers,
             },
         }
+        # Initial Interview may start from PARTIAL coverage only with this auditable
+        # scanner-workflow decision (bounded, pinned, evidence-backed limitations).
+        return attach_partial_coverage_policy(payload)
 
 __all__ = [
     "REPOSITORY_ANALYSIS_VERSION",
