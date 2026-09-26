@@ -426,14 +426,22 @@ def test_ai_absent_claim_contradicted_by_sdk_import_is_downgraded(tmp_path) -> N
     providers = {finding.provider for finding in discovery.findings}
     assert {"langchain", "openai"} <= providers
     assert all(finding.state == "AI_PROVIDER_REFERENCE" for finding in discovery.findings)
-    assert all(finding.clarification_owner == "TECHNICAL" for finding in discovery.findings)
+    # The full scan already failed to trace these calls; a technical rerun would repeat
+    # the miss, so production use is a Customer question (assessment 7976a135).
+    assert all(finding.clarification_owner == "CUSTOMER" for finding in discovery.findings)
+    assert all(
+        finding.clarification_kind == "OUTBOUND_AI_CONFIRMATION" for finding in discovery.findings
+    )
     anchors = {anchor.anchor_id: anchor for anchor in result.source_anchors}
     for finding in discovery.findings:
         anchor = anchors[finding.anchor_id]
         assert anchor.file_path in {"agent/runtime.py", "web/src/client.ts"}
         assert anchor.start_line == 1
-    assert discovery.material_unresolved_frontiers
-    assert any("AI_ABSENT_CONFIRMED" in note for note in result.coverage_notes)
+    assert discovery.material_unresolved_frontiers == []
+    assert any(
+        "AI_ABSENT_CONFIRMED" in note and "agent/runtime.py:1" in note
+        for note in result.coverage_notes
+    )
 
 
 def test_ai_absent_claim_contradicted_by_manifest_dependency_is_downgraded(tmp_path) -> None:

@@ -441,8 +441,10 @@ def enforce_ai_absence_backstop(
 
     Absence is only legal under genuinely READY coverage (ai-discovery-gate.md), yet READY
     is the model's own claim. Product imports or dependency declarations of AI SDKs are
-    provider references requiring technical resolution, so the gate drops to AI_UNKNOWN.
-    If the deterministic search itself fails, absence is unproven and also drops.
+    provider references, so the gate drops to AI_UNKNOWN. The full repository pass has
+    already failed to trace a call from them, so another technical pass would repeat the
+    same miss: whether the product uses the SDK is one bounded Customer question. If the
+    deterministic search itself fails, absence is unproven technically and stays a frontier.
     """
     discovery = result.ai_discovery
     if discovery.gate != "AI_ABSENT_CONFIRMED":
@@ -488,15 +490,11 @@ def enforce_ai_absence_backstop(
                 resolution_state="OBSERVED",
                 kind="PROVIDER_REFERENCE",
                 provider=provider,
-                clarification_owner="TECHNICAL",
-                clarification_kind="TARGETED_TECHNICAL_REANALYSIS",
+                clarification_owner="CUSTOMER",
+                clarification_kind="OUTBOUND_AI_CONFIRMATION",
                 evidence_refs=[anchor_id],
                 anchor_id=anchor_id,
             ).model_dump()
-        )
-        frontiers.append(
-            f"Deterministic SDK scan found {provider} referenced at {file_path}:{line}; "
-            "AI absence is not proven"
         )
     data["source_anchors"] = anchors
     data["ai_discovery"].update(
@@ -511,7 +509,16 @@ def enforce_ai_absence_backstop(
         *data["coverage_notes"],
         "AI_ABSENT_CONFIRMED was downgraded to AI_UNKNOWN by the deterministic "
         "AI SDK dependency/import check"
-        + (f" ({', '.join(sorted(hits))})" if hits else "")
+        + (
+            " ("
+            + ", ".join(
+                f"{provider} at {str(match['path']).lstrip('/')}:{int(match.get('line') or 1)}"
+                for provider, match in sorted(hits.items())
+            )
+            + ")"
+            if hits
+            else ""
+        )
         + ".",
     ]
     return RepositoryAnalysisResult.model_validate(data)

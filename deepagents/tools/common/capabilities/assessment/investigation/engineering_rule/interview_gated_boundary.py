@@ -786,6 +786,21 @@ def _ai_discovery_handoff(
             {"id": "UNSURE", "label": "Unsure"},
         ]
         description = f"Runtime reachability of the AI path evidenced at {location}"
+    elif kind == "OUTBOUND_AI_CONFIRMATION" and finding.get("kind") == "PROVIDER_REFERENCE":
+        provider_text = f"the {provider} AI SDK" if provider else "an AI SDK"
+        prompt = (
+            f"LCSP found {provider_text} declared or imported at {location}, but could not "
+            "trace a model call from the assessed product code. Does the assessed product use "
+            "it to call an AI/LLM service in production? If Yes, name the feature or workflow "
+            "that uses it."
+        )
+        control = "SINGLE_SELECT"
+        choices = [
+            {"id": "YES", "label": "Yes", "requiresFreeText": True},
+            {"id": "NO", "label": "No"},
+            {"id": "UNSURE", "label": "Unsure"},
+        ]
+        description = f"Production use of the AI SDK referenced at {location}"
     elif kind == "OUTBOUND_AI_CONFIRMATION":
         prompt = (
             f"LCSP found an outbound API call at {location} with AI-compatible request evidence, "

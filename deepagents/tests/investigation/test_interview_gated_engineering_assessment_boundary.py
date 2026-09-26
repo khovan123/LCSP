@@ -895,3 +895,59 @@ def test_api_client_posts_ai_not_detected_to_internal_route(monkeypatch) -> None
             {"redact": False},
         )
     ]
+
+
+def test_backstop_sdk_references_start_interview_instead_of_parked_reanalysis(tmp_path) -> None:
+    """Assessment 7976a135 regression: backstop findings must reach the Customer.
+
+    The scanner claimed AI absence, the deterministic backstop found AI SDKs in
+    product code, and routing that to technical recovery parked the pipeline on an
+    approval-gated reanalysis that nothing approves. The scanner already failed to
+    trace a call, so whether the SDK is used is one bounded Customer question.
+    """
+    from deepagents.backends import LocalShellBackend
+
+    from tools.common.capabilities.evidence.repository_analysis.analyzer import (
+        enforce_ai_absence_backstop,
+    )
+    from tools.common.capabilities.evidence.repository_analysis.models import (
+        RepositoryAnalysisResult,
+    )
+
+    (tmp_path / "app.py").write_text("from langchain_openai import ChatOpenAI\n", encoding="utf-8")
+    absent = RepositoryAnalysisResult.model_validate(
+        {
+            "summary": "No AI usage found",
+            "coverage_state": "READY",
+            "ai_discovery": {"gate": "AI_ABSENT_CONFIRMED", "coverage_state": "READY"},
+        }
+    )
+    discovery = enforce_ai_absence_backstop(
+        LocalShellBackend(root_dir=str(tmp_path), virtual_mode=True), absent
+    ).ai_discovery.model_dump()
+    report = _ai_report("AI_UNKNOWN", discovery["findings"])
+    report["evidence_payload"]["ai_discovery"]["material_unresolved_frontiers"] = discovery[
+        "material_unresolved_frontiers"
+    ]
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+    root = RecordingRoot()
+    dispatcher = FakeDispatcher()
+
+    result = _boundary(api, dispatcher, root)._prepare_interview(
+        evidence_report=report,
+        evidence_report_id="ter-1",
+        assessment_id="assessment-1",
+        correlation_id="corr",
+        workflow_run_id="workflow-1",
+    )
+
+    assert result is None
+    assert root.calls == []
+    assert dispatcher.calls == []
+    assert len(api.seeded) == 1
+    question = api.seeded[0][1]["activeQuestion"]
+    assert question["control"] == "SINGLE_SELECT"
+    assert [choice["id"] for choice in question["choices"]] == ["YES", "NO", "UNSURE"]
+    assert "SDK" in question["prompt"]
+    assert "outbound API call" not in question["prompt"]
+    assert question["frontier"]["owner"] == "CUSTOMER"
