@@ -1767,6 +1767,8 @@ export const enPages = {
         "Evaluation resumed. Your saved answer is queued again.",
       resumeTurnLimitReached:
         "This answer could not be evaluated after several attempts. Please try again later or contact support.",
+      resumeTurnInsufficientCredits:
+        "Your wallet does not have enough credits to evaluate this answer. Top up credits in Billing, then press Resume again.",
       resumeTurnFailed:
         "The evaluation could not be resumed right now. Please try again.",
       contextReadyHandoff:

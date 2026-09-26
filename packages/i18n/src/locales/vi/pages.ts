@@ -1769,6 +1769,8 @@ export const viPages = {
         "Đã tiếp tục đánh giá. Câu trả lời đã lưu đang được xếp hàng lại.",
       resumeTurnLimitReached:
         "Không thể đánh giá câu trả lời này sau nhiều lần thử. Vui lòng thử lại sau hoặc liên hệ hỗ trợ.",
+      resumeTurnInsufficientCredits:
+        "Ví của bạn không đủ credit để đánh giá câu trả lời này. Vui lòng nạp thêm credit trong mục Thanh toán rồi nhấn Tiếp tục lại.",
       resumeTurnFailed: "Hiện chưa thể tiếp tục đánh giá. Vui lòng thử lại.",
       contextReadyHandoff:
         "Bối cảnh kinh doanh cơ bản đã được xác nhận. Assessment giờ có thể tiếp tục với lập kế hoạch và điều tra. Các câu hỏi riêng cho từng yêu cầu vẫn có thể được hỏi thêm nếu cần.",

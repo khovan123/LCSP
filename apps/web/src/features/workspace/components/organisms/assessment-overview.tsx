@@ -564,7 +564,9 @@ function AssessmentInterviewFlow({
                 ? "pages.assessmentFlow.interview.resumeTurnQueued"
                 : outcome.kind === API_OUTCOME_KINDS.rateLimited
                   ? "pages.assessmentFlow.interview.resumeTurnLimitReached"
-                  : "pages.assessmentFlow.interview.resumeTurnFailed",
+                  : outcome.kind === API_OUTCOME_KINDS.insufficientCredits
+                    ? "pages.assessmentFlow.interview.resumeTurnInsufficientCredits"
+                    : "pages.assessmentFlow.interview.resumeTurnFailed",
             ),
           );
         },
