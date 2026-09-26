@@ -1063,3 +1063,59 @@ def test_api_unauthorized_evidence_ref_is_stripped_and_question_resubmitted() ->
     question = payload["activeQuestion"]
     assert question["whyEvidenceRefs"] == ["technicalEvidenceReport:ter-1"]
     assert question["frontier"]["evidenceRefs"] == ["technicalEvidenceReport:ter-1"]
+
+
+def _initial_interview_kwargs():
+    return {
+        "evidence_report": _report(),
+        "evidence_report_id": "ter-1",
+        "assessment_id": "assessment-1",
+        "correlation_id": "00000000-0000-0000-0000-000000000001",
+        "workflow_run_id": "10000000-0000-0000-0000-000000000001",
+    }
+
+
+def test_missing_initial_handoff_gets_one_bounded_schema_correction() -> None:
+    from orchestration.result_validation import SpecialistHandoffValidationError
+
+    class FlakyDispatcher(FakeDispatcher):
+        def dispatch(self, **kwargs):
+            if not self.calls:
+                self.calls.append(kwargs)
+                raise SpecialistHandoffValidationError(
+                    "interview did not return a structured_response handoff"
+                )
+            return super().dispatch(**kwargs)
+
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0, "answerHistory": []})
+    dispatcher = FlakyDispatcher()
+
+    assert _boundary(api, dispatcher)._prepare_interview(**_initial_interview_kwargs()) is None
+
+    first, repair = dispatcher.calls
+    assert repair["idempotency_key"] == f"{first['idempotency_key']}:schema-correction:1"
+    assert repair["instruction"].startswith(first["instruction"])
+    assert "INTERVIEW_HANDOFF_SCHEMA_VIOLATION" in repair["instruction"]
+    assert "did not return a structured_response handoff" in repair["instruction"]
+    assert "INTERVIEW_HANDOFF_SCHEMA_VIOLATION" not in first["instruction"]
+    assert len(api.seeded) == 1
+
+
+def test_second_initial_handoff_violation_propagates() -> None:
+    from orchestration.result_validation import SpecialistHandoffValidationError
+
+    class BrokenDispatcher(FakeDispatcher):
+        def dispatch(self, **kwargs):
+            self.calls.append(kwargs)
+            raise SpecialistHandoffValidationError(
+                "interview did not return a structured_response handoff"
+            )
+
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0, "answerHistory": []})
+    dispatcher = BrokenDispatcher()
+
+    with pytest.raises(SpecialistHandoffValidationError):
+        _boundary(api, dispatcher)._prepare_interview(**_initial_interview_kwargs())
+
+    assert len(dispatcher.calls) == 2
+    assert api.seeded == []

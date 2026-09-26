@@ -6,10 +6,12 @@ from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
 
 import hashlib
 import json
+import logging
 import re
 from typing import Any
 
 from orchestration.dispatcher import RootSubagentDispatcher
+from orchestration.result_validation import SpecialistHandoffValidationError
 from decision.shadow import InterviewRoutingPacket, observer_from_api_client
 from tools.common.capabilities.agent_runtime.boundary import NonRetryableAgentBoundaryError
 from tools.common.capabilities.platform.api_client import InterviewCoverageCallbackError
@@ -30,6 +32,8 @@ from tools.common.capabilities.assessment.planning.engineering_rule.confirmed_bu
     normalize_confirmed_structured_business_context,
 )
 
+
+_LOGGER = logging.getLogger(__name__)
 
 _TERMINAL_WAITING_OUTCOMES = {
     "WAITING_FOR_CUSTOMER",
@@ -314,29 +318,49 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
             else None
         )
         if handoff is None:
-            ledger_token = set_active_turn_evidence_ledger(ledger)
+            instruction = _initial_interview_instruction(
+                assessment_id=assessment_id,
+                evidence_report_id=evidence_report_id,
+                evidence_report=evidence_report,
+            )
+            idempotency_key = f"assessment-interview-initial:{assessment_id}:{evidence_report_id}"
+            dispatcher = self._interview_dispatcher or RootSubagentDispatcher()
+
+            def _dispatch_initial(instruction: str, idempotency_key: str) -> Any:
+                ledger_token = set_active_turn_evidence_ledger(ledger)
+                try:
+                    return dispatcher.dispatch(
+                        subagent_type="interview",
+                        instruction=instruction,
+                        idempotency_key=idempotency_key,
+                        trigger="TECHNICAL_EVIDENCE_ACCEPTED",
+                        metadata={
+                            "assessment_id": assessment_id,
+                            "technical_evidence_report_id": evidence_report_id,
+                            "correlationId": correlation_id,
+                        },
+                        thread_id=f"interview:{assessment_id}",
+                        context=run_context,
+                        reenter_root=False,
+                    )
+                finally:
+                    reset_active_turn_evidence_ledger(ledger_token)
+
             try:
-                dispatcher = self._interview_dispatcher or RootSubagentDispatcher()
-                result = dispatcher.dispatch(
-                    subagent_type="interview",
-                    instruction=_initial_interview_instruction(
-                        assessment_id=assessment_id,
-                        evidence_report_id=evidence_report_id,
-                        evidence_report=evidence_report,
-                    ),
-                    idempotency_key=f"assessment-interview-initial:{assessment_id}:{evidence_report_id}",
-                    trigger="TECHNICAL_EVIDENCE_ACCEPTED",
-                    metadata={
-                        "assessment_id": assessment_id,
-                        "technical_evidence_report_id": evidence_report_id,
-                        "correlationId": correlation_id,
-                    },
-                    thread_id=f"interview:{assessment_id}",
-                    context=run_context,
-                    reenter_root=False,
+                result = _dispatch_initial(instruction, idempotency_key)
+            except SpecialistHandoffValidationError as exc:
+                # A missing or malformed typed handoff is a candidate-shape failure.
+                # Give the specialist one bounded correction with the exact rule it
+                # broke (as the resume boundary does); a second failure propagates.
+                _LOGGER.warning(
+                    "INTERVIEW_INITIAL_HANDOFF_VALIDATION_REPAIRED assessment_id=%s reason=%s",
+                    assessment_id,
+                    str(exc)[:300],
                 )
-            finally:
-                reset_active_turn_evidence_ledger(ledger_token)
+                result = _dispatch_initial(
+                    _initial_schema_correction_instruction(instruction, exc),
+                    f"{idempotency_key}:schema-correction:1",
+                )
             handoff = result.get("handoff") if isinstance(result, dict) else None
 
         if not isinstance(handoff, dict):
@@ -928,6 +952,25 @@ def _initial_interview_instruction(
         "candidate, use Yes/No/Unsure and do not name a provider unless evidence or the Customer does. "
         "Return WAITING_FOR_CUSTOMER with exactly one bounded activeQuestion.\n"
         f"Bounded initial context: {json.dumps(safe_context, ensure_ascii=False, sort_keys=True)}"
+    )
+
+
+def _initial_schema_correction_instruction(
+    instruction: str,
+    error: SpecialistHandoffValidationError,
+) -> str:
+    feedback = {
+        "code": "INTERVIEW_HANDOFF_SCHEMA_VIOLATION",
+        "rejectedReason": str(error)[:2000],
+    }
+    return (
+        f"{instruction}\n"
+        "Your previous candidate was rejected before persistence. Return the final answer "
+        "as the structured InterviewResult handoff (not prose), fixing only the rule named "
+        "in rejectedReason: outcome WAITING_FOR_CUSTOMER with exactly one activeQuestion "
+        "whose frontier has owner=CUSTOMER, materiality=MATERIAL, a non-empty description "
+        "and evidenceRefs limited to governed refs from the bounded context ([] when none).\n"
+        f"decisionValidationFeedback: {json.dumps(feedback, ensure_ascii=False, sort_keys=True)}"
     )
 
 
