@@ -1338,3 +1338,41 @@ test("tool activities group across tools and use their activity icon", async () 
   );
   assert.deepEqual(counts, ["1", "2", "2"]);
 });
+
+test("repeated activities such as context trimming update one row", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const trimmed = (sequence: number, cleared: number) =>
+    event(
+      sequence,
+      ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentContextTrimmed,
+      { cleared_tool_results: cleared },
+      {
+        toolName: null,
+        toolCallId: null,
+        status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+      },
+    );
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={[trimmed(1, 2), trimmed(2, 3), trimmed(3, 5)]}
+      />,
+    );
+  });
+
+  const rows = container.querySelectorAll('[data-stream-kind="progress"]');
+  assert.equal(rows.length, 1);
+  assert.equal(
+    rows[0]?.querySelector("[data-stream-repeat-count]")?.getAttribute(
+      "data-stream-repeat-count",
+    ),
+    "3",
+  );
+  const technical =
+    rows[0]?.querySelector("[data-stream-technical-details]")?.textContent ?? "";
+  assert.match(technical, /"cleared_tool_results": 5/);
+});
