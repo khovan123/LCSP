@@ -90,6 +90,31 @@ def _is_rate_limited(error: BaseException) -> bool:
     return not _is_terminal_model_error(error) and _error_status(error) in _RATE_LIMITED_STATUSES
 
 
+_GOOGLE_RETRY_INFO_TYPE = "type.googleapis.com/google.rpc.RetryInfo"
+
+
+def _google_retry_delay_seconds(error: BaseException) -> float | None:
+    """Return Google's `google.rpc.RetryInfo.retryDelay` (e.g. "37s") from an error body.
+
+    Gemini 429s carry the delay in the JSON error details, not a Retry-After header.
+    """
+    body = getattr(error, "details", None)
+    payload = body.get("error") if isinstance(body, dict) else None
+    details = payload.get("details") if isinstance(payload, dict) else None
+    for item in details if isinstance(details, list) else ():
+        if not isinstance(item, dict) or item.get("@type") != _GOOGLE_RETRY_INFO_TYPE:
+            continue
+        raw = item.get("retryDelay")
+        if not isinstance(raw, str) or not raw.endswith("s"):
+            return None
+        try:
+            value = float(raw[:-1])
+        except ValueError:
+            return None
+        return value if value >= 0 else None
+    return None
+
+
 def _retry_after_seconds(error: BaseException) -> float | None:
     seen: set[int] = set()
     current: BaseException | None = error
@@ -104,6 +129,9 @@ def _retry_after_seconds(error: BaseException) -> float | None:
             except (TypeError, ValueError):
                 return None
             return value if value >= 0 else None
+        google_delay = _google_retry_delay_seconds(current)
+        if google_delay is not None:
+            return google_delay
         current = current.__cause__ or current.__context__
     return None
 
