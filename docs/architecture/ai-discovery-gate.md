@@ -26,7 +26,12 @@ or possible AI call, provider reference requiring clarification, or material AI 
 frontier. A missing signal under `PARTIAL`/`UNAVAILABLE` coverage is never absence proof.
 
 Technical/resolvable uncertainty routes to targeted reanalysis. Customer-owned runtime or
-business uncertainty becomes one bounded Interview question. Confirmed invocation skips
+business uncertainty becomes one bounded Interview question. When the deterministic absence
+backstop contradicts a model-asserted `AI_ABSENT_CONFIRMED` with an AI SDK import or
+dependency in product code, the full repository pass has already failed to trace a call, so
+the reference is Customer-owned `OUTBOUND_AI_CONFIRMATION` (does the product use this SDK in
+production?) rather than another technical pass; only a failed deterministic search stays a
+technical frontier. Confirmed invocation skips
 the redundant “is this AI?” question and asks purpose + Web/Mobile/API feature/module and
 workflow context. An unresolved custom outbound candidate uses `Yes / No / Unsure`; a Yes
 answer may provide the customer-hosted/provider identity as free text.
