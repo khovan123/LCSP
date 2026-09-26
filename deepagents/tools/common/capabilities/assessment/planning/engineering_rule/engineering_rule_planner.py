@@ -1,7 +1,7 @@
 """LLM-assisted EngineeringRule planning with deterministic fail-closed validation."""
 from __future__ import annotations
 
-from orchestration.agent_stream import invoke_with_stream
+from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
 
 import json
 from collections import Counter
@@ -279,6 +279,7 @@ class EngineeringRulePlanner:
                     },
                     "configurable": {"thread_id": workflow_run_id},
                 },
+                stage=AGENT_STREAM_STAGES["planner"],
             )
             plan = self._validate_plan(
                 rows,

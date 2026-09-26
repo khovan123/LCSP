@@ -18,7 +18,11 @@ from decision.shadow import (
     observer_from_api_client,
 )
 from model_policy import create_lcsp_agent as create_agent
-from orchestration.agent_stream import invoke_with_stream, publish_agent_stream_event
+from orchestration.agent_stream import (
+    AGENT_STREAM_STAGES,
+    invoke_with_stream,
+    publish_agent_stream_event,
+)
 from subagents import FLOW_SUBAGENTS
 
 from .context import LCSPRunContext
@@ -180,6 +184,7 @@ class RootSubagentDispatcher:
                 {"messages": [{"role": "user", "content": prompt}]},
                 config=config,
                 context=context,
+                stage=_stream_stage_for_subagent(subagent_type),
             )
             validation_graph = program_graph
             if (
@@ -327,6 +332,7 @@ class RootSubagentDispatcher:
             {"messages": [{"role": "user", "content": prompt}]},
             config=config,
             context=context,
+            stage=_stream_stage_for_subagent(subagent_type),
         )
         return {
             "status": "ROOT_REENTERED",
@@ -415,6 +421,20 @@ def _deterministic_transition_available(metadata: dict[str, Any]) -> bool:
         else metadata.get("deterministicTransitionAvailable")
     )
     return bool(value)
+
+
+def _stream_stage_for_subagent(subagent_type: str) -> str | None:
+    """Customer-visible live-stream stage for one specialist dispatch."""
+    normalized = subagent_type.strip().lower()
+    if normalized == "planner":
+        return AGENT_STREAM_STAGES["planner"]
+    if normalized == "investigator":
+        return AGENT_STREAM_STAGES["investigate"]
+    if normalized == "interview":
+        return AGENT_STREAM_STAGES["interview"]
+    if normalized in {"gate", "classification"}:
+        return AGENT_STREAM_STAGES["gate"]
+    return None
 
 
 def _authoritative_route_for_subagent(subagent_type: str) -> str:

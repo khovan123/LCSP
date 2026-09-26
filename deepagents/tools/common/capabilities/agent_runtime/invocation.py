@@ -29,6 +29,7 @@ from middleware.billing_metering import (
 )
 from tools.common.capabilities.agent_runtime.boundary import AgentBoundaryBase
 from orchestration.agent_stream import (
+    AGENT_STREAM_STAGES,
     AgentStreamSession,
     BufferedAgentStreamEmitter,
     activate_agent_stream,
@@ -176,6 +177,14 @@ AGENT_INVOCATION_BOUNDARIES: tuple[AgentInvocationBoundary, ...] = (
 )
 
 _LOGGER = logging.getLogger(__name__)
+# Default live-stream stage for boundaries that serve exactly one stage. The
+# engineering assessment boundary spans Interview, Planner, Investigate and
+# Gate, so each of those invocations names its own stage instead.
+_BOUNDARY_STREAM_STAGES = {
+    "scan_requested": AGENT_STREAM_STAGES["scanner"],
+    "targeted_reanalysis_requested": AGENT_STREAM_STAGES["scanner"],
+    "assessment_interview_resume_requested": AGENT_STREAM_STAGES["interview"],
+}
 _BOUNDARY_INDEX = {boundary.name: boundary for boundary in AGENT_INVOCATION_BOUNDARIES}
 if len(_BOUNDARY_INDEX) != len(AGENT_INVOCATION_BOUNDARIES):
     raise RuntimeError("Agent Runtime invocation boundary names must be unique")
@@ -445,6 +454,7 @@ def _agent_stream_session(
         correlation_id=correlation_id,
         boundary_name=boundary_name,
         emit_payload=BufferedAgentStreamEmitter(client.post_agent_stream_event),
+        stage=_BOUNDARY_STREAM_STAGES.get(boundary_name),
     )
 
 

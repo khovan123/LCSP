@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from orchestration.agent_stream import invoke_with_stream
+from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
 
 import hashlib
 import json
@@ -455,6 +455,7 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
                                  "technical_evidence_report_id": evidence_report_id,
                                  "correlationId": correlation_id,
                                  "trigger": "AI_DISCOVERY_REANALYSIS_REQUIRED"}},
+            stage=AGENT_STREAM_STAGES["scanner"],
         )
         _require_technical_recovery_request(
             result,
@@ -510,6 +511,7 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
                     "trigger": "TECHNICAL_COVERAGE_RECOVERY_REQUIRED",
                 },
             },
+            stage=AGENT_STREAM_STAGES["scanner"],
         )
         _require_technical_recovery_request(
             result,

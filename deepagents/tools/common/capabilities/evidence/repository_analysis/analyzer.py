@@ -26,7 +26,7 @@ from middleware.model_governance import (
     governed_general_purpose_subagent,
 )
 from model_policy import INVESTIGATOR_MODEL_SPEC, resolve_agent_model
-from orchestration.agent_stream import invoke_with_stream
+from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
 from orchestration.technical_coverage_policy import attach_partial_coverage_policy
 from tools.common.capabilities.evidence.graph.schema.models import (
     program_graph_content_hash,
@@ -212,6 +212,7 @@ class RepositoryDeepAnalyzer:
                     "commit_sha": commit_sha,
                 },
             },
+            stage=AGENT_STREAM_STAGES["scanner"],
         )
         if not isinstance(response, dict) or response.get("structured_response") is None:
             raise RuntimeError("repository Deep Agent did not return structured_response")

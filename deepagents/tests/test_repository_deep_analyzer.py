@@ -35,11 +35,12 @@ def test_repository_deep_analyzer_runs_as_standalone_root_without_checkpointer(
         calls["create_kwargs"] = kwargs
         return fake_agent
 
-    def fake_invoke_with_stream(agent, inputs, *, config):
+    def fake_invoke_with_stream(agent, inputs, *, config, stage=None):
         calls["invoke"] = {
             "agent": agent,
             "inputs": inputs,
             "config": config,
+            "stage": stage,
         }
         return {
             "structured_response": {
@@ -83,6 +84,7 @@ def test_repository_deep_analyzer_runs_as_standalone_root_without_checkpointer(
     assert invoke["config"]["configurable"]["thread_id"] == (
         "repository-analysis:scan-1"
     )
+    assert invoke["stage"] == "SCANNER"
     assert result.summary == "Repository inspected"
 
 
@@ -105,7 +107,7 @@ def test_repository_deep_analyzer_allows_more_than_two_model_calls(
         calls["create_kwargs"] = kwargs
         return fake_agent
 
-    def fake_invoke_with_stream(agent, inputs, *, config):
+    def fake_invoke_with_stream(agent, inputs, *, config, stage=None):
         nonlocal simulated_model_calls
         for _ in range(3):
             simulated_model_calls += 1
@@ -553,7 +555,9 @@ def test_repository_analyst_task_subagents_run_under_model_governance(
     monkeypatch.setattr(
         analyzer,
         "invoke_with_stream",
-        lambda agent, inputs, *, config: {"structured_response": _valid_repository_result()},
+        lambda agent, inputs, *, config, stage=None: {
+            "structured_response": _valid_repository_result()
+        },
     )
 
     RepositoryDeepAnalyzer()._invoke(

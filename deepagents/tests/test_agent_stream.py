@@ -11,9 +11,11 @@ from time import monotonic
 from langchain_core.messages import AIMessageChunk, ToolMessage
 
 from orchestration.agent_stream import (
+    AGENT_STREAM_STAGES,
     AgentStreamSession,
     BufferedAgentStreamEmitter,
     activate_agent_stream,
+    agent_stream_stage,
     invoke_graph_with_stream,
     invoke_with_stream,
     _should_forward_stream_log,
@@ -510,3 +512,61 @@ def test_invoke_with_stream_returns_final_values_when_nested_in_a_parent_graph_n
         parent.invoke({"steps": []})
 
     assert returned["value"] == {"steps": ["inner", "child-final"]}
+
+
+def test_invoke_with_stream_tags_every_event_with_its_pipeline_stage():
+    """Interview, Planner and Investigate stream on their own timeline, like Scanner."""
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        invoke_with_stream(
+            FakeAgent(),
+            {"messages": []},
+            stage=AGENT_STREAM_STAGES["planner"],
+        )
+        planner_count = len(events)
+        invoke_with_stream(FakeAgent(), {"messages": []})
+
+    assert planner_count
+    assert {event.get("stage") for event in events[:planner_count]} == {"PLANNER"}
+    assert events[planner_count:]
+    assert all("stage" not in event for event in events[planner_count:])
+
+
+def test_nested_stage_wins_over_session_default_and_enclosing_stage():
+    events = []
+    session = stream_session(events)
+    session.stage = AGENT_STREAM_STAGES["scanner"]
+    boundaries = []
+    with activate_agent_stream(session):
+        with agent_stream_stage(AGENT_STREAM_STAGES["investigate"]):
+            invoke_with_stream(
+                FakeAgent(),
+                {"messages": []},
+                stage=AGENT_STREAM_STAGES["interview"],
+            )
+            boundaries.append(len(events))
+            invoke_with_stream(FakeAgent(), {"messages": []})
+            boundaries.append(len(events))
+        invoke_with_stream(FakeAgent(), {"messages": []})
+
+    stages = [event["stage"] for event in events]
+    first, second = boundaries
+    assert set(stages[:first]) == {"INTERVIEW"}
+    assert set(stages[first:second]) == {"INVESTIGATE"}
+    assert set(stages[second:]) == {"SCANNER"}
+
+
+def test_agent_stream_stages_match_shared_typescript_contract() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    contract_text = (
+        repo_root / "packages/contracts/src/evidence/assessment-runtime.ts"
+    ).read_text()
+    block = re.search(
+        r"export const ASSESSMENT_AGENT_STREAM_STAGES = \{(.*?)\} as const;",
+        contract_text,
+        re.S,
+    )
+    assert block is not None
+    assert set(re.findall(r':\s*"([A-Z0-9_]+)"', block.group(1))) == set(
+        AGENT_STREAM_STAGES.values()
+    )

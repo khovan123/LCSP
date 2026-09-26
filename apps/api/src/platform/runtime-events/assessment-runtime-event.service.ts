@@ -2,6 +2,7 @@ import { asRecord } from "../../common/utils/index.js";
 import { randomUUID } from "node:crypto";
 import {
   ASSESSMENT_AGENT_STREAM_EVENT_TYPES,
+  ASSESSMENT_AGENT_STREAM_STAGES,
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   ASSESSMENT_RUNTIME_ENGINEERING_PROGRESS_TOOL_NAMES,
   ASSESSMENT_RUNTIME_ENGINEERING_RULE_TOOL_PREFIXES,
@@ -10,6 +11,7 @@ import {
   ASSESSMENT_RUNTIME_STAGE_CODES,
   ASSESSMENT_RUNTIME_SYNTHETIC_TOOL_NAMES,
   isAssessmentAgentStreamEventType,
+  isAssessmentAgentStreamStage,
   isPostFindingRuntimePhase,
   isRemediationDecision,
   REMEDIATION_APPROVAL_STATUSES,
@@ -17,6 +19,7 @@ import {
   FINAL_ASSESSMENT_RESULT_STATUSES,
   type AssessmentAgentStreamEvent,
   type AssessmentAgentStreamEventType,
+  type AssessmentAgentStreamStage,
   type AssessmentPostFindingActivity,
   type AssessmentPostFindingRuntimeState,
   type AssessmentRuntimeEventType,
@@ -83,6 +86,7 @@ export type PublishAgentStreamEventInput = {
   runId: string;
   correlationId: string;
   eventType: AssessmentAgentStreamEventType;
+  stage?: AssessmentAgentStreamStage | null;
   source?: string | null;
   agentName?: string | null;
   subagentName?: string | null;
@@ -439,7 +443,8 @@ export class AssessmentRuntimeEventService {
       assessmentId: scanJob.assessmentId,
       runId: scanJob.id,
       correlationId: scanJob.correlationId,
-      eventType: "RUNTIME_EVENT",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeEvent,
+      stage: ASSESSMENT_AGENT_STREAM_STAGES.scanner,
       source: "runtime-event",
       toolName: input.toolName ?? null,
       status: input.runStatus,
@@ -480,6 +485,7 @@ export class AssessmentRuntimeEventService {
         sanitizeAgentStreamIdentifier(input.correlationId) ??
         input.correlationId,
       eventType: input.eventType,
+      stage: input.stage ?? null,
       source: sanitizeAgentStreamIdentifier(input.source),
       agentName: sanitizeAgentStreamIdentifier(input.agentName),
       subagentName: sanitizeAgentStreamIdentifier(input.subagentName),
@@ -2190,6 +2196,7 @@ function agentStreamJournalEventFromRow(
     runId: stringValue(event.runId) ?? row.runId,
     correlationId: stringValue(event.correlationId) ?? row.correlationId,
     eventType: event.eventType as AssessmentAgentStreamEventType,
+    stage: isAssessmentAgentStreamStage(event.stage) ? event.stage : null,
     source: stringValue(event.source),
     agentName: stringValue(event.agentName),
     subagentName: stringValue(event.subagentName),

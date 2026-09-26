@@ -1,6 +1,7 @@
 import {
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   isAssessmentAgentStreamEventType,
+  isAssessmentAgentStreamStage,
   FINAL_ASSESSMENT_RESULT_STATUSES,
   isPostFindingRuntimePhase,
   isRemediationDecision,
@@ -50,6 +51,7 @@ export function parseAgentStreamEvent(
     runId: item.run_id,
     correlationId: item.correlation_id,
     eventType: item.event_type,
+    stage: isAssessmentAgentStreamStage(item.stage) ? item.stage : null,
     source: optionalString(item.source),
     agentName: optionalString(item.agent_name),
     subagentName: optionalString(item.subagent_name),

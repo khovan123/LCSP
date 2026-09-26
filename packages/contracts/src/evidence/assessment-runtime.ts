@@ -246,6 +246,26 @@ export function isAssessmentAgentStreamEventType(
   );
 }
 
+/** Customer-visible pipeline stage one live agent stream event belongs to. */
+export const ASSESSMENT_AGENT_STREAM_STAGES = {
+  scanner: "SCANNER",
+  interview: "INTERVIEW",
+  planner: "PLANNER",
+  investigate: "INVESTIGATE",
+  gate: "GATE",
+} as const;
+
+export type AssessmentAgentStreamStage =
+  (typeof ASSESSMENT_AGENT_STREAM_STAGES)[keyof typeof ASSESSMENT_AGENT_STREAM_STAGES];
+
+export function isAssessmentAgentStreamStage(
+  value: unknown,
+): value is AssessmentAgentStreamStage {
+  return Object.values(ASSESSMENT_AGENT_STREAM_STAGES).includes(
+    value as AssessmentAgentStreamStage,
+  );
+}
+
 export type AssessmentAgentStreamEvent = {
   eventId: string;
   sequence: number;
@@ -255,6 +275,7 @@ export type AssessmentAgentStreamEvent = {
   runId: string;
   correlationId: string;
   eventType: AssessmentAgentStreamEventType;
+  stage: AssessmentAgentStreamStage | null;
   source: string | null;
   agentName: string | null;
   subagentName: string | null;

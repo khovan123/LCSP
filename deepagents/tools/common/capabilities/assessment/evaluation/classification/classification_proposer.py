@@ -1,6 +1,6 @@
 """Produce bounded model-assisted classification proposals for later validation."""
 
-from orchestration.agent_stream import invoke_with_stream
+from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
 from typing import Any
 
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
@@ -94,6 +94,7 @@ class ModelAssistedClassificationProposer:
                     },
                     "configurable": {"thread_id": workflow_run_id},
                 },
+                stage=AGENT_STREAM_STAGES["gate"],
             )
         except BillingMeteringError:
             raise

@@ -65,6 +65,7 @@ function event(
     runId: "run-1",
     correlationId: "corr-1",
     eventType,
+    stage: null,
     source: "engineering",
     agentName: "investigator",
     subagentName: null,
