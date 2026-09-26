@@ -7,12 +7,9 @@ import hashlib
 import json
 from typing import Any
 
-from langchain.agents.middleware import ToolCallLimitMiddleware
-
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.billing_metering import BillingAgentRoleMiddleware, BillingMeteringError
 from deepagents import create_deep_agent
-from middleware.agent_run_budget import AgentRunBudgetMiddleware
 from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
 from model_policy import INVESTIGATOR_MODEL_SPEC, resolve_agent_model
 from tools.common.capabilities.platform.logging import get_logger
@@ -30,7 +27,6 @@ from tools.common.capabilities.assessment.claims.evidence_claim.models import (
 
 
 logger = get_logger(__name__)
-MAX_INVESTIGATION_STEPS = 8
 MAX_WORKING_RESULTS = 4
 MAX_WORKING_RESULT_CHARS = 24_000
 MAX_PROMPT_CHARS = 110_000
@@ -125,14 +121,11 @@ class LawGuidedInvestigator:
                 "never invent Program Evidence Graph node/edge IDs."
             ),
             response_format=self._claims_response_schema(),
+            # The Investigator is the one role that explores the repository; it is
+            # not step-limited. Deep Agents summarization keeps its context bounded.
             middleware=[
-                AgentRunBudgetMiddleware(),
                 BillingAgentRoleMiddleware("investigator"),
                 *MODEL_GOVERNANCE_MIDDLEWARE,
-                ToolCallLimitMiddleware(
-                    run_limit=MAX_INVESTIGATION_STEPS,
-                    exit_behavior="error",
-                ),
             ],
         )
         try:

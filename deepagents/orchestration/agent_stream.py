@@ -367,6 +367,26 @@ def publish_rule_decision(
         active_agent_stream_rule.reset(token)
 
 
+def publish_rule_waiting(rule_id: str, *, reason_code: str) -> None:
+    """Publish that one rule waits for Customer context before it can be planned."""
+    token = active_agent_stream_rule.set(rule_id)
+    try:
+        publish_agent_stream_event(
+            "ENGINEERING_RULE",
+            status="WAITING",
+            text="engineering rule waiting for customer context",
+            data=_semantic_payload(
+                "ENGINEERING_RULE",
+                durability=DURABLE,
+                engineeringRuleId=rule_id,
+                reasonCode=_text(reason_code),
+                status="WAITING",
+            ),
+        )
+    finally:
+        active_agent_stream_rule.reset(token)
+
+
 def _claim_summary(claim: Any) -> dict[str, Any]:
     def field_value(*names: str) -> Any:
         for name in names:
@@ -1735,4 +1755,5 @@ __all__ = [
     "invoke_with_stream",
     "publish_agent_stream_event",
     "publish_rule_decision",
+    "publish_rule_waiting",
 ]

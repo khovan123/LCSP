@@ -8,6 +8,7 @@ import pytest
 import harness
 import model_policy
 from middleware.agent_run_budget import AgentRunBudgetMiddleware
+from middleware.tool_scope import AllowedToolsMiddleware
 from middleware.interview_runtime_context import inject_interview_runtime_context
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE, TRIAGE_MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.billing_metering import BillingAgentRoleMiddleware
@@ -92,10 +93,17 @@ def test_subagents_follow_deep_agents_dictionary_contract() -> None:
             expected_prefix = [inject_lcsp_runtime_context]
             expected_governance = MODEL_GOVERNANCE_MIDDLEWARE
         middleware = subagent["middleware"]
-        if name in {"interview", "planner", "investigator"}:
-            # Every specialist except batch triage is bounded so its ReAct loop converges.
+        if name == "interview":
             assert isinstance(middleware[0], AgentRunBudgetMiddleware)
             middleware = middleware[1:]
+        if name == "planner":
+            # The Planner never reads source: Deep Agents' filesystem, shell and task
+            # tools are hidden so only its own tools remain visible.
+            assert isinstance(middleware[0], AllowedToolsMiddleware)
+            assert middleware[0].allowed == frozenset({"retrieve_verified_episodes"})
+            middleware = middleware[1:]
+        # The Investigator is the exploring role and is deliberately not step-limited.
+        assert not any(isinstance(item, AgentRunBudgetMiddleware) for item in middleware)
         assert middleware[:1] == expected_prefix
         role_middleware = middleware[1]
         assert isinstance(role_middleware, BillingAgentRoleMiddleware)

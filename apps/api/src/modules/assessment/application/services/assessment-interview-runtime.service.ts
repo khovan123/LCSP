@@ -28,6 +28,7 @@ import {
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
   ASSESSMENT_INTERVIEW_RESUME_MAX_ATTEMPTS,
   ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES,
+  ASSESSMENT_INTERVIEW_RESUME_REASONS,
   ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS,
   ASSESSMENT_RUNTIME_STAGE_CODES,
   CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES,
@@ -102,7 +103,8 @@ const PUBLIC_REDACTED_ANSWER_SUMMARY =
 const PUBLIC_REDACTED_DRAFT_SUMMARY =
   "Customer draft persisted for Interview resume.";
 const INTERVIEW_AGENT_DECISION_REQUIRED = "INTERVIEW_AGENT_DECISION_REQUIRED";
-const INVESTIGATOR_RESOLUTION_REQUIRED = "INVESTIGATOR_RESOLUTION_REQUIRED";
+const INVESTIGATOR_RESOLUTION_REQUIRED =
+  ASSESSMENT_INTERVIEW_RESUME_REASONS.investigatorResolutionRequired;
 // Worker-only private answer history (never merged into publicState, which stays
 // the sanitized customer projection). Bounded so a long-running Interview thread
 // cannot grow the model prompt unboundedly: only the most recent
@@ -222,6 +224,32 @@ type TargetedInterviewContinuation = {
   pgeVersion: string;
 };
 
+/**
+ * Business fact the Planner needs before it can select EngineeringRules. The
+ * Interview asks the Customer; once context is ready again the engineering
+ * assessment re-runs and the Planner decides with the answer.
+ */
+type PlannerContextNeed = {
+  needId: string;
+  businessContextNeed: string;
+  resolutionCriteria: string[];
+  whyNeeded?: string;
+  affectedRuleIds: string[];
+  workflowRunId: string;
+  sourceVersion: string;
+  pgeVersion: string;
+};
+
+type PlannerContextNeedRegistrationInput = {
+  actorId: string;
+  needId: string;
+  businessContextNeed: string;
+  resolutionCriteria: string[];
+  whyNeeded?: string;
+  affectedRuleIds: string[];
+  workflowRunId: string;
+};
+
 type PrivateInterviewStore = {
   revisions: PrivateInterviewAnswerRevision[];
   submittedAnswerRequests?: InterviewAnswerIdempotencyRecord[];
@@ -229,6 +257,9 @@ type PrivateInterviewStore = {
   workingStrategy?: InterviewWorkingStrategy;
   targetedNeed?: TargetedInterviewNeed;
   targetedContinuation?: TargetedInterviewContinuation;
+  plannerContextNeed?: PlannerContextNeed;
+  // Every Planner need ever registered; a Planner never asks the same need twice.
+  plannerContextNeedIds?: string[];
   partialCoveragePolicyDecision?: PartialCoveragePolicyDecision;
   // Context revision whose Interview Agent decision run reported FAILED.
   failedDecisionRevision?: number;
@@ -278,6 +309,8 @@ type WorkerPrivateContext = {
   priorAnswerHistory: WorkerPriorAnswerHistoryItem[];
   priorAnswerHistoryOmittedCount: number;
   targetedNeed?: TargetedInterviewNeed;
+  // Business fact the Planner asked for; Interview authors one question for it.
+  plannerContextNeed?: PlannerContextNeed;
   guidanceVersion: string;
   workingStrategy: InterviewWorkingStrategy;
 };
@@ -1373,9 +1406,107 @@ export class AssessmentInterviewRuntimeService {
       priorAnswerHistory,
       priorAnswerHistoryOmittedCount,
       targetedNeed: target,
+      plannerContextNeed: thread.privateStore.plannerContextNeed,
       guidanceVersion: thread.guidanceVersion ?? this.resolveGuidanceVersion(),
       workingStrategy: normalizeStrategy(thread.privateStore.workingStrategy),
     };
+  }
+
+  /**
+   * Reopens Interview for one business fact the Planner needs to select
+   * EngineeringRules. The Planner never inspects source code; missing Customer
+   * context goes back through Root Orchestration to Interview and the Customer.
+   */
+  async registerPlannerContextNeedForWorker(input: {
+    assessmentId: string;
+    correlationId: string;
+    need: PlannerContextNeedRegistrationInput;
+  }): Promise<{ registered: boolean; state: AssessmentInterviewRuntimeState }> {
+    const need = parsePlannerContextNeedRegistration(
+      input.need,
+      input.correlationId,
+    );
+    const provenance = await this.assessmentProvenance(input.assessmentId);
+    const result = await this.runInterviewTransaction(async (tx) => {
+      await this.lockInterviewThread(input.assessmentId, tx);
+      const thread = await this.readThread(input.assessmentId, tx);
+      const askedNeedIds = thread.privateStore.plannerContextNeedIds ?? [];
+      if (
+        askedNeedIds.includes(need.needId) ||
+        thread.state.outcome !== ASSESSMENT_INTERVIEW_OUTCOMES.contextReady
+      ) {
+        // Already asked, or Interview is no longer at a ready context: the
+        // Planner must decide with what it has (uncertain scope is selected).
+        return { registered: false, state: thread.state };
+      }
+      const plannerContextNeed: PlannerContextNeed = {
+        ...need,
+        sourceVersion: provenance.sourceVersion,
+        pgeVersion: provenance.pgeVersion,
+      };
+      const nextState: AssessmentInterviewRuntimeState = {
+        ...thread.state,
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        activeQuestion: undefined,
+        orchestrationRequested: true,
+      };
+      await this.persistThreadState(input.assessmentId, nextState, tx, {
+        contextRevision: thread.contextRevision,
+        activeQuestionId: null,
+        processedRevision: thread.processedRevision,
+        privateStore: {
+          ...thread.privateStore,
+          plannerContextNeed,
+          plannerContextNeedIds: [...askedNeedIds, need.needId],
+        },
+        sourceVersion: provenance.sourceVersion,
+        pgeVersion: provenance.pgeVersion,
+        guidanceVersion:
+          thread.guidanceVersion ?? this.resolveGuidanceVersion(),
+      });
+      await this.outboxRepository.enqueue(
+        this.interviewAgentResumeCommand({
+          assessmentId: input.assessmentId,
+          // The Interview thread keeps its own root workflow run; the worker
+          // rejects a resume command pinned to any other run.
+          workflowRunId:
+            thread.privateStore.workflowRunId ?? need.workflowRunId,
+          actorId: need.actorId,
+          correlationId: input.correlationId,
+          contextRevision: thread.contextRevision,
+          questionId: need.needId,
+          sourceVersion: provenance.sourceVersion,
+          pgeVersion: provenance.pgeVersion,
+          guidanceVersion:
+            thread.guidanceVersion ?? this.resolveGuidanceVersion(),
+          resumeReason:
+            ASSESSMENT_INTERVIEW_RESUME_REASONS.plannerContextRequired,
+        }),
+        tx,
+      );
+      return { registered: true, state: nextState };
+    });
+
+    if (result.registered) {
+      await this.runtimeEvents.recordToolWaitingInput({
+        assessmentId: input.assessmentId,
+        runId: need.workflowRunId,
+        correlationId: input.correlationId,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+        toolName: INTERVIEW_TOOL_NAME,
+        summary: "Planner requested Customer business context.",
+        inputSummary: { affectedRuleCount: need.affectedRuleIds.length },
+        outputSummary: {
+          assessmentInterview: publicState(result.state),
+          interviewWorkflowEvent:
+            ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewWaitingForCustomer,
+        },
+        waitingReason:
+          ASSESSMENT_INTERVIEW_RESUME_REASONS.plannerContextRequired,
+        startedAt: new Date(),
+      });
+    }
+    return { registered: result.registered, state: publicState(result.state) };
   }
 
   async registerTargetedNeedForWorker(input: {
@@ -1702,12 +1833,23 @@ export class AssessmentInterviewRuntimeService {
           ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
         !thread.activeQuestionId &&
         !!thread.privateStore.targetedNeed;
+      // The Planner reopened a ready context: the follow-up question is authored
+      // at the same revision, like a Customer "provide more context" request.
+      const isPlannerContextFollowup =
+        decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
+        thread.state.outcome ===
+          ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
+        !thread.activeQuestionId &&
+        !!thread.privateStore.plannerContextNeed;
       assertGuardedDecision(
         decision,
         latestPrivate,
         thread,
         input.correlationId,
-        { isBlockedFollowup, isTargetedBootstrap },
+        {
+          isBlockedFollowup: isBlockedFollowup || isPlannerContextFollowup,
+          isTargetedBootstrap,
+        },
       );
       const transition = orchestratorInterviewTransition(
         decision,
@@ -1773,7 +1915,7 @@ export class AssessmentInterviewRuntimeService {
           contextRevision: decision.expectedContextRevision,
           activeQuestionId: thread.activeQuestionId,
           processedRevision:
-            isBlockedFollowup || isTargetedBootstrap
+            isBlockedFollowup || isTargetedBootstrap || isPlannerContextFollowup
               ? thread.processedRevision
               : { lt: decision.expectedContextRevision },
         },
@@ -1785,6 +1927,12 @@ export class AssessmentInterviewRuntimeService {
           privateContextJson: toJson({
             ...thread.privateStore,
             revisions,
+            // A ready context answers the Planner need; the re-run Planner
+            // decides with it.
+            plannerContextNeed:
+              state.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextReady
+                ? undefined
+                : thread.privateStore.plannerContextNeed,
           }),
         },
       });
@@ -3332,6 +3480,14 @@ function parsePrivateStore(value: unknown): PrivateInterviewStore {
         : undefined,
     targetedNeed,
     targetedContinuation,
+    plannerContextNeed: parseStoredPlannerContextNeed(
+      record.plannerContextNeed,
+    ),
+    plannerContextNeedIds: Array.isArray(record.plannerContextNeedIds)
+      ? record.plannerContextNeedIds.filter(
+          (item): item is string => typeof item === "string" && item.length > 0,
+        )
+      : undefined,
     partialCoveragePolicyDecision: parsePartialCoveragePolicyDecision(
       record.partialCoveragePolicyDecision,
     ),
@@ -3356,6 +3512,88 @@ function parseResumeAttempts(
   const contextRevision = positiveSafeInteger(record?.contextRevision);
   const count = positiveSafeInteger(record?.count);
   return contextRevision && count ? { contextRevision, count } : undefined;
+}
+
+function parseStoredPlannerContextNeed(
+  value: unknown,
+): PlannerContextNeed | undefined {
+  const record = objectRecord(value);
+  if (
+    !record ||
+    typeof record.needId !== "string" ||
+    typeof record.businessContextNeed !== "string" ||
+    !Array.isArray(record.resolutionCriteria) ||
+    !Array.isArray(record.affectedRuleIds) ||
+    typeof record.workflowRunId !== "string" ||
+    typeof record.sourceVersion !== "string" ||
+    typeof record.pgeVersion !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    needId: record.needId,
+    businessContextNeed: record.businessContextNeed,
+    resolutionCriteria: record.resolutionCriteria.filter(
+      (item): item is string => typeof item === "string",
+    ),
+    whyNeeded:
+      typeof record.whyNeeded === "string" ? record.whyNeeded : undefined,
+    affectedRuleIds: record.affectedRuleIds.filter(
+      (item): item is string => typeof item === "string",
+    ),
+    workflowRunId: record.workflowRunId,
+    sourceVersion: record.sourceVersion,
+    pgeVersion: record.pgeVersion,
+  };
+}
+
+function parsePlannerContextNeedRegistration(
+  value: unknown,
+  correlationId: string,
+): PlannerContextNeedRegistrationInput {
+  const record = objectRecord(value);
+  const text = (key: string, max: number) => {
+    const item = record?.[key];
+    return typeof item === "string" && item.trim() && item.trim().length <= max
+      ? item.trim()
+      : null;
+  };
+  const list = (key: string, max: number) => {
+    const items = record?.[key];
+    if (!Array.isArray(items)) return null;
+    const cleaned = items
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+    return cleaned.length > 0 && cleaned.length <= max ? cleaned : null;
+  };
+  const actorId = text("actorId", 200);
+  const needId = text("needId", 200);
+  const businessContextNeed = text("businessContextNeed", 1_000);
+  const workflowRunId = text("workflowRunId", 200);
+  const resolutionCriteria = list("resolutionCriteria", 10);
+  const affectedRuleIds = list("affectedRuleIds", 100);
+  if (
+    !actorId ||
+    !needId ||
+    !businessContextNeed ||
+    !workflowRunId ||
+    !resolutionCriteria ||
+    !affectedRuleIds
+  ) {
+    throw problemException("INTERVIEW_PLANNER_NEED_INVALID", correlationId, {
+      status: HttpStatus.BAD_REQUEST,
+    });
+  }
+  return {
+    actorId,
+    needId,
+    businessContextNeed,
+    resolutionCriteria,
+    whyNeeded: text("whyNeeded", 1_000) ?? undefined,
+    affectedRuleIds,
+    workflowRunId,
+  };
 }
 
 function parseStoredTargetedNeed(

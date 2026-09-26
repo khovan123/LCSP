@@ -30,6 +30,7 @@ from tools.common.capabilities.assessment.claims.evidence_claim.models import (
 )
 from tools.common.capabilities.assessment.planning.engineering_rule.engineering_rule_planner import (
     ENGINEERING_RULE_PLAN_REASON_CODES,
+    PLANNER_CONTEXT_REQUIRED,
 )
 from tools.legal.retrieval.legal_basis.rule_applicability_evaluator import (
     RuleApplicabilityEvaluator,
@@ -784,7 +785,9 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
 
         targeted_need = context.get("targetedNeed")
         targeted_mode = isinstance(targeted_need, dict)
-        same_revision_resume = resume_reason == "PROVIDE_MORE_CONTEXT" or targeted_mode
+        same_revision_resume = (
+            resume_reason in _SAME_REVISION_RESUME_REASONS or targeted_mode
+        )
         if not same_revision_resume:
             if status in {DUPLICATE_CONTEXT, STALE_CONTEXT}:
                 return
@@ -1770,6 +1773,13 @@ def _profile_with_confirmed_context_facts(
         fact_refs[target_field] = [statement.statement_id]
     return {"mergedProfile": merged, "factEvidenceRefs": fact_refs}
 
+# Resumes that author a follow-up question at the current revision instead of
+# processing a new Customer answer.
+_SAME_REVISION_RESUME_REASONS = frozenset(
+    {"PROVIDE_MORE_CONTEXT", PLANNER_CONTEXT_REQUIRED}
+)
+
+
 def _terminal_guarded_state(context: dict[str, Any]) -> bool:
     state = context.get("publicState")
     return isinstance(state, dict) and str(state.get("outcome") or "") in _TERMINAL_GUARDED_OUTCOMES
@@ -1878,6 +1888,10 @@ def _interview_instruction(
         "priorAnswerHistoryOmittedCount": context.get("priorAnswerHistoryOmittedCount") or 0,
         "targetedNeed": targeted_need,
     }
+    planner_need = context.get("plannerContextNeed")
+    if resume_reason == PLANNER_CONTEXT_REQUIRED and isinstance(planner_need, dict):
+        # Business fact the Planner could not decide rule selection without.
+        bounded_payload["plannerContextNeed"] = planner_need
     if context.get("decisionValidationFeedback"):
         bounded_payload["decisionValidationFeedback"] = context["decisionValidationFeedback"]
     return (
@@ -1897,7 +1911,15 @@ def _interview_instruction(
         "return only the typed InterviewResult candidate. HTTP persistence is not proof "
         "of sufficiency. PROVIDE_MORE_CONTEXT means author the next bounded question from "
         "the existing thread; do not restart a targeted Interview. "
-        "Never return outcome=CONTEXT_READY while publicThreadState.contextAuthority is "
+        + (
+            "PLANNER_CONTEXT_REQUIRED means the Planner cannot select EngineeringRules "
+            "without the business fact in plannerContextNeed: author one bounded Customer "
+            "question that resolves its resolutionCriteria, reuse confirmed context, and "
+            "never mention rule IDs, legal citations or internal systems. "
+            if "plannerContextNeed" in bounded_payload
+            else ""
+        )
+        + "Never return outcome=CONTEXT_READY while publicThreadState.contextAuthority is "
         "CUSTOMER_STATED; the platform requires CUSTOMER_CONFIRMED authority for "
         "CONTEXT_READY and rejects an unauthoritative CONTEXT_READY with no automatic "
         "recovery beyond one bounded correction. Provenance rule: CUSTOMER_CONFIRMED "
