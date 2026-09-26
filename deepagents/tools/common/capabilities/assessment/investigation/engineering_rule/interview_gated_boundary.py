@@ -12,12 +12,10 @@ from typing import Any
 
 from orchestration.dispatcher import RootSubagentDispatcher
 from orchestration.result_validation import SpecialistHandoffValidationError
+from subagents.interview.customer_safe_projection import MAX_LISTED_ALLOWED_REFS
 from decision.shadow import InterviewRoutingPacket, observer_from_api_client
 from tools.common.capabilities.agent_runtime.boundary import NonRetryableAgentBoundaryError
 from tools.common.capabilities.platform.api_client import InterviewCoverageCallbackError
-from tools.common.capabilities.workflow.recovery.evidence_ref_repair import (
-    post_with_evidence_ref_repair,
-)
 
 from .engineering_assessment_boundary import EngineeringAssessmentBoundary
 from .managed_targeted_investigator import (
@@ -233,12 +231,13 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
         from subagents.interview.customer_safe_projection import (
             TurnEvidenceLedger,
             build_why_are_we_asking_explanation,
-            drop_unauthorized_candidate_refs,
             evaluate_question_eligibility,
+            evidence_ref_correction_reason,
             extract_governed_evidence_refs,
             reset_active_turn_evidence_ledger,
             sanitize_customer_facing_text,
             set_active_turn_evidence_ledger,
+            unauthorized_candidate_refs,
             validate_evidence_refs,
         )
 
@@ -318,19 +317,42 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
             if ai_discovery
             else None
         )
+        # The exact set the API persists and accepts (AssessmentProvenanceSnapshot
+        # .governedEvidenceRefs). Question refs must be copied verbatim from it.
+        persistable_refs = _persistable_evidence_refs(evidence_report, evidence_report_id)
+
+        def _require_persistable_question(candidate: Any) -> dict[str, Any]:
+            if not isinstance(candidate, dict):
+                raise ValueError("Initial Interview specialist did not return a validated handoff")
+            if candidate.get("outcome") != "WAITING_FOR_CUSTOMER" or not isinstance(
+                candidate.get("activeQuestion"), dict
+            ):
+                raise ValueError(
+                    "Initial Interview must persist a Customer question before EngineeringRule work"
+                )
+            if not isinstance(candidate["activeQuestion"].get("frontier"), dict):
+                raise ValueError("Initial Interview question candidate requires frontier metadata")
+            rejected = unauthorized_candidate_refs(candidate["activeQuestion"], persistable_refs)
+            if rejected:
+                raise SpecialistHandoffValidationError(
+                    evidence_ref_correction_reason(rejected, persistable_refs)
+                )
+            return candidate
+
         if handoff is None:
             instruction = _initial_interview_instruction(
                 assessment_id=assessment_id,
                 evidence_report_id=evidence_report_id,
                 evidence_report=evidence_report,
+                allowed_evidence_refs=persistable_refs,
             )
             idempotency_key = f"assessment-interview-initial:{assessment_id}:{evidence_report_id}"
             dispatcher = self._interview_dispatcher or RootSubagentDispatcher()
 
-            def _dispatch_initial(instruction: str, idempotency_key: str) -> Any:
+            def _dispatch_initial(instruction: str, idempotency_key: str) -> dict[str, Any]:
                 ledger_token = set_active_turn_evidence_ledger(ledger)
                 try:
-                    return dispatcher.dispatch(
+                    result = dispatcher.dispatch(
                         subagent_type="interview",
                         instruction=instruction,
                         idempotency_key=idempotency_key,
@@ -346,48 +368,31 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
                     )
                 finally:
                     reset_active_turn_evidence_ledger(ledger_token)
+                return _require_persistable_question(
+                    result.get("handoff") if isinstance(result, dict) else None
+                )
 
             try:
-                result = _dispatch_initial(instruction, idempotency_key)
+                handoff = _dispatch_initial(instruction, idempotency_key)
             except SpecialistHandoffValidationError as exc:
-                # A missing or malformed typed handoff is a candidate-shape failure.
-                # Give the specialist one bounded correction with the exact rule it
-                # broke (as the resume boundary does); a second failure propagates.
+                # A missing/malformed handoff or an inexact evidence ref is a
+                # candidate-shape failure. Give the specialist one bounded correction
+                # naming the exact rule it broke (as the resume boundary does); a
+                # second failure propagates. Refs are never dropped or substituted.
                 _LOGGER.warning(
                     "INTERVIEW_INITIAL_HANDOFF_VALIDATION_REPAIRED assessment_id=%s reason=%s",
                     assessment_id,
                     str(exc)[:300],
                 )
-                result = _dispatch_initial(
+                handoff = _dispatch_initial(
                     _initial_schema_correction_instruction(instruction, exc),
                     f"{idempotency_key}:schema-correction:1",
                 )
-            handoff = result.get("handoff") if isinstance(result, dict) else None
-
-        if not isinstance(handoff, dict):
-            raise ValueError("Initial Interview specialist did not return a validated handoff")
-        if handoff.get("outcome") != "WAITING_FOR_CUSTOMER" or not isinstance(
-            handoff.get("activeQuestion"), dict
-        ):
-            raise ValueError(
-                "Initial Interview must persist a Customer question before EngineeringRule work"
-            )
+        else:
+            handoff = _require_persistable_question(handoff)
 
         question = handoff["activeQuestion"]
-        frontier = question.get("frontier")
-        if not isinstance(frontier, dict):
-            raise ValueError("Initial Interview question candidate requires frontier metadata")
-        dropped_refs = drop_unauthorized_candidate_refs(
-            question,
-            ledger,
-            fallback_refs=(f"technicalEvidenceReport:{evidence_report_id}",),
-        )
-        if dropped_refs:
-            _LOGGER.warning(
-                "INTERVIEW_UNAUTHORIZED_REFS_DROPPED assessment_id=%s count=%s",
-                assessment_id,
-                len(dropped_refs),
-            )
+        frontier = question["frontier"]
         eligible, reason = evaluate_question_eligibility(frontier, ledger)
         if not eligible:
             raise ValueError(f"Initial Interview question candidate is not eligible: {reason}")
@@ -447,17 +452,7 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
         handoff["technicalEvidenceReportId"] = evidence_report_id
         handoff["workflowRunId"] = valid_wf_id
         try:
-            # The turn ledger may authorize tool-returned refs (e.g. source
-            # locators) that the API's persisted provenance does not; strip
-            # those instead of failing the whole run.
-            post_with_evidence_ref_repair(
-                lambda payload: self._api_client.post_interview_initial_question(
-                    assessment_id, payload
-                ),
-                handoff,
-                fallback_refs=(f"technicalEvidenceReport:{evidence_report_id}",),
-                assessment_id=assessment_id,
-            )
+            self._api_client.post_interview_initial_question(assessment_id, handoff)
         except InterviewCoverageCallbackError:
             self._route_coverage_to_recovery(
                 assessment_id=assessment_id,
@@ -926,11 +921,68 @@ def _ai_discovery_handoff(
     }
 
 
+_INTERVIEW_RUNTIME_EVIDENCE_REF = "interviewRuntime:assessment-interview-runtime-v1"
+_EVIDENCE_GRAPH_KEYS = (
+    "evidence_graph",
+    "evidenceGraph",
+    "programEvidenceGraph",
+    "program_evidence_graph",
+)
+
+
+def _ref_strings(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item.strip()]
+
+
+def _record_refs(record: Any) -> list[str]:
+    if not isinstance(record, dict):
+        return []
+    refs = record.get("evidence_refs")
+    return _ref_strings(refs if refs is not None else record.get("evidenceRefs"))
+
+
+def _persistable_evidence_refs(
+    evidence_report: dict[str, Any],
+    evidence_report_id: str,
+) -> set[str]:
+    """Exact evidence refs the API accepts for this report's Interview question.
+
+    Mirrors ``AssessmentProvenanceSnapshot.governedEvidenceRefs`` in
+    ``assessment-interview-runtime.service.ts``: the report, its snapshot, the
+    Interview runtime, and the evidence refs of the graph, its nodes and edges, and
+    the payload. Refs are kept verbatim; a ref outside this set is rejected there.
+    """
+    refs = {f"technicalEvidenceReport:{evidence_report_id}", _INTERVIEW_RUNTIME_EVIDENCE_REF}
+    snapshot_id = str(
+        evidence_report.get("snapshot_id") or evidence_report.get("snapshotId") or ""
+    ).strip()
+    if snapshot_id:
+        refs.add(f"repositorySnapshot:{snapshot_id}")
+    payload = evidence_report.get("evidence_payload")
+    if payload is None:
+        payload = evidence_report.get("evidencePayload")
+    if not isinstance(payload, dict):
+        return refs
+    graph = next((payload[key] for key in _EVIDENCE_GRAPH_KEYS if payload.get(key) is not None), None)
+    if isinstance(graph, dict):
+        refs.update(_record_refs(graph))
+        for collection in ("nodes", "edges"):
+            items = graph.get(collection)
+            if isinstance(items, list):
+                for item in items:
+                    refs.update(_record_refs(item))
+    refs.update(_record_refs(payload))
+    return refs
+
+
 def _initial_interview_instruction(
     *,
     assessment_id: str,
     evidence_report_id: str,
     evidence_report: dict[str, Any],
+    allowed_evidence_refs: set[str] | None = None,
 ) -> str:
     coverage_state, coverage_notes = _technical_coverage(evidence_report)
     safe_context = {
@@ -951,6 +1003,11 @@ def _initial_interview_instruction(
         "schemaVersion": evidence_report.get("schema_version")
         or evidence_report.get("schemaVersion"),
         "aiDiscovery": _ai_discovery(evidence_report),
+        "allowedEvidenceRefs": sorted(
+            allowed_evidence_refs
+            if allowed_evidence_refs is not None
+            else _persistable_evidence_refs(evidence_report, evidence_report_id)
+        )[:MAX_LISTED_ALLOWED_REFS],
     }
     return (
         "Run INITIAL_INTERVIEW before any EngineeringRule, Planner or Investigator work. "
@@ -962,7 +1019,9 @@ def _initial_interview_instruction(
         "confirmed AI invocation is already present, do not ask whether it is AI; ask only the "
         "unresolved purpose/feature/workflow/output-role context. For an unresolved custom outbound "
         "candidate, use Yes/No/Unsure and do not name a provider unless evidence or the Customer does. "
-        "Return WAITING_FOR_CUSTOMER with exactly one bounded activeQuestion.\n"
+        "Return WAITING_FOR_CUSTOMER with exactly one bounded activeQuestion. Every "
+        "whyEvidenceRefs/frontier.evidenceRefs entry must be copied verbatim from "
+        "allowedEvidenceRefs; never invent, shorten or rename a ref, and use [] when none applies.\n"
         f"Bounded initial context: {json.dumps(safe_context, ensure_ascii=False, sort_keys=True)}"
     )
 

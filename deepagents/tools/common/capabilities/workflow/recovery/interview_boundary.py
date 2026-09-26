@@ -23,9 +23,6 @@ from tools.common.capabilities.agent_runtime.boundary import AgentBoundaryBase
 from tools.common.capabilities.platform.api_client import (
     InterviewDecisionRepairableCallbackError,
 )
-from tools.common.capabilities.workflow.recovery.evidence_ref_repair import (
-    post_with_evidence_ref_repair,
-)
 from tools.common.capabilities.workflow.recovery.post_guard_continuation import (
     PostGuardContinuationStore,
 )
@@ -861,12 +858,8 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             decision = _confirmation_or_original(decision, context)
 
         try:
-            guarded_state = post_with_evidence_ref_repair(
-                lambda payload: api_client.post_interview_agent_decision(
-                    assessment_id, payload,
-                ),
-                decision,
-                assessment_id=assessment_id,
+            guarded_state = api_client.post_interview_agent_decision(
+                assessment_id, decision,
             )
         except InterviewDecisionRepairableCallbackError as exc:
             # A rejected candidate has not advanced the persisted revision. The API
@@ -888,6 +881,11 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             missing = getattr(exc, "missing", None)
             if isinstance(missing, str):
                 decision_feedback["missingCriteria"] = missing
+            unauthorized_ref = (getattr(exc, "meta", None) or {}).get("unauthorizedRef")
+            if isinstance(unauthorized_ref, str) and unauthorized_ref.strip():
+                # The exact ref the API refused; the specialist must replace or remove
+                # it with an allowed ref itself. The platform never substitutes refs.
+                decision_feedback["unauthorizedEvidenceRef"] = unauthorized_ref.strip()
             missing_dimensions = (getattr(exc, "meta", None) or {}).get("missingDimensions")
             if isinstance(missing_dimensions, str) and missing_dimensions.strip():
                 decision_feedback["missingDimensions"] = [
@@ -900,12 +898,8 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             corrected = run(context=repair_context)
             corrected = _confirmation_or_original(corrected, context)
             # A second rejection propagates to terminal delivery settlement.
-            guarded_state = post_with_evidence_ref_repair(
-                lambda payload: api_client.post_interview_agent_decision(
-                    assessment_id, payload,
-                ),
-                corrected,
-                assessment_id=assessment_id,
+            guarded_state = api_client.post_interview_agent_decision(
+                assessment_id, corrected,
             )
         self._run_guarded_continuation(
             assessment_id=assessment_id,
@@ -974,12 +968,13 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         from subagents.interview.customer_safe_projection import (
             TurnEvidenceLedger,
             build_why_are_we_asking_explanation,
-            drop_unauthorized_candidate_refs,
             evaluate_question_eligibility,
+            evidence_ref_correction_reason,
             extract_governed_evidence_refs,
             reset_active_turn_evidence_ledger,
             sanitize_customer_facing_text,
             set_active_turn_evidence_ledger,
+            unauthorized_candidate_refs,
             validate_evidence_refs,
         )
 
@@ -1112,27 +1107,21 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             }:
                 raise ValueError("Targeted Interview question escaped its registered need")
 
+        # Evidence refs must be exact: an unauthorized ref is a repairable candidate
+        # violation (one bounded specialist correction listing the allowed refs),
+        # never something the platform drops or substitutes.
+        rejected_refs = unauthorized_candidate_refs(
+            [handoff.get("activeQuestion"), handoff.get("confirmedContext")],
+            ledger.authorized_refs,
+        )
+        if rejected_refs:
+            raise SpecialistHandoffValidationError(
+                evidence_ref_correction_reason(rejected_refs, ledger.authorized_refs)
+            )
+
         # Validate candidate question and evidence refs emitted by the Interview specialist
         question = handoff.get("activeQuestion")
         outcome = handoff.get("outcome")
-        # Invented refs are never persisted; drop them instead of failing the turn.
-        # Only the question falls back to the report ref: confirmed statements must
-        # not claim evidence they did not cite.
-        dropped_refs = [
-            *drop_unauthorized_candidate_refs(
-                question,
-                ledger,
-                fallback_refs=(f"technicalEvidenceReport:{technical_evidence_report_id}",),
-            ),
-            *drop_unauthorized_candidate_refs(handoff.get("confirmedContext"), ledger),
-        ]
-        if dropped_refs:
-            _LOGGER.warning(
-                "INTERVIEW_UNAUTHORIZED_REFS_DROPPED assessment_id=%s question_id=%s count=%s",
-                assessment_id,
-                question_id,
-                len(dropped_refs),
-            )
         if outcome == "WAITING_FOR_CUSTOMER":
             if not isinstance(question, dict):
                 raise ValueError("Interview handoff with WAITING_FOR_CUSTOMER requires an activeQuestion")
