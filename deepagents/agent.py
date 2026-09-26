@@ -15,7 +15,10 @@ from deepagents import create_deep_agent
 from langchain.agents.middleware import TodoListMiddleware
 
 from harness import LCSP_MODEL_SPEC, configure_lcsp_harness
-from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from middleware.model_governance import (
+    MODEL_GOVERNANCE_MIDDLEWARE,
+    governed_general_purpose_subagent,
+)
 from middleware.billing_metering import BillingAgentRoleMiddleware
 from middleware.runtime_context import inject_lcsp_runtime_context
 from middleware.specialist_handoff_validation import validate_lcsp_specialist_task_handoff
@@ -93,7 +96,10 @@ def create_lcsp_agent(*, checkpointer=None, store=None):
             TodoListMiddleware(),
         ],
         context_schema=LCSPRunContext,
-        subagents=FLOW_SUBAGENTS,
+        subagents=[
+            *FLOW_SUBAGENTS,
+            governed_general_purpose_subagent(LCSP_MODEL_SPEC, billing_role="root"),
+        ],
         interrupt_on={
             "request_targeted_reanalysis": True,
         },
