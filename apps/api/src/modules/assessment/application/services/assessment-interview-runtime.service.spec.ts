@@ -40,7 +40,10 @@ import type { PrismaService } from "../../../../infrastructure/prisma/prisma.ser
 import type { OutboxRepository } from "../../../../platform/outbox/outbox.repository.js";
 import type { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import type { InterviewAuditService } from "../../../audit/application/services/interview-audit.service.js";
+import type { BillingAccountingKernel } from "../../../billing/application/shared/billing-accounting.kernel.js";
+import type { ConfigService } from "@nestjs/config";
 import { AssessmentInterviewRuntimeService } from "./assessment-interview-runtime.service.js";
+import { AssessmentModelCreditPreflight } from "./assessment-model-credit-preflight.js";
 import { missingInitialPlanningContextDimensions } from "./interview-minimum-planning-context.js";
 
 const TEST_GUIDANCE_VERSION = "interview-context-test-v1";
@@ -1675,13 +1678,15 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
               : fallback,
         ),
       };
-      Object.defineProperty(service, "billingAccounting", {
+      Object.defineProperty(service, "creditPreflight", {
         configurable: true,
-        value: { rebuildProjection },
-      });
-      Object.defineProperty(service, "config", {
-        configurable: true,
-        value: config,
+        value: new AssessmentModelCreditPreflight(
+          { assessment: mockTx.assessment } as unknown as PrismaService,
+          {
+            rebuildProjection,
+          } as unknown as BillingAccountingKernel,
+          config as unknown as ConfigService,
+        ),
       });
 
       await expect(

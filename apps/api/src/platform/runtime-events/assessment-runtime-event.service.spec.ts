@@ -2163,3 +2163,70 @@ describe("AssessmentRuntimeEventService", () => {
     });
   });
 });
+
+describe("AssessmentRuntimeEventService.getPipelineLiveness", () => {
+  const WINDOW_MS = 90_000;
+
+  function serviceWithLatest(latest: Record<string, unknown> | null) {
+    const findMany = jest
+      .fn<(...args: unknown[]) => Promise<unknown[]>>()
+      .mockResolvedValue(latest ? [latest] : []);
+    const service = new AssessmentRuntimeEventService({
+      assessmentRuntimeEvent: { findMany },
+    } as never);
+    return { service, findMany };
+  }
+
+  it("treats a recent non-terminal event such as a model heartbeat as live", async () => {
+    const createdAt = new Date(Date.now() - 5_000);
+    const { service, findMany } = serviceWithLatest({
+      runStatus: "RUNNING",
+      createdAt,
+      outputSummaryJson: {
+        agentStreamEvent: { eventType: "MODEL_CALL_HEARTBEAT" },
+      },
+    });
+
+    await expect(
+      service.getPipelineLiveness("assessment-1", WINDOW_MS),
+    ).resolves.toEqual({ live: true, lastActivityAt: createdAt });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { assessmentId: "assessment-1" },
+        take: 1,
+      }),
+    );
+  });
+
+  it("is not live after the boundary failed, however recent", async () => {
+    const { service } = serviceWithLatest({
+      runStatus: "RUNNING",
+      createdAt: new Date(),
+      outputSummaryJson: { agentStreamEvent: { eventType: "BOUNDARY_FAILED" } },
+    });
+
+    await expect(
+      service.getPipelineLiveness("assessment-1", WINDOW_MS),
+    ).resolves.toMatchObject({ live: false });
+  });
+
+  it("is not live once activity is older than the window", async () => {
+    const { service } = serviceWithLatest({
+      runStatus: "RUNNING",
+      createdAt: new Date(Date.now() - WINDOW_MS - 1_000),
+      outputSummaryJson: null,
+    });
+
+    await expect(
+      service.getPipelineLiveness("assessment-1", WINDOW_MS),
+    ).resolves.toMatchObject({ live: false });
+  });
+
+  it("is not live when the assessment has no runtime activity", async () => {
+    const { service } = serviceWithLatest(null);
+
+    await expect(
+      service.getPipelineLiveness("assessment-1", WINDOW_MS),
+    ).resolves.toEqual({ live: false, lastActivityAt: null });
+  });
+});

@@ -29,6 +29,7 @@ import { ListAssessmentsQuery } from "../../application/queries/list-assessments
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { AssessmentInterviewRuntimeService } from "../../application/services/assessment-interview-runtime.service.js";
 import { AssessmentInterviewSnippetService } from "../../application/services/assessment-interview-snippet.service.js";
+import { AssessmentPipelineContinuationService } from "../../application/services/assessment-pipeline-continuation.service.js";
 import { CreateAssessmentRequest } from "./dto/create-assessment.request.js";
 
 /**
@@ -47,6 +48,7 @@ export class AssessmentController {
     private readonly queryBus: QueryBus,
     private readonly interviewRuntime: AssessmentInterviewRuntimeService,
     private readonly interviewSnippet: AssessmentInterviewSnippetService,
+    private readonly pipelineContinuation: AssessmentPipelineContinuationService,
   ) {}
 
   /**
@@ -285,6 +287,22 @@ export class AssessmentController {
         actor: request.rbacContext,
         correlationId: request.correlationId ?? "worker-interview-context",
         resume: body as never,
+      }),
+    );
+  }
+
+  @Post(":assessmentId/pipeline/continue")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
+  async continuePipeline(
+    @Param("assessmentId") assessmentId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.pipelineContinuation.continuePipeline({
+        assessmentId,
+        actor: request.rbacContext,
+        correlationId: request.correlationId ?? "customer-pipeline-continue",
       }),
     );
   }
