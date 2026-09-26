@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -375,3 +376,127 @@ def test_ready_evidence_payload_needs_no_partial_coverage_policy(tmp_path) -> No
     payload = _evidence_payload_for(tmp_path, result)
 
     assert "partialCoveragePolicyDecision" not in payload
+
+
+def _ai_absent_result() -> dict[str, object]:
+    result = _valid_repository_result()
+    result["coverage_state"] = "READY"
+    result["unresolved_frontiers"] = []
+    result["ai_discovery"] = {
+        "gate": "AI_ABSENT_CONFIRMED",
+        "coverage_state": "READY",
+        "findings": [],
+        "material_unresolved_frontiers": [],
+    }
+    return result
+
+
+def _enforce(tmp_path, files: dict[str, str]):
+    from tools.common.capabilities.evidence.repository_analysis.analyzer import (
+        enforce_ai_absence_backstop,
+    )
+    from tools.common.capabilities.evidence.repository_analysis.models import (
+        RepositoryAnalysisResult,
+    )
+
+    for relative, content in files.items():
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    backend = LocalShellBackend(root_dir=str(tmp_path), virtual_mode=True)
+    return enforce_ai_absence_backstop(
+        backend, RepositoryAnalysisResult.model_validate(_ai_absent_result())
+    )
+
+
+def test_ai_absent_claim_contradicted_by_sdk_import_is_downgraded(tmp_path) -> None:
+    # Regression: scan d880c2f5 declared AI_ABSENT_CONFIRMED for a repository whose
+    # runtime imports AI SDKs, dismissing them as "development harness code".
+    result = _enforce(
+        tmp_path,
+        {
+            "app.py": "app = object()\n",
+            "agent/runtime.py": "from langchain_openai import ChatOpenAI\n",
+            "web/src/client.ts": 'import OpenAI from "openai";\n',
+        },
+    )
+
+    discovery = result.ai_discovery
+    assert discovery.gate == "AI_UNKNOWN"
+    providers = {finding.provider for finding in discovery.findings}
+    assert {"langchain", "openai"} <= providers
+    assert all(finding.state == "AI_PROVIDER_REFERENCE" for finding in discovery.findings)
+    assert all(finding.clarification_owner == "TECHNICAL" for finding in discovery.findings)
+    anchors = {anchor.anchor_id: anchor for anchor in result.source_anchors}
+    for finding in discovery.findings:
+        anchor = anchors[finding.anchor_id]
+        assert anchor.file_path in {"agent/runtime.py", "web/src/client.ts"}
+        assert anchor.start_line == 1
+    assert discovery.material_unresolved_frontiers
+    assert any("AI_ABSENT_CONFIRMED" in note for note in result.coverage_notes)
+
+
+def test_ai_absent_claim_contradicted_by_manifest_dependency_is_downgraded(tmp_path) -> None:
+    result = _enforce(
+        tmp_path,
+        {
+            "app.py": "app = object()\n",
+            "package.json": '{"dependencies": {"@google/genai": "^1.0.0"}}\n',
+        },
+    )
+
+    assert result.ai_discovery.gate == "AI_UNKNOWN"
+    assert [finding.provider for finding in result.ai_discovery.findings] == ["google-genai"]
+
+
+def test_vendored_and_test_only_references_do_not_contradict_absence(tmp_path) -> None:
+    result = _enforce(
+        tmp_path,
+        {
+            "app.py": "app = object()\n",
+            "node_modules/openai/index.js": 'module.exports = require("openai");\n',
+            "tests/test_fixture.py": "import openai\n",
+        },
+    )
+
+    assert result.ai_discovery.gate == "AI_ABSENT_CONFIRMED"
+    assert result.ai_discovery.findings == []
+
+
+def test_clean_repository_keeps_ai_absent_confirmed(tmp_path) -> None:
+    result = _enforce(tmp_path, {"app.py": "app = object()\n"})
+
+    assert result.ai_discovery.gate == "AI_ABSENT_CONFIRMED"
+
+
+def test_absence_backstop_fails_closed_when_search_errors(tmp_path) -> None:
+    from tools.common.capabilities.evidence.repository_analysis.analyzer import (
+        enforce_ai_absence_backstop,
+    )
+    from tools.common.capabilities.evidence.repository_analysis.models import (
+        RepositoryAnalysisResult,
+    )
+
+    class BrokenBackend:
+        def grep(self, *_args, **_kwargs):
+            return SimpleNamespace(error="sandbox unavailable", matches=None, truncated=False)
+
+    result = enforce_ai_absence_backstop(
+        BrokenBackend(), RepositoryAnalysisResult.model_validate(_ai_absent_result())
+    )
+
+    assert result.ai_discovery.gate == "AI_UNKNOWN"
+    assert result.ai_discovery.material_unresolved_frontiers
+
+
+def test_non_absent_results_are_untouched(tmp_path) -> None:
+    from tools.common.capabilities.evidence.repository_analysis.analyzer import (
+        enforce_ai_absence_backstop,
+    )
+    from tools.common.capabilities.evidence.repository_analysis.models import (
+        RepositoryAnalysisResult,
+    )
+
+    original = RepositoryAnalysisResult.model_validate(_valid_repository_result())
+
+    assert enforce_ai_absence_backstop(MagicMock(), original) is original

@@ -27,7 +27,7 @@ from orchestration.agent_stream import invoke_with_stream
 from orchestration.technical_coverage_policy import attach_partial_coverage_policy
 from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
 
-from .models import RepositoryAnalysisResult
+from .models import AiFinding, RepositoryAnalysisResult, SourceAnchor
 
 
 REPOSITORY_ANALYSIS_VERSION = "1.0.0"
@@ -121,6 +121,7 @@ class RepositoryDeepAnalyzer:
             scan_job_id=scan_job_id,
             targeted_scope=targeted_scope,
         )
+        result = enforce_ai_absence_backstop(repository_backend, result)
         return RepositoryAnalysisArtifact(
             result=result,
             evidence_payload=self._evidence_payload(
@@ -347,9 +348,175 @@ class RepositoryDeepAnalyzer:
         # scanner-workflow decision (bounded, pinned, evidence-backed limitations).
         return attach_partial_coverage_policy(payload)
 
+# Deterministic contradiction check for the model's AI absence claim. Literal patterns
+# (backend grep is substring, not regex) mapped to a provider label.
+_AI_IMPORT_SIGNALS: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    ("import openai", ("**/*.py",), "openai"),
+    ("from openai", ("**/*.py",), "openai"),
+    ("import anthropic", ("**/*.py",), "anthropic"),
+    ("from anthropic", ("**/*.py",), "anthropic"),
+    ("from langchain", ("**/*.py",), "langchain"),
+    ("from google import genai", ("**/*.py",), "google-genai"),
+    ("import google.generativeai", ("**/*.py",), "google-genai"),
+    ("import litellm", ("**/*.py",), "litellm"),
+    ("from litellm", ("**/*.py",), "litellm"),
+)
+_JS_SOURCE_GLOBS = ("**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs", "**/*.cjs")
+_JS_AI_MODULES: tuple[tuple[str, str], ...] = (
+    ("openai", "openai"),
+    ("@google/genai", "google-genai"),
+    ("@google/generative-ai", "google-genai"),
+    ("@anthropic-ai/sdk", "anthropic"),
+    ("@aws-sdk/client-bedrock-runtime", "bedrock"),
+    ("@mistralai/mistralai", "mistral"),
+    ("@langchain/", "langchain"),
+    ("langchain", "langchain"),
+)
+_AI_MANIFEST_SIGNALS: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    *(
+        (f'"{module}' + ("" if module.endswith("/") else '"'), ("**/package.json",), provider)
+        for module, provider in _JS_AI_MODULES
+    ),
+    *(
+        (package, ("**/pyproject.toml", "**/requirements*.txt"), provider)
+        for package, provider in (
+            ("openai", "openai"),
+            ("anthropic", "anthropic"),
+            ("langchain", "langchain"),
+            ("google-genai", "google-genai"),
+            ("google-generativeai", "google-genai"),
+            ("litellm", "litellm"),
+        )
+    ),
+)
+_AI_SIGNALS = (
+    *_AI_IMPORT_SIGNALS,
+    *(
+        (f'from {quote}{module}', _JS_SOURCE_GLOBS, provider)
+        for module, provider in _JS_AI_MODULES
+        for quote in ('"', "'")
+    ),
+    *(
+        (f'require("{module}', _JS_SOURCE_GLOBS, provider)
+        for module, provider in _JS_AI_MODULES
+    ),
+    *_AI_MANIFEST_SIGNALS,
+)
+_NON_PRODUCT_SEGMENTS = frozenset(
+    {
+        "node_modules", ".venv", "venv", ".git", ".lcsp", "dist", "build", "vendor",
+        "site-packages", "__pycache__", "tests", "test", "__tests__", "fixtures",
+    }
+)
+_MAX_BACKSTOP_MATCHES = 50
+
+
+def _product_path(path: str) -> bool:
+    parts = [part for part in path.replace("\\", "/").split("/") if part]
+    if not parts or any(part in _NON_PRODUCT_SEGMENTS for part in parts[:-1]):
+        return False
+    name = parts[-1]
+    return not (name.startswith("test_") or ".spec." in name or ".test." in name)
+
+
+def _first_product_match(backend: BackendProtocol, pattern: str, globs: tuple[str, ...]):
+    for glob in globs:
+        found = backend.grep(pattern, path="/", glob=glob, max_count=_MAX_BACKSTOP_MATCHES)
+        if getattr(found, "error", None):
+            raise RuntimeError(str(found.error))
+        for match in getattr(found, "matches", None) or []:
+            if _product_path(str(match.get("path") or "")):
+                return match
+    return None
+
+
+def enforce_ai_absence_backstop(
+    backend: BackendProtocol, result: RepositoryAnalysisResult
+) -> RepositoryAnalysisResult:
+    """Refuse a model-asserted AI_ABSENT_CONFIRMED that repository files contradict.
+
+    Absence is only legal under genuinely READY coverage (ai-discovery-gate.md), yet READY
+    is the model's own claim. Product imports or dependency declarations of AI SDKs are
+    provider references requiring technical resolution, so the gate drops to AI_UNKNOWN.
+    If the deterministic search itself fails, absence is unproven and also drops.
+    """
+    discovery = result.ai_discovery
+    if discovery.gate != "AI_ABSENT_CONFIRMED":
+        return result
+
+    hits: dict[str, dict[str, Any]] = {}
+    frontiers: list[str] = []
+    try:
+        for pattern, globs, provider in _AI_SIGNALS:
+            if provider in hits:
+                continue
+            match = _first_product_match(backend, pattern, globs)
+            if match is not None:
+                hits[provider] = match
+    except Exception as error:  # noqa: BLE001 - any search failure leaves absence unproven
+        frontiers.append(
+            "AI absence could not be verified: deterministic SDK scan failed "
+            f"({type(error).__name__})"
+        )
+    if not hits and not frontiers:
+        return result
+
+    data = result.model_dump()
+    findings = list(data["ai_discovery"]["findings"])
+    anchors = list(data["source_anchors"])
+    taken = {anchor["anchor_id"] for anchor in anchors}
+    for index, (provider, match) in enumerate(sorted(hits.items()), start=1):
+        anchor_id = f"ai-absence-backstop-{index}"
+        while anchor_id in taken:
+            anchor_id += "-x"
+        taken.add(anchor_id)
+        file_path = str(match["path"]).lstrip("/")
+        line = int(match.get("line") or 1)
+        anchors.append(
+            SourceAnchor(
+                anchor_id=anchor_id, file_path=file_path, start_line=line, end_line=line
+            ).model_dump()
+        )
+        findings.append(
+            AiFinding(
+                evidence_id=anchor_id,
+                state="AI_PROVIDER_REFERENCE",
+                resolution_state="OBSERVED",
+                kind="PROVIDER_REFERENCE",
+                provider=provider,
+                clarification_owner="TECHNICAL",
+                clarification_kind="TARGETED_TECHNICAL_REANALYSIS",
+                evidence_refs=[anchor_id],
+                anchor_id=anchor_id,
+            ).model_dump()
+        )
+        frontiers.append(
+            f"Deterministic SDK scan found {provider} referenced at {file_path}:{line}; "
+            "AI absence is not proven"
+        )
+    data["source_anchors"] = anchors
+    data["ai_discovery"].update(
+        gate="AI_UNKNOWN",
+        findings=findings,
+        material_unresolved_frontiers=[
+            *data["ai_discovery"]["material_unresolved_frontiers"],
+            *frontiers,
+        ],
+    )
+    data["coverage_notes"] = [
+        *data["coverage_notes"],
+        "AI_ABSENT_CONFIRMED was downgraded to AI_UNKNOWN by the deterministic "
+        "AI SDK dependency/import check"
+        + (f" ({', '.join(sorted(hits))})" if hits else "")
+        + ".",
+    ]
+    return RepositoryAnalysisResult.model_validate(data)
+
+
 __all__ = [
     "REPOSITORY_ANALYSIS_VERSION",
     "RepositoryAnalysisArtifact",
     "RepositoryDeepAnalyzer",
     "SYSTEM_PROMPT",
+    "enforce_ai_absence_backstop",
 ]
