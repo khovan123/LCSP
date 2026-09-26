@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
+import { AGENT_STREAM_ACTIVITY_ICONS } from "../../config/agent-stream-activity-icons";
 import {
   AGENT_STREAM_SEGMENT_KINDS,
   type AgentStreamRuleHeader,
@@ -74,7 +75,11 @@ type ProjectedStreamRow = {
   repeatCount: number;
   /** What the latest tool call acts on (file, pattern, command), shown inline. */
   target: string | null;
+  /** Tool activity this row groups; picks its icon. */
+  activity: StreamActivityKey | null;
 };
+
+type StreamActivityKey = keyof ReturnType<typeof streamActivityLabels>;
 
 export function AgentStreamTimeline({
   events,
@@ -308,11 +313,11 @@ function projectStreamRows(
         continue;
       }
 
-      const label = meaningfulToolActivity(
+      const activity = toolActivityKey(
         typeof semantic.toolName === "string" ? semantic.toolName : event.toolName,
         semantic.parameters ?? semantic.resultSummary ?? null,
       );
-      const groupKey = toolGroupKey(event, semantic, label);
+      const groupKey = toolGroupKey(event, activity);
       const group = toolGroupRows.get(groupKey);
       if (group) {
         // Same activity again (another file read, another search): stream the new
@@ -339,7 +344,8 @@ function projectStreamRows(
 
       const projected = toStreamRow(event);
       projected.kind = "tool";
-      projected.label = label;
+      projected.activity = activity;
+      projected.label = activityCopy(activity);
       projected.detail = null;
       projected.target = toolTarget(semantic.parameters);
       projected.input =
@@ -748,40 +754,45 @@ function meaningfulToolActivity(
   toolName: string | null | undefined,
   payload: AssessmentRuntimeSummaryValue | null | undefined,
 ): string {
+  return activityCopy(toolActivityKey(toolName, payload));
+}
+
+function toolActivityKey(
+  toolName: string | null | undefined,
+  payload: AssessmentRuntimeSummaryValue | null | undefined,
+): StreamActivityKey {
   const name = (toolName ?? "").toLowerCase();
   const searchable = `${name} ${formatSemanticValue(payload ?? "")}`.toLowerCase();
 
-  if (/\b(git\s+push|git_push)\b/.test(searchable)) return activityCopy("changesPushed");
-  if (/\b(git\s+commit|git_commit)\b/.test(searchable)) return activityCopy("changesCommitted");
+  if (/\b(git\s+push|git_push)\b/.test(searchable)) return "changesPushed";
+  if (/\b(git\s+commit|git_commit)\b/.test(searchable)) return "changesCommitted";
   if (/\b(pytest|vitest|jest|test:web|test:e2e|pnpm test|npm test)\b/.test(searchable)) {
-    return activityCopy("targetedTestsRan");
+    return "targetedTestsRan";
   }
-  if (/\b(eslint|ruff|lint)\b/.test(searchable)) return activityCopy("codeQualityValidated");
+  if (/\b(eslint|ruff|lint)\b/.test(searchable)) return "codeQualityValidated";
   if (/\b(tsc|typecheck|py_compile|mypy)\b/.test(searchable)) {
-    return activityCopy("typeSafetyValidated");
+    return "typeSafetyValidated";
   }
   if (/\b(apply_patch|write_file|edit_file|patch_apply|workspace_file_write)\b/.test(searchable)) {
-    return activityCopy("implementationUpdated");
+    return "implementationUpdated";
   }
   if (/\b(git\s+diff|git\s+status|git\s+log|git_review)\b/.test(searchable)) {
-    return activityCopy("repositoryChangesReviewed");
+    return "repositoryChangesReviewed";
   }
   if (/\b(grep|rg|search|search_nodes)\b/.test(searchable)) {
-    return activityCopy("repositorySourceSearched");
+    return "repositorySourceSearched";
   }
-  if (/\b(find|glob|locate)\b/.test(searchable)) return activityCopy("relevantFilesLocated");
+  if (/\b(find|glob|locate)\b/.test(searchable)) return "relevantFilesLocated";
   if (/\b(read_file|cat|sed|open_file)\b/.test(searchable)) {
-    return activityCopy("sourceFilesReviewed");
+    return "sourceFilesReviewed";
   }
   if (name === "ls" || /\b(list_files|list_directory)\b/.test(searchable)) {
-    return activityCopy("repositoryFilesInspected");
+    return "repositoryFilesInspected";
   }
-  return activityCopy("repositoryToolRan");
+  return "repositoryToolRan";
 }
 
-function activityCopy(
-  key: keyof ReturnType<typeof streamActivityLabels>,
-): string {
+function activityCopy(key: StreamActivityKey): string {
   return streamActivityLabels()[key];
 }
 
@@ -865,6 +876,7 @@ function row(
     technical: technicalEventDetails(event),
     repeatCount: 1,
     target: null,
+    activity: null,
   };
 }
 
@@ -1179,7 +1191,7 @@ function StreamRowView({
         )}
       >
         <summary className="flex cursor-pointer list-none items-center gap-2 select-none">
-          <StreamKindIcon kind={row.kind} />
+          <StreamKindIcon kind={row.kind} activity={row.activity} />
           <span className="flex min-w-0 flex-1 items-baseline gap-2">
             <span
               className={cn(
@@ -1244,7 +1256,23 @@ function StreamStatusIcon({ row }: { row: ProjectedStreamRow }) {
   return <Circle className="size-2.5 fill-current" />;
 }
 
-function StreamKindIcon({ kind }: { kind: StreamRowKind }) {
+function StreamKindIcon({
+  kind,
+  activity,
+}: {
+  kind: StreamRowKind;
+  activity: StreamActivityKey | null;
+}) {
+  const ActivityIcon = activity ? AGENT_STREAM_ACTIVITY_ICONS[activity] : undefined;
+  if (kind === "tool" && ActivityIcon) {
+    return (
+      <ActivityIcon
+        aria-hidden="true"
+        data-stream-activity-icon={activity}
+        className="size-3.5 shrink-0 text-muted-foreground"
+      />
+    );
+  }
   if (kind === "tool") {
     return <Wrench aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />;
   }
@@ -1433,19 +1461,15 @@ const TOOL_TARGET_PARAMETER_KEYS = [
 
 const MAX_TOOL_TARGET_CHARS = 160;
 
-/** One row per activity (e.g. "reviewed source files") within a run and rule. */
+/**
+ * One row per activity (e.g. "reviewed source files") within a run and rule,
+ * whichever tool performed it: read_file and a shell `sed` are both reads.
+ */
 function toolGroupKey(
   event: AssessmentAgentStreamEvent,
-  semantic: SemanticRecord,
-  label: string,
+  activity: StreamActivityKey,
 ): string {
-  return [
-    "tool",
-    event.runId,
-    event.engineeringRuleId ?? "",
-    firstString(semantic.toolName, event.toolName),
-    label,
-  ].join(":");
+  return ["tool", event.runId, event.engineeringRuleId ?? "", activity].join(":");
 }
 
 function toolTarget(

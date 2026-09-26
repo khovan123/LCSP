@@ -1280,3 +1280,61 @@ test("repeated calls of one tool stream their latest target into one row", async
   assert.match(text, /"offset": 200/);
   assert.doesNotMatch(text, /first page|second page|other file/);
 });
+
+test("tool activities group across tools and use their activity icon", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const call = (
+    sequence: number,
+    toolName: string,
+    parameters: Record<string, AssessmentRuntimeSummaryValue>,
+  ) =>
+    event(
+      sequence,
+      ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
+      {
+        schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+        kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall,
+        durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+        toolName,
+        toolCallId: `call-${sequence}`,
+        parameters,
+      },
+      { toolName, toolCallId: `call-${sequence}` },
+    );
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          call(1, "ls", { path: "/workspace/repository" }),
+          call(2, "grep", { pattern: "openai", path: "/workspace/repository" }),
+          call(3, "execute", { command: "cd /workspace/repository && grep -n llm src" }),
+          call(4, "read_file", { file_path: "/workspace/repository/src/app.py" }),
+          call(5, "execute", { command: "cd /workspace/repository && sed -n '1,20p' src/app.py" }),
+        ]}
+      />,
+    );
+  });
+
+  const icons = [
+    ...container.querySelectorAll('[data-stream-kind="tool"] [data-stream-activity-icon]'),
+  ].map((icon) => icon.getAttribute("data-stream-activity-icon"));
+  // A shell grep is the same "searched" activity as the grep tool, and a shell
+  // sed is the same "read" activity as read_file.
+  assert.deepEqual(icons, [
+    "repositoryFilesInspected",
+    "repositorySourceSearched",
+    "sourceFilesReviewed",
+  ]);
+  const counts = [
+    ...container.querySelectorAll('[data-stream-kind="tool"]'),
+  ].map(
+    (row) =>
+      row.querySelector("[data-stream-repeat-count]")?.getAttribute("data-stream-repeat-count") ??
+      "1",
+  );
+  assert.deepEqual(counts, ["1", "2", "2"]);
+});
