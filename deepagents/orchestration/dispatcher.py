@@ -9,6 +9,7 @@ create agent-specific orchestrators.
 from __future__ import annotations
 
 from collections.abc import Callable
+import json
 import logging
 from typing import Any
 
@@ -364,13 +365,27 @@ class RootSubagentDispatcher:
     ) -> dict[str, Any] | None:
         if response_format is None:
             return None
-        if not isinstance(invocation_result, dict) or invocation_result.get("structured_response") is None:
+        payload = (
+            invocation_result.get("structured_response")
+            if isinstance(invocation_result, dict)
+            else None
+        )
+        if payload is None:
+            # Tool-strategy providers (e.g. llm7) sometimes answer with the handoff
+            # JSON as plain text instead of calling the structured-output tool. The
+            # recovered object still goes through the same strict validation below.
+            payload = _final_message_json_object(invocation_result)
+            if payload is not None:
+                logger.warning(
+                    "SPECIALIST_HANDOFF_RECOVERED_FROM_TEXT subagent_type=%s",
+                    subagent_type,
+                )
+        if payload is None:
             # A missing typed handoff is a candidate-shape failure like any other schema
             # violation, so boundaries with a bounded self-correction can repair it.
             raise SpecialistHandoffValidationError(
                 f"{subagent_type} did not return a structured_response handoff"
             )
-        payload = invocation_result["structured_response"]
         if subagent_type == "interview":
             payload = repair_targeted_interview_frontier(
                 payload,
@@ -384,6 +399,34 @@ class RootSubagentDispatcher:
             pinned_versions=pinned_versions or {},
         )
         return handoff.model_dump(mode="json")
+
+
+def _final_message_json_object(invocation_result: Any) -> dict[str, Any] | None:
+    """Return the JSON object a final text-only AI message carries, if any."""
+    if not isinstance(invocation_result, dict):
+        return None
+    messages = invocation_result.get("messages")
+    if not isinstance(messages, list) or not messages:
+        return None
+    final = messages[-1]
+    if getattr(final, "type", None) != "ai" or getattr(final, "tool_calls", None):
+        return None
+    content = getattr(final, "content", None)
+    if isinstance(content, list):
+        content = "".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in content
+        )
+    if not isinstance(content, str):
+        return None
+    start, end = content.find("{"), content.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        payload = json.loads(content[start : end + 1])
+    except ValueError:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _load_program_graph_from_metadata(
