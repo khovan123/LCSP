@@ -9,8 +9,11 @@ from dataclasses import dataclass, replace
 from typing import Any, Iterable
 
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
-from middleware.billing_metering import BillingMeteringError
-from model_policy import PLANNER_MODEL_SPEC, create_lcsp_agent as create_agent
+from middleware.billing_metering import BillingAgentRoleMiddleware, BillingMeteringError
+from deepagents import create_deep_agent
+from middleware.agent_run_budget import AgentRunBudgetMiddleware
+from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
+from model_policy import PLANNER_MODEL_SPEC, resolve_agent_model
 from tools.legal.corpus.engineering_rules.contract.models import EngineeringRule
 from tools.common.capabilities.platform.logging import get_logger
 from tools.common.capabilities.evidence.graph.schema.models import ProgramEvidenceGraph
@@ -245,9 +248,12 @@ class EngineeringRulePlanner:
             )
 
         try:
-            agent = create_agent(
-                agent_name="lcsp-engineering-rule-planner",
-                model=self._model,
+            agent = create_deep_agent(
+                name="lcsp-engineering-rule-planner",
+                model=resolve_agent_model(
+                    agent_name="lcsp-engineering-rule-planner", model_spec=self._model
+                ),
+                backend=current_repository_backend(),
                 system_prompt=(
                     "Plan the bounded technical investigation directly from the assessment "
                     "repository using native Deep Agents filesystem/shell/task tools. "
@@ -256,7 +262,11 @@ class EngineeringRulePlanner:
                     "applicability, risk, or compliance decisions."
                 ),
                 response_format=self._plan_response_schema(),
-                middleware=MODEL_GOVERNANCE_MIDDLEWARE,
+                middleware=[
+                    AgentRunBudgetMiddleware(),
+                    BillingAgentRoleMiddleware("planner"),
+                    *MODEL_GOVERNANCE_MIDDLEWARE,
+                ],
             )
             response = invoke_with_stream(agent,
                 {

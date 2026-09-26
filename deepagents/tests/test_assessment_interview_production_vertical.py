@@ -415,7 +415,7 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
             instructions=investigator_instructions,
         )(**kwargs)
 
-    monkeypatch.setattr(managed, "create_agent", create_agent_with_report)
+    monkeypatch.setattr(managed, "create_deep_agent", create_agent_with_report)
 
     boundary = InterviewGatedEngineeringAssessmentBoundary(
         config,
@@ -693,7 +693,7 @@ def test_release_gate_blocks_unresolved_targeted_context_without_resume(
             need_id=BLOCKED_NEED_ID,
         )(**kwargs)
 
-    monkeypatch.setattr(managed, "create_agent", create_agent_with_report)
+    monkeypatch.setattr(managed, "create_deep_agent", create_agent_with_report)
 
     boundary = InterviewGatedEngineeringAssessmentBoundary(
         config,

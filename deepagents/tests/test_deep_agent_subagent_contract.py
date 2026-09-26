@@ -92,8 +92,8 @@ def test_subagents_follow_deep_agents_dictionary_contract() -> None:
             expected_prefix = [inject_lcsp_runtime_context]
             expected_governance = MODEL_GOVERNANCE_MIDDLEWARE
         middleware = subagent["middleware"]
-        if name in {"planner", "investigator"}:
-            # Repository-exploring roles are bounded so their ReAct loop converges.
+        if name in {"interview", "planner", "investigator"}:
+            # Every specialist except batch triage is bounded so its ReAct loop converges.
             assert isinstance(middleware[0], AgentRunBudgetMiddleware)
             middleware = middleware[1:]
         assert middleware[:1] == expected_prefix

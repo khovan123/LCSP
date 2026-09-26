@@ -58,9 +58,9 @@ class LocalAgentRuntime:
     def start(self) -> None:
         disable_langsmith_tracing_by_default()
         checkpointer = self._open_checkpointer()
-        from agent import create_lcsp_agent
+        from agent import create_root_agent
 
-        self.graph = create_lcsp_agent(checkpointer=checkpointer)
+        self.graph = create_root_agent(checkpointer=checkpointer)
 
     def close(self) -> None:
         # Drain in-flight runs before tearing down the checkpointer/runtime.

@@ -1,6 +1,7 @@
 """Interview subagent: Customer business-context question and sufficiency reasoning."""
 
 from contracts.handoffs import InterviewResult
+from middleware.agent_run_budget import AgentRunBudgetMiddleware
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.billing_metering import BillingAgentRoleMiddleware
 from middleware.interview_runtime_context import inject_interview_runtime_context
@@ -133,6 +134,7 @@ SUBAGENT = {
     "tools": TOOLS,
     "model": INTERVIEW_MODEL_SPEC,
     "middleware": [
+        AgentRunBudgetMiddleware(),
         inject_interview_runtime_context,
         BillingAgentRoleMiddleware("interview"),
         *MODEL_GOVERNANCE_MIDDLEWARE,

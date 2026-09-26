@@ -449,7 +449,7 @@ def test_root_agent_task_subagents_run_under_model_governance(monkeypatch) -> No
 
     monkeypatch.setattr(deep_subagents, "create_agent", recording_create_agent)
 
-    root_agent_module.create_lcsp_agent()
+    root_agent_module.create_root_agent()
 
     assert "general-purpose" in compiled
     governance = {

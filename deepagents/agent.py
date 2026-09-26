@@ -77,7 +77,7 @@ if os.environ.get("LCSP_LOCAL_GRAPH_DEV") == "1":
     deepagents_graph._lc_version = deepagents_version._lc_version
 
 
-def create_lcsp_agent(*, checkpointer=None, store=None):
+def create_root_agent(*, checkpointer=None, store=None):
     """Build the native LCSP Deep Agent graph for local or hosted runtimes."""
     return create_deep_agent(
         name="lcsp-agent",
@@ -108,4 +108,4 @@ def create_lcsp_agent(*, checkpointer=None, store=None):
     )
 
 
-agent = create_lcsp_agent()
+agent = create_root_agent()

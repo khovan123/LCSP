@@ -20,7 +20,7 @@ type SummaryRecord = Record<string, AssessmentRuntimeSummaryValue>;
 
 type RuleScopedRow = {
   ruleId: string | null;
-  sequence: number;
+  firstSequence: number;
 };
 
 /** EngineeringRule lifecycle events render as a rule section, not as a row. */
@@ -82,7 +82,7 @@ export function segmentAgentStreamRowsByRule<TRow extends RuleScopedRow>(
   };
 
   const entries = [
-    ...rows.map((row) => ({ sequence: row.sequence, row, ruleId: row.ruleId })),
+    ...rows.map((row) => ({ sequence: row.firstSequence, row, ruleId: row.ruleId })),
     ...[...headers.values()].map((header) => ({
       sequence: header.sequence,
       row: null,

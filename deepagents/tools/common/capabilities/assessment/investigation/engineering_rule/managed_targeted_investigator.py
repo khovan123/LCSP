@@ -22,7 +22,8 @@ from langchain.agents.structured_output import StructuredOutputError
 from contracts.handoffs import InvestigatorResult
 from middleware.failure_policy import TerminalSchemaError
 from middleware.specialist_handoff_validation import _persist_targeted_interview_need
-from model_policy import create_lcsp_agent as create_agent
+from deepagents import create_deep_agent
+from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
 from orchestration.context import LCSPRunContext
 from orchestration.result_validation import (
     SpecialistHandoffValidationError,
@@ -1087,9 +1088,10 @@ def _is_failed_investigator_handoff(handoff: dict[str, Any]) -> bool:
 
 def _durable_investigator_agent(checkpointer: Any):
     definition = INVESTIGATOR_SUBAGENT
-    return create_agent(
-        agent_name="lcsp-investigator-durable-execution",
+    return create_deep_agent(
+        name="lcsp-investigator-durable-execution",
         model=definition["model"],
+        backend=current_repository_backend(),
         tools=definition["tools"],
         system_prompt=definition["system_prompt"],
         middleware=definition["middleware"],

@@ -286,7 +286,8 @@ test("model call events render provider progress and terminal failures", async (
   assert.match(technical, /gemini-3\.5-flash-lite/);
   assert.match(technical, /google_genai/);
   assert.match(technical, /MODEL_CALL_STARTED/);
-  assert.match(technical, /MODEL_CALL_HEARTBEAT/);
+  // Heartbeats update the row in place instead of growing it into a long log.
+  assert.doesNotMatch(technical, /MODEL_CALL_HEARTBEAT/);
   assert.match(technical, /MODEL_CALL_TIMEOUT/);
   assert.match(technical, /model call timed out/);
   assert.match(technical, /elapsed_seconds/);
@@ -1198,4 +1199,76 @@ test("budget and context trimming render as their own progress rows", async () =
     progress[1]?.textContent ?? "",
     /Step budget reached|Đã chạm giới hạn số bước/,
   );
+});
+
+test("repeated calls on the same tool target replace input and output in one row", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const call = (sequence: number, callId: string, parameters: Record<string, AssessmentRuntimeSummaryValue>) =>
+    event(
+      sequence,
+      ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
+      {
+        schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+        kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall,
+        durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+        toolName: "read_file",
+        toolCallId: callId,
+        parameters,
+      },
+      { toolName: "read_file", toolCallId: callId, agentName: "repository-analyst" },
+    );
+  const result = (sequence: number, callId: string, text: string) =>
+    event(
+      sequence,
+      ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolResult,
+      {
+        schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+        kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolResult,
+        durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+        toolName: "read_file",
+        toolCallId: callId,
+        resultSummary: { text },
+      },
+      {
+        toolName: "read_file",
+        toolCallId: callId,
+        agentName: "repository-analyst",
+        status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+      },
+    );
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          call(1, "c1", { file_path: "/src/app.py", offset: 0, limit: 100 }),
+          result(2, "c1", "first page"),
+          call(3, "c2", { file_path: "/src/app.py", offset: 100, limit: 100 }),
+          result(4, "c2", "second page"),
+          call(5, "c3", { file_path: "/src/other.py" }),
+          result(6, "c3", "other file"),
+          call(7, "c4", { file_path: "/src/app.py", offset: 200, limit: 100 }),
+          result(8, "c4", "third page"),
+        ]}
+      />,
+    );
+  });
+
+  const toolRows = container.querySelectorAll<HTMLElement>('[data-stream-kind="tool"]');
+  assert.equal(toolRows.length, 2);
+  const appRow = toolRows[0];
+  assert.ok(appRow);
+  assert.equal(appRow.getAttribute("data-stream-status"), "completed");
+  assert.equal(
+    appRow.querySelector("[data-stream-repeat-count]")?.getAttribute("data-stream-repeat-count"),
+    "3",
+  );
+  const text = appRow.textContent ?? "";
+  assert.match(text, /third page/);
+  assert.match(text, /"offset": 200/);
+  assert.doesNotMatch(text, /first page|second page/);
+  assert.equal(toolRows[1]?.querySelector("[data-stream-repeat-count]"), null);
 });

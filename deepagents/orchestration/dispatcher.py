@@ -12,18 +12,20 @@ from collections.abc import Callable
 import logging
 from typing import Any
 
+from deepagents import create_deep_agent
+
 from decision.shadow import (
     RootRoutingPacket,
     ShadowDecisionObserver,
     observer_from_api_client,
 )
-from model_policy import create_lcsp_agent as create_agent
 from orchestration.agent_stream import (
     AGENT_STREAM_STAGES,
     invoke_with_stream,
     publish_agent_stream_event,
 )
 from subagents import FLOW_SUBAGENTS
+from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
 
 from .context import LCSPRunContext
 from .lifecycle import RootOrchestrationLifecycle
@@ -44,7 +46,7 @@ class RootSubagentDispatcher:
         self,
         *,
         lifecycle: RootOrchestrationLifecycle | None = None,
-        agent_factory: Callable[..., Any] = create_agent,
+        agent_factory: Callable[..., Any] = create_deep_agent,
         root_agent: Any | None = None,
         root_agent_factory: Callable[[], Any] | None = None,
         subagents: dict[str, dict[str, Any]] | None = None,
@@ -144,9 +146,11 @@ class RootSubagentDispatcher:
         if owner_instruction:
             prompt = f"{owner_instruction}\n\n{prompt}" if prompt else owner_instruction
 
+        # Same construction as the root ``task`` tool: Deep Agents resolves the
+        # definition's model spec through the LCSP provider profiles.
         agent_kwargs: dict[str, Any] = {
-            "agent_name": subagent_type,
             "model": definition["model"],
+            "backend": current_repository_backend(),
             "tools": definition["tools"],
             "system_prompt": definition["system_prompt"],
             "middleware": definition["middleware"],

@@ -495,12 +495,13 @@ def test_root_dispatcher_fails_policy_when_structured_handoff_is_missing(result)
 def test_default_agent_factory_builds_each_specialist_definition(monkeypatch, subagent_type) -> None:
     """Assessment 7976a135 regression: the real factory must accept real definitions.
 
-    Specialist definitions declare their own billing role; the factory added a second
-    one, so create_agent rejected the stack and Initial Interview could never start.
+    Specialists are built with Deep Agents' own ``create_deep_agent`` from the same
+    definition dict the root ``task`` tool uses, so each role and budget middleware
+    appears exactly once and the model spec resolves through the LCSP profiles.
     """
     import deepagents.graph as deep_graph
+    from deepagents import create_deep_agent
 
-    from model_policy import create_lcsp_agent
     from subagents import FLOW_SUBAGENTS
 
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
@@ -515,8 +516,9 @@ def test_default_agent_factory_builds_each_specialist_definition(monkeypatch, su
     monkeypatch.setattr(deep_graph, "create_agent", recording_create_agent)
     definition = next(item for item in FLOW_SUBAGENTS if item["name"] == subagent_type)
 
-    create_lcsp_agent(
-        agent_name=subagent_type,
+    factory = RootSubagentDispatcher()._agent_factory
+    assert factory is create_deep_agent
+    factory(
         model=definition["model"],
         tools=definition["tools"],
         system_prompt=definition["system_prompt"],
