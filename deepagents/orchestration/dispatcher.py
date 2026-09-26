@@ -23,7 +23,11 @@ from subagents import FLOW_SUBAGENTS
 
 from .context import LCSPRunContext
 from .lifecycle import RootOrchestrationLifecycle
-from .result_validation import repair_targeted_interview_frontier, validate_specialist_handoff
+from .result_validation import (
+    SpecialistHandoffValidationError,
+    repair_targeted_interview_frontier,
+    validate_specialist_handoff,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -351,7 +355,9 @@ class RootSubagentDispatcher:
         if response_format is None:
             return None
         if not isinstance(invocation_result, dict) or invocation_result.get("structured_response") is None:
-            raise RuntimeError(
+            # A missing typed handoff is a candidate-shape failure like any other schema
+            # violation, so boundaries with a bounded self-correction can repair it.
+            raise SpecialistHandoffValidationError(
                 f"{subagent_type} did not return a structured_response handoff"
             )
         payload = invocation_result["structured_response"]

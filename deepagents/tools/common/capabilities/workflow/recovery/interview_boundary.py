@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import unicodedata
+from functools import partial
 from typing import Any, Callable
 
 from contracts.handoffs import InterviewResult
@@ -807,48 +808,16 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
     def _run_and_persist_decision(self, api_client, assessment_id, thread_id, question_id,
                                   context_revision, resume_reason, context, correlationId,
                                   source_version, pge_version):
-        try:
-            decision = self._run_interview(
-                assessment_id=assessment_id,
-                thread_id=thread_id,
-                question_id=question_id,
-                context_revision=context_revision,
-                resume_reason=resume_reason,
-                context=context,
-                correlationId=correlationId,
-            )
-        except SpecialistHandoffValidationError as exc:
-            # The specialist's candidate violated one of the conditional InterviewResult /
-            # InterviewQuestionResult constraints a provider schema cannot express (e.g. a
-            # malformed CONFIRM_ADJUST choice shape, a missing frontier). None of those
-            # validators are relaxed; give the specialist one bounded chance to see the
-            # exact rule it broke and self-correct instead of crashing the whole turn.
-            rule_names = _violated_rule_names(exc)
-            _LOGGER.warning(
-                "%s assessment_id=%s question_id=%s context_revision=%s rule=%s",
-                _INTERVIEW_HANDOFF_VALIDATION_REPAIRED,
-                assessment_id,
-                question_id,
-                context_revision,
-                rule_names,
-            )
-            repair_context = {
-                **context,
-                "decisionValidationFeedback": {
-                    "code": "INTERVIEW_HANDOFF_SCHEMA_VIOLATION",
-                    "rejectedReason": str(exc),
-                },
-            }
-            # A second violation propagates to terminal delivery settlement.
-            decision = self._run_interview(
-                assessment_id=assessment_id,
-                thread_id=thread_id,
-                question_id=question_id,
-                context_revision=context_revision,
-                resume_reason=resume_reason,
-                context=repair_context,
-                correlationId=correlationId,
-            )
+        run = partial(
+            self._run_interview_with_schema_repair,
+            assessment_id=assessment_id,
+            thread_id=thread_id,
+            question_id=question_id,
+            context_revision=context_revision,
+            resume_reason=resume_reason,
+            correlationId=correlationId,
+        )
+        decision = run(context=context)
         decision, authority_feedback = _apply_authority_preflight(decision, context)
         if authority_feedback is not None:
             _LOGGER.warning(
@@ -864,15 +833,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 **context,
                 "decisionValidationFeedback": authority_feedback,
             }
-            decision = self._run_interview(
-                assessment_id=assessment_id,
-                thread_id=thread_id,
-                question_id=question_id,
-                context_revision=context_revision,
-                resume_reason=resume_reason,
-                context=repair_context,
-                correlationId=correlationId,
-            )
+            decision = run(context=repair_context)
             decision = _confirmation_or_original(decision, context)
 
         try:
@@ -908,15 +869,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 **context,
                 "decisionValidationFeedback": decision_feedback,
             }
-            corrected = self._run_interview(
-                assessment_id=assessment_id,
-                thread_id=thread_id,
-                question_id=question_id,
-                context_revision=context_revision,
-                resume_reason=resume_reason,
-                context=repair_context,
-                correlationId=correlationId,
-            )
+            corrected = run(context=repair_context)
             corrected = _confirmation_or_original(corrected, context)
             # A second rejection propagates to terminal delivery settlement.
             guarded_state = api_client.post_interview_agent_decision(
@@ -933,6 +886,45 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             correlationId=correlationId,
             root_workflow_run_id=context.get("rootWorkflowRunId"),
         )
+
+    def _run_interview_with_schema_repair(self, *, context, **kwargs):
+        """Run one Interview candidate, allowing one bounded schema self-correction.
+
+        The specialist's candidate can violate a conditional InterviewResult /
+        InterviewQuestionResult constraint a provider schema cannot express (e.g. a
+        select control without choices, a malformed CONFIRM_ADJUST choice shape, a
+        missing frontier) or return no structured handoff at all. None of those
+        validators are relaxed; every candidate run, including the platform-guard
+        corrections, gets one chance to see the exact rule it broke instead of
+        crashing the whole turn. A second violation propagates to terminal delivery
+        settlement.
+        """
+        try:
+            return self._run_interview(context=context, **kwargs)
+        except SpecialistHandoffValidationError as exc:
+            _LOGGER.warning(
+                "%s assessment_id=%s question_id=%s context_revision=%s rule=%s",
+                _INTERVIEW_HANDOFF_VALIDATION_REPAIRED,
+                kwargs.get("assessment_id"),
+                kwargs.get("question_id"),
+                kwargs.get("context_revision"),
+                _violated_rule_names(exc),
+            )
+            schema_feedback = {
+                "code": "INTERVIEW_HANDOFF_SCHEMA_VIOLATION",
+                "rejectedReason": str(exc),
+            }
+            prior_feedback = context.get("decisionValidationFeedback")
+            feedback = (
+                # Keep the guard correction being answered; add the structural rule.
+                {**prior_feedback, "schemaViolation": schema_feedback}
+                if isinstance(prior_feedback, dict) and prior_feedback
+                else schema_feedback
+            )
+            return self._run_interview(
+                context={**context, "decisionValidationFeedback": feedback},
+                **kwargs,
+            )
 
     def _run_interview(
         self,
@@ -1000,8 +992,11 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         invocation_key = (
             f"assessment-interview:{assessment_id}:{context_revision}:{resume_reason}"
         )
-        if context.get("decisionValidationFeedback"):
+        feedback = context.get("decisionValidationFeedback")
+        if feedback:
             invocation_key += ":resolution-correction:1"
+            if isinstance(feedback, dict) and feedback.get("schemaViolation"):
+                invocation_key += ":schema-correction:1"
 
         run_context = LCSPRunContext(
             assessment_id=assessment_id,
@@ -1913,6 +1908,7 @@ def _interview_instruction(
         "rejectedReason names the exact structural rule the prior candidate broke (for "
         "example a malformed CONFIRM_ADJUST choice shape or an invalid outcome/mode "
         "combination): fix only that violation, changing nothing else about the candidate. "
+        "If it also has schemaViolation, fix that rejectedReason rule too. "
         "Do not invent confirmation or treat validation feedback as customer evidence. "
         "If evidence is missing, return WAITING_FOR_CUSTOMER with a bounded clarification, "
         "or BLOCKED_OR_UNRESOLVED when the customer cannot supply it. Because provider "
