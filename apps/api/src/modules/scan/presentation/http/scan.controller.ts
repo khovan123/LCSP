@@ -61,6 +61,7 @@ import type { ScanCallbackRequest } from "../../application/contracts/scan/scan-
 import { ProcessScanCallbackCommand } from "../../application/commands/process-scan-callback/process-scan-callback.command.js";
 import { GetScanJobQuery } from "../../application/queries/get-scan-job/get-scan-job.query.js";
 import { RerunScanCommand } from "../../application/commands/rerun-scan/rerun-scan.command.js";
+import { ReleaseInactiveScanReservationsCommand } from "../../../billing/application/commands/release-inactive-scan-reservations/release-inactive-scan-reservations.command.js";
 import { RequestTargetedReanalysisCommand } from "../../application/commands/request-targeted-reanalysis/request-targeted-reanalysis.command.js";
 import type { RerunScanRequestDto } from "../../application/contracts/scan/rerun-scan.contract.js";
 import { WorkerApiKeyGuard } from "./worker-api-key.guard.js";
@@ -508,7 +509,7 @@ export class InternalScanController {
     });
     const current = await this.prisma.repositoryScanJob.findUnique({
       where: { id: scanJobId },
-      select: { status: true },
+      select: { status: true, assessmentId: true },
     });
     if (!current) {
       throw problemException(
@@ -518,6 +519,7 @@ export class InternalScanController {
       );
     }
     const currentStatus = fromPrismaRepositoryScanJobStatus(current.status);
+    await this.releaseTerminalScanCredits(current.assessmentId, scanJobId);
     if (terminalized.count > 0) {
       await this.runtimeEvents.recordRepositoryAnalysisEvent({
         scanJobId,
@@ -541,6 +543,28 @@ export class InternalScanController {
       status: currentStatus,
       reasonCode,
     });
+  }
+
+  /**
+   * Returns credits the worker kept for a redelivery that will never happen.
+   *
+   * Retryable boundary failures keep their reservation for the next attempt; once
+   * the scan is terminal nothing else releases it. The sweep is idempotent, so a
+   * failure here is retried by the next terminal callback or rerun.
+   */
+  private async releaseTerminalScanCredits(
+    assessmentId: string,
+    scanJobId: string,
+  ): Promise<void> {
+    try {
+      await this.commandBus.execute(
+        new ReleaseInactiveScanReservationsCommand(assessmentId),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Could not release credits held by terminal scan scanJobId=${scanJobId} error=${error instanceof Error ? error.name : "unknown"}`,
+      );
+    }
   }
 
   /** Accepts one live Deep Agents/LangGraph stream event from the trusted worker. */

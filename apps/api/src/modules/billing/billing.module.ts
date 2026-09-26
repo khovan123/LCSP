@@ -22,6 +22,7 @@ import { CreateBillingOrderHandler } from "./application/commands/create-billing
 import { ExpireBillingOrderHandler } from "./application/commands/expire-billing-order/expire-billing-order.handler.js";
 import { RejectBillingPaymentHandler } from "./application/commands/reject-billing-payment/reject-billing-payment.handler.js";
 import { ReleaseBillingReservationHandler } from "./application/commands/release-billing-reservation/release-billing-reservation.handler.js";
+import { ReleaseInactiveScanReservationsHandler } from "./application/commands/release-inactive-scan-reservations/release-inactive-scan-reservations.handler.js";
 import { ResolveBillingPaymentHandler } from "./application/commands/resolve-billing-payment/resolve-billing-payment.handler.js";
 import { ReserveBillingCreditsHandler } from "./application/commands/reserve-billing-credits/reserve-billing-credits.handler.js";
 import { SettleBillingUsageHandler } from "./application/commands/settle-billing-usage/settle-billing-usage.handler.js";
@@ -102,6 +103,7 @@ import { BillingPricingPreflightService } from "./application/shared/billing-pri
     ListBillingTransactionsHandler,
     RejectBillingPaymentHandler,
     ReleaseBillingReservationHandler,
+    ReleaseInactiveScanReservationsHandler,
     ResolveBillingAssessmentOwnerHandler,
     ResolveBillingReservationOwnerHandler,
     ResolveBillingPaymentHandler,

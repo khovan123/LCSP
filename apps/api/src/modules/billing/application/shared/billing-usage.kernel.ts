@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import {
+  BillingReservationStatus,
+  RepositoryScanJobStatus,
+} from "@prisma/client";
+import {
   LLM_USAGE_AVAILABILITY_REASONS,
   LLM_USAGE_STATUSES,
 } from "@lcsp/contracts/billing";
@@ -9,6 +13,7 @@ import {
   BillingDomainError,
   BillingIdempotencyConflictError,
   InsufficientCreditError,
+  InvalidReservationTransitionError,
   OwnershipMismatchError,
   PricingSnapshotUnavailableError,
 } from "../../domain/billing.errors.js";
@@ -78,6 +83,9 @@ export type BillingUsagePort = {
     assessmentId: string;
     reservationId: string;
   }): Promise<unknown>;
+  releaseInactiveScanReservations(
+    assessmentId: string,
+  ): Promise<{ releasedReservationIds: string[] }>;
   claimInvocation(input: {
     assessmentId: string;
     reservationId: string;
@@ -389,6 +397,56 @@ export class BillingUsageKernel {
       assessmentId: input.assessmentId,
     });
   }
+  /**
+   * Releases credits held for scans that can no longer spend them.
+   *
+   * A scan-bound reservation only funds an active scan. The worker keeps it after
+   * a retryable failure so a redelivery can reuse it; once the scan is terminal or
+   * deleted by a rerun, no worker will spend or release it again.
+   */
+  async releaseInactiveScanReservations(
+    assessmentId: string,
+  ): Promise<{ releasedReservationIds: string[] }> {
+    if (!this.prisma)
+      throw new BillingDomainError("Scan reservation resolver is unavailable");
+    const held = await this.prisma.billingReservation.findMany({
+      where: {
+        assessmentId,
+        status: BillingReservationStatus.RESERVED,
+        scanJobId: { not: null },
+      },
+      select: { id: true, userId: true, scanJobId: true },
+    });
+    const scanJobIds = held.flatMap((r) => (r.scanJobId ? [r.scanJobId] : []));
+    if (scanJobIds.length === 0) return { releasedReservationIds: [] };
+    const activeScans = await this.prisma.repositoryScanJob.findMany({
+      where: {
+        id: { in: scanJobIds },
+        status: {
+          in: [RepositoryScanJobStatus.QUEUED, RepositoryScanJobStatus.RUNNING],
+        },
+      },
+      select: { id: true },
+    });
+    const active = new Set(activeScans.map((scan) => scan.id));
+    const releasedReservationIds: string[] = [];
+    for (const r of held) {
+      if (!r.scanJobId || active.has(r.scanJobId)) continue;
+      try {
+        await this.accounting.releaseReservation({
+          userId: r.userId,
+          reservationId: r.id,
+          assessmentId,
+        });
+        releasedReservationIds.push(r.id);
+      } catch (error) {
+        // Settled or released concurrently: the credits are no longer held.
+        if (!(error instanceof InvalidReservationTransitionError)) throw error;
+      }
+    }
+    return { releasedReservationIds };
+  }
+
   recordAndSettleUsage(i: {
     userId: string;
     assessmentId?: string;
