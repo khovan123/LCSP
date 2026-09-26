@@ -31,17 +31,17 @@ def test_provider_aliases_route_to_langchain_canonical_keys(monkeypatch) -> None
 def test_provider_constructor_kwargs_are_isolated() -> None:
     assert provider_init_kwargs("openai") == openai_responses_base_init_kwargs()
     assert provider_init_kwargs("anthropic") == {}
-    assert provider_init_kwargs("google_genai") == {"request_timeout": 90.0}
+    assert provider_init_kwargs("google_genai") == {"request_timeout": 300.0}
     assert provider_init_kwargs("llm7") == {
         "base_url": "https://api.llm7.io/v1",
         "use_responses_api": False,
-        "timeout": 30.0,
+        "timeout": 300.0,
     }
     assert provider_init_kwargs("inception") == {
         "base_url": "https://api.inceptionlabs.ai/v1",
         "temperature": 0.75,
         "use_responses_api": False,
-        "timeout": 30.0,
+        "timeout": 300.0,
     }
 
     assert provider_client("openai") == "responses_api"
@@ -54,7 +54,7 @@ def test_provider_constructor_kwargs_are_isolated() -> None:
     assert openai_kwargs == {
         "use_responses_api": True,
         "output_version": "responses/v1",
-        "timeout": 30.0,
+        "timeout": 300.0,
     }
     assert "use_responses_api" not in provider_init_kwargs("anthropic")
     assert "reasoning" not in provider_init_kwargs("google_genai")
@@ -66,21 +66,22 @@ def test_provider_constructor_kwargs_are_isolated() -> None:
     assert "reasoning" not in provider_init_kwargs("inception")
 
 
-def test_global_provider_timeout_env_does_not_downgrade_provider_defaults(monkeypatch) -> None:
+def test_provider_timeout_defaults_to_five_minutes_for_every_provider() -> None:
+    assert provider_init_kwargs("openai")["timeout"] == 300.0
+    assert provider_init_kwargs("llm7")["timeout"] == 300.0
+    assert provider_init_kwargs("inception")["timeout"] == 300.0
+    assert provider_init_kwargs("google_genai")["request_timeout"] == 300.0
+
+
+def test_shared_provider_timeout_env_applies_to_every_provider(monkeypatch) -> None:
     monkeypatch.setenv("LLM_PROVIDER_TIMEOUT_SECONDS", "12.5")
+    # Per-provider variables are not part of the contract and are ignored.
+    monkeypatch.setenv("LLM_PROVIDER_TIMEOUT_SECONDS_GOOGLE_GENAI", "75")
 
     assert provider_init_kwargs("openai")["timeout"] == 12.5
     assert provider_init_kwargs("llm7")["timeout"] == 12.5
     assert provider_init_kwargs("inception")["timeout"] == 12.5
-    assert provider_init_kwargs("google_genai")["request_timeout"] == 90.0
-
-
-def test_provider_timeout_env_can_override_one_provider(monkeypatch) -> None:
-    monkeypatch.setenv("LLM_PROVIDER_TIMEOUT_SECONDS_GOOGLE_GENAI", "75")
-
-    assert provider_init_kwargs("openai")["timeout"] == 30.0
-    assert provider_init_kwargs("llm7")["timeout"] == 30.0
-    assert provider_init_kwargs("google_genai")["request_timeout"] == 75.0
+    assert provider_init_kwargs("google_genai")["request_timeout"] == 12.5
 
 
 def test_agent_constructor_kwargs_gate_reasoning_by_agent_and_model() -> None:
@@ -171,13 +172,13 @@ def test_harness_registers_each_active_provider_without_cross_provider_kwargs(
     profiles = {key: profile for key, profile in provider_registrations}
     assert dict(profiles["openai"].init_kwargs) == openai_responses_base_init_kwargs()
     assert dict(profiles["anthropic"].init_kwargs) == {}
-    assert dict(profiles["google_genai"].init_kwargs) == {"request_timeout": 90.0}
+    assert dict(profiles["google_genai"].init_kwargs) == {"request_timeout": 300.0}
     assert dict(profiles["openai:gpt-5-mini"].init_kwargs) == (
         openai_responses_init_kwargs("openai:gpt-5-mini")
     )
     assert dict(profiles["anthropic:claude-sonnet-4-6"].init_kwargs) == {}
     assert dict(profiles["google_genai:gemini-3.1-pro-preview"].init_kwargs) == {
-        "request_timeout": 90.0,
+        "request_timeout": 300.0,
     }
 
     assert tuple(model_spec for model_spec, _ in harness_registrations) == mixed_specs

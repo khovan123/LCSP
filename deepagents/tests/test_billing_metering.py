@@ -302,7 +302,7 @@ def test_model_call_telemetry_emits_heartbeat_and_completion(monkeypatch):
     started = next(fields for event_type, fields in events if event_type == "MODEL_CALL_STARTED")
     assert started["data"]["provider"] == "google_genai"
     assert started["data"]["model"] == "gemini-test"
-    assert started["data"]["timeout_seconds"] == 90.0
+    assert started["data"]["timeout_seconds"] == 300.0
     assert len(client.payloads) == 1
 
 

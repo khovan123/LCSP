@@ -21,19 +21,19 @@ if expected == "google_genai":
     assert p.ALL_LCSP_MODEL_SPECS == ("google_genai:gemini-3.5-flash-lite",)
     expected_profile = p.model_profile_for_route("google_genai", "gemini-3.5-flash-lite")
     assert model_provider_profile_for(p.ROOT_MODEL_SPEC).init_kwargs == {
-        "request_timeout": 90.0,
+        "request_timeout": 300.0,
         "profile": expected_profile,
         "thinking_level": "low",
     }
     for role in p.REASONING_AGENT_NAMES:
         assert p.model_init_kwargs_for_agent(agent_name=role, model_spec=p.ROOT_MODEL_SPEC) == {
-            "request_timeout": 90.0,
+            "request_timeout": 300.0,
             "profile": expected_profile,
             "thinking_level": "low",
         }
     for role in p.NON_REASONING_AGENT_NAMES:
         assert p.model_init_kwargs_for_agent(agent_name=role, model_spec=p.NARRATOR_MODEL_SPEC) == {
-            "request_timeout": 90.0,
+            "request_timeout": 300.0,
             "profile": expected_profile,
             "thinking_level": "minimal",
         }
@@ -42,7 +42,7 @@ elif expected == "llm7":
     expected_kwargs = {
         "base_url": "https://api.llm7.io/v1",
         "use_responses_api": False,
-        "timeout": 30.0,
+        "timeout": 300.0,
     }
     expected_kwargs = {
         **expected_kwargs,
@@ -63,7 +63,7 @@ elif expected == "inception":
         "base_url": "https://api.inceptionlabs.ai/v1",
         "temperature": 0.75,
         "use_responses_api": False,
-        "timeout": 30.0,
+        "timeout": 300.0,
     }
     expected_kwargs = {
         **expected_kwargs,
@@ -105,7 +105,7 @@ assert profiles["openai"]["api_key"] == "llm7-first"
 assert profiles[p.ROOT_MODEL_SPEC]["api_key"] == "llm7-first"
 assert profiles[p.ROOT_MODEL_SPEC]["base_url"] == "https://api.llm7.io/v1"
 assert profiles[p.ROOT_MODEL_SPEC]["use_responses_api"] is False
-assert profiles[p.ROOT_MODEL_SPEC]["timeout"] == 30.0
+assert profiles[p.ROOT_MODEL_SPEC]["timeout"] == 300.0
 assert profiles[p.ROOT_MODEL_SPEC]["max_retries"] == 0
 assert "reasoning" not in profiles[p.ROOT_MODEL_SPEC]
 assert "output_version" not in profiles[p.ROOT_MODEL_SPEC]
@@ -135,7 +135,7 @@ assert profiles[p.ROOT_MODEL_SPEC]["api_key"] == "inception-first"
 assert profiles[p.ROOT_MODEL_SPEC]["base_url"] == "https://api.inceptionlabs.ai/v1"
 assert profiles[p.ROOT_MODEL_SPEC]["temperature"] == 0.75
 assert profiles[p.ROOT_MODEL_SPEC]["use_responses_api"] is False
-assert profiles[p.ROOT_MODEL_SPEC]["timeout"] == 30.0
+assert profiles[p.ROOT_MODEL_SPEC]["timeout"] == 300.0
 assert profiles[p.ROOT_MODEL_SPEC]["max_retries"] == 0
 assert "reasoning" not in profiles[p.ROOT_MODEL_SPEC]
 assert "output_version" not in profiles[p.ROOT_MODEL_SPEC]
