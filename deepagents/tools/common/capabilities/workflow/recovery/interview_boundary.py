@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
+from orchestration.agent_stream import (
+    AGENT_STREAM_STAGES,
+    agent_stream_rule_scope,
+    agent_stream_stage,
+    invoke_with_stream,
+)
 
 import hashlib
 import json
@@ -1471,15 +1476,29 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
 
             resumer = resume_managed_investigator
 
-        result = resumer(
-            config=self._config,
-            api_client=api_client,
-            assessment_id=assessment_id,
-            context_revision=context_revision,
-            continuation=continuation,
-            confirmed_context=confirmed_context,
-            correlation_id=correlationId,
+        affected_rule_ids = continuation.get("affectedRuleIds")
+        resumed_rule_id = (
+            str(affected_rule_ids[0])
+            if isinstance(affected_rule_ids, list) and len(affected_rule_ids) == 1
+            else None
         )
+        # The resumed Investigator streams under the same rule section that paused
+        # for the Customer, so its activity and result stay grouped with that rule.
+        with agent_stream_stage(AGENT_STREAM_STAGES["investigate"]), agent_stream_rule_scope(
+            resumed_rule_id
+        ) as rule_stream:
+            result = resumer(
+                config=self._config,
+                api_client=api_client,
+                assessment_id=assessment_id,
+                context_revision=context_revision,
+                continuation=continuation,
+                confirmed_context=confirmed_context,
+                correlation_id=correlationId,
+            )
+            resumed_handoff = result.get("handoff") if isinstance(result, dict) else None
+            if rule_stream is not None and isinstance(resumed_handoff, dict):
+                rule_stream.complete(resumed_handoff.get("claims") or ())
         if not isinstance(result, dict):
             raise RuntimeError("exact Investigator resume returned an invalid result")
         if result.get("executionId") != continuation.get("investigatorExecutionId"):
