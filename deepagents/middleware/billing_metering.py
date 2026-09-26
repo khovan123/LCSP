@@ -798,6 +798,9 @@ def _safe_scalar(value: Any) -> Any:
     return value if isinstance(value, (str, int, float, bool)) or value is None else None
 
 
+_DIAGNOSTIC_ROLE_TAIL = 8
+
+
 def _request_shape_diagnostic(request: Any, model: Any) -> dict[str, Any]:
     provider, model_name = provider_identity(model)
     messages = getattr(request, "messages", None)
@@ -809,15 +812,21 @@ def _request_shape_diagnostic(request: Any, model: Any) -> dict[str, Any]:
         for message in message_list
         if _message_role_shape(message) == "tool"
     ]
-    tool_call_id_shapes = [
-        _tool_call_id_shape(getattr(message, "tool_call_id", None))
-        for message in tool_messages
-    ]
+    # Long agent runs carry hundreds of messages; logging every role and every
+    # tool-call id shape made each line tens of KB. Keep the recent tail and the
+    # distinct shapes, which is what diagnosing a provider rejection needs.
+    tool_call_id_shapes: list[dict[str, Any]] = []
+    for message in tool_messages:
+        shape = _tool_call_id_shape(getattr(message, "tool_call_id", None))
+        if shape not in tool_call_id_shapes:
+            tool_call_id_shapes.append(shape)
+    roles = [_message_role_shape(message) for message in message_list]
     return {
         "provider": provider.lower(),
         "model": model_name,
         "message_count": len(message_list),
-        "message_roles": [_message_role_shape(message) for message in message_list],
+        "message_roles": roles[-_DIAGNOSTIC_ROLE_TAIL:],
+        "message_roles_omitted": max(0, len(roles) - _DIAGNOSTIC_ROLE_TAIL),
         "tool_count": len(tool_list),
         "tool_result_count": len(tool_messages),
         "tool_call_id_shapes": tool_call_id_shapes,
