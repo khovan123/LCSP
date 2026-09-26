@@ -18,7 +18,11 @@ from middleware.failure_policy import (
     is_terminal_task_error,
 )
 from orchestration.agent_stream import publish_agent_stream_event
-from middleware.token_fallback import credential_failure, model_provider
+from middleware.token_fallback import (
+    credential_failure,
+    further_provider_route,
+    model_provider,
+)
 from model_policy import (
     PROVIDER_PRESETS,
     canonical_provider,
@@ -210,7 +214,8 @@ class ProviderFallbackMiddleware(AgentMiddleware):
 
         if not _provider_route_disabled(current_provider):
             try:
-                return handler(request)
+                with further_provider_route(bool(routes)):
+                    return handler(request)
             except Exception as error:
                 if not provider_fallback_failure(error):
                     raise
@@ -227,7 +232,8 @@ class ProviderFallbackMiddleware(AgentMiddleware):
                 index=index,
             )
             try:
-                return handler(request.override(model=fallback_model(provider)))
+                with further_provider_route(index < len(routes)):
+                    return handler(request.override(model=fallback_model(provider)))
             except Exception as error:
                 if not provider_fallback_failure(error):
                     raise
@@ -248,7 +254,8 @@ class ProviderFallbackMiddleware(AgentMiddleware):
 
         if not _provider_route_disabled(current_provider):
             try:
-                return await handler(request)
+                with further_provider_route(bool(routes)):
+                    return await handler(request)
             except Exception as error:
                 if not provider_fallback_failure(error):
                     raise
@@ -265,7 +272,8 @@ class ProviderFallbackMiddleware(AgentMiddleware):
                 index=index,
             )
             try:
-                return await handler(request.override(model=fallback_model(provider)))
+                with further_provider_route(index < len(routes)):
+                    return await handler(request.override(model=fallback_model(provider)))
             except Exception as error:
                 if not provider_fallback_failure(error):
                     raise

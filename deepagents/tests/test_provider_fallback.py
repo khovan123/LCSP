@@ -523,15 +523,16 @@ def test_primary_key_pool_exhausts_before_llm7_pool(monkeypatch):
     assert [model_provider(item.model) for item in requests] == [
         "openai",
         "openai",
-        "openai",
+        "llm7",
         "llm7",
         "llm7",
     ]
-    # The OpenAI pool waits once and retries its soonest slot before llm7 is used.
+    # The OpenAI pool hands over to llm7 instead of waiting out its cooldown; only
+    # the last route (llm7) waits once and retries its soonest slot.
     assert [
         item.model.openai_api_key.get_secret_value()
         for item in requests
-    ] == ["openai-a", "openai-b", "openai-a", "llm7-a", "llm7-b"]
+    ] == ["openai-a", "openai-b", "llm7-a", "llm7-b", "llm7-a"]
     llm7_model = requests[-1].model
     assert str(llm7_model.openai_api_base).rstrip("/") == "https://api.llm7.io/v1"
     assert llm7_model.use_responses_api is False
@@ -607,14 +608,13 @@ def test_chain_advances_openai_then_google_then_llm7(monkeypatch):
     monkeypatch.setenv("LLM_FALLBACK_PROVIDER_2", "llm7")
     request = ModelRequest(model=_openai_model(), messages=[], tools=[])
     response = ModelResponse(result=[])
-    raw_handler = MagicMock(side_effect=[QuotaError()] * 6 + [response])
+    raw_handler = MagicMock(side_effect=[QuotaError()] * 4 + [response])
 
     assert _sync_chain(request, raw_handler) is response
+    # Rate-limited pools with a later route hand over without a cooldown retry.
     assert [model_provider(call.args[0].model) for call in raw_handler.call_args_list] == [
         "openai",
         "openai",
-        "openai",
-        "google_genai",
         "google_genai",
         "google_genai",
         "llm7",
@@ -642,8 +642,9 @@ def test_all_provider_pools_exhaust_to_terminal_error(monkeypatch):
 
     with pytest.raises(TerminalCredentialError, match="provider routes exhausted"):
         _sync_chain(request, raw_handler)
-    # Each two-slot pool: both slots, one cooldown wait, one retry of the soonest slot.
-    assert raw_handler.call_count == 6
+    # The OpenAI pool tries both slots and hands over; the last (llm7) pool tries
+    # both slots, waits once, and retries the soonest slot.
+    assert raw_handler.call_count == 5
 
 
 def test_current_provider_is_not_reentered_from_fallback_chain(monkeypatch):
@@ -763,3 +764,51 @@ async def test_output_rejected_by_every_route_reraises_the_schema_error(monkeypa
                 await fallback.awrap_model_call(request, async_reject)
             else:
                 fallback.wrap_model_call(request, reject)
+
+
+def test_rate_limited_llm7_pool_moves_to_google_without_cooldown_wait(monkeypatch):
+    from middleware import token_fallback
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(token_fallback, "_sleep", sleeps.append)
+    monkeypatch.setenv("LLM7_API_KEY", "llm7-a,llm7-b")
+    monkeypatch.setenv("GOOGLE_API_KEY", "google-a,google-b")
+    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "google_genai")
+    request = ModelRequest(model=_llm7_model(), messages=[], tools=[])
+    response = ModelResponse(result=[])
+    raw_handler = MagicMock(side_effect=[QuotaError(), QuotaError(), response])
+
+    assert _sync_chain(request, raw_handler) is response
+    requests = [call.args[0] for call in raw_handler.call_args_list]
+    assert [model_provider(item.model) for item in requests] == [
+        "llm7",
+        "llm7",
+        "google_genai",
+    ]
+    assert sleeps == []
+
+
+def test_last_provider_route_still_waits_for_its_cooldown(monkeypatch):
+    from middleware import token_fallback
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(token_fallback, "_sleep", sleeps.append)
+    monkeypatch.setenv("LLM7_API_KEY", "llm7-a,llm7-b")
+    monkeypatch.setenv("GOOGLE_API_KEY", "google-a,google-b")
+    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "google_genai")
+    request = ModelRequest(model=_llm7_model(), messages=[], tools=[])
+    response = ModelResponse(result=[])
+    raw_handler = MagicMock(
+        side_effect=[QuotaError(), QuotaError(), QuotaError(), QuotaError(), response]
+    )
+
+    assert _sync_chain(request, raw_handler) is response
+    requests = [call.args[0] for call in raw_handler.call_args_list]
+    assert [model_provider(item.model) for item in requests] == [
+        "llm7",
+        "llm7",
+        "google_genai",
+        "google_genai",
+        "google_genai",
+    ]
+    assert len(sleeps) == 1

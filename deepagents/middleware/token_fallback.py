@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import time
 import asyncio
+from contextlib import contextmanager
+from contextvars import ContextVar
 from hashlib import sha256
 
 from langchain.agents.middleware import AgentMiddleware
@@ -41,6 +43,21 @@ _RATE_LIMITED_UNTIL: dict[tuple[str, str], dict[int, float]] = {}
 _monotonic = time.monotonic
 _sleep = time.sleep
 _asleep = asyncio.sleep
+# Set by ProviderFallbackMiddleware while another provider route remains after the
+# current one. Waiting out a same-provider cooldown then only delays the run.
+_FURTHER_PROVIDER_ROUTE: ContextVar[bool] = ContextVar(
+    "lcsp_further_provider_route", default=False
+)
+
+
+@contextmanager
+def further_provider_route(available: bool):
+    """Declare whether a later provider route can take over this model call."""
+    token = _FURTHER_PROVIDER_ROUTE.set(available)
+    try:
+        yield
+    finally:
+        _FURTHER_PROVIDER_ROUTE.reset(token)
 
 
 def _credential_fingerprint(token: str) -> str:
@@ -194,7 +211,8 @@ class TokenFallbackMiddleware(AgentMiddleware):
     - 401/403: the slot is dead for this process and is skipped on later calls.
     - 429: the slot cools down (Retry-After when present, capped) and is skipped until
       it expires; it is never marked dead. When only cooling slots remain, the call
-      waits once for the soonest one and retries it (see ``_next_step``).
+      waits once for the soonest one and retries it (see ``_next_step``), unless a
+      later provider route can take the call (see ``further_provider_route``).
     - other transient failures (5xx, timeouts): move on to the next slot.
     - schema/request/billing failures: raised immediately, no rotation.
     """
@@ -536,6 +554,16 @@ class TokenFallbackMiddleware(AgentMiddleware):
             env_name=env_name,
             tokens=tokens,
         )
+        if wait is not None and _FURTHER_PROVIDER_ROUTE.get():
+            # Hand the call to the next provider now instead of sleeping for the
+            # soonest cooldown; the cooling slots stay recorded for later calls.
+            logger.warning(
+                "MODEL_CREDENTIAL_FALLBACK_DEFERRED_TO_PROVIDER_ROUTE",
+                provider=provider,
+                credential_env=env_name,
+                wait_seconds=wait[1],
+            )
+            return [], None, False
         return [], wait, False
 
     def _end_cooldown_wait(self, *, provider: str, env_name: str, index: int, attempted: set[int]) -> None:
@@ -743,6 +771,7 @@ class TokenFallbackMiddleware(AgentMiddleware):
 
 __all__ = [
     "TokenFallbackMiddleware",
+    "further_provider_route",
     "credential_failure",
     "model_provider",
     "model_with_token",
