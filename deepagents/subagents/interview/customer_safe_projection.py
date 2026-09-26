@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
+import json
 from typing import Any, Iterable, Mapping
 import re
 
@@ -395,33 +396,25 @@ _CANDIDATE_REF_LIST_KEYS = frozenset({
     "governed_evidence_refs",
     "whyEvidenceRefs",
 })
+# Bounds the allowed-ref list echoed back to the specialist in a correction.
+MAX_LISTED_ALLOWED_REFS = 200
 
 
-def drop_unauthorized_candidate_refs(
-    candidate: Any,
-    ledger: TurnEvidenceLedger,
-    *,
-    fallback_refs: Iterable[str] = (),
-) -> list[str]:
-    """Remove refs the turn ledger never authorized from a model candidate, in place.
+def unauthorized_candidate_refs(candidate: Any, authorized_refs: Iterable[str]) -> list[str]:
+    """Return every ref a model candidate cites that is not exactly in ``authorized_refs``.
 
-    Models sometimes cite invented ids (e.g. ``ev-agent-loop``). Those refs must never
-    be persisted, but they are only extra provenance: dropping them keeps the fail-closed
-    guarantee without failing the whole turn. A list emptied by the removal is refilled
-    with the authorized ``fallback_refs``. Returns the removed refs.
+    Refs are compared verbatim: no normalization, substitution or dropping happens here.
     """
-    fallback = [ref for ref in dict.fromkeys(str(r).strip() for r in fallback_refs) if ledger.is_authorized(ref)]
-    dropped: list[str] = []
+    allowed = {str(ref) for ref in authorized_refs}
+    rejected: list[str] = []
 
     def _walk(item: Any) -> None:
         if isinstance(item, dict):
             for key, value in item.items():
                 if key in _CANDIDATE_REF_LIST_KEYS and isinstance(value, list):
-                    kept = [ref for ref in value if isinstance(ref, str) and ledger.is_authorized(ref)]
-                    removed = [ref for ref in value if ref not in kept]
-                    if removed:
-                        dropped.extend(str(ref) for ref in removed)
-                        item[key] = kept or list(fallback)
+                    rejected.extend(
+                        str(ref) for ref in value if not isinstance(ref, str) or ref not in allowed
+                    )
                 else:
                     _walk(value)
         elif isinstance(item, list):
@@ -429,7 +422,24 @@ def drop_unauthorized_candidate_refs(
                 _walk(entry)
 
     _walk(candidate)
-    return list(dict.fromkeys(dropped))
+    return list(dict.fromkeys(rejected))
+
+
+def evidence_ref_correction_reason(
+    rejected_refs: Iterable[str],
+    authorized_refs: Iterable[str],
+) -> str:
+    """Explain an evidence-ref violation with the exact refs the specialist may cite."""
+    allowed = sorted({str(ref) for ref in authorized_refs})
+    listed = allowed[:MAX_LISTED_ALLOWED_REFS]
+    return (
+        "interview handoff cites evidence refs that are not authorized for this turn: "
+        f"{json.dumps(sorted(set(rejected_refs)), ensure_ascii=False)}. "
+        "Every evidence ref must be copied verbatim from allowedEvidenceRefs; never invent, "
+        "shorten or rename a ref, and use [] when no allowed ref supports the item. "
+        f"allowedEvidenceRefs: {json.dumps(listed, ensure_ascii=False)}"
+        + (f" (+{len(allowed) - len(listed)} more)" if len(allowed) > len(listed) else "")
+    )
 
 
 def extract_governed_evidence_refs(*sources: Any) -> set[str]:

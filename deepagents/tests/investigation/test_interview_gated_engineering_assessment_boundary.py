@@ -1012,43 +1012,29 @@ def test_finding_snippet_ref_is_bounded_to_the_interview_locator_limit(tmp_path)
     InterviewSnippetRef.model_validate(snippet_ref)
 
 
-def test_api_unauthorized_evidence_ref_is_stripped_and_question_resubmitted() -> None:
-    from tools.common.capabilities.platform.api_client import (
-        InterviewDecisionRepairableCallbackError,
-    )
-
+def test_inexact_evidence_ref_gets_one_specialist_correction_never_a_substitute() -> None:
     source_ref = "packages/api/src/features/ai/service.ts"
 
-    class RejectingApi(FakeApi):
-        def post_interview_initial_question(self, assessment_id, payload):
-            question = payload["activeQuestion"]
-            refs = [*question["whyEvidenceRefs"], *question["frontier"]["evidenceRefs"]]
-            if source_ref in refs:
-                self.seeded.append(("rejected", [*refs]))
-                raise InterviewDecisionRepairableCallbackError(
-                    "INTERVIEW_EVIDENCE_REF_UNAUTHORIZED: client error",
-                    error_code="INTERVIEW_EVIDENCE_REF_UNAUTHORIZED",
-                    status_code=400,
-                    meta={"unauthorizedRef": source_ref},
-                )
-            return super().post_interview_initial_question(assessment_id, payload)
-
-    class SourceRefDispatcher(FakeDispatcher):
+    class CorrectingDispatcher(FakeDispatcher):
         def dispatch(self, **kwargs):
             result = super().dispatch(**kwargs)
             question = result["handoff"]["activeQuestion"]
-            question["whyEvidenceRefs"] = ["technicalEvidenceReport:ter-1", source_ref]
-            question["frontier"]["evidenceRefs"] = [source_ref]
+            if len(self.calls) == 1:
+                # Authorized by the turn ledger (tool-visible) but not persistable.
+                question["whyEvidenceRefs"] = [source_ref]
+                question["frontier"]["evidenceRefs"] = ["ev-agent-loop"]
+            else:
+                question["whyEvidenceRefs"] = ["node-ref-1"]
+                question["frontier"]["evidenceRefs"] = ["node-ref-1"]
             return result
 
-    api = RejectingApi(
-        {"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0, "answerHistory": []}
-    )
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0, "answerHistory": []})
     report = _report()
-    # The worker ledger authorizes the tool-visible source locator; the API does not.
+    report["evidence_payload"]["evidence_graph"]["nodes"] = [{"evidence_refs": ["node-ref-1"]}]
     report["evidence_payload"]["findings"] = [{"evidence_refs": [source_ref]}]
+    dispatcher = CorrectingDispatcher()
 
-    result = _boundary(api, SourceRefDispatcher())._prepare_interview(
+    result = _boundary(api, dispatcher)._prepare_interview(
         evidence_report=report,
         evidence_report_id="ter-1",
         assessment_id="assessment-1",
@@ -1057,12 +1043,36 @@ def test_api_unauthorized_evidence_ref_is_stripped_and_question_resubmitted() ->
     )
 
     assert result is None
-    assert api.seeded[0][0] == "rejected"
-    assessment_id, payload = api.seeded[1]
-    assert assessment_id == "assessment-1"
-    question = payload["activeQuestion"]
-    assert question["whyEvidenceRefs"] == ["technicalEvidenceReport:ter-1"]
-    assert question["frontier"]["evidenceRefs"] == ["technicalEvidenceReport:ter-1"]
+    first, correction = dispatcher.calls
+    assert '"node-ref-1"' in first["instruction"]
+    assert source_ref not in first["instruction"]
+    assert correction["idempotency_key"].endswith(":schema-correction:1")
+    assert "ev-agent-loop" in correction["instruction"]
+    assert source_ref in correction["instruction"]
+    assert len(api.seeded) == 1
+    question = api.seeded[0][1]["activeQuestion"]
+    # The specialist's corrected refs are persisted verbatim; nothing substituted.
+    assert question["whyEvidenceRefs"] == ["node-ref-1"]
+    assert question["frontier"]["evidenceRefs"] == ["node-ref-1"]
+
+
+def test_repeated_inexact_evidence_ref_fails_closed() -> None:
+    from orchestration.result_validation import SpecialistHandoffValidationError
+
+    class FabricatingDispatcher(FakeDispatcher):
+        def dispatch(self, **kwargs):
+            result = super().dispatch(**kwargs)
+            result["handoff"]["activeQuestion"]["frontier"]["evidenceRefs"] = ["ev-agent-loop"]
+            return result
+
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0, "answerHistory": []})
+    dispatcher = FabricatingDispatcher()
+
+    with pytest.raises(SpecialistHandoffValidationError, match="ev-agent-loop"):
+        _boundary(api, dispatcher)._prepare_interview(**_initial_interview_kwargs())
+
+    assert len(dispatcher.calls) == 2
+    assert api.seeded == []
 
 
 def _initial_interview_kwargs():
@@ -1121,19 +1131,31 @@ def test_second_initial_handoff_violation_propagates() -> None:
     assert api.seeded == []
 
 
-def test_fabricated_question_refs_are_dropped_before_eligibility() -> None:
-    class FabricatingDispatcher(FakeDispatcher):
-        def dispatch(self, **kwargs):
-            result = super().dispatch(**kwargs)
-            question = result["handoff"]["activeQuestion"]
-            question["whyEvidenceRefs"] = ["ev-ai-sdk-generation"]
-            question["frontier"]["evidenceRefs"] = ["ev-ai-sdk-generation", "ev-agent-loop"]
-            return result
+def test_persistable_refs_mirror_the_api_governed_evidence_refs() -> None:
+    from tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary import (
+        _persistable_evidence_refs,
+    )
 
-    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0, "answerHistory": []})
+    report = {
+        "snapshot_id": "snap-1",
+        "evidence_payload": {
+            "evidence_refs": ["payload-ref"],
+            "findings": [{"evidence_refs": ["finding-only-ref"]}],
+            "evidence_graph": {
+                "evidenceRefs": ["graph-ref"],
+                "nodes": [{"evidence_refs": ["node-ref"]}, {"evidenceRefs": ["node-camel-ref"]}],
+                "edges": [{"evidence_refs": ["edge-ref", ""]}],
+            },
+        },
+    }
 
-    assert _boundary(api, FabricatingDispatcher())._prepare_interview(**_initial_interview_kwargs()) is None
-
-    question = api.seeded[0][1]["activeQuestion"]
-    assert question["whyEvidenceRefs"] == ["technicalEvidenceReport:ter-1"]
-    assert question["frontier"]["evidenceRefs"] == ["technicalEvidenceReport:ter-1"]
+    assert _persistable_evidence_refs(report, "ter-1") == {
+        "technicalEvidenceReport:ter-1",
+        "repositorySnapshot:snap-1",
+        "interviewRuntime:assessment-interview-runtime-v1",
+        "payload-ref",
+        "graph-ref",
+        "node-ref",
+        "node-camel-ref",
+        "edge-ref",
+    }
