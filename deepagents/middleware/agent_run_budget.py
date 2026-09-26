@@ -213,14 +213,6 @@ class AgentRunBudgetMiddleware(AgentMiddleware):
         }
 
 
-def with_agent_run_budget(middleware: Any) -> list[Any]:
-    """Prepend one default run budget unless the stack already declares one."""
-    items = list(middleware or [])
-    if any(isinstance(item, AgentRunBudgetMiddleware) for item in items):
-        return items
-    return [AgentRunBudgetMiddleware(), *items]
-
-
 def _run_model_calls(state: Any) -> int:
     if not isinstance(state, dict):
         return 0
@@ -283,5 +275,4 @@ __all__ = [
     "AGENT_CONTEXT_TRIMMED",
     "AgentRunBudgetMiddleware",
     "FINALIZE_INSTRUCTION",
-    "with_agent_run_budget",
 ]

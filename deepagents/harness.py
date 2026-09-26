@@ -18,6 +18,7 @@ from provider_credentials import credential_init_kwargs
 from model_policy import (
     ALL_LCSP_MODEL_SPECS,
     model_init_kwargs_for_agent,
+    model_profile_init_kwargs,
     ROOT_MODEL_SPEC,
     canonical_provider,
     openai_responses_base_init_kwargs,
@@ -52,18 +53,29 @@ def provider_profile_for(provider: str) -> ProviderProfile:
 
 
 def model_provider_profile_for(model_spec: str) -> ProviderProfile:
-    """Return the exact-model construction profile for LCSP reasoning-capable models."""
+    """Return the exact-model construction profile for LCSP reasoning-capable models.
+
+    Deep Agents builds every string model spec (root, ``task`` subagents and
+    directly dispatched specialists) from this profile, so it also carries the
+    model's context window for summarization, context trimming and billing guards.
+    """
     provider = provider_from_model_spec(model_spec)
     route_provider = route_provider_for_model_spec(model_spec)
+    _, _, model_name = model_spec.partition(":")
+    context_window = model_profile_init_kwargs(route_provider, model_name)
     if route_provider in {"llm7", "inception"}:
-        return ProviderProfile(init_kwargs=provider_init_kwargs(route_provider))
+        return ProviderProfile(
+            init_kwargs={**provider_init_kwargs(route_provider), **context_window}
+        )
     if model_spec == "google_genai:gemini-3.5-flash-lite":
         return ProviderProfile(init_kwargs=model_init_kwargs_for_agent(
             agent_name="lcsp-agent", model_spec=model_spec
         ))
     if provider == "openai" and supports_openai_reasoning(model_spec):
-        return ProviderProfile(init_kwargs=openai_responses_init_kwargs(model_spec))
-    return ProviderProfile(init_kwargs=provider_init_kwargs(provider))
+        return ProviderProfile(
+            init_kwargs={**openai_responses_init_kwargs(model_spec), **context_window}
+        )
+    return ProviderProfile(init_kwargs={**provider_init_kwargs(provider), **context_window})
 
 
 # LCSP intentionally uses the complete Deep Agents harness. Repository analysis runs

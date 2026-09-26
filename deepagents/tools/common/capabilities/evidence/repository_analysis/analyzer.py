@@ -20,6 +20,7 @@ from deepagents.backends import BackendProtocol
 from langchain.agents.middleware import TodoListMiddleware
 
 from harness import configure_lcsp_harness
+from middleware.agent_run_budget import AgentRunBudgetMiddleware
 from middleware.billing_metering import BillingAgentRoleMiddleware
 from middleware.model_governance import (
     MODEL_GOVERNANCE_MIDDLEWARE,
@@ -37,6 +38,7 @@ from .models import AiFinding, RepositoryAnalysisResult, SourceAnchor
 
 
 REPOSITORY_ANALYSIS_VERSION = "1.0.0"
+SCANNER_FINALIZE_AFTER_MODEL_CALLS = 80
 # Interview snippet locators are bounded to seven lines by the handoff contract and the
 # API snippet resolver; anchors may span a whole symbol, so findings point at its head.
 SNIPPET_REF_MAX_LINES = 7
@@ -172,6 +174,9 @@ class RepositoryDeepAnalyzer:
             backend=backend,
             system_prompt=SYSTEM_PROMPT,
             middleware=[
+                # Whole-repository analysis legitimately needs more steps than a
+                # single-rule investigation, but it must still converge.
+                AgentRunBudgetMiddleware(finalize_after=SCANNER_FINALIZE_AFTER_MODEL_CALLS),
                 TodoListMiddleware(),
                 BillingAgentRoleMiddleware("investigator"),
                 *MODEL_GOVERNANCE_MIDDLEWARE,

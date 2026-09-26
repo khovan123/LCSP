@@ -7,7 +7,11 @@ import json
 from typing import Any
 
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
-from model_policy import PLANNER_MODEL_SPEC, create_lcsp_agent as create_agent
+from deepagents import create_deep_agent
+from middleware.agent_run_budget import AgentRunBudgetMiddleware
+from middleware.billing_metering import BillingAgentRoleMiddleware
+from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
+from model_policy import PLANNER_MODEL_SPEC, resolve_agent_model
 from tools.common.capabilities.evidence.graph.schema.vocabulary import EDGE_TYPES, NODE_TYPES
 from tools.common.capabilities.agent_runtime.skill_loader import load_project_skill
 
@@ -53,9 +57,12 @@ class EngineeringRuleCompiler:
         if not compile_context:
             return []
         triage_skill = load_project_skill(TRIAGE_SKILL_NAME)
-        agent = create_agent(
-            agent_name="lcsp-engineering-rule-compiler",
-            model=self._model,
+        agent = create_deep_agent(
+            name="lcsp-engineering-rule-compiler",
+            model=resolve_agent_model(
+                agent_name="lcsp-engineering-rule-compiler", model_spec=self._model
+            ),
+            backend=current_repository_backend(),
             system_prompt=(
                 "Compile only triage-approved legal evidence into bounded, reusable "
                 "EngineeringRules. Preserve the legal obligation and its timing/conditions; "
@@ -65,7 +72,11 @@ class EngineeringRuleCompiler:
                 f"{triage_skill}"
             ),
             response_format=_engineering_rules_response_schema(),
-            middleware=MODEL_GOVERNANCE_MIDDLEWARE,
+            middleware=[
+                AgentRunBudgetMiddleware(),
+                BillingAgentRoleMiddleware("lcsp-engineering-rule-compiler"),
+                *MODEL_GOVERNANCE_MIDDLEWARE,
+            ],
         )
         result = invoke_with_stream(agent,
             {"messages": [{"role": "user", "content": self._prompt(legal_rule, compile_context)}]},

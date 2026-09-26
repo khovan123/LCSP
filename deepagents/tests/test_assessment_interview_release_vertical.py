@@ -723,7 +723,7 @@ def test_release_gate_crosses_production_boundaries_and_exact_resume_is_replay_s
     run_counter: list[int] = []
     monkeypatch.setattr(
         managed,
-        'create_agent',
+        'create_deep_agent',
         _durable_create_agent_factory(run_counter),
     )
 

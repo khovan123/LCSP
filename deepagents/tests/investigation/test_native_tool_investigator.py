@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import json
 from unittest.mock import patch
 
@@ -13,6 +15,15 @@ from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     MODEL_SELECTABLE_LIMITATION_CODES,
     InvestigationPacket,
 )
+
+
+@pytest.fixture(autouse=True)
+def _offline_agent_models(monkeypatch):
+    """Agents are built with create_deep_agent; keep model construction offline."""
+    monkeypatch.setattr(
+        "tools.common.capabilities.assessment.investigation.engineering_rule.investigator.resolve_agent_model",
+        lambda *, agent_name, model_spec: f"model:{agent_name}",
+    )
 
 
 def _graph() -> dict:
@@ -79,7 +90,7 @@ def test_investigator_uses_native_tools_and_structured_claims() -> None:
         return Agent()
 
     with patch(
-        "tools.common.capabilities.assessment.investigation.engineering_rule.investigator.create_agent",
+        "tools.common.capabilities.assessment.investigation.engineering_rule.investigator.create_deep_agent",
         side_effect=fake_create_agent,
     ):
         claims = LawGuidedInvestigator("test:model").investigate(
@@ -148,7 +159,7 @@ def test_unknown_observation_ref_fails_closed() -> None:
             }
 
     with patch(
-        "tools.common.capabilities.assessment.investigation.engineering_rule.investigator.create_agent",
+        "tools.common.capabilities.assessment.investigation.engineering_rule.investigator.create_deep_agent",
         return_value=Agent(),
     ):
         claim = LawGuidedInvestigator("test:model").investigate(
@@ -171,7 +182,7 @@ def test_empty_native_response_falls_back_to_seed_provenance() -> None:
             return {"structured_response": {"claims": []}}
 
     with patch(
-        "tools.common.capabilities.assessment.investigation.engineering_rule.investigator.create_agent",
+        "tools.common.capabilities.assessment.investigation.engineering_rule.investigator.create_deep_agent",
         return_value=Agent(),
     ):
         claim = LawGuidedInvestigator("test:model").investigate(
@@ -215,7 +226,7 @@ def test_evidence_less_native_claim_falls_back_to_seed_provenance() -> None:
             }
 
     with patch(
-        "tools.common.capabilities.assessment.investigation.engineering_rule.investigator.create_agent",
+        "tools.common.capabilities.assessment.investigation.engineering_rule.investigator.create_deep_agent",
         return_value=Agent(),
     ):
         claim = LawGuidedInvestigator("test:model").investigate(

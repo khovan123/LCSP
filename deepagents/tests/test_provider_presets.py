@@ -44,11 +44,13 @@ elif expected == "llm7":
         "use_responses_api": False,
         "timeout": 30.0,
     }
-    assert model_provider_profile_for(p.ROOT_MODEL_SPEC).init_kwargs == expected_kwargs
     expected_kwargs = {
         **expected_kwargs,
         "profile": p.model_profile_for_route("llm7", "GLM-5.3-Flash"),
     }
+    # Deep Agents builds string specs (root and subagents) from this profile, so it
+    # carries the same context window as an explicitly resolved agent model.
+    assert model_provider_profile_for(p.ROOT_MODEL_SPEC).init_kwargs == expected_kwargs
     assert p.model_init_kwargs_for_agent(
         agent_name="law_guided_investigator", model_spec=p.ROOT_MODEL_SPEC
     ) == expected_kwargs
@@ -63,11 +65,13 @@ elif expected == "inception":
         "use_responses_api": False,
         "timeout": 30.0,
     }
-    assert model_provider_profile_for(p.ROOT_MODEL_SPEC).init_kwargs == expected_kwargs
     expected_kwargs = {
         **expected_kwargs,
         "profile": p.model_profile_for_route("inception", "mercury-2.5"),
     }
+    # Deep Agents builds string specs (root and subagents) from this profile, so it
+    # carries the same context window as an explicitly resolved agent model.
+    assert model_provider_profile_for(p.ROOT_MODEL_SPEC).init_kwargs == expected_kwargs
     assert p.model_init_kwargs_for_agent(
         agent_name="law_guided_investigator", model_spec=p.ROOT_MODEL_SPEC
     ) == expected_kwargs

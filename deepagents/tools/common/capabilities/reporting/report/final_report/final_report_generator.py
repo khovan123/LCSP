@@ -2,7 +2,11 @@
 
 from orchestration.agent_stream import invoke_with_stream
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
-from model_policy import NARRATOR_MODEL_SPEC, create_lcsp_agent as create_agent
+from deepagents import create_deep_agent
+from middleware.agent_run_budget import AgentRunBudgetMiddleware
+from middleware.billing_metering import BillingAgentRoleMiddleware
+from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
+from model_policy import NARRATOR_MODEL_SPEC, resolve_agent_model
 
 
 class FinalReportGenerator:
@@ -110,14 +114,21 @@ class FinalReportGenerator:
         - Do not claim legal certification, legal approval, legal compliance, or a court-level violation conclusion.
         - Do not include raw source code.
         """
-        agent = create_agent(
-            agent_name="lcsp-final-report-narrator",
-            model=self._model,
+        agent = create_deep_agent(
+            name="lcsp-final-report-narrator",
+            model=resolve_agent_model(
+                agent_name="lcsp-final-report-narrator", model_spec=self._model
+            ),
+            backend=current_repository_backend(),
             system_prompt=(
                 "You draft bounded LCSP assessment narration. Never make a legal "
                 "certification, approval, or compliance conclusion."
             ),
-            middleware=MODEL_GOVERNANCE_MIDDLEWARE,
+            middleware=[
+                AgentRunBudgetMiddleware(),
+                BillingAgentRoleMiddleware("narrator"),
+                *MODEL_GOVERNANCE_MIDDLEWARE,
+            ],
         )
         result = invoke_with_stream(agent,
             {"messages": [{"role": "user", "content": prompt}]},

@@ -10,11 +10,8 @@ from langsmith_bootstrap import disable_langsmith_tracing_by_default
 
 disable_langsmith_tracing_by_default()
 
-from deepagents import create_deep_agent as _deepagents_create_agent
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models.model_profile import ModelProfile
-from middleware.agent_run_budget import with_agent_run_budget
-from middleware.billing_metering import BillingAgentRoleMiddleware
 from provider_credentials import (
     credential_init_kwargs,
     inception_base_url,
@@ -453,65 +450,6 @@ def resolve_agent_model(*, agent_name: str, model_spec: str):
         **model_init_kwargs_for_agent(agent_name=agent_name, model_spec=normalized),
         **credential_init_kwargs(route_provider),
     )
-
-
-def create_lcsp_agent(
-    *,
-    agent_name: str,
-    model: Any,
-    **kwargs: Any,
-):
-    """Create a Deep Agent with LCSP agent-scoped model policy applied."""
-    resolved_model = (
-        resolve_agent_model(agent_name=agent_name, model_spec=model)
-        if isinstance(model, str)
-        else model
-    )
-    langchain_name = kwargs.pop("name", agent_name)
-    middleware = kwargs.get("middleware")
-    # Specialist definitions declare their own role; a second instance with the same
-    # middleware name makes create_agent reject the whole stack.
-    if middleware is not None and not any(
-        isinstance(item, BillingAgentRoleMiddleware) for item in middleware
-    ):
-        middleware = [
-            BillingAgentRoleMiddleware(billing_role_for_agent(agent_name)),
-            *middleware,
-        ]
-    # Every LCSP agent run is bounded: an unbounded ReAct loop never returns and
-    # keeps re-sending a growing context until the provider rate-limits it.
-    kwargs["middleware"] = with_agent_run_budget(middleware)
-    if "backend" not in kwargs:
-        from tools.common.capabilities.platform.repository_sandbox import (
-            current_repository_backend,
-        )
-
-        repository_backend = current_repository_backend()
-        if repository_backend is not None:
-            kwargs["backend"] = repository_backend
-    return _deepagents_create_agent(
-        model=resolved_model,
-        name=langchain_name,
-        **kwargs,
-    )
-
-
-def billing_role_for_agent(agent_name: str) -> str:
-    """Map implementation agent names to the runtime pricing-policy roles."""
-    normalized = agent_name.strip().lower()
-    if normalized in {"lcsp-agent", "root"}:
-        return "root"
-    if "triage" in normalized:
-        return "triage"
-    if "planner" in normalized:
-        return "planner"
-    if "interview" in normalized:
-        return "interview"
-    if "investigator" in normalized:
-        return "investigator"
-    if normalized in NON_REASONING_AGENT_NAMES or "narrator" in normalized:
-        return "narrator"
-    return normalized
 
 
 def provider_init_kwargs(provider: str) -> dict[str, object]:

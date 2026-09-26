@@ -58,6 +58,8 @@ type ProjectedStreamRow = {
   id: string;
   runId: string;
   ruleId: string | null;
+  /** Sequence of the event that opened this row; keeps its place when updated. */
+  firstSequence: number;
   sequence: number;
   label: string;
   detail: string | null;
@@ -68,6 +70,8 @@ type ProjectedStreamRow = {
   input: AssessmentRuntimeSummaryValue | null;
   output: AssessmentRuntimeSummaryValue | null;
   technical: AssessmentRuntimeSummaryValue | null;
+  /** Calls folded into this row because they hit the same tool target. */
+  repeatCount: number;
 };
 
 export function AgentStreamTimeline({
@@ -215,6 +219,7 @@ function projectStreamRows(
   const ordered = [...events].sort((left, right) => left.sequence - right.sequence);
   const rows: ProjectedStreamRow[] = [];
   const toolRows = new Map<string, ProjectedStreamRow>();
+  const toolTargetRows = new Map<string, ProjectedStreamRow>();
   const modelProgressRows = new Map<string, ProjectedStreamRow>();
   const runtimeRows = new Map<string, ProjectedStreamRow>();
   const lifecycleRows = new Map<string, ProjectedStreamRow>();
@@ -283,7 +288,7 @@ function projectStreamRows(
           event.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed;
         existing.status = existing.failed ? "failed" : "completed";
         existing.meta = semanticMeta(event, semantic);
-        existing.technical = appendTechnicalDetails(
+        existing.technical = startAndLatestDetails(
           existing.technical,
           technicalEventDetails(event),
         );
@@ -295,6 +300,27 @@ function projectStreamRows(
           existing.output = cleanedStreamValue(semantic.resultSummary);
           existing.detail = null;
         }
+        previousMergeKey = null;
+        continue;
+      }
+
+      const targetKey =
+        semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall
+          ? toolTargetKey(event, semantic)
+          : null;
+      const sameTarget = targetKey ? toolTargetRows.get(targetKey) : undefined;
+      if (sameTarget) {
+        // Same tool on the same target: replace this row's input/output instead
+        // of appending another row for a repeated read or search.
+        sameTarget.sequence = event.sequence;
+        sameTarget.repeatCount += 1;
+        sameTarget.failed = false;
+        sameTarget.status = "running";
+        sameTarget.meta = semanticMeta(event, semantic);
+        sameTarget.input = cleanedStreamValue(semantic.parameters);
+        sameTarget.output = null;
+        sameTarget.technical = technicalEventDetails(event);
+        toolRows.set(toolIdentity, sameTarget);
         previousMergeKey = null;
         continue;
       }
@@ -322,6 +348,7 @@ function projectStreamRows(
           : "running";
       rows.push(projected);
       toolRows.set(toolIdentity, projected);
+      if (targetKey) toolTargetRows.set(targetKey, projected);
       previousMergeKey = null;
       continue;
     }
@@ -354,7 +381,7 @@ function projectStreamRows(
         existing.meta = updated.meta;
         existing.failed = updated.failed;
         existing.status = updated.status;
-        existing.technical = appendTechnicalDetails(
+        existing.technical = startAndLatestDetails(
           existing.technical,
           updated.technical,
         );
@@ -379,7 +406,7 @@ function projectStreamRows(
         existing.meta = updated.meta;
         existing.failed = updated.failed;
         existing.status = updated.status;
-        existing.technical = appendTechnicalDetails(
+        existing.technical = startAndLatestDetails(
           existing.technical,
           updated.technical,
         );
@@ -404,7 +431,7 @@ function projectStreamRows(
         existing.meta = updated.meta;
         existing.failed = updated.failed;
         existing.status = updated.status;
-        existing.technical = appendTechnicalDetails(
+        existing.technical = startAndLatestDetails(
           existing.technical,
           updated.technical,
         );
@@ -423,7 +450,7 @@ function projectStreamRows(
     if (mergeKey && previous && previousMergeKey === mergeKey) {
       previous.detail = `${previous.detail ?? ""}${event.text ?? ""}`;
       previous.sequence = event.sequence;
-      previous.technical = appendTechnicalDetails(
+      previous.technical = startAndLatestDetails(
         previous.technical,
         technicalEventDetails(event),
       );
@@ -839,6 +866,7 @@ function row(
     id: event.eventId,
     runId: event.runId,
     ruleId: event.engineeringRuleId,
+    firstSequence: event.sequence,
     sequence: event.sequence,
     label,
     detail,
@@ -849,6 +877,7 @@ function row(
     input: null,
     output: null,
     technical: technicalEventDetails(event),
+    repeatCount: 1,
   };
 }
 
@@ -1049,13 +1078,19 @@ function technicalEventDetails(
   return Object.keys(cleaned).length > 0 ? cleaned : null;
 }
 
-function appendTechnicalDetails(
+/**
+ * A row keeps the event that opened it and the latest one only. Heartbeats,
+ * retries and repeated calls replace the latest state instead of growing the
+ * row into one ever-longer log.
+ */
+function startAndLatestDetails(
   current: AssessmentRuntimeSummaryValue | null,
-  next: AssessmentRuntimeSummaryValue | null,
+  latest: AssessmentRuntimeSummaryValue | null,
 ): AssessmentRuntimeSummaryValue | null {
-  if (next === null) return current;
-  if (current === null) return next;
-  return Array.isArray(current) ? [...current, next] : [current, next];
+  if (latest === null) return current;
+  if (current === null) return latest;
+  const start = Array.isArray(current) ? (current[0] ?? null) : current;
+  return start === null ? latest : [start, latest];
 }
 
 function StreamTechnicalDetails({
@@ -1166,6 +1201,14 @@ function StreamRowView({
           >
             {row.label}
           </span>
+          {row.repeatCount > 1 ? (
+            <span
+              data-stream-repeat-count={row.repeatCount}
+              className="shrink-0 rounded-full bg-muted px-1.5 font-mono text-xs text-muted-foreground"
+            >
+              ×{row.repeatCount}
+            </span>
+          ) : null}
           {statusLabel ? (
             <span
               className={cn(
@@ -1378,6 +1421,40 @@ function toolIdentityKey(
     )}`;
   }
   return null;
+}
+
+// Arguments that name what a tool acts on. Paging arguments (offset, limit) are
+// deliberately excluded so re-reading another page of one file stays one row.
+const TOOL_TARGET_PARAMETER_KEYS = [
+  "file_path",
+  "path",
+  "url",
+  "command",
+  "pattern",
+  "glob",
+  "include",
+  "query",
+  "nodeType",
+] as const;
+
+function toolTargetKey(
+  event: AssessmentAgentStreamEvent,
+  semantic: SemanticRecord,
+): string | null {
+  const toolName = firstString(semantic.toolName, event.toolName);
+  const parameters = isSummaryRecord(semantic.parameters) ? semantic.parameters : null;
+  if (parameters === null) return null;
+  const target = TOOL_TARGET_PARAMETER_KEYS.flatMap((key) =>
+    parameters[key] === undefined ? [] : [[key, parameters[key]] as const],
+  );
+  return [
+    event.runId,
+    event.engineeringRuleId ?? "",
+    event.agentName ?? "",
+    event.namespace.join("/"),
+    toolName,
+    JSON.stringify(target.length > 0 ? target : parameters),
+  ].join(":");
 }
 
 function lifecycleEventProgressKey(

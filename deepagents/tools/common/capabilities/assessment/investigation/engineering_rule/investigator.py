@@ -10,8 +10,11 @@ from typing import Any
 from langchain.agents.middleware import ToolCallLimitMiddleware
 
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
-from middleware.billing_metering import BillingMeteringError
-from model_policy import INVESTIGATOR_MODEL_SPEC, create_lcsp_agent as create_agent
+from middleware.billing_metering import BillingAgentRoleMiddleware, BillingMeteringError
+from deepagents import create_deep_agent
+from middleware.agent_run_budget import AgentRunBudgetMiddleware
+from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
+from model_policy import INVESTIGATOR_MODEL_SPEC, resolve_agent_model
 from tools.common.capabilities.platform.logging import get_logger
 from tools.common.capabilities.platform.tracing import traceable
 
@@ -107,9 +110,12 @@ class LawGuidedInvestigator:
         if packet.confirmed_customer_context:
             ledger.add(source="confirmed_customer_context", result=dict(packet.confirmed_customer_context))
 
-        agent = create_agent(
-            agent_name="law_guided_investigator",
-            model=self._model,
+        agent = create_deep_agent(
+            name="law_guided_investigator",
+            model=resolve_agent_model(
+                agent_name="law_guided_investigator", model_spec=self._model
+            ),
+            backend=current_repository_backend(),
             system_prompt=(
                 "Investigate one EngineeringRule directly inside the assessment repository. "
                 "Use native Deep Agents filesystem/shell/task tools as the primary source of "
@@ -120,6 +126,8 @@ class LawGuidedInvestigator:
             ),
             response_format=self._claims_response_schema(),
             middleware=[
+                AgentRunBudgetMiddleware(),
+                BillingAgentRoleMiddleware("investigator"),
                 *MODEL_GOVERNANCE_MIDDLEWARE,
                 ToolCallLimitMiddleware(
                     run_limit=MAX_INVESTIGATION_STEPS,

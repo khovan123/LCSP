@@ -9,7 +9,6 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from middleware.agent_run_budget import (
     FINALIZE_INSTRUCTION,
     AgentRunBudgetMiddleware,
-    with_agent_run_budget,
 )
 from middleware.failure_policy import (
     AgentRunBudgetExceeded,
@@ -159,15 +158,6 @@ def test_context_that_cannot_be_trimmed_under_budget_finalizes():
 
     assert bounded.tools == []
     assert bounded.messages[-1].content == FINALIZE_INSTRUCTION
-
-
-def test_with_agent_run_budget_adds_one_budget_first():
-    marker = object()
-    stack = with_agent_run_budget([marker])
-    assert isinstance(stack[0], AgentRunBudgetMiddleware)
-    assert stack[1] is marker
-    assert with_agent_run_budget(stack) == stack
-    assert isinstance(with_agent_run_budget(None)[0], AgentRunBudgetMiddleware)
 
 
 def test_real_agent_loop_that_never_stops_calling_tools_is_bounded():

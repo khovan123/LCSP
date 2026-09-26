@@ -29,6 +29,15 @@ from tools.common.capabilities.assessment.planning.engineering_rule.confirmed_bu
 from tools.common.capabilities.evidence.graph.schema.models import ProgramEvidenceGraph
 
 
+@pytest.fixture(autouse=True)
+def _offline_agent_models(monkeypatch):
+    """Agents are built with create_deep_agent; keep model construction offline."""
+    monkeypatch.setattr(
+        "tools.common.capabilities.assessment.planning.engineering_rule.engineering_rule_planner.resolve_agent_model",
+        lambda *, agent_name, model_spec: f"model:{agent_name}",
+    )
+
+
 def _graph() -> ProgramEvidenceGraph:
     return ProgramEvidenceGraph(
         graph_id="graph-1",
@@ -126,7 +135,7 @@ def native_agent(monkeypatch):
     agent = MagicMock()
     monkeypatch.setattr(
         sys.modules[EngineeringRulePlanner.__module__],
-        "create_agent",
+        "create_deep_agent",
         lambda **_kwargs: agent,
     )
     return agent
