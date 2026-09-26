@@ -812,3 +812,41 @@ def test_last_provider_route_still_waits_for_its_cooldown(monkeypatch):
         "google_genai",
     ]
     assert len(sleeps) == 1
+
+
+def test_llm7_text_only_structured_answer_falls_back_to_google(monkeypatch):
+    from langchain.agents.structured_output import ToolStrategy
+    from pydantic import BaseModel
+    from middleware.model_governance import StopSchemaRepairMiddleware
+
+    class Answer(BaseModel):
+        count: int
+
+    monkeypatch.setenv("LLM7_API_KEY", "llm7-a,llm7-b")
+    monkeypatch.setenv("GOOGLE_API_KEY", "google-a")
+    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "google_genai")
+    request = ModelRequest(
+        model=_llm7_model(), messages=[], tools=[], response_format=ToolStrategy(Answer),
+    )
+    structured = ModelResponse(result=[AIMessage(content="")], structured_response=Answer(count=2))
+    raw_handler = MagicMock(side_effect=[
+        ModelResponse(result=[AIMessage(content="I think the answer is two.")]),
+        structured,
+    ])
+    stop_schema_repair = StopSchemaRepairMiddleware()
+    token_fallback = TokenFallbackMiddleware()
+
+    response = ProviderFallbackMiddleware().wrap_model_call(
+        request,
+        lambda provider_request: token_fallback.wrap_model_call(
+            provider_request,
+            lambda slot_request: stop_schema_repair.wrap_model_call(slot_request, raw_handler),
+        ),
+    )
+
+    assert response is structured
+    # The contract violation is provider-specific: no llm7 key rotation, straight to Google.
+    assert [model_provider(call.args[0].model) for call in raw_handler.call_args_list] == [
+        "llm7",
+        "google_genai",
+    ]

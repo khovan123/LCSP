@@ -7,8 +7,16 @@ from langchain.agents.middleware import (
     ModelRetryMiddleware,
     PIIMiddleware,
 )
-from langchain.agents.structured_output import AutoStrategy, ProviderStrategy, ToolStrategy
-from langchain_core.messages import ToolMessage
+import json
+
+from langchain.agents.middleware import ModelResponse
+from langchain.agents.structured_output import (
+    AutoStrategy,
+    OutputToolBinding,
+    ProviderStrategy,
+    ToolStrategy,
+)
+from langchain_core.messages import AIMessage, ToolMessage
 from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
 from middleware.provider_fallback import ProviderFallbackMiddleware
 from middleware.provider_schema import ProviderSchemaCompatibilityMiddleware
@@ -46,6 +54,21 @@ class StopSchemaRepairMiddleware(AgentMiddleware):
             raise StructuredOutputRejected(
                 "Structured output schema validation failed; automatic repair disabled"
             )
+        final = next(
+            (message for message in reversed(response.result) if isinstance(message, AIMessage)),
+            None,
+        )
+        if final is not None and not final.tool_calls:
+            # Tool strategy forces tool_choice, so a text-only answer broke the contract
+            # (LLM7 GLM does this). Accept it only when the text is exactly one schema-valid
+            # JSON object; otherwise reject it so provider fallback can try a provider with
+            # native structured output instead of ending the agent with no handoff.
+            parsed = _parse_text_structured_output(final, strategy)
+            if parsed is None:
+                raise StructuredOutputRejected(
+                    "Model answered without the structured-output tool; automatic repair disabled"
+                )
+            return ModelResponse(result=response.result, structured_response=parsed)
         return response
 
     @staticmethod
@@ -69,6 +92,34 @@ class StopSchemaRepairMiddleware(AgentMiddleware):
 
     async def awrap_model_call(self, request, handler):
         return self._check(request, await handler(request))
+
+
+def _parse_text_structured_output(message: AIMessage, strategy: ToolStrategy):
+    """Parse a text-only answer that is exactly one JSON object valid for the schema."""
+    content = message.content
+    if isinstance(content, list):
+        content = "".join(
+            block.get("text", "") if isinstance(block, dict) else str(block) for block in content
+        )
+    if not isinstance(content, str):
+        return None
+    text = content.strip()
+    if text.startswith("```"):
+        text = text.strip("`").strip()
+        if text.lower().startswith("json"):
+            text = text[4:].strip()
+    try:
+        payload = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    for spec in strategy.schema_specs:
+        try:
+            return OutputToolBinding.from_schema_spec(spec).parse(payload)
+        except Exception:
+            continue
+    return None
 
 
 def _redacting_pii(pii_type: str, detector: str | None = None) -> PIIMiddleware:
