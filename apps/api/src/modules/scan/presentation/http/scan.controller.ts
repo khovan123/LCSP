@@ -30,6 +30,7 @@ import {
   ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS,
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   isAssessmentAgentStreamEventType,
+  isAssessmentAgentStreamStage,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   ASSESSMENT_RUNTIME_STAGE_CODES,
   type AssessmentRuntimeEventType,
@@ -108,6 +109,7 @@ interface WorkerAgentStreamEventRequest {
   run_id?: unknown;
   correlation_id?: unknown;
   event_type?: unknown;
+  stage?: unknown;
   source?: unknown;
   agent_name?: unknown;
   subagent_name?: unknown;
@@ -603,6 +605,7 @@ export class InternalScanController {
         headerCorrelationId?.trim() ??
         randomUUID(),
       eventType: payload.event_type,
+      stage: isAssessmentAgentStreamStage(payload.stage) ? payload.stage : null,
       source: optionalText(payload.source),
       agentName: optionalText(payload.agent_name),
       subagentName: optionalText(payload.subagent_name),

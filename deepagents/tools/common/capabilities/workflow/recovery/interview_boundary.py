@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from orchestration.agent_stream import invoke_with_stream
+from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
 
 import hashlib
 import json
@@ -1430,6 +1430,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                     "trigger": "INTERVIEW_DOWNSTREAM_IMPACT_REEVALUATION",
                 },
             },
+            stage=AGENT_STREAM_STAGES["investigate"],
         )
 
     def _resume_exact_investigator(
@@ -1567,6 +1568,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                     "trigger": "ASSESSMENT_INTERVIEW_REVALIDATION_REQUIRED",
                 },
             },
+            stage=AGENT_STREAM_STAGES["interview"],
         )
 
     def _reenter_root_for_coverage_recovery(
@@ -1605,6 +1607,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                     "trigger": "ASSESSMENT_INTERVIEW_COVERAGE_RECOVERY_REQUIRED",
                 },
             },
+            stage=AGENT_STREAM_STAGES["interview"],
         )
 
     def _load_api_client(self):

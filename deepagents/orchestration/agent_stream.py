@@ -49,6 +49,17 @@ PRIVATE_GRAPH_KEYS = frozenset(
     }
 )
 
+# Customer-visible pipeline stage an event belongs to. Mirrors
+# ASSESSMENT_AGENT_STREAM_STAGES in packages/contracts so the workspace renders
+# one live timeline per stage (Scanner, Interview, Planner, Investigate, Gate).
+AGENT_STREAM_STAGES = {
+    "scanner": "SCANNER",
+    "interview": "INTERVIEW",
+    "planner": "PLANNER",
+    "investigate": "INVESTIGATE",
+    "gate": "GATE",
+}
+
 NOISY_STREAM_LOGGER_PREFIXES = (
     "httpx",
     "httpcore",
@@ -147,6 +158,7 @@ class AgentStreamSession:
     correlation_id: str
     boundary_name: str
     emit_payload: Callable[[dict[str, Any]], None]
+    stage: str | None = None
     sequence: int = field(default=0, init=False)
     emitted_model_requests: set[str] = field(default_factory=set, init=False)
     model_output_chunks: dict[str, list[str]] = field(
@@ -172,6 +184,9 @@ class AgentStreamSession:
             "source": self.boundary_name,
             **fields,
         }
+        stage = active_agent_stream_stage.get() or self.stage
+        if stage and "stage" not in fields:
+            payload["stage"] = stage
         self.emit_payload(_sanitize_payload(payload))
 
 
@@ -194,6 +209,26 @@ active_agent_stream: ContextVar[AgentStreamSession | None] = ContextVar(
 _emitting_stream_event: ContextVar[bool] = ContextVar(
     "emitting_agent_stream_event", default=False
 )
+active_agent_stream_stage: ContextVar[str | None] = ContextVar(
+    "active_agent_stream_stage", default=None
+)
+
+
+@contextmanager
+def agent_stream_stage(stage: str | None) -> Iterator[None]:
+    """Attribute every live event emitted in this block to one pipeline stage.
+
+    Nested stages win, so an Interview dispatched from inside the engineering
+    assessment boundary streams as Interview, not as the enclosing stage.
+    """
+    if not stage:
+        yield
+        return
+    token = active_agent_stream_stage.set(stage)
+    try:
+        yield
+    finally:
+        active_agent_stream_stage.reset(token)
 
 
 @contextmanager
@@ -251,12 +286,32 @@ def invoke_with_stream(
     config: Any | None = None,
     context: Any | None = None,
     agent_name: str | None = None,
+    stage: str | None = None,
 ) -> Any:
     """Invoke one LangGraph/Deep Agent while forwarding its v2 multi-mode stream.
 
     The final ``values`` projection is returned so existing business code receives
-    the same final graph state it previously obtained from ``invoke``.
+    the same final graph state it previously obtained from ``invoke``. ``stage``
+    attributes the whole stream to one customer-visible pipeline stage.
     """
+    with agent_stream_stage(stage):
+        return _invoke_with_stream(
+            agent,
+            input_value,
+            config=config,
+            context=context,
+            agent_name=agent_name,
+        )
+
+
+def _invoke_with_stream(
+    agent: Any,
+    input_value: Any,
+    *,
+    config: Any | None,
+    context: Any | None,
+    agent_name: str | None,
+) -> Any:
     session = active_agent_stream.get()
     if session is None or not callable(getattr(agent, "stream", None)):
         invoke_kwargs: dict[str, Any] = {}
@@ -355,8 +410,25 @@ def invoke_graph_with_stream(
     *,
     config: Any | None = None,
     graph_name: str = "workflow",
+    stage: str | None = None,
 ) -> Any:
     """Run a LangGraph workflow with live node/custom/state events and preserve invoke semantics."""
+    with agent_stream_stage(stage):
+        return _invoke_graph_with_stream(
+            graph,
+            input_value,
+            config=config,
+            graph_name=graph_name,
+        )
+
+
+def _invoke_graph_with_stream(
+    graph: Any,
+    input_value: Any,
+    *,
+    config: Any | None,
+    graph_name: str,
+) -> Any:
     if active_agent_stream.get() is None or not callable(getattr(graph, "stream", None)):
         if config is None:
             return graph.invoke(input_value)
@@ -1233,10 +1305,13 @@ def install_agent_stream_log_handler() -> None:
 
 
 __all__ = [
+    "AGENT_STREAM_STAGES",
     "AgentStreamSession",
     "BufferedAgentStreamEmitter",
     "activate_agent_stream",
     "active_agent_stream",
+    "active_agent_stream_stage",
+    "agent_stream_stage",
     "install_agent_stream_log_handler",
     "invoke_graph_with_stream",
     "invoke_with_stream",

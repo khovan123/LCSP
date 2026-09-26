@@ -5,6 +5,7 @@ import {
   ASSESSMENT_REPOSITORY_PROVIDERS,
 } from "@lcsp/contracts/assessment";
 import {
+  ASSESSMENT_AGENT_STREAM_STAGES,
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
   ASSESSMENT_INTERVIEW_CONTROLS,
   type AssessmentInterviewBlockedAction,
@@ -13,7 +14,7 @@ import {
 import { REPOSITORY_CONNECTION_STATUSES } from "@lcsp/contracts/github-integration";
 import { resolveMessage } from "@lcsp/i18n";
 import { SaveIcon, TextCursorInputIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { RepositorySetupConversation } from "@/features/assessment-flow/components/organisms/repository-setup-conversation";
@@ -42,6 +43,8 @@ import {
 } from "../../config/pipeline-continue";
 import { useAssessmentRuntimeViewModel } from "../../hooks/use-assessment-runtime-view-model";
 import type { AssessmentOverviewProps } from "../../types/assessment-overview.types";
+import { RUNTIME_THINKING_PHASES } from "../../types/workspace-runtime.types";
+import { groupAgentStreamEventsByStage } from "../../utils/agent-stream-stages";
 import {
   selectComposerAvailability,
   selectCustomerActions,
@@ -241,6 +244,16 @@ function AssessmentInterviewFlow({
   );
   const postFinding = selectPostFindingPresentation(normalized);
   const runtimeThinkingItems = selectRuntimeThinkingItems(normalized);
+  const plannerThinkingItems = runtimeThinkingItems.filter(
+    (item) => item.phase === RUNTIME_THINKING_PHASES.planner,
+  );
+  const investigatorThinkingItems = runtimeThinkingItems.filter(
+    (item) => item.phase === RUNTIME_THINKING_PHASES.investigator,
+  );
+  const stageEvents = useMemo(
+    () => groupAgentStreamEventsByStage(liveTimeline.agentStreamEvents ?? []),
+    [liveTimeline.agentStreamEvents],
+  );
   const runtimeInterviewState = interviewQuery.data;
   const interviewTurnTimestamp = normalized.identity.audit?.timestamp;
   const submitAnswer = useSubmitAssessmentInterviewAnswerMutation(assessmentId);
@@ -558,9 +571,9 @@ function AssessmentInterviewFlow({
       <AssessmentTranscript autoScrollKey={autoScrollKey}>
         {scanner}
         <AgentStreamTimeline
-          events={liveTimeline.agentStreamEvents ?? []}
-          activeRunId={interviewEnabled ? null : activeScanRunId}
-          reset={!interviewEnabled && resetScannerActivity}
+          events={stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.scanner]}
+          activeRunId={activeScanRunId}
+          reset={resetScannerActivity}
           history={liveTimeline.agentStreamHistory}
           onLoadOlder={() => {
             void workspaceRuntime.loadMoreAgentStreamHistory(assessmentId);
@@ -576,9 +589,34 @@ function AssessmentInterviewFlow({
               />
             ))}
 
-            {runtimeThinkingItems.map((item) => (
+            <AgentStreamTimeline
+              events={
+                stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.interview]
+              }
+            />
+
+            {plannerThinkingItems.map((item) => (
               <RuntimeThinkingActivity key={item.id} item={item} />
             ))}
+            <AgentStreamTimeline
+              events={
+                stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.planner]
+              }
+            />
+
+            {investigatorThinkingItems.map((item) => (
+              <RuntimeThinkingActivity key={item.id} item={item} />
+            ))}
+            <AgentStreamTimeline
+              events={
+                stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.investigate]
+              }
+            />
+
+            <AgentStreamTimeline
+              events={stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.gate]}
+            />
+            <AgentStreamTimeline events={stageEvents.unstaged} />
 
             {interview.questionTurnProps ? (
               <AgentTurn
@@ -743,7 +781,9 @@ function AssessmentInterviewFlow({
               </AgentTurn>
             ) : null}
           </>
-        ) : null}
+        ) : (
+          <AgentStreamTimeline events={stageEvents.unstaged} />
+        )}
       </AssessmentTranscript>
 
       <AssessmentComposer

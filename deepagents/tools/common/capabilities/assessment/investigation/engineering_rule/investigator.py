@@ -1,7 +1,7 @@
 """LLM-guided, evidence-bounded investigation over the Program Evidence Graph."""
 from __future__ import annotations
 
-from orchestration.agent_stream import invoke_with_stream
+from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
 
 import hashlib
 import json
@@ -137,6 +137,7 @@ class LawGuidedInvestigator:
                         "engineering_rule_id": packet.engineering_rule_id,
                     }
                 },
+                stage=AGENT_STREAM_STAGES["investigate"],
             )
             payload = response.get("structured_response") or {}
             if hasattr(payload, "model_dump"):

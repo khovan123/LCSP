@@ -4,6 +4,7 @@ import { RepositoryScanJobStatus as PrismaRepositoryScanJobStatus } from "@prism
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   ASSESSMENT_AGENT_STREAM_EVENT_TYPES,
+  ASSESSMENT_AGENT_STREAM_STAGES,
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
 } from "@lcsp/contracts/evidence";
@@ -443,6 +444,47 @@ describe("InternalScanController", () => {
       ok: true,
       data: { recorded: true, eventId: "agent-event-1" },
     });
+  });
+
+  it("keeps the worker's pipeline stage so each stage streams on its own timeline", async () => {
+    const publishAgentStreamEvent = jest.fn((value: unknown) =>
+      Promise.resolve({ ...(value as object), eventId: "agent-event-stage" }),
+    );
+    const controller = new InternalScanController(
+      {} as unknown as CommandBus,
+      { publishAgentStreamEvent } as never,
+      {} as never,
+    );
+
+    await controller.recordAgentStreamEvent(
+      {
+        assessment_id: "assessment-1",
+        run_id: "run-1",
+        event_type: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
+        stage: ASSESSMENT_AGENT_STREAM_STAGES.planner,
+      },
+      "corr-header",
+    );
+    await controller.recordAgentStreamEvent(
+      {
+        assessment_id: "assessment-1",
+        run_id: "run-1",
+        event_type: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
+        stage: "not-a-stage",
+      },
+      "corr-header",
+    );
+
+    expect(publishAgentStreamEvent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        stage: ASSESSMENT_AGENT_STREAM_STAGES.planner,
+      }),
+    );
+    expect(publishAgentStreamEvent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ stage: null }),
+    );
   });
 
   it("accepts model-call telemetry events from the worker stream", async () => {

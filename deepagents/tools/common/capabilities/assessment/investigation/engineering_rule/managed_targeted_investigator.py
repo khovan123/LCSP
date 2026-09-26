@@ -9,7 +9,7 @@ before deterministic evaluation or the outer assessment callback can continue.
 
 from __future__ import annotations
 
-from orchestration.agent_stream import invoke_with_stream
+from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
 
 import hashlib
 import json
@@ -754,6 +754,7 @@ def _invoke_managed_investigator(
                         },
                     },
                     context=context,
+                    stage=AGENT_STREAM_STAGES["investigate"],
                 )
                 if not isinstance(invocation, dict) or "structured_response" not in invocation:
                     raise SpecialistHandoffValidationError(
