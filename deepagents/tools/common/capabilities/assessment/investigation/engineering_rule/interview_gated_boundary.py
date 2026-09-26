@@ -233,6 +233,7 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
         from subagents.interview.customer_safe_projection import (
             TurnEvidenceLedger,
             build_why_are_we_asking_explanation,
+            drop_unauthorized_candidate_refs,
             evaluate_question_eligibility,
             extract_governed_evidence_refs,
             reset_active_turn_evidence_ledger,
@@ -376,6 +377,17 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
         frontier = question.get("frontier")
         if not isinstance(frontier, dict):
             raise ValueError("Initial Interview question candidate requires frontier metadata")
+        dropped_refs = drop_unauthorized_candidate_refs(
+            question,
+            ledger,
+            fallback_refs=(f"technicalEvidenceReport:{evidence_report_id}",),
+        )
+        if dropped_refs:
+            _LOGGER.warning(
+                "INTERVIEW_UNAUTHORIZED_REFS_DROPPED assessment_id=%s count=%s",
+                assessment_id,
+                len(dropped_refs),
+            )
         eligible, reason = evaluate_question_eligibility(frontier, ledger)
         if not eligible:
             raise ValueError(f"Initial Interview question candidate is not eligible: {reason}")

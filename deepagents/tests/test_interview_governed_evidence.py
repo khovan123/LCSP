@@ -1307,7 +1307,34 @@ def test_interview_canonicalizes_raw_turn_version_refs() -> None:
     assert question["whyEvidenceRefs"] == expected
 
 
-def test_interview_still_rejects_refs_to_other_artifacts() -> None:
-    """Only this turn's exact identifiers are aliased; another report stays fabricated."""
-    with pytest.raises(ValueError, match="unauthorized or fabricated"):
-        _raw_version_ref_boundary(["ter-2:1.0.0"])()
+def test_interview_never_persists_refs_to_other_artifacts() -> None:
+    """Only this turn's exact identifiers are aliased; another report stays fabricated.
+
+    A fabricated ref is dropped (never persisted) and the question falls back to this
+    turn's governed report ref instead of failing the whole Interview turn.
+    """
+    decision = _raw_version_ref_boundary(["ter-2:1.0.0", "ev-agent-loop"])()
+
+    question = decision["activeQuestion"]
+    assert question["frontier"]["evidenceRefs"] == ["technicalEvidenceReport:ter-1"]
+    assert question["whyEvidenceRefs"] == ["technicalEvidenceReport:ter-1"]
+
+
+def test_drop_unauthorized_candidate_refs_keeps_statements_without_fallback() -> None:
+    from subagents.interview.customer_safe_projection import drop_unauthorized_candidate_refs
+
+    ledger = TurnEvidenceLedger(initial_authorized_refs=["technicalEvidenceReport:ter-1", "node:a"])
+    question = {"whyEvidenceRefs": ["ev-x"], "frontier": {"evidenceRefs": ["node:a", "ev-y"]}}
+    confirmed = {"statements": [{"statementId": "s1", "evidenceRefs": ["ev-z"]}]}
+
+    assert drop_unauthorized_candidate_refs(
+        question, ledger, fallback_refs=("technicalEvidenceReport:ter-1", "not-authorized"),
+    ) == ["ev-x", "ev-y"]
+    assert drop_unauthorized_candidate_refs(confirmed, ledger) == ["ev-z"]
+
+    assert question == {
+        "whyEvidenceRefs": ["technicalEvidenceReport:ter-1"],
+        "frontier": {"evidenceRefs": ["node:a"]},
+    }
+    assert confirmed["statements"][0]["evidenceRefs"] == []
+    assert drop_unauthorized_candidate_refs(None, ledger) == []

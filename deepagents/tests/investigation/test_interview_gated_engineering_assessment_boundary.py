@@ -1119,3 +1119,21 @@ def test_second_initial_handoff_violation_propagates() -> None:
 
     assert len(dispatcher.calls) == 2
     assert api.seeded == []
+
+
+def test_fabricated_question_refs_are_dropped_before_eligibility() -> None:
+    class FabricatingDispatcher(FakeDispatcher):
+        def dispatch(self, **kwargs):
+            result = super().dispatch(**kwargs)
+            question = result["handoff"]["activeQuestion"]
+            question["whyEvidenceRefs"] = ["ev-ai-sdk-generation"]
+            question["frontier"]["evidenceRefs"] = ["ev-ai-sdk-generation", "ev-agent-loop"]
+            return result
+
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0, "answerHistory": []})
+
+    assert _boundary(api, FabricatingDispatcher())._prepare_interview(**_initial_interview_kwargs()) is None
+
+    question = api.seeded[0][1]["activeQuestion"]
+    assert question["whyEvidenceRefs"] == ["technicalEvidenceReport:ter-1"]
+    assert question["frontier"]["evidenceRefs"] == ["technicalEvidenceReport:ter-1"]
