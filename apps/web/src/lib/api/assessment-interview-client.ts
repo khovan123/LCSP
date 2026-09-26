@@ -19,7 +19,8 @@ import {
   type AssessmentInterviewAnswerInput,
   type AssessmentInterviewAuditRef,
   type AssessmentInterviewBlockedInput,
-  type AssessmentInterviewResumeInput,
+  type AssessmentPipelineContinueAction,
+  type AssessmentPipelineContinueResult,
   type AssessmentInterviewFlag,
   type AssessmentInterviewQuestion,
   type AssessmentInterviewQuestionChoice,
@@ -29,6 +30,7 @@ import {
   type SubmitInterviewAnswerCommand,
   INTERVIEW_TECHNICAL_CONTRACT_VERSION,
   ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES,
+  ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES,
 } from "@lcsp/contracts/evidence";
 
 import { BILLING_ERROR_CODES } from "@lcsp/contracts/billing";
@@ -155,39 +157,60 @@ export async function recordAssessmentInterviewBlockedAction(
   );
 }
 
-export type AssessmentInterviewResumeOutcome =
+export type AssessmentPipelineContinueOutcome =
   | {
       kind: typeof API_OUTCOME_KINDS.requested;
-      state: AssessmentInterviewRuntimeState;
+      action: AssessmentPipelineContinueAction;
     }
+  | { kind: typeof API_OUTCOME_KINDS.alreadyRunning }
+  | { kind: typeof API_OUTCOME_KINDS.waitingForCustomer }
+  | { kind: typeof API_OUTCOME_KINDS.completed }
   | { kind: typeof API_OUTCOME_KINDS.rateLimited }
   | { kind: typeof API_OUTCOME_KINDS.insufficientCredits }
   | { kind: typeof API_OUTCOME_KINDS.error };
 
-export async function resumeAssessmentInterviewTurn(
+const PIPELINE_CONTINUE_PROBLEM_OUTCOMES: Record<
+  string,
+  Exclude<
+    AssessmentPipelineContinueOutcome,
+    { kind: typeof API_OUTCOME_KINDS.requested }
+  >
+> = {
+  [ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES.alreadyRunning]: {
+    kind: API_OUTCOME_KINDS.alreadyRunning,
+  },
+  [ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES.waitingForCustomer]: {
+    kind: API_OUTCOME_KINDS.waitingForCustomer,
+  },
+  [ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES.completed]: {
+    kind: API_OUTCOME_KINDS.completed,
+  },
+  [ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.limitReached]: {
+    kind: API_OUTCOME_KINDS.rateLimited,
+  },
+  [BILLING_ERROR_CODES.insufficientCredits]: {
+    kind: API_OUTCOME_KINDS.insufficientCredits,
+  },
+};
+
+/** Continue a paused or stopped assessment pipeline from wherever it stopped. */
+export async function continueAssessmentPipeline(
   assessmentId: string,
-  input: AssessmentInterviewResumeInput,
-): Promise<AssessmentInterviewResumeOutcome> {
+): Promise<AssessmentPipelineContinueOutcome> {
   const { ok, payload, problemCode } = await apiRequest(
-    `/api/assessments/${encodeURIComponent(assessmentId)}/interview/resume`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
-    },
+    `/api/assessments/${encodeURIComponent(assessmentId)}/pipeline/continue`,
+    { method: "POST" },
   );
   if (ok) {
     return {
       kind: API_OUTCOME_KINDS.requested,
-      state: payload as AssessmentInterviewRuntimeState,
+      action: (payload as AssessmentPipelineContinueResult).action,
     };
   }
-  if (problemCode === ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.limitReached) {
-    return { kind: API_OUTCOME_KINDS.rateLimited };
-  }
-  return problemCode === BILLING_ERROR_CODES.insufficientCredits
-    ? { kind: API_OUTCOME_KINDS.insufficientCredits }
-    : { kind: API_OUTCOME_KINDS.error };
+  const mapped = problemCode
+    ? PIPELINE_CONTINUE_PROBLEM_OUTCOMES[problemCode]
+    : undefined;
+  return mapped ?? { kind: API_OUTCOME_KINDS.error };
 }
 
 export async function submitAssessmentPostFindingDecision(

@@ -1,9 +1,11 @@
 export const API_OUTCOME_KINDS = {
   accessRevoked: "access_revoked",
+  alreadyRunning: "already_running",
   alreadyResolved: "already_resolved",
   alreadySubmitted: "already_submitted",
   authenticated: "authenticated",
   blocked: "blocked",
+  completed: "completed",
   created: "created",
   disabled: "disabled",
   emailAlreadyExists: "email_already_exists",
@@ -25,6 +27,7 @@ export const API_OUTCOME_KINDS = {
   submitted: "submitted",
   validationError: "validation_error",
   verified: "verified",
+  waitingForCustomer: "waiting_for_customer",
   workspaceSelectionRequired: "workspace_selection_required",
 } as const;
 

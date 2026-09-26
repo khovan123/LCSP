@@ -71,8 +71,6 @@ import {
   NotFoundException,
   Optional,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { BILLING_ERROR_CODES } from "@lcsp/contracts/billing";
 import { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
@@ -81,7 +79,7 @@ import { problemException } from "../../../../platform/http/filters/error.factor
 import { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
 import { InterviewAuditService } from "../../../audit/application/services/interview-audit.service.js";
-import { BillingAccountingKernel } from "../../../billing/application/shared/billing-accounting.kernel.js";
+import { AssessmentModelCreditPreflight } from "./assessment-model-credit-preflight.js";
 import {
   normalizeStrategy,
   updateInterviewWorkingStrategy,
@@ -344,8 +342,8 @@ export class AssessmentInterviewRuntimeService {
     private readonly runtimeEvents: AssessmentRuntimeEventService,
     private readonly outboxRepository: OutboxRepository,
     private readonly interviewAudit: InterviewAuditService,
-    @Optional() private readonly billingAccounting?: BillingAccountingKernel,
-    @Optional() private readonly config?: ConfigService,
+    @Optional()
+    private readonly creditPreflight?: AssessmentModelCreditPreflight,
   ) {}
 
   async getState(
@@ -871,6 +869,32 @@ export class AssessmentInterviewRuntimeService {
   }
 
   /**
+   * Summarises the Interview thread for pipeline Continue after the caller has
+   * checked visibility: whether the Customer owes an answer, and whether an
+   * answered turn is still waiting for its Interview Agent decision.
+   */
+  async pipelineInterviewStatus(assessmentId: string): Promise<{
+    awaitingCustomer: boolean;
+    pendingTurn: boolean;
+  }> {
+    const thread = await this.readThread(assessmentId);
+    // A blocked Interview waits for the Customer's blocked-action choice.
+    const awaitingCustomer = Boolean(
+      thread.activeQuestionId ||
+      thread.state.activeQuestion ||
+      thread.state.outcome ===
+        ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved,
+    );
+    return {
+      awaitingCustomer,
+      pendingTurn:
+        thread.exists &&
+        !awaitingCustomer &&
+        thread.processedRevision < thread.contextRevision,
+    };
+  }
+
+  /**
    * Re-queues the Interview Agent decision for the current context revision
    * after the worker reported FAILED. The Customer answer is already persisted,
    * so the retry reuses the same revision instead of asking for a new answer.
@@ -880,10 +904,13 @@ export class AssessmentInterviewRuntimeService {
     actor: RbacRequestContext;
     correlationId: string;
     resume: AssessmentInterviewResumeInput;
+    // Pipeline Continue has already proven no worker owns the turn, so a turn
+    // that stalled without reporting FAILED (worker crash) is resumable too.
+    allowStalled?: boolean;
   }): Promise<AssessmentInterviewRuntimeState> {
     const resume = parseResumeInput(input.resume, input.correlationId);
     await this.assertAssessmentVisible(input.assessmentId, input.actor);
-    await this.assertResumeCreditsAvailable(
+    await this.creditPreflight?.assertAvailable(
       input.assessmentId,
       input.correlationId,
     );
@@ -901,6 +928,7 @@ export class AssessmentInterviewRuntimeService {
     const next = await this.runInterviewTransaction(async (tx) => {
       const thread = await this.readThread(input.assessmentId, tx);
       const turnFailed =
+        input.allowStalled === true ||
         thread.privateStore.failedDecisionRevision === thread.contextRevision ||
         (thread.contextRevision === currentRevision &&
           latestProgressPhase === INTERVIEW_PROGRESS_PHASES.failed);
@@ -1047,51 +1075,6 @@ export class AssessmentInterviewRuntimeService {
     });
 
     return publicState(next.state);
-  }
-
-  /**
-   * Refuses a resume the worker could not bill. The worker reserves
-   * billing.reservationCredits from the assessment owner's wallet before the
-   * Interview Agent runs; queueing a turn the wallet cannot cover only strands
-   * the Customer on a QUEUED turn that never starts.
-   */
-  private async assertResumeCreditsAvailable(
-    assessmentId: string,
-    correlationId: string,
-  ): Promise<void> {
-    if (
-      !this.billingAccounting ||
-      !this.config?.get<boolean>("billing.meteringEnabled", false)
-    ) {
-      return;
-    }
-    const configured = this.config
-      .get<string>("billing.reservationCredits", "")
-      .trim();
-    if (!/^[0-9]+$/.test(configured)) return;
-    const requiredCredits = BigInt(configured);
-    const assessment = await this.prisma.assessment.findUnique({
-      where: { id: assessmentId },
-      select: { ownerId: true },
-    });
-    if (!assessment?.ownerId) return;
-    const availableCredits = await this.billingAccounting
-      .rebuildProjection(assessment.ownerId)
-      .then((projection) => projection.availableBalance)
-      .catch(() => 0n);
-    if (availableCredits < requiredCredits) {
-      throw problemException(
-        BILLING_ERROR_CODES.insufficientCredits,
-        correlationId,
-        {
-          status: HttpStatus.PAYMENT_REQUIRED,
-          meta: {
-            requiredCredits: requiredCredits.toString(),
-            availableCredits: availableCredits.toString(),
-          },
-        },
-      );
-    }
   }
 
   async recordBlockedAction(input: {
@@ -2266,7 +2249,7 @@ export class AssessmentInterviewRuntimeService {
     }
   }
 
-  private async assertAssessmentVisible(
+  async assertAssessmentVisible(
     assessmentId: string,
     actor: RbacRequestContext,
   ): Promise<void> {

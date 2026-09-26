@@ -841,6 +841,35 @@ export type AssessmentInterviewResumeInput = {
   expectedSessionRevision?: number;
 };
 
+/** What a Customer "Continue" did to a paused or stopped assessment pipeline. */
+export const ASSESSMENT_PIPELINE_CONTINUE_ACTIONS = {
+  interviewTurnResumed: "INTERVIEW_TURN_RESUMED",
+  downstreamRequeued: "DOWNSTREAM_REQUEUED",
+} as const;
+
+export type AssessmentPipelineContinueAction =
+  (typeof ASSESSMENT_PIPELINE_CONTINUE_ACTIONS)[keyof typeof ASSESSMENT_PIPELINE_CONTINUE_ACTIONS];
+
+export const ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES = {
+  alreadyRunning: "PIPELINE_ALREADY_RUNNING",
+  waitingForCustomer: "PIPELINE_WAITING_FOR_CUSTOMER",
+  completed: "PIPELINE_COMPLETED",
+} as const;
+
+export type AssessmentPipelineContinueProblemCode =
+  (typeof ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES)[keyof typeof ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES];
+
+/** Audit reason recorded when Continue re-sends accepted technical evidence. */
+export const ASSESSMENT_PIPELINE_CONTINUE_RERUN_REASON =
+  "CUSTOMER_PIPELINE_CONTINUE";
+
+/** Runtime activity newer than this means a worker still owns the pipeline. */
+export const ASSESSMENT_PIPELINE_LIVENESS_WINDOW_SECONDS = 90;
+
+export type AssessmentPipelineContinueResult = {
+  action: AssessmentPipelineContinueAction;
+};
+
 type StringLiteralRecord = Record<string, string>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {

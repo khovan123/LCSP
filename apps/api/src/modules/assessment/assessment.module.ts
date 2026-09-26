@@ -15,6 +15,8 @@ import { GetAssessmentHandler } from "./application/queries/get-assessment/get-a
 import { GetAssessmentReadinessHandler } from "./application/queries/get-assessment-readiness/get-assessment-readiness.handler.js";
 import { AssessmentInterviewRuntimeService } from "./application/services/assessment-interview-runtime.service.js";
 import { AssessmentInterviewSnippetService } from "./application/services/assessment-interview-snippet.service.js";
+import { AssessmentModelCreditPreflight } from "./application/services/assessment-model-credit-preflight.js";
+import { AssessmentPipelineContinuationService } from "./application/services/assessment-pipeline-continuation.service.js";
 import { ListAssessmentsHandler } from "./application/queries/list-assessments/list-assessments.handler.js";
 import { ASSESSMENT_BILLING_RETENTION } from "./application/ports/billing/assessment-billing-retention.port.js";
 import { ASSESSMENT_REPOSITORY } from "./application/ports/persistence/assessment.repository.js";
@@ -34,6 +36,8 @@ import {
   providers: [
     AssessmentInterviewRuntimeService,
     AssessmentInterviewSnippetService,
+    AssessmentModelCreditPreflight,
+    AssessmentPipelineContinuationService,
     AssessmentRuntimeEventService,
     WorkerApiKeyGuard,
     CreateAssessmentHandler,

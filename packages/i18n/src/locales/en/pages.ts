@@ -1779,6 +1779,18 @@ export const enPages = {
         "Your answer has been saved. Waiting for the evaluation result or the next question.",
       placeholder: "Describe the project or system...",
     },
+    pipeline: {
+      continueQueued:
+        "Continuing the assessment from the step where it stopped.",
+      continueAlreadyRunning:
+        "The assessment is still running. If it stops, press Resume again.",
+      continueWaitingForCustomer:
+        "The assessment is waiting for your answer to the current question.",
+      continueCompleted:
+        "This assessment has finished; there is no step left to continue.",
+      continueFailed:
+        "The assessment could not be continued right now. Please try again.",
+    },
     technicalEvidence: {
       progress: "Assessment progress",
       plannerProgress: "Planner progress",

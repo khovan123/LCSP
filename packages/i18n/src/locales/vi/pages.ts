@@ -1780,6 +1780,16 @@ export const viPages = {
         "Câu trả lời đã được lưu. Đang chờ kết quả đánh giá hoặc câu hỏi tiếp theo.",
       placeholder: "Mô tả project hoặc system...",
     },
+    pipeline: {
+      continueQueued: "Đang tiếp tục assessment từ bước đã dừng.",
+      continueAlreadyRunning:
+        "Assessment vẫn đang chạy. Nếu pipeline dừng lại, hãy nhấn Tiếp tục lần nữa.",
+      continueWaitingForCustomer:
+        "Assessment đang chờ câu trả lời của bạn cho câu hỏi hiện tại.",
+      continueCompleted:
+        "Assessment đã kết thúc, không còn bước nào để tiếp tục.",
+      continueFailed: "Hiện chưa thể tiếp tục assessment. Vui lòng thử lại.",
+    },
     technicalEvidence: {
       progress: "Tiến độ assessment",
       plannerProgress: "Tiến độ Planner",

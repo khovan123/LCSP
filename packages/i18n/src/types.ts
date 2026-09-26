@@ -1702,6 +1702,13 @@ export type PagesMessages = {
       aiNotDetectedPlaceholder: string;
       placeholder: string;
     };
+    pipeline: {
+      continueQueued: string;
+      continueAlreadyRunning: string;
+      continueWaitingForCustomer: string;
+      continueCompleted: string;
+      continueFailed: string;
+    };
     technicalEvidence: {
       progress: string;
       plannerProgress: string;

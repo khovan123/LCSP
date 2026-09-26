@@ -7,8 +7,6 @@ import {
 import {
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
   ASSESSMENT_INTERVIEW_CONTROLS,
-  ASSESSMENT_RUNTIME_RUN_STATUSES,
-  ASSESSMENT_RUNTIME_STAGE_CODES,
   type AssessmentInterviewBlockedAction,
   type RemediationDecision,
 } from "@lcsp/contracts/evidence";
@@ -26,11 +24,10 @@ import { deriveRepositorySetupAnswer } from "@/features/assessment-flow/utils/re
 import {
   useAssessmentInterviewBlockedActionMutation,
   useAssessmentInterviewStateQuery,
+  useContinueAssessmentPipelineMutation,
   useProgramEvidenceGraphOverviewQuery,
   useReadinessStatusQuery,
-  useRerunClassificationMutation,
   useRerunRepositoryScanMutation,
-  useResumeAssessmentInterviewTurnMutation,
   useSubmitAssessmentInterviewAnswerMutation,
   useSubmitAssessmentPostFindingDecisionMutation,
 } from "@/lib/api/assessment-queries";
@@ -38,6 +35,11 @@ import { API_OUTCOME_KINDS } from "@/lib/api/outcome-kinds";
 import { useAssessmentsQuery } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 
+import {
+  PIPELINE_CONTINUE_FAILED_MESSAGE_KEY,
+  PIPELINE_CONTINUE_FINISHED_STATUSES,
+  pipelineContinueMessageKey,
+} from "../../config/pipeline-continue";
 import { useAssessmentRuntimeViewModel } from "../../hooks/use-assessment-runtime-view-model";
 import type { AssessmentOverviewProps } from "../../types/assessment-overview.types";
 import {
@@ -244,9 +246,7 @@ function AssessmentInterviewFlow({
   const submitAnswer = useSubmitAssessmentInterviewAnswerMutation(assessmentId);
   const recordBlockedAction =
     useAssessmentInterviewBlockedActionMutation(assessmentId);
-  const resumeAssessmentPipeline = useRerunClassificationMutation(assessmentId);
-  const resumeInterviewTurn =
-    useResumeAssessmentInterviewTurnMutation(assessmentId);
+  const continuePipeline = useContinueAssessmentPipelineMutation(assessmentId);
   const submitPostFindingDecision =
     useSubmitAssessmentPostFindingDecisionMutation(assessmentId);
 
@@ -511,72 +511,37 @@ function AssessmentInterviewFlow({
     (activeQuestion?.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust &&
       !activeDraft.isAdjusting);
   const hasComposerDraft = composerValue.trim().length > 0;
-  const canResumeAssessmentPipeline =
+  // Continue is offered whenever the pipeline is not waiting on the Customer:
+  // the API decides whether a failed/stalled Interview turn or the downstream
+  // assessment restarts, and refuses while a worker still owns the pipeline.
+  const canContinuePipeline =
     interviewEnabled &&
     !scanFailed &&
-    workflow.activeStatus === ASSESSMENT_RUNTIME_RUN_STATUSES.waiting &&
-    workflow.activeStage === ASSESSMENT_RUNTIME_STAGE_CODES.legalRetrieval &&
     !hasComposerDraft &&
+    !(customerActions.canAnswerQuestion && activeQuestion) &&
+    !customerActions.canSubmitBlockedAction &&
+    !(
+      assessmentStatus !== null &&
+      PIPELINE_CONTINUE_FINISHED_STATUSES.has(assessmentStatus)
+    ) &&
     !submitAnswer.isPending &&
     !recordBlockedAction.isPending &&
-    !submitPostFindingDecision.isPending &&
-    !resumeAssessmentPipeline.isPending;
-  const canResumeInterviewTurn =
-    interviewEnabled &&
-    !scanFailed &&
-    interviewHandoff.canResumeFailedTurn &&
-    !hasComposerDraft &&
-    !submitAnswer.isPending &&
-    !recordBlockedAction.isPending &&
-    !resumeInterviewTurn.isPending;
-  const canResume = canResumeAssessmentPipeline || canResumeInterviewTurn;
-  const isResuming =
-    resumeAssessmentPipeline.isPending || resumeInterviewTurn.isPending;
+    !submitPostFindingDecision.isPending;
   const composerDisabled =
-    isComposerDisabled && !canResume && !hasComposerDraft;
+    isComposerDisabled && !canContinuePipeline && !hasComposerDraft;
 
-  function handleResume() {
-    if (canResumeInterviewTurn) {
-      handleResumeInterviewTurn();
+  function handleContinuePipeline() {
+    if (!canContinuePipeline || continuePipeline.isPending) {
       return;
     }
-    if (!canResumeAssessmentPipeline) {
-      return;
-    }
-    resumeAssessmentPipeline.mutate(undefined, {
-      onSuccess: () => {
-        setLastSavedMessage(t("pages.assessment.resumeQueued"));
+    continuePipeline.mutate(undefined, {
+      onSuccess: (outcome) => {
+        setLastSavedMessage(t(pipelineContinueMessageKey(outcome)));
+      },
+      onError: () => {
+        setLastSavedMessage(t(PIPELINE_CONTINUE_FAILED_MESSAGE_KEY));
       },
     });
-  }
-
-  function handleResumeInterviewTurn() {
-    resumeInterviewTurn.mutate(
-      {
-        expectedSessionRevision:
-          normalized.identity.contextRevision ?? undefined,
-      },
-      {
-        onSuccess: (outcome) => {
-          setLastSavedMessage(
-            t(
-              outcome.kind === API_OUTCOME_KINDS.requested
-                ? "pages.assessmentFlow.interview.resumeTurnQueued"
-                : outcome.kind === API_OUTCOME_KINDS.rateLimited
-                  ? "pages.assessmentFlow.interview.resumeTurnLimitReached"
-                  : outcome.kind === API_OUTCOME_KINDS.insufficientCredits
-                    ? "pages.assessmentFlow.interview.resumeTurnInsufficientCredits"
-                    : "pages.assessmentFlow.interview.resumeTurnFailed",
-            ),
-          );
-        },
-        onError: () => {
-          setLastSavedMessage(
-            t("pages.assessmentFlow.interview.resumeTurnFailed"),
-          );
-        },
-      },
-    );
   }
 
   return (
@@ -786,13 +751,13 @@ function AssessmentInterviewFlow({
         disabled={composerDisabled}
         submitReady={isSubmitReady}
         submitting={submitAnswer.isPending || recordBlockedAction.isPending}
-        resuming={isResuming}
-        resumeAvailable={canResume || isResuming}
+        resuming={continuePipeline.isPending}
+        resumeAvailable={canContinuePipeline || continuePipeline.isPending}
         resumeLabel={t("pages.assessment.resumePipeline")}
         placeholder={t(composerPlaceholderKey)}
         onValueChange={handleComposerValueChange}
         onSubmit={handleSubmit}
-        onResume={handleResume}
+        onResume={handleContinuePipeline}
       />
     </main>
   );
