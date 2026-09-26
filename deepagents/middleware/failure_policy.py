@@ -151,9 +151,21 @@ def is_terminal_boundary_error(error: BaseException) -> bool:
 
     Inside the model stack an auth failure moves to another credential or provider. Once
     it escapes to a task boundary, every eligible route has already been tried, so
-    redelivering the task would only resend a rejected credential.
+    redelivering the task would only resend a rejected credential. A non-retryable
+    boundary failure is never redelivered either, so its reservation can be released.
     """
-    return is_terminal_task_error(error) or is_auth_failure(error)
+    return (
+        is_terminal_task_error(error)
+        or is_auth_failure(error)
+        or _is_non_retryable_boundary_error(error)
+    )
+
+
+def _is_non_retryable_boundary_error(error: BaseException) -> bool:
+    # Duck-typed to keep the failure policy independent of the Agent Runtime module.
+    return any(
+        cls.__name__ == "NonRetryableAgentBoundaryError" for cls in type(error).__mro__
+    )
 
 
 def retry_model_error(error: Exception) -> bool:

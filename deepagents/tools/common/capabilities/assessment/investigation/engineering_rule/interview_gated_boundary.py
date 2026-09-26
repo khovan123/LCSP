@@ -11,6 +11,7 @@ from typing import Any
 
 from orchestration.dispatcher import RootSubagentDispatcher
 from decision.shadow import InterviewRoutingPacket, observer_from_api_client
+from tools.common.capabilities.agent_runtime.boundary import NonRetryableAgentBoundaryError
 from tools.common.capabilities.platform.api_client import InterviewCoverageCallbackError
 
 from .engineering_assessment_boundary import EngineeringAssessmentBoundary
@@ -30,6 +31,9 @@ _TERMINAL_WAITING_OUTCOMES = {
     "FAILED",
 }
 
+# The only authored root assessment mutation (approval-gated); see instructions.md.
+_TECHNICAL_RECOVERY_TOOL = "request_targeted_reanalysis"
+
 _CANONICAL_COVERAGE_STATES = {
     "READY": "READY",
     "SUFFICIENT": "READY",
@@ -37,6 +41,14 @@ _CANONICAL_COVERAGE_STATES = {
     "LIMITED": "PARTIAL",
     "UNAVAILABLE": "UNAVAILABLE",
 }
+
+
+class TechnicalRecoveryNotStarted(NonRetryableAgentBoundaryError):
+    """Root orchestration ended a required technical recovery without requesting it.
+
+    Initial Interview cannot start until recovery produces newly accepted evidence, so
+    completing the boundary here would leave the assessment waiting with nothing queued.
+    """
 
 
 class _ConfirmedContextPipeline:
@@ -422,7 +434,7 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
                 ai_discovery.get("material_unresolved_frontiers") or []
             )[:16],
         }
-        invoke_with_stream(root,
+        result = invoke_with_stream(root,
             {"messages": [{"role": "user", "content": (
                 "AI discovery is technically unresolved. Do not ask the Customer to solve a "
                 "scanner/static-analysis gap and do not enter EngineeringRule, Planner, or "
@@ -437,6 +449,12 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
                                  "technical_evidence_report_id": evidence_report_id,
                                  "correlationId": correlation_id,
                                  "trigger": "AI_DISCOVERY_REANALYSIS_REQUIRED"}},
+        )
+        _require_technical_recovery_request(
+            result,
+            trigger="AI_DISCOVERY_REANALYSIS_REQUIRED",
+            assessment_id=assessment_id,
+            evidence_report_id=evidence_report_id,
         )
 
     def _route_coverage_to_recovery(
@@ -453,7 +471,7 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
             from agent import agent
 
             root = agent
-        invoke_with_stream(root,
+        result = invoke_with_stream(root,
             {
                 "messages": [
                     {
@@ -487,6 +505,64 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
                 },
             },
         )
+        _require_technical_recovery_request(
+            result,
+            trigger="TECHNICAL_COVERAGE_RECOVERY_REQUIRED",
+            assessment_id=assessment_id,
+            evidence_report_id=evidence_report_id,
+        )
+
+
+def _message_field(message: Any, key: str) -> Any:
+    if isinstance(message, dict):
+        return message.get(key)
+    return getattr(message, key, None)
+
+
+def _requested_technical_recovery(result: Any) -> bool:
+    """Return whether this invocation's reply requested (or ran) targeted reanalysis.
+
+    Recovery threads are persistent, so only messages after the latest instruction
+    count. The tool is approval-gated: a pending call is held at the interrupt.
+    """
+    messages = result.get("messages") if isinstance(result, dict) else None
+    if not isinstance(messages, list):
+        return False
+    latest_instruction = max(
+        (
+            index
+            for index, message in enumerate(messages)
+            if (_message_field(message, "type") or _message_field(message, "role"))
+            in {"human", "user"}
+        ),
+        default=-1,
+    )
+    for message in messages[latest_instruction + 1:]:
+        for call in _message_field(message, "tool_calls") or []:
+            if _message_field(call, "name") == _TECHNICAL_RECOVERY_TOOL:
+                return True
+        if (
+            _message_field(message, "type") == "tool"
+            and _message_field(message, "name") == _TECHNICAL_RECOVERY_TOOL
+        ):
+            return True
+    return False
+
+
+def _require_technical_recovery_request(
+    result: Any,
+    *,
+    trigger: str,
+    assessment_id: str,
+    evidence_report_id: str,
+) -> None:
+    if _requested_technical_recovery(result):
+        return
+    raise TechnicalRecoveryNotStarted(
+        f"{trigger}: root orchestration ended without requesting "
+        f"{_TECHNICAL_RECOVERY_TOOL}; Initial Interview cannot start "
+        f"(assessment {assessment_id}, evidence report {evidence_report_id})"
+    )
 
 
 def _technical_coverage(evidence_report: dict[str, Any]) -> tuple[str, list[str]]:
