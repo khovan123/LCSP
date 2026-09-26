@@ -6,6 +6,7 @@ model messages and hidden reasoning are never included in the billing payload.
 
 from __future__ import annotations
 
+import json
 import math
 import time
 from contextlib import contextmanager
@@ -41,8 +42,21 @@ class BillingUsageUnavailable(RuntimeError):
     """Provider returned no complete numeric usage metadata."""
 
 
+class BillingBudgetExhausted(RuntimeError):
+    """The active billing reservation cannot authorize another provider call."""
+
+    def __init__(self, message: str, *, error_code: str | None = None) -> None:
+        super().__init__(message)
+        self.status_code = 402
+        self.error_code = error_code or "BILLING_BUDGET_EXHAUSTED"
+
+
 class BillingReservationUnavailable(RuntimeError):
     """The broker replay found a reservation that is no longer spendable."""
+
+
+class ModelContextWindowExceeded(RuntimeError):
+    """The active provider/model cannot accept the request after context reduction."""
 
 
 class BillingMeteringError(WorkerCallbackError):
@@ -98,6 +112,7 @@ class BillingMeteringSession:
     _provider_invocation_count: int = field(default=0, init=False)
     _invocation_ids: set[str] = field(default_factory=set, init=False)
     _disabled_provider_routes: set[str] = field(default_factory=set, init=False)
+    _announced_provider_fallbacks: set[tuple[str, str]] = field(default_factory=set, init=False)
 
     @classmethod
     def reserve(
@@ -214,7 +229,11 @@ class BillingMeteringSession:
         self._invocation_ids.add(invocation_id)
         return invocation_id
 
-    def claim_provider_invocation(self, invocation_id: str) -> None:
+    def claim_provider_invocation(
+        self,
+        invocation_id: str,
+        metrics: "InvocationAuthorizationMetrics | None" = None,
+    ) -> None:
         """Track one provider attempt without imposing a run-level call limit.
 
         max_invocations is reservation sizing/audit metadata only. LCSP is bounded
@@ -225,14 +244,56 @@ class BillingMeteringSession:
                 BillingReservationClaimPayload,
             )
 
-            self.api_client.claim_billing_invocation(
-                self.reservation_id,
-                BillingReservationClaimPayload(
-                    assessmentId=self.assessment_id,
-                    invocationId=invocation_id,
+            payload = BillingReservationClaimPayload(
+                assessmentId=self.assessment_id,
+                invocationId=invocation_id,
+                provider=metrics.provider if metrics else None,
+                model=metrics.model if metrics else None,
+                estimatedInputTokens=(
+                    str(metrics.estimated_input_tokens) if metrics else None
+                ),
+                estimatedInputBytes=(
+                    str(metrics.estimated_input_bytes) if metrics else None
+                ),
+                maxOutputTokens=(
+                    str(metrics.max_output_tokens) if metrics else None
+                ),
+                maxReasoningTokens=(
+                    str(metrics.max_reasoning_tokens) if metrics else None
                 ),
             )
+            try:
+                self.api_client.claim_billing_invocation(
+                    self.reservation_id,
+                    payload,
+                )
+            except WorkerCallbackError as error:
+                if error.status_code == 402 and (
+                    error.error_code is None
+                    or error.error_code
+                    in {
+                        "BILLING_INSUFFICIENT_CREDITS",
+                        "BILLING_BUDGET_EXHAUSTED",
+                    }
+                ):
+                    raise BillingBudgetExhausted(
+                        "Billing budget exhausted before provider call",
+                        error_code=error.error_code,
+                    ) from error
+                raise
         self._provider_invocation_count += 1
+
+    def provider_fallback_should_publish(
+        self, current_provider: str | None, fallback_provider: str
+    ) -> bool:
+        key = (
+            (current_provider or "unknown").strip().lower(),
+            fallback_provider.strip().lower(),
+        )
+        if key in self._announced_provider_fallbacks:
+            return False
+        self._announced_provider_fallbacks.add(key)
+        return True
 
     def disable_provider_route(self, provider: str) -> None:
         self._disabled_provider_routes.add(provider.strip().lower())
@@ -257,29 +318,24 @@ class BillingMeteringSession:
                 "Provider/model differs from the reserved pricing envelope"
             )
 
-    def assert_input_within_limit(self, request: Any) -> None:
-        if self.max_input_bytes is None and self.max_input_tokens is None:
-            return
-        request_input = {
-            "messages": getattr(request, "messages", None),
-            "tools": getattr(request, "tools", None),
-            "system": getattr(request, "system_prompt", None),
-        }
-        if all(value is None for value in request_input.values()):
-            return
-        encoded = str(request_input).encode("utf-8")
-        byte_count = len(encoded)
-        if self.max_input_bytes is not None and byte_count > self.max_input_bytes:
-            raise BillingUsageUnavailable(
-                "Input exceeds the reserved byte ceiling"
-            )
+    def authorize_request_context(
+        self, request: Any, model: Any
+    ) -> "InvocationAuthorizationMetrics":
+        metrics = estimate_invocation_authorization_metrics(
+            request,
+            model,
+            max_output_tokens=self.max_output_tokens or 0,
+            max_reasoning_tokens=self.max_reasoning_tokens or 0,
+        )
+        context_limit = metrics.provider_context_limit
         if (
-            self.max_input_tokens is not None
-            and _estimate_input_tokens(encoded) > self.max_input_tokens
+            context_limit is not None
+            and metrics.estimated_input_tokens > context_limit
         ):
-            raise BillingUsageUnavailable(
-                "Input exceeds the reserved token ceiling"
+            raise ModelContextWindowExceeded(
+                "Input exceeds the active provider context window"
             )
+        return metrics
 
     def bounded_model(self, model: Any) -> Any:
         output_limit = (self.max_output_tokens or 0) + (
@@ -378,6 +434,19 @@ def active_billing_metering() -> BillingMeteringSession | None:
     return _active_session.get()
 
 
+@dataclass(frozen=True)
+class InvocationAuthorizationMetrics:
+    provider: str
+    model: str
+    estimated_input_tokens: int
+    estimated_input_bytes: int
+    max_output_tokens: int
+    max_reasoning_tokens: int
+    provider_context_limit: int | None
+    message_count: int
+    tool_result_count: int
+
+
 def _estimate_input_tokens(encoded: bytes) -> int:
     """Estimate prompt tokens separately from byte ceilings.
 
@@ -389,6 +458,167 @@ def _estimate_input_tokens(encoded: bytes) -> int:
     if not encoded:
         return 0
     return math.ceil(len(encoded) / 3)
+
+
+def estimate_invocation_authorization_metrics(
+    request: Any,
+    model: Any,
+    *,
+    max_output_tokens: int,
+    max_reasoning_tokens: int,
+) -> InvocationAuthorizationMetrics:
+    provider, model_name = provider_identity(model)
+    messages = getattr(request, "messages", None)
+    message_list = messages if isinstance(messages, list) else []
+    tool_messages = [
+        message
+        for message in message_list
+        if _message_role_shape(message) == "tool"
+    ]
+    encoded = _safe_json_bytes(
+        {
+            "system": _jsonable(getattr(request, "system_prompt", None)),
+            "messages": [_message_estimation_payload(message) for message in message_list],
+            "tools": _tools_estimation_payload(getattr(request, "tools", None)),
+            "response_format": _response_format_estimation_payload(
+                getattr(request, "response_format", None)
+            ),
+        }
+    )
+    return InvocationAuthorizationMetrics(
+        provider=provider,
+        model=model_name,
+        estimated_input_bytes=len(encoded),
+        estimated_input_tokens=_estimate_input_tokens(encoded),
+        max_output_tokens=max(0, int(max_output_tokens or 0)),
+        max_reasoning_tokens=max(0, int(max_reasoning_tokens or 0)),
+        provider_context_limit=_provider_context_limit_tokens(model),
+        message_count=len(message_list),
+        tool_result_count=len(tool_messages),
+    )
+
+
+def _safe_json_bytes(value: Any) -> bytes:
+    return json.dumps(
+        _jsonable(value),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def _jsonable(value: Any, *, depth: int = 0) -> Any:
+    if depth > 8:
+        return repr(type(value).__name__)
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, dict):
+        return {
+            str(key): _jsonable(item, depth=depth + 1)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple, set)):
+        return [_jsonable(item, depth=depth + 1) for item in value]
+    if hasattr(value, "model_dump"):
+        try:
+            return _jsonable(value.model_dump(mode="json"), depth=depth + 1)
+        except TypeError:
+            return _jsonable(value.model_dump(), depth=depth + 1)
+        except Exception:
+            pass
+    if hasattr(value, "dict"):
+        try:
+            return _jsonable(value.dict(), depth=depth + 1)
+        except Exception:
+            pass
+    return {
+        key: _jsonable(getattr(value, key), depth=depth + 1)
+        for key in (
+            "name",
+            "description",
+            "args",
+            "args_schema",
+            "schema",
+            "parameters",
+            "content",
+            "additional_kwargs",
+            "tool_calls",
+            "tool_call_id",
+            "role",
+            "type",
+        )
+        if hasattr(value, key)
+    } or repr(type(value).__name__)
+
+
+def _message_estimation_payload(message: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "role": _message_role_shape(message),
+        "content": _jsonable(getattr(message, "content", None)),
+    }
+    for key in ("name", "tool_call_id", "tool_calls", "additional_kwargs"):
+        if hasattr(message, key):
+            payload[key] = _jsonable(getattr(message, key))
+    return payload
+
+
+def _tools_estimation_payload(tools: Any) -> Any:
+    if not isinstance(tools, list):
+        return _jsonable(tools)
+    return [_tool_estimation_payload(tool) for tool in tools]
+
+
+def _tool_estimation_payload(tool: Any) -> Any:
+    if isinstance(tool, dict):
+        return _jsonable(tool)
+    schema = None
+    args_schema = getattr(tool, "args_schema", None)
+    if args_schema is not None:
+        try:
+            schema = args_schema.model_json_schema()
+        except Exception:
+            schema = _jsonable(args_schema)
+    return {
+        "name": getattr(tool, "name", None),
+        "description": getattr(tool, "description", None),
+        "args": _jsonable(getattr(tool, "args", None)),
+        "schema": _jsonable(schema),
+    }
+
+
+def _response_format_estimation_payload(response_format: Any) -> Any:
+    if response_format is None:
+        return None
+    schema = None
+    for key in ("schema", "schema_", "output_schema"):
+        if not hasattr(response_format, key):
+            continue
+        schema = getattr(response_format, key)
+        break
+    if hasattr(schema, "model_json_schema"):
+        try:
+            schema = schema.model_json_schema()
+        except Exception:
+            schema = _jsonable(schema)
+    return {
+        "strategy": type(response_format).__name__,
+        "schema": _jsonable(schema),
+    }
+
+
+def _provider_context_limit_tokens(model: Any) -> int | None:
+    profile = getattr(model, "profile", None)
+    if profile is None:
+        return None
+    if isinstance(profile, dict):
+        value = profile.get("max_input_tokens")
+    else:
+        value = getattr(profile, "max_input_tokens", None)
+    if isinstance(value, int) and value > 0:
+        return value
+    return None
 
 
 @contextmanager
@@ -422,7 +652,7 @@ class _ModelCallTelemetry:
 
     def __init__(self, model: Any) -> None:
         self.provider, self.model_name = provider_identity(model)
-        self.timeout_seconds = llm_provider_timeout_seconds()
+        self.timeout_seconds = llm_provider_timeout_seconds(self.provider)
         self._started_at = time.monotonic()
         self._stop = Event()
         self._context = copy_context()
@@ -596,17 +826,29 @@ class BillingMeteringMiddleware(AgentMiddleware):
         session = active_billing_metering()
         if session is None:
             return handler(request)
-        session.assert_input_within_limit(request)
         invocation_id = session.new_invocation_id()
         # Keep the authorized candidate for settlement. Applying bind() below
         # returns a RunnableBinding that no longer exposes provider identity.
         billing_model = request.model
         session.assert_model_identity(billing_model)
+        metrics = session.authorize_request_context(request, billing_model)
+        logger.info(
+            "MODEL_CONTEXT_DIAGNOSTIC",
+            provider=metrics.provider.lower(),
+            model=metrics.model,
+            message_count=metrics.message_count,
+            tool_result_count=metrics.tool_result_count,
+            estimated_input_tokens=metrics.estimated_input_tokens,
+            estimated_input_bytes=metrics.estimated_input_bytes,
+            provider_context_limit=metrics.provider_context_limit,
+            reservation_max_input_tokens=session.max_input_tokens,
+            reservation_max_input_bytes=session.max_input_bytes,
+        )
         logger.info(
             "MODEL_REQUEST_DIAGNOSTIC",
             **_request_shape_diagnostic(request, billing_model),
         )
-        session.claim_provider_invocation(invocation_id)
+        session.claim_provider_invocation(invocation_id, metrics)
         if hasattr(request, "override"):
             request = request.override(model=session.bounded_model(billing_model))
         telemetry = _ModelCallTelemetry(billing_model)
@@ -629,15 +871,27 @@ class BillingMeteringMiddleware(AgentMiddleware):
         session = active_billing_metering()
         if session is None:
             return await handler(request)
-        session.assert_input_within_limit(request)
         invocation_id = session.new_invocation_id()
         billing_model = request.model
         session.assert_model_identity(billing_model)
+        metrics = session.authorize_request_context(request, billing_model)
+        logger.info(
+            "MODEL_CONTEXT_DIAGNOSTIC",
+            provider=metrics.provider.lower(),
+            model=metrics.model,
+            message_count=metrics.message_count,
+            tool_result_count=metrics.tool_result_count,
+            estimated_input_tokens=metrics.estimated_input_tokens,
+            estimated_input_bytes=metrics.estimated_input_bytes,
+            provider_context_limit=metrics.provider_context_limit,
+            reservation_max_input_tokens=session.max_input_tokens,
+            reservation_max_input_bytes=session.max_input_bytes,
+        )
         logger.info(
             "MODEL_REQUEST_DIAGNOSTIC",
             **_request_shape_diagnostic(request, billing_model),
         )
-        session.claim_provider_invocation(invocation_id)
+        session.claim_provider_invocation(invocation_id, metrics)
         if hasattr(request, "override"):
             request = request.override(model=session.bounded_model(billing_model))
         telemetry = _ModelCallTelemetry(billing_model)
@@ -811,12 +1065,14 @@ def _parse_limit(value: str | None) -> int | None:
 
 
 __all__ = [
+    "BillingBudgetExhausted",
     "BillingMeteringMiddleware",
     "BillingAgentRoleMiddleware",
     "BillingMeteringSession",
     "BillingMeteringError",
     "BillingUsageUnavailable",
     "BillingReservationUnavailable",
+    "ModelContextWindowExceeded",
     "BillingFinalizationError",
     "activate_billing_metering",
     "active_billing_metering",

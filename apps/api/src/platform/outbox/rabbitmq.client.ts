@@ -101,9 +101,13 @@ export class RabbitMqClient implements OnModuleDestroy {
         messageId,
         ...(headers ? { headers } : {}),
       },
-      (error) => {
+      (error: unknown) => {
         if (error) {
-          rejectPublish(error);
+          rejectPublish(
+            error instanceof Error
+              ? error
+              : new Error("RabbitMQ publish was not confirmed"),
+          );
           return;
         }
         confirmPublish();
@@ -245,8 +249,8 @@ export class RabbitMqClient implements OnModuleDestroy {
       });
 
       const channel = await connection.createConfirmChannel();
-      channel.on("return", (message) => {
-        const returnedMessageId = message.properties.messageId;
+      channel.on("return", (message: amqp.Message) => {
+        const returnedMessageId: unknown = message.properties.messageId;
         if (typeof returnedMessageId === "string" && returnedMessageId) {
           this.returnedMessageIds.add(returnedMessageId);
         }

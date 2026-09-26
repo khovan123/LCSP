@@ -72,7 +72,16 @@ import { BillingPricingPreflightService } from "./application/shared/billing-pri
     BillingPricingPreflightService,
     {
       provide: BILLING_USAGE_KERNEL,
-      useClass: BillingUsageKernel,
+      useFactory: (
+        transactions: PrismaBillingTransaction,
+        accounting: BillingAccountingKernel,
+        prisma: PrismaService,
+      ) => new BillingUsageKernel(transactions, accounting, prisma),
+      inject: [
+        BILLING_TRANSACTION_PORT,
+        BillingAccountingKernel,
+        PrismaService,
+      ],
     },
     SePayReconciliationConsumer,
     SePayWebhookIngress,

@@ -19,18 +19,22 @@ assert all(c.provider == expected and c.source == "provider_preset" for c in p.e
 assert p.REASONING_EFFORT == "low"
 if expected == "google_genai":
     assert p.ALL_LCSP_MODEL_SPECS == ("google_genai:gemini-3.5-flash-lite",)
+    expected_profile = p.model_profile_for_route("google_genai", "gemini-3.5-flash-lite")
     assert model_provider_profile_for(p.ROOT_MODEL_SPEC).init_kwargs == {
-        "request_timeout": 30.0,
+        "request_timeout": 90.0,
+        "profile": expected_profile,
         "thinking_level": "low",
     }
     for role in p.REASONING_AGENT_NAMES:
         assert p.model_init_kwargs_for_agent(agent_name=role, model_spec=p.ROOT_MODEL_SPEC) == {
-            "request_timeout": 30.0,
+            "request_timeout": 90.0,
+            "profile": expected_profile,
             "thinking_level": "low",
         }
     for role in p.NON_REASONING_AGENT_NAMES:
         assert p.model_init_kwargs_for_agent(agent_name=role, model_spec=p.NARRATOR_MODEL_SPEC) == {
-            "request_timeout": 30.0,
+            "request_timeout": 90.0,
+            "profile": expected_profile,
             "thinking_level": "minimal",
         }
 elif expected == "llm7":
@@ -41,6 +45,10 @@ elif expected == "llm7":
         "timeout": 30.0,
     }
     assert model_provider_profile_for(p.ROOT_MODEL_SPEC).init_kwargs == expected_kwargs
+    expected_kwargs = {
+        **expected_kwargs,
+        "profile": p.model_profile_for_route("llm7", "codestral-latest"),
+    }
     assert p.model_init_kwargs_for_agent(
         agent_name="law_guided_investigator", model_spec=p.ROOT_MODEL_SPEC
     ) == expected_kwargs
@@ -56,6 +64,10 @@ elif expected == "inception":
         "timeout": 30.0,
     }
     assert model_provider_profile_for(p.ROOT_MODEL_SPEC).init_kwargs == expected_kwargs
+    expected_kwargs = {
+        **expected_kwargs,
+        "profile": p.model_profile_for_route("inception", "mercury-2.5"),
+    }
     assert p.model_init_kwargs_for_agent(
         agent_name="law_guided_investigator", model_spec=p.ROOT_MODEL_SPEC
     ) == expected_kwargs

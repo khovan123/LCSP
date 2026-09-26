@@ -1387,14 +1387,18 @@ model BillingReservation {
 }
 
 model BillingReservationInvocationClaim {
-  id            String              @id @default(uuid())
-  reservationId String
-  invocationId  String
-  createdAt     DateTime            @default(now())
-  reservation   BillingReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  id                        String              @id @default(uuid())
+  reservationId             String
+  invocationId              String
+  authorizedChargeCredits   BigInt              @default(0)
+  authorizationFingerprint  String?
+  settledAt                 DateTime?
+  createdAt                 DateTime            @default(now())
+  reservation               BillingReservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
 
   @@unique([reservationId, invocationId])
   @@index([invocationId])
+  @@index([reservationId, settledAt])
 }
 
 model ModelPricingSnapshot {

@@ -429,7 +429,11 @@ def agent_thread_id(
     message: Mapping[str, Any],
     correlation_id: str,
 ) -> str:
-    """Use one stable LangGraph thread/sandbox for the full assessment lifetime."""
+    """Use stable LangGraph thread/sandbox identities for runtime boundaries."""
+    if boundary_name == "scan_requested":
+        scan_job_id = _find_text(message, "scanJobId", "scan_job_id")
+        if scan_job_id:
+            return str(uuid5(_THREAD_NAMESPACE, f"scan:{scan_job_id}"))
     assessment_id = _find_text(message, "assessmentId", "assessment_id")
     if assessment_id:
         seed = f"assessment:{assessment_id}"

@@ -25,11 +25,11 @@ export type AuthorizedUsageLimits = {
 /**
  * Builds the most expensive usage one invocation can report under a snapshot.
  *
- * Input tokens are counted in every input dimension the snapshot prices because
- * the adapter split between fresh, cached and cache-write input is unknown when
- * credits are reserved. A dimension the snapshot leaves unpriced is one the
- * provider does not bill, so it contributes nothing rather than making the
- * reservation unpriceable.
+ * Input tokens are counted in the most expensive mutually-exclusive input
+ * dimension the snapshot prices because the fresh/cached/cache-write split is
+ * unknown when credits are reserved. A dimension the snapshot leaves unpriced
+ * is one the provider does not bill, so it contributes nothing rather than
+ * making the reservation unpriceable.
  *
  * @param limits - Per-invocation token ceilings authorized for the reservation.
  * @param pricing - Immutable pricing snapshot the charge is derived from.
@@ -39,14 +39,39 @@ export function worstCaseUsageForPricing(
   limits: AuthorizedUsageLimits,
   pricing: PricingRecord,
 ): UsageDimensions {
+  const inputDimensions = [
+    {
+      key: "inputTokens" as const,
+      price: pricing.inputPricePerMillion,
+    },
+    {
+      key: "cachedInputTokens" as const,
+      price: pricing.cachedInputPricePerMillion,
+    },
+    {
+      key: "cacheWriteTokens" as const,
+      price: pricing.cacheWritePricePerMillion,
+    },
+  ].filter((dimension) => dimension.price);
+  const mostExpensiveInput = inputDimensions.reduce<
+    (typeof inputDimensions)[number] | undefined
+  >((selected, dimension) => {
+    if (!selected) return dimension;
+    return fixedPoint(dimension.price!) > fixedPoint(selected.price!)
+      ? dimension
+      : selected;
+  }, undefined);
   return {
-    inputTokens: limits.maxInputTokens,
-    cachedInputTokens: pricing.cachedInputPricePerMillion
-      ? limits.maxInputTokens
-      : 0n,
-    cacheWriteTokens: pricing.cacheWritePricePerMillion
-      ? limits.maxInputTokens
-      : 0n,
+    inputTokens:
+      mostExpensiveInput?.key === "inputTokens" ? limits.maxInputTokens : 0n,
+    cachedInputTokens:
+      mostExpensiveInput?.key === "cachedInputTokens"
+        ? limits.maxInputTokens
+        : 0n,
+    cacheWriteTokens:
+      mostExpensiveInput?.key === "cacheWriteTokens"
+        ? limits.maxInputTokens
+        : 0n,
     outputTokens: limits.maxOutputTokens,
     reasoningTokens: pricing.reasoningPricePerMillion
       ? limits.maxReasoningTokens

@@ -24,6 +24,8 @@ describe("PrismaBillingTransaction runtime policy repository", () => {
     const selected = await transaction.runForUser("user-1", (repositories) =>
       repositories.runtimePolicy.findApplicable(
         "investigator",
+        "GOOGLE_GENAI",
+        "gemini-3.5-flash-lite",
         new Date("2026-09-24T16:39:22.918Z"),
       ),
     );
@@ -32,6 +34,8 @@ describe("PrismaBillingTransaction runtime policy repository", () => {
     expect(tx.runtimeModelPolicySnapshot.findMany).toHaveBeenCalledWith({
       where: {
         role: "investigator",
+        provider: "GOOGLE_GENAI",
+        model: "gemini-3.5-flash-lite",
         effectiveAt: { lte: new Date("2026-09-24T16:39:22.918Z") },
       },
       orderBy: { effectiveAt: "desc" },

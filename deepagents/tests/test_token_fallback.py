@@ -1,6 +1,7 @@
 from hashlib import sha256
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 from langchain.agents.middleware import ModelRequest, ModelResponse
 from langchain_openai import ChatOpenAI
@@ -130,6 +131,49 @@ def clear_dead_credential_slots():
     token_fallback._RATE_LIMITED_UNTIL.clear()
 
 
+@pytest.fixture(autouse=True)
+def forbid_real_cooldown_sleep(monkeypatch):
+    """Fail loudly instead of sleeping for a production cooldown (30-120s)."""
+    from middleware import token_fallback
+
+    def real_sleep(seconds: float) -> None:
+        raise AssertionError(f"real cooldown sleep of {seconds}s; install the fake clock")
+
+    async def real_asleep(seconds: float) -> None:
+        raise AssertionError(f"real cooldown sleep of {seconds}s; install the fake clock")
+
+    monkeypatch.setattr(token_fallback, "_sleep", real_sleep)
+    monkeypatch.setattr(token_fallback, "_asleep", real_asleep)
+
+
+class _FakeCooldownClock:
+    def __init__(self, start: float):
+        self.now = start
+        self.sleeps: list[float] = []
+        self.async_sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+    async def asleep(self, seconds: float) -> None:
+        self.async_sleeps.append(seconds)
+        self.now += seconds
+
+
+def _install_fake_cooldown_clock(monkeypatch, *, start: float = 1_000.0):
+    from middleware import token_fallback
+
+    clock = _FakeCooldownClock(start)
+    monkeypatch.setattr(token_fallback, "_monotonic", clock.monotonic)
+    monkeypatch.setattr(token_fallback, "_sleep", clock.sleep)
+    monkeypatch.setattr(token_fallback, "_asleep", clock.asleep)
+    return clock, token_fallback
+
+
 @pytest.mark.parametrize("provider", ["openai", "google_genai", "llm7", "inception"])
 @pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.asyncio
@@ -211,6 +255,7 @@ async def test_token_fallback_preserves_model_policy(monkeypatch, provider, asyn
 @pytest.mark.asyncio
 async def test_exhaustion_stops_without_restarting_list(monkeypatch, asynchronous):
     monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
+    _install_fake_cooldown_clock(monkeypatch)
     model = ChatOpenAI(model="gpt-5-nano", **credential_init_kwargs("openai"))
     request = ModelRequest(model=model, messages=[], tools=[])
     handler = AsyncMock(side_effect=QuotaError()) if asynchronous else MagicMock(side_effect=QuotaError())
@@ -220,7 +265,7 @@ async def test_exhaustion_stops_without_restarting_list(monkeypatch, asynchronou
             await middleware.awrap_model_call(request, handler)
         else:
             middleware.wrap_model_call(request, handler)
-    assert handler.call_count == 2
+    assert handler.call_count == 3
     assert is_terminal_task_error(caught.value)
     assert "test-token" not in str(caught.value)
 
@@ -243,6 +288,16 @@ def test_transient_errors_are_recognized_through_wrappers(status, attribute):
     wrapper = RuntimeError("model failure")
     wrapper.__cause__ = source
     assert credential_failure(wrapper)
+
+
+def test_sdk_timeout_errors_are_transient_credential_failures():
+    from middleware.token_fallback import credential_failure
+
+    wrapper = RuntimeError("model failure")
+    wrapper.__cause__ = httpx.ReadTimeout("provider timed out")
+
+    assert credential_failure(wrapper)
+    assert not is_terminal_task_error(wrapper)
 
 
 @pytest.mark.parametrize("attribute", ["status_code", "code"])
@@ -407,57 +462,337 @@ def test_llm7_roll_key_uses_same_dead_and_cooldown_semantics(monkeypatch):
 
 def test_rate_limited_slots_are_cooled_not_marked_dead_and_still_tried_last(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
-    from middleware import token_fallback
+    _, token_fallback = _install_fake_cooldown_clock(monkeypatch)
 
     model = ChatOpenAI(model="gpt-5-nano", **credential_init_kwargs("openai"))
     response = ModelResponse(result=[])
     middleware = TokenFallbackMiddleware()
-    first = MagicMock(side_effect=QuotaError())
-    with pytest.raises(TerminalCredentialError):
-        middleware.wrap_model_call(ModelRequest(model=model, messages=[], tools=[]), first)
-    assert first.call_count == 2
+    first = MagicMock(side_effect=[QuotaError(), QuotaError(), response])
+    assert middleware.wrap_model_call(ModelRequest(model=model, messages=[], tools=[]), first) is response
+    assert first.call_count == 3
     assert token_fallback._DEAD_CREDENTIAL_SLOTS.get(("openai", "OPENAI_API_KEY"), set()) == set()
+    assert [call.args[0].model.openai_api_key.get_secret_value() for call in first.call_args_list] == [
+        "first-test-token",
+        "second-test-token",
+        "first-test-token",
+    ]
 
     second = MagicMock(side_effect=[response])
     assert middleware.wrap_model_call(ModelRequest(model=model, messages=[], tools=[]), second) is response
     assert second.call_count == 1
 
 
-def test_retry_after_header_sets_bounded_cooldown(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
+class RetryAfterQuotaError(QuotaError):
+    def __init__(self, retry_after: str):
+        super().__init__()
+        self.response = type("Response", (), {"headers": {"retry-after": retry_after}})()
+
+
+def _openai_request() -> ModelRequest:
+    model = ChatOpenAI(model="gpt-5-nano", **credential_init_kwargs("openai"))
+    return ModelRequest(model=model, messages=[], tools=[])
+
+
+def _openai_keys(handler) -> list[str]:
+    return [call.args[0].model.openai_api_key.get_secret_value() for call in handler.call_args_list]
+
+
+async def _call(middleware, request, handler, asynchronous: bool):
+    if asynchronous:
+        return await middleware.awrap_model_call(request, handler)
+    return middleware.wrap_model_call(request, handler)
+
+
+def _handler(side_effect, asynchronous: bool):
+    return AsyncMock(side_effect=side_effect) if asynchronous else MagicMock(side_effect=side_effect)
+
+
+def _waits(clock, asynchronous: bool) -> list[float]:
+    # Each path must use its own sleep hook; the other must stay untouched.
+    used, unused = (clock.async_sleeps, clock.sleeps) if asynchronous else (clock.sleeps, clock.async_sleeps)
+    assert unused == []
+    return used
+
+
+def test_credential_health_state_is_clean_at_test_start():
     from middleware import token_fallback
 
-    monkeypatch.setattr(token_fallback, "_monotonic", lambda: 50.0)
+    assert token_fallback._DEAD_CREDENTIAL_SLOTS == {}
+    assert token_fallback._RATE_LIMITED_UNTIL == {}
+
+
+def test_fake_clock_helper_is_not_a_generator_and_fixture_owns_cleanup():
+    import inspect
+
+    # A stray `yield` once turned the helper into a generator: it never installed the
+    # clock and the fixture never cleaned up after the test.
+    assert not inspect.isgeneratorfunction(_install_fake_cooldown_clock)
+    assert inspect.isgeneratorfunction(clear_dead_credential_slots.__wrapped__)
+
+
+def test_leaves_dirty_credential_health_for_the_fixture_to_clear(monkeypatch):
+    from middleware import token_fallback
+
+    # The autouse fixture's teardown must clear this; the next test asserts it did.
+    token_fallback._DEAD_CREDENTIAL_SLOTS[("openai", "OPENAI_API_KEY")] = {0, 1}
+    token_fallback._RATE_LIMITED_UNTIL[("openai", "OPENAI_API_KEY")] = {0: 9e9}
+
+
+def test_credential_health_state_is_clean_after_a_dirty_test():
+    from middleware import token_fallback
+
+    assert token_fallback._DEAD_CREDENTIAL_SLOTS == {}
+    assert token_fallback._RATE_LIMITED_UNTIL == {}
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_all_slots_429_waits_once_for_soonest_slot_then_succeeds(monkeypatch, asynchronous):
+    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
+    clock, token_fallback = _install_fake_cooldown_clock(monkeypatch)
+    response = ModelResponse(result=[])
+    # Slot B cools for less time than slot A, so B is the slot waited for.
+    handler = _handler([RetryAfterQuotaError("40"), RetryAfterQuotaError("10"), response], asynchronous)
+
+    result = await _call(TokenFallbackMiddleware(), _openai_request(), handler, asynchronous)
+
+    assert result is response
+    assert _openai_keys(handler) == ["first-test-token", "second-test-token", "second-test-token"]
+    assert _waits(clock, asynchronous) == [10.0]
+    assert token_fallback._DEAD_CREDENTIAL_SLOTS.get(("openai", "OPENAI_API_KEY"), set()) == set()
+    # B recovered; A is still cooling until its own expiry.
+    assert token_fallback._RATE_LIMITED_UNTIL[("openai", "OPENAI_API_KEY")] == {0: 1_040.0}
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_second_429_after_the_single_wait_terminates(monkeypatch, asynchronous):
+    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
+    clock, _ = _install_fake_cooldown_clock(monkeypatch)
+    handler = _handler(QuotaError(), asynchronous)
+
+    with pytest.raises(TerminalCredentialError) as caught:
+        await _call(TokenFallbackMiddleware(), _openai_request(), handler, asynchronous)
+
+    # A, B, then only the awaited slot (A wins the equal-expiry tie by index), once.
+    assert _openai_keys(handler) == ["first-test-token", "second-test-token", "first-test-token"]
+    assert _waits(clock, asynchronous) == [30.0]
+    assert isinstance(caught.value.__cause__, QuotaError)
+    assert "test-token" not in str(caught.value)
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_healthy_slot_is_used_before_a_cooling_slot_without_waiting(monkeypatch, asynchronous):
+    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
+    clock, token_fallback = _install_fake_cooldown_clock(monkeypatch)
+    token_fallback._RATE_LIMITED_UNTIL[("openai", "OPENAI_API_KEY")] = {0: clock.now + 25}
+    response = ModelResponse(result=[])
+    handler = _handler([response], asynchronous)
+
+    assert await _call(TokenFallbackMiddleware(), _openai_request(), handler, asynchronous) is response
+
+    assert _openai_keys(handler) == ["second-test-token"]
+    assert _waits(clock, asynchronous) == []
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_all_slots_already_cooling_wait_until_soonest_expiry(monkeypatch, asynchronous):
+    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token,third-test-token")
+    clock, token_fallback = _install_fake_cooldown_clock(monkeypatch)
+    token_fallback._RATE_LIMITED_UNTIL[("openai", "OPENAI_API_KEY")] = {
+        0: clock.now + 50,
+        1: clock.now + 12,
+        2: clock.now + 12,
+    }
+    invoked_at: list[float] = []
+    response = ModelResponse(result=[])
+
+    def record(_request):
+        invoked_at.append(clock.now)
+        return response
+
+    handler = _handler(record, asynchronous)
+
+    assert await _call(TokenFallbackMiddleware(), _openai_request(), handler, asynchronous) is response
+
+    # No provider call before the soonest expiry; the lower index wins the tie.
+    assert _waits(clock, asynchronous) == [12.0]
+    assert invoked_at == [1_012.0]
+    assert _openai_keys(handler) == ["second-test-token"]
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_after_the_wait_each_newly_eligible_slot_is_tried_once_in_index_order(monkeypatch, asynchronous):
+    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token,third-test-token")
+    clock, token_fallback = _install_fake_cooldown_clock(monkeypatch)
+    # Slots 1 and 2 cool before this call; slot 0 is tried and 429s with a later expiry.
+    token_fallback._RATE_LIMITED_UNTIL[("openai", "OPENAI_API_KEY")] = {
+        1: clock.now + 5,
+        2: clock.now + 5,
+    }
+    handler = _handler([RetryAfterQuotaError("60"), QuotaError(), QuotaError()], asynchronous)
+
+    with pytest.raises(TerminalCredentialError):
+        await _call(TokenFallbackMiddleware(), _openai_request(), handler, asynchronous)
+
+    assert _waits(clock, asynchronous) == [5.0]
+    assert _openai_keys(handler) == ["first-test-token", "second-test-token", "third-test-token"]
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_retry_after_header_sets_bounded_cooldown(monkeypatch, asynchronous):
+    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
+    clock, token_fallback = _install_fake_cooldown_clock(monkeypatch, start=50.0)
     logger = _FakeLogger()
     monkeypatch.setattr(token_fallback, "logger", logger)
+    handler = _handler(
+        [RetryAfterQuotaError("7"), RetryAfterQuotaError("9999"), RetryAfterQuotaError("3")],
+        asynchronous,
+    )
 
-    class RetryAfterQuotaError(QuotaError):
-        def __init__(self, retry_after: str):
-            super().__init__()
-            self.response = type("Response", (), {"headers": {"retry-after": retry_after}})()
-
-    model = ChatOpenAI(model="gpt-5-nano", **credential_init_kwargs("openai"))
-    handler = MagicMock(side_effect=[RetryAfterQuotaError("7"), RetryAfterQuotaError("9999")])
     with pytest.raises(TerminalCredentialError):
-        TokenFallbackMiddleware().wrap_model_call(ModelRequest(model=model, messages=[], tools=[]), handler)
+        await _call(TokenFallbackMiddleware(), _openai_request(), handler, asynchronous)
 
+    # Waits exactly the provider's 7s for slot 0, never the capped 120s of slot 1.
+    assert _waits(clock, asynchronous) == [7.0]
     assert token_fallback._RATE_LIMITED_UNTIL[("openai", "OPENAI_API_KEY")] == {
-        0: 57.0,
+        0: 57.0 + 3.0,
         1: 50.0 + token_fallback._MAX_RATE_LIMIT_COOLDOWN_SECONDS,
     }
-    rate_limited_events = [
-        item
-        for item in logger.events
-        if item[0] == "MODEL_CREDENTIAL_FALLBACK_SLOT_RATE_LIMITED"
+    rate_limited = [item[1] for item in logger.events if item[0] == "MODEL_CREDENTIAL_FALLBACK_SLOT_RATE_LIMITED"]
+    assert [event["cooldown_seconds"] for event in rate_limited] == [
+        7.0,
+        token_fallback._MAX_RATE_LIMIT_COOLDOWN_SECONDS,
+        3.0,
     ]
-    assert rate_limited_events[0][1]["credential_fingerprint"] == _fingerprint(
-        "first-test-token"
-    )
-    assert rate_limited_events[1][1]["credential_fingerprint"] == _fingerprint(
-        "second-test-token"
-    )
+    assert rate_limited[0]["credential_fingerprint"] == _fingerprint("first-test-token")
+    assert rate_limited[1]["credential_fingerprint"] == _fingerprint("second-test-token")
+    waiting = [item[1] for item in logger.events if item[0] == "MODEL_CREDENTIAL_FALLBACK_WAITING_FOR_RATE_LIMIT"]
+    assert waiting == [
+        {
+            "provider": "openai",
+            "credential_source": "OPENAI_API_KEY",
+            "credential_slot": 0,
+            "credential_fingerprint": _fingerprint("first-test-token"),
+            "fallback_enabled": True,
+            "wait_seconds": 7.0,
+        }
+    ]
     assert "first-test-token" not in str(logger.events)
     assert "second-test-token" not in str(logger.events)
+
+
+def test_retry_after_without_header_uses_default_cooldown(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
+    clock, token_fallback = _install_fake_cooldown_clock(monkeypatch)
+    response = ModelResponse(result=[])
+    handler = MagicMock(side_effect=[QuotaError(), response])
+
+    assert TokenFallbackMiddleware().wrap_model_call(_openai_request(), handler) is response
+
+    assert token_fallback._RATE_LIMITED_UNTIL[("openai", "OPENAI_API_KEY")] == {
+        0: clock.now + token_fallback._DEFAULT_RATE_LIMIT_COOLDOWN_SECONDS,
+    }
+    assert clock.sleeps == []
+
+
+@pytest.mark.parametrize("status", [401, 403])
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_auth_failure_marks_dead_without_cooldown_or_sleep(monkeypatch, status, asynchronous):
+    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
+    clock, token_fallback = _install_fake_cooldown_clock(monkeypatch)
+    auth_error = RuntimeError("provider auth failure")
+    auth_error.status_code = status
+    response = ModelResponse(result=[])
+    middleware = TokenFallbackMiddleware()
+
+    first = _handler([auth_error, response], asynchronous)
+    assert await _call(middleware, _openai_request(), first, asynchronous) is response
+    assert token_fallback._DEAD_CREDENTIAL_SLOTS[("openai", "OPENAI_API_KEY")] == {0}
+    assert token_fallback._RATE_LIMITED_UNTIL.get(("openai", "OPENAI_API_KEY"), {}) == {}
+
+    # Even once every live slot has failed, a dead slot is never waited for or retried.
+    second = _handler(ServerError(), asynchronous)
+    with pytest.raises(TerminalCredentialError):
+        await _call(middleware, _openai_request(), second, asynchronous)
+    assert _openai_keys(second) == ["second-test-token"]
+    assert clock.sleeps == []
+    assert clock.async_sleeps == []
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_wrapped_sdk_timeout_rotates_without_marking_slot_dead(monkeypatch, asynchronous):
+    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
+    clock, token_fallback = _install_fake_cooldown_clock(monkeypatch)
+    timeout = RuntimeError("model failure")
+    timeout.__cause__ = httpx.ReadTimeout("provider timed out")
+    response = ModelResponse(result=[])
+    middleware = TokenFallbackMiddleware()
+
+    first = _handler([timeout, response], asynchronous)
+    assert await _call(middleware, _openai_request(), first, asynchronous) is response
+    assert _openai_keys(first) == ["first-test-token", "second-test-token"]
+
+    # Neither dead nor cooling: the timed-out slot is first again on the next call.
+    second = _handler([response], asynchronous)
+    assert await _call(middleware, _openai_request(), second, asynchronous) is response
+    assert _openai_keys(second) == ["first-test-token"]
+    assert token_fallback._DEAD_CREDENTIAL_SLOTS.get(("openai", "OPENAI_API_KEY"), set()) == set()
+    assert token_fallback._RATE_LIMITED_UNTIL.get(("openai", "OPENAI_API_KEY"), {}) == {}
+    assert clock.sleeps == [] and clock.async_sleeps == []
+
+
+def test_server_errors_on_every_slot_terminate_without_waiting(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
+    clock, token_fallback = _install_fake_cooldown_clock(monkeypatch)
+    handler = MagicMock(side_effect=ServerError())
+
+    with pytest.raises(TerminalCredentialError):
+        TokenFallbackMiddleware().wrap_model_call(_openai_request(), handler)
+
+    assert handler.call_count == 2
+    assert clock.sleeps == []
+    assert token_fallback._DEAD_CREDENTIAL_SLOTS.get(("openai", "OPENAI_API_KEY"), set()) == set()
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_billing_budget_exhaustion_never_rotates_credentials(monkeypatch, asynchronous):
+    from middleware.billing_metering import BillingBudgetExhausted
+
+    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
+    _install_fake_cooldown_clock(monkeypatch)
+    handler = _handler(BillingBudgetExhausted("reservation exhausted"), asynchronous)
+
+    with pytest.raises(BillingBudgetExhausted):
+        await _call(TokenFallbackMiddleware(), _openai_request(), handler, asynchronous)
+    assert handler.call_count == 1
+
+
+@pytest.mark.parametrize("status", [429, 503])
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_billing_delivery_failure_never_rebills_on_another_credential(monkeypatch, status, asynchronous):
+    from middleware.billing_metering import BillingMeteringError
+
+    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
+    clock, token_fallback = _install_fake_cooldown_clock(monkeypatch)
+    callback_failure = RuntimeError("usage callback failed")
+    callback_failure.status_code = status
+    handler = _handler(BillingMeteringError(callback_failure), asynchronous)
+
+    with pytest.raises(BillingMeteringError):
+        await _call(TokenFallbackMiddleware(), _openai_request(), handler, asynchronous)
+    # A provider response was already received and billed; a second slot would re-bill it.
+    assert handler.call_count == 1
+    assert token_fallback._RATE_LIMITED_UNTIL.get(("openai", "OPENAI_API_KEY"), {}) == {}
+    assert clock.sleeps == [] and clock.async_sleeps == []
 
 
 def test_outer_model_retry_does_not_resend_auth_failures(monkeypatch):
@@ -573,6 +908,8 @@ def test_dead_fallback_token_is_skipped_on_later_rotation(monkeypatch):
     fallback_model = second_handler.call_args_list[0].args[0].model
     assert fallback_model.google_api_key.get_secret_value() == "working-test-token"
     skipped = [item for item in logger.events if item[0] == "MODEL_CREDENTIAL_FALLBACK_SLOT_SKIPPED"]
+    # Logged once for the later call, not again on each re-plan.
+    assert len(skipped) == 1
     assert skipped[-1][1]["credential_slot"] == 1
     assert skipped[-1][1]["credential_fingerprint"] == _fingerprint(
         "dead-test-token"
@@ -584,6 +921,7 @@ def test_outer_model_retry_does_not_restart_exhausted_tokens(monkeypatch):
     from langchain.agents.middleware import ModelRetryMiddleware
     from middleware.failure_policy import retry_model_error
     monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
+    _install_fake_cooldown_clock(monkeypatch)
     model = ChatOpenAI(model="gpt-5-nano", **credential_init_kwargs("openai"))
     request = ModelRequest(model=model, messages=[], tools=[])
     handler = MagicMock(side_effect=QuotaError())
@@ -591,7 +929,7 @@ def test_outer_model_retry_does_not_restart_exhausted_tokens(monkeypatch):
     retry = ModelRetryMiddleware(max_retries=2, retry_on=retry_model_error, on_failure="error", initial_delay=0)
     with pytest.raises(TerminalCredentialError):
         retry.wrap_model_call(request, lambda r: fallback.wrap_model_call(r, handler))
-    assert handler.call_count == 2
+    assert handler.call_count == 3
 
 
 def test_google_retired_model_never_retries_or_rotates_token(monkeypatch):

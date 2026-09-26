@@ -148,7 +148,7 @@ describe("RabbitMqClient", () => {
         contentType: "application/json",
         persistent: true,
         mandatory: false,
-        messageId: expect.any(String),
+        messageId: expect.any(String) as unknown,
       }),
       expect.any(Function),
     );
@@ -174,7 +174,7 @@ describe("RabbitMqClient", () => {
         contentType: "application/json",
         persistent: true,
         mandatory: false,
-        messageId: expect.any(String),
+        messageId: expect.any(String) as unknown,
         headers: {
           user_id: "user-1",
           action: "scan:trigger",

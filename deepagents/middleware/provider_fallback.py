@@ -18,7 +18,13 @@ from middleware.failure_policy import (
 )
 from orchestration.agent_stream import publish_agent_stream_event
 from middleware.token_fallback import credential_failure, model_provider
-from model_policy import PROVIDER_PRESETS, canonical_provider, provider_init_kwargs
+from model_policy import (
+    PROVIDER_PRESETS,
+    canonical_provider,
+    model_name_from_spec,
+    model_profile_init_kwargs,
+    provider_init_kwargs,
+)
 from provider_credentials import (
     PROVIDER_KEY_ENV,
     credential_init_kwargs,
@@ -89,9 +95,12 @@ def provider_fallback_failure(error: BaseException) -> bool:
 
 def provider_circuit_breaker_failure(error: BaseException) -> bool:
     """Return whether this provider route should stay disabled for the active run."""
+    if is_provider_route_incompatibility(error):
+        return True
+    if is_terminal_task_error(error):
+        return False
     return (
         error_status(error) in _PERMANENT_PROVIDER_ROUTE_STATUSES
-        or is_provider_route_incompatibility(error)
     )
 
 
@@ -122,9 +131,11 @@ def fallback_model(provider: str):
     """Construct one provider-preset model using only that provider's credentials."""
     canonical = canonical_provider(provider)
     preset = PROVIDER_PRESETS[canonical]
+    model_name = model_name_from_spec(preset.reasoning_model)
     return init_chat_model(
         preset.reasoning_model,
         **provider_init_kwargs(canonical),
+        **model_profile_init_kwargs(canonical, model_name),
         **credential_init_kwargs(canonical),
     )
 
@@ -148,12 +159,20 @@ class ProviderFallbackMiddleware(AgentMiddleware):
 
     @staticmethod
     def _log_attempt(*, current_provider: str | None, provider: str, index: int) -> None:
+        session = active_billing_metering()
+        publish_visible = (
+            session is None
+            or session.provider_fallback_should_publish(current_provider, provider)
+        )
         logger.warning(
             "MODEL_PROVIDER_FALLBACK_ATTEMPT",
             current_provider=current_provider or "unknown",
             fallback_provider=provider,
             fallback_index=index,
+            stream_published=publish_visible,
         )
+        if not publish_visible:
+            return
         publish_agent_stream_event(
             "PROVIDER_FALLBACK",
             status="RUNNING",

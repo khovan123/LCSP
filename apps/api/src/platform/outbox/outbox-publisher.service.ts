@@ -322,7 +322,7 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
         maxInvocations,
         authorizedModels,
         idempotencyKey: `outbox:${message.id}:billing-reservation`,
-        agentRole: `outbox:${message.eventType}`,
+        agentRole: billingAgentRoleForEventType(message.eventType),
       },
     };
   }
@@ -403,6 +403,17 @@ const BILLABLE_MODEL_EVENTS = new Set<string>([
   GITHUB_INTEGRATION_EVENT_TYPES.targetedReanalysisRequested,
   SCAN_EVENT_TYPES.evidenceAccepted,
 ]);
+
+const REPOSITORY_ANALYSIS_BILLING_AGENT_ROLE = "root";
+
+function billingAgentRoleForEventType(eventType: string): string {
+  if (
+    eventType === GITHUB_INTEGRATION_EVENT_TYPES.scanTriggered ||
+    eventType === GITHUB_INTEGRATION_EVENT_TYPES.targetedReanalysisRequested
+  )
+    return REPOSITORY_ANALYSIS_BILLING_AGENT_ROLE;
+  return `outbox:${eventType}`;
+}
 
 /**
  * Extracts non-sensitive exception metadata for outbox failure logs. Payloads are

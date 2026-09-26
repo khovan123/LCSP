@@ -6,11 +6,12 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from middleware.billing_metering import (
+    BillingBudgetExhausted,
     BillingReservationUnavailable,
     BillingMeteringError,
     BillingMeteringMiddleware,
     BillingMeteringSession,
-    BillingUsageUnavailable,
+    ModelContextWindowExceeded,
     activate_billing_metering,
     extract_provider_usage,
 )
@@ -137,10 +138,20 @@ def test_billing_invocation_metadata_never_caps_agent_run():
         run_id="run-long",
         reservation_id="reservation-long",
         agent_role="investigator",
+        max_input_tokens=1,
+        max_input_bytes=1,
         max_invocations=1,
     )
     request = SimpleNamespace(
-        model=SimpleNamespace(provider="google_genai", model_name="gemini-test")
+        model=SimpleNamespace(provider="google_genai", model_name="gemini-test"),
+        messages=[
+            HumanMessage(content="large managed history " * 2000),
+            ToolMessage(
+                content="large repository tool result " * 2000,
+                tool_call_id="call-large-history",
+                name="read_file",
+            ),
+        ],
     )
     middleware = BillingMeteringMiddleware()
 
@@ -158,6 +169,101 @@ def test_billing_invocation_metadata_never_caps_agent_run():
     assert len({invocation_id for _, invocation_id in client.claims}) == 20
     assert len(client.payloads) == 20
     assert session._provider_invocation_count == 20
+
+
+def test_known_provider_context_window_exceeded_is_not_billing_usage_error():
+    client = FakeClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-context",
+        run_id="run-context",
+        reservation_id="reservation-context",
+        agent_role="investigator",
+        max_invocations=1,
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(
+            provider="google_genai",
+            model_name="gemini-test",
+            profile={"max_input_tokens": 10},
+        ),
+        messages=[HumanMessage(content="known context overflow " * 100)],
+    )
+
+    with activate_billing_metering(session), pytest.raises(
+        ModelContextWindowExceeded,
+        match="active provider context window",
+    ):
+        BillingMeteringMiddleware().wrap_model_call(
+            request,
+            lambda _request: response(),
+        )
+
+    assert client.payloads == []
+
+
+def test_provider_input_limit_does_not_include_output_budget():
+    client = FakeClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-context-budget",
+        run_id="run-context-budget",
+        reservation_id="reservation-context-budget",
+        agent_role="investigator",
+        max_output_tokens=4096,
+        max_reasoning_tokens=1024,
+        max_invocations=1,
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(
+            provider="google_genai",
+            model_name="gemini-test",
+            profile={"max_input_tokens": 100},
+        ),
+        messages=[HumanMessage(content="small input")],
+    )
+
+    metrics = session.authorize_request_context(request, request.model)
+
+    assert metrics.estimated_input_tokens <= 100
+    assert metrics.max_output_tokens == 4096
+    assert metrics.max_reasoning_tokens == 1024
+
+
+def test_billing_claim_budget_failure_happens_before_provider_call():
+    class BudgetClient(FakeClient):
+        def claim_billing_invocation(self, _reservation_id, payload):
+            assert payload.provider == "GOOGLE_GENAI"
+            assert payload.model == "gemini-test"
+            assert int(payload.estimatedInputTokens) > 0
+            raise WorkerCallbackError("BILLING_INSUFFICIENT_CREDITS", status_code=402)
+
+    session = BillingMeteringSession(
+        api_client=BudgetClient(),
+        assessment_id="assessment-budget",
+        run_id="run-budget",
+        reservation_id="reservation-budget",
+        agent_role="investigator",
+        max_output_tokens=4096,
+        max_reasoning_tokens=0,
+        max_invocations=1,
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="google_genai", model_name="gemini-test"),
+        messages=[HumanMessage(content="bill this invocation")],
+    )
+    provider_called = False
+
+    def provider_handler(_request):
+        nonlocal provider_called
+        provider_called = True
+        return response()
+
+    with activate_billing_metering(session), pytest.raises(BillingBudgetExhausted):
+        BillingMeteringMiddleware().wrap_model_call(request, provider_handler)
+
+    assert provider_called is False
+    assert session.api_client.payloads == []
 
 
 def test_model_call_telemetry_emits_heartbeat_and_completion(monkeypatch):
@@ -196,7 +302,7 @@ def test_model_call_telemetry_emits_heartbeat_and_completion(monkeypatch):
     started = next(fields for event_type, fields in events if event_type == "MODEL_CALL_STARTED")
     assert started["data"]["provider"] == "google_genai"
     assert started["data"]["model"] == "gemini-test"
-    assert started["data"]["timeout_seconds"] == 30.0
+    assert started["data"]["timeout_seconds"] == 90.0
     assert len(client.payloads) == 1
 
 
@@ -681,9 +787,18 @@ def test_release_failure_is_durable_and_replayed_without_model_retry(tmp_path: P
     assert drain(session.recovery_store_path, client) == 0
 
 
-def test_input_ceiling_fails_before_provider_handler():
+def test_reservation_input_byte_ceiling_does_not_cap_provider_context():
+    class ClaimClient(FakeClient):
+        def __init__(self):
+            super().__init__()
+            self.claim = None
+
+        def claim_billing_invocation(self, _reservation_id, payload):
+            self.claim = payload
+
+    client = ClaimClient()
     session = BillingMeteringSession(
-        api_client=FakeClient(),
+        api_client=client,
         assessment_id="assessment-1",
         run_id="run-1",
         reservation_id="reservation-1",
@@ -691,8 +806,12 @@ def test_input_ceiling_fails_before_provider_handler():
         max_input_bytes=1,
         max_output_tokens=1,
         max_reasoning_tokens=0,
+        max_invocations=1,
     )
-    request = SimpleNamespace(messages=[{"role": "user", "content": "too long"}])
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="openai", model_name="gpt-test"),
+        messages=[{"role": "user", "content": "too long"}],
+    )
     called = False
 
     def provider_handler(_request):
@@ -700,24 +819,37 @@ def test_input_ceiling_fails_before_provider_handler():
         called = True
         return response()
 
-    import pytest
-
-    with activate_billing_metering(session), pytest.raises(BillingUsageUnavailable):
+    with activate_billing_metering(session):
         BillingMeteringMiddleware().wrap_model_call(request, provider_handler)
-    assert called is False
+    assert called is True
+    assert client.claim is not None
+    assert int(client.claim.estimatedInputBytes) > 1
 
 
-def test_priced_token_ceiling_is_enforced_before_provider_handler():
+def test_reservation_token_ceiling_does_not_cap_provider_context():
+    class ClaimClient(FakeClient):
+        def __init__(self):
+            super().__init__()
+            self.claim = None
+
+        def claim_billing_invocation(self, _reservation_id, payload):
+            self.claim = payload
+
+    client = ClaimClient()
     session = BillingMeteringSession(
-        api_client=FakeClient(),
+        api_client=client,
         assessment_id="assessment-1",
         run_id="run-1",
         reservation_id="reservation-1",
         agent_role="planner",
         max_input_tokens=4,
         max_input_bytes=16_384,
+        max_invocations=1,
     )
-    request = SimpleNamespace(messages=[{"role": "user", "content": "12345"}])
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="openai", model_name="gpt-test"),
+        messages=[{"role": "user", "content": "12345"}],
+    )
     called = False
 
     def provider_handler(_request):
@@ -725,11 +857,11 @@ def test_priced_token_ceiling_is_enforced_before_provider_handler():
         called = True
         return response()
 
-    import pytest
-
-    with activate_billing_metering(session), pytest.raises(BillingUsageUnavailable):
+    with activate_billing_metering(session):
         BillingMeteringMiddleware().wrap_model_call(request, provider_handler)
-    assert called is False
+    assert called is True
+    assert client.claim is not None
+    assert int(client.claim.estimatedInputTokens) > 4
 
 
 def test_token_ceiling_is_not_treated_as_the_same_number_of_bytes():

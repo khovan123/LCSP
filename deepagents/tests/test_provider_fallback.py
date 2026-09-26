@@ -17,6 +17,7 @@ from middleware.provider_fallback import (
     provider_fallback_failure,
 )
 from middleware.billing_metering import (
+    BillingBudgetExhausted,
     BillingMeteringMiddleware,
     BillingMeteringSession,
     activate_billing_metering,
@@ -64,6 +65,19 @@ def clear_provider_fallback_env(monkeypatch):
 
     token_fallback._DEAD_CREDENTIAL_SLOTS.clear()
     token_fallback._RATE_LIMITED_UNTIL.clear()
+    # A pool whose every slot is rate limited waits once for a cooldown; advance a
+    # fake clock instead of sleeping for the production 30-120s.
+    clock = {"now": 1_000.0}
+
+    def sleep(seconds: float) -> None:
+        clock["now"] += seconds
+
+    async def asleep(seconds: float) -> None:
+        clock["now"] += seconds
+
+    monkeypatch.setattr(token_fallback, "_monotonic", lambda: clock["now"])
+    monkeypatch.setattr(token_fallback, "_sleep", sleep)
+    monkeypatch.setattr(token_fallback, "_asleep", asleep)
     yield
     token_fallback._DEAD_CREDENTIAL_SLOTS.clear()
     token_fallback._RATE_LIMITED_UNTIL.clear()
@@ -326,7 +340,6 @@ def test_llm7_402_opens_run_scoped_circuit_and_skips_next_primary(monkeypatch):
     assert len(client.payloads) == 2
     assert [event_type for event_type, _ in stream_events] == [
         "PROVIDER_FALLBACK",
-        "PROVIDER_FALLBACK",
     ]
 
 
@@ -450,7 +463,6 @@ def test_llm7_upstream_unprocessable_fallback_preserves_tool_continuation_and_op
     ]
     assert [event_type for event_type, _ in stream_events] == [
         "PROVIDER_FALLBACK",
-        "PROVIDER_FALLBACK",
     ]
 
 
@@ -460,6 +472,16 @@ def test_provider_route_incompatibility_is_fallback_before_generic_422_terminal(
     assert is_provider_route_incompatibility(error)
     assert provider_fallback_failure(error)
     assert provider_circuit_breaker_failure(error)
+
+
+def test_lcsp_billing_402_remains_terminal_without_provider_fallback():
+    error = BillingBudgetExhausted(
+        "Billing budget exhausted before provider call",
+        error_code="BILLING_INSUFFICIENT_CREDITS",
+    )
+
+    assert not provider_fallback_failure(error)
+    assert not provider_circuit_breaker_failure(error)
 
 
 def test_local_validation_422_remains_terminal_without_provider_fallback():
@@ -491,21 +513,25 @@ def test_primary_key_pool_exhausts_before_llm7_pool(monkeypatch):
     monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "llm7")
     request = ModelRequest(model=_openai_model(), messages=[], tools=[])
     response = ModelResponse(result=[])
-    raw_handler = MagicMock(side_effect=[QuotaError(), QuotaError(), QuotaError(), response])
+    raw_handler = MagicMock(
+        side_effect=[QuotaError(), QuotaError(), QuotaError(), QuotaError(), response]
+    )
 
     assert _sync_chain(request, raw_handler) is response
-    assert raw_handler.call_count == 4
+    assert raw_handler.call_count == 5
     requests = [call.args[0] for call in raw_handler.call_args_list]
     assert [model_provider(item.model) for item in requests] == [
+        "openai",
         "openai",
         "openai",
         "llm7",
         "llm7",
     ]
+    # The OpenAI pool waits once and retries its soonest slot before llm7 is used.
     assert [
         item.model.openai_api_key.get_secret_value()
         for item in requests
-    ] == ["openai-a", "openai-b", "llm7-a", "llm7-b"]
+    ] == ["openai-a", "openai-b", "openai-a", "llm7-a", "llm7-b"]
     llm7_model = requests[-1].model
     assert str(llm7_model.openai_api_base).rstrip("/") == "https://api.llm7.io/v1"
     assert llm7_model.use_responses_api is False
@@ -581,14 +607,14 @@ def test_chain_advances_openai_then_google_then_llm7(monkeypatch):
     monkeypatch.setenv("LLM_FALLBACK_PROVIDER_2", "llm7")
     request = ModelRequest(model=_openai_model(), messages=[], tools=[])
     response = ModelResponse(result=[])
-    raw_handler = MagicMock(
-        side_effect=[QuotaError(), QuotaError(), QuotaError(), QuotaError(), response]
-    )
+    raw_handler = MagicMock(side_effect=[QuotaError()] * 6 + [response])
 
     assert _sync_chain(request, raw_handler) is response
     assert [model_provider(call.args[0].model) for call in raw_handler.call_args_list] == [
         "openai",
         "openai",
+        "openai",
+        "google_genai",
         "google_genai",
         "google_genai",
         "llm7",
@@ -616,7 +642,8 @@ def test_all_provider_pools_exhaust_to_terminal_error(monkeypatch):
 
     with pytest.raises(TerminalCredentialError, match="provider routes exhausted"):
         _sync_chain(request, raw_handler)
-    assert raw_handler.call_count == 4
+    # Each two-slot pool: both slots, one cooldown wait, one retry of the soonest slot.
+    assert raw_handler.call_count == 6
 
 
 def test_current_provider_is_not_reentered_from_fallback_chain(monkeypatch):

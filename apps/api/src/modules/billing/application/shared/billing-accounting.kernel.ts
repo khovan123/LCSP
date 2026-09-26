@@ -101,6 +101,7 @@ export class BillingAccountingKernel {
     i: {
       userId: string;
       reservationId: string;
+      invocationId: string;
       usageEventId: string;
       chargedCredits: bigint;
     },
@@ -129,6 +130,17 @@ export class BillingAccountingKernel {
         throw new InvalidReservationTransitionError(
           "Reservation is not reservable",
         );
+      const claim = await repos.reservation.findInvocationClaim(
+        i.reservationId,
+        i.invocationId,
+      );
+      if (
+        claim?.authorizationFingerprint &&
+        i.chargedCredits > claim.authorizedChargeCredits
+      )
+        throw new BillingDomainError(
+          "Usage charge exceeds the authorized invocation hold",
+        );
       if (i.chargedCredits < 0n || i.chargedCredits > r.remainingCredits)
         throw new BillingDomainError("Invalid charge amount");
       const w = await repos.wallet.findForUser(i.userId);
@@ -153,6 +165,16 @@ export class BillingAccountingKernel {
         },
         true,
       );
+      if (
+        claim &&
+        !(await repos.reservation.settleInvocationClaim({
+          reservationId: i.reservationId,
+          invocationId: i.invocationId,
+        }))
+      )
+        throw new BillingConcurrencyError(
+          "Invocation authorization hold could not be settled",
+        );
       await this.reconcile(repos.wallet, repos.ledger, repos.reservation, w);
       return { reservationId: r.id, chargedCredits: i.chargedCredits };
     })();

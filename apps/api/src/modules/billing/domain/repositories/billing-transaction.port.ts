@@ -35,6 +35,14 @@ export type ReservationRecord = {
   idempotencyKey: string | null;
   status: string;
 };
+export type InvocationClaimRecord = {
+  reservationId: string;
+  invocationId: string;
+  authorizedChargeCredits: bigint;
+  authorizationFingerprint: string | null;
+  settledAt: Date | null;
+};
+
 export type OrderRecord = {
   id: string;
   userId: string;
@@ -163,7 +171,18 @@ export interface BillingReservationPort {
     idempotencyKey: string;
     maxInvocations?: bigint;
   }): Promise<ReservationRecord>;
+  findInvocationClaim(
+    reservationId: string,
+    invocationId: string,
+  ): Promise<InvocationClaimRecord | null>;
+  sumUnsettledAuthorizedChargeCredits(reservationId: string): Promise<bigint>;
   claimInvocation(input: {
+    reservationId: string;
+    invocationId: string;
+    authorizedChargeCredits?: bigint;
+    authorizationFingerprint?: string;
+  }): Promise<boolean>;
+  settleInvocationClaim(input: {
     reservationId: string;
     invocationId: string;
   }): Promise<boolean>;
@@ -314,6 +333,8 @@ export interface PricingSnapshotPort {
 export interface RuntimeModelPolicyPort {
   findApplicable(
     role: string,
+    provider: string,
+    model: string,
     occurredAt: Date,
   ): Promise<RuntimeModelPolicyRecord | null>;
 }
