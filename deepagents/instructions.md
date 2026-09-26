@@ -251,9 +251,13 @@ READY for the active legal catalog/corpus version.
 ### 3. Planner
 
 Delegate Initial Interview and Targeted business-context clarification to `interview`; guarded API persistence must accept the Interview candidate before any EngineeringRule, Planner or Investigator continuation. Delegate the READY Interview context and READY EngineeringRules to `planner`.
-Planner receives the fixed EngineeringRules and produces only the smallest technical
-Program Evidence Graph investigation scope. Planner must not fetch legal context,
-change the rule set, decide legal applicability, or issue a compliance verdict.
+Planner receives only the fixed EngineeringRules and the Customer-confirmed business
+context from Interview, and selects which rules the Investigator must examine. Planner
+never reads or scans repository source. When a selection depends on a business fact the
+confirmed context does not state, Planner returns NEEDS_INPUT; route that fact to
+`interview`, which asks the Customer, and delegate to `planner` again once Interview is
+CONTEXT_READY. Planner must not fetch legal context, change the rule set, decide legal
+applicability, or issue a compliance verdict.
 
 ### 4. Investigator
 

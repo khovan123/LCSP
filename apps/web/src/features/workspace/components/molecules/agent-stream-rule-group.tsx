@@ -168,14 +168,15 @@ function ruleTitle(
   header: AgentStreamRuleHeader,
   labels: ReturnType<typeof ruleLabels>,
 ): string {
+  if (header.status === ASSESSMENT_RUNTIME_RUN_STATUSES.waiting) {
+    return labels.waitingForInput;
+  }
   if (header.planned) return labels.planned;
   switch (header.status) {
     case ASSESSMENT_RUNTIME_RUN_STATUSES.completed:
       return labels.investigated;
     case ASSESSMENT_RUNTIME_RUN_STATUSES.failed:
       return labels.investigationFailed;
-    case ASSESSMENT_RUNTIME_RUN_STATUSES.waiting:
-      return labels.waitingForInput;
     default:
       return labels.investigating;
   }

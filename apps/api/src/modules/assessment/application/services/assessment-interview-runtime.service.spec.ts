@@ -13,6 +13,7 @@ import {
   ASSESSMENT_INTERVIEW_MODES,
   ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS,
   ASSESSMENT_INTERVIEW_OUTCOMES,
+  ASSESSMENT_INTERVIEW_RESUME_REASONS,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
   ASSESSMENT_INTERVIEW_RESUME_MAX_ATTEMPTS,
   ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES,
@@ -1784,6 +1785,119 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         },
       });
       expect(mockOutboxRepository.enqueue).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("registerPlannerContextNeedForWorker", () => {
+    const plannerNeed = {
+      actorId: "user-1",
+      needId: "planner:abc",
+      businessContextNeed: "Whether the product is offered to patients.",
+      resolutionCriteria: ["Customer states whether patients use the product"],
+      whyNeeded: "It decides which safeguards apply.",
+      affectedRuleIds: ["rule-1", "rule-2"],
+      workflowRunId: "10000000-0000-4000-8000-000000000010",
+    };
+
+    function mockThread(
+      state: AssessmentInterviewRuntimeState,
+      privateContextJson: Record<string, unknown> = {},
+    ) {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
+        assessmentId: "assessment-1",
+        contextRevision: 2,
+        processedRevision: 2,
+        activeQuestionId: null,
+        stateJson: state,
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+          ...privateContextJson,
+        },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+      });
+    }
+
+    it("reopens a ready Interview and resumes the Interview agent for the Planner need", async () => {
+      mockThread({
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+        contextRevision: 2,
+      });
+
+      const result = await service.registerPlannerContextNeedForWorker({
+        assessmentId: "assessment-1",
+        correlationId: "corr-planner-1",
+        need: plannerNeed,
+      });
+
+      expect(result.registered).toBe(true);
+      expect(result.state.outcome).toBe(
+        ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      );
+      expect(
+        mockTx.assessmentInterviewThread.upsert as jest.Mock<
+          (input: unknown) => Promise<Record<string, unknown>>
+        >,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({
+            privateContextJson: expect.objectContaining({
+              plannerContextNeed: expect.objectContaining({
+                needId: "planner:abc",
+                affectedRuleIds: ["rule-1", "rule-2"],
+              }),
+              plannerContextNeedIds: ["planner:abc"],
+            }),
+          }),
+        }),
+      );
+      expect(mockOutboxRepository.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: "command.assessment-interview.resume-agent.v1",
+          payload: expect.objectContaining({
+            // The Interview thread keeps its own root workflow run.
+            workflowRunId: "10000000-0000-4000-8000-000000000001",
+            questionId: "planner:abc",
+            resumeReason:
+              ASSESSMENT_INTERVIEW_RESUME_REASONS.plannerContextRequired,
+          }),
+        }),
+        mockTx,
+      );
+    });
+
+    it("never asks the same Planner need twice", async () => {
+      mockThread(
+        {
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+          contextRevision: 3,
+        },
+        { plannerContextNeedIds: ["planner:abc"] },
+      );
+
+      const result = await service.registerPlannerContextNeedForWorker({
+        assessmentId: "assessment-1",
+        correlationId: "corr-planner-2",
+        need: plannerNeed,
+      });
+
+      expect(result.registered).toBe(false);
+      expect(mockOutboxRepository.enqueue).not.toHaveBeenCalled();
+    });
+
+    it("rejects an incomplete Planner need", async () => {
+      await expect(
+        service.registerPlannerContextNeedForWorker({
+          assessmentId: "assessment-1",
+          correlationId: "corr-planner-3",
+          need: { ...plannerNeed, resolutionCriteria: [] },
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          problem: { code: "INTERVIEW_PLANNER_NEED_INVALID", status: 400 },
+        },
+      });
     });
   });
 

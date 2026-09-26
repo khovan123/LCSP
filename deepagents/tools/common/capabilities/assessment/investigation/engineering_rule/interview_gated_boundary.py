@@ -19,6 +19,9 @@ from .managed_targeted_investigator import (
     ManagedTargetedInvestigatorPipeline,
     TargetedInterviewPending,
 )
+from tools.common.capabilities.assessment.planning.engineering_rule.engineering_rule_planner import (
+    PlannerContextPending,
+)
 from tools.common.capabilities.assessment.planning.engineering_rule.confirmed_business_context import (
     ConfirmedStructuredBusinessContext,
     normalize_confirmed_structured_business_context,
@@ -129,6 +132,10 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
                 # execution/checkpoint and queued Targeted Interview. Do not emit a
                 # classification callback or continue deterministic evaluation until
                 # that exact execution is resumed with guarded Customer context.
+                return
+            except PlannerContextPending:
+                # The Planner reopened Interview for a Customer fact. When Interview
+                # is CONTEXT_READY again this boundary re-runs and plans with it.
                 return
         finally:
             self._pipeline = original_pipeline

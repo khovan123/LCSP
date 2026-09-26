@@ -12,6 +12,7 @@ from orchestration.agent_stream import (
     agent_stream_rule_scope,
     agent_stream_stage,
     publish_rule_decision,
+    publish_rule_waiting,
 )
 from tools.common.capabilities.platform.logging import get_logger
 from tools.common.capabilities.evidence.graph.schema.source_roles import filter_program_evidence_graph
@@ -21,9 +22,12 @@ from tools.common.capabilities.assessment.planning.engineering_rule.confirmed_bu
     coerce_confirmed_structured_business_context,
 )
 from tools.common.capabilities.assessment.planning.engineering_rule.engineering_rule_planner import (
+    PLANNER_CONTEXT_REQUIRED,
     EngineeringRulePlan,
     EngineeringRulePlanDecisionAudit,
     EngineeringRulePlanner,
+    PlannerContextNeed,
+    PlannerContextPending,
 )
 from tools.common.capabilities.assessment.planning.engineering_rule.material_scope import material_planning_packet
 from tools.common.capabilities.assessment.investigation.engineering_rule.investigator import LawGuidedInvestigator
@@ -425,6 +429,15 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             workflow_run_id=workflow_run_id,
             correlation_id=correlation_id,
         )
+        if plan.context_needs and self._request_planner_context(
+            plan.context_needs[0],
+            assessment_id=assessment_id,
+            user_id=user_id,
+            workflow_run_id=workflow_run_id,
+        ):
+            raise PlannerContextPending(
+                "Planner reopened Interview for Customer business context"
+            )
 
         # Existing implementation continues below in this helper.
         return self._finish_planned_investigation(
@@ -446,6 +459,49 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             user_id=user_id,
             scan_job_id=scan_job_id,
         )
+
+    def _request_planner_context(
+        self,
+        need: PlannerContextNeed,
+        *,
+        assessment_id: str | None,
+        user_id: str | None,
+        workflow_run_id: str,
+    ) -> bool:
+        """Ask Root Orchestration to route one missing business fact to Interview.
+
+        Returns False when the need cannot be asked (no trusted assessment/user, or it
+        was already asked once): the plan then proceeds and keeps the affected rules
+        selected, so an unanswerable fact never blocks or silently narrows the scope.
+        """
+        register = getattr(self._api_client, "post_interview_planner_context_need", None)
+        if not callable(register) or not assessment_id or not user_id:
+            return False
+        result = register(
+            assessment_id,
+            {
+                "actorId": user_id,
+                "needId": need.need_id,
+                "businessContextNeed": need.business_context_need,
+                "resolutionCriteria": list(need.resolution_criteria),
+                "whyNeeded": need.why_needed,
+                "affectedRuleIds": list(need.engineering_rule_ids),
+                "workflowRunId": workflow_run_id,
+            },
+        )
+        registered = isinstance(result, dict) and result.get("registered") is True
+        logger.info(
+            "ENGINEERING_RULE_PLAN_CONTEXT_NEED",
+            need_id=need.need_id,
+            engineering_rule_ids=list(need.engineering_rule_ids),
+            registered=registered,
+            workflow_run_id=workflow_run_id,
+        )
+        if registered:
+            with agent_stream_stage(AGENT_STREAM_STAGES["planner"]):
+                for rule_id in need.engineering_rule_ids:
+                    publish_rule_waiting(rule_id, reason_code=PLANNER_CONTEXT_REQUIRED)
+        return registered
 
     def _finish_planned_investigation(
         self,

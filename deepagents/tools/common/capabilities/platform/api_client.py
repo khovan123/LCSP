@@ -928,6 +928,14 @@ class WorkerApiClient:
             raise WorkerCallbackError("Interview targeted need response was invalid.")
         return data
 
+    def post_interview_planner_context_need(self, assessment_id: str, payload: dict) -> dict:
+        """Reopen Interview for one business fact the Planner needs to select rules."""
+        path = InternalPath.INTERVIEW_PLANNER_CONTEXT_NEED.format(assessment_id=assessment_id)
+        data = self._post_with_retry(path, payload, redact=False)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("Interview planner context need response was invalid.")
+        return data
+
     def dispatch_agentic_tool(self, payload: dict) -> dict:
         """Dispatch one already validated/authorized agentic tool to the trusted API."""
         path = InternalPath.AGENTIC_TOOL_DISPATCH

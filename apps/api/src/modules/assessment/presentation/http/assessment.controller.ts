@@ -401,6 +401,21 @@ export class InternalAssessmentInterviewController {
     );
   }
 
+  @Post(":assessmentId/planner-context-needs")
+  async registerPlannerContextNeed(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.interviewRuntime.registerPlannerContextNeedForWorker({
+        assessmentId,
+        correlationId: request.correlationId ?? "worker-interview-context",
+        need: body as never,
+      }),
+    );
+  }
+
   @Post(":assessmentId/targeted-needs")
   async registerTargetedNeed(
     @Param("assessmentId") assessmentId: string,

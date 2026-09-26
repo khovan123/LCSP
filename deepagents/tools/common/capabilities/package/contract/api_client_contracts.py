@@ -42,6 +42,9 @@ class InternalPath(StrEnum):
     INTERVIEW_AGENT_DECISION = "/internal/assessment-interviews/{assessment_id}/agent-decisions"
     INTERVIEW_INITIAL_QUESTION = "/internal/assessment-interviews/{assessment_id}/initial-question"
     INTERVIEW_TARGETED_NEED = "/internal/assessment-interviews/{assessment_id}/targeted-needs"
+    INTERVIEW_PLANNER_CONTEXT_NEED = (
+        "/internal/assessment-interviews/{assessment_id}/planner-context-needs"
+    )
     ASSESSMENT_AI_NOT_DETECTED = "/internal/assessment-interviews/{assessment_id}/ai-not-detected"
     LEGAL_SOURCE_SNAPSHOTS = "/internal/legal-rule-catalog/source-snapshots"
 

@@ -234,6 +234,15 @@ export const ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS = {
 export type AssessmentInterviewWorkflowEvent =
   (typeof ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS)[keyof typeof ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS];
 
+/** Why the Interview agent is resumed without a new Customer answer. */
+export const ASSESSMENT_INTERVIEW_RESUME_REASONS = {
+  investigatorResolutionRequired: "INVESTIGATOR_RESOLUTION_REQUIRED",
+  plannerContextRequired: "PLANNER_CONTEXT_REQUIRED",
+} as const;
+
+export type AssessmentInterviewResumeReason =
+  (typeof ASSESSMENT_INTERVIEW_RESUME_REASONS)[keyof typeof ASSESSMENT_INTERVIEW_RESUME_REASONS];
+
 export const ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS = {
   provideMoreContext: "PROVIDE_MORE_CONTEXT",
   checkInternally: "CHECK_INTERNALLY",
