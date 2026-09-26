@@ -1690,6 +1690,10 @@ export type PagesMessages = {
       progressTool: string;
       progressCompleted: string;
       progressFailed: string;
+      resumeFailedPlaceholder: string;
+      resumeTurnQueued: string;
+      resumeTurnLimitReached: string;
+      resumeTurnFailed: string;
       contextReadyHandoff: string;
       contextResolvedHandoff: string;
       pendingPlaceholder: string;

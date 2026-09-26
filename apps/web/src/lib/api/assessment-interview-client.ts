@@ -19,6 +19,7 @@ import {
   type AssessmentInterviewAnswerInput,
   type AssessmentInterviewAuditRef,
   type AssessmentInterviewBlockedInput,
+  type AssessmentInterviewResumeInput,
   type AssessmentInterviewFlag,
   type AssessmentInterviewQuestion,
   type AssessmentInterviewQuestionChoice,
@@ -27,9 +28,11 @@ import {
   type NonEmptyArray,
   type SubmitInterviewAnswerCommand,
   INTERVIEW_TECHNICAL_CONTRACT_VERSION,
+  ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES,
 } from "@lcsp/contracts/evidence";
 
-import { apiJson } from "./api-request";
+import { apiJson, apiRequest } from "./api-request";
+import { API_OUTCOME_KINDS } from "./outcome-kinds";
 
 export async function getAssessmentInterviewState(assessmentId: string) {
   return apiJson<AssessmentInterviewRuntimeState>(
@@ -148,6 +151,37 @@ export async function recordAssessmentInterviewBlockedAction(
       body: JSON.stringify(input),
     },
   );
+}
+
+export type AssessmentInterviewResumeOutcome =
+  | {
+      kind: typeof API_OUTCOME_KINDS.requested;
+      state: AssessmentInterviewRuntimeState;
+    }
+  | { kind: typeof API_OUTCOME_KINDS.rateLimited }
+  | { kind: typeof API_OUTCOME_KINDS.error };
+
+export async function resumeAssessmentInterviewTurn(
+  assessmentId: string,
+  input: AssessmentInterviewResumeInput,
+): Promise<AssessmentInterviewResumeOutcome> {
+  const { ok, payload, problemCode } = await apiRequest(
+    `/api/assessments/${encodeURIComponent(assessmentId)}/interview/resume`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  if (ok) {
+    return {
+      kind: API_OUTCOME_KINDS.requested,
+      state: payload as AssessmentInterviewRuntimeState,
+    };
+  }
+  return problemCode === ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.limitReached
+    ? { kind: API_OUTCOME_KINDS.rateLimited }
+    : { kind: API_OUTCOME_KINDS.error };
 }
 
 export async function submitAssessmentPostFindingDecision(

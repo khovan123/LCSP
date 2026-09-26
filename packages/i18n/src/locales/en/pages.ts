@@ -1760,7 +1760,15 @@ export const enPages = {
       progressCompleted:
         "Interview evaluation completed. The result has been saved.",
       progressFailed:
-        "This evaluation attempt failed. Your answer remains saved.",
+        "This evaluation attempt failed. Your answer remains saved. Press Resume to evaluate it again.",
+      resumeFailedPlaceholder:
+        "Press Resume to evaluate your saved answer again",
+      resumeTurnQueued:
+        "Evaluation resumed. Your saved answer is queued again.",
+      resumeTurnLimitReached:
+        "This answer could not be evaluated after several attempts. Please try again later or contact support.",
+      resumeTurnFailed:
+        "The evaluation could not be resumed right now. Please try again.",
       contextReadyHandoff:
         "The baseline business context has been confirmed. The assessment can now continue to planning and investigation. Additional rule-specific questions may still be asked if needed.",
       contextResolvedHandoff:

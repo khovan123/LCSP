@@ -1762,7 +1762,14 @@ export const viPages = {
       progressTool: "Đang kiểm tra thông tin hỗ trợ.",
       progressCompleted: "Đánh giá Interview đã hoàn tất. Kết quả đã được lưu.",
       progressFailed:
-        "Lượt đánh giá này gặp lỗi. Câu trả lời của bạn vẫn được lưu.",
+        "Lượt đánh giá này gặp lỗi. Câu trả lời của bạn vẫn được lưu. Nhấn Tiếp tục để đánh giá lại.",
+      resumeFailedPlaceholder:
+        "Nhấn Tiếp tục để đánh giá lại câu trả lời đã lưu",
+      resumeTurnQueued:
+        "Đã tiếp tục đánh giá. Câu trả lời đã lưu đang được xếp hàng lại.",
+      resumeTurnLimitReached:
+        "Không thể đánh giá câu trả lời này sau nhiều lần thử. Vui lòng thử lại sau hoặc liên hệ hỗ trợ.",
+      resumeTurnFailed: "Hiện chưa thể tiếp tục đánh giá. Vui lòng thử lại.",
       contextReadyHandoff:
         "Bối cảnh kinh doanh cơ bản đã được xác nhận. Assessment giờ có thể tiếp tục với lập kế hoạch và điều tra. Các câu hỏi riêng cho từng yêu cầu vẫn có thể được hỏi thêm nếu cần.",
       contextResolvedHandoff:

@@ -360,6 +360,7 @@ export function selectInterviewHandoffPresentation(
     // Terminal: governed evidence proved no AI use, so no Interview question follows.
     return {
       isStartupPending: false,
+      canResumeFailedTurn: false,
       messageKey: "pages.assessmentFlow.interview.aiNotDetectedDescription",
       placeholderKey: "pages.assessmentFlow.interview.aiNotDetectedPlaceholder",
     } as const;
@@ -415,12 +416,21 @@ export function selectInterviewHandoffPresentation(
                 ? "pages.assessmentFlow.interview.startingDescription"
                 : "pages.assessmentFlow.interview.pendingDescription";
 
+  // The answer is saved but the Interview Agent turn failed: offer Resume.
+  const canResumeFailedTurn =
+    isStartupPending &&
+    progress?.phase === INTERVIEW_PROGRESS_PHASES.failed &&
+    messageKey === progressKey;
+
   return {
     isStartupPending,
+    canResumeFailedTurn,
     messageKey,
-    placeholderKey: interview.orchestrationRequested
-      ? "pages.assessmentFlow.interview.startingPlaceholder"
-      : "pages.assessmentFlow.interview.pendingPlaceholder",
+    placeholderKey: canResumeFailedTurn
+      ? "pages.assessmentFlow.interview.resumeFailedPlaceholder"
+      : interview.orchestrationRequested
+        ? "pages.assessmentFlow.interview.startingPlaceholder"
+        : "pages.assessmentFlow.interview.pendingPlaceholder",
   };
 }
 

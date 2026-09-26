@@ -20,6 +20,7 @@ import {
   ASSESSMENT_RUNTIME_STEP_SKIP_REASONS,
   ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS,
   ASSESSMENT_TECHNICAL_COVERAGE_STATES,
+  INTERVIEW_PROGRESS_PHASES,
   type AssessmentInterviewAuditRef,
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
@@ -2029,6 +2030,87 @@ test("LCSP-272 HANDOFF: evidence ready without orchestration request stays truth
   );
 });
 
+test("LCSP-999 HANDOFF: a failed Interview turn offers Resume until a new progress phase arrives", () => {
+  const progressEvent = (
+    sequence: number,
+    phase: string,
+    eventType: WorkspaceRuntimeActivityItem["eventType"],
+  ) =>
+    runtimeActivity("asm-failed-turn", sequence, "Interview progress", {
+      runId: "run-interview",
+      eventType,
+      stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+      outputSummary: { interviewProgress: { contextRevision: 2, phase } },
+    });
+  const failedRuntime = (recentActivity: WorkspaceRuntimeActivityItem[]) =>
+    normalizeAssessmentRuntime({
+      assessmentId: "asm-failed-turn",
+      interviewState: {
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        contextRevision: 2,
+        orchestrationRequested: true,
+        answerHistory: [
+          {
+            questionId: "q-1",
+            answeredAt: "2026-09-05T08:00:00.000Z",
+            summary: "Saved answer",
+          },
+        ],
+      },
+      timeline: {
+        currentRun: null,
+        recentActivity,
+        latestRunId: "run-interview",
+        connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+        lastEmittedAt: "2026-09-05T08:05:00.000Z",
+      },
+    });
+
+  const failed = selectInterviewHandoffPresentation(
+    failedRuntime([
+      progressEvent(
+        1,
+        INTERVIEW_PROGRESS_PHASES.running,
+        ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
+      ),
+      progressEvent(
+        2,
+        INTERVIEW_PROGRESS_PHASES.failed,
+        ASSESSMENT_RUNTIME_EVENT_TYPES.toolFailed,
+      ),
+    ]),
+  );
+  assert.equal(failed.canResumeFailedTurn, true);
+  assert.equal(
+    failed.messageKey,
+    "pages.assessmentFlow.interview.progressFailed",
+  );
+  assert.equal(
+    failed.placeholderKey,
+    "pages.assessmentFlow.interview.resumeFailedPlaceholder",
+  );
+
+  const requeued = selectInterviewHandoffPresentation(
+    failedRuntime([
+      progressEvent(
+        2,
+        INTERVIEW_PROGRESS_PHASES.failed,
+        ASSESSMENT_RUNTIME_EVENT_TYPES.toolFailed,
+      ),
+      progressEvent(
+        3,
+        INTERVIEW_PROGRESS_PHASES.queued,
+        ASSESSMENT_RUNTIME_EVENT_TYPES.toolWaitingInput,
+      ),
+    ]),
+  );
+  assert.equal(requeued.canResumeFailedTurn, false);
+  assert.equal(
+    requeued.messageKey,
+    "pages.assessmentFlow.interview.progressQueued",
+  );
+});
+
 test("LCSP-999 HANDOFF: AI not detected ends the assessment instead of waiting for Interview", () => {
   const normalized = normalizeAssessmentRuntime({
     assessmentId: "asm-ai-not-detected",
@@ -2443,7 +2525,6 @@ test("context ready and resolved handoffs resolve deterministic i18n copy withou
   }
 });
 
-
 test("artifact cards derive Business Context and Investigation Notes readiness only from artifact API state", () => {
   const normalized = normalizeAssessmentRuntime({
     assessmentId: "asm-artifacts",
@@ -2497,7 +2578,10 @@ test("artifact cards derive Business Context and Investigation Notes readiness o
     ASSESSMENT_ARTIFACT_AVAILABILITIES.updating,
   );
   assert.equal(normalized.artifacts.businessContext.customerSafeSummary, null);
-  assert.equal(normalized.artifacts.investigationNotes.customerSafeSummary, null);
+  assert.equal(
+    normalized.artifacts.investigationNotes.customerSafeSummary,
+    null,
+  );
 });
 
 test("completed workflow stages cannot fabricate READY textual artifacts when the artifact API says unavailable", () => {

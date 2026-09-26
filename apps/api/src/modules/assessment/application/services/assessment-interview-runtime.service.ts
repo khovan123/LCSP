@@ -26,6 +26,8 @@ import {
   ASSESSMENT_INTERVIEW_OUTCOMES,
   ASSESSMENT_INTERVIEW_FLAGS,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
+  ASSESSMENT_INTERVIEW_RESUME_MAX_ATTEMPTS,
+  ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES,
   ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS,
   ASSESSMENT_RUNTIME_STAGE_CODES,
   CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES,
@@ -41,6 +43,7 @@ import {
   type AssessmentInterviewAnswerHistoryItem,
   type AssessmentInterviewAnswerInput,
   type AssessmentInterviewBlockedInput,
+  type AssessmentInterviewResumeInput,
   type AssessmentInterviewControl,
   type AssessmentInterviewOrchestratorAction,
   type CanonicalAssessmentInterviewMode,
@@ -97,6 +100,7 @@ const PUBLIC_REDACTED_ANSWER_SUMMARY =
 const PUBLIC_REDACTED_DRAFT_SUMMARY =
   "Customer draft persisted for Interview resume.";
 const INTERVIEW_AGENT_DECISION_REQUIRED = "INTERVIEW_AGENT_DECISION_REQUIRED";
+const INVESTIGATOR_RESOLUTION_REQUIRED = "INVESTIGATOR_RESOLUTION_REQUIRED";
 // Worker-only private answer history (never merged into publicState, which stays
 // the sanitized customer projection). Bounded so a long-running Interview thread
 // cannot grow the model prompt unboundedly: only the most recent
@@ -224,6 +228,15 @@ type PrivateInterviewStore = {
   targetedNeed?: TargetedInterviewNeed;
   targetedContinuation?: TargetedInterviewContinuation;
   partialCoveragePolicyDecision?: PartialCoveragePolicyDecision;
+  // Context revision whose Interview Agent decision run reported FAILED.
+  failedDecisionRevision?: number;
+  // Customer-triggered resume attempts for the failed context revision.
+  resumeAttempts?: InterviewResumeAttempts;
+};
+
+type InterviewResumeAttempts = {
+  contextRevision: number;
+  count: number;
 };
 
 type TargetedNeedRegistrationInput = {
@@ -497,6 +510,20 @@ export class AssessmentInterviewRuntimeService {
       },
     };
     if (input.phase === INTERVIEW_PROGRESS_PHASES.failed) {
+      // Remember the failed revision so the Customer can resume the same turn.
+      await this.prisma.assessmentInterviewThread.updateMany({
+        where: {
+          assessmentId,
+          contextRevision: thread.contextRevision,
+          processedRevision: thread.processedRevision,
+        },
+        data: {
+          privateContextJson: toJson({
+            ...thread.privateStore,
+            failedDecisionRevision: thread.contextRevision,
+          }),
+        },
+      });
       await this.runtimeEvents.recordToolFailed(event);
     } else {
       await this.runtimeEvents.recordToolStarted(event);
@@ -817,6 +844,167 @@ export class AssessmentInterviewRuntimeService {
       inputSummary: {
         questionId: next.questionId,
         answer: PUBLIC_REDACTED_ANSWER_SUMMARY,
+      },
+      outputSummary: {
+        assessmentInterview: publicState(next.state),
+        interviewProgress: {
+          contextRevision: next.revision,
+          phase: INTERVIEW_PROGRESS_PHASES.queued,
+        },
+        interviewWorkflowEvent:
+          ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewContextUpdated,
+        partialCoveragePolicyDecision:
+          next.partialCoveragePolicyDecision ?? null,
+      },
+      waitingReason:
+        ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewContextUpdated,
+      startedAt: new Date(),
+    });
+
+    return publicState(next.state);
+  }
+
+  /**
+   * Re-queues the Interview Agent decision for the current context revision
+   * after the worker reported FAILED. The Customer answer is already persisted,
+   * so the retry reuses the same revision instead of asking for a new answer.
+   */
+  async resumeFailedTurn(input: {
+    assessmentId: string;
+    actor: RbacRequestContext;
+    correlationId: string;
+    resume: AssessmentInterviewResumeInput;
+  }): Promise<AssessmentInterviewRuntimeState> {
+    const resume = parseResumeInput(input.resume, input.correlationId);
+    await this.assertAssessmentVisible(input.assessmentId, input.actor);
+    const provenance = await this.assessmentProvenance(input.assessmentId);
+    const next = await this.runInterviewTransaction(async (tx) => {
+      const thread = await this.readThread(input.assessmentId, tx);
+      if (
+        resume.expectedSessionRevision !== undefined &&
+        resume.expectedSessionRevision !== thread.contextRevision
+      ) {
+        throw problemException(
+          ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.revisionStale,
+          input.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
+      }
+      const answered = [...thread.privateRevisions]
+        .reverse()
+        .find(
+          (revision) => revision.contextRevision === thread.contextRevision,
+        );
+      const targetedNeed = thread.privateStore.targetedNeed;
+      const target = answered
+        ? {
+            questionId: answered.questionId,
+            resumeReason: INTERVIEW_AGENT_DECISION_REQUIRED,
+          }
+        : targetedNeed
+          ? {
+              questionId: targetedNeed.needId,
+              resumeReason: INVESTIGATOR_RESOLUTION_REQUIRED,
+            }
+          : undefined;
+      const workflowRunId =
+        thread.privateStore.targetedContinuation?.workflowRunId ??
+        thread.privateStore.workflowRunId;
+      if (
+        !target ||
+        !workflowRunId ||
+        thread.activeQuestionId ||
+        thread.state.activeQuestion ||
+        thread.processedRevision >= thread.contextRevision ||
+        thread.privateStore.failedDecisionRevision !== thread.contextRevision
+      ) {
+        throw problemException(
+          ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.notAvailable,
+          input.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
+      }
+      const priorAttempts =
+        thread.privateStore.resumeAttempts?.contextRevision ===
+        thread.contextRevision
+          ? thread.privateStore.resumeAttempts.count
+          : 0;
+      if (priorAttempts >= ASSESSMENT_INTERVIEW_RESUME_MAX_ATTEMPTS) {
+        throw problemException(
+          ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.limitReached,
+          input.correlationId,
+          {
+            status: HttpStatus.CONFLICT,
+            meta: { maxAttempts: ASSESSMENT_INTERVIEW_RESUME_MAX_ATTEMPTS },
+          },
+        );
+      }
+      const attempt = priorAttempts + 1;
+      const updated = await tx.assessmentInterviewThread.updateMany({
+        where: {
+          assessmentId: input.assessmentId,
+          contextRevision: thread.contextRevision,
+          processedRevision: thread.processedRevision,
+          activeQuestionId: null,
+        },
+        data: {
+          privateContextJson: toJson({
+            ...thread.privateStore,
+            failedDecisionRevision: undefined,
+            resumeAttempts: {
+              contextRevision: thread.contextRevision,
+              count: attempt,
+            },
+          }),
+        },
+      });
+      if (updated.count !== 1) {
+        throw problemException(
+          ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.notAvailable,
+          input.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
+      }
+      await this.outboxRepository.enqueue(
+        this.interviewAgentResumeCommand({
+          assessmentId: input.assessmentId,
+          workflowRunId,
+          actorId: input.actor.userId,
+          correlationId: input.correlationId,
+          contextRevision: thread.contextRevision,
+          questionId: target.questionId,
+          sourceVersion: provenance.sourceVersion,
+          pgeVersion: provenance.pgeVersion,
+          guidanceVersion:
+            thread.guidanceVersion ?? this.resolveGuidanceVersion(),
+          resumeReason: target.resumeReason,
+          resumeAttempt: attempt,
+        }),
+        tx,
+      );
+      return {
+        state: thread.state,
+        revision: thread.contextRevision,
+        questionId: target.questionId,
+        workflowRunId,
+        attempt,
+        partialCoveragePolicyDecision:
+          provenance.partialCoveragePolicyDecision ??
+          thread.privateStore.partialCoveragePolicyDecision,
+      };
+    });
+
+    await this.runtimeEvents.recordToolWaitingInput({
+      assessmentId: input.assessmentId,
+      runId: next.workflowRunId,
+      correlationId: input.correlationId,
+      stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+      toolName: INTERVIEW_TOOL_NAME,
+      summary:
+        "Customer resumed a failed Interview turn; Interview Agent sufficiency decision re-queued.",
+      inputSummary: {
+        questionId: next.questionId,
+        resumeAttempt: next.attempt,
       },
       outputSummary: {
         assessmentInterview: publicState(next.state),
@@ -1232,7 +1420,7 @@ export class AssessmentInterviewRuntimeService {
           pgeVersion: initialProvenance.pgeVersion,
           guidanceVersion:
             thread.guidanceVersion ?? this.resolveGuidanceVersion(),
-          resumeReason: "INVESTIGATOR_RESOLUTION_REQUIRED",
+          resumeReason: INVESTIGATOR_RESOLUTION_REQUIRED,
         }),
         tx,
       );
@@ -2131,7 +2319,12 @@ export class AssessmentInterviewRuntimeService {
     pgeVersion: string;
     guidanceVersion: string;
     resumeReason: string;
+    // Customer resume attempt; distinct outbox key so the retry is not deduplicated.
+    resumeAttempt?: number;
   }) {
+    const attemptSuffix = input.resumeAttempt
+      ? `:resume-${input.resumeAttempt}`
+      : "";
     return buildOutboxMessageInput({
       aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
       aggregateId: input.assessmentId,
@@ -2142,7 +2335,7 @@ export class AssessmentInterviewRuntimeService {
       actor: { id: input.actorId, type: AUDIT_ACTOR_TYPES.user },
       result: ASSESSMENT_EVENT_TYPES.interviewAnswerSubmitted,
       redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
-      idempotencyKey: `${input.assessmentId}:${input.contextRevision}:${input.resumeReason}:${input.questionId}:${ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox}`,
+      idempotencyKey: `${input.assessmentId}:${input.contextRevision}:${input.resumeReason}:${input.questionId}:${ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox}${attemptSuffix}`,
       payload: {
         assessmentId: input.assessmentId,
         threadId: this.threadId(input.assessmentId),
@@ -3037,6 +3230,30 @@ function parseStoredInterviewState(
   return record as AssessmentInterviewRuntimeState;
 }
 
+function parseResumeInput(
+  value: unknown,
+  correlationId: string,
+): AssessmentInterviewResumeInput {
+  const record =
+    value === undefined || value === null ? {} : objectRecord(value);
+  const expected = record?.expectedSessionRevision;
+  if (
+    !record ||
+    Object.keys(record).some((key) => key !== "expectedSessionRevision") ||
+    (expected !== undefined &&
+      (typeof expected !== "number" ||
+        !Number.isSafeInteger(expected) ||
+        expected < 0))
+  ) {
+    throw problemException(
+      ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.notAvailable,
+      correlationId,
+      { status: HttpStatus.BAD_REQUEST },
+    );
+  }
+  return expected === undefined ? {} : { expectedSessionRevision: expected };
+}
+
 function parsePrivateStore(value: unknown): PrivateInterviewStore {
   if (Array.isArray(value)) {
     return { revisions: value.filter(isPrivateRevision) };
@@ -3069,7 +3286,24 @@ function parsePrivateStore(value: unknown): PrivateInterviewStore {
     workingStrategy: normalizeStrategy(
       record.workingStrategy as Partial<InterviewWorkingStrategy> | undefined,
     ),
+    failedDecisionRevision: positiveSafeInteger(record.failedDecisionRevision),
+    resumeAttempts: parseResumeAttempts(record.resumeAttempts),
   };
+}
+
+function positiveSafeInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0
+    ? value
+    : undefined;
+}
+
+function parseResumeAttempts(
+  value: unknown,
+): InterviewResumeAttempts | undefined {
+  const record = objectRecord(value);
+  const contextRevision = positiveSafeInteger(record?.contextRevision);
+  const count = positiveSafeInteger(record?.count);
+  return contextRevision && count ? { contextRevision, count } : undefined;
 }
 
 function parseStoredTargetedNeed(
