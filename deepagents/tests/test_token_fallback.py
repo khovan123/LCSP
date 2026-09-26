@@ -1024,3 +1024,54 @@ def test_google_retired_model_never_retries_or_rotates_token(monkeypatch):
     with pytest.raises(GoogleModelNotFoundError):
         TokenFallbackMiddleware().wrap_model_call(ModelRequest(model=model, messages=[], tools=[]), handler)
     assert handler.call_count == 1
+
+
+def _google_rate_limit(retry_delay: object) -> Exception:
+    from google.genai.errors import ClientError
+    from langchain_google_genai.chat_models import GoogleRateLimitError
+
+    details = [{"@type": "type.googleapis.com/google.rpc.QuotaFailure"}]
+    if retry_delay is not None:
+        details.append({"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": retry_delay})
+    error = GoogleRateLimitError("rate limited")
+    error.__cause__ = ClientError(
+        429,
+        {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": "Quota exceeded.", "details": details}},
+    )
+    return error
+
+
+@pytest.mark.parametrize(
+    ("retry_delay", "expected"),
+    [("45s", 45.0), ("37.4s", 37.4), ("9999s", None), ("soon", 30.0), (None, 30.0)],
+)
+def test_google_retry_info_delay_sets_bounded_cooldown(monkeypatch, retry_delay, expected):
+    # Google reports its 429 delay in the error body (google.rpc.RetryInfo), not a
+    # Retry-After header; ignoring it made the single cooldown wait too short (scan 30321443).
+    monkeypatch.setenv("GOOGLE_API_KEY", "first-test-token,second-test-token")
+    clock, token_fallback = _install_fake_cooldown_clock(monkeypatch, start=100.0)
+    model = ChatGoogleGenerativeAI(
+        model="gemini-3.5-flash-lite", thinking_level="minimal", **credential_init_kwargs("google_genai")
+    )
+    response = ModelResponse(result=[])
+    handler = MagicMock(side_effect=[_google_rate_limit(retry_delay), response])
+
+    assert TokenFallbackMiddleware().wrap_model_call(ModelRequest(model=model, messages=[], tools=[]), handler) is response
+
+    cooldown = expected if expected is not None else token_fallback._MAX_RATE_LIMIT_COOLDOWN_SECONDS
+    assert token_fallback._RATE_LIMITED_UNTIL[("google_genai", "GOOGLE_API_KEY")] == {0: 100.0 + cooldown}
+
+
+def test_google_retry_info_governs_the_single_cooldown_wait(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "first-test-token,second-test-token")
+    clock, _ = _install_fake_cooldown_clock(monkeypatch, start=100.0)
+    model = ChatGoogleGenerativeAI(
+        model="gemini-3.5-flash-lite", thinking_level="minimal", **credential_init_kwargs("google_genai")
+    )
+    response = ModelResponse(result=[])
+    handler = MagicMock(side_effect=[_google_rate_limit("50s"), _google_rate_limit("40s"), response])
+
+    assert TokenFallbackMiddleware().wrap_model_call(ModelRequest(model=model, messages=[], tools=[]), handler) is response
+
+    # Waits the provider-requested 40s for the soonest slot, not the 30s default.
+    assert clock.sleeps == [40.0]
