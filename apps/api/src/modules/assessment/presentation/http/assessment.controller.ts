@@ -271,6 +271,24 @@ export class AssessmentController {
     );
   }
 
+  @Post(":assessmentId/interview/resume")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
+  async resumeInterviewTurn(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.interviewRuntime.resumeFailedTurn({
+        assessmentId,
+        actor: request.rbacContext,
+        correlationId: request.correlationId ?? "worker-interview-context",
+        resume: body as never,
+      }),
+    );
+  }
+
   @Post(":assessmentId/post-finding/decisions")
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.customer)

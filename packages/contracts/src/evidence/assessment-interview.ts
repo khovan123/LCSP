@@ -824,6 +824,23 @@ export type AssessmentInterviewBlockedInput = {
   draft?: string;
 };
 
+/** Customer retries allowed for one failed Interview Agent turn (per context revision). */
+export const ASSESSMENT_INTERVIEW_RESUME_MAX_ATTEMPTS = 3;
+
+export const ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES = {
+  notAvailable: "INTERVIEW_RESUME_NOT_AVAILABLE",
+  limitReached: "INTERVIEW_RESUME_LIMIT_REACHED",
+  revisionStale: "INTERVIEW_SESSION_REVISION_STALE",
+} as const;
+
+export type AssessmentInterviewResumeProblemCode =
+  (typeof ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES)[keyof typeof ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES];
+
+/** Customer request to re-run an Interview Agent turn that failed after the answer was saved. */
+export type AssessmentInterviewResumeInput = {
+  expectedSessionRevision?: number;
+};
+
 type StringLiteralRecord = Record<string, string>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {

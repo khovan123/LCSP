@@ -30,6 +30,7 @@ import {
   useReadinessStatusQuery,
   useRerunClassificationMutation,
   useRerunRepositoryScanMutation,
+  useResumeAssessmentInterviewTurnMutation,
   useSubmitAssessmentInterviewAnswerMutation,
   useSubmitAssessmentPostFindingDecisionMutation,
 } from "@/lib/api/assessment-queries";
@@ -263,6 +264,8 @@ function AssessmentInterviewFlow({
   const recordBlockedAction =
     useAssessmentInterviewBlockedActionMutation(assessmentId);
   const resumeAssessmentPipeline = useRerunClassificationMutation(assessmentId);
+  const resumeInterviewTurn =
+    useResumeAssessmentInterviewTurnMutation(assessmentId);
   const submitPostFindingDecision =
     useSubmitAssessmentPostFindingDecisionMutation(assessmentId);
 
@@ -537,10 +540,25 @@ function AssessmentInterviewFlow({
     !recordBlockedAction.isPending &&
     !submitPostFindingDecision.isPending &&
     !resumeAssessmentPipeline.isPending;
+  const canResumeInterviewTurn =
+    interviewEnabled &&
+    !scanFailed &&
+    interviewHandoff.canResumeFailedTurn &&
+    !hasComposerDraft &&
+    !submitAnswer.isPending &&
+    !recordBlockedAction.isPending &&
+    !resumeInterviewTurn.isPending;
+  const canResume = canResumeAssessmentPipeline || canResumeInterviewTurn;
+  const isResuming =
+    resumeAssessmentPipeline.isPending || resumeInterviewTurn.isPending;
   const composerDisabled =
-    isComposerDisabled && !canResumeAssessmentPipeline && !hasComposerDraft;
+    isComposerDisabled && !canResume && !hasComposerDraft;
 
-  function handleResumeAssessmentPipeline() {
+  function handleResume() {
+    if (canResumeInterviewTurn) {
+      handleResumeInterviewTurn();
+      return;
+    }
     if (!canResumeAssessmentPipeline) {
       return;
     }
@@ -549,6 +567,33 @@ function AssessmentInterviewFlow({
         setLastSavedMessage(t("pages.assessment.resumeQueued"));
       },
     });
+  }
+
+  function handleResumeInterviewTurn() {
+    resumeInterviewTurn.mutate(
+      {
+        expectedSessionRevision:
+          normalized.identity.contextRevision ?? undefined,
+      },
+      {
+        onSuccess: (outcome) => {
+          setLastSavedMessage(
+            t(
+              outcome.kind === API_OUTCOME_KINDS.requested
+                ? "pages.assessmentFlow.interview.resumeTurnQueued"
+                : outcome.kind === API_OUTCOME_KINDS.rateLimited
+                  ? "pages.assessmentFlow.interview.resumeTurnLimitReached"
+                  : "pages.assessmentFlow.interview.resumeTurnFailed",
+            ),
+          );
+        },
+        onError: () => {
+          setLastSavedMessage(
+            t("pages.assessmentFlow.interview.resumeTurnFailed"),
+          );
+        },
+      },
+    );
   }
 
   return (
@@ -758,13 +803,13 @@ function AssessmentInterviewFlow({
         disabled={composerDisabled}
         submitReady={isSubmitReady}
         submitting={submitAnswer.isPending || recordBlockedAction.isPending}
-        resuming={resumeAssessmentPipeline.isPending}
-        resumeAvailable={canResumeAssessmentPipeline}
+        resuming={isResuming}
+        resumeAvailable={canResume || isResuming}
         resumeLabel={t("pages.assessment.resumePipeline")}
         placeholder={t(composerPlaceholderKey)}
         onValueChange={handleComposerValueChange}
         onSubmit={handleSubmit}
-        onResume={handleResumeAssessmentPipeline}
+        onResume={handleResume}
       />
     </main>
   );
