@@ -37,9 +37,10 @@ class RepositoryWorkspace:
     """Materialize repository archives into bounded, isolated temporary workspaces.
 
     Archive extraction is treated as an untrusted-input boundary. The workspace
-    rejects traversal, links/devices, excessive path depth/member count/expansion,
-    and oversized archives. Individual oversized files are skipped with an explicit
-    coverage limitation instead of weakening the global extraction limits.
+    rejects traversal, excessive path depth/member count/expansion, and oversized
+    archives. Links and devices are never created: they are skipped with an explicit
+    coverage limitation, like individual oversized files, because ordinary
+    repositories commonly contain symlinks (e.g. CLAUDE.md -> AGENTS.md).
     """
 
     def __init__(
@@ -152,9 +153,12 @@ class RepositoryWorkspace:
                         continue
 
                     if member.issym() or member.islnk() or member.isdev():
-                        raise ArchiveMaterializationError(
-                            f"unsupported archive entry type: {member.name!r}"
-                        )
+                        # Never materialize a link or device: following one could
+                        # read or write outside the workspace. The link target is
+                        # normally a regular file in the same archive anyway.
+                        skipped_files += 1
+                        coverage_limited = True
+                        continue
 
                     if not member.isfile():
                         continue
