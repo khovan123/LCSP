@@ -10,6 +10,7 @@ from langchain.agents.structured_output import (
     ProviderStrategy,
     ToolStrategy,
 )
+from langchain_core.messages import AIMessage
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel
 
@@ -149,12 +150,39 @@ def gemini_structured_model_settings(model: Any, output_format: Any, current: An
     return settings
 
 
+def llm7_compatible_messages(model: Any, messages: list[Any]) -> list[Any] | None:
+    """Drop `name` from assistant messages sent to LLM7, or return None when unchanged.
+
+    LLM7's upstream rejects an assistant message carrying `name` with 422
+    `upstream_unprocessable_request`. Deep Agents stamp the agent name on every AI
+    message, so every LLM7 tool continuation failed. Only the provider request changes;
+    graph state keeps the name.
+    """
+    from middleware.token_fallback import model_provider
+
+    if model_provider(model) != "llm7":
+        return None
+    if not any(isinstance(message, AIMessage) and message.name for message in messages):
+        return None
+    return [
+        message.model_copy(update={"name": None})
+        if isinstance(message, AIMessage) and message.name
+        else message
+        for message in messages
+    ]
+
+
 class ProviderSchemaCompatibilityMiddleware(AgentMiddleware):
     """Relax the provider-facing response schema where the provider cannot accept it."""
 
     @staticmethod
     def _override_request(request, replacement, tools_replacement):
         overrides: dict[str, Any] = {}
+        messages_replacement = llm7_compatible_messages(
+            request.model, list(getattr(request, "messages", None) or [])
+        )
+        if messages_replacement is not None:
+            overrides["messages"] = messages_replacement
         if replacement is not None:
             overrides["response_format"] = replacement
         if tools_replacement is not None:

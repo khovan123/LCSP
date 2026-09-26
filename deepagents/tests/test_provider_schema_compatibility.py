@@ -268,3 +268,79 @@ def test_raw_schema_without_array_upper_bounds_still_disables_gemini_afc() -> No
     assert handler.call_args.args[0].model_settings["automatic_function_calling"] == {
         "disable": True
     }
+
+
+def _llm7() -> ChatOpenAI:
+    return ChatOpenAI(
+        model="codestral-latest",
+        base_url="https://api.llm7.io/v1",
+        api_key="llm7-test-token",
+        use_responses_api=False,
+    )
+
+
+def _conversation():
+    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+
+    return [
+        SystemMessage(content="system"),
+        HumanMessage(content="analyze", name="customer"),
+        AIMessage(
+            content="",
+            name="repository-analyst",
+            tool_calls=[{"id": "m9WhW6SDw", "name": "ls", "args": {"path": "/"}}],
+        ),
+        ToolMessage(content="app.py", tool_call_id="m9WhW6SDw", name="ls"),
+    ]
+
+
+def _message_request(model, messages):
+    from langchain.agents.middleware import ModelRequest
+
+    return ModelRequest(model=model, messages=messages, tools=[])
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.asyncio
+async def test_llm7_requests_drop_assistant_name(asynchronous) -> None:
+    # Regression: LLM7's upstream answers 422 upstream_unprocessable_request when an
+    # assistant message carries `name` (Deep Agents stamp the agent name), so LLM7
+    # failed on the first tool continuation of every scan and its circuit opened.
+    messages = _conversation()
+    request = _message_request(_llm7(), messages)
+    handler = AsyncMock(return_value="ok") if asynchronous else MagicMock(return_value="ok")
+    middleware = ProviderSchemaCompatibilityMiddleware()
+
+    if asynchronous:
+        await middleware.awrap_model_call(request, handler)
+    else:
+        middleware.wrap_model_call(request, handler)
+
+    sent = handler.call_args.args[0].messages
+    assert [type(message).__name__ for message in sent] == [
+        "SystemMessage", "HumanMessage", "AIMessage", "ToolMessage",
+    ]
+    assert sent[2].name is None
+    assert sent[2].tool_calls == messages[2].tool_calls
+    # Only assistant names are dropped; graph state keeps the original message.
+    assert sent[1].name == "customer"
+    assert sent[3].name == "ls"
+    assert messages[2].name == "repository-analyst"
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        _gemini(),
+        ChatOpenAI(model="mercury-2.5", base_url="https://api.inceptionlabs.ai/v1", api_key="k", use_responses_api=False),
+        ChatOpenAI(model="gpt-5-nano", api_key="k"),
+    ],
+)
+def test_other_providers_keep_assistant_name(model) -> None:
+    messages = _conversation()
+    request = _message_request(model, messages)
+    handler = MagicMock(return_value="ok")
+
+    ProviderSchemaCompatibilityMiddleware().wrap_model_call(request, handler)
+
+    assert handler.call_args.args[0].messages[2].name == "repository-analyst"
