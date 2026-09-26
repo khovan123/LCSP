@@ -23,6 +23,7 @@ import {
   type AssessmentInterviewAuditRef,
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
+import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 import { PROGRAM_EVIDENCE_METRIC_FORMATS } from "../src/features/assessment-flow/types/assessment-flow.types.ts";
 
@@ -2025,6 +2026,46 @@ test("LCSP-272 HANDOFF: evidence ready without orchestration request stays truth
   assert.equal(
     selectInterviewHandoffPresentation(resumed).messageKey,
     "pages.assessmentFlow.interview.continuingDescription",
+  );
+});
+
+test("LCSP-999 HANDOFF: AI not detected ends the assessment instead of waiting for Interview", () => {
+  const normalized = normalizeAssessmentRuntime({
+    assessmentId: "asm-ai-not-detected",
+    interviewState: {
+      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      orchestrationRequested: false,
+    },
+    timeline: {
+      currentRun: null,
+      recentActivity: [],
+      latestRunId: "run-scan",
+      connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
+      lastEmittedAt: "2026-09-26T10:00:00.000Z",
+    },
+  });
+
+  const waiting = selectInterviewHandoffPresentation(
+    normalized,
+    ASSESSMENT_STATUS_CODES.wizardSubmitted,
+  );
+  assert.equal(
+    waiting.messageKey,
+    "pages.assessmentFlow.interview.pendingDescription",
+  );
+
+  const ended = selectInterviewHandoffPresentation(
+    normalized,
+    ASSESSMENT_STATUS_CODES.aiNotDetected,
+  );
+  assert.equal(ended.isStartupPending, false);
+  assert.equal(
+    ended.messageKey,
+    "pages.assessmentFlow.interview.aiNotDetectedDescription",
+  );
+  assert.equal(
+    ended.placeholderKey,
+    "pages.assessmentFlow.interview.aiNotDetectedPlaceholder",
   );
 });
 

@@ -302,6 +302,10 @@ export function WorkspaceRuntimeProvider({
         const fingerprint = runtimeFingerprint(parsed);
         if (latestFingerprint.current !== fingerprint) {
           latestFingerprint.current = fingerprint;
+          // Runtime outcomes can change lifecycle status (e.g. AI not detected).
+          void queryClient.invalidateQueries({
+            queryKey: apiQueryKeys.workspace.assessments(),
+          });
           for (const assessmentId of affectedAssessmentIds(parsed)) {
             void queryClient.invalidateQueries({
               queryKey: apiQueryKeys.assessment.interview(assessmentId),

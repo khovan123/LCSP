@@ -930,6 +930,7 @@ export type PagesMessages = {
       SCAN_IN_PROGRESS: string;
       CLASSIFICATION_LOCKED: string;
       READY_FOR_REVIEW: string;
+      AI_NOT_DETECTED: string;
     };
     nextActions: {
       workflowRun: string;
@@ -1696,6 +1697,8 @@ export type PagesMessages = {
       contextReadyHandoff: string;
       contextResolvedHandoff: string;
       pendingPlaceholder: string;
+      aiNotDetectedDescription: string;
+      aiNotDetectedPlaceholder: string;
       placeholder: string;
     };
     technicalEvidence: {

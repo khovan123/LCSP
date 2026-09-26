@@ -22,6 +22,7 @@ import { CreateAssessmentCommand } from "../../application/commands/create-asses
 import { CompleteRepositorySetupCommand } from "../../application/commands/complete-repository-setup/complete-repository-setup.command.js";
 import { DeleteAssessmentCommand } from "../../application/commands/delete-assessment/delete-assessment.command.js";
 import { RenameAssessmentCommand } from "../../application/commands/rename-assessment/rename-assessment.command.js";
+import { MarkAiNotDetectedCommand } from "../../application/commands/mark-ai-not-detected/mark-ai-not-detected.command.js";
 import { GetAssessmentQuery } from "../../application/queries/get-assessment/get-assessment.query.js";
 import { GetAssessmentReadinessQuery } from "../../application/queries/get-assessment-readiness/get-assessment-readiness.query.js";
 import { ListAssessmentsQuery } from "../../application/queries/list-assessments/list-assessments.query.js";
@@ -315,7 +316,30 @@ export class AssessmentController {
 export class InternalAssessmentInterviewController {
   constructor(
     private readonly interviewRuntime: AssessmentInterviewRuntimeService,
+    private readonly commandBus: CommandBus,
   ) {}
+
+  @Post(":assessmentId/ai-not-detected")
+  async markAiNotDetected(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const technicalEvidenceReportId =
+      body && typeof body === "object"
+        ? (body as { technicalEvidenceReportId?: unknown })
+            .technicalEvidenceReportId
+        : undefined;
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new MarkAiNotDetectedCommand(
+          assessmentId,
+          technicalEvidenceReportId,
+          request.correlationId ?? "worker-interview-context",
+        ),
+      ),
+    );
+  }
 
   @Get(":assessmentId/state")
   async getWorkerState(@Param("assessmentId") assessmentId: string) {

@@ -21,6 +21,11 @@ class FakeApi:
     def __init__(self, state):
         self.state = state
         self.seeded = []
+        self.ai_not_detected = []
+
+    def post_assessment_ai_not_detected(self, assessment_id, payload):
+        self.ai_not_detected.append((assessment_id, payload))
+        return {"assessment_id": assessment_id, "status": "AI_NOT_DETECTED"}
 
     def get_interview_worker_state(self, assessment_id):
         assert assessment_id == "assessment-1"
@@ -351,6 +356,10 @@ def test_ready_no_ai_gate_short_circuits_before_interview_dispatch() -> None:
     assert dispatcher.calls == []
     assert api.seeded == []
     assert root.calls == []
+    # The assessment ends as "AI not detected" instead of waiting for a question.
+    assert api.ai_not_detected == [
+        ("assessment-1", {"technicalEvidenceReportId": "ter-no-ai"})
+    ]
 
 
 def test_unrelated_customer_business_model_does_not_block_no_ai_gate() -> None:
@@ -398,6 +407,26 @@ def test_ready_no_ai_gate_early_stops_with_unrelated_customer_business_model() -
     )
     assert result is None
     assert dispatcher.calls == []
+    assert api.ai_not_detected == [
+        ("assessment-1", {"technicalEvidenceReportId": "ter-business-model"})
+    ]
+
+
+def test_ai_not_detected_rejection_fails_the_boundary_instead_of_waiting() -> None:
+    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
+
+    def reject(*_args):
+        raise WorkerCallbackError("absence not proven", status_code=409)
+
+    api.post_assessment_ai_not_detected = reject
+
+    with pytest.raises(WorkerCallbackError):
+        _boundary(api, FakeDispatcher())._prepare_interview(
+            evidence_report=_ai_report("AI_ABSENT_CONFIRMED", []),
+            evidence_report_id="ter-stale",
+            assessment_id="assessment-1",
+            correlation_id="corr-stale",
+        )
 
 
 def test_explicit_customer_external_ai_context_blocks_no_ai_gate() -> None:
@@ -466,6 +495,7 @@ def test_no_ai_gate_does_not_override_authoritative_customer_confirmed_ai_contex
     assert result is not None
     assert result.context_revision == 3
     assert result.confirmed_statement_refs == ("stmt-ai-usage",)
+    assert api.ai_not_detected == []
 
 
 def test_mixed_customer_and_technical_ai_uncertainty_routes_to_reanalysis_before_ready_context() -> None:
@@ -839,3 +869,29 @@ def test_executed_reanalysis_tool_result_counts_as_recovery() -> None:
 
     assert result is None
     assert len(root.calls) == 1
+
+
+def test_api_client_posts_ai_not_detected_to_internal_route(monkeypatch) -> None:
+    from tools.common.capabilities.platform.api_client import WorkerApiClient
+
+    client = WorkerApiClient("http://api.test", "worker-key")
+    calls = []
+
+    def fake_post(path, payload, **kwargs):
+        calls.append((path, payload, kwargs))
+        return {"assessment_id": "assessment-1", "status": "AI_NOT_DETECTED"}
+
+    monkeypatch.setattr(client, "_post_with_retry", fake_post)
+
+    result = client.post_assessment_ai_not_detected(
+        "assessment-1", {"technicalEvidenceReportId": "ter-1"}
+    )
+
+    assert result["status"] == "AI_NOT_DETECTED"
+    assert calls == [
+        (
+            "/internal/assessment-interviews/assessment-1/ai-not-detected",
+            {"technicalEvidenceReportId": "ter-1"},
+            {"redact": False},
+        )
+    ]

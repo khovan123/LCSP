@@ -155,6 +155,8 @@ const ASSESSMENT_STATUS_TO_PRISMA = {
     PrismaAssessmentStatus.CLASSIFICATION_LOCKED,
   [ASSESSMENT_STATUS_CODES.readyForReview]:
     PrismaAssessmentStatus.READY_FOR_REVIEW,
+  [ASSESSMENT_STATUS_CODES.aiNotDetected]:
+    PrismaAssessmentStatus.AI_NOT_DETECTED,
 } as const satisfies Record<AssessmentStatusCode, PrismaAssessmentStatus>;
 
 const PRISMA_ASSESSMENT_STATUS_TO_CONTRACT = {
@@ -170,6 +172,8 @@ const PRISMA_ASSESSMENT_STATUS_TO_CONTRACT = {
     ASSESSMENT_STATUS_CODES.classificationLocked,
   [PrismaAssessmentStatus.READY_FOR_REVIEW]:
     ASSESSMENT_STATUS_CODES.readyForReview,
+  [PrismaAssessmentStatus.AI_NOT_DETECTED]:
+    ASSESSMENT_STATUS_CODES.aiNotDetected,
 } as const satisfies Record<PrismaAssessmentStatus, AssessmentStatusCode>;
 
 const ENGINEERING_RULE_EVALUATION_STATUS_TO_PRISMA = {
