@@ -974,6 +974,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         from subagents.interview.customer_safe_projection import (
             TurnEvidenceLedger,
             build_why_are_we_asking_explanation,
+            drop_unauthorized_candidate_refs,
             evaluate_question_eligibility,
             extract_governed_evidence_refs,
             reset_active_turn_evidence_ledger,
@@ -1114,6 +1115,24 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         # Validate candidate question and evidence refs emitted by the Interview specialist
         question = handoff.get("activeQuestion")
         outcome = handoff.get("outcome")
+        # Invented refs are never persisted; drop them instead of failing the turn.
+        # Only the question falls back to the report ref: confirmed statements must
+        # not claim evidence they did not cite.
+        dropped_refs = [
+            *drop_unauthorized_candidate_refs(
+                question,
+                ledger,
+                fallback_refs=(f"technicalEvidenceReport:{technical_evidence_report_id}",),
+            ),
+            *drop_unauthorized_candidate_refs(handoff.get("confirmedContext"), ledger),
+        ]
+        if dropped_refs:
+            _LOGGER.warning(
+                "INTERVIEW_UNAUTHORIZED_REFS_DROPPED assessment_id=%s question_id=%s count=%s",
+                assessment_id,
+                question_id,
+                len(dropped_refs),
+            )
         if outcome == "WAITING_FOR_CUSTOMER":
             if not isinstance(question, dict):
                 raise ValueError("Interview handoff with WAITING_FOR_CUSTOMER requires an activeQuestion")

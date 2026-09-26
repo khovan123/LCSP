@@ -388,6 +388,50 @@ def evaluate_question_eligibility(
     return True, "ELIGIBLE"
 
 
+_CANDIDATE_REF_LIST_KEYS = frozenset({
+    "evidenceRefs",
+    "evidence_refs",
+    "governedEvidenceRefs",
+    "governed_evidence_refs",
+    "whyEvidenceRefs",
+})
+
+
+def drop_unauthorized_candidate_refs(
+    candidate: Any,
+    ledger: TurnEvidenceLedger,
+    *,
+    fallback_refs: Iterable[str] = (),
+) -> list[str]:
+    """Remove refs the turn ledger never authorized from a model candidate, in place.
+
+    Models sometimes cite invented ids (e.g. ``ev-agent-loop``). Those refs must never
+    be persisted, but they are only extra provenance: dropping them keeps the fail-closed
+    guarantee without failing the whole turn. A list emptied by the removal is refilled
+    with the authorized ``fallback_refs``. Returns the removed refs.
+    """
+    fallback = [ref for ref in dict.fromkeys(str(r).strip() for r in fallback_refs) if ledger.is_authorized(ref)]
+    dropped: list[str] = []
+
+    def _walk(item: Any) -> None:
+        if isinstance(item, dict):
+            for key, value in item.items():
+                if key in _CANDIDATE_REF_LIST_KEYS and isinstance(value, list):
+                    kept = [ref for ref in value if isinstance(ref, str) and ledger.is_authorized(ref)]
+                    removed = [ref for ref in value if ref not in kept]
+                    if removed:
+                        dropped.extend(str(ref) for ref in removed)
+                        item[key] = kept or list(fallback)
+                else:
+                    _walk(value)
+        elif isinstance(item, list):
+            for entry in item:
+                _walk(entry)
+
+    _walk(candidate)
+    return list(dict.fromkeys(dropped))
+
+
 def extract_governed_evidence_refs(*sources: Any) -> set[str]:
     """Recursively extract all governed evidence references from payload structures."""
     out: set[str] = set()
