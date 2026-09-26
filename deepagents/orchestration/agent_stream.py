@@ -223,6 +223,27 @@ def publish_agent_stream_event(event_type: str, **fields: Any) -> None:
         _emitting_stream_event.reset(token)
 
 
+class _FinalValues:
+    """Track the invoked graph's own final state across its multi-mode stream.
+
+    A graph invoked from inside a parent graph node streams every chunk under the
+    parent task namespace, and its subgraphs always stream deeper. The shortest
+    namespace seen is therefore this invocation's own level, empty or not.
+    """
+
+    def __init__(self) -> None:
+        self.namespace: tuple[str, ...] | None = None
+        self.value: Any = None
+        self.seen = False
+
+    def offer(self, namespace: tuple[str, ...], data: Any) -> None:
+        if self.namespace is None or len(namespace) < len(self.namespace):
+            self.namespace = namespace
+        if namespace == self.namespace:
+            self.value = data
+            self.seen = True
+
+
 def invoke_with_stream(
     agent: Any,
     input_value: Any,
@@ -257,8 +278,7 @@ def invoke_with_stream(
         status="RUNNING",
     )
 
-    final_value: Any = None
-    saw_values = False
+    final = _FinalValues()
     try:
         stream_kwargs: dict[str, Any] = {
             "stream_mode": list(STREAM_MODES),
@@ -276,9 +296,7 @@ def invoke_with_stream(
             namespace = _namespace(chunk.get("ns"))
             data = chunk.get("data")
             if mode == "values":
-                if not namespace:
-                    final_value = data
-                    saw_values = True
+                final.offer(namespace, data)
                 _emit_values_metadata(
                     data,
                     namespace=namespace,
@@ -317,7 +335,7 @@ def invoke_with_stream(
         )
         raise
 
-    if not saw_values:
+    if not final.seen:
         raise RuntimeError(
             "LCSP streamed agent invocation completed without a final values projection"
         )
@@ -327,7 +345,7 @@ def invoke_with_stream(
         agent_name=resolved_name,
         status="COMPLETED",
     )
-    return final_value
+    return final.value
 
 
 
@@ -344,8 +362,7 @@ def invoke_graph_with_stream(
             return graph.invoke(input_value)
         return graph.invoke(input_value, config)
 
-    final_value: Any = None
-    saw_values = False
+    final = _FinalValues()
     publish_agent_stream_event(
         "AGENT_STARTED",
         agent_name=graph_name,
@@ -366,9 +383,7 @@ def invoke_graph_with_stream(
             namespace = _namespace(chunk.get("ns"))
             data = chunk.get("data")
             if mode == "values":
-                if not namespace:
-                    final_value = data
-                    saw_values = True
+                final.offer(namespace, data)
                 _emit_values_metadata(
                     data,
                     namespace=namespace,
@@ -398,7 +413,7 @@ def invoke_graph_with_stream(
         )
         raise
 
-    if not saw_values:
+    if not final.seen:
         raise RuntimeError(
             "LCSP streamed workflow completed without a final root values projection"
         )
@@ -408,7 +423,7 @@ def invoke_graph_with_stream(
         status="COMPLETED",
         data={"kind": "workflow"},
     )
-    return final_value
+    return final.value
 
 def _emit_message_event(
     data: Any,
