@@ -1,6 +1,8 @@
 """Typed persisted contracts for Program Evidence Graph artifacts."""
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -65,6 +67,14 @@ class SourceEvidenceAnchor:
     end_line: int | None
     source_hash: str
     graph_node_id: str
+
+
+def program_graph_content_hash(graph: dict[str, Any]) -> str:
+    """Content-address one Program Evidence Graph payload (excluding its own hash)."""
+    body = {key: value for key, value in graph.items() if key not in {"graph_hash", "graphHash"}}
+    return "sha256:" + hashlib.sha256(
+        json.dumps(body, sort_keys=True, separators=(",", ":"), default=str).encode()
+    ).hexdigest()
 
 
 @dataclass

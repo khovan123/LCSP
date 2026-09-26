@@ -665,3 +665,23 @@ def test_repository_analyst_task_subagent_timeout_falls_back_to_next_provider(
     assert primary.subagent_calls == 1
     assert fallback.subagent_calls == 1
     assert primary.parent_calls == 2
+
+
+def test_evidence_graph_carries_content_hash_that_investigation_accepts(tmp_path) -> None:
+    # Regression: the Deep Agent analyzer emitted graph_hash="" so every
+    # post-Interview investigation stopped on "provenance is incomplete".
+    from tools.common.capabilities.assessment.investigation.engineering_rule.pipeline import (
+        EngineeringInvestigationPipeline,
+    )
+    from tools.common.capabilities.evidence.graph.schema.models import (
+        program_graph_content_hash,
+    )
+
+    payload = _evidence_payload_for(tmp_path, _valid_repository_result())
+    graph = payload["evidence_graph"]
+
+    assert graph["graph_hash"].startswith("sha256:")
+    assert graph["graph_hash"] == program_graph_content_hash(graph)
+    parsed = EngineeringInvestigationPipeline._graph({"evidence_payload": payload})
+    assert parsed.graph_id == "deep-agent:scan-1"
+    assert parsed.graph_hash == graph["graph_hash"]
