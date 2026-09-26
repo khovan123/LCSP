@@ -706,8 +706,8 @@ def test_rule_scope_attributes_activity_and_reports_the_reasoning_result():
 def test_rule_scope_reports_failed_and_waiting_rules():
     from orchestration.agent_stream import agent_stream_rule_scope
 
-    class Pending(Exception):
-        pass
+    class Pending(BaseException):
+        """Like TargetedInterviewPending: an intentional pause, not a failure."""
 
     events = []
     with activate_agent_stream(stream_session(events)):
@@ -715,7 +715,7 @@ def test_rule_scope_reports_failed_and_waiting_rules():
             try:
                 with agent_stream_rule_scope("ER-9", waiting_on=(Pending,)):
                     raise error
-            except Exception:
+            except BaseException:
                 pass
 
     statuses = [event["status"] for event in events]

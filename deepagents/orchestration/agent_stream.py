@@ -326,12 +326,13 @@ def agent_stream_rule_scope(
         )
         try:
             yield scope
-        except Exception as error:
-            if not scope.finished:
-                scope.fail(
-                    error,
-                    status="WAITING" if isinstance(error, waiting_on) else "FAILED",
-                )
+        except BaseException as error:
+            # Intentional pauses (TargetedInterviewPending) are BaseExceptions so
+            # generic failure handlers skip them; the rule then waits, not fails.
+            if not scope.finished and isinstance(error, waiting_on):
+                scope.fail(error, status="WAITING")
+            elif not scope.finished and isinstance(error, Exception):
+                scope.fail(error, status="FAILED")
             raise
         if not scope.finished:
             scope.complete()
