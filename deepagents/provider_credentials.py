@@ -12,6 +12,9 @@ PROVIDER_KEY_ENV = {
     "llm7": ("LLM7_API_KEY",),
     "inception": ("INCEPTION_API_KEY",),
 }
+PROVIDER_TIMEOUT_DEFAULTS_SECONDS = {
+    "google_genai": 90.0,
+}
 # SDK value that disables SDK-internal retries when credential rotation owns retries.
 # langchain_google_genai maps max_retries to HttpRetryOptions(attempts=...): 0 means
 # "Google default" (5 retries), so a single attempt is 1 there and 0 for OpenAI.
@@ -23,16 +26,34 @@ NO_SDK_RETRY_MAX_RETRIES = {
 }
 
 
-def llm_provider_timeout_seconds() -> float:
-    """Return the governed provider request timeout in seconds."""
-    raw = (os.getenv("LLM_PROVIDER_TIMEOUT_SECONDS") or "30").strip()
+def _positive_timeout(raw: str, name: str) -> float:
     try:
         value = float(raw)
     except ValueError as error:
-        raise RuntimeError("LLM_PROVIDER_TIMEOUT_SECONDS must be a number") from error
+        raise RuntimeError(f"{name} must be a number") from error
     if value <= 0:
-        raise RuntimeError("LLM_PROVIDER_TIMEOUT_SECONDS must be > 0")
+        raise RuntimeError(f"{name} must be > 0")
     return value
+
+
+def llm_provider_timeout_seconds(provider: str | None = None) -> float:
+    """Return the governed provider request timeout in seconds."""
+    canonical = (provider or "").strip().lower()
+    provider_env = (
+        f"LLM_PROVIDER_TIMEOUT_SECONDS_{canonical.upper()}"
+        if canonical
+        else ""
+    )
+    if provider_env:
+        provider_raw = os.getenv(provider_env)
+        if provider_raw is not None and provider_raw.strip():
+            return _positive_timeout(provider_raw.strip(), provider_env)
+    if canonical in PROVIDER_TIMEOUT_DEFAULTS_SECONDS:
+        return PROVIDER_TIMEOUT_DEFAULTS_SECONDS[canonical]
+    global_raw = os.getenv("LLM_PROVIDER_TIMEOUT_SECONDS")
+    if global_raw is not None and global_raw.strip():
+        return _positive_timeout(global_raw.strip(), "LLM_PROVIDER_TIMEOUT_SECONDS")
+    return 30.0
 
 
 def llm7_base_url() -> str:

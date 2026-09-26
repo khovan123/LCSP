@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import {
   LLM_USAGE_AVAILABILITY_REASONS,
@@ -7,6 +8,7 @@ import type { EffectiveRuntimeModel } from "@lcsp/contracts/billing";
 import {
   BillingDomainError,
   BillingIdempotencyConflictError,
+  InsufficientCreditError,
   OwnershipMismatchError,
   PricingSnapshotUnavailableError,
 } from "../../domain/billing.errors.js";
@@ -25,6 +27,28 @@ import {
   calculateUsageChargeCredits,
   worstCaseUsageForPricing,
 } from "../../domain/usage-pricing.js";
+
+function invocationAuthorizationFingerprint(input: {
+  provider: string;
+  model: string;
+  estimatedInputTokens: bigint;
+  estimatedInputBytes?: bigint;
+  maxOutputTokens: bigint;
+  maxReasoningTokens: bigint;
+}): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        provider: input.provider,
+        model: input.model,
+        estimatedInputTokens: input.estimatedInputTokens.toString(),
+        estimatedInputBytes: input.estimatedInputBytes?.toString() ?? null,
+        maxOutputTokens: input.maxOutputTokens.toString(),
+        maxReasoningTokens: input.maxReasoningTokens.toString(),
+      }),
+    )
+    .digest("hex");
+}
 
 export const BILLING_USAGE_KERNEL = Symbol("BILLING_USAGE_KERNEL");
 
@@ -58,6 +82,12 @@ export type BillingUsagePort = {
     assessmentId: string;
     reservationId: string;
     invocationId: string;
+    provider?: string;
+    model?: string;
+    estimatedInputTokens?: bigint;
+    estimatedInputBytes?: bigint;
+    maxOutputTokens?: bigint;
+    maxReasoningTokens?: bigint;
   }): Promise<unknown>;
   recordAndSettleUsage(input: {
     userId: string;
@@ -214,13 +244,137 @@ export class BillingUsageKernel {
     assessmentId: string;
     reservationId: string;
     invocationId: string;
+    provider?: string;
+    model?: string;
+    estimatedInputTokens?: bigint;
+    estimatedInputBytes?: bigint;
+    maxOutputTokens?: bigint;
+    maxReasoningTokens?: bigint;
   }) {
     const userId = await this.resolveAssessmentOwner(input.assessmentId);
-    return this.accounting.claimInvocation({
-      userId,
-      reservationId: input.reservationId,
-      assessmentId: input.assessmentId,
-      invocationId: input.invocationId,
+    const hasAuthorizationMetrics =
+      input.provider !== undefined ||
+      input.model !== undefined ||
+      input.estimatedInputTokens !== undefined ||
+      input.estimatedInputBytes !== undefined ||
+      input.maxOutputTokens !== undefined ||
+      input.maxReasoningTokens !== undefined;
+    if (!hasAuthorizationMetrics)
+      return this.accounting.claimInvocation({
+        userId,
+        reservationId: input.reservationId,
+        assessmentId: input.assessmentId,
+        invocationId: input.invocationId,
+      });
+    if (
+      !input.provider ||
+      !input.model ||
+      input.estimatedInputTokens === undefined ||
+      input.maxOutputTokens === undefined ||
+      input.maxReasoningTokens === undefined
+    )
+      throw new BillingDomainError(
+        "Invocation authorization metrics are incomplete",
+      );
+    const provider = input.provider.trim().toUpperCase();
+    const model = input.model.trim();
+    if (
+      input.estimatedInputTokens < 0n ||
+      (input.estimatedInputBytes !== undefined &&
+        input.estimatedInputBytes < 0n) ||
+      input.maxOutputTokens < 0n ||
+      input.maxReasoningTokens < 0n
+    )
+      throw new BillingDomainError(
+        "Invocation authorization metrics are invalid",
+      );
+    const estimatedInputTokens = input.estimatedInputTokens;
+    const maxOutputTokens = input.maxOutputTokens;
+    const maxReasoningTokens = input.maxReasoningTokens;
+    const authorizationFingerprint = invocationAuthorizationFingerprint({
+      provider,
+      model,
+      estimatedInputTokens,
+      estimatedInputBytes: input.estimatedInputBytes,
+      maxOutputTokens,
+      maxReasoningTokens,
+    });
+
+    return this.transactions.runForUser(userId, async (repos) => {
+      const reservation = await repos.reservation.findForUser(
+        userId,
+        input.reservationId,
+      );
+      if (!reservation || reservation.status !== "RESERVED")
+        throw new BillingDomainError("Reservation is not spendable");
+      if (reservation.assessmentId !== input.assessmentId)
+        throw new OwnershipMismatchError(
+          "Reservation does not belong to the assessment",
+        );
+
+      const existingClaim = await repos.reservation.findInvocationClaim(
+        input.reservationId,
+        input.invocationId,
+      );
+      if (existingClaim) {
+        if (existingClaim.authorizationFingerprint !== authorizationFingerprint)
+          throw new BillingIdempotencyConflictError(
+            "Invocation authorization replay differs",
+          );
+        return {
+          reservationId: input.reservationId,
+          authorizedChargeCredits: existingClaim.authorizedChargeCredits,
+        };
+      }
+
+      const pricing = await repos.pricing.findApplicable(
+        provider,
+        model,
+        new Date(),
+      );
+      if (!pricing)
+        throw new PricingSnapshotUnavailableError(
+          `Pricing snapshot is required before authorizing provider spend: ${provider}/${model}`,
+        );
+      const authorizedChargeCredits = calculateCustomerChargeVnd(
+        worstCaseUsageForPricing(
+          {
+            maxInputTokens: estimatedInputTokens,
+            maxOutputTokens,
+            maxReasoningTokens,
+          },
+          pricing,
+        ),
+        pricing,
+      );
+      const outstandingAuthorizedCredits =
+        await repos.reservation.sumUnsettledAuthorizedChargeCredits(
+          input.reservationId,
+        );
+      const availableForAuthorization =
+        reservation.remainingCredits - outstandingAuthorizedCredits;
+      if (
+        availableForAuthorization < 0n ||
+        authorizedChargeCredits > availableForAuthorization
+      )
+        throw new InsufficientCreditError(
+          "Billing budget exhausted for provider invocation",
+        );
+      if (
+        !(await repos.reservation.claimInvocation({
+          reservationId: input.reservationId,
+          invocationId: input.invocationId,
+          authorizedChargeCredits,
+          authorizationFingerprint,
+        }))
+      )
+        throw new BillingDomainError(
+          "Reservation invocation claim raced with reservation lifecycle",
+        );
+      return {
+        reservationId: input.reservationId,
+        authorizedChargeCredits,
+      };
     });
   }
 
@@ -296,6 +450,28 @@ export class BillingUsageKernel {
         i.inputTokens !== undefined && i.outputTokens !== undefined;
       const retryableExisting =
         existing?.status === LLM_USAGE_STATUSES.RETRYABLE;
+      const settleAuthorizationClaimIfPresent = async () => {
+        const claim = await reservation.findInvocationClaim(
+          i.reservationId,
+          i.invocationId,
+        );
+        if (!claim || claim.settledAt) return;
+        if (
+          await reservation.settleInvocationClaim({
+            reservationId: i.reservationId,
+            invocationId: i.invocationId,
+          })
+        )
+          return;
+        const concurrent = await reservation.findInvocationClaim(
+          i.reservationId,
+          i.invocationId,
+        );
+        if (!concurrent?.settledAt)
+          throw new BillingDomainError(
+            "Invocation authorization settlement failed",
+          );
+      };
       if (existing) {
         if (
           existing.provider !== provider ||
@@ -317,7 +493,11 @@ export class BillingUsageKernel {
             existing.occurredAt.getTime() !== i.occurredAt.getTime())
         )
           throw new BillingIdempotencyConflictError("Usage replay differs");
-        if (!retryableExisting || !hasRequiredProviderUsage) return existing;
+        if (!retryableExisting || !hasRequiredProviderUsage) {
+          if (existing.status === LLM_USAGE_STATUSES.UNAVAILABLE)
+            await settleAuthorizationClaimIfPresent();
+          return existing;
+        }
       }
       if (i.providerResponseId) {
         const response = await usage.findByProviderResponse(
@@ -329,31 +509,34 @@ export class BillingUsageKernel {
             "Provider response already recorded",
           );
       }
-      const createUnavailable = (availabilityReason: string) => {
-        if (existing) return existing;
-        return usage.create({
-          userId: i.userId,
-          assessmentId: assessmentId ?? undefined,
-          runId: runId ?? undefined,
-          agentRole: i.agentRole,
-          provider,
-          model,
-          invocationId: i.invocationId,
-          providerResponseId: i.providerResponseId,
-          inputTokens: i.inputTokens,
-          cachedInputTokens: i.cachedInputTokens,
-          cacheWriteTokens: i.cacheWriteTokens,
-          outputTokens: i.outputTokens,
-          reasoningTokens: i.reasoningTokens,
-          totalTokens: i.totalTokens,
-          reservationId: i.reservationId,
-          chargedCredits: 0n,
-          providerCostCredits: 0n,
-          customerChargeVnd: 0n,
-          status: LLM_USAGE_STATUSES.UNAVAILABLE,
-          availabilityReason,
-          occurredAt,
-        });
+      const createUnavailable = async (availabilityReason: string) => {
+        const event =
+          existing ??
+          (await usage.create({
+            userId: i.userId,
+            assessmentId: assessmentId ?? undefined,
+            runId: runId ?? undefined,
+            agentRole: i.agentRole,
+            provider,
+            model,
+            invocationId: i.invocationId,
+            providerResponseId: i.providerResponseId,
+            inputTokens: i.inputTokens,
+            cachedInputTokens: i.cachedInputTokens,
+            cacheWriteTokens: i.cacheWriteTokens,
+            outputTokens: i.outputTokens,
+            reasoningTokens: i.reasoningTokens,
+            totalTokens: i.totalTokens,
+            reservationId: i.reservationId,
+            chargedCredits: 0n,
+            providerCostCredits: 0n,
+            customerChargeVnd: 0n,
+            status: LLM_USAGE_STATUSES.UNAVAILABLE,
+            availabilityReason,
+            occurredAt,
+          }));
+        await settleAuthorizationClaimIfPresent();
+        return event;
       };
       if (assessmentId && runId && !hasRequiredProviderUsage)
         return createUnavailable(
@@ -361,6 +544,8 @@ export class BillingUsageKernel {
         );
       const selected = await repos.runtimePolicy.findApplicable(
         i.agentRole,
+        provider,
+        model,
         occurredAt,
       );
       if (!selected) {
@@ -473,6 +658,7 @@ export class BillingUsageKernel {
         await this.accounting.settleUsageWithinTransaction(repos, {
           userId: i.userId,
           reservationId: i.reservationId,
+          invocationId: i.invocationId,
           usageEventId: event.id,
           chargedCredits: customerChargeVnd,
         });

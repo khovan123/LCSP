@@ -158,7 +158,7 @@ export function AssessmentComposer({
         placeholder={placeholder}
         aria-label={placeholder}
         className={cn(
-          "min-h-11 resize-none overflow-y-hidden border-0 bg-transparent px-4.5 py-3 pr-14 text-sm leading-5 shadow-none placeholder:text-muted-foreground focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent",
+          "min-h-11 resize-none overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-0 bg-transparent px-4.5 py-3 pr-14 text-sm leading-5 shadow-none placeholder:text-muted-foreground focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent",
         )}
       />
       {canResize || expanded ? (

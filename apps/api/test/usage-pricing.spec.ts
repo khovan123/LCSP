@@ -85,7 +85,7 @@ describe("usage pricing", () => {
     ).toThrow("required usage dimension price");
   });
 
-  it("bounds a reservation by every input dimension the snapshot prices", () => {
+  it("bounds a reservation by the most expensive mutually-exclusive input dimension", () => {
     const fullPricing = {
       ...pricing,
       cachedInputPricePerMillion: "0.50000000",
@@ -102,8 +102,8 @@ describe("usage pricing", () => {
         fullPricing,
       ),
     ).toEqual({
-      inputTokens: 1_000_000n,
-      cachedInputTokens: 1_000_000n,
+      inputTokens: 0n,
+      cachedInputTokens: 0n,
       cacheWriteTokens: 1_000_000n,
       outputTokens: 2_000_000n,
       reasoningTokens: 3_000_000n,

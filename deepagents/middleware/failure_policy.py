@@ -97,6 +97,8 @@ def is_terminal_task_error(error: BaseException) -> bool:
         seen.add(id(current))
         if isinstance(current, (TypeError, ValidationError, StructuredOutputError, TerminalSchemaError, TerminalCredentialError)):
             return True
+        if type(current).__name__ == "BillingBudgetExhausted":
+            return True
         # Our own API rejected this payload. The boundary re-runs the model on every
         # redelivery, so requeueing an identical rejected decision is an unbounded spend
         # that never converges; fail loudly instead. Duck-typed to keep the queue policy

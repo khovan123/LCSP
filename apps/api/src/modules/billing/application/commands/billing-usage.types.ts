@@ -29,6 +29,12 @@ export type BillingUsageClaimInput = {
   assessmentId: string;
   reservationId: string;
   invocationId: string;
+  provider?: string;
+  model?: string;
+  estimatedInputTokens?: bigint;
+  estimatedInputBytes?: bigint;
+  maxOutputTokens?: bigint;
+  maxReasoningTokens?: bigint;
 };
 
 export type BillingUsageSettlementInput = {

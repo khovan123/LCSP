@@ -1,7 +1,7 @@
 "use client";
 
 import { resolveMessage } from "@lcsp/i18n";
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode, type Ref } from "react";
 
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ type AssessmentTranscriptProps = {
 type ChatRailProps = {
   children: ReactNode;
   className?: string;
+  elementRef?: Ref<HTMLDivElement>;
 };
 
 export function AssessmentTranscript({
@@ -27,11 +28,9 @@ export function AssessmentTranscript({
   className,
 }: AssessmentTranscriptProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const railRef = useRef<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
-    if (autoScrollKey === undefined) {
-      return;
-    }
     const viewport = viewportRef.current;
     if (!viewport) {
       return;
@@ -41,11 +40,13 @@ export function AssessmentTranscript({
 
   useEffect(() => {
     const viewport = viewportRef.current;
-    if (!viewport || typeof ResizeObserver === "undefined") {
+    const rail = railRef.current;
+    if (!viewport || !rail || typeof ResizeObserver === "undefined") {
       return;
     }
     const observer = new ResizeObserver(() => scrollToLatest(viewport));
     observer.observe(viewport);
+    observer.observe(rail);
     return () => observer.disconnect();
   }, []);
   return (
@@ -56,20 +57,24 @@ export function AssessmentTranscript({
       aria-live="polite"
       aria-label={ariaLabel}
       className={cn(
-        "no-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto",
+        "no-scrollbar flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto",
         className,
       )}
     >
-      <ChatRail className="min-h-full justify-end gap-4 pt-6 pb-3">
+      <ChatRail
+        elementRef={railRef}
+        className="shrink-0 gap-4 pt-6 pb-4"
+      >
         {children}
       </ChatRail>
     </div>
   );
 }
 
-export function ChatRail({ children, className }: ChatRailProps) {
+export function ChatRail({ children, className, elementRef }: ChatRailProps) {
   return (
     <div
+      ref={elementRef}
       data-slot="chat-rail"
       className={cn(
         "mx-auto flex w-full max-w-170 min-w-0 flex-col px-4 sm:px-0",
@@ -82,6 +87,9 @@ export function ChatRail({ children, className }: ChatRailProps) {
 }
 
 function scrollToLatest(viewport: HTMLDivElement) {
+  if (viewport.scrollHeight <= viewport.clientHeight) {
+    return;
+  }
   viewport.scrollTo({
     top: viewport.scrollHeight,
     behavior: "auto",

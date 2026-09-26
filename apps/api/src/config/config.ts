@@ -117,6 +117,18 @@ function runtimeIdentityForProvider(
   );
 }
 
+function envText(value: unknown, fallback = ""): string {
+  if (value === undefined || value === null) return fallback;
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return String(value);
+  }
+  return "";
+}
+
 function runtimeIdentityForModelSpec(
   spec: string,
 ): RuntimeModelIdentity | null {
@@ -130,10 +142,10 @@ function runtimeIdentityForModelSpec(
 function primaryRuntimeIdentity(
   env: Record<string, unknown>,
 ): RuntimeModelIdentity | null {
-  const selectedProvider = String(env.LCSP_MODEL_PROVIDER ?? "").trim();
+  const selectedProvider = envText(env.LCSP_MODEL_PROVIDER).trim();
   if (selectedProvider) return runtimeIdentityForProvider(selectedProvider);
   return runtimeIdentityForModelSpec(
-    String(env.LCSP_ROOT_AGENT_MODEL ?? DEFAULT_ROOT_MODEL_SPEC),
+    envText(env.LCSP_ROOT_AGENT_MODEL, DEFAULT_ROOT_MODEL_SPEC),
   );
 }
 
@@ -144,7 +156,7 @@ function fallbackRuntimeIdentities(
   for (const [key, rawValue] of Object.entries(env)) {
     const match = /^LLM_FALLBACK_PROVIDER_(\d+)$/u.exec(key);
     if (!match) continue;
-    const provider = String(rawValue ?? "").trim();
+    const provider = envText(rawValue).trim();
     if (!provider) continue;
     const identity = runtimeIdentityForProvider(provider);
     if (!identity) return null;
@@ -164,7 +176,7 @@ function fallbackRuntimeIdentities(
 function parseBillingAuthorizedRuntimeModels(
   value: unknown,
 ): RuntimeModelIdentity[] | null {
-  const text = String(value ?? "").trim();
+  const text = envText(value).trim();
   if (!text) return [];
   const models: RuntimeModelIdentity[] = [];
   for (const entry of text.split(",")) {
@@ -190,12 +202,12 @@ function containsRuntimeIdentity(
 function billingRuntimePolicyMatches(
   env: Record<string, unknown>,
 ):
-  | "ok"
+  | "valid"
   | "invalidRuntime"
   | "invalidAuthorizedModels"
   | "primaryMismatch"
   | "missingAuthorizedRuntime" {
-  if (env.BILLING_METERING_ENABLED !== true) return "ok";
+  if (env.BILLING_METERING_ENABLED !== true) return "valid";
   const primary = primaryRuntimeIdentity(env);
   const fallbacks = fallbackRuntimeIdentities(env);
   if (!primary || !fallbacks) return "invalidRuntime";
@@ -204,10 +216,8 @@ function billingRuntimePolicyMatches(
   );
   if (!authorized) return "invalidAuthorizedModels";
   const billingPrimary = {
-    provider: String(env.BILLING_RUNTIME_PROVIDER ?? "")
-      .trim()
-      .toUpperCase(),
-    model: String(env.BILLING_RUNTIME_MODEL ?? "").trim(),
+    provider: envText(env.BILLING_RUNTIME_PROVIDER).trim().toUpperCase(),
+    model: envText(env.BILLING_RUNTIME_MODEL).trim(),
   };
   if (
     billingPrimary.provider !== primary.provider ||
@@ -218,7 +228,7 @@ function billingRuntimePolicyMatches(
   return required.every((identity) =>
     containsRuntimeIdentity(authorized, identity),
   )
-    ? "ok"
+    ? "valid"
     : "missingAuthorizedRuntime";
 }
 
@@ -513,7 +523,7 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
         return helpers.error("credentialKek.archiveRetrieval");
       }
       const billingRuntimeStatus = billingRuntimePolicyMatches(env);
-      if (billingRuntimeStatus !== "ok") {
+      if (billingRuntimeStatus !== "valid") {
         return helpers.error(`billingRuntime.${billingRuntimeStatus}`);
       }
       if (env.GITHUB_CLI_CREDENTIAL_PERSISTENCE_ENABLED !== true) return env;

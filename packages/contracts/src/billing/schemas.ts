@@ -194,6 +194,12 @@ export type BillingUsageReleaseRequest = z.infer<
 export const billingUsageClaimSchema = z.object({
   assessmentId: flexibleText,
   invocationId: flexibleText,
+  provider: flexibleText.optional(),
+  model: flexibleText.optional(),
+  estimatedInputTokens: nonNegativeIntegerText.optional(),
+  estimatedInputBytes: nonNegativeIntegerText.optional(),
+  maxOutputTokens: nonNegativeIntegerText.optional(),
+  maxReasoningTokens: nonNegativeIntegerText.optional(),
 });
 export type BillingUsageClaimRequest = z.infer<typeof billingUsageClaimSchema>;
 

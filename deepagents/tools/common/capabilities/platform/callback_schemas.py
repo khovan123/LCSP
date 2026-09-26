@@ -131,6 +131,12 @@ class BillingReservationClaimPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     assessmentId: str
     invocationId: str
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    estimatedInputTokens: Optional[str] = None
+    estimatedInputBytes: Optional[str] = None
+    maxOutputTokens: Optional[str] = None
+    maxReasoningTokens: Optional[str] = None
 
 
 class ConflictDetectionCallbackPayload(BaseModel):

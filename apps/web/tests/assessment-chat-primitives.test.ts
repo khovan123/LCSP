@@ -73,7 +73,7 @@ test("assessment transcript is the shared scrollable 680px rail primitive", asyn
   assert.match(source, /data-slot="chat-rail"/);
   assert.match(source, /role="log"/);
   assert.match(source, /aria-live="polite"/);
-  assert.match(source, /no-scrollbar min-h-0 flex-1 overflow-x-hidden/);
+  assert.match(source, /no-scrollbar flex min-h-0 flex-1 flex-col overflow-x-hidden/);
   assert.match(source, /overflow-y-auto/);
   assert.match(source, /max-w-170/);
   assert.doesNotMatch(source, /max-w-\[760px\]/);
@@ -86,8 +86,11 @@ test("assessment transcript stays pinned to latest output and preserves a fixed 
   assert.match(source, /scrollToLatest\(viewport\)/);
   assert.match(source, /ResizeObserver/);
   assert.match(source, /observer\.observe\(viewport\)/);
+  assert.match(source, /observer\.observe\(rail\)/);
+  assert.match(source, /viewport\.scrollHeight <= viewport\.clientHeight/);
   assert.match(source, /behavior: "auto"/);
-  assert.match(source, /min-h-full justify-end gap-4 pt-6 pb-3/);
+  assert.match(source, /shrink-0 gap-4 pt-6 pb-4/);
+  assert.doesNotMatch(source, /mt-auto/);
   assert.doesNotMatch(source, /AUTO_FOLLOW_THRESHOLD_PX/);
   assert.doesNotMatch(source, /isFollowingLatestRef/);
   assert.doesNotMatch(source, /onScroll=\{handleScroll\}/);
@@ -119,6 +122,8 @@ test("assessment composer auto-grows from one to three rows and keeps expansion 
   assert.match(source, /EXPANDED_MAX_HEIGHT_PX = 352/);
   assert.match(source, /max-h-\[min\(42dvh,22rem\)\]/);
   assert.match(source, /min-h-11/);
+  assert.match(source, /\[scrollbar-width:none\]/);
+  assert.match(source, /\[&::-webkit-scrollbar\]:hidden/);
   assert.equal(source.match(/<Textarea\b/g)?.length, 1);
   assert.equal(source.match(/type="submit"/g)?.length, 1);
   assert.match(source, /Maximize2Icon/);

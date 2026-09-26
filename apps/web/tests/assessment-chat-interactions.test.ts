@@ -615,6 +615,26 @@ test("chat single select keyboard navigation selects and focuses enabled radios"
   assert.equal(testWindow.document.activeElement, getRadios(container)[0]);
 });
 
+test("assessment transcript leaves short content at the top without synthetic bottom anchoring", async () => {
+  // createElement's positional children do not satisfy a required `children` prop type.
+  const transcriptProps: React.ComponentProps<typeof AssessmentTranscript> = {
+    ariaLabel: "Transcript",
+    children: React.createElement("p", null, "Short content"),
+  };
+  const { container } = await renderElement(
+    React.createElement(AssessmentTranscript, transcriptProps),
+  );
+
+  const transcript = getTranscript(container);
+  const rail = container.querySelector<HTMLElement>('[data-slot="chat-rail"]');
+  assert.ok(rail);
+  assert.match(transcript.className, /flex-col/);
+  assert.match(rail.className, /shrink-0/);
+  assert.match(rail.className, /pb-4/);
+  assert.doesNotMatch(rail.className, /mt-auto/);
+});
+
+
 test("assessment transcript always anchors to the latest streamed output", async () => {
   const { container, rerender } = await renderElement(
     transcriptElement("Initial", 1),

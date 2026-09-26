@@ -27,6 +27,8 @@ const billingConfig = {
     maxInputTokens: "1000",
     maxOutputTokens: "500",
     maxReasoningTokens: "0",
+    runtimeProvider: "openai",
+    runtimeModel: "gpt-test",
   }),
 };
 
@@ -102,6 +104,8 @@ describe("billing customer CQRS handlers", () => {
     expect(runForUser).toHaveBeenCalledWith("customer-1", expect.any(Function));
     expect(findRuntime).toHaveBeenCalledWith(
       BILLING_ESTIMATE_RUNTIME_ROLE,
+      "OPENAI",
+      "gpt-test",
       expect.any(Date),
     );
     expect(findPricing).toHaveBeenCalledWith(
@@ -279,7 +283,12 @@ function createEstimateHandler(input: {
 }) {
   const findRuntime =
     jest.fn<
-      (role: string, effectiveAt: Date) => Promise<typeof runtime | null>
+      (
+        role: string,
+        provider: string,
+        model: string,
+        effectiveAt: Date,
+      ) => Promise<typeof runtime | null>
     >();
   if (input.runtimeError) {
     findRuntime.mockRejectedValue(input.runtimeError);

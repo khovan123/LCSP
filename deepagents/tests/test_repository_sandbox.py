@@ -15,11 +15,21 @@ from tools.common.capabilities.platform import repository_sandbox
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_same_assessment_reuses_one_agent_thread_across_pipeline_events() -> None:
+def test_scan_job_reuses_thread_only_for_same_scan_delivery() -> None:
     scan = agent_server_client.agent_thread_id(
         "scan_requested",
         {"assessmentId": "assessment-1", "scanJobId": "scan-1"},
         "corr-scan",
+    )
+    redelivery = agent_server_client.agent_thread_id(
+        "scan_requested",
+        {"assessmentId": "assessment-1", "scanJobId": "scan-1"},
+        "corr-redelivery",
+    )
+    rerun = agent_server_client.agent_thread_id(
+        "scan_requested",
+        {"assessmentId": "assessment-1", "scanJobId": "scan-2"},
+        "corr-rerun",
     )
     assessment = agent_server_client.agent_thread_id(
         "engineering_assessment_requested",
@@ -32,7 +42,9 @@ def test_same_assessment_reuses_one_agent_thread_across_pipeline_events() -> Non
         "corr-other",
     )
 
-    assert scan == assessment
+    assert scan == redelivery
+    assert scan != rerun
+    assert scan != assessment
     assert scan != other
 
 

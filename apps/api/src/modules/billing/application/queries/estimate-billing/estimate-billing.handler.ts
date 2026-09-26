@@ -33,11 +33,16 @@ export class EstimateBillingHandler implements IQueryHandler<EstimateBillingQuer
   async execute(query: EstimateBillingQuery): Promise<BillingUsageEstimate> {
     const prepaid = estimatePrepaid(query.amountVnd);
     const effectiveAt = new Date();
+    const billing = this.config.getOrThrow<AppConfig["billing"]>("billing");
+    const runtimeProvider = billing.runtimeProvider.trim().toUpperCase();
+    const runtimeModel = billing.runtimeModel.trim();
     return this.transactions.runForUser(query.userId, async (repositories) => {
       let runtime: RuntimeModelPolicyRecord | null;
       try {
         runtime = await repositories.runtimePolicy.findApplicable(
           BILLING_ESTIMATE_RUNTIME_ROLE,
+          runtimeProvider,
+          runtimeModel,
           effectiveAt,
         );
       } catch (error) {

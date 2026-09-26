@@ -53,6 +53,12 @@ export function toClaimInput(
     assessmentId: body.assessmentId,
     reservationId,
     invocationId: body.invocationId,
+    provider: body.provider?.toUpperCase(),
+    model: body.model,
+    estimatedInputTokens: toBigInt(body.estimatedInputTokens),
+    estimatedInputBytes: toBigInt(body.estimatedInputBytes),
+    maxOutputTokens: toBigInt(body.maxOutputTokens),
+    maxReasoningTokens: toBigInt(body.maxReasoningTokens),
   };
 }
 

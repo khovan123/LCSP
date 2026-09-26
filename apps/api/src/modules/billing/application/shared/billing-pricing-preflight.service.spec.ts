@@ -24,10 +24,12 @@ function makePrismaService(available: ReadonlySet<string>): {
 } {
   return {
     modelPricingSnapshot: {
-      findFirst: jest.fn(async (args: FindFirstArgs) =>
-        available.has(`${args.where.provider}:${args.where.model}`)
-          ? { id: "pricing-1" }
-          : null,
+      findFirst: jest.fn((args: FindFirstArgs) =>
+        Promise.resolve(
+          available.has(`${args.where.provider}:${args.where.model}`)
+            ? { id: "pricing-1" }
+            : null,
+        ),
       ),
     },
   };

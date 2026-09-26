@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+import asyncio
 from hashlib import sha256
 
 from langchain.agents.middleware import AgentMiddleware
@@ -13,6 +14,7 @@ from middleware.failure_policy import (
     TerminalSchemaError,
     is_auth_failure,
     is_provider_capacity_failure,
+    is_terminal_task_error,
     error_status,
 )
 from orchestration.agent_stream import publish_agent_stream_event
@@ -33,10 +35,12 @@ _RETRYABLE_TRANSIENT_STATUSES = frozenset({408, 409, 425, 429})
 _DEFAULT_RATE_LIMIT_COOLDOWN_SECONDS = 30.0
 _MAX_RATE_LIMIT_COOLDOWN_SECONDS = 120.0
 # Process-window credential health. Auth failures are permanent for the process;
-# rate limits only deprioritize a slot until its cooldown expires.
+# rate limits make a slot ineligible until its cooldown expires.
 _DEAD_CREDENTIAL_SLOTS: dict[tuple[str, str], set[int]] = {}
 _RATE_LIMITED_UNTIL: dict[tuple[str, str], dict[int, float]] = {}
 _monotonic = time.monotonic
+_sleep = time.sleep
+_asleep = asyncio.sleep
 
 
 def _credential_fingerprint(token: str) -> str:
@@ -67,6 +71,14 @@ def _is_retryable_transient_error(error: BaseException) -> bool:
         return True
     if status is not None:
         return status >= 500
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        name = type(current).__name__.lower()
+        if "timeout" in name:
+            return True
+        current = current.__cause__ or current.__context__
     return isinstance(error, (TimeoutError, ConnectionError))
 
 
@@ -143,10 +155,11 @@ class TokenFallbackMiddleware(AgentMiddleware):
     """Try healthy configured credential slots, each at most once per model call.
 
     - 401/403: the slot is dead for this process and is skipped on later calls.
-    - 429: the slot is cooled down (Retry-After when present) and tried after healthy
-      slots until the cooldown expires; it is never marked dead.
+    - 429: the slot cools down (Retry-After when present, capped) and is skipped until
+      it expires; it is never marked dead. When only cooling slots remain, the call
+      waits once for the soonest one and retries it (see ``_next_step``).
     - other transient failures (5xx, timeouts): move on to the next slot.
-    - schema/request failures: raised immediately, no rotation.
+    - schema/request/billing failures: raised immediately, no rotation.
     """
 
     def wrap_model_call(self, request, handler):
@@ -301,6 +314,37 @@ class TokenFallbackMiddleware(AgentMiddleware):
             },
         )
 
+    def _log_wait_for_rate_limit(
+        self,
+        *,
+        provider: str,
+        env_name: str,
+        index: int,
+        fingerprint: str,
+        wait_seconds: float,
+    ) -> None:
+        logger.warning(
+            "MODEL_CREDENTIAL_FALLBACK_WAITING_FOR_RATE_LIMIT",
+            provider=provider,
+            credential_source=env_name,
+            credential_slot=index,
+            credential_fingerprint=fingerprint,
+            fallback_enabled=True,
+            wait_seconds=wait_seconds,
+        )
+        publish_agent_stream_event(
+            "CREDENTIAL_ROTATION",
+            status="WAITING",
+            text="waiting for credential cooldown",
+            data={
+                "provider": provider,
+                "credential_source": env_name,
+                "credential_slot": index,
+                "credential_fingerprint": fingerprint,
+                "wait_seconds": wait_seconds,
+            },
+        )
+
     def _mark_dead(
         self,
         *,
@@ -346,27 +390,91 @@ class TokenFallbackMiddleware(AgentMiddleware):
     def _mark_healthy(self, *, provider: str, env_name: str, index: int) -> None:
         self._rate_limited_slots(provider, env_name).pop(index, None)
 
-    def _attempt_order(self, *, provider: str, env_name: str, tokens: tuple[str, ...]) -> list[int]:
+    def _attempt_order(
+        self,
+        *,
+        provider: str,
+        env_name: str,
+        tokens: tuple[str, ...],
+        attempted: set[int],
+    ) -> list[int]:
         dead = self._dead_slots(provider, env_name)
         cooling = self._rate_limited_slots(provider, env_name)
         now = _monotonic()
         healthy: list[int] = []
-        cooled: list[int] = []
         for index in range(len(tokens)):
+            if index in attempted:
+                continue
             if index in dead:
-                self._log_skip_dead_slot(
-                    provider=provider,
-                    env_name=env_name,
-                    index=index,
-                    fingerprint=_credential_fingerprint(tokens[index]),
-                )
+                # Log once per model call, on its first plan, not on every re-plan.
+                if not attempted:
+                    self._log_skip_dead_slot(
+                        provider=provider,
+                        env_name=env_name,
+                        index=index,
+                        fingerprint=_credential_fingerprint(tokens[index]),
+                    )
                 continue
             if cooling.get(index, 0.0) > now:
-                cooled.append(index)
+                continue
             else:
                 cooling.pop(index, None)
                 healthy.append(index)
-        return healthy + sorted(cooled, key=lambda index: cooling[index])
+        return healthy
+
+    def _next_rate_limited_slot(
+        self,
+        *,
+        provider: str,
+        env_name: str,
+        tokens: tuple[str, ...],
+    ) -> tuple[int, float] | None:
+        """Return the soonest-eligible cooling slot; ties break on the lower slot index."""
+        dead = self._dead_slots(provider, env_name)
+        cooling = self._rate_limited_slots(provider, env_name)
+        now = _monotonic()
+        candidates = [
+            (until, index)
+            for index, until in cooling.items()
+            if index < len(tokens) and index not in dead and until > now
+        ]
+        if not candidates:
+            return None
+        until, index = min(candidates)
+        return index, until - now
+
+    def _next_step(
+        self,
+        *,
+        provider: str,
+        env_name: str,
+        tokens: tuple[str, ...],
+        attempted: set[int],
+        waited_for_cooldown: bool,
+    ) -> tuple[list[int], tuple[int, float] | None]:
+        """Plan the next batch of slots, or the single cooldown wait of this model call.
+
+        Every slot is invoked at most once before the wait. The wait happens at most once
+        per model call, only when no healthy untried slot remains, and targets the
+        soonest-eligible cooling slot. After it, that slot plus any untried slot whose
+        cooldown has also expired are each invoked once more in slot-index order; a
+        further 429 ends the call. A model call therefore makes at most len(tokens) + 1
+        provider invocations.
+        """
+        order = self._attempt_order(
+            provider=provider,
+            env_name=env_name,
+            tokens=tokens,
+            attempted=attempted,
+        )
+        if order or waited_for_cooldown:
+            return order, None
+        return [], self._next_rate_limited_slot(provider=provider, env_name=env_name, tokens=tokens)
+
+    def _end_cooldown_wait(self, *, provider: str, env_name: str, index: int, attempted: set[int]) -> None:
+        # The awaited slot is eligible by construction; do not let clock rounding skip it.
+        self._rate_limited_slots(provider, env_name).pop(index, None)
+        attempted.discard(index)
 
     def _record_failure(
         self,
@@ -378,6 +486,11 @@ class TokenFallbackMiddleware(AgentMiddleware):
         error: BaseException,
     ) -> bool:
         """Record slot health for a failed attempt; return whether rotation may continue."""
+        # Billing gates, callback rejections and request/schema failures are not credential
+        # faults. Billing errors may carry a provider-like status (402, or the callback's
+        # 429/5xx); rotating on them would re-authorize or re-bill the same invocation.
+        if is_terminal_task_error(error):
+            return False
         if _is_auth_failure(error):
             self._mark_dead(
                 provider=provider,
@@ -398,6 +511,26 @@ class TokenFallbackMiddleware(AgentMiddleware):
             return True
         return credential_failure(error)
 
+    def _before_attempt(
+        self,
+        *,
+        provider: str,
+        env_name: str,
+        tokens: tuple[str, ...],
+        index: int,
+        attempt_count: int,
+        attempted: set[int],
+    ) -> None:
+        if attempt_count:
+            self._log_fallback_attempt(
+                provider=provider,
+                env_name=env_name,
+                index=index,
+                fingerprint=_credential_fingerprint(tokens[index]),
+                reason="previous_slot_failure",
+            )
+        attempted.add(index)
+
     def _run_with_fallback(self, *, request, handler, provider: str, env_name: str, tokens: tuple[str, ...], asynchronous: bool):
         if asynchronous:
             return self._arun_with_fallback(request, handler, provider, env_name, tokens)
@@ -405,64 +538,113 @@ class TokenFallbackMiddleware(AgentMiddleware):
 
     def _srun_with_fallback(self, request, handler, provider: str, env_name: str, tokens: tuple[str, ...]):
         first_error: BaseException | None = None
-        for attempt, index in enumerate(
-            self._attempt_order(provider=provider, env_name=env_name, tokens=tokens)
-        ):
-            if attempt:
-                self._log_fallback_attempt(
+        attempted: set[int] = set()
+        waited_for_cooldown = False
+        attempt_count = 0
+        while True:
+            order, wait = self._next_step(
+                provider=provider,
+                env_name=env_name,
+                tokens=tokens,
+                attempted=attempted,
+                waited_for_cooldown=waited_for_cooldown,
+            )
+            if wait is not None:
+                index, wait_seconds = wait
+                waited_for_cooldown = True
+                self._log_wait_for_rate_limit(
                     provider=provider,
                     env_name=env_name,
                     index=index,
                     fingerprint=_credential_fingerprint(tokens[index]),
-                    reason="previous_slot_failure",
+                    wait_seconds=wait_seconds,
                 )
-            try:
-                response = handler(self._candidate_request(request, provider, tokens[index], index))
-            except Exception as error:
-                if not self._record_failure(
+                _sleep(wait_seconds)
+                self._end_cooldown_wait(provider=provider, env_name=env_name, index=index, attempted=attempted)
+                continue
+            if not order:
+                break
+            for index in order:
+                self._before_attempt(
                     provider=provider,
                     env_name=env_name,
+                    tokens=tokens,
                     index=index,
-                    token=tokens[index],
-                    error=error,
-                ):
-                    raise
-                first_error = first_error or error
-                continue
-            self._mark_healthy(provider=provider, env_name=env_name, index=index)
-            return response
+                    attempt_count=attempt_count,
+                    attempted=attempted,
+                )
+                attempt_count += 1
+                try:
+                    response = handler(self._candidate_request(request, provider, tokens[index], index))
+                except Exception as error:
+                    if not self._record_failure(
+                        provider=provider,
+                        env_name=env_name,
+                        index=index,
+                        token=tokens[index],
+                        error=error,
+                    ):
+                        raise
+                    first_error = first_error or error
+                    continue
+                self._mark_healthy(provider=provider, env_name=env_name, index=index)
+                return response
         raise TerminalCredentialError("All configured retryable provider credential slots failed; task stopped") from first_error
 
     async def _arun_with_fallback(self, request, handler, provider: str, env_name: str, tokens: tuple[str, ...]):
         first_error: BaseException | None = None
-        for attempt, index in enumerate(
-            self._attempt_order(provider=provider, env_name=env_name, tokens=tokens)
-        ):
-            if attempt:
-                self._log_fallback_attempt(
+        attempted: set[int] = set()
+        waited_for_cooldown = False
+        attempt_count = 0
+        while True:
+            order, wait = self._next_step(
+                provider=provider,
+                env_name=env_name,
+                tokens=tokens,
+                attempted=attempted,
+                waited_for_cooldown=waited_for_cooldown,
+            )
+            if wait is not None:
+                index, wait_seconds = wait
+                waited_for_cooldown = True
+                self._log_wait_for_rate_limit(
                     provider=provider,
                     env_name=env_name,
                     index=index,
                     fingerprint=_credential_fingerprint(tokens[index]),
-                    reason="previous_slot_failure",
+                    wait_seconds=wait_seconds,
                 )
-            try:
-                response = await handler(self._candidate_request(request, provider, tokens[index], index))
-            except Exception as error:
-                if not self._record_failure(
+                await _asleep(wait_seconds)
+                self._end_cooldown_wait(provider=provider, env_name=env_name, index=index, attempted=attempted)
+                continue
+            if not order:
+                break
+            for index in order:
+                self._before_attempt(
                     provider=provider,
                     env_name=env_name,
+                    tokens=tokens,
                     index=index,
-                    token=tokens[index],
-                    error=error,
-                ):
-                    raise
-                first_error = first_error or error
-                continue
-            self._mark_healthy(provider=provider, env_name=env_name, index=index)
-            return response
+                    attempt_count=attempt_count,
+                    attempted=attempted,
+                )
+                attempt_count += 1
+                try:
+                    response = await handler(self._candidate_request(request, provider, tokens[index], index))
+                except Exception as error:
+                    if not self._record_failure(
+                        provider=provider,
+                        env_name=env_name,
+                        index=index,
+                        token=tokens[index],
+                        error=error,
+                    ):
+                        raise
+                    first_error = first_error or error
+                    continue
+                self._mark_healthy(provider=provider, env_name=env_name, index=index)
+                return response
         raise TerminalCredentialError("All configured retryable provider credential slots failed; task stopped") from first_error
-
 
 __all__ = [
     "TokenFallbackMiddleware",

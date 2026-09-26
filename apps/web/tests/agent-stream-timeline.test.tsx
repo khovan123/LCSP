@@ -661,6 +661,125 @@ test("terminal failure stops orphaned running spinners without failing completed
   );
 });
 
+test("recovered provider attempts do not render as repeated terminal failures", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          event(
+            1,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted,
+            {
+              provider: "llm7",
+              model: "codestral-latest",
+              timeout_seconds: 30,
+            },
+            {
+              messageId: "llm7-failed-attempt",
+              toolCallId: null,
+              text: "model call started",
+            },
+          ),
+          event(
+            2,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed,
+            {
+              provider: "llm7",
+              model: "codestral-latest",
+              elapsed_seconds: 1,
+              error_type: "UnprocessableEntityError",
+            },
+            {
+              messageId: "llm7-failed-attempt",
+              toolCallId: null,
+              status: ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+              text: "model call failed",
+            },
+          ),
+          event(
+            3,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.providerFallback,
+            {
+              current_provider: "llm7",
+              fallback_provider: "google_genai",
+              fallback_index: 1,
+            },
+            {
+              source: "scan_requested",
+              toolName: null,
+              toolCallId: null,
+              text: "provider fallback attempt",
+            },
+          ),
+          event(
+            4,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.toolResult,
+            { entries: ["src"] },
+            {
+              toolName: "ls",
+              toolCallId: "tool-after-fallback",
+              status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+            },
+          ),
+          event(
+            5,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed,
+            {
+              boundary: "scan_requested",
+              exception_type: "AgentServerRunError",
+            },
+            {
+              source: "scan_requested",
+              toolName: null,
+              toolCallId: null,
+              status: ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+              text: "repository analysis failed",
+            },
+          ),
+        ]}
+      />,
+    );
+  });
+
+  const summaries = [
+    ...container.querySelectorAll<HTMLDetailsElement>(
+      "details[data-stream-activity]",
+    ),
+  ].map((activity) => activity.querySelector("summary")?.textContent ?? "");
+  assert.equal(
+    summaries.filter((summary) =>
+      /AI provider could not complete this analysis step|AI provider không thể hoàn tất bước phân tích này/.test(
+        summary,
+      ),
+    ).length,
+    0,
+  );
+  assert.equal(
+    summaries.filter((summary) =>
+      /Switched to a backup AI provider|Đã chuyển sang AI provider dự phòng/.test(
+        summary,
+      ),
+    ).length,
+    1,
+  );
+  assert.ok(
+    summaries.some((summary) =>
+      /Inspected repository files|Đã kiểm tra các file trong repository/.test(
+        summary,
+      ),
+    ),
+  );
+  assert.equal(
+    container.querySelectorAll('[data-stream-status="failed"]').length,
+    1,
+  );
+});
+
 test("runtime TOOL_STARTED and TOOL_COMPLETED merge into one completed activity even when outer status stays RUNNING", async () => {
   const container = document.createElement("div");
   document.body.append(container);

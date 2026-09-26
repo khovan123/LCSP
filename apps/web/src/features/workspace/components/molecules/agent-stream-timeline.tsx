@@ -188,6 +188,7 @@ function projectStreamRows(
   const semanticToolIds = new Set<string>();
   const semanticModelOutputIds = new Set<string>();
   const semanticReasoningIds = new Set<string>();
+  const recoveredProviderFailures = recoveredProviderFailureCutoffs(ordered);
 
   for (const event of ordered) {
     const semantic = semanticData(event.data);
@@ -222,6 +223,7 @@ function projectStreamRows(
         semanticToolIds,
         semanticModelOutputIds,
         semanticReasoningIds,
+        recoveredProviderFailures,
       )
     ) {
       continue;
@@ -1163,6 +1165,7 @@ function shouldSuppressEvent(
   semanticToolIds: Set<string>,
   semanticModelOutputIds: Set<string>,
   semanticReasoningIds: Set<string>,
+  recoveredProviderFailures: Map<string, number>,
 ): boolean {
   const identity = [
     event.nodeName,
@@ -1178,6 +1181,13 @@ function shouldSuppressEvent(
   if (
     event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.graphUpdate ||
     event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.graphState
+  ) {
+    return true;
+  }
+  const recoveredProviderKey = modelCallProgressKey(event);
+  if (
+    recoveredProviderKey &&
+    event.sequence < (recoveredProviderFailures.get(recoveredProviderKey) ?? -1)
   ) {
     return true;
   }
@@ -1217,6 +1227,47 @@ function shouldSuppressEvent(
     event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted ||
     event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed
   );
+}
+
+function recoveredProviderFailureCutoffs(
+  events: AssessmentAgentStreamEvent[],
+): Map<string, number> {
+  const cutoffs = new Map<string, number>();
+  const failedModelCalls = events.filter(
+    (event) =>
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed ||
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout,
+  );
+  for (const fallback of events) {
+    if (fallback.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.providerFallback) {
+      continue;
+    }
+    const data = isSummaryRecord(fallback.data) ? fallback.data : null;
+    const provider =
+      typeof data?.current_provider === "string"
+        ? data.current_provider.trim().toLowerCase()
+        : "";
+    if (!provider) continue;
+    for (const failed of failedModelCalls) {
+      if (failed.runId !== fallback.runId || failed.sequence >= fallback.sequence) {
+        continue;
+      }
+      const failedData = isSummaryRecord(failed.data) ? failed.data : null;
+      if (
+        typeof failedData?.provider !== "string" ||
+        failedData.provider.trim().toLowerCase() !== provider
+      ) {
+        continue;
+      }
+      const key = modelCallProgressKey(failed);
+      if (!key) continue;
+      const existing = cutoffs.get(key);
+      if (existing === undefined || fallback.sequence < existing) {
+        cutoffs.set(key, fallback.sequence);
+      }
+    }
+  }
+  return cutoffs;
 }
 
 function toolIdentityKey(
