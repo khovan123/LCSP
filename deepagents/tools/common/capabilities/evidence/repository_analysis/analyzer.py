@@ -28,6 +28,9 @@ from middleware.model_governance import (
 from model_policy import INVESTIGATOR_MODEL_SPEC, resolve_agent_model
 from orchestration.agent_stream import invoke_with_stream
 from orchestration.technical_coverage_policy import attach_partial_coverage_policy
+from tools.common.capabilities.evidence.graph.schema.models import (
+    program_graph_content_hash,
+)
 from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
 
 from .models import AiFinding, RepositoryAnalysisResult, SourceAnchor
@@ -339,6 +342,8 @@ class RepositoryDeepAnalyzer:
             "graph_hash": "",
             "schema_version": "deep-agent-1.0.0",
         }
+        # Downstream investigation requires identifiable provenance (graph_id + hash).
+        graph["graph_hash"] = program_graph_content_hash(graph)
         payload = {
             "summary": result.summary,
             "languages": result.languages,

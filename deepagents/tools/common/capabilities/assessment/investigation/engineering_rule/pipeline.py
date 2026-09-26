@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from tools.legal.retrieval.legal_basis.chromadb_citation_retriever import ChromaDbCitationRetriever
@@ -12,7 +12,10 @@ from model_policy import INVESTIGATOR_MODEL_SPEC, PLANNER_MODEL_SPEC
 from tools.common.capabilities.platform.api_client import WorkerApiClient
 from tools.common.capabilities.platform.logging import get_logger
 from middleware.billing_metering import BillingMeteringError
-from tools.common.capabilities.evidence.graph.schema.models import ProgramEvidenceGraph
+from tools.common.capabilities.evidence.graph.schema.models import (
+    ProgramEvidenceGraph,
+    program_graph_content_hash,
+)
 from memory_policy.episodes import capture_verified_episode
 
 from tools.common.capabilities.assessment.investigation.engineering_rule.initial_query_executor import InitialQueryExecutor
@@ -635,8 +638,14 @@ class EngineeringInvestigationPipeline:
         if not isinstance(graph_payload, dict):
             raise ValueError("technical evidence report has no Program Evidence Graph")
         graph = ProgramEvidenceGraph.from_dict(graph_payload)
-        if not graph.graph_id or not graph.graph_hash:
+        if not graph.graph_id:
             raise ValueError("Program Evidence Graph provenance is incomplete")
+        if not graph.graph_hash:
+            # Deep Agents repository analysis stored graphs without a hash before it
+            # stamped one; content-address them rather than blocking investigation.
+            if not graph.nodes:
+                raise ValueError("Program Evidence Graph provenance is incomplete")
+            graph = replace(graph, graph_hash=program_graph_content_hash(graph.to_dict()))
         return graph
 
     @staticmethod
