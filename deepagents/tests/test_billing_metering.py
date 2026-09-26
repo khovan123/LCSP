@@ -884,3 +884,31 @@ def test_token_ceiling_is_not_treated_as_the_same_number_of_bytes():
         BillingMeteringMiddleware().wrap_model_call(request, lambda _: response())
 
     assert len(client.payloads) == 1
+
+
+def test_request_shape_diagnostic_stays_bounded_for_long_runs():
+    from middleware.billing_metering import _request_shape_diagnostic
+
+    messages = [HumanMessage(content="start")]
+    for index in range(200):
+        call_id = f"call_{index:04d}"
+        messages.append(
+            AIMessage(content="", tool_calls=[{"name": "ls", "args": {}, "id": call_id}])
+        )
+        messages.append(ToolMessage(content="result", tool_call_id=call_id, name="ls"))
+    request = SimpleNamespace(messages=messages, tools=[])
+
+    fields = _request_shape_diagnostic(
+        request, SimpleNamespace(provider="llm7", model_name="GLM-5.3-Flash")
+    )
+
+    assert fields["message_count"] == 401
+    assert len(fields["message_roles"]) == 8
+    assert fields["message_roles"][-1] == "tool"
+    assert fields["message_roles_omitted"] == 393
+    assert fields["tool_result_count"] == 200
+    # Every id has the same shape, so it is reported once.
+    assert fields["tool_call_id_shapes"] == [
+        {"length": len("call_0000"), "has_call_prefix": True, "contains_whitespace": False}
+    ]
+    assert len(str(fields)) < 1_000
