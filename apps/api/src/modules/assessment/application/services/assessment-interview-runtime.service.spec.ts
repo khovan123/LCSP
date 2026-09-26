@@ -341,6 +341,9 @@ type MockRuntimeEvents = {
   recordToolWaitingInput: jest.Mock<(...args: unknown[]) => Promise<void>>;
   recordToolCompleted: jest.Mock<(...args: unknown[]) => Promise<void>>;
   recordToolFailed: jest.Mock<(...args: unknown[]) => Promise<void>>;
+  getLatestInterviewProgressPhase: jest.Mock<
+    (...args: unknown[]) => Promise<string | null>
+  >;
   getLatestPostFindingState: jest.Mock<
     () => Promise<AssessmentPostFindingRuntimeState | null>
   >;
@@ -614,6 +617,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       recordToolFailed: jest
         .fn<(...args: unknown[]) => Promise<void>>()
         .mockResolvedValue(undefined),
+      getLatestInterviewProgressPhase: jest
+        .fn<(...args: unknown[]) => Promise<string | null>>()
+        .mockResolvedValue(null),
       getLatestPostFindingState: jest
         .fn<() => Promise<AssessmentPostFindingRuntimeState | null>>()
         .mockResolvedValue(null),
@@ -1629,6 +1635,27 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           }),
         }),
       );
+    });
+
+    it("accepts a FAILED progress event recorded before the thread persisted the failure", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        failedTurnThread({ failedDecisionRevision: undefined }),
+      );
+      mockRuntimeEvents.getLatestInterviewProgressPhase.mockResolvedValue(
+        INTERVIEW_PROGRESS_PHASES.failed,
+      );
+
+      await service.resumeFailedTurn({
+        assessmentId: "assessment-1",
+        actor,
+        correlationId: "corr-resume-legacy-failure",
+        resume: { expectedSessionRevision: 2 },
+      });
+
+      expect(
+        mockRuntimeEvents.getLatestInterviewProgressPhase,
+      ).toHaveBeenCalledWith("assessment-1", "assessment_interview", 2);
+      expect(mockOutboxRepository.enqueue).toHaveBeenCalledTimes(1);
     });
 
     it("rejects resume when the current revision has not failed", async () => {

@@ -878,8 +878,22 @@ export class AssessmentInterviewRuntimeService {
     const resume = parseResumeInput(input.resume, input.correlationId);
     await this.assertAssessmentVisible(input.assessmentId, input.actor);
     const provenance = await this.assessmentProvenance(input.assessmentId);
+    const currentRevision = (await this.readThread(input.assessmentId))
+      .contextRevision;
+    // Failures reported before the thread persisted failedDecisionRevision are
+    // still visible as the latest FAILED progress event, which the composer uses.
+    const latestProgressPhase =
+      await this.runtimeEvents.getLatestInterviewProgressPhase(
+        input.assessmentId,
+        INTERVIEW_TOOL_NAME,
+        currentRevision,
+      );
     const next = await this.runInterviewTransaction(async (tx) => {
       const thread = await this.readThread(input.assessmentId, tx);
+      const turnFailed =
+        thread.privateStore.failedDecisionRevision === thread.contextRevision ||
+        (thread.contextRevision === currentRevision &&
+          latestProgressPhase === INTERVIEW_PROGRESS_PHASES.failed);
       if (
         resume.expectedSessionRevision !== undefined &&
         resume.expectedSessionRevision !== thread.contextRevision
@@ -916,7 +930,7 @@ export class AssessmentInterviewRuntimeService {
         thread.activeQuestionId ||
         thread.state.activeQuestion ||
         thread.processedRevision >= thread.contextRevision ||
-        thread.privateStore.failedDecisionRevision !== thread.contextRevision
+        !turnFailed
       ) {
         throw problemException(
           ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.notAvailable,

@@ -1058,6 +1058,61 @@ def test_handoff_schema_violation_gets_one_correction_before_continuation(caplog
     assert all(call.args[-1] != "FAILED" for call in api.post_interview_progress.call_args_list)
 
 
+def test_schema_violation_during_guard_correction_gets_its_own_repair(caplog):
+    api = RecordingApi()
+    api.post_interview_progress = Mock()
+    rejected = {
+        **deepcopy(WAITING_HANDOFF),
+        "mode": "INITIAL_INTERVIEW",
+        "outcome": "CONTEXT_READY",
+        "contextAuthority": "CUSTOMER_STATED",
+        "activeQuestion": None,
+    }
+    corrected = {**deepcopy(WAITING_HANDOFF), "mode": "INITIAL_INTERVIEW"}
+    schema_error = SpecialistHandoffValidationError(
+        "interview handoff failed schema validation: "
+        "activeQuestion: Value error, select Interview controls require choices"
+    )
+    dispatcher = RecordingDispatcher()
+    dispatcher.dispatch = Mock(
+        side_effect=[{"handoff": rejected}, schema_error, {"handoff": corrected}]
+    )
+    api.post_interview_agent_decision = Mock(return_value={"outcome": "WAITING_FOR_CUSTOMER"})
+    boundary = AssessmentInterviewResumeBoundary(
+        SimpleNamespace(), api_client=api, dispatcher=dispatcher
+    )
+    boundary._run_guarded_continuation = Mock()
+
+    with caplog.at_level(
+        "WARNING", logger="tools.common.capabilities.workflow.recovery.interview_boundary"
+    ):
+        boundary.handle(_message(), "corr-1")
+
+    _, guard_correction, schema_correction = [
+        call.kwargs for call in dispatcher.dispatch.call_args_list
+    ]
+    feedback = json.loads(schema_correction["instruction"].split("\n\n", 1)[1])[
+        "decisionValidationFeedback"
+    ]
+    assert feedback["code"] == "INTERVIEW_CONTEXT_READY_REQUIRES_AUTHORITY"
+    assert feedback["schemaViolation"]["code"] == "INTERVIEW_HANDOFF_SCHEMA_VIOLATION"
+    assert "require choices" in feedback["schemaViolation"]["rejectedReason"]
+    assert schema_correction["idempotency_key"] != guard_correction["idempotency_key"]
+    assert "rule=select Interview controls require choices" in caplog.text
+    api.post_interview_agent_decision.assert_called_once()
+    boundary._run_guarded_continuation.assert_called_once()
+    assert all(call.args[-1] != "FAILED" for call in api.post_interview_progress.call_args_list)
+
+
+def test_missing_structured_response_is_a_repairable_handoff_error():
+    with pytest.raises(SpecialistHandoffValidationError, match="structured_response"):
+        RootSubagentDispatcher._validated_handoff(
+            subagent_type="interview",
+            response_format=object(),
+            invocation_result={"messages": []},
+        )
+
+
 def test_handoff_schema_violation_repair_is_bounded():
     api = RecordingApi()
     api.post_interview_progress = Mock()

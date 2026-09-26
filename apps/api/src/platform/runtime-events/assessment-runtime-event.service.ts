@@ -1,3 +1,4 @@
+import { asRecord } from "../../common/utils/index.js";
 import { randomUUID } from "node:crypto";
 import {
   ASSESSMENT_RUNTIME_EVENT_TYPES,
@@ -866,6 +867,39 @@ export class AssessmentRuntimeEventService {
       })),
       postFindingStates,
     };
+  }
+
+  /**
+   * Returns the latest Interview progress phase recorded for one context revision.
+   * The web composer derives its Resume affordance from the same events, so the
+   * API resume guard reads them too instead of relying only on thread state.
+   *
+   * @param assessmentId - Assessment that owns the Interview thread.
+   * @param toolName - Interview runtime tool name that carries interviewProgress.
+   * @param contextRevision - Interview context revision to look up.
+   * @returns The newest recorded phase for that revision, or null when none exists.
+   */
+  async getLatestInterviewProgressPhase(
+    assessmentId: string,
+    toolName: string,
+    contextRevision: number,
+  ): Promise<string | null> {
+    const events = await this.safeFindMany({
+      where: { assessmentId, toolName },
+      orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
+      take: 50,
+    });
+    for (const event of events) {
+      const output = asRecord(event.outputSummaryJson);
+      const progress = asRecord(output?.interviewProgress);
+      if (
+        progress?.contextRevision === contextRevision &&
+        typeof progress.phase === "string"
+      ) {
+        return progress.phase;
+      }
+    }
+    return null;
   }
 
   async getLatestPostFindingState(
