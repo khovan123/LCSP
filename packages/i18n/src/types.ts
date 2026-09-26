@@ -1697,6 +1697,7 @@ export type PagesMessages = {
       resumeFailedPlaceholder: string;
       resumeTurnQueued: string;
       resumeTurnLimitReached: string;
+      resumeTurnInsufficientCredits: string;
       resumeTurnFailed: string;
       contextReadyHandoff: string;
       contextResolvedHandoff: string;

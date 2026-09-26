@@ -31,6 +31,8 @@ import {
   ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES,
 } from "@lcsp/contracts/evidence";
 
+import { BILLING_ERROR_CODES } from "@lcsp/contracts/billing";
+
 import { apiJson, apiRequest } from "./api-request";
 import { API_OUTCOME_KINDS } from "./outcome-kinds";
 
@@ -159,6 +161,7 @@ export type AssessmentInterviewResumeOutcome =
       state: AssessmentInterviewRuntimeState;
     }
   | { kind: typeof API_OUTCOME_KINDS.rateLimited }
+  | { kind: typeof API_OUTCOME_KINDS.insufficientCredits }
   | { kind: typeof API_OUTCOME_KINDS.error };
 
 export async function resumeAssessmentInterviewTurn(
@@ -179,8 +182,11 @@ export async function resumeAssessmentInterviewTurn(
       state: payload as AssessmentInterviewRuntimeState,
     };
   }
-  return problemCode === ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.limitReached
-    ? { kind: API_OUTCOME_KINDS.rateLimited }
+  if (problemCode === ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.limitReached) {
+    return { kind: API_OUTCOME_KINDS.rateLimited };
+  }
+  return problemCode === BILLING_ERROR_CODES.insufficientCredits
+    ? { kind: API_OUTCOME_KINDS.insufficientCredits }
     : { kind: API_OUTCOME_KINDS.error };
 }
 

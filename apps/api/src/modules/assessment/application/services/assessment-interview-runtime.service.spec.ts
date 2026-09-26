@@ -33,6 +33,7 @@ import {
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { BILLING_ERROR_CODES } from "@lcsp/contracts/billing";
 import { INTERVIEW_TECHNICAL_COVERAGE_STATES } from "@lcsp/contracts/audit";
 
 import type { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
@@ -1656,6 +1657,55 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         mockRuntimeEvents.getLatestInterviewProgressPhase,
       ).toHaveBeenCalledWith("assessment-1", "assessment_interview", 2);
       expect(mockOutboxRepository.enqueue).toHaveBeenCalledTimes(1);
+    });
+
+    it("refuses resume with 402 when the owner wallet cannot cover the worker reservation", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        failedTurnThread(),
+      );
+      const rebuildProjection = jest
+        .fn<(userId: string) => Promise<{ availableBalance: bigint }>>()
+        .mockResolvedValue({ availableBalance: 10n });
+      const config = {
+        get: jest.fn((key: string, fallback?: unknown) =>
+          key === "billing.meteringEnabled"
+            ? true
+            : key === "billing.reservationCredits"
+              ? "100"
+              : fallback,
+        ),
+      };
+      Object.defineProperty(service, "billingAccounting", {
+        configurable: true,
+        value: { rebuildProjection },
+      });
+      Object.defineProperty(service, "config", {
+        configurable: true,
+        value: config,
+      });
+
+      await expect(
+        service.resumeFailedTurn({
+          assessmentId: "assessment-1",
+          actor,
+          correlationId: "corr-resume-no-credits",
+          resume: {},
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          ok: false,
+          problem: {
+            status: 402,
+            code: BILLING_ERROR_CODES.insufficientCredits,
+            meta: { requiredCredits: "100", availableCredits: "10" },
+          },
+        },
+      });
+      expect(rebuildProjection).toHaveBeenCalledWith("user-1");
+      expect(mockOutboxRepository.enqueue).not.toHaveBeenCalled();
+      expect(
+        mockTx.assessmentInterviewThread.updateMany,
+      ).not.toHaveBeenCalled();
     });
 
     it("rejects resume when the current revision has not failed", async () => {

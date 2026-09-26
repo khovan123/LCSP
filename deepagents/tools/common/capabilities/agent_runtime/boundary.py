@@ -35,3 +35,12 @@ class AgentBoundaryBase:
     def handle(self, message: dict[str, Any], correlationId: str) -> None:
         """Process one Agent Runtime invocation payload."""
         raise NotImplementedError
+
+    def report_dispatch_failure(
+        self, message: dict[str, Any], correlationId: str, error: BaseException
+    ) -> None:
+        """Surface a failure raised before ``handle`` ran (e.g. billing reservation).
+
+        Boundaries whose domain state shows live progress override this so the
+        customer is not left on a QUEUED state for work that never started.
+        """

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import logging
 from dataclasses import dataclass
 from typing import Any, Type
 
@@ -174,6 +175,7 @@ AGENT_INVOCATION_BOUNDARIES: tuple[AgentInvocationBoundary, ...] = (
     ),
 )
 
+_LOGGER = logging.getLogger(__name__)
 _BOUNDARY_INDEX = {boundary.name: boundary for boundary in AGENT_INVOCATION_BOUNDARIES}
 if len(_BOUNDARY_INDEX) != len(AGENT_INVOCATION_BOUNDARIES):
     raise RuntimeError("Agent Runtime invocation boundary names must be unique")
@@ -203,7 +205,13 @@ def invoke_boundary(
         raise ValueError(f"unknown agent runtime invocation boundary: {boundary_name}")
     boundary_handler = build_boundary(boundary.target)
     session = _agent_stream_session(boundary.name, message, correlation_id)
-    billing_session = _billing_metering_session(boundary.name, message, correlation_id)
+    try:
+        billing_session = _billing_metering_session(
+            boundary.name, message, correlation_id
+        )
+    except Exception as error:
+        _report_dispatch_failure(boundary_handler, message, correlation_id, error)
+        raise
     try:
         billing_context = activate_billing_metering(billing_session)
         with billing_context:
@@ -242,6 +250,22 @@ def invoke_boundary(
         "source_event": boundary.source_event,
         "status": "COMPLETED",
     }
+
+
+def _report_dispatch_failure(
+    boundary_handler: AgentBoundaryBase,
+    message: dict[str, Any],
+    correlation_id: str,
+    error: BaseException,
+) -> None:
+    """Best-effort domain notification; never masks the original failure."""
+    try:
+        boundary_handler.report_dispatch_failure(message, correlation_id, error)
+    except Exception:
+        _LOGGER.warning(
+            "AGENT_RUNTIME_DISPATCH_FAILURE_REPORT_FAILED boundary=%s",
+            type(boundary_handler).__name__,
+        )
 
 
 def _run_boundary_handler(

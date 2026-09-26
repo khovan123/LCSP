@@ -69,7 +69,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { BILLING_ERROR_CODES } from "@lcsp/contracts/billing";
 import { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
@@ -78,6 +81,7 @@ import { problemException } from "../../../../platform/http/filters/error.factor
 import { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
 import { InterviewAuditService } from "../../../audit/application/services/interview-audit.service.js";
+import { BillingAccountingKernel } from "../../../billing/application/shared/billing-accounting.kernel.js";
 import {
   normalizeStrategy,
   updateInterviewWorkingStrategy,
@@ -340,6 +344,8 @@ export class AssessmentInterviewRuntimeService {
     private readonly runtimeEvents: AssessmentRuntimeEventService,
     private readonly outboxRepository: OutboxRepository,
     private readonly interviewAudit: InterviewAuditService,
+    @Optional() private readonly billingAccounting?: BillingAccountingKernel,
+    @Optional() private readonly config?: ConfigService,
   ) {}
 
   async getState(
@@ -877,6 +883,10 @@ export class AssessmentInterviewRuntimeService {
   }): Promise<AssessmentInterviewRuntimeState> {
     const resume = parseResumeInput(input.resume, input.correlationId);
     await this.assertAssessmentVisible(input.assessmentId, input.actor);
+    await this.assertResumeCreditsAvailable(
+      input.assessmentId,
+      input.correlationId,
+    );
     const provenance = await this.assessmentProvenance(input.assessmentId);
     const currentRevision = (await this.readThread(input.assessmentId))
       .contextRevision;
@@ -1037,6 +1047,51 @@ export class AssessmentInterviewRuntimeService {
     });
 
     return publicState(next.state);
+  }
+
+  /**
+   * Refuses a resume the worker could not bill. The worker reserves
+   * billing.reservationCredits from the assessment owner's wallet before the
+   * Interview Agent runs; queueing a turn the wallet cannot cover only strands
+   * the Customer on a QUEUED turn that never starts.
+   */
+  private async assertResumeCreditsAvailable(
+    assessmentId: string,
+    correlationId: string,
+  ): Promise<void> {
+    if (
+      !this.billingAccounting ||
+      !this.config?.get<boolean>("billing.meteringEnabled", false)
+    ) {
+      return;
+    }
+    const configured = this.config
+      .get<string>("billing.reservationCredits", "")
+      .trim();
+    if (!/^[0-9]+$/.test(configured)) return;
+    const requiredCredits = BigInt(configured);
+    const assessment = await this.prisma.assessment.findUnique({
+      where: { id: assessmentId },
+      select: { ownerId: true },
+    });
+    if (!assessment?.ownerId) return;
+    const availableCredits = await this.billingAccounting
+      .rebuildProjection(assessment.ownerId)
+      .then((projection) => projection.availableBalance)
+      .catch(() => 0n);
+    if (availableCredits < requiredCredits) {
+      throw problemException(
+        BILLING_ERROR_CODES.insufficientCredits,
+        correlationId,
+        {
+          status: HttpStatus.PAYMENT_REQUIRED,
+          meta: {
+            requiredCredits: requiredCredits.toString(),
+            availableCredits: availableCredits.toString(),
+          },
+        },
+      );
+    }
   }
 
   async recordBlockedAction(input: {

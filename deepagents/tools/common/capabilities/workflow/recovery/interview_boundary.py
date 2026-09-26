@@ -672,6 +672,19 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             config
         )
 
+    def report_dispatch_failure(
+        self, message: dict[str, Any], correlationId: str, error: BaseException
+    ) -> None:
+        # A turn that could not even reserve billing never reaches handle(), so no
+        # RUNNING/FAILED progress exists and the Customer would wait on QUEUED.
+        # FAILED lets the API offer Resume; the resume preflight then explains why.
+        assessment_id = _required_text(message, "assessmentId")
+        context_revision = _required_int(message, "contextRevision")
+        api_client = self._api_client or self._load_api_client()
+        reporter = getattr(api_client, "post_interview_progress", None)
+        if reporter is not None:
+            reporter(assessment_id, context_revision, "FAILED")
+
     def handle(self, message: dict[str, Any], correlationId: str) -> None:
         assessment_id = _required_text(message, "assessmentId")
         thread_id = _required_text(message, "threadId")

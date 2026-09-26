@@ -459,3 +459,53 @@ def test_invoke_boundary_releases_reservation_only_for_non_redelivered_failures(
         invocation.invoke_boundary("engineering_assessment_requested", {}, "corr-release")
 
     assert session.released == (1 if released else 0)
+
+
+def test_invoke_boundary_reports_billing_reservation_failure_before_raising(monkeypatch):
+    from tools.common.capabilities.agent_runtime import invocation
+
+    class RecordingBoundary:
+        def __init__(self):
+            self.reported = []
+
+        def report_dispatch_failure(self, message, correlation_id, error):
+            self.reported.append((message, correlation_id, error))
+
+    boundary = RecordingBoundary()
+    error = RuntimeError("BILLING_INSUFFICIENT_CREDITS")
+
+    def failing_reservation(*_args):
+        raise error
+
+    monkeypatch.setattr(invocation, "build_boundary", lambda _target: boundary)
+    monkeypatch.setattr(invocation, "_agent_stream_session", lambda *_args: None)
+    monkeypatch.setattr(invocation, "_billing_metering_session", failing_reservation)
+
+    message = {"assessmentId": "assessment-1", "contextRevision": 8}
+    with pytest.raises(RuntimeError) as caught:
+        invocation.invoke_boundary("engineering_assessment_requested", message, "corr-billing")
+
+    assert caught.value is error
+    assert boundary.reported == [(message, "corr-billing", error)]
+
+
+def test_dispatch_failure_report_errors_never_mask_the_original_failure(monkeypatch):
+    from tools.common.capabilities.agent_runtime import invocation
+
+    class BrokenReporter:
+        def report_dispatch_failure(self, *_args):
+            raise ValueError("progress endpoint down")
+
+    error = RuntimeError("BILLING_INSUFFICIENT_CREDITS")
+
+    def failing_reservation(*_args):
+        raise error
+
+    monkeypatch.setattr(invocation, "build_boundary", lambda _target: BrokenReporter())
+    monkeypatch.setattr(invocation, "_agent_stream_session", lambda *_args: None)
+    monkeypatch.setattr(invocation, "_billing_metering_session", failing_reservation)
+
+    with pytest.raises(RuntimeError) as caught:
+        invocation.invoke_boundary("engineering_assessment_requested", {}, "corr-billing")
+
+    assert caught.value is error
