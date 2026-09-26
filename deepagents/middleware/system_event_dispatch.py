@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Mapping
 
-from langchain.agents.middleware import before_agent
+from langchain.agents.middleware import AgentMiddleware, hook_config
 
 from orchestration.context import LCSPRunContext
 from tools.common.capabilities.agent_runtime.invocation import invoke_boundary
@@ -21,9 +22,31 @@ from tools.common.capabilities.platform.repository_sandbox import (
 )
 
 
-@before_agent(can_jump_to=["end"])
-def dispatch_agent_runtime_system_event(state, runtime) -> dict[str, Any] | None:
-    """Run trusted LCSP system events before the root model is invoked."""
+class _SystemEventDispatchMiddleware(AgentMiddleware):
+    """Run trusted LCSP system events before the root model is invoked.
+
+    The Agent Server executes graphs asynchronously. A sync-only hook would run
+    the whole boundary (minutes of model calls) on the server event loop, so the
+    server could not answer any other request: every other broker delivery then
+    timed out creating its thread and was dropped after its retries. The async
+    hook moves the blocking boundary onto a worker thread (context variables are
+    copied), keeping the server responsive while the event runs.
+    """
+
+    @property
+    def name(self) -> str:
+        return "dispatch_agent_runtime_system_event"
+
+    @hook_config(can_jump_to=["end"])
+    def before_agent(self, state, runtime) -> dict[str, Any] | None:
+        return _dispatch_system_event(state, runtime)
+
+    @hook_config(can_jump_to=["end"])
+    async def abefore_agent(self, state, runtime) -> dict[str, Any] | None:
+        return await asyncio.to_thread(_dispatch_system_event, state, runtime)
+
+
+def _dispatch_system_event(state, runtime) -> dict[str, Any] | None:
     _ = state
     context = _context(runtime.context)
     if context is None or not context.system_boundary_name or not context.system_event:
@@ -70,6 +93,9 @@ def dispatch_agent_runtime_system_event(state, runtime) -> dict[str, Any] | None
             correlation_id,
         )
     return {"jump_to": "end"}
+
+
+dispatch_agent_runtime_system_event = _SystemEventDispatchMiddleware()
 
 
 def _context(value: object) -> LCSPRunContext | None:
