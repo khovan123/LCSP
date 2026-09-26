@@ -230,6 +230,7 @@ function projectStreamRows(
   const aiRows = new Map<string, ProjectedStreamRow>();
   const aiSteps = new Map<ProjectedStreamRow, Set<string>>();
   const aiStreamedText = new Map<string, string>();
+  const activityRows = new Map<string, ProjectedStreamRow>();
   const runtimeRows = new Map<string, ProjectedStreamRow>();
   const lifecycleRows = new Map<string, ProjectedStreamRow>();
   const semanticToolIds = new Set<string>();
@@ -448,7 +449,35 @@ function projectStreamRows(
       );
       continue;
     }
-    rows.push(toStreamRow(event));
+    const projected = toStreamRow(event);
+    if (mergeKey === null) {
+      // Any other activity that repeats (context trimming, progress, logs) updates
+      // one row per label in place instead of adding the same line again.
+      const activityKey = [
+        "activity",
+        event.runId,
+        event.engineeringRuleId ?? "",
+        event.eventType,
+        projected.label,
+      ].join(":");
+      const existing = activityRows.get(activityKey);
+      if (existing) {
+        existing.sequence = event.sequence;
+        existing.repeatCount += 1;
+        existing.status = projected.status;
+        existing.failed = projected.failed;
+        existing.detail = projected.detail ?? existing.detail;
+        existing.meta = projected.meta;
+        existing.technical = startAndLatestDetails(
+          existing.technical,
+          projected.technical,
+        );
+        previousMergeKey = null;
+        continue;
+      }
+      activityRows.set(activityKey, projected);
+    }
+    rows.push(projected);
     previousMergeKey = mergeKey;
   }
 
