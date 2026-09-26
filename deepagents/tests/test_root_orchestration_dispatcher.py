@@ -489,3 +489,40 @@ def test_root_dispatcher_fails_policy_when_structured_handoff_is_missing(result)
 
     lifecycle.fail_subagent.assert_called_once_with(reservation)
     lifecycle.complete_subagent.assert_not_called()
+
+
+@pytest.mark.parametrize("subagent_type", ["triage", "interview", "planner", "investigator"])
+def test_default_agent_factory_builds_each_specialist_definition(monkeypatch, subagent_type) -> None:
+    """Assessment 7976a135 regression: the real factory must accept real definitions.
+
+    Specialist definitions declare their own billing role; the factory added a second
+    one, so create_agent rejected the stack and Initial Interview could never start.
+    """
+    import deepagents.graph as deep_graph
+
+    from model_policy import create_lcsp_agent
+    from subagents import FLOW_SUBAGENTS
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("LLM7_API_KEY", "test-llm7-key")
+    compiled: dict[str, list[str]] = {}
+    real_create_agent = deep_graph.create_agent
+
+    def recording_create_agent(model, **kwargs):
+        compiled[kwargs["name"]] = [middleware.name for middleware in kwargs["middleware"]]
+        return real_create_agent(model, **kwargs)
+
+    monkeypatch.setattr(deep_graph, "create_agent", recording_create_agent)
+    definition = next(item for item in FLOW_SUBAGENTS if item["name"] == subagent_type)
+
+    create_lcsp_agent(
+        agent_name=subagent_type,
+        model=definition["model"],
+        tools=definition["tools"],
+        system_prompt=definition["system_prompt"],
+        middleware=definition["middleware"],
+        name=f"lcsp-{subagent_type}-root-dispatch",
+    )
+
+    stack = compiled[f"lcsp-{subagent_type}-root-dispatch"]
+    assert stack.count("BillingAgentRoleMiddleware") == 1
