@@ -13,6 +13,9 @@ from orchestration.dispatcher import RootSubagentDispatcher
 from decision.shadow import InterviewRoutingPacket, observer_from_api_client
 from tools.common.capabilities.agent_runtime.boundary import NonRetryableAgentBoundaryError
 from tools.common.capabilities.platform.api_client import InterviewCoverageCallbackError
+from tools.common.capabilities.workflow.recovery.evidence_ref_repair import (
+    post_with_evidence_ref_repair,
+)
 
 from .engineering_assessment_boundary import EngineeringAssessmentBoundary
 from .managed_targeted_investigator import (
@@ -408,7 +411,17 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
         handoff["technicalEvidenceReportId"] = evidence_report_id
         handoff["workflowRunId"] = valid_wf_id
         try:
-            self._api_client.post_interview_initial_question(assessment_id, handoff)
+            # The turn ledger may authorize tool-returned refs (e.g. source
+            # locators) that the API's persisted provenance does not; strip
+            # those instead of failing the whole run.
+            post_with_evidence_ref_repair(
+                lambda payload: self._api_client.post_interview_initial_question(
+                    assessment_id, payload
+                ),
+                handoff,
+                fallback_refs=(f"technicalEvidenceReport:{evidence_report_id}",),
+                assessment_id=assessment_id,
+            )
         except InterviewCoverageCallbackError:
             self._route_coverage_to_recovery(
                 assessment_id=assessment_id,

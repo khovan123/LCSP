@@ -23,6 +23,9 @@ from tools.common.capabilities.agent_runtime.boundary import AgentBoundaryBase
 from tools.common.capabilities.platform.api_client import (
     InterviewDecisionRepairableCallbackError,
 )
+from tools.common.capabilities.workflow.recovery.evidence_ref_repair import (
+    post_with_evidence_ref_repair,
+)
 from tools.common.capabilities.workflow.recovery.post_guard_continuation import (
     PostGuardContinuationStore,
 )
@@ -858,8 +861,12 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             decision = _confirmation_or_original(decision, context)
 
         try:
-            guarded_state = api_client.post_interview_agent_decision(
-                assessment_id, decision,
+            guarded_state = post_with_evidence_ref_repair(
+                lambda payload: api_client.post_interview_agent_decision(
+                    assessment_id, payload,
+                ),
+                decision,
+                assessment_id=assessment_id,
             )
         except InterviewDecisionRepairableCallbackError as exc:
             # A rejected candidate has not advanced the persisted revision. The API
@@ -893,8 +900,12 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             corrected = run(context=repair_context)
             corrected = _confirmation_or_original(corrected, context)
             # A second rejection propagates to terminal delivery settlement.
-            guarded_state = api_client.post_interview_agent_decision(
-                assessment_id, corrected,
+            guarded_state = post_with_evidence_ref_repair(
+                lambda payload: api_client.post_interview_agent_decision(
+                    assessment_id, payload,
+                ),
+                corrected,
+                assessment_id=assessment_id,
             )
         self._run_guarded_continuation(
             assessment_id=assessment_id,
