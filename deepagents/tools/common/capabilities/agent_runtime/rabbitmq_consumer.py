@@ -17,7 +17,7 @@ from typing import Any, Callable
 import httpx
 import pika
 
-from middleware.failure_policy import is_terminal_task_error
+from middleware.failure_policy import is_terminal_boundary_error
 from orchestration.agent_stream import install_agent_stream_log_handler
 
 from tools.common.capabilities.platform.env import load_runtime_env
@@ -799,7 +799,7 @@ def _settle_delivery(
         retryable = (
             requeue_on_error
             and not isinstance(error, NonRetryableAgentBoundaryError)
-            and not is_terminal_task_error(error)
+            and not is_terminal_boundary_error(error)
         )
         current_attempt = _delivery_attempt(properties)
         max_attempts = len(retry_delays_seconds)

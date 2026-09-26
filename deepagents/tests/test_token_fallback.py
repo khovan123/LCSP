@@ -775,7 +775,7 @@ async def test_billing_budget_exhaustion_never_rotates_credentials(monkeypatch, 
     assert handler.call_count == 1
 
 
-@pytest.mark.parametrize("status", [429, 503])
+@pytest.mark.parametrize("status", [401, 403, 429, 503])
 @pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.asyncio
 async def test_billing_delivery_failure_never_rebills_on_another_credential(monkeypatch, status, asynchronous):
@@ -792,6 +792,8 @@ async def test_billing_delivery_failure_never_rebills_on_another_credential(monk
     # A provider response was already received and billed; a second slot would re-bill it.
     assert handler.call_count == 1
     assert token_fallback._RATE_LIMITED_UNTIL.get(("openai", "OPENAI_API_KEY"), {}) == {}
+    # Our own API's callback status never marks a provider credential dead.
+    assert token_fallback._DEAD_CREDENTIAL_SLOTS.get(("openai", "OPENAI_API_KEY"), set()) == set()
     assert clock.sleeps == [] and clock.async_sleeps == []
 
 

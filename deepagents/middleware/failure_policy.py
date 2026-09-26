@@ -1,10 +1,17 @@
 """Shared terminal failure classification for model calls and queue delivery."""
 from langchain.agents.structured_output import StructuredOutputError
-from langchain_core.exceptions import ModelError
+from langchain_core.exceptions import (
+    ModelAuthenticationError,
+    ModelError,
+    ModelPermissionDeniedError,
+)
 from pydantic import ValidationError
 
 
 _AUTH_FAILURE_STATUSES = frozenset({401, 403})
+# Typed provider rejections of the credential, not of the request. They are
+# non-retryable for the same credential, yet another credential or provider may succeed.
+_CREDENTIAL_MODEL_ERRORS = (ModelAuthenticationError, ModelPermissionDeniedError)
 _PROVIDER_CAPACITY_STATUSES = frozenset({402, 429})
 _PROVIDER_CAPACITY_CODES = frozenset(
     {
@@ -72,8 +79,24 @@ def _error_codes(error: BaseException) -> set[str]:
     return codes
 
 
+def _is_credential_model_error(error: BaseException) -> bool:
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, _CREDENTIAL_MODEL_ERRORS):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
 def is_auth_failure(error: BaseException) -> bool:
-    return error_status(error) in _AUTH_FAILURE_STATUSES
+    """Return whether the provider rejected the credential (401/403 or typed auth error).
+
+    An auth failure is never retried with the same credential (see retry_model_error),
+    but it is not a terminal task error: credential and provider fallback may continue.
+    """
+    return error_status(error) in _AUTH_FAILURE_STATUSES or _is_credential_model_error(error)
 
 
 def is_provider_capacity_failure(error: BaseException) -> bool:
@@ -111,15 +134,31 @@ def is_terminal_task_error(error: BaseException) -> bool:
         status = getattr(current, "status_code", None) or getattr(current, "code", None)
         if status in (400, 404, 422):
             return True
-        if isinstance(current, ModelError) and not current.is_retryable:
+        # A non-retryable credential rejection only rules out the same credential; it is
+        # classified by is_auth_failure so credential/provider fallback can continue.
+        if (
+            isinstance(current, ModelError)
+            and not current.is_retryable
+            and not isinstance(current, _CREDENTIAL_MODEL_ERRORS)
+        ):
             return True
         current = current.__cause__ or current.__context__
     return False
 
 
+def is_terminal_boundary_error(error: BaseException) -> bool:
+    """Return whether a failure that escaped the model stack must stop the whole task.
+
+    Inside the model stack an auth failure moves to another credential or provider. Once
+    it escapes to a task boundary, every eligible route has already been tried, so
+    redelivering the task would only resend a rejected credential.
+    """
+    return is_terminal_task_error(error) or is_auth_failure(error)
+
+
 def retry_model_error(error: Exception) -> bool:
     # Re-sending the same request with the same rejected credential cannot succeed.
-    # Queue redelivery policy is intentionally unchanged (see is_terminal_task_error).
+    # Queue redelivery policy lives in is_terminal_boundary_error.
     return (
         not is_terminal_task_error(error)
         and not is_auth_failure(error)

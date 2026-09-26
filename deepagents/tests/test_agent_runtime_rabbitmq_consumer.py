@@ -979,3 +979,28 @@ def test_stale_scan_delivery_is_acked_without_retry_or_terminal_failure(monkeypa
     assert channel.nacked == []
     assert channel.published == []
     assert failures == []
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_typed_auth_failure_escaping_every_route_is_not_requeued(status):
+    # Inside the model stack a typed auth error rotates credentials/providers. If one
+    # still reaches the boundary, redelivery would only resend a rejected credential.
+    from google.genai.errors import ClientError
+    from langchain_google_genai.chat_models import (
+        GoogleAuthenticationError,
+        GooglePermissionDeniedError,
+    )
+
+    error_type = GoogleAuthenticationError if status == 401 else GooglePermissionDeniedError
+    error = error_type("credential rejected")
+    error.__cause__ = ClientError(status, {"error": {"code": status, "message": "rejected"}})
+    channel = FakeChannel()
+    completed = Future()
+    completed.set_exception(error)
+
+    rabbitmq_consumer._settle_delivery(
+        channel=channel, delivery_tag="auth-task", routing_key="command.test",
+        boundary_name="test_boundary", requeue_on_error=True, completed=completed,
+    )
+
+    assert channel.nacked == [("auth-task", False)]
