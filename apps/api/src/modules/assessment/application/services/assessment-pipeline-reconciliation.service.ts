@@ -178,16 +178,16 @@ export class AssessmentPipelineReconciliationService
         skipDuplicates: true,
       });
       const claim = await this.prisma.pipelineReconciliation.updateMany({
-          where: {
-            assessmentId,
-            attemptCount: { lt: maxAttempts },
-            OR: [
-              { lastAttemptAt: null },
-              { lastAttemptAt: { lte: cooldownBefore } },
-            ],
-          },
-          data: { attemptCount: { increment: 1 }, lastAttemptAt: now },
-        });
+        where: {
+          assessmentId,
+          attemptCount: { lt: maxAttempts },
+          OR: [
+            { lastAttemptAt: null },
+            { lastAttemptAt: { lte: cooldownBefore } },
+          ],
+        },
+        data: { attemptCount: { increment: 1 }, lastAttemptAt: now },
+      });
       if (claim.count !== 1) return;
 
       try {
