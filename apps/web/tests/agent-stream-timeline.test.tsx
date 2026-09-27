@@ -14,6 +14,12 @@ import {
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 
+import {
+  groupAgentStreamEventsByRun,
+  interleaveInterviewTranscript,
+  splitCurrentInterviewActivity,
+} from "../src/features/workspace/utils/agent-stream-stages.ts";
+
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "http://localhost/",
 });
@@ -40,8 +46,66 @@ Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
 const { createRoot } = await import("react-dom/client");
 const { AgentStreamTimeline } =
   await import("../src/features/workspace/components/molecules/agent-stream-timeline.tsx");
+const { InterviewAnswerHistory } =
+  await import("../src/features/workspace/components/molecules/interview-answer-history.tsx");
 
 const roots: ReturnType<typeof createRoot>[] = [];
+
+test("billing pause closes its dispatch without changing a real Investigator failure or another dispatch", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const events = [
+    event(1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted, null),
+    event(2, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted, null),
+    event(3, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused, null, {
+      status: ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
+    }),
+  ];
+  await act(async () => root.render(<AgentStreamTimeline events={events} />));
+  assert.equal(container.querySelectorAll(".animate-spin").length, 0);
+  assert.match(container.textContent ?? "", /billing/);
+  await act(async () =>
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          ...events.slice(0, 2),
+          event(3, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentFailed, null, {
+            status: ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+          }),
+          event(
+            4,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted,
+            null,
+            { status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed },
+          ),
+        ]}
+      />,
+    ),
+  );
+  assert.equal(container.querySelectorAll(".animate-spin").length, 0);
+  assert.match(
+    container.querySelector("summary")?.textContent ?? "",
+    /Thất bại|Failed/,
+  );
+  await act(async () =>
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          ...events,
+          event(4, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted, null, {
+            correlationId: "corr-2",
+          }),
+          event(5, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted, null, {
+            correlationId: "corr-2",
+          }),
+        ]}
+      />,
+    ),
+  );
+  assert.ok(container.querySelectorAll(".animate-spin").length > 0);
+});
 
 afterEach(() => {
   act(() => {
@@ -83,6 +147,142 @@ function event(
     ...overrides,
   };
 }
+
+test("historical interview activity sits below its agent question and above the customer answer", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () => {
+    root.render(
+      <InterviewAnswerHistory
+        answer={{
+          questionId: "q-1",
+          questionPrompt: "Question turn",
+          answeredAt: "2026-09-27T09:56:00Z",
+          summary: "Customer answer",
+        }}
+        activity={
+          <div data-slot="question-turn-activity">
+            <AgentStreamTimeline
+              events={[
+                event(
+                  1,
+                  ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted,
+                  { model_step_id: "step-1" },
+                  {
+                    stage: ASSESSMENT_AGENT_STREAM_STAGES.interview,
+                    status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+                  },
+                ),
+              ]}
+            />
+          </div>
+        }
+      />,
+    );
+  });
+  const question = [...container.querySelectorAll("p")].find(
+    (node) => node.textContent === "Question turn",
+  );
+  const activity = container.querySelector(
+    '[data-slot="question-turn-activity"]',
+  );
+  const answer = [...container.querySelectorAll("p")].find(
+    (node) => node.textContent === "Customer answer",
+  );
+  assert.ok(question && activity && answer);
+  assert.ok(
+    question.compareDocumentPosition(activity) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+  assert.ok(
+    activity.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+});
+
+test("rendering the next answered turn keeps all earlier question activity in the transcript", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const stage = ASSESSMENT_AGENT_STREAM_STAGES.interview;
+  const answers = [1, 2, 3].map((turn) => ({
+    questionId: `q-${turn}`,
+    questionPrompt: `Question ${turn}`,
+    answeredAt: `2026-09-27T11:0${turn * 2 + 1}:00Z`,
+    summary: `Answer ${turn}`,
+  }));
+  const events = [1, 2, 3].map((turn) =>
+    event(
+      turn,
+      ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted,
+      { model_step_id: `step-${turn}` },
+      {
+        stage,
+        correlationId: `dispatch-${turn}`,
+        emittedAt: `2026-09-27T11:0${turn * 2}:00Z`,
+        status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+      },
+    ),
+  );
+  for (const count of [1, 2, 3]) {
+    const { history } = splitCurrentInterviewActivity(
+      interleaveInterviewTranscript(answers.slice(0, count), [
+        { stage, groups: groupAgentStreamEventsByRun(events.slice(0, count)) },
+      ]),
+    );
+    await act(async () =>
+      root.render(
+        <>
+          {history.map((turn) => (
+            <InterviewAnswerHistory
+              key={turn.answer.questionId}
+              answer={turn.answer}
+              activity={
+                <div data-question-activity={turn.answer.questionId}>
+                  {turn.activity.map((segment) => (
+                    <AgentStreamTimeline
+                      key={segment.turnKey}
+                      events={segment.events}
+                      activeRunId={segment.runId}
+                    />
+                  ))}
+                </div>
+              }
+            />
+          ))}
+        </>,
+      ),
+    );
+    assert.equal(
+      container.querySelectorAll("[data-question-activity]").length,
+      count,
+    );
+    for (let turn = 1; turn <= count; turn++) {
+      const activity = container.querySelector(
+        `[data-question-activity="q-${turn}"]`,
+      );
+      assert.ok(activity);
+      assert.ok(activity.querySelector("details[data-stream-activity]"));
+      const question = [...container.querySelectorAll("p")].find(
+        (node) => node.textContent === `Question ${turn}`,
+      );
+      const answer = [...container.querySelectorAll("p")].find(
+        (node) => node.textContent === `Answer ${turn}`,
+      );
+      assert.ok(question && answer);
+      assert.ok(
+        question.compareDocumentPosition(activity) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      assert.ok(
+        activity.compareDocumentPosition(answer) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    }
+  }
+});
 
 test("semantic agent stream rows render structured tool model and skill fields", async () => {
   const container = document.createElement("div");
@@ -410,7 +610,10 @@ test("private graph state and PII middleware noise are not rendered", async () =
   assert.doesNotMatch(text, /PIIMiddleware/);
   assert.match(text, /Checking repository architecture/);
   // Reasoning streams into the single AI analysis row.
-  assert.equal(container.querySelectorAll('[data-stream-kind="model"]').length, 1);
+  assert.equal(
+    container.querySelectorAll('[data-stream-kind="model"]').length,
+    1,
+  );
 });
 
 test("thinking header closes after the matching agent lifecycle completes", async () => {
@@ -1008,10 +1211,15 @@ test("investigation renders one section per rule with its own activity and reaso
     root.render(
       <AgentStreamTimeline
         events={[
-          engineeringRuleEvent(1, "ER-1", ASSESSMENT_RUNTIME_RUN_STATUSES.running, {
-            concept: "Token validation",
-            status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
-          }),
+          engineeringRuleEvent(
+            1,
+            "ER-1",
+            ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+            {
+              concept: "Token validation",
+              status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+            },
+          ),
           event(
             2,
             ASSESSMENT_AGENT_STREAM_EVENT_TYPES.customProgress,
@@ -1019,7 +1227,9 @@ test("investigation renders one section per rule with its own activity and reaso
               schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
               kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.reasoningSummary,
               durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
-              resultSummary: { summary: "Token checks live in auth/tokens.py." },
+              resultSummary: {
+                summary: "Token checks live in auth/tokens.py.",
+              },
             },
             {
               engineeringRuleId: "ER-1",
@@ -1062,22 +1272,32 @@ test("investigation renders one section per rule with its own activity and reaso
               status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
             },
           ),
-          engineeringRuleEvent(5, "ER-1", ASSESSMENT_RUNTIME_RUN_STATUSES.completed, {
-            decision: "RULE_REQUIREMENT_MET",
-            resultSummary: {
-              claims: [
-                {
-                  claimType: "RULE_REQUIREMENT_MET",
-                  criterion: "Tokens are validated",
-                  confidence: 0.9,
-                  sourceLocations: "auth/tokens.py#L3-L9",
-                },
-              ],
+          engineeringRuleEvent(
+            5,
+            "ER-1",
+            ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+            {
+              decision: "RULE_REQUIREMENT_MET",
+              resultSummary: {
+                claims: [
+                  {
+                    claimType: "RULE_REQUIREMENT_MET",
+                    criterion: "Tokens are validated",
+                    confidence: 0.9,
+                    sourceLocations: "auth/tokens.py#L3-L9",
+                  },
+                ],
+              },
             },
-          }),
-          engineeringRuleEvent(6, "ER-2", ASSESSMENT_RUNTIME_RUN_STATUSES.running, {
-            concept: "Audit logging",
-          }),
+          ),
+          engineeringRuleEvent(
+            6,
+            "ER-2",
+            ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+            {
+              concept: "Audit logging",
+            },
+          ),
         ]}
       />,
     );
@@ -1098,17 +1318,23 @@ test("investigation renders one section per rule with its own activity and reaso
   const firstRule = rules[0];
   assert.ok(firstRule);
   assert.match(firstRule.textContent ?? "", /Token validation/);
-  const activities = firstRule.querySelectorAll("details[data-stream-activity]");
+  const activities = firstRule.querySelectorAll(
+    "details[data-stream-activity]",
+  );
   // The two model messages and the tool call retain their own activity rows.
   assert.equal(activities.length, 3);
-  const aiDetails = [...firstRule.querySelectorAll('[data-stream-kind="model"] [data-stream-detail]')]
-    .map((detail) => detail.textContent);
+  const aiDetails = [
+    ...firstRule.querySelectorAll(
+      '[data-stream-kind="model"] [data-stream-detail]',
+    ),
+  ].map((detail) => detail.textContent);
   assert.deepEqual(aiDetails, [
     "Token checks live in auth/tokens.py.",
     "Tokens are validated before use.",
   ]);
 
-  const result = firstRule.querySelector("[data-stream-rule-result]")?.textContent ?? "";
+  const result =
+    firstRule.querySelector("[data-stream-rule-result]")?.textContent ?? "";
   assert.match(result, /RULE_REQUIREMENT_MET/);
   assert.match(result, /Tokens are validated/);
   assert.match(result, /90%/);
@@ -1154,9 +1380,14 @@ test("each AI step remains visible while the next step is running", async () => 
   await act(async () => {
     root.render(<AgentStreamTimeline events={firstTurn} />);
   });
-  assert.equal(container.querySelectorAll('[data-stream-kind="model"]').length, 1);
   assert.equal(
-    container.querySelector<HTMLDetailsElement>('details[data-slot="agent-stream-timeline"]')?.open,
+    container.querySelectorAll('[data-stream-kind="model"]').length,
+    1,
+  );
+  assert.equal(
+    container.querySelector<HTMLDetailsElement>(
+      'details[data-slot="agent-stream-timeline"]',
+    )?.open,
     true,
   );
 
@@ -1165,9 +1396,21 @@ test("each AI step remains visible while the next step is running", async () => 
       <AgentStreamTimeline
         events={[
           ...firstTurn,
-          step(3, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.credentialRotation, "step-2"),
-          step(4, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted, "step-2"),
-          step(5, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallHeartbeat, "step-2"),
+          step(
+            3,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.credentialRotation,
+            "step-2",
+          ),
+          step(
+            4,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted,
+            "step-2",
+          ),
+          step(
+            5,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallHeartbeat,
+            "step-2",
+          ),
         ]}
       />,
     );
@@ -1180,6 +1423,229 @@ test("each AI step remains visible while the next step is running", async () => 
   assert.equal(
     container.querySelectorAll("details[data-stream-activity]").length,
     3,
+  );
+});
+
+test("completed AI turns group incrementally with a count and retain every turn detail", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const result = (sequence: number) =>
+    event(
+      sequence,
+      ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelResult,
+      {
+        schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+        kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.modelOutput,
+        durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+        resultSummary: { text: `Completed turn ${sequence}` },
+      },
+      {
+        messageId: `message-${sequence}`,
+        toolName: null,
+        toolCallId: null,
+        status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+      },
+    );
+  const running = event(
+    3,
+    ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted,
+    {
+      model_step_id: "step-3",
+    },
+    { toolName: null, toolCallId: null },
+  );
+
+  await act(async () => {
+    root.render(<AgentStreamTimeline events={[result(1), running]} />);
+  });
+  assert.equal(
+    container.querySelectorAll('[data-stream-kind="model"]').length,
+    2,
+  );
+  assert.equal(container.querySelector("[data-stream-repeat-count]"), null);
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline events={[result(1), result(2), running]} />,
+    );
+  });
+  const rows = container.querySelectorAll('[data-stream-kind="model"]');
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0]?.getAttribute("data-stream-status"), "completed");
+  assert.equal(
+    rows[0]?.querySelector("[data-stream-repeat-count]")?.textContent,
+    "×2",
+  );
+  assert.equal(rows[0]?.querySelectorAll("[data-stream-turn]").length, 2);
+  assert.deepEqual(
+    [...rows[0]!.querySelectorAll("[data-stream-detail]")].map(
+      (detail) => detail.textContent,
+    ),
+    ["Completed turn 1", "Completed turn 2"],
+  );
+  assert.equal(rows[1]?.getAttribute("data-stream-status"), "running");
+  assert.equal(
+    container.querySelector<HTMLDetailsElement>(
+      'details[data-slot="agent-stream-timeline"]',
+    )?.open,
+    true,
+  );
+});
+
+test("repeated reads and AI completions update compact rows while preserving every detail", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const events: AssessmentAgentStreamEvent[] = [];
+  for (const turn of [1, 2, 3]) {
+    const sequence = turn * 3;
+    events.push(
+      event(
+        sequence,
+        ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted,
+        { model_step_id: `step-${turn}` },
+        {
+          toolName: null,
+          toolCallId: null,
+          messageId: `m-${turn}`,
+          status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+        },
+      ),
+      event(
+        sequence + 1,
+        ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
+        {
+          schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+          kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall,
+          toolName: "read_file",
+          toolCallId: `read-${turn}`,
+          parameters: { file_path: `/src/file-${turn}.ts` },
+        },
+        { toolName: "read_file", toolCallId: `read-${turn}` },
+      ),
+      event(
+        sequence + 2,
+        ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolResult,
+        {
+          schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+          kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolResult,
+          toolName: "read_file",
+          toolCallId: `read-${turn}`,
+          result: `contents-${turn}`,
+        },
+        {
+          toolName: "read_file",
+          toolCallId: `read-${turn}`,
+          status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+        },
+      ),
+    );
+    await act(async () =>
+      root.render(<AgentStreamTimeline events={[...events]} />),
+    );
+    const reads = container.querySelectorAll('[data-stream-kind="tool"]');
+    const models = container.querySelectorAll('[data-stream-kind="model"]');
+    assert.equal(reads.length, 1);
+    assert.equal(models.length, 1);
+    assert.equal(
+      reads[0]?.querySelector("[data-stream-target]")?.textContent,
+      `/src/file-${turn}.ts`,
+    );
+    if (turn > 1) {
+      assert.equal(
+        reads[0]?.querySelector("[data-stream-repeat-count]")?.textContent,
+        `×${turn}`,
+      );
+      assert.equal(
+        models[0]?.querySelector("[data-stream-repeat-count]")?.textContent,
+        `×${turn}`,
+      );
+      assert.equal(
+        reads[0]?.querySelectorAll("[data-stream-turn]").length,
+        turn,
+      );
+      for (let prior = 1; prior <= turn; prior++)
+        assert.match(
+          reads[0]!.textContent ?? "",
+          new RegExp(`file-${prior}\\.ts`),
+        );
+    }
+  }
+});
+
+test("completed AI grouping never crosses unfinished tools, stages, rules, agents, or failures", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const completed = (
+    sequence: number,
+    overrides: Partial<AssessmentAgentStreamEvent> = {},
+  ) =>
+    event(
+      sequence,
+      ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted,
+      { model_step_id: `step-${sequence}` },
+      {
+        toolName: null,
+        toolCallId: null,
+        status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+        ...overrides,
+      },
+    );
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline
+        events={[
+          completed(1),
+          event(
+            2,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
+            {
+              schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+              kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall,
+              toolName: "read_file",
+              toolCallId: "read-2",
+              parameters: { file_path: "/src/app.py" },
+            },
+            { toolCallId: "read-2" },
+          ),
+          completed(3),
+          completed(4, { stage: ASSESSMENT_AGENT_STREAM_STAGES.interview }),
+          completed(5, { engineeringRuleId: "ER-other" }),
+          completed(6, { agentName: "other-agent" }),
+          completed(7, { namespace: ["other-node"] }),
+          event(
+            8,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed,
+            { model_step_id: "step-8" },
+            {
+              toolName: null,
+              toolCallId: null,
+              status: ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+            },
+          ),
+          completed(9),
+        ]}
+      />,
+    );
+  });
+  assert.equal(
+    container.querySelectorAll('[data-stream-kind="model"]').length,
+    8,
+  );
+  assert.equal(
+    container.querySelectorAll('[data-stream-kind="tool"]').length,
+    1,
+  );
+  assert.equal(container.querySelector("[data-stream-repeat-count]"), null);
+  assert.equal(
+    container.querySelectorAll('[data-stream-status="failed"]').length,
+    1,
   );
 });
 
@@ -1199,48 +1665,77 @@ test("scanner, interview, planner, and investigator publish visible turns before
   for (const [index, stage] of stages.entries()) {
     const sequence = index * 4;
     events.push(
-      event(sequence, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted, null, {
-        stage,
-        messageId: null,
-        toolCallId: null,
-        toolName: null,
-      }),
-      event(sequence + 1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelRequest, {
-        schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
-        kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.modelRequest,
-        durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
-      }, { stage, messageId: `turn-${index}`, toolCallId: null, toolName: null }),
-      event(sequence + 2, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelResult, {
-        schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
-        kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.modelOutput,
-        durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
-        resultSummary: { text: `Turn ${index + 1} complete` },
-      }, {
-        stage,
-        messageId: `turn-${index}`,
-        toolCallId: null,
-        toolName: null,
-        status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
-      }),
+      event(
+        sequence,
+        ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted,
+        null,
+        {
+          stage,
+          messageId: null,
+          toolCallId: null,
+          toolName: null,
+        },
+      ),
+      event(
+        sequence + 1,
+        ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelRequest,
+        {
+          schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+          kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.modelRequest,
+          durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+        },
+        { stage, messageId: `turn-${index}`, toolCallId: null, toolName: null },
+      ),
+      event(
+        sequence + 2,
+        ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelResult,
+        {
+          schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+          kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.modelOutput,
+          durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+          resultSummary: { text: `Turn ${index + 1} complete` },
+        },
+        {
+          stage,
+          messageId: `turn-${index}`,
+          toolCallId: null,
+          toolName: null,
+          status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+        },
+      ),
     );
     await act(async () => {
       root.render(<AgentStreamTimeline events={[...events]} />);
     });
-    const rows = container.querySelectorAll<HTMLElement>('[data-stream-kind="model"]');
+    const rows = container.querySelectorAll<HTMLElement>(
+      '[data-stream-kind="model"]',
+    );
     assert.equal(rows.length, index + 1);
     assert.equal(rows[index]?.getAttribute("data-stream-status"), "completed");
-    assert.match(rows[index]?.textContent ?? "", new RegExp(`Turn ${index + 1} complete`));
+    assert.match(
+      rows[index]?.textContent ?? "",
+      new RegExp(`Turn ${index + 1} complete`),
+    );
     assert.equal(
-      container.querySelector<HTMLDetailsElement>('details[data-slot="agent-stream-timeline"]')?.open,
+      container.querySelector<HTMLDetailsElement>(
+        'details[data-slot="agent-stream-timeline"]',
+      )?.open,
       true,
     );
-    events.push(event(sequence + 3, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted, null, {
-      stage,
-      messageId: null,
-      toolCallId: null,
-      toolName: null,
-      status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
-    }));
+    events.push(
+      event(
+        sequence + 3,
+        ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted,
+        null,
+        {
+          stage,
+          messageId: null,
+          toolCallId: null,
+          toolName: null,
+          status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+        },
+      ),
+    );
   }
 });
 
@@ -1252,35 +1747,47 @@ test("late completion from a previous stage does not close the active agent turn
 
   await act(async () => {
     root.render(
-      <AgentStreamTimeline events={[
-        event(1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted, null, {
-          stage: ASSESSMENT_AGENT_STREAM_STAGES.scanner,
-          messageId: null,
-          toolName: null,
-          toolCallId: null,
-        }),
-        event(2, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted, null, {
-          stage: ASSESSMENT_AGENT_STREAM_STAGES.interview,
-          messageId: null,
-          toolName: null,
-          toolCallId: null,
-        }),
-        event(3, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted, null, {
-          stage: ASSESSMENT_AGENT_STREAM_STAGES.scanner,
-          messageId: null,
-          toolName: null,
-          toolCallId: null,
-          status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
-        }),
-      ]} />,
+      <AgentStreamTimeline
+        events={[
+          event(1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted, null, {
+            stage: ASSESSMENT_AGENT_STREAM_STAGES.scanner,
+            messageId: null,
+            toolName: null,
+            toolCallId: null,
+          }),
+          event(2, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted, null, {
+            stage: ASSESSMENT_AGENT_STREAM_STAGES.interview,
+            messageId: null,
+            toolName: null,
+            toolCallId: null,
+          }),
+          event(
+            3,
+            ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted,
+            null,
+            {
+              stage: ASSESSMENT_AGENT_STREAM_STAGES.scanner,
+              messageId: null,
+              toolName: null,
+              toolCallId: null,
+              status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+            },
+          ),
+        ]}
+      />,
     );
   });
 
   assert.equal(
-    container.querySelector<HTMLDetailsElement>('details[data-slot="agent-stream-timeline"]')?.open,
+    container.querySelector<HTMLDetailsElement>(
+      'details[data-slot="agent-stream-timeline"]',
+    )?.open,
     true,
   );
-  assert.equal(container.querySelectorAll('[data-stream-status="running"]').length, 1);
+  assert.equal(
+    container.querySelectorAll('[data-stream-status="running"]').length,
+    1,
+  );
 });
 
 test("budget and context trimming render as their own progress rows", async () => {
@@ -1297,7 +1804,11 @@ test("budget and context trimming render as their own progress rows", async () =
             1,
             ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentContextTrimmed,
             { cleared_tool_results: 4 },
-            { toolName: null, toolCallId: null, status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed },
+            {
+              toolName: null,
+              toolCallId: null,
+              status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+            },
           ),
           event(
             2,
@@ -1327,7 +1838,11 @@ test("repeated tool calls retain each target and result", async () => {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const call = (sequence: number, callId: string, parameters: Record<string, AssessmentRuntimeSummaryValue>) =>
+  const call = (
+    sequence: number,
+    callId: string,
+    parameters: Record<string, AssessmentRuntimeSummaryValue>,
+  ) =>
     event(
       sequence,
       ASSESSMENT_AGENT_STREAM_EVENT_TYPES.semanticToolCall,
@@ -1339,7 +1854,11 @@ test("repeated tool calls retain each target and result", async () => {
         toolCallId: callId,
         parameters,
       },
-      { toolName: "read_file", toolCallId: callId, agentName: "repository-analyst" },
+      {
+        toolName: "read_file",
+        toolCallId: callId,
+        agentName: "repository-analyst",
+      },
     );
   const result = (sequence: number, callId: string, text: string) =>
     event(
@@ -1378,15 +1897,29 @@ test("repeated tool calls retain each target and result", async () => {
     );
   });
 
-  const toolRows = container.querySelectorAll<HTMLElement>('[data-stream-kind="tool"]');
-  assert.equal(toolRows.length, 4);
-  assert.deepEqual(
-    [...toolRows].map((row) => row.querySelector("[data-stream-target]")?.textContent),
-    ["/src/app.py", "/src/app.py", "/src/other.py", "/src/app.py"],
+  const toolRows = container.querySelectorAll<HTMLElement>(
+    '[data-stream-kind="tool"]',
   );
-  for (const [index, text] of ["first page", "second page", "other file", "third page"].entries()) {
-    assert.equal(toolRows[index]?.getAttribute("data-stream-status"), "completed");
-    assert.match(toolRows[index]?.textContent ?? "", new RegExp(text));
+  assert.equal(toolRows.length, 1);
+  assert.equal(
+    toolRows[0]?.querySelector("[data-stream-target]")?.textContent,
+    "/src/app.py",
+  );
+  assert.equal(
+    toolRows[0]?.querySelector("[data-stream-repeat-count]")?.textContent,
+    "×4",
+  );
+  const calls = toolRows[0]!.querySelectorAll("[data-stream-turn]");
+  assert.equal(calls.length, 4);
+  assert.match(calls[2]?.textContent ?? "", /\/src\/other\.py/);
+  for (const [index, text] of [
+    "first page",
+    "second page",
+    "other file",
+    "third page",
+  ].entries()) {
+    assert.equal(toolRows[0]?.getAttribute("data-stream-status"), "completed");
+    assert.match(calls[index]?.textContent ?? "", new RegExp(text));
   }
 });
 
@@ -1420,16 +1953,24 @@ test("tool activities keep one row per call and use their activity icon", async 
         events={[
           call(1, "ls", { path: "/workspace/repository" }),
           call(2, "grep", { pattern: "openai", path: "/workspace/repository" }),
-          call(3, "execute", { command: "cd /workspace/repository && grep -n llm src" }),
-          call(4, "read_file", { file_path: "/workspace/repository/src/app.py" }),
-          call(5, "execute", { command: "cd /workspace/repository && sed -n '1,20p' src/app.py" }),
+          call(3, "execute", {
+            command: "cd /workspace/repository && grep -n llm src",
+          }),
+          call(4, "read_file", {
+            file_path: "/workspace/repository/src/app.py",
+          }),
+          call(5, "execute", {
+            command: "cd /workspace/repository && sed -n '1,20p' src/app.py",
+          }),
         ]}
       />,
     );
   });
 
   const icons = [
-    ...container.querySelectorAll('[data-stream-kind="tool"] [data-stream-activity-icon]'),
+    ...container.querySelectorAll(
+      '[data-stream-kind="tool"] [data-stream-activity-icon]',
+    ),
   ].map((icon) => icon.getAttribute("data-stream-activity-icon"));
   // A shell grep is the same "searched" activity as the grep tool, and a shell
   // sed is the same "read" activity as read_file.
@@ -1444,8 +1985,9 @@ test("tool activities keep one row per call and use their activity icon", async 
     ...container.querySelectorAll('[data-stream-kind="tool"]'),
   ].map(
     (row) =>
-      row.querySelector("[data-stream-repeat-count]")?.getAttribute("data-stream-repeat-count") ??
-      "1",
+      row
+        .querySelector("[data-stream-repeat-count]")
+        ?.getAttribute("data-stream-repeat-count") ?? "1",
   );
   assert.deepEqual(counts, ["1", "1", "1", "1", "1"]);
 });
@@ -1478,7 +2020,9 @@ test("repeated activities such as context trimming retain each occurrence", asyn
   const rows = container.querySelectorAll('[data-stream-kind="progress"]');
   assert.equal(rows.length, 3);
   for (const [index, count] of [2, 3, 5].entries()) {
-    const technical = rows[index]?.querySelector("[data-stream-technical-details]")?.textContent ?? "";
+    const technical =
+      rows[index]?.querySelector("[data-stream-technical-details]")
+        ?.textContent ?? "";
     assert.match(technical, new RegExp(`"cleared_tool_results": ${count}`));
   }
 });

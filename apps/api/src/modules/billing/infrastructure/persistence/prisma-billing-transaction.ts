@@ -86,6 +86,16 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
             }),
         },
         reservation: {
+          extendBudget: async (i) =>
+            (
+              await tx.billingReservation.updateMany({
+                where: { id: i.reservationId, status: "RESERVED" },
+                data: {
+                  amountCredits: { increment: i.amountCredits },
+                  remainingCredits: { increment: i.amountCredits },
+                },
+              })
+            ).count === 1,
           findForUser: (id, reservationId) =>
             tx.billingReservation.findFirst({
               where: { id: reservationId, userId: id },
@@ -100,6 +110,7 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
             tx.billingReservation.create({
               data: {
                 ...i,
+                initialAmountCredits: i.amountCredits,
                 remainingCredits: i.amountCredits,
                 maxInvocations: i.maxInvocations ?? 1n,
               },

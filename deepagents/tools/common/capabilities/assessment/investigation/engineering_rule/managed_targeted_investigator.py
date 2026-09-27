@@ -20,6 +20,7 @@ from typing import Any, Iterable
 from langchain.agents.structured_output import StructuredOutputError
 
 from contracts.handoffs import InvestigatorResult
+from middleware.billing_metering import BillingBudgetExhausted
 from middleware.failure_policy import TerminalSchemaError
 from middleware.specialist_handoff_validation import _persist_targeted_interview_need
 from deepagents import create_deep_agent
@@ -628,6 +629,37 @@ def _invoke_managed_investigator(
         checkpointer.setup()
         agent = _durable_investigator_agent(checkpointer)
 
+        billing_resume = False
+        if checkpoint_id is None:
+            record = registry.get(execution_id)
+            if record is not None and (
+                record.status == MANAGED_INVESTIGATOR_EXECUTION_STATUSES["ready"]
+                or record.last_error == "BILLING_CREDITS_REQUIRED"
+            ):
+                _assert_execution_registry_matches_continuation(
+                    checkpoint_url=checkpoint_url, execution_id=execution_id,
+                    assessment_id=context.assessment_id, thread_id=thread_id,
+                    checkpoint_id=record.checkpoint_id,
+                    affected_rule_ids=context.engineering_rule_ids,
+                    artifact_versions=dict(context.artifact_versions),
+                )
+                latest = agent.get_state({"configurable": {
+                    "thread_id": thread_id, "checkpoint_id": record.checkpoint_id,
+                }})
+                if record.status == MANAGED_INVESTIGATOR_EXECUTION_STATUSES["ready"]:
+                    validated = validate_specialist_handoff(
+                        "investigator", _snapshot_structured_response(latest),
+                        graph=graph, pinned_rule_ids=context.engineering_rule_ids,
+                        pinned_versions=dict(context.artifact_versions),
+                        confirmed_statement_refs=confirmed_statement_refs,
+                    )
+                    result = InvestigatorResult.model_validate(validated)
+                    if result.status != "READY":
+                        raise SpecialistHandoffValidationError("Stored READY execution has no READY handoff")
+                    return result.model_dump(mode="json"), record.checkpoint_id
+                checkpoint_id = record.checkpoint_id
+                billing_resume = True
+
         # If a prior attempt already advanced this exact child checkpoint and persisted a
         # READY structured response, reuse that durable result instead of invoking the
         # model again. This closes the crash-after-resume/before-ACK duplicate window.
@@ -727,7 +759,7 @@ def _invoke_managed_investigator(
             candidate_handoff: Any | None = None
             try:
                 invocation = invoke_with_stream(agent,
-                    {"messages": [{"role": "user", "content": current_instruction}]},
+                    None if billing_resume else {"messages": [{"role": "user", "content": current_instruction}]},
                     config={
                         "configurable": configurable,
                         "metadata": {
@@ -757,6 +789,18 @@ def _invoke_managed_investigator(
                     pinned_versions=dict(context.artifact_versions),
                     confirmed_statement_refs=confirmed_statement_refs,
                 )
+            except BillingBudgetExhausted:
+                snapshot = agent.get_state({"configurable": {"thread_id": thread_id}})
+                checkpoint_text = _snapshot_checkpoint_id(snapshot)
+                registry.save(
+                    execution_id=execution_id, assessment_id=context.assessment_id,
+                    thread_id=thread_id, checkpoint_id=checkpoint_text,
+                    affected_rule_ids=context.engineering_rule_ids,
+                    artifact_versions=dict(context.artifact_versions),
+                    status=MANAGED_INVESTIGATOR_EXECUTION_STATUSES["waiting"],
+                    last_error="BILLING_CREDITS_REQUIRED",
+                )
+                raise
             except (
                 SpecialistHandoffValidationError,
                 StructuredOutputError,
@@ -851,6 +895,7 @@ def _invoke_managed_investigator(
                     instruction=instruction,
                     validation_error=error_message,
                 )
+                billing_resume = False
                 continue
 
             result = InvestigatorResult.model_validate(validated)

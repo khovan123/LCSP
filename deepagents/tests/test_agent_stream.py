@@ -22,6 +22,7 @@ from orchestration.agent_stream import (
     agent_stream_stage,
     invoke_graph_with_stream,
     invoke_with_stream,
+    publish_agent_stream_event,
     _should_forward_stream_log,
 )
 
@@ -611,6 +612,30 @@ def test_nested_stage_wins_over_session_default_and_enclosing_stage():
     assert set(stages[:first]) == {"INTERVIEW"}
     assert set(stages[first:second]) == {"INVESTIGATE"}
     assert set(stages[second:]) == {"SCANNER"}
+
+
+def test_new_boundary_session_does_not_inherit_scanner_stage_and_restores_parent():
+    events = []
+    scanner = stream_session(events)
+    scanner.stage = AGENT_STREAM_STAGES["scanner"]
+    interview = stream_session(events)
+    interview.stage = AGENT_STREAM_STAGES["interview"]
+    engineering = stream_session(events)
+    with activate_agent_stream(scanner):
+        with agent_stream_stage(AGENT_STREAM_STAGES["scanner"]):
+            with activate_agent_stream(interview):
+                publish_agent_stream_event("BOUNDARY_STARTED")
+                invoke_with_stream(FakeAgent(), {"messages": []})
+                publish_agent_stream_event("BOUNDARY_COMPLETED")
+            interview_end = len(events)
+            with activate_agent_stream(engineering):
+                publish_agent_stream_event("BOUNDARY_STARTED")
+                invoke_with_stream(FakeAgent(), {"messages": []}, stage=AGENT_STREAM_STAGES["planner"])
+            publish_agent_stream_event("BOUNDARY_COMPLETED")
+    assert {event.get("stage") for event in events[:interview_end]} == {"INTERVIEW"}
+    assert "stage" not in events[interview_end]
+    assert {event.get("stage") for event in events[interview_end + 1:-1]} == {"PLANNER"}
+    assert events[-1]["stage"] == "SCANNER"
 
 
 def test_agent_stream_stages_match_shared_typescript_contract() -> None:

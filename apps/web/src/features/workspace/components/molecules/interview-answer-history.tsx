@@ -9,6 +9,7 @@ import { TurnFooter } from "./turn-footer";
 
 export function InterviewAnswerHistory({
   answer,
+  activity,
 }: InterviewAnswerHistoryProps) {
   const question = answer.question;
   const hasSelection = Boolean(
@@ -46,6 +47,7 @@ export function InterviewAnswerHistory({
               </AgentMessage>
             </AgentTurn>
           ) : null}
+          {activity}
           {summaryIsAgentAcknowledgement ? (
             <AgentTurn footer={agentTimestampFooter}>
               <AgentMessage>
@@ -61,6 +63,7 @@ export function InterviewAnswerHistory({
           )}
         </>
       )}
+      {hasSelection ? activity : null}
       {answer.comment?.trim() ? (
         <AgentTurn role={ASSESSMENT_CHAT_ROLES.user}>
           <InterviewAnswerMessage text={answer.comment} />

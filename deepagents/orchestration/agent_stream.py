@@ -248,6 +248,13 @@ class AgentStreamInterrupted(BaseException):
     """
 
 
+def check_agent_execution_active() -> None:
+    """Stop nested work before another provider call after run cancellation."""
+    cancel_event = active_agent_stream_cancel.get()
+    if cancel_event is not None and cancel_event.is_set():
+        raise AgentStreamInterrupted("agent execution deadline or cancellation reached")
+
+
 @contextmanager
 def agent_stream_stage(stage: str | None) -> Iterator[None]:
     """Attribute every live event emitted in this block to one pipeline stage.
@@ -348,7 +355,9 @@ def agent_stream_rule_scope(
         except BaseException as error:
             # Intentional pauses (TargetedInterviewPending) are BaseExceptions so
             # generic failure handlers skip them; the rule then waits, not fails.
-            if not scope.finished and isinstance(error, waiting_on):
+            from middleware.billing_metering import BillingBudgetExhausted
+
+            if not scope.finished and isinstance(error, (*waiting_on, BillingBudgetExhausted)):
                 scope.fail(error, status="WAITING")
             elif not scope.finished and isinstance(error, Exception):
                 scope.fail(error, status="FAILED")
@@ -468,6 +477,8 @@ def _rule_decision(summaries: list[dict[str, Any]]) -> str:
 def activate_agent_stream(session: AgentStreamSession | None) -> Iterator[None]:
     """Bind a live-stream session to the current boundary execution context."""
     token = active_agent_stream.set(session)
+    # A new boundary owns its attribution, not its caller's Scanner/Interview stage.
+    stage_token = active_agent_stream_stage.set(session.stage if session else None)
     try:
         yield
     finally:
@@ -476,6 +487,7 @@ def activate_agent_stream(session: AgentStreamSession | None) -> Iterator[None]:
             if callable(closer):
                 closer()
         finally:
+            active_agent_stream_stage.reset(stage_token)
             active_agent_stream.reset(token)
 
 
@@ -547,6 +559,7 @@ def _invoke_with_stream(
 ) -> Any:
     session = active_agent_stream.get()
     if session is None or not callable(getattr(agent, "stream", None)):
+        check_agent_execution_active()
         invoke_kwargs: dict[str, Any] = {}
         if config is not None:
             invoke_kwargs["config"] = config
@@ -675,6 +688,7 @@ def _invoke_graph_with_stream(
     graph_name: str,
 ) -> Any:
     if active_agent_stream.get() is None or not callable(getattr(graph, "stream", None)):
+        check_agent_execution_active()
         if config is None:
             return graph.invoke(input_value)
         return graph.invoke(input_value, config)
@@ -1702,6 +1716,7 @@ CRITICAL_STREAM_EVENT_TYPES = frozenset(
         "BOUNDARY_STARTED",
         "BOUNDARY_COMPLETED",
         "BOUNDARY_FAILED",
+        "BOUNDARY_PAUSED",
         "AGENT_STARTED",
         "AGENT_COMPLETED",
         "AGENT_FAILED",

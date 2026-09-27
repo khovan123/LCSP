@@ -201,6 +201,7 @@ export const ASSESSMENT_AGENT_STREAM_EVENT_TYPES = {
   boundaryStarted: "BOUNDARY_STARTED",
   boundaryCompleted: "BOUNDARY_COMPLETED",
   boundaryFailed: "BOUNDARY_FAILED",
+  boundaryPaused: "BOUNDARY_PAUSED",
   agentStarted: "AGENT_STARTED",
   agentCompleted: "AGENT_COMPLETED",
   agentFailed: "AGENT_FAILED",

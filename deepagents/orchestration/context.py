@@ -29,6 +29,7 @@ class LCSPRunContext:
     idempotency_key: str | None = None
     correlation_id: str | None = None
     system_boundary_name: str | None = None
+    system_deadline_at: float | None = None
     system_event: dict[str, Any] = field(default_factory=dict)
     repository_path: str | None = None
 

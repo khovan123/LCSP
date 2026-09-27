@@ -6,6 +6,7 @@ import {
 } from "@lcsp/contracts/assessment";
 import {
   ASSESSMENT_AGENT_STREAM_STAGES,
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES,
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
   ASSESSMENT_INTERVIEW_CONTROLS,
   type AssessmentInterviewBlockedAction,
@@ -50,6 +51,7 @@ import {
   groupAgentStreamEventsByRun,
   groupAgentStreamEventsByStage,
   interleaveInterviewTranscript,
+  splitCurrentInterviewActivity,
 } from "../../utils/agent-stream-stages";
 import {
   selectComposerAvailability,
@@ -282,11 +284,13 @@ function AssessmentInterviewFlow({
       ),
     [stageEvents],
   );
-  // Only the Interview boundary can be cooperatively stopped/resumed today, so
-  // "paused" only ever comes from the Interview stage. But the stop icon must
-  // reflect whether the customer can type right now, not just Interview: while
-  // Planner, Investigate or Gate are still running the pipeline, this is not
-  // the customer's turn either, so those stages count toward "running" too.
+  const billingPaused = groupAgentStreamEventsByRun(
+    liveTimeline.agentStreamEvents ?? [],
+  ).at(-1)?.events.some((event) =>
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused,
+  ) ?? false;
+  // Cooperative stops belong to Interview; billing can pause any dispatch.
+  // Downstream work still owns the turn while it is running.
   const downstreamTurnRunning = useMemo(
     () =>
       [
@@ -448,6 +452,7 @@ function AssessmentInterviewFlow({
       ]),
     [answerHistory, stageEvents],
   );
+  const transcriptTurns = splitCurrentInterviewActivity(interviewTranscript);
   const autoScrollKey = [
     assessmentId,
     runtimeKey,
@@ -610,16 +615,16 @@ function AssessmentInterviewFlow({
   // the API decides whether a failed/stalled Interview turn or the downstream
   // assessment restarts, and refuses while a worker still owns the pipeline.
   const canContinuePipeline =
-    interviewEnabled &&
+    (billingPaused || interviewEnabled) &&
     !scanFailed &&
     !hasComposerDraft &&
-    !(customerActions.canAnswerQuestion && activeQuestion) &&
+    (billingPaused || !(customerActions.canAnswerQuestion && activeQuestion)) &&
     !customerActions.canSubmitBlockedAction &&
     !(
       assessmentStatus !== null &&
       PIPELINE_CONTINUE_FINISHED_STATUSES.has(assessmentStatus)
     ) &&
-    !interviewHandoff.isGenuinelyPending &&
+    (billingPaused || !interviewHandoff.isGenuinelyPending) &&
     !submitAnswer.isPending &&
     !recordBlockedAction.isPending &&
     !submitPostFindingDecision.isPending;
@@ -665,22 +670,19 @@ function AssessmentInterviewFlow({
 
         {interviewEnabled ? (
           <>
-            {interviewTranscript.map((segment) =>
-              segment.kind === "answer" ? (
-                <InterviewAnswerHistory
-                  key={`answer:${segment.answer.questionId}:${segment.answer.answeredAt}`}
-                  answer={segment.answer}
-                />
-              ) : (
-                <AgentStreamTimeline
-                  key={`activity:${segment.stage}:${segment.runId}`}
-                  events={segment.events}
-                  activeRunId={segment.runId}
-                />
-              ),
-            )}
-
-            <AgentStreamTimeline events={stageEvents.unstaged} />
+            {transcriptTurns.history.map((turn) => (
+              <InterviewAnswerHistory
+                key={`answer:${turn.answer.questionId}:${turn.answer.answeredAt}`}
+                answer={turn.answer}
+                activity={turn.activity.map((segment) => (
+                  <AgentStreamTimeline
+                    key={`activity:${segment.stage}:${segment.turnKey}`}
+                    events={segment.events}
+                    activeRunId={segment.runId}
+                  />
+                ))}
+              />
+            ))}
 
             {interview.questionTurnProps ? (
               <AgentTurn
@@ -805,6 +807,15 @@ function AssessmentInterviewFlow({
               </AgentTurn>
             )}
 
+            {transcriptTurns.currentActivity.map((segment) => (
+              <AgentStreamTimeline
+                key={`activity:${segment.stage}:${segment.turnKey}`}
+                events={segment.events}
+                activeRunId={segment.runId}
+              />
+            ))}
+            <AgentStreamTimeline events={stageEvents.unstaged} />
+
             {postFinding ? (
               <AgentTurn
                 content={
@@ -863,7 +874,7 @@ function AssessmentInterviewFlow({
         onSubmit={handleSubmit}
         onResume={handleContinuePipeline}
         turnRunning={anyAgentTurnRunning}
-        turnPaused={interviewTurnState === "paused"}
+        turnPaused={billingPaused || interviewTurnState === "paused"}
         onInterruptTurn={
           interviewTurnState === "running"
             ? () => interruptInterviewTurn.mutate()

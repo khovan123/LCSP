@@ -13,6 +13,7 @@ import {
   groupAgentStreamEventsByRun,
   groupAgentStreamEventsByStage,
   interleaveInterviewTranscript,
+  splitCurrentInterviewActivity,
 } from "../src/features/workspace/utils/agent-stream-stages.ts";
 
 function answer(
@@ -53,6 +54,45 @@ function event(
   };
 }
 
+test("outer dispatch termination closes every participating stage but no other turn", () => {
+  const stages = ASSESSMENT_AGENT_STREAM_STAGES;
+  const types = ASSESSMENT_AGENT_STREAM_EVENT_TYPES;
+  for (const terminal of [
+    types.boundaryCompleted,
+    types.boundaryFailed,
+    types.boundaryPaused,
+  ]) {
+    const grouped = groupAgentStreamEventsByStage([
+      event(1, stages.scanner, {
+        correlationId: "scanner",
+        eventType: types.boundaryStarted,
+      }),
+      event(2, null, { eventType: types.boundaryStarted }),
+      event(3, stages.interview),
+      event(4, stages.planner),
+      event(5, stages.investigate),
+      event(6, stages.interview, { eventType: terminal }),
+    ]);
+    for (const stage of [
+      stages.interview,
+      stages.planner,
+      stages.investigate,
+    ]) {
+      const end = grouped.byStage[stage].at(-1)!;
+      assert.equal(end.eventType, terminal);
+      assert.equal(end.stage, stage);
+      assert.equal(
+        deriveLatestAgentStreamTurnState(grouped.byStage[stage]),
+        terminal === types.boundaryPaused ? "paused" : "idle",
+      );
+    }
+    assert.deepEqual(
+      grouped.byStage[stages.scanner].map((e) => e.sequence),
+      [1],
+    );
+  }
+});
+
 test("agent stream events split into one timeline per pipeline stage", () => {
   const grouped = groupAgentStreamEventsByStage([
     event(1, ASSESSMENT_AGENT_STREAM_STAGES.scanner),
@@ -61,7 +101,7 @@ test("agent stream events split into one timeline per pipeline stage", () => {
     event(4, ASSESSMENT_AGENT_STREAM_STAGES.investigate),
     event(5, ASSESSMENT_AGENT_STREAM_STAGES.planner),
     event(6, ASSESSMENT_AGENT_STREAM_STAGES.gate),
-    event(7, null),
+    event(7, null, { correlationId: "unattributed-dispatch" }),
   ]);
 
   const sequences = (events: AssessmentAgentStreamEvent[]) =>
@@ -119,6 +159,216 @@ test("agent stream events split into one group per run, oldest turn first", () =
 
 test("turn state is idle with no events", () => {
   assert.equal(deriveLatestAgentStreamTurnState([]), "idle");
+});
+
+test("resumed interview dispatches sharing a scan job keep separate activity turns", () => {
+  const groups = groupAgentStreamEventsByRun([
+    event(1, ASSESSMENT_AGENT_STREAM_STAGES.interview, {
+      correlationId: "question-dispatch",
+      emittedAt: "2026-09-27T11:00:00Z",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted,
+    }),
+    event(2, ASSESSMENT_AGENT_STREAM_STAGES.interview, {
+      correlationId: "answer-dispatch",
+      emittedAt: "2026-09-27T11:02:00Z",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted,
+    }),
+  ]);
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0]?.runId, groups[1]?.runId);
+  assert.notEqual(groups[0]?.turnKey, groups[1]?.turnKey);
+  const split = splitCurrentInterviewActivity(
+    interleaveInterviewTranscript(
+      [answer("q-1", "2026-09-27T11:01:00Z")],
+      [{ stage: ASSESSMENT_AGENT_STREAM_STAGES.interview, groups }],
+    ),
+  );
+  assert.deepEqual(
+    split.history.map((turn) => turn.answer.questionId),
+    ["q-1"],
+  );
+  assert.equal(
+    split.history[0]?.activity[0]?.events[0]?.correlationId,
+    "question-dispatch",
+  );
+  assert.deepEqual(
+    split.currentActivity[0]?.events.map((item) => item.correlationId),
+    ["answer-dispatch"],
+  );
+  assert.equal(
+    deriveLatestAgentStreamTurnState(groups.flatMap((group) => group.events)),
+    "running",
+  );
+});
+
+test("initial interview activity belongs below the current agent question", () => {
+  const split = splitCurrentInterviewActivity(
+    interleaveInterviewTranscript(
+      [],
+      [
+        {
+          stage: ASSESSMENT_AGENT_STREAM_STAGES.interview,
+          groups: groupAgentStreamEventsByRun([
+            event(1, ASSESSMENT_AGENT_STREAM_STAGES.interview),
+          ]),
+        },
+      ],
+    ),
+  );
+  assert.deepEqual(split.history, []);
+  assert.equal(split.currentActivity.length, 1);
+});
+
+test("each answered question retains its activity when later answers and live events arrive", () => {
+  const stage = ASSESSMENT_AGENT_STREAM_STAGES.interview;
+  const events = [1, 2, 3].map((turn) =>
+    event(turn, stage, {
+      correlationId: `dispatch-${turn}`,
+      emittedAt: `2026-09-27T11:0${turn * 2}:00Z`,
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted,
+    }),
+  );
+  const answers = [1, 2, 3].map((turn) =>
+    answer(`q-${turn}`, `2026-09-27T11:0${turn * 2 + 1}:00Z`),
+  );
+  const transcript = (history: typeof answers, journal: typeof events) =>
+    splitCurrentInterviewActivity(
+      interleaveInterviewTranscript(history, [
+        {
+          stage,
+          groups: groupAgentStreamEventsByRun(journal),
+        },
+      ]),
+    );
+  const first = transcript(answers.slice(0, 1), events.slice(0, 1));
+  const second = transcript(answers.slice(0, 2), events.slice(0, 2));
+  const third = transcript(answers, [
+    ...events,
+    event(4, stage, {
+      correlationId: "dispatch-4",
+      emittedAt: "2026-09-27T11:08:00Z",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted,
+    }),
+  ]);
+  assert.deepEqual(second.history[0], first.history[0]);
+  assert.deepEqual(third.history.slice(0, 2), second.history);
+  assert.deepEqual(
+    third.history.map((turn) => ({
+      questionId: turn.answer.questionId,
+      activity: turn.activity.flatMap((segment) =>
+        segment.events.map((item) => item.correlationId),
+      ),
+    })),
+    [1, 2, 3].map((turn) => ({
+      questionId: `q-${turn}`,
+      activity: [`dispatch-${turn}`],
+    })),
+  );
+  assert.deepEqual(
+    third.currentActivity[0]?.events.map((item) => item.correlationId),
+    ["dispatch-4"],
+  );
+  // Rehydrating the same durable journal cannot move activity to the latest answer.
+  assert.deepEqual(
+    transcript(answers, [...events].reverse()).history,
+    third.history,
+  );
+});
+
+test("a new interview dispatch cannot change completed scanner activity", () => {
+  const scanner = event(1, ASSESSMENT_AGENT_STREAM_STAGES.scanner, {
+    eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted,
+    emittedAt: "2026-09-27T11:00:00Z",
+  });
+  const before = groupAgentStreamEventsByStage([scanner]);
+  const after = groupAgentStreamEventsByStage([
+    scanner,
+    event(2, ASSESSMENT_AGENT_STREAM_STAGES.interview, {
+      correlationId: "answer-dispatch",
+      emittedAt: "2026-09-27T11:02:00Z",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted,
+    }),
+  ]);
+  assert.deepEqual(
+    after.byStage[ASSESSMENT_AGENT_STREAM_STAGES.scanner],
+    before.byStage[ASSESSMENT_AGENT_STREAM_STAGES.scanner],
+  );
+  assert.equal(
+    deriveLatestAgentStreamTurnState(
+      after.byStage[ASSESSMENT_AGENT_STREAM_STAGES.scanner],
+    ),
+    "idle",
+  );
+  assert.equal(
+    deriveLatestAgentStreamTurnState(
+      after.byStage[ASSESSMENT_AGENT_STREAM_STAGES.interview],
+    ),
+    "running",
+  );
+});
+
+test("untagged interview envelopes join their own turn instead of a standalone timeline", () => {
+  const grouped = groupAgentStreamEventsByStage([
+    event(1, ASSESSMENT_AGENT_STREAM_STAGES.scanner, {
+      correlationId: "scan-dispatch",
+    }),
+    event(2, null, {
+      correlationId: "interview-dispatch",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted,
+    }),
+    event(3, ASSESSMENT_AGENT_STREAM_STAGES.interview, {
+      correlationId: "interview-dispatch",
+    }),
+    event(4, null, {
+      correlationId: "interview-dispatch",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted,
+    }),
+  ]);
+  assert.deepEqual(
+    grouped.byStage[ASSESSMENT_AGENT_STREAM_STAGES.scanner].map(
+      (item) => item.sequence,
+    ),
+    [1],
+  );
+  assert.deepEqual(
+    grouped.byStage[ASSESSMENT_AGENT_STREAM_STAGES.interview].map(
+      (item) => item.sequence,
+    ),
+    [2, 3, 4],
+  );
+  assert.deepEqual(grouped.unstaged, []);
+  assert.equal(
+    groupAgentStreamEventsByRun(
+      grouped.byStage[ASSESSMENT_AGENT_STREAM_STAGES.interview],
+    ).length,
+    1,
+  );
+});
+
+test("untagged progress follows stage transitions only inside the same dispatch", () => {
+  const grouped = groupAgentStreamEventsByStage([
+    event(1, ASSESSMENT_AGENT_STREAM_STAGES.planner),
+    event(2, null),
+    event(3, ASSESSMENT_AGENT_STREAM_STAGES.investigate),
+    event(4, null),
+    event(5, null, { correlationId: "unknown-dispatch" }),
+  ]);
+  assert.deepEqual(
+    grouped.byStage[ASSESSMENT_AGENT_STREAM_STAGES.planner].map(
+      (item) => item.sequence,
+    ),
+    [1, 2],
+  );
+  assert.deepEqual(
+    grouped.byStage[ASSESSMENT_AGENT_STREAM_STAGES.investigate].map(
+      (item) => item.sequence,
+    ),
+    [3, 4],
+  );
+  assert.deepEqual(
+    grouped.unstaged.map((item) => item.sequence),
+    [5],
+  );
 });
 
 test("turn state is running before any terminal event arrives", () => {

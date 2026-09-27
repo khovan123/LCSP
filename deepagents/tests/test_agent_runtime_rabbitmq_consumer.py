@@ -54,6 +54,65 @@ class FakeChannel:
         self.deleted.append(kwargs)
 
 
+@pytest.mark.parametrize("boundary", ["scan_requested", "engineering_assessment_requested"])
+def test_configured_boundary_deadline_leaves_broker_settlement_margin(monkeypatch, boundary):
+    monkeypatch.setenv("LCSP_AGENT_RUNTIME_BROKER_ACK_TIMEOUT_SECONDS", "1800")
+    monkeypatch.setenv("LCSP_AGENT_RUNTIME_SETTLEMENT_MARGIN_SECONDS", "120")
+    monkeypatch.setenv(f"LCSP_AGENT_RUNTIME_BOUNDARY_TIMEOUT_{boundary.upper()}_SECONDS", "3600")
+    assert rabbitmq_consumer._boundary_timeout_seconds(boundary) == 1680
+
+
+def test_short_test_deadline_is_not_extended(monkeypatch):
+    monkeypatch.setenv("LCSP_AGENT_RUNTIME_BOUNDARY_TIMEOUT_SCAN_REQUESTED_SECONDS", "5")
+    assert rabbitmq_consumer._boundary_timeout_seconds("scan_requested") == 5
+
+
+def test_invalid_settlement_margin_fails_before_consuming(monkeypatch):
+    monkeypatch.setenv("LCSP_AGENT_RUNTIME_BROKER_ACK_TIMEOUT_SECONDS", "120")
+    monkeypatch.setenv("LCSP_AGENT_RUNTIME_SETTLEMENT_MARGIN_SECONDS", "120")
+    with pytest.raises(RuntimeError, match="Settlement margin"):
+        rabbitmq_consumer._boundary_timeout_seconds("scan_requested")
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "0", "-1"])
+def test_broker_deadline_configuration_requires_finite_positive_values(monkeypatch, value):
+    monkeypatch.setenv("LCSP_AGENT_RUNTIME_BROKER_ACK_TIMEOUT_SECONDS", value)
+    with pytest.raises(RuntimeError, match="finite and > 0"):
+        rabbitmq_consumer._boundary_timeout_seconds("scan_requested")
+
+
+def test_long_boundary_budget_requires_matching_broker_budget(monkeypatch):
+    monkeypatch.setenv("LCSP_AGENT_RUNTIME_BROKER_ACK_TIMEOUT_SECONDS", "7200")
+    monkeypatch.setenv("LCSP_AGENT_RUNTIME_BOUNDARY_TIMEOUT_SCAN_REQUESTED_SECONDS", "3600")
+    monkeypatch.setenv("LCSP_AGENT_RUNTIME_SETTLEMENT_MARGIN_SECONDS", "120")
+    assert rabbitmq_consumer._boundary_timeout_seconds("scan_requested") == 3600
+
+
+def test_terminal_claim_drops_delivery_without_dispatch(monkeypatch):
+    client = SimpleNamespace(claim_scan_job=lambda *_args: {"claimed": False, "terminal": True})
+    monkeypatch.setattr(rabbitmq_consumer, "_worker_client_or_none", lambda: client)
+    monkeypatch.setattr(rabbitmq_consumer, "dispatch_agent_runtime_event", lambda *_args, **_kwargs: pytest.fail("terminal scan must not dispatch"))
+    with pytest.raises(rabbitmq_consumer.TerminalScanDelivery):
+        rabbitmq_consumer._dispatch_delivery("scan_requested", SimpleNamespace(headers={}), b'{"scanJobId":"scan-1"}', 45)
+
+
+def test_claim_time_is_deducted_from_dispatch_budget(monkeypatch):
+    times = iter([10.0])
+    monkeypatch.setattr(rabbitmq_consumer, "monotonic", lambda: next(times))
+    monkeypatch.setattr(rabbitmq_consumer, "_claim_scan_delivery", lambda *_args: None)
+    seen = []
+    monkeypatch.setattr(rabbitmq_consumer, "dispatch_agent_runtime_event", lambda *_args, **kwargs: seen.append(kwargs["timeout_seconds"]))
+    rabbitmq_consumer._dispatch_delivery("scan_requested", SimpleNamespace(headers={}), b'{}', 45, rabbitmq_consumer.DeliverySettlementState(deadline=40))
+    assert seen == [30]
+
+
+@pytest.mark.parametrize("remote_type", ["AgentRuntimeBoundaryTimeout", "AgentServerRunTimeout"])
+def test_remote_boundary_deadline_is_not_misreported_as_provider_timeout(remote_type):
+    from tools.common.capabilities.agent_runtime.agent_server_client import AgentServerRunError
+
+    assert rabbitmq_consumer._scan_failure_reason_code(AgentServerRunError(remote_type, "deadline reached")) == "AGENT_RUNTIME_BOUNDARY_TIMEOUT"
+
+
 class ImmediateExecutor:
     def submit(self, function, *args):
         future = Future()
@@ -943,7 +1002,8 @@ def test_missing_scan_job_claim_is_classified_as_stale_delivery(monkeypatch):
     assert raised.value.scan_job_id == "scan-deleted"
 
 
-def test_stale_scan_delivery_is_acked_without_retry_or_terminal_failure(monkeypatch):
+@pytest.mark.parametrize("delivery_error", [rabbitmq_consumer.StaleScanDelivery, rabbitmq_consumer.TerminalScanDelivery])
+def test_stale_scan_delivery_is_acked_without_retry_or_terminal_failure(monkeypatch, delivery_error):
     failures = []
 
     class FakeWorkerClient:
@@ -957,7 +1017,7 @@ def test_stale_scan_delivery_is_acked_without_retry_or_terminal_failure(monkeypa
     )
     channel = FakeChannel()
     completed: Future[None] = Future()
-    completed.set_exception(rabbitmq_consumer.StaleScanDelivery("scan-deleted"))
+    completed.set_exception(delivery_error("scan-deleted"))
 
     rabbitmq_consumer._settle_delivery(
         channel=channel,

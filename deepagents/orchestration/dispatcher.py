@@ -83,10 +83,12 @@ class RootSubagentDispatcher:
         reenter_root: bool = True,
     ) -> dict[str, Any]:
         """Run one specialist while Root Orchestration owns lifecycle transitions."""
+        selected_stage = _stream_stage_for_subagent(subagent_type)
         publish_agent_stream_event(
             "SUBAGENT_SELECTED",
             subagent_name=subagent_type,
             status="RUNNING",
+            **({"stage": selected_stage} if selected_stage else {}),
             data={
                 "trigger": trigger,
                 "affected_rule_ids": affected_rule_ids or [],

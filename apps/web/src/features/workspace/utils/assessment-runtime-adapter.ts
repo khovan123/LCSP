@@ -586,7 +586,7 @@ function normalizeWorkflowSteps({
       id,
       label: existingStep?.label ?? stageLabel(id),
       status:
-        latestScanJob.status === REPOSITORY_SCAN_JOB_STATUSES.queued
+        latestScanJob.status !== REPOSITORY_SCAN_JOB_STATUSES.running
           ? NORMALIZED_WORKFLOW_STEP_STATUSES.waiting
           : NORMALIZED_WORKFLOW_STEP_STATUSES.running,
       detail: existingStep?.detail ?? null,
@@ -948,7 +948,8 @@ function latestSnapshotScanJob(
 function isActiveScanJob(job: WorkspaceRuntimeScanJob): boolean {
   return (
     job.status === REPOSITORY_SCAN_JOB_STATUSES.queued ||
-    job.status === REPOSITORY_SCAN_JOB_STATUSES.running
+    job.status === REPOSITORY_SCAN_JOB_STATUSES.running ||
+    job.status === REPOSITORY_SCAN_JOB_STATUSES.waitingForCredits
   );
 }
 
@@ -984,6 +985,7 @@ function normalizeProgramEvidenceAvailability({
       return ASSESSMENT_ARTIFACT_AVAILABILITIES.updating;
     case REPOSITORY_SCAN_JOB_STATUSES.pendingMapping:
     case REPOSITORY_SCAN_JOB_STATUSES.waitingForContext:
+    case REPOSITORY_SCAN_JOB_STATUSES.waitingForCredits:
     case REPOSITORY_SCAN_JOB_STATUSES.readyToSnapshot:
       return ASSESSMENT_ARTIFACT_AVAILABILITIES.waiting;
     case REPOSITORY_SCAN_JOB_STATUSES.failed:
@@ -1115,7 +1117,8 @@ function normalizeArtifacts({
     businessContext,
     investigationNotes,
     ...[remediationPatch, verificationReport, finalReport].filter(
-      (artifact): artifact is NormalizedAssessmentArtifactItem => artifact !== null,
+      (artifact): artifact is NormalizedAssessmentArtifactItem =>
+        artifact !== null,
     ),
   ];
 

@@ -6,7 +6,7 @@ from typing import Any
 
 from model_policy import INVESTIGATOR_MODEL_SPEC, PLANNER_MODEL_SPEC
 from tools.common.capabilities.platform.api_client import WorkerCallbackError
-from middleware.billing_metering import BillingMeteringError
+from middleware.billing_metering import BillingMeteringError, BillingBudgetExhausted
 from orchestration.agent_stream import (
     AGENT_STREAM_STAGES,
     agent_stream_rule_scope,
@@ -712,7 +712,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                     concept=packet.concept,
                     required_evidence=packet.required_evidence,
                     investigation_goals=packet.investigation_goals,
-                    waiting_on=(TargetedInterviewPending,),
+                    waiting_on=(TargetedInterviewPending, BillingBudgetExhausted),
                 ) as rule_stream:
                     rule_claims = self._investigator.investigate(
                         packet=packet,

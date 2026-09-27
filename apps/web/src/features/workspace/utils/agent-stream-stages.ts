@@ -25,26 +25,73 @@ export function groupAgentStreamEventsByStage(
     },
     unstaged: [],
   };
-  for (const event of events) {
-    if (event.stage === null) {
+  const ordered = [...events].sort((left, right) => {
+    const timestamp = left.emittedAt.localeCompare(right.emittedAt);
+    return timestamp || left.sequence - right.sequence;
+  });
+  const firstStages = new Map<string, AssessmentAgentStreamStage>();
+  for (const event of ordered) {
+    const key = agentStreamTurnKey(event);
+    if (event.stage !== null && !firstStages.has(key)) {
+      firstStages.set(key, event.stage);
+    }
+  }
+  const activeStages = new Map<string, AssessmentAgentStreamStage>();
+  const participatingStages = new Map<
+    string,
+    Set<AssessmentAgentStreamStage>
+  >();
+  for (const event of ordered) {
+    const key = agentStreamTurnKey(event);
+    const dispatchEnded =
+      event.eventType ===
+        ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted ||
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed ||
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused;
+    if (dispatchEnded) {
+      const stages = participatingStages.get(key);
+      if (stages?.size) {
+        // The outer boundary may be Interview while its synchronous children
+        // are Planner/Investigator. End every participant of this dispatch only.
+        for (const participant of stages) {
+          grouped.byStage[participant].push({ ...event, stage: participant });
+        }
+        continue;
+      }
+    }
+    if (event.stage !== null) activeStages.set(key, event.stage);
+    // Untagged boundary envelopes belong to their own dispatch's stage, never
+    // the previous Scanner run or a separate anonymous completed timeline.
+    const stage = event.stage ?? activeStages.get(key) ?? firstStages.get(key);
+    if (stage === undefined) {
       grouped.unstaged.push(event);
     } else {
-      grouped.byStage[event.stage].push(event);
+      grouped.byStage[stage].push(
+        event.stage === stage ? event : { ...event, stage },
+      );
+      const stages =
+        participatingStages.get(key) ?? new Set<AssessmentAgentStreamStage>();
+      stages.add(stage);
+      participatingStages.set(key, stages);
     }
   }
   return grouped;
 }
 
+function agentStreamTurnKey(event: AssessmentAgentStreamEvent): string {
+  return JSON.stringify([event.runId, event.correlationId]);
+}
+
 export type AgentStreamRunGroup = {
+  turnKey: string;
   runId: string;
   events: AssessmentAgentStreamEvent[];
 };
 
 /**
- * Split one stage's events into one group per run, oldest first. Interview,
- * Planner, Investigate and Gate each resume in a new run per turn; without this,
- * rendering the stage's events in one AgentStreamTimeline (which shows only the
- * latest run) silently drops every earlier turn's activity/thinking.
+ * Split a stage by dispatch, oldest first. Resumes may share the scan-job runId,
+ * but each dispatch carries its own correlationId. Neither a new answer nor a
+ * resumed boundary may update an earlier turn's activity block.
  */
 export function groupAgentStreamEventsByRun(
   events: AssessmentAgentStreamEvent[],
@@ -56,20 +103,28 @@ export function groupAgentStreamEventsByRun(
   });
   const groups = new Map<string, AssessmentAgentStreamEvent[]>();
   for (const event of ordered) {
-    const existing = groups.get(event.runId);
+    const turnKey = agentStreamTurnKey(event);
+    const existing = groups.get(turnKey);
     if (existing) {
       existing.push(event);
     } else {
-      groups.set(event.runId, [event]);
+      groups.set(turnKey, [event]);
     }
   }
-  return [...groups.entries()].map(([runId, runEvents]) => ({
-    runId,
+  return [...groups.entries()].map(([turnKey, runEvents]) => ({
+    turnKey,
+    runId: runEvents[0]!.runId,
     events: runEvents,
   }));
 }
 
-export type AgentStreamTurnState = "running" | "paused" | "idle";
+export const AGENT_STREAM_TURN_STATES = {
+  running: "running",
+  paused: "paused",
+  idle: "idle",
+} as const;
+export type AgentStreamTurnState =
+  (typeof AGENT_STREAM_TURN_STATES)[keyof typeof AGENT_STREAM_TURN_STATES];
 
 // Matches orchestration/agent_stream.py's AgentStreamInterrupted handling: the
 // worker tags the AGENT_FAILED it emits on a cooperative stop with this reason
@@ -91,6 +146,13 @@ export function deriveLatestAgentStreamTurnState(
   let pausedByCustomer = false;
   let terminal = false;
   for (const event of latest.events) {
+    if (
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused
+    ) {
+      terminal = true;
+      pausedByCustomer = true;
+      continue;
+    }
     const failed =
       event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentFailed ||
       event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed;
@@ -129,6 +191,7 @@ export type InterviewTranscriptSegment =
       kind: "activity";
       timestamp: number;
       stage: AssessmentAgentStreamStage;
+      turnKey: string;
       runId: string;
       events: AssessmentAgentStreamEvent[];
     };
@@ -161,6 +224,7 @@ export function interleaveInterviewTranscript(
         kind: "activity",
         timestamp: first ? Date.parse(first.emittedAt) || 0 : 0,
         stage,
+        turnKey: group.turnKey,
         runId: group.runId,
         events: group.events,
       });
@@ -170,4 +234,27 @@ export function interleaveInterviewTranscript(
   // starting the instant an answer is recorded) keep answers first.
   segments.sort((left, right) => left.timestamp - right.timestamp);
   return segments;
+}
+
+/** Put the current agent's activity below its message, not above its question. */
+export function splitCurrentInterviewActivity(
+  segments: InterviewTranscriptSegment[],
+) {
+  let activity: Extract<
+    InterviewTranscriptSegment,
+    { events: AssessmentAgentStreamEvent[] }
+  >[] = [];
+  const history = segments.flatMap((segment) => {
+    if (segment.kind === "activity") {
+      activity.push(segment);
+      return [];
+    }
+    const turn = { answer: segment.answer, activity };
+    activity = [];
+    return [turn];
+  });
+  return {
+    history,
+    currentActivity: activity,
+  };
 }

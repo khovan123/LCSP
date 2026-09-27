@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import httpx
+import pytest
 
 from tools.common.capabilities.agent_runtime import agent_server_client
 
@@ -30,6 +31,7 @@ class _FakeRuns:
         self.listed_runs = list(listed_runs or [])
         self.timeout_first_get = timeout_first_get
         self.create_calls = 0
+        self.created_context = None
         self.get_calls = 0
         self.cancel_calls = []
         self._refuse_cancel = refuse_cancel
@@ -40,6 +42,7 @@ class _FakeRuns:
 
     def create(self, _thread_id, _assistant_id, **kwargs):
         self.create_calls += 1
+        self.created_context = kwargs.get("context")
         return {
             "run_id": "created-run",
             "status": self._created_run_status,
@@ -89,6 +92,19 @@ def test_run_poll_timeout_keeps_existing_binding(monkeypatch):
     assert result == {"ok": True}
     assert fake_runs.create_calls == 1
     assert fake_runs.get_calls == 2
+
+
+def test_dispatch_shares_deadline_and_deducts_scheduler_setup_time(monkeypatch):
+    fake_runs = _FakeRuns()
+    _install_client(monkeypatch, _FakeClient(fake_runs))
+    ticks = iter([100.0, 104.0])
+    monkeypatch.setattr(agent_server_client.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(agent_server_client.time, "time", lambda: 1000.0)
+    seen = []
+    monkeypatch.setattr(agent_server_client, "_poll_run_until_terminal", lambda *_args, **kwargs: seen.append(kwargs["timeout_seconds"]))
+    agent_server_client.dispatch_agent_runtime_event("scan_requested", {}, "corr-1", timeout_seconds=30)
+    assert fake_runs.created_context["system_deadline_at"] == 1030.0
+    assert seen == [26.0]
 
 
 def test_redelivered_scan_reattaches_active_boundary_run(monkeypatch):

@@ -24,7 +24,10 @@ from middleware.billing_recovery import (
     enqueue_usage_and_release,
 )
 from middleware.token_fallback import model_provider
-from orchestration.agent_stream import publish_agent_stream_event
+from orchestration.agent_stream import (
+    check_agent_execution_active,
+    publish_agent_stream_event,
+)
 from provider_credentials import llm_provider_timeout_seconds
 from tools.common.capabilities.platform.api_client import (
     WorkerApiClient,
@@ -42,16 +45,22 @@ class BillingUsageUnavailable(RuntimeError):
     """Provider returned no complete numeric usage metadata."""
 
 
-class BillingBudgetExhausted(RuntimeError):
-    """The active billing reservation cannot authorize another provider call."""
+class BillingBudgetExhausted(BaseException):
+    """Workflow pause sentinel, like TargetedInterviewPending.
+
+    Bypass specialist fallback handlers; only Root may persist and acknowledge
+    a resumable spend guard, rather than failing every remaining requirement.
+    """
 
     def __init__(self, message: str, *, error_code: str | None = None) -> None:
         super().__init__(message)
         self.status_code = 402
         self.error_code = error_code or "BILLING_BUDGET_EXHAUSTED"
+        self.resume_message: dict[str, Any] | None = None
+        self.resume_source_event: str | None = None
 
 
-class BillingReservationUnavailable(RuntimeError):
+class BillingReservationUnavailable(BillingBudgetExhausted):
     """The broker replay found a reservation that is no longer spendable."""
 
 
@@ -274,6 +283,11 @@ class BillingMeteringSession:
                     payload,
                 )
             except WorkerCallbackError as error:
+                if error.status_code == 409 and error.error_code == "BILLING_RESERVATION_TRANSITION_INVALID":
+                    raise BillingReservationUnavailable(
+                        "Billing reservation is no longer spendable",
+                        error_code=error.error_code,
+                    ) from error
                 if error.status_code == 402 and (
                     error.error_code is None
                     or error.error_code
@@ -320,8 +334,9 @@ class BillingMeteringSession:
             (self.reserved_provider, self.reserved_model)
         }
         if (provider, model_name) not in envelope:
-            raise BillingReservationUnavailable(
-                "Provider/model differs from the reserved pricing envelope"
+            raise WorkerCallbackError(
+                "Provider/model differs from the reserved pricing envelope",
+                status_code=400, error_code="BILLING_VALIDATION_FAILED",
             )
 
     def authorize_request_context(
@@ -871,6 +886,7 @@ class BillingMeteringMiddleware(AgentMiddleware):
     """Meter each actual downstream provider response exactly once."""
 
     def wrap_model_call(self, request, handler):
+        check_agent_execution_active()
         session = active_billing_metering()
         if session is None:
             return handler(request)
@@ -898,6 +914,7 @@ class BillingMeteringMiddleware(AgentMiddleware):
             **_request_shape_diagnostic(request, billing_model),
         )
         session.claim_provider_invocation(invocation_id, metrics)
+        check_agent_execution_active()
         if hasattr(request, "override"):
             request = request.override(model=session.bounded_model(billing_model))
         telemetry = _ModelCallTelemetry(billing_model)
@@ -914,9 +931,11 @@ class BillingMeteringMiddleware(AgentMiddleware):
             invocation_id,
             agent_role=active_billing_agent_role(),
         )
+        check_agent_execution_active()
         return response
 
     async def awrap_model_call(self, request, handler):
+        check_agent_execution_active()
         session = active_billing_metering()
         if session is None:
             return await handler(request)
@@ -942,6 +961,7 @@ class BillingMeteringMiddleware(AgentMiddleware):
             **_request_shape_diagnostic(request, billing_model),
         )
         session.claim_provider_invocation(invocation_id, metrics)
+        check_agent_execution_active()
         if hasattr(request, "override"):
             request = request.override(model=session.bounded_model(billing_model))
         telemetry = _ModelCallTelemetry(billing_model)
@@ -958,6 +978,7 @@ class BillingMeteringMiddleware(AgentMiddleware):
             invocation_id,
             agent_role=active_billing_agent_role(),
         )
+        check_agent_execution_active()
         return response
 
 

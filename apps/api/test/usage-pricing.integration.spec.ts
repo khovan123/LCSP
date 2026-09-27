@@ -11,10 +11,13 @@ import {
 import { randomUUID } from "node:crypto";
 import { BillingAccountingKernel } from "../src/modules/billing/application/shared/billing-accounting.kernel.js";
 import { BillingUsageKernel } from "../src/modules/billing/application/shared/billing-usage.kernel.js";
+import { BillingWorkflowPauseService } from "../src/modules/billing/application/shared/billing-workflow-pause.service.js";
+import { OutboxRepository } from "../src/platform/outbox/outbox.repository.js";
 import { calculateUsageChargeCredits } from "../src/modules/billing/domain/usage-pricing.js";
 import {
   BillingIdempotencyConflictError,
   InsufficientCreditError,
+  InvalidReservationTransitionError,
   PricingSnapshotUnavailableError,
 } from "../src/modules/billing/domain/billing.errors.js";
 import { PrismaBillingTransaction } from "../src/modules/billing/infrastructure/persistence/prisma-billing-transaction.js";
@@ -22,7 +25,10 @@ import type {
   BillingTransactionPort,
   BillingTransactionRepositories,
 } from "../src/modules/billing/domain/repositories/billing-transaction.port.js";
-import type { EffectiveRuntimeModel } from "@lcsp/contracts/billing";
+import {
+  BILLING_WORKFLOW_PAUSE_SOURCES,
+  type EffectiveRuntimeModel,
+} from "@lcsp/contracts/billing";
 import { PrismaService } from "../src/infrastructure/prisma/prisma.service.js";
 import {
   TEST_DATABASE_URL,
@@ -112,6 +118,108 @@ describe("LCSP-310 usage and pricing foundation", () => {
   afterAll(async () => {
     await prisma?.$disconnect();
     await billingPrisma?.$disconnect();
+  });
+
+  it("returns a typed reservation transition guard before claiming a released reservation", async () => {
+    const f = await governedFixture();
+    await governedUsage.releaseForAssessment({
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+    });
+    await expect(
+      governedUsage.claimInvocation({
+        assessmentId: f.assessmentId,
+        reservationId: f.reservation.id,
+        invocationId: id(),
+        provider: runtimeModel.provider,
+        model: runtimeModel.model,
+        estimatedInputTokens: 1n,
+        maxOutputTokens: 1n,
+        maxReasoningTokens: 0n,
+      }),
+    ).rejects.toThrow(InvalidReservationTransitionError);
+    expect(
+      await prisma.billingReservationInvocationClaim.count({
+        where: { reservationId: f.reservation.id },
+      }),
+    ).toBe(0);
+  });
+
+  it("durably parks a dispatch and requeues it once with original pins but no spent billing context", async () => {
+    const f = await governedFixture();
+    const pauses = new BillingWorkflowPauseService(
+      billingPrisma,
+      new OutboxRepository(billingPrisma),
+    );
+    const input = {
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+      dispatchKey: `dispatch:${id()}`,
+      sourceEvent: BILLING_WORKFLOW_PAUSE_SOURCES.engineering,
+      payload: {
+        assessmentId: f.assessmentId,
+        evidenceReportId: "evidence-pinned",
+        workflowRunId: f.runId,
+        billing: { reservationId: f.reservation.id },
+      },
+    };
+    const saved = await pauses.pause(input);
+    expect(await pauses.pause(input)).toEqual(saved);
+    const parked = await prisma.workflowBillingPause.findUniqueOrThrow({
+      where: { id: saved.pauseId },
+    });
+    expect(parked.resumedAt).toBeNull();
+    expect(parked.payload).not.toHaveProperty("billing");
+    const resumes = await Promise.all([
+      pauses.resume(f.assessmentId, f.user.id, "corr-resume-a"),
+      pauses.resume(f.assessmentId, f.user.id, "corr-resume-b"),
+    ]);
+    expect(resumes.sort()).toEqual([false, true]);
+    const outbox = await prisma.outboxMessage.findMany({
+      where: { aggregateId: f.assessmentId },
+    });
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]!.payload).toMatchObject({
+      evidenceReportId: "evidence-pinned",
+      workflowRunId: f.runId,
+    });
+    expect(outbox[0]!.payload).not.toHaveProperty("billing");
+    expect(await pauses.hasPendingResume(f.assessmentId)).toBe(true);
+    await pauses.pause(input);
+    expect(
+      (
+        await prisma.workflowBillingPause.findUniqueOrThrow({
+          where: { id: saved.pauseId },
+        })
+      ).resumedAt,
+    ).not.toBeNull();
+  });
+
+  it("does not allow another account to resume the billing pause", async () => {
+    const f = await governedFixture();
+    const pauses = new BillingWorkflowPauseService(
+      billingPrisma,
+      new OutboxRepository(billingPrisma),
+    );
+    await pauses.pause({
+      assessmentId: f.assessmentId,
+      dispatchKey: `dispatch:${id()}`,
+      sourceEvent: BILLING_WORKFLOW_PAUSE_SOURCES.engineering,
+      payload: { evidenceReportId: "pinned" },
+    });
+    await expect(
+      pauses.resume(f.assessmentId, "another-user", "corr-foreign"),
+    ).rejects.toThrow("owner");
+    expect(
+      await prisma.outboxMessage.count({
+        where: { aggregateId: f.assessmentId },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.workflowBillingPause.count({
+        where: { assessmentId: f.assessmentId, resumedAt: null },
+      }),
+    ).toBe(1);
   });
 
   async function fixture() {
@@ -445,6 +553,112 @@ describe("LCSP-310 usage and pricing foundation", () => {
         })
       ).invocationsStarted,
     ).toBe(2n);
+  });
+
+  it("auto-refills only an opted-in wallet and holds each invocation exactly once", async () => {
+    const f = await governedFixture(10n);
+    await prisma.billingWallet.update({
+      where: { userId: f.user.id },
+      data: { reservationAutoRefillEnabled: true },
+    });
+    const claim = {
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+      invocationId: "AUTO-REFILL-1",
+      provider: "OPENAI",
+      model: "MODEL_A",
+      estimatedInputTokens: 12_000_000n,
+      estimatedInputBytes: 48_000_000n,
+      maxOutputTokens: 0n,
+      maxReasoningTokens: 0n,
+    };
+    const before = await prisma.billingWallet.findUniqueOrThrow({
+      where: { userId: f.user.id },
+    });
+    await Promise.all([
+      governedUsage.claimInvocation(claim),
+      governedUsage.claimInvocation(claim),
+    ]);
+    const wallet = await prisma.billingWallet.findUniqueOrThrow({
+      where: { userId: f.user.id },
+    });
+    const reservation = await prisma.billingReservation.findUniqueOrThrow({
+      where: { id: f.reservation.id },
+    });
+    expect(reservation.remainingCredits).toBe(12n);
+    expect(reservation.amountCredits).toBe(12n);
+    expect(reservation.initialAmountCredits).toBe(10n);
+    expect(reservation.invocationsStarted).toBe(1n);
+    expect(wallet.availableCredits).toBe(before.availableCredits - 2n);
+    expect(wallet.reservedCredits).toBe(before.reservedCredits + 2n);
+    const replay = () =>
+      accounting.reserveCredits({
+        userId: f.user.id,
+        assessmentId: f.assessmentId,
+        runId: f.runId,
+        amountCredits: 10n,
+        maxInvocations: 1n,
+        idempotencyKey: f.reservation.idempotencyKey!,
+      });
+    expect((await replay()).id).toBe(f.reservation.id);
+    await expect(
+      accounting.reserveCredits({
+        userId: f.user.id,
+        assessmentId: f.assessmentId,
+        runId: f.runId,
+        amountCredits: 11n,
+        maxInvocations: 1n,
+        idempotencyKey: f.reservation.idempotencyKey!,
+      }),
+    ).rejects.toThrow("Reservation replay differs");
+    await prisma.billingReservation.update({
+      where: { id: f.reservation.id },
+      data: { initialAmountCredits: null },
+    });
+    expect((await replay()).id).toBe(f.reservation.id);
+    await governedUsage.releaseForAssessment({
+      assessmentId: f.assessmentId,
+      reservationId: f.reservation.id,
+    });
+    const released = await prisma.billingWallet.findUniqueOrThrow({
+      where: { userId: f.user.id },
+    });
+    expect(released.availableCredits).toBe(before.availableCredits + 10n);
+    expect(released.reservedCredits).toBe(before.reservedCredits - 10n);
+  });
+
+  it("auto-refill never authorizes more than the wallet can fund", async () => {
+    const f = await governedFixture(10n);
+    await prisma.billingWallet.update({
+      where: { userId: f.user.id },
+      data: { reservationAutoRefillEnabled: true },
+    });
+    const before = await prisma.billingWallet.findUniqueOrThrow({
+      where: { userId: f.user.id },
+    });
+    await expect(
+      governedUsage.claimInvocation({
+        assessmentId: f.assessmentId,
+        reservationId: f.reservation.id,
+        invocationId: "AUTO-REFILL-TOO-LARGE",
+        provider: "OPENAI",
+        model: "MODEL_A",
+        estimatedInputTokens: 1_000_000_000n,
+        estimatedInputBytes: 4_000_000_000n,
+        maxOutputTokens: 0n,
+        maxReasoningTokens: 0n,
+      }),
+    ).rejects.toBeInstanceOf(InsufficientCreditError);
+    expect(
+      await prisma.billingWallet.findUniqueOrThrow({
+        where: { userId: f.user.id },
+      }),
+    ).toEqual(before);
+    expect(
+      await prisma.billingReservationInvocationClaim.count({
+        where: { reservationId: f.reservation.id },
+      }),
+    ).toBe(0);
   });
 
   it("settles an authorized fallback model against its matching runtime policy", async () => {

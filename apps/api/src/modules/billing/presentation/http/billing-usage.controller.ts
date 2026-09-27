@@ -2,6 +2,8 @@ import { Body, Controller, Param, Post, UseGuards } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import {
   BILLING_ERROR_CODES,
+  billingWorkflowPauseSchema,
+  type BillingWorkflowPauseRequest,
   billingResourceIdSchema,
   billingUsageClaimSchema,
   billingUsageReleaseSchema,
@@ -31,13 +33,33 @@ import {
   toSettlementInput,
 } from "./mappers/billing-usage.request.mapper.js";
 import { mapUsageError } from "./errors/billing-http.error-mapper.js";
+import { BillingWorkflowPauseService } from "../../application/shared/billing-workflow-pause.service.js";
 
 @Controller("internal/billing")
 export class BillingUsageController {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
+    private readonly workflowPause: BillingWorkflowPauseService,
   ) {}
+
+  @Post("workflow-pauses")
+  @UseGuards(WorkerApiKeyGuard)
+  async pauseWorkflow(
+    @Body(
+      new ZodValidationPipe(
+        billingWorkflowPauseSchema,
+        BILLING_ERROR_CODES.validationFailed,
+      ),
+    )
+    body: BillingWorkflowPauseRequest,
+  ) {
+    try {
+      return resultEnvelope(await this.workflowPause.pause(body));
+    } catch (error) {
+      throw mapUsageError(error);
+    }
+  }
 
   @Post("reservations")
   @UseGuards(WorkerApiKeyGuard)

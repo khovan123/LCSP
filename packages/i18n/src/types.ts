@@ -263,6 +263,7 @@ export type PagesMessages = {
       agentStepOutput: string;
       agentBudgetReached: string;
       agentBudgetExhausted: string;
+      billingPaused: string;
       agentContextTrimmed: string;
     };
     agentStreamRule: {

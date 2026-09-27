@@ -1,4 +1,5 @@
 export const BILLING_AUDIT_EVENT_TYPES = {
+  reservationAutoRefillEnabled: "BILLING_RESERVATION_AUTO_REFILL_ENABLED",
   orderCreated: "billing.order.created",
   orderExpired: "billing.order.expired",
   reconciliationDecided: "billing.reconciliation.decided",

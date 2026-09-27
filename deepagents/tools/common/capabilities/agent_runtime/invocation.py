@@ -15,7 +15,7 @@ from tools.common.capabilities.agentic_evidence import (
 )
 from tools.common.capabilities.agentic_evidence.governance.authorization import ApiRbacToolAuthorizer
 from tools.common.capabilities.platform.rbac_client import RbacClient
-from tools.common.capabilities.platform.api_client import WorkerApiClient
+from tools.common.capabilities.platform.api_client import WorkerApiClient, WorkerCallbackError
 from tools.common.capabilities.platform.config import load_config
 from middleware.billing_recovery import (
     drain as drain_billing_recovery,
@@ -25,6 +25,7 @@ from middleware.billing_metering import (
     BillingMeteringSession,
     BillingMeteringError,
     BillingFinalizationError,
+    BillingBudgetExhausted,
     activate_billing_metering,
 )
 from tools.common.capabilities.agent_runtime.boundary import AgentBoundaryBase
@@ -227,7 +228,16 @@ def invoke_boundary(
         billing_session = _billing_metering_session(
             boundary.name, message, correlation_id
         )
+    except BillingBudgetExhausted as error:
+        with activate_agent_stream(session):
+            return _pause_billing_dispatch(boundary, message, correlation_id, error)
     except Exception as error:
+        if isinstance(error, WorkerCallbackError) and error.status_code == 402:
+            with activate_agent_stream(session):
+                return _pause_billing_dispatch(
+                    boundary, message, correlation_id,
+                    BillingBudgetExhausted("Billing credits required"),
+                )
         _report_dispatch_failure(boundary_handler, message, correlation_id, error)
         raise
     try:
@@ -240,6 +250,14 @@ def invoke_boundary(
                     correlation_id,
                     boundary,
                 )
+    except BillingBudgetExhausted as error:
+        with activate_agent_stream(session):
+            result = _pause_billing_dispatch(
+                boundary, message, correlation_id, error, billing_session
+            )
+        if billing_session is not None:
+            billing_session.release()
+        return result
     except Exception as error:
         # Keep a spendable reservation for broker-retryable execution failures.
         # Terminal failures are not going to execute again and can release now.
@@ -268,6 +286,38 @@ def invoke_boundary(
         "source_event": boundary.source_event,
         "status": "COMPLETED",
     }
+
+
+def _pause_billing_dispatch(
+    boundary: AgentInvocationBoundary,
+    message: dict[str, Any],
+    correlation_id: str,
+    error: BillingBudgetExhausted,
+    billing_session: BillingMeteringSession | None = None,
+) -> dict[str, Any]:
+    billing = message.get("billing") or {}
+    assessment_id = _find_first_text(billing, ("assessmentId", "assessment_id"))
+    if not assessment_id:
+        assessment_id = _find_first_text(message, ("assessmentId", "assessment_id"))
+    if not assessment_id:
+        raise ValueError("Billing pause requires assessment identity") from error
+    config = load_config()
+    client = WorkerApiClient(config.nestjs_api_base_url, config.worker_api_key)
+    payload = {
+        "assessmentId": assessment_id,
+        "dispatchKey": f"{assessment_id}:{correlation_id}:{boundary.name}",
+        "sourceEvent": error.resume_source_event or boundary.source_event,
+        "payload": error.resume_message or {k: v for k, v in message.items() if k != "billing"},
+    }
+    if billing_session is not None:
+        payload["reservationId"] = billing_session.reservation_id
+    # Callback failures propagate normally: never ACK a pause that is not durable.
+    saved = client.pause_billing_workflow(payload)
+    publish_agent_stream_event(
+        "BOUNDARY_PAUSED", status="WAITING",
+        data={"boundary": boundary.name, "reasonCode": "BILLING_CREDITS_REQUIRED"},
+    )
+    return {"boundary": boundary.name, "status": "WAITING", **saved}
 
 
 def _report_dispatch_failure(
@@ -300,6 +350,8 @@ def _run_boundary_handler(
     )
     try:
         boundary_handler.handle(message, correlation_id)
+    except BillingBudgetExhausted:
+        raise
     except Exception as error:
         publish_agent_stream_event(
             "BOUNDARY_FAILED",

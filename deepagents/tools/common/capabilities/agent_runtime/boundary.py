@@ -15,6 +15,10 @@ class NonRetryableAgentBoundaryError(RuntimeError):
     """Signals a terminal boundary failure already represented in domain state."""
 
 
+class AgentRuntimeBoundaryTimeout(NonRetryableAgentBoundaryError):
+    """The trusted boundary deadline stopped nested agent execution."""
+
+
 class AgentBoundaryBase:
     """Base class for one LCSP Agent Runtime invocation boundary."""
 

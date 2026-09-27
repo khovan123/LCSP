@@ -168,6 +168,7 @@ model Assessment {
   verifiedAgentEpisodes      VerifiedAgentEpisode[]
   verifiedProfiles           VerifiedProfile[]
   billingReservations        BillingReservation[]
+  billingPauses              WorkflowBillingPause[]
   llmUsageEvents             LlmUsageEvent[]
 
   @@index([ownerId])
@@ -1077,6 +1078,7 @@ enum RepositoryScanJobStatus {
   PENDING_MAPPING
   BLOCKED_MAPPING
   WAITING_FOR_CONTEXT
+  WAITING_FOR_CREDITS
   READY_TO_SNAPSHOT
 }
 
@@ -1266,11 +1268,31 @@ model BillingWallet {
   availableCredits BigInt               @default(0)
   reservedCredits  BigInt               @default(0)
   version          Int                  @default(0)
+  reservationAutoRefillEnabled Boolean  @default(false)
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   user             User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
   ledgerEntries    CreditLedgerEntry[]
   reservations     BillingReservation[]
+}
+
+enum WorkflowBillingPauseSource {
+  SCANNER
+  ENGINEERING
+  INTERVIEW
+}
+
+model WorkflowBillingPause {
+  id           String   @id @default(uuid())
+  assessmentId String
+  dispatchKey  String   @unique
+  sourceEvent  WorkflowBillingPauseSource
+  payload      Json
+  pausedAt     DateTime @default(now())
+  resumedAt    DateTime?
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@index([assessmentId, resumedAt, pausedAt])
 }
 
 model BillingOrder {
@@ -1372,6 +1394,7 @@ model BillingReservation {
   invocationId   String?
   modelInvocationId String?
   amountCredits  BigInt
+  initialAmountCredits BigInt?
   remainingCredits BigInt                 @default(0)
   maxInvocations BigInt                   @default(1)
   invocationsStarted BigInt               @default(0)

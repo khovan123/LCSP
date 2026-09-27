@@ -45,6 +45,7 @@ import {
   BillingUsageKernel,
 } from "./application/shared/billing-usage.kernel.js";
 import { BillingPricingPreflightService } from "./application/shared/billing-pricing-preflight.service.js";
+import { BillingWorkflowPauseService } from "./application/shared/billing-workflow-pause.service.js";
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { BillingPricingPreflightService } from "./application/shared/billing-pri
     BillingAccountingKernel,
     BillingPaymentKernel,
     BillingPricingPreflightService,
+    BillingWorkflowPauseService,
     {
       provide: BILLING_USAGE_KERNEL,
       useFactory: (
@@ -111,6 +113,10 @@ import { BillingPricingPreflightService } from "./application/shared/billing-pri
     SettleBillingUsageHandler,
     ReconcileAcceptedSePayWebhookHandler,
   ],
-  exports: [BillingAccountingKernel, BillingPaymentKernel],
+  exports: [
+    BillingAccountingKernel,
+    BillingPaymentKernel,
+    BillingWorkflowPauseService,
+  ],
 })
 export class BillingModule {}

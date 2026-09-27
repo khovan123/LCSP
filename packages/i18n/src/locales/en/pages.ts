@@ -237,6 +237,7 @@ export const enPages = {
       agentStepOutput: "Agent output",
       agentBudgetReached: "Step budget reached, finishing with the evidence already inspected",
       agentBudgetExhausted: "Agent did not finish within its step budget",
+      billingPaused: "Paused for billing. Add funds, then continue.",
       agentContextTrimmed: "Trimmed older tool results to stay within the context budget",
     },
     agentStreamRule: {

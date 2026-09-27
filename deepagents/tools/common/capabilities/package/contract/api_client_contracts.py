@@ -14,6 +14,7 @@ class CallbackPath(StrEnum):
     TECHNICAL_PROFILE = "/internal/evidence/technical-profile-callback"
     AI_USAGE_FLOW = "/internal/ai-usage-flow/callback"
     BILLING_USAGE = "/internal/billing/usage"
+    BILLING_WORKFLOW_PAUSE = "/internal/billing/workflow-pauses"
     BILLING_RESERVATION = "/internal/billing/reservations"
     BILLING_RESERVATION_RELEASE = "/internal/billing/reservations/{reservation_id}/release"
     BILLING_RESERVATION_CLAIM = "/internal/billing/reservations/{reservation_id}/claim"

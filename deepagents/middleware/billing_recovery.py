@@ -7,6 +7,7 @@ contract payload (numeric usage and identities), never prompts or model output.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 import time
@@ -21,6 +22,7 @@ from tools.common.capabilities.platform.callback_schemas import (
 
 _workers: set[str] = set()
 _workers_lock = threading.Lock()
+_logger = logging.getLogger(__name__)
 
 
 def enqueue_usage(path: str | Path, payload: SettledUsagePayload) -> None:
@@ -96,8 +98,8 @@ def enqueue_usage_and_release(
 def drain(path: str | Path, api_client: Any) -> int:
     """Deliver pending callbacks in order; return the number removed.
 
-    A failed row remains pending, so a later recovery attempt can retry it.  The
-    API endpoints are idempotent and the keys intentionally remain unchanged.
+    Transient failures remain pending. Permanent contract failures are retained
+    as POISON for reconciliation, never replayed as provider work.
     """
     db = _connect(path)
     delivered = 0
@@ -117,8 +119,7 @@ def drain(path: str | Path, api_client: Any) -> int:
             if kind == "RELEASE" and _has_pending_usage(
                 db, payload["reservationId"]
             ):
-                # Never release a reservation while its usage debit is still
-                # pending; that would make a successful provider call unchargeable.
+                # Pending or quarantined usage must be reconciled before release.
                 continue
             try:
                 if kind == "USAGE":
@@ -133,11 +134,12 @@ def drain(path: str | Path, api_client: Any) -> int:
                         ),
                     )
             except Exception as error:
-                if _is_permanent_ownership_mismatch(error):
-                    _dead_letter(
-                        db,
-                        row_id,
-                        "BILLING_OWNERSHIP_MISMATCH: reservation ownership mismatch is permanent",
+                reason = _permanent_callback_failure(error)
+                if reason is not None:
+                    _dead_letter(db, row_id, reason)
+                    _logger.error(
+                        "Billing callback quarantined id=%s kind=%s reason=%s",
+                        row_id, kind, reason,
                     )
                     continue
                 # One poisoned callback must not block unrelated users. The
@@ -244,9 +246,16 @@ def _dead_letter(db: sqlite3.Connection, row_id: int, reason: str) -> None:
     db.commit()
 
 
-def _is_permanent_ownership_mismatch(error: BaseException) -> bool:
+def _permanent_callback_failure(error: BaseException) -> str | None:
     status_code = getattr(error, "status_code", None)
-    return status_code == 403 and "BILLING_OWNERSHIP_MISMATCH" in str(error)
+    code = getattr(error, "error_code", None)
+    for status, reason in (
+        (403, "BILLING_OWNERSHIP_MISMATCH"),
+        (409, "BILLING_RESERVATION_TRANSITION_INVALID"),
+    ):
+        if status_code == status and (code == reason or reason in str(error)):
+            return reason
+    return None
 
 
 def _normalize_usage_recovery_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -276,7 +285,7 @@ def _has_pending_usage(db: sqlite3.Connection, reservation_id: str) -> bool:
         """
         SELECT payload
         FROM billing_callback_recovery
-        WHERE kind = 'USAGE' AND state = 'PENDING'
+        WHERE kind = 'USAGE' AND state IN ('PENDING', 'POISON')
         """
     ).fetchall()
     return any(json.loads(row[0]).get("reservationId") == reservation_id for row in rows)

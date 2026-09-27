@@ -218,8 +218,18 @@ export class BillingAccountingKernel {
         i.idempotencyKey,
       );
       if (old) {
+        const amountMatches =
+          old.initialAmountCredits === i.amountCredits ||
+          (old.initialAmountCredits === null &&
+            old.amountCredits === i.amountCredits);
+        const legacyRefillReplay =
+          old.initialAmountCredits === null &&
+          old.invocationsStarted > 0n &&
+          old.amountCredits > i.amountCredits &&
+          (await wallet.findForUser(i.userId))?.reservationAutoRefillEnabled ===
+            true;
         if (
-          old.amountCredits !== i.amountCredits ||
+          (!amountMatches && !legacyRefillReplay) ||
           old.workspaceId !== (i.workspaceId ?? null) ||
           old.assessmentId !== (i.assessmentId ?? null) ||
           old.scanJobId !== (i.scanJobId ?? null) ||

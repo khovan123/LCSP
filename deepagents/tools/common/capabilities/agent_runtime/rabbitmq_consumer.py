@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import signal
@@ -51,6 +52,8 @@ DEFAULT_API_READY_POLL_SECONDS = 0.5
 DEFAULT_BOUNDARY_WORKERS = 4
 DEFAULT_BOUNDARY_TIMEOUT_SECONDS = 900.0
 DEFAULT_SCAN_BOUNDARY_TIMEOUT_SECONDS = 1800.0
+DEFAULT_BROKER_ACK_TIMEOUT_SECONDS = 1800.0
+DEFAULT_SETTLEMENT_MARGIN_SECONDS = 120.0
 SCAN_FAILURE_AGENT_RUNTIME_BOUNDARY_TIMEOUT = "AGENT_RUNTIME_BOUNDARY_TIMEOUT"
 SCAN_FAILURE_PROVIDER_TIMEOUT = "PROVIDER_TIMEOUT"
 SCAN_FAILURE_REPOSITORY_SANDBOX_FAILURE = "REPOSITORY_SANDBOX_FAILURE"
@@ -83,6 +86,14 @@ class StaleScanDelivery(NonRetryableAgentBoundaryError):
         super().__init__(f"stale scan delivery for missing job {scan_job_id}")
 
 
+class TerminalScanDelivery(NonRetryableAgentBoundaryError):
+    """Redelivery of already-terminal work; acknowledge without failing it again."""
+
+    def __init__(self, scan_job_id: str):
+        self.scan_job_id = scan_job_id
+        super().__init__(f"scan job {scan_job_id} is already terminal")
+
+
 @dataclass(frozen=True)
 class BoundaryBinding:
     """One RabbitMQ queue binding for one Agent Runtime boundary."""
@@ -98,6 +109,7 @@ class DeliverySettlementState:
     """Single-settlement guard for one RabbitMQ delivery."""
 
     settled: bool = False
+    deadline: float | None = None
     timer: Timer | None = None
     lock: Lock = field(default_factory=Lock)
 
@@ -435,7 +447,9 @@ def _delivery_handler(
         properties: Any,
         body: bytes,
     ) -> None:
-        settlement_state = DeliverySettlementState()
+        settlement_state = DeliverySettlementState(
+            deadline=monotonic() + timeout_seconds if timeout_seconds else None
+        )
         future = executor.submit(
             _dispatch_delivery,
             boundary_name,
@@ -503,6 +517,10 @@ def _dispatch_delivery(
         boundary_name,
     )
     _claim_scan_delivery(boundary_name, message, timeout_seconds)
+    if settlement_state is not None and settlement_state.deadline is not None:
+        timeout_seconds = settlement_state.deadline - monotonic()
+        if timeout_seconds <= 0 or _delivery_already_settled(settlement_state):
+            raise BoundaryExecutionTimeout(0.0)
     dispatch_agent_runtime_event(
         boundary_name,
         message,
@@ -550,7 +568,7 @@ def _claim_scan_delivery(
             raise StaleScanDelivery(scan_job_id) from error
         raise
     if response.get("terminal") is True and response.get("claimed") is not True:
-        raise NonRetryableAgentBoundaryError("scan job is already terminal")
+        raise TerminalScanDelivery(scan_job_id)
 
 
 def _notify_scan_delivery_terminal_failure(
@@ -614,6 +632,8 @@ def _scan_failure_reason_code(error: BaseException) -> str:
     remote_error_type = getattr(error, "remote_error_type", None)
     if isinstance(remote_error_type, str) and remote_error_type:
         error_names.add(remote_error_type)
+    if error_names & {"AgentRuntimeBoundaryTimeout", "AgentServerRunTimeout"}:
+        return SCAN_FAILURE_AGENT_RUNTIME_BOUNDARY_TIMEOUT
     cause = getattr(error, "__cause__", None)
     if cause is not None:
         error_names.add(type(cause).__name__)
@@ -778,14 +798,15 @@ def _settle_delivery(
             channel.basic_ack(delivery_tag=delivery_tag)
             return
 
-        if isinstance(error, StaleScanDelivery):
+        if isinstance(error, (StaleScanDelivery, TerminalScanDelivery)):
             LOGGER.info(
                 "Dropped stale Agent Runtime scan delivery boundary=%s routing_key=%s "
-                "scan_job_id=%s correlation_id=%s",
+                "scan_job_id=%s correlation_id=%s reason=%s",
                 boundary_name,
                 routing_key,
                 error.scan_job_id,
                 _property_value(properties, "correlation_id"),
+                type(error).__name__,
             )
             channel.basic_ack(delivery_tag=delivery_tag)
             return
@@ -934,16 +955,35 @@ def _boundary_timeout_seconds(boundary_name: str) -> float:
         f"{_env_boundary_name(boundary_name)}_SECONDS"
     )
     if os.getenv(env_name) is not None:
-        return _positive_float_env(env_name)
-    if boundary_name == "scan_requested":
-        return _positive_float_env(
+        requested = _positive_float_env(env_name)
+    elif boundary_name == "scan_requested":
+        requested = _positive_float_env(
             "LCSP_AGENT_RUNTIME_SCAN_BOUNDARY_TIMEOUT_SECONDS",
             DEFAULT_SCAN_BOUNDARY_TIMEOUT_SECONDS,
         )
-    return _positive_float_env(
-        "LCSP_AGENT_RUNTIME_BOUNDARY_TIMEOUT_SECONDS",
-        DEFAULT_BOUNDARY_TIMEOUT_SECONDS,
+    else:
+        requested = _positive_float_env(
+            "LCSP_AGENT_RUNTIME_BOUNDARY_TIMEOUT_SECONDS",
+            DEFAULT_BOUNDARY_TIMEOUT_SECONDS,
+        )
+    ack_timeout = _positive_float_env(
+        "LCSP_AGENT_RUNTIME_BROKER_ACK_TIMEOUT_SECONDS",
+        DEFAULT_BROKER_ACK_TIMEOUT_SECONDS,
     )
+    margin = _positive_float_env(
+        "LCSP_AGENT_RUNTIME_SETTLEMENT_MARGIN_SECONDS",
+        DEFAULT_SETTLEMENT_MARGIN_SECONDS,
+    )
+    if margin >= ack_timeout:
+        raise RuntimeError("Settlement margin must be smaller than broker ACK timeout")
+    effective = min(requested, ack_timeout - margin)
+    if effective < requested:
+        LOGGER.warning(
+            "Boundary deadline capped before broker ACK timeout "
+            "boundary=%s requested=%s effective=%s",
+            boundary_name, requested, effective,
+        )
+    return effective
 
 
 def _env_boundary_name(boundary_name: str) -> str:
@@ -960,8 +1000,8 @@ def _positive_float_env(name: str, default: float | None = None) -> float:
         value = float(raw)
     except ValueError as exc:
         raise RuntimeError(f"Invalid numeric env var: {name}") from exc
-    if value <= 0:
-        raise RuntimeError(f"{name} must be > 0")
+    if not math.isfinite(value) or value <= 0:
+        raise RuntimeError(f"{name} must be finite and > 0")
     return value
 
 

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import sys
 import types
+import pytest
 from types import SimpleNamespace
 from typing import Any
 
 from langchain.agents.structured_output import StructuredOutputError
 
 from middleware.failure_policy import TerminalSchemaError
+from middleware.billing_metering import BillingBudgetExhausted
 
 from orchestration.context import LCSPRunContext
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
@@ -230,6 +232,50 @@ def _seed_store(*, status: str, attempt_count: int) -> None:
         )
     }
     _FakeStore.saves = []
+
+
+def test_budget_pause_reuses_exact_checkpoint_and_completed_handoff(monkeypatch):
+    _install_fake_postgres_saver(monkeypatch)
+    _FakeStore.records = {}
+    _FakeStore.saves = []
+    agent = _InvalidThenValidAgent(BillingBudgetExhausted("reservation exhausted"))
+    monkeypatch.setattr(managed, "ManagedInvestigatorExecutionStore", _FakeStore)
+    monkeypatch.setattr(managed, "_durable_investigator_agent", lambda _checkpointer: agent)
+    kwargs = dict(
+        checkpoint_url="postgresql://recovery-test",
+        thread_id="investigator:exec-recovery-1", checkpoint_id=None,
+        context=_context(), instruction="Investigate pinned rule",
+        graph=_program_graph(), execution_id="exec-recovery-1",
+        correlation_id="corr-billing-1",
+    )
+    with pytest.raises(BillingBudgetExhausted):
+        managed._invoke_managed_investigator(**kwargs)
+    record = _FakeStore.records["exec-recovery-1"]
+    assert record.status == MANAGED_INVESTIGATOR_EXECUTION_STATUSES["waiting"]
+    assert record.last_error == "BILLING_CREDITS_REQUIRED"
+    handoff, checkpoint = managed._invoke_managed_investigator(**kwargs)
+    assert handoff["status"] == "READY"
+    assert agent.invoke_calls[-1][0] is None
+    assert agent.invoke_calls[-1][1]["configurable"]["checkpoint_id"] == "checkpoint-invalid-json"
+    cached, cached_checkpoint = managed._invoke_managed_investigator(**kwargs)
+    assert cached == handoff and cached_checkpoint == checkpoint
+    assert len(agent.invoke_calls) == 2
+
+
+def test_budget_resume_rejects_changed_artifact_pins(monkeypatch):
+    _install_fake_postgres_saver(monkeypatch)
+    _seed_store(status=MANAGED_INVESTIGATOR_EXECUTION_STATUSES["waiting"], attempt_count=0)
+    _FakeStore.records["exec-recovery-1"].last_error = "BILLING_CREDITS_REQUIRED"
+    _FakeStore.records["exec-recovery-1"].artifact_versions = {**ARTIFACT_PINS, "repositorySnapshotId": "changed"}
+    agent = _AlwaysBrokenAgent()
+    monkeypatch.setattr(managed, "ManagedInvestigatorExecutionStore", _FakeStore)
+    monkeypatch.setattr(managed, "_durable_investigator_agent", lambda _checkpointer: agent)
+    with pytest.raises(RuntimeError, match="artifact"):
+        managed._invoke_managed_investigator(
+            checkpoint_url="postgresql://recovery-test", thread_id="investigator:exec-recovery-1",
+            checkpoint_id=None, context=_context(), instruction="Investigate pinned rule",
+            graph=_program_graph(), execution_id="exec-recovery-1", correlation_id="corr-billing-2",
+        )
 
 
 def test_broken_stored_resume_handoff_is_rejected_then_model_retried_once(monkeypatch) -> None:

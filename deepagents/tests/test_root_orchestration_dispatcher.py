@@ -11,6 +11,32 @@ from contracts.handoffs import InvestigatorResult, TriageResult
 from orchestration.context import LCSPRunContext
 from orchestration.dispatcher import RootSubagentDispatcher
 from orchestration.lifecycle import RootSubagentReservation
+from orchestration.agent_stream import (
+    AGENT_STREAM_STAGES,
+    AgentStreamSession,
+    activate_agent_stream,
+    agent_stream_stage,
+)
+
+
+@pytest.mark.parametrize("specialist,stage", [
+    ("interview", "INTERVIEW"), ("planner", "PLANNER"),
+    ("investigator", "INVESTIGATE"), ("gate", "GATE"),
+])
+def test_specialist_selection_is_attributed_to_target_not_enclosing_scanner(monkeypatch, specialist, stage):
+    dispatcher = RootSubagentDispatcher(lifecycle=MagicMock(), subagents=[_definition()])
+    monkeypatch.setattr(dispatcher, "_observe_shadow_root_routing", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatcher, "_dispatch_via_root", lambda **_kwargs: {})
+    events = []
+    session = AgentStreamSession(
+        assessment_id="assessment-1", run_id="scan-job-1", correlation_id="corr-1",
+        boundary_name="scan_requested", emit_payload=events.append,
+        stage=AGENT_STREAM_STAGES["scanner"],
+    )
+    with activate_agent_stream(session), agent_stream_stage(AGENT_STREAM_STAGES["scanner"]):
+        dispatcher.dispatch(subagent_type=specialist, instruction="bounded specialist work")
+    assert events[0]["event_type"] == "SUBAGENT_SELECTED"
+    assert events[0]["stage"] == stage
 
 
 def _definition() -> dict:

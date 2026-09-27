@@ -239,6 +239,7 @@ export const viPages = {
       agentStepOutput: "Kết quả của agent",
       agentBudgetReached: "Đã chạm giới hạn số bước, kết thúc với evidence đã kiểm tra",
       agentBudgetExhausted: "Agent không hoàn tất trong giới hạn số bước",
+      billingPaused: "Tạm dừng vì billing. Nạp tiền rồi tiếp tục.",
       agentContextTrimmed: "Đã lược bớt kết quả tool cũ để giữ trong giới hạn context",
     },
     agentStreamRule: {

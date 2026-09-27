@@ -313,11 +313,15 @@ export class BillingUsageKernel {
         userId,
         input.reservationId,
       );
-      if (!reservation || reservation.status !== "RESERVED")
-        throw new BillingDomainError("Reservation is not spendable");
+      if (!reservation)
+        throw new BillingDomainError("Reservation is not available");
       if (reservation.assessmentId !== input.assessmentId)
         throw new OwnershipMismatchError(
           "Reservation does not belong to the assessment",
+        );
+      if (reservation.status !== "RESERVED")
+        throw new InvalidReservationTransitionError(
+          "Reservation is not spendable",
         );
 
       const existingClaim = await repos.reservation.findInvocationClaim(
@@ -359,8 +363,36 @@ export class BillingUsageKernel {
         await repos.reservation.sumUnsettledAuthorizedChargeCredits(
           input.reservationId,
         );
-      const availableForAuthorization =
+      let availableForAuthorization =
         reservation.remainingCredits - outstandingAuthorizedCredits;
+      if (authorizedChargeCredits > availableForAuthorization) {
+        const wallet = await repos.wallet.findForUser(userId);
+        if (wallet?.reservationAutoRefillEnabled) {
+          const deficit = authorizedChargeCredits - availableForAuthorization;
+          // Hold only the next claim's deficit; no unlimited spend is granted.
+          // Claims and holds share the same user transaction lock.
+          const refill = deficit;
+          if (wallet.availableCredits >= refill) {
+            if (
+              !(await repos.wallet.compareAndSetProjection({
+                walletId: wallet.id,
+                expectedVersion: wallet.version,
+                availableCredits: wallet.availableCredits - refill,
+                reservedCredits: wallet.reservedCredits + refill,
+              })) ||
+              !(await repos.reservation.extendBudget({
+                reservationId: reservation.id,
+                amountCredits: refill,
+              }))
+            ) {
+              throw new BillingDomainError(
+                "Reservation refill raced with lifecycle",
+              );
+            }
+            availableForAuthorization += refill;
+          }
+        }
+      }
       if (
         availableForAuthorization < 0n ||
         authorizedChargeCredits > availableForAuthorization

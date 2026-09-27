@@ -65,6 +65,16 @@ def dispatch_agent_runtime_event(
         interrupt_agent_runtime_run(interrupt_target, message, correlation_id)
         return {"status": "interrupt_requested"}
 
+    budget = (
+        timeout_seconds
+        if timeout_seconds is not None and timeout_seconds > 0
+        else _positive_float_env(
+            "LCSP_AGENT_SERVER_RUN_TIMEOUT_SECONDS",
+            DEFAULT_AGENT_SERVER_RUN_TIMEOUT_SECONDS,
+        )
+    )
+    deadline_at = time.time() + budget
+    started_at = time.monotonic()
     thread_id = agent_thread_id(boundary_name, message, correlation_id)
     assessment_id = _find_text(message, "assessmentId", "assessment_id")
     workflow_run_id = _find_text(
@@ -86,6 +96,7 @@ def dispatch_agent_runtime_event(
         "commit_sha": _find_text(message, "commitSha", "commit_sha"),
         "correlation_id": correlation_id,
         "system_boundary_name": boundary_name,
+        "system_deadline_at": deadline_at,
         "system_event": message,
         "repository_path": "/",
     }
@@ -160,7 +171,7 @@ def dispatch_agent_runtime_event(
         run_id=run_id,
         run=run,
         observer=observer,
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=max(0.001, budget - (time.monotonic() - started_at)),
     )
 
 

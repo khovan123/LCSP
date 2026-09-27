@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
+from middleware.billing_metering import BillingBudgetExhausted
 
 from orchestration.context import LCSPRunContext
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
@@ -202,6 +203,63 @@ def test_post_guard_pending_completed_state_survives_store_reconstruction() -> N
         outcome="CONTEXT_RESOLVED",
     )
     assert completed is not None and completed.completed
+
+
+def test_billing_pause_resumes_failed_node_without_repeating_completed_work(monkeypatch):
+    suffix = uuid4().hex
+    counts = {"prepare": 0, "model": 0}
+
+    def factory(checkpointer):
+        graph = StateGraph(_DurableState)
+
+        def prepare(_state):
+            counts["prepare"] += 1
+            return {}
+
+        def model(_state):
+            counts["model"] += 1
+            if counts["model"] == 1:
+                raise BillingBudgetExhausted("No spendable reservation budget")
+            return {"structured_response": {
+                "status": "READY", "artifact_versions": dict(ARTIFACT_PINS),
+                "claims": [{
+                    "claim_id": "claim-budget", "engineering_rule_id": "ENG-POSTGRES-1",
+                    "claim_type": "UNRESOLVED_ENGINEERING_FACT", "value": None,
+                    "evidence_refs": ["EV-POSTGRES-1"], "graph_path_refs": [],
+                    "source_anchor_refs": [], "confidence": 0.8,
+                    "limitations": [ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]],
+                    "criterion": None,
+                }], "limitations": [], "missing_input": None,
+                "business_context_need": None, "next_step": "GATE",
+            }}
+
+        graph.add_node("prepare", prepare)
+        graph.add_node("model", model)
+        graph.add_edge(START, "prepare")
+        graph.add_edge("prepare", "model")
+        graph.add_edge("model", END)
+        return graph.compile(checkpointer=checkpointer)
+
+    monkeypatch.setattr(managed, "_durable_investigator_agent", factory)
+    execution_id = f"exec-budget-{suffix}"
+    context = LCSPRunContext(
+        assessment_id=f"assessment-budget-{suffix}", user_id="customer-postgres-1",
+        workflow_run_id=f"investigator:{execution_id}", artifact_versions=dict(ARTIFACT_PINS),
+        engineering_rule_ids=("ENG-POSTGRES-1",), idempotency_key=f"budget:{suffix}",
+    )
+    kwargs = dict(
+        checkpoint_url=CHECKPOINT_URL, thread_id=context.workflow_run_id,
+        checkpoint_id=None, context=context, instruction="Pinned investigation",
+        graph=_program_graph(), execution_id=execution_id, correlation_id=f"corr-budget-{suffix}",
+    )
+    with pytest.raises(BillingBudgetExhausted):
+        managed._invoke_managed_investigator(**kwargs)
+    result, checkpoint = managed._invoke_managed_investigator(**kwargs)
+    assert result["status"] == "READY"
+    assert counts == {"prepare": 1, "model": 2}
+    cached, cached_checkpoint = managed._invoke_managed_investigator(**kwargs)
+    assert cached == result and cached_checkpoint == checkpoint
+    assert counts == {"prepare": 1, "model": 2}
 
 
 def test_exact_investigator_resume_uses_real_postgres_checkpoint_and_is_replay_safe(

@@ -4,6 +4,7 @@ export type WalletRecord = {
   availableCredits: bigint;
   reservedCredits: bigint;
   version: number;
+  reservationAutoRefillEnabled?: boolean;
 };
 export type LedgerRecord = {
   id: string;
@@ -20,6 +21,7 @@ export type ReservationRecord = {
   userId: string;
   walletId: string;
   amountCredits: bigint;
+  initialAmountCredits: bigint | null;
   remainingCredits: bigint;
   maxInvocations: bigint;
   invocationsStarted: bigint;
@@ -176,6 +178,10 @@ export interface BillingReservationPort {
     invocationId: string,
   ): Promise<InvocationClaimRecord | null>;
   sumUnsettledAuthorizedChargeCredits(reservationId: string): Promise<bigint>;
+  extendBudget(input: {
+    reservationId: string;
+    amountCredits: bigint;
+  }): Promise<boolean>;
   claimInvocation(input: {
     reservationId: string;
     invocationId: string;

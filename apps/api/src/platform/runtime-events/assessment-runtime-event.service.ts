@@ -905,7 +905,8 @@ export class AssessmentRuntimeEventService {
       latest.runStatus === ASSESSMENT_RUNTIME_RUN_STATUSES.failed ||
       latest.runStatus === ASSESSMENT_RUNTIME_RUN_STATUSES.completed ||
       agentEventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed ||
-      agentEventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted;
+      agentEventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted ||
+      agentEventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused;
     const recent = Date.now() - latest.createdAt.getTime() < windowMs;
     return { live: recent && !endsRun, lastActivityAt: latest.createdAt };
   }

@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 import time
+from threading import Event
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -18,10 +19,12 @@ from middleware.billing_metering import (
 from middleware.billing_recovery import (
     drain,
     enqueue_usage,
+    enqueue_usage_and_release,
     _normalize_usage_recovery_payload,
 )
 from tools.common.capabilities.platform.api_client import WorkerCallbackError
-from tools.common.capabilities.platform.callback_schemas import SettledUsagePayload
+from tools.common.capabilities.platform.callback_schemas import SettledUsagePayload, BillingReservationReleasePayload
+from orchestration.agent_stream import active_agent_stream_cancel, AgentStreamInterrupted
 from tools.common.capabilities.agent_runtime.invocation import _billing_metering_session
 from tools.common.capabilities.agent_runtime.rabbitmq_consumer import _with_billing_attempt
 
@@ -32,6 +35,127 @@ class FakeClient:
 
     def post_settled_usage(self, payload):
         self.payloads.append(payload)
+
+
+def test_claiming_closed_reservation_pauses_before_provider_call():
+    class Client(FakeClient):
+        def claim_billing_invocation(self, *_args):
+            raise WorkerCallbackError("closed", status_code=409, error_code="BILLING_RESERVATION_TRANSITION_INVALID")
+
+    session = BillingMeteringSession(
+        api_client=Client(), assessment_id="assessment-1", run_id="run-1",
+        reservation_id="reservation-1", agent_role="investigator", max_invocations=1,
+    )
+    calls = []
+    request = SimpleNamespace(model=SimpleNamespace(provider="openai", model_name="gpt-test"))
+    with activate_billing_metering(session), pytest.raises(BillingReservationUnavailable):
+        BillingMeteringMiddleware().wrap_model_call(request, lambda value: calls.append(value))
+    assert calls == []
+
+
+def test_unauthorized_model_is_failure_not_credit_pause():
+    session = BillingMeteringSession(
+        api_client=FakeClient(), assessment_id="assessment-1", run_id="run-1",
+        reservation_id="reservation-1", agent_role="investigator",
+        authorized_models={("OPENAI", "authorized")},
+    )
+    with pytest.raises(WorkerCallbackError) as error:
+        session.assert_model_identity(SimpleNamespace(provider="openai", model_name="unapproved"))
+    assert error.value.status_code == 400
+
+
+@pytest.mark.parametrize("cancel_during_call", [False, True])
+def test_cancelled_model_turn_never_replays_and_retains_incurred_usage(cancel_during_call):
+    client = FakeClient()
+    session = BillingMeteringSession(
+        api_client=client, assessment_id="assessment-1", run_id="run-1",
+        reservation_id="reservation-1", agent_role="investigator",
+    )
+    cancel = Event()
+    calls = []
+
+    def provider(request):
+        calls.append(request)
+        cancel.set()
+        return response()
+
+    if not cancel_during_call:
+        cancel.set()
+    token = active_agent_stream_cancel.set(cancel)
+    request = SimpleNamespace(model=SimpleNamespace(provider="openai", model_name="gpt-test"))
+    try:
+        with activate_billing_metering(session):
+            for _ in range(2):
+                with pytest.raises(AgentStreamInterrupted):
+                    BillingMeteringMiddleware().wrap_model_call(request, provider)
+    finally:
+        active_agent_stream_cancel.reset(token)
+    assert len(calls) == int(cancel_during_call)
+    assert len(client.payloads) == int(cancel_during_call)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancel_during_call", [False, True])
+async def test_async_cancelled_model_turn_retains_usage_without_next_call(cancel_during_call):
+    client = FakeClient()
+    session = BillingMeteringSession(
+        api_client=client, assessment_id="assessment-1", run_id="run-1",
+        reservation_id="reservation-1", agent_role="investigator",
+    )
+    cancel = Event()
+    calls = []
+
+    async def provider(request):
+        calls.append(request)
+        cancel.set()
+        return response()
+
+    if not cancel_during_call:
+        cancel.set()
+    token = active_agent_stream_cancel.set(cancel)
+    request = SimpleNamespace(model=SimpleNamespace(provider="openai", model_name="gpt-test"))
+    try:
+        with activate_billing_metering(session):
+            for _ in range(2):
+                with pytest.raises(AgentStreamInterrupted):
+                    await BillingMeteringMiddleware().awrap_model_call(request, provider)
+    finally:
+        active_agent_stream_cancel.reset(token)
+    assert len(calls) == int(cancel_during_call)
+    assert len(client.payloads) == int(cancel_during_call)
+
+
+def test_closed_reservation_usage_is_quarantined_and_blocks_release(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "billing.sqlite3"
+    payload = SettledUsagePayload(
+        assessmentId="assessment-1", runId="run-1", reservationId="reservation-1",
+        invocationId="invocation-1", agentRole="investigator", provider="OPENAI",
+        model="gpt-test", inputTokens="1", outputTokens="1", occurredAt="2026-09-27T07:56:25Z",
+    )
+    enqueue_usage_and_release(path, payload, BillingReservationReleasePayload(assessmentId="assessment-1"))
+
+    class Client:
+        attempts = 0
+
+        def post_settled_usage(self, payload):
+            self.attempts += 1
+            raise WorkerCallbackError(
+                "Callback failed", status_code=409,
+                error_code="BILLING_RESERVATION_TRANSITION_INVALID",
+            )
+
+        def release_billing_reservation(self, *_args):
+            pytest.fail("unreconciled usage must block dependent release")
+
+    client = Client()
+    assert drain(path, client) == 0
+    assert drain(path, client) == 0
+    assert client.attempts == 1
+    with sqlite3.connect(path) as db:
+        rows = db.execute("SELECT kind, state FROM billing_callback_recovery ORDER BY id").fetchall()
+    assert rows == [("USAGE", "POISON"), ("RELEASE", "PENDING")]
 
 
 class FailingClient:

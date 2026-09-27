@@ -789,6 +789,10 @@ class WorkerApiClient:
             payload.model_dump(exclude_none=True),
         )
 
+    def pause_billing_workflow(self, payload: dict) -> dict:
+        """Durably park a dispatch before the broker may acknowledge it."""
+        return self._post_with_retry(CallbackPath.BILLING_WORKFLOW_PAUSE, payload)
+
     def release_billing_reservation(
         self, reservation_id: str, payload: BillingReservationReleasePayload
     ) -> dict:

@@ -1,6 +1,8 @@
 """Consume accepted repository evidence and persist direct EngineeringRule evaluation results."""
 from __future__ import annotations
 
+from middleware.billing_metering import BillingBudgetExhausted
+
 import hashlib
 import json
 import os
@@ -137,6 +139,16 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
                 user_id=user_id or None,
                 scan_job_id=scan_job_id,
             )
+        except BillingBudgetExhausted as error:
+            # A synchronous Interview continuation has already persisted its
+            # decision. Resume downstream, not the customer's answered turn.
+            error.resume_source_event = "event.technical-evidence.accepted.v1"
+            error.resume_message = {
+                "assessmentId": assessment_id,
+                "evidenceReportId": evidence_report_id,
+                "workflowRunId": workflow_run_id,
+            }
+            raise
         finally:
             if workspace_path is not None:
                 self._code_workspace.cleanup(workspace_job_id)

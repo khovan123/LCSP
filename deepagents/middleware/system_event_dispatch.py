@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import time
+from threading import Event, Timer
 from typing import Any, Mapping
 
 from langchain.agents.middleware import AgentMiddleware, hook_config
 
 from orchestration.context import LCSPRunContext
+from orchestration.agent_stream import (
+    AgentStreamInterrupted,
+    active_agent_stream_cancel,
+    check_agent_execution_active,
+)
+from tools.common.capabilities.agent_runtime.boundary import AgentRuntimeBoundaryTimeout
 from tools.common.capabilities.agent_runtime.invocation import invoke_boundary
 from tools.common.capabilities.platform.callback_schemas import (
     SCAN_CALLBACK_STATUSES,
@@ -43,10 +51,53 @@ class _SystemEventDispatchMiddleware(AgentMiddleware):
 
     @hook_config(can_jump_to=["end"])
     async def abefore_agent(self, state, runtime) -> dict[str, Any] | None:
-        return await asyncio.to_thread(_dispatch_system_event, state, runtime)
+        cancel = active_agent_stream_cancel.get() or Event()
+        token = active_agent_stream_cancel.set(cancel)
+        try:
+            return await asyncio.to_thread(_dispatch_system_event, state, runtime)
+        except asyncio.CancelledError:
+            # Cancelling to_thread's await does not stop its underlying thread.
+            cancel.set()
+            raise
+        finally:
+            active_agent_stream_cancel.reset(token)
 
 
 def _dispatch_system_event(state, runtime) -> dict[str, Any] | None:
+    context = _context(runtime.context)
+    cancel = active_agent_stream_cancel.get() or Event()
+    token = active_agent_stream_cancel.set(cancel)
+    timer = None
+    if context is not None and context.system_deadline_at is not None:
+        remaining = context.system_deadline_at - time.time()
+        if remaining <= 0:
+            cancel.set()
+        else:
+            timer = Timer(remaining, cancel.set)
+            timer.daemon = True
+            timer.start()
+    try:
+        check_agent_execution_active()
+        return _dispatch_active_system_event(state, runtime)
+    except AgentStreamInterrupted as error:
+        # Agent Server handles Exception/CancelledError as terminal run states;
+        # the stream's BaseException stop sentinel must not escape its worker.
+        if (
+            context is not None
+            and context.system_deadline_at is not None
+            and time.time() >= context.system_deadline_at
+        ):
+            raise AgentRuntimeBoundaryTimeout(
+                "Agent Runtime boundary deadline reached"
+            ) from error
+        raise asyncio.CancelledError("Agent Runtime boundary interrupted") from error
+    finally:
+        if timer is not None:
+            timer.cancel()
+        active_agent_stream_cancel.reset(token)
+
+
+def _dispatch_active_system_event(state, runtime) -> dict[str, Any] | None:
     _ = state
     context = _context(runtime.context)
     if context is None or not context.system_boundary_name or not context.system_event:
@@ -87,6 +138,7 @@ def _dispatch_system_event(state, runtime) -> dict[str, Any] | None:
                 pass
         raise
     with activate_repository_backend(backend):
+        check_agent_execution_active()
         invoke_boundary(
             context.system_boundary_name,
             dict(context.system_event),

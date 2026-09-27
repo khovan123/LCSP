@@ -89,6 +89,11 @@ export class AssessmentPipelineReconciliationService
       );
       const quietBefore = new Date(now.getTime() - quietPeriodMs);
       const eligibleAssessment: Prisma.AssessmentWhereInput = {
+        billingPauses: {
+          none: {
+            OR: [{ resumedAt: null }, { resumedAt: { gt: quietBefore } }],
+          },
+        },
         status: {
           notIn: [...FINISHED_ASSESSMENT_STATUSES].map(
             toPrismaAssessmentStatus,
