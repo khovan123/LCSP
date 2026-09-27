@@ -12,6 +12,10 @@ test("expired API sessions redirect refresh flows back to sign-in with next path
   assert.equal(isExpiredSessionProblem(AUTH_ERROR_CODES.authRequired), true);
   assert.equal(isExpiredSessionProblem(AUTH_ERROR_CODES.sessionInvalid), true);
   assert.equal(
+    isExpiredSessionProblem(AUTH_ERROR_CODES.accountSuspended),
+    true,
+  );
+  assert.equal(
     isExpiredSessionProblem(undefined, REQUIRED_ACTIONS.signIn),
     true,
   );
