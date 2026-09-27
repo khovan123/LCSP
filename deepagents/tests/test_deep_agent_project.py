@@ -140,11 +140,12 @@ def test_agent_project_separates_authored_tools_from_runtime() -> None:
 def test_all_former_consumers_remain_internal_agent_runtime_invocation_boundaries() -> None:
     manifest = invocation_boundary_manifest()
 
-    assert len(manifest) == 20
+    assert len(manifest) == 21
     assert {entry["name"] for entry in manifest} >= {
         "scan_requested",
         "engineering_assessment_requested",
         "assessment_interview_resume_requested",
+        "assessment_interview_pause_requested",
         "legal_rule_triage_requested",
         "legal_change_detection_requested",
         "agent_runtime_health_requested",

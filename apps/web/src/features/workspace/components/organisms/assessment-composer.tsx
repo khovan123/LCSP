@@ -2,6 +2,8 @@
 
 import { resolveMessage } from "@lcsp/i18n";
 import {
+  CirclePlayIcon,
+  CircleStopIcon,
   CornerDownLeftIcon,
   Maximize2Icon,
   Minimize2Icon,
@@ -43,6 +45,14 @@ type AssessmentComposerProps = {
   submitReady?: boolean;
   resumeAvailable?: boolean;
   className?: string;
+  /** An agent turn is currently running: replaces send with a stop button. */
+  turnRunning?: boolean;
+  /** The running turn was cooperatively stopped: replaces stop with play. */
+  turnPaused?: boolean;
+  onInterruptTurn?: () => void;
+  onResumeTurn?: () => void;
+  interruptingTurn?: boolean;
+  resumingTurn?: boolean;
 };
 
 export function AssessmentComposer({
@@ -59,6 +69,12 @@ export function AssessmentComposer({
   submitReady,
   resumeAvailable = false,
   className,
+  turnRunning = false,
+  turnPaused = false,
+  onInterruptTurn,
+  onResumeTurn,
+  interruptingTurn = false,
+  resumingTurn = false,
 }: AssessmentComposerProps) {
   const [expanded, setExpanded] = useState(false);
   const [canResize, setCanResize] = useState(false);
@@ -102,6 +118,10 @@ export function AssessmentComposer({
   const sendDisabled = disabled || submitting || !isSubmitReady;
   const showResumeAction = resumeAvailable && value.trim().length === 0;
   const resumeDisabled = resuming || !onResume;
+  const stopTurnLabel = t("pages.appShell.chatStopTurn");
+  const resumeTurnLabel = t("pages.appShell.chatResumeTurn");
+  const interruptTurnDisabled = interruptingTurn || !onInterruptTurn;
+  const resumeTurnDisabled = resumingTurn || !onResumeTurn;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -118,6 +138,20 @@ export function AssessmentComposer({
     }
     onResume?.();
     setExpanded(false);
+  }
+
+  function handleInterruptTurn() {
+    if (interruptTurnDisabled) {
+      return;
+    }
+    onInterruptTurn?.();
+  }
+
+  function handleResumeTurn() {
+    if (resumeTurnDisabled) {
+      return;
+    }
+    onResumeTurn?.();
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -198,7 +232,22 @@ export function AssessmentComposer({
           </TooltipContent>
         </Tooltip>
       ) : null}
-      {showResumeAction ? (
+      {turnRunning || turnPaused ? (
+        <Button
+          type="button"
+          size="icon"
+          disabled={turnPaused ? resumeTurnDisabled : interruptTurnDisabled}
+          aria-label={turnPaused ? resumeTurnLabel : stopTurnLabel}
+          onClick={turnPaused ? handleResumeTurn : handleInterruptTurn}
+          className="absolute bottom-2 right-3 size-8 rounded-full bg-transparent text-foreground hover:bg-accent disabled:bg-transparent"
+        >
+          {turnPaused ? (
+            <CirclePlayIcon aria-hidden="true" />
+          ) : (
+            <CircleStopIcon aria-hidden="true" />
+          )}
+        </Button>
+      ) : showResumeAction ? (
         <Button
           type="button"
           size="sm"

@@ -36,6 +36,15 @@ class AgentServerRunError(NonRetryableAgentBoundaryError):
         super().__init__(f"{self.remote_error_type}: {self.remote_message}")
 
 
+# Boundaries whose command only signals a cooperative interrupt of another
+# boundary's already-active run. These must never create their own Agent Server
+# run: with multitask_strategy="enqueue" that run would simply queue behind the
+# very run it exists to stop, arriving only after that run already finished.
+_INTERRUPT_TARGET_BOUNDARY_BY_COMMAND_BOUNDARY: dict[str, str] = {
+    "assessment_interview_pause_requested": "assessment_interview_resume_requested",
+}
+
+
 def dispatch_agent_runtime_event(
     boundary_name: str,
     message: dict[str, Any],
@@ -49,6 +58,13 @@ def dispatch_agent_runtime_event(
     runs.wait request. This exposes scheduler delay, detects terminal errors
     promptly, and lets the boundary deadline interrupt the actual LangGraph run.
     """
+    interrupt_target = _INTERRUPT_TARGET_BOUNDARY_BY_COMMAND_BOUNDARY.get(
+        boundary_name
+    )
+    if interrupt_target is not None:
+        interrupt_agent_runtime_run(interrupt_target, message, correlation_id)
+        return {"status": "interrupt_requested"}
+
     thread_id = agent_thread_id(boundary_name, message, correlation_id)
     assessment_id = _find_text(message, "assessmentId", "assessment_id")
     workflow_run_id = _find_text(
@@ -138,6 +154,26 @@ def dispatch_agent_runtime_event(
         },
     )
 
+    return _poll_run_until_terminal(
+        client,
+        thread_id=thread_id,
+        run_id=run_id,
+        run=run,
+        observer=observer,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def _poll_run_until_terminal(
+    client: Any,
+    *,
+    thread_id: str,
+    run_id: str,
+    run: Mapping[str, Any],
+    observer: "_ScanRunObserver",
+    timeout_seconds: float | None,
+) -> Any:
+    """Poll a created/reused run to a terminal state and return its result values."""
     deadline_seconds = (
         timeout_seconds
         if timeout_seconds is not None and timeout_seconds > 0
@@ -238,6 +274,112 @@ def dispatch_agent_runtime_event(
     result = state.get("values", state) if isinstance(state, Mapping) else state
     _raise_for_agent_server_error(result)
     return result
+
+
+def interrupt_agent_runtime_run(
+    boundary_name: str,
+    message: dict[str, Any],
+    correlation_id: str,
+) -> None:
+    """Cooperatively interrupt the active run for this boundary's thread, if any.
+
+    Fire-and-forget: ``action="interrupt"`` never deletes checkpoints, so the
+    LangGraph checkpointer keeps the state as of the last completed superstep
+    and the thread stays resumable via :func:`resume_agent_runtime_run`. A race
+    where the turn already finished before this call lands is not an error.
+    """
+    thread_id = agent_thread_id(boundary_name, message, correlation_id)
+    client = get_sync_client(
+        url=os.getenv("LCSP_AGENT_SERVER_URL", DEFAULT_AGENT_SERVER_URL),
+        timeout=30,
+    )
+    run = _find_active_thread_run(client, thread_id, boundary_name)
+    if run is None:
+        return
+    run_id = _find_text(run, "run_id", "runId")
+    if not run_id:
+        return
+    client.runs.cancel(thread_id, run_id, wait=False, action="interrupt")
+
+
+def resume_agent_runtime_run(
+    boundary_name: str,
+    message: dict[str, Any],
+    correlation_id: str,
+    *,
+    timeout_seconds: float | None = None,
+) -> dict[str, Any] | list[dict[str, Any]]:
+    """Continue a previously interrupted run from its last checkpoint.
+
+    Recomputes the same deterministic thread id and creates a new run with no
+    new input, so the graph resumes purely from checkpointed state (LangGraph's
+    standard resume idiom) instead of appending another turn.
+    """
+    thread_id = agent_thread_id(boundary_name, message, correlation_id)
+    assessment_id = _find_text(message, "assessmentId", "assessment_id")
+    workflow_run_id = _find_text(
+        message,
+        "workflowRunId",
+        "workflow_run_id",
+        "runId",
+        "run_id",
+        "scanJobId",
+        "scan_job_id",
+    )
+    context = {
+        "assessment_id": assessment_id,
+        "workflow_run_id": workflow_run_id,
+        "thread_id": thread_id,
+        "snapshot_id": _find_text(message, "snapshotId", "snapshot_id"),
+        "scan_job_id": _find_text(message, "scanJobId", "scan_job_id"),
+        "commit_sha": _find_text(message, "commitSha", "commit_sha"),
+        "correlation_id": correlation_id,
+        "system_boundary_name": boundary_name,
+        "system_event": message,
+        "repository_path": "/",
+    }
+    client = get_sync_client(
+        url=os.getenv("LCSP_AGENT_SERVER_URL", DEFAULT_AGENT_SERVER_URL),
+        timeout=30,
+    )
+    run = client.runs.create(
+        thread_id,
+        os.getenv("LCSP_AGENT_ASSISTANT_ID", DEFAULT_ASSISTANT_ID),
+        input=None,
+        context=context,
+        metadata={
+            "lcsp_boundary_name": boundary_name,
+            "correlation_id": correlation_id,
+            "assessment_id": assessment_id,
+        },
+        multitask_strategy="enqueue",
+        on_completion="keep",
+    )
+    run_id = _find_text(run, "run_id", "runId")
+    if not run_id:
+        raise AgentServerRunError(
+            "AgentServerRunCreateError",
+            "Agent Server did not return a run id",
+        )
+
+    observer = _ScanRunObserver(message)
+    observer.emit(
+        event_type="TOOL_STARTED",
+        run_status="RUNNING",
+        summary="LangGraph repository run resumed from checkpoint",
+        output_summary={
+            "runId": run_id,
+            "schedulerState": _run_status(run, "pending"),
+        },
+    )
+    return _poll_run_until_terminal(
+        client,
+        thread_id=thread_id,
+        run_id=run_id,
+        run=run,
+        observer=observer,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 class _ScanRunObserver:
@@ -482,5 +624,7 @@ __all__ = [
     "AgentServerRunError",
     "agent_thread_id",
     "dispatch_agent_runtime_event",
+    "interrupt_agent_runtime_run",
     "reconcile_stale_agent_runs",
+    "resume_agent_runtime_run",
 ]

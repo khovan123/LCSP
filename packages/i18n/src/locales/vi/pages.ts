@@ -154,6 +154,8 @@ export const viPages = {
     chatTranscriptLabel: "Hội thoại assessment",
     chatComposerPlaceholder: "Nhắn cho LCSP",
     chatSend: "Gửi tin nhắn",
+    chatStopTurn: "Dừng",
+    chatResumeTurn: "Tiếp tục",
     chatExpand: "Mở rộng ô soạn thảo",
     chatCollapse: "Thu gọn ô soạn thảo",
     chatShowMore: "Xem thêm",

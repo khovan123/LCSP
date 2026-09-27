@@ -10,10 +10,14 @@ from time import monotonic
 
 from langchain_core.messages import AIMessageChunk, ToolMessage
 
+import pytest
+
 from orchestration.agent_stream import (
     AGENT_STREAM_STAGES,
+    AgentStreamInterrupted,
     AgentStreamSession,
     BufferedAgentStreamEmitter,
+    active_agent_stream_cancel,
     activate_agent_stream,
     agent_stream_stage,
     invoke_graph_with_stream,
@@ -720,3 +724,54 @@ def test_rule_scope_reports_failed_and_waiting_rules():
 
     statuses = [event["status"] for event in events]
     assert statuses == ["RUNNING", "FAILED", "RUNNING", "WAITING"]
+
+
+def test_invoke_with_stream_raises_agent_stream_interrupted_when_cancel_is_set():
+    """A nested boundary call stops cooperatively, not with a generic failure.
+
+    local_server.py binds active_agent_stream_cancel around its own
+    graph.stream(...) loop so this reaches whichever invoke_with_stream call is
+    actually iterating the real per-turn reasoning loop, however deep it is.
+    """
+    cancel_event = Event()
+    cancel_event.set()
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        token = active_agent_stream_cancel.set(cancel_event)
+        try:
+            with pytest.raises(AgentStreamInterrupted):
+                invoke_with_stream(FakeAgent(), {"messages": []})
+        finally:
+            active_agent_stream_cancel.reset(token)
+
+    assert events[-1]["event_type"] == "AGENT_FAILED"
+    assert events[-1]["data"]["reasonCode"] == "CUSTOMER_REQUESTED_STOP"
+
+
+def test_invoke_with_stream_ignores_an_unset_cancel_event():
+    cancel_event = Event()
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        token = active_agent_stream_cancel.set(cancel_event)
+        try:
+            result = invoke_with_stream(FakeAgent(), {"messages": []})
+        finally:
+            active_agent_stream_cancel.reset(token)
+
+    assert result == {"result": "done"}
+
+
+def test_invoke_graph_with_stream_raises_agent_stream_interrupted_when_cancel_is_set():
+    cancel_event = Event()
+    cancel_event.set()
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        token = active_agent_stream_cancel.set(cancel_event)
+        try:
+            with pytest.raises(AgentStreamInterrupted):
+                invoke_graph_with_stream(FakeGraph(), {"input": True})
+        finally:
+            active_agent_stream_cancel.reset(token)
+
+    assert events[-1]["event_type"] == "AGENT_FAILED"
+    assert events[-1]["data"]["reasonCode"] == "CUSTOMER_REQUESTED_STOP"

@@ -26,9 +26,11 @@ import {
   useAssessmentInterviewBlockedActionMutation,
   useAssessmentInterviewStateQuery,
   useContinueAssessmentPipelineMutation,
+  useInterruptAssessmentInterviewMutation,
   useProgramEvidenceGraphOverviewQuery,
   useReadinessStatusQuery,
   useRerunRepositoryScanMutation,
+  useResumeAssessmentInterviewMutation,
   useSubmitAssessmentInterviewAnswerMutation,
   useSubmitAssessmentPostFindingDecisionMutation,
 } from "@/lib/api/assessment-queries";
@@ -44,7 +46,12 @@ import {
 import { useAssessmentRuntimeViewModel } from "../../hooks/use-assessment-runtime-view-model";
 import type { AssessmentOverviewProps } from "../../types/assessment-overview.types";
 import { RUNTIME_THINKING_PHASES } from "../../types/workspace-runtime.types";
-import { groupAgentStreamEventsByStage } from "../../utils/agent-stream-stages";
+import {
+  deriveLatestAgentStreamTurnState,
+  groupAgentStreamEventsByRun,
+  groupAgentStreamEventsByStage,
+  interleaveInterviewTranscript,
+} from "../../utils/agent-stream-stages";
 import {
   selectComposerAvailability,
   selectCustomerActions,
@@ -273,12 +280,23 @@ function AssessmentInterviewFlow({
     () => groupAgentStreamEventsByStage(liveTimeline.agentStreamEvents ?? []),
     [liveTimeline.agentStreamEvents],
   );
+  const interviewTurnState = useMemo(
+    () =>
+      deriveLatestAgentStreamTurnState(
+        stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.interview],
+      ),
+    [stageEvents],
+  );
   const runtimeInterviewState = interviewQuery.data;
   const interviewTurnTimestamp = normalized.identity.audit?.timestamp;
   const submitAnswer = useSubmitAssessmentInterviewAnswerMutation(assessmentId);
   const recordBlockedAction =
     useAssessmentInterviewBlockedActionMutation(assessmentId);
   const continuePipeline = useContinueAssessmentPipelineMutation(assessmentId);
+  const interruptInterviewTurn =
+    useInterruptAssessmentInterviewMutation(assessmentId);
+  const resumeInterviewTurn =
+    useResumeAssessmentInterviewMutation(assessmentId);
   const submitPostFindingDecision =
     useSubmitAssessmentPostFindingDecisionMutation(assessmentId);
 
@@ -385,6 +403,36 @@ function AssessmentInterviewFlow({
   }
 
   const answerHistory = interview.answerHistory;
+  const interviewTranscript = useMemo(
+    () =>
+      interleaveInterviewTranscript(answerHistory, [
+        {
+          stage: ASSESSMENT_AGENT_STREAM_STAGES.interview,
+          groups: groupAgentStreamEventsByRun(
+            stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.interview],
+          ),
+        },
+        {
+          stage: ASSESSMENT_AGENT_STREAM_STAGES.planner,
+          groups: groupAgentStreamEventsByRun(
+            stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.planner],
+          ),
+        },
+        {
+          stage: ASSESSMENT_AGENT_STREAM_STAGES.investigate,
+          groups: groupAgentStreamEventsByRun(
+            stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.investigate],
+          ),
+        },
+        {
+          stage: ASSESSMENT_AGENT_STREAM_STAGES.gate,
+          groups: groupAgentStreamEventsByRun(
+            stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.gate],
+          ),
+        },
+      ]),
+    [answerHistory, stageEvents],
+  );
   const autoScrollKey = [
     assessmentId,
     runtimeKey,
@@ -601,40 +649,27 @@ function AssessmentInterviewFlow({
 
         {interviewEnabled ? (
           <>
-            {answerHistory.map((answer) => (
-              <InterviewAnswerHistory
-                key={`${answer.questionId}:${answer.answeredAt}`}
-                answer={answer}
-              />
-            ))}
-
-            <AgentStreamTimeline
-              events={
-                stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.interview]
-              }
-            />
+            {interviewTranscript.map((segment) =>
+              segment.kind === "answer" ? (
+                <InterviewAnswerHistory
+                  key={`answer:${segment.answer.questionId}:${segment.answer.answeredAt}`}
+                  answer={segment.answer}
+                />
+              ) : (
+                <AgentStreamTimeline
+                  key={`activity:${segment.stage}:${segment.runId}`}
+                  events={segment.events}
+                  activeRunId={segment.runId}
+                />
+              ),
+            )}
 
             {plannerThinkingItems.map((item) => (
               <RuntimeThinkingActivity key={item.id} item={item} />
             ))}
-            <AgentStreamTimeline
-              events={
-                stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.planner]
-              }
-            />
-
             {investigatorThinkingItems.map((item) => (
               <RuntimeThinkingActivity key={item.id} item={item} />
             ))}
-            <AgentStreamTimeline
-              events={
-                stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.investigate]
-              }
-            />
-
-            <AgentStreamTimeline
-              events={stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.gate]}
-            />
             <AgentStreamTimeline events={stageEvents.unstaged} />
 
             {interview.questionTurnProps ? (
@@ -817,6 +852,12 @@ function AssessmentInterviewFlow({
         onValueChange={handleComposerValueChange}
         onSubmit={handleSubmit}
         onResume={handleContinuePipeline}
+        turnRunning={interviewTurnState === "running"}
+        turnPaused={interviewTurnState === "paused"}
+        onInterruptTurn={() => interruptInterviewTurn.mutate()}
+        onResumeTurn={() => resumeInterviewTurn.mutate()}
+        interruptingTurn={interruptInterviewTurn.isPending}
+        resumingTurn={resumeInterviewTurn.isPending}
       />
     </main>
   );

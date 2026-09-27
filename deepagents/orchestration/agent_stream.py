@@ -227,6 +227,22 @@ active_agent_stream_stage: ContextVar[str | None] = ContextVar(
 active_agent_stream_rule: ContextVar[str | None] = ContextVar(
     "active_agent_stream_rule", default=None
 )
+# Set by the Agent Server run loop (local_server.py) around graph.stream(...) so a
+# customer-requested stop reaches whichever nested invoke_with_stream call is
+# currently iterating its own model/tool stream, however deep the boundary handler
+# call stack goes, without threading a cancel parameter through every call site.
+active_agent_stream_cancel: ContextVar[Event | None] = ContextVar(
+    "active_agent_stream_cancel", default=None
+)
+
+
+class AgentStreamInterrupted(BaseException):
+    """Cooperative stop requested mid-stream; not a failure.
+
+    Subclasses BaseException, like TargetedInterviewPending elsewhere in this
+    codebase, so it is never swallowed by an ``except Exception`` handler in a
+    boundary handler and reaches the Agent Server run loop that owns run status.
+    """
 
 
 @contextmanager
@@ -548,6 +564,7 @@ def _invoke_with_stream(
     )
 
     final = _FinalValues()
+    cancel_event = active_agent_stream_cancel.get()
     try:
         stream_kwargs: dict[str, Any] = {
             "stream_mode": list(STREAM_MODES),
@@ -559,6 +576,17 @@ def _invoke_with_stream(
         if context is not None:
             stream_kwargs["context"] = context
         for chunk in agent.stream(input_value, **stream_kwargs):
+            if cancel_event is not None and cancel_event.is_set():
+                publish_agent_stream_event(
+                    "AGENT_FAILED",
+                    agent_name=resolved_name,
+                    status="FAILED",
+                    text="agent turn stopped by customer request",
+                    data={"reasonCode": "CUSTOMER_REQUESTED_STOP"},
+                )
+                raise AgentStreamInterrupted(
+                    "agent stream cooperatively interrupted"
+                )
             if not isinstance(chunk, dict):
                 continue
             mode = _text(chunk.get("type"))
@@ -649,6 +677,7 @@ def _invoke_graph_with_stream(
         return graph.invoke(input_value, config)
 
     final = _FinalValues()
+    cancel_event = active_agent_stream_cancel.get()
     publish_agent_stream_event(
         "AGENT_STARTED",
         agent_name=graph_name,
@@ -663,6 +692,17 @@ def _invoke_graph_with_stream(
             subgraphs=True,
             version="v2",
         ):
+            if cancel_event is not None and cancel_event.is_set():
+                publish_agent_stream_event(
+                    "AGENT_FAILED",
+                    agent_name=graph_name,
+                    status="FAILED",
+                    text="agent turn stopped by customer request",
+                    data={"kind": "workflow", "reasonCode": "CUSTOMER_REQUESTED_STOP"},
+                )
+                raise AgentStreamInterrupted(
+                    "agent stream cooperatively interrupted"
+                )
             if not isinstance(chunk, dict):
                 continue
             mode = _text(chunk.get("type"))
@@ -1742,11 +1782,13 @@ def install_agent_stream_log_handler() -> None:
 
 __all__ = [
     "AGENT_STREAM_STAGES",
+    "AgentStreamInterrupted",
     "AgentStreamRuleScope",
     "AgentStreamSession",
     "BufferedAgentStreamEmitter",
     "activate_agent_stream",
     "active_agent_stream",
+    "active_agent_stream_cancel",
     "active_agent_stream_rule",
     "active_agent_stream_stage",
     "agent_stream_rule_scope",

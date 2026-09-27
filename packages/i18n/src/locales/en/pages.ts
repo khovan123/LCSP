@@ -152,6 +152,8 @@ export const enPages = {
     chatTranscriptLabel: "Assessment conversation",
     chatComposerPlaceholder: "Message LCSP",
     chatSend: "Send message",
+    chatStopTurn: "Stop",
+    chatResumeTurn: "Resume",
     chatExpand: "Expand editor",
     chatCollapse: "Collapse editor",
     chatShowMore: "Show more",

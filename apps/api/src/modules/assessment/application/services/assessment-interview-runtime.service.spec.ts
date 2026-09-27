@@ -1788,6 +1788,91 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
     });
   });
 
+  describe("pauseActiveTurn", () => {
+    const actor = {
+      userId: "user-1",
+      sessionId: "session-1",
+      role: AUTH_USER_ROLES.customer,
+      scope: "assessment:assessment-1",
+    };
+
+    it("enqueues a pause command carrying the active thread's workflow run id", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
+        assessmentId: "assessment-1",
+        contextRevision: 2,
+        processedRevision: 1,
+        activeQuestionId: "q-1",
+        stateJson: {
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+          contextRevision: 2,
+        },
+        privateContextJson: {
+          revisions: [],
+          workflowRunId: "10000000-0000-4000-8000-000000000001",
+        },
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+      });
+
+      await service.pauseActiveTurn({
+        assessmentId: "assessment-1",
+        actor,
+        correlationId: "corr-pause-1",
+      });
+
+      expect(mockOutboxRepository.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: ASSESSMENT_EVENT_TYPES.interviewAgentPauseRequestedOutbox,
+          payload: expect.objectContaining({
+            assessmentId: "assessment-1",
+            workflowRunId: "10000000-0000-4000-8000-000000000001",
+          }),
+        }),
+        mockTx,
+      );
+    });
+
+    it("still enqueues the pause command when no Interview thread exists yet", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(null);
+
+      await service.pauseActiveTurn({
+        assessmentId: "assessment-1",
+        actor,
+        correlationId: "corr-pause-2",
+      });
+
+      expect(mockOutboxRepository.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: ASSESSMENT_EVENT_TYPES.interviewAgentPauseRequestedOutbox,
+          payload: expect.objectContaining({
+            assessmentId: "assessment-1",
+          }),
+        }),
+        mockTx,
+      );
+      const [enqueuedPayload] = mockOutboxRepository.enqueue.mock.calls[0];
+      expect(
+        (enqueuedPayload as { payload: Record<string, unknown> }).payload,
+      ).not.toHaveProperty("workflowRunId");
+    });
+
+    it("rejects a customer pausing an assessment they do not own", async () => {
+      mockTx.assessment.findUnique.mockResolvedValueOnce({
+        id: "assessment-1",
+        ownerId: "someone-else",
+      });
+
+      await expect(
+        service.pauseActiveTurn({
+          assessmentId: "assessment-1",
+          actor,
+          correlationId: "corr-pause-3",
+        }),
+      ).rejects.toBeDefined();
+      expect(mockOutboxRepository.enqueue).not.toHaveBeenCalled();
+    });
+  });
+
   describe("registerPlannerContextNeedForWorker", () => {
     const plannerNeed = {
       actorId: "user-1",

@@ -143,6 +143,26 @@ function toCustomerAnswer(
   };
 }
 
+/** Cooperatively interrupt whatever Interview turn is currently running. */
+export async function pauseAssessmentInterviewTurn(assessmentId: string) {
+  return apiJson<{ paused: boolean }>(
+    `/api/assessments/${encodeURIComponent(assessmentId)}/interview/pause`,
+    { method: "POST" },
+  );
+}
+
+/** Continue an Interview turn previously stopped with pauseAssessmentInterviewTurn. */
+export async function resumeAssessmentInterviewTurn(assessmentId: string) {
+  return apiJson<AssessmentInterviewRuntimeState>(
+    `/api/assessments/${encodeURIComponent(assessmentId)}/interview/resume`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    },
+  );
+}
+
 export async function recordAssessmentInterviewBlockedAction(
   assessmentId: string,
   input: AssessmentInterviewBlockedInput,

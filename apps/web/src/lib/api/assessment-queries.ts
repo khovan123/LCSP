@@ -13,7 +13,9 @@ import {
   buildSubmitInterviewAnswerCommand,
   continueAssessmentPipeline,
   getAssessmentInterviewState,
+  pauseAssessmentInterviewTurn,
   recordAssessmentInterviewBlockedAction,
+  resumeAssessmentInterviewTurn,
   submitAssessmentInterviewAnswer,
   submitAssessmentPostFindingDecision,
 } from "./assessment-interview-client";
@@ -108,6 +110,32 @@ export function useAssessmentInterviewBlockedActionMutation(
   return useMutation({
     mutationFn: (input: AssessmentInterviewBlockedInput) =>
       recordAssessmentInterviewBlockedAction(assessmentId, input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: apiQueryKeys.assessment.interview(assessmentId),
+      });
+    },
+  });
+}
+
+export function useInterruptAssessmentInterviewMutation(assessmentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => pauseAssessmentInterviewTurn(assessmentId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: apiQueryKeys.assessment.interview(assessmentId),
+      });
+    },
+  });
+}
+
+export function useResumeAssessmentInterviewMutation(assessmentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => resumeAssessmentInterviewTurn(assessmentId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: apiQueryKeys.assessment.interview(assessmentId),

@@ -8,4 +8,6 @@ export const ASSESSMENT_EVENT_TYPES = {
   aiNotDetected: "ASSESSMENT_AI_NOT_DETECTED",
   interviewAgentResumeRequestedOutbox:
     "command.assessment-interview.resume-agent.v1",
+  interviewAgentPauseRequestedOutbox:
+    "command.assessment-interview.pause-agent.v1",
 } as const;

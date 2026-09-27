@@ -178,6 +178,8 @@ export type PagesMessages = {
     chatTranscriptLabel: string;
     chatComposerPlaceholder: string;
     chatSend: string;
+    chatStopTurn: string;
+    chatResumeTurn: string;
     chatExpand: string;
     chatCollapse: string;
     chatShowMore: string;

@@ -287,8 +287,28 @@ export class AssessmentController {
         actor: request.rbacContext,
         correlationId: request.correlationId ?? "worker-interview-context",
         resume: body as never,
+        // The customer reaches this route by clicking Resume, which covers a
+        // worker-crash stall exactly as well as a turn they cooperatively
+        // paused themselves (pauseActiveTurn never reports FAILED progress,
+        // so the strict turnFailed check alone would 409 a paused turn).
+        allowStalled: true,
       }),
     );
+  }
+
+  @Post(":assessmentId/interview/pause")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
+  async pauseInterviewTurn(
+    @Param("assessmentId") assessmentId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    await this.interviewRuntime.pauseActiveTurn({
+      assessmentId,
+      actor: request.rbacContext,
+      correlationId: request.correlationId ?? "worker-interview-context",
+    });
+    return resultEnvelope({ paused: true });
   }
 
   @Post(":assessmentId/pipeline/continue")

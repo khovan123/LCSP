@@ -30,6 +30,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from tools.common.capabilities.platform.graph_runtime import checkpoint_database_url
+from orchestration.agent_stream import AgentStreamInterrupted, active_agent_stream_cancel
 
 
 DEFAULT_ASSISTANT_ID = "lcsp-agent"
@@ -46,6 +47,7 @@ class LocalAgentRuntime:
         self._locks: dict[str, threading.Lock] = {}
         self._runs: dict[tuple[str, str], dict[str, Any]] = {}
         self._run_futures: dict[tuple[str, str], Future[None]] = {}
+        self._cancel_events: dict[tuple[str, str], threading.Event] = {}
         self._lock = threading.Lock()
         self._executor = ThreadPoolExecutor(
             max_workers=_run_worker_count(),
@@ -124,6 +126,7 @@ class LocalAgentRuntime:
         key = (thread_id, run_id)
         with self._lock:
             self._runs[key] = run
+            self._cancel_events[key] = threading.Event()
         future = self._executor.submit(
             self._execute_run,
             thread_id,
@@ -139,18 +142,38 @@ class LocalAgentRuntime:
             run = self._runs.get((thread_id, run_id))
             return dict(run) if run is not None else None
 
+    def list_runs(self, thread_id: str) -> list[dict[str, Any]]:
+        """Return this thread's runs, newest first (mirrors the LangGraph SDK shape)."""
+        with self._lock:
+            runs = [
+                dict(run)
+                for (run_thread_id, _run_id), run in self._runs.items()
+                if run_thread_id == thread_id
+            ]
+        runs.sort(key=lambda run: str(run.get("created_at") or ""), reverse=True)
+        return runs
+
     def cancel_run(self, thread_id: str, run_id: str) -> dict[str, Any] | None:
-        """Cancel a queued run when possible and record requests for active runs."""
+        """Cancel a queued run immediately, or signal an in-flight run to stop.
+
+        A run already inside ``graph.stream(...)`` cannot be killed outright without
+        corrupting graph state, so this sets a cooperative cancel event that
+        ``_run_graph`` checks between completed supersteps (the same points the
+        checkpointer already persists to), leaving the thread cleanly resumable.
+        """
         key = (thread_id, run_id)
         with self._lock:
             run = self._runs.get(key)
             future = self._run_futures.get(key)
+            cancel_event = self._cancel_events.get(key)
             if run is None:
                 return None
         if future is not None and future.cancel():
             self._set_run_status(thread_id, run_id, "interrupted")
             self._set_thread_status(thread_id, "idle")
         else:
+            if cancel_event is not None:
+                cancel_event.set()
             with self._lock:
                 current = self._runs.get(key)
                 if current is not None:
@@ -159,6 +182,26 @@ class LocalAgentRuntime:
         return self.get_run(thread_id, run_id)
 
     def wait_for_run(self, thread_id: str, payload: Mapping[str, Any]) -> Any:
+        """Synchronous SDK-compatible wait. No run id is tracked on this path, so
+        it cannot be cancelled mid-flight — only the async create/poll/cancel path
+        (``create_run``/``_execute_run``) supports cooperative interruption."""
+        result, _interrupted = self._run_graph(thread_id, payload, cancel_event=None)
+        return _json_ready(result)
+
+    def _run_graph(
+        self,
+        thread_id: str,
+        payload: Mapping[str, Any],
+        *,
+        cancel_event: threading.Event | None,
+    ) -> tuple[Any, bool]:
+        """Run, or resume, the graph for one turn.
+
+        Streams by superstep instead of a single blocking ``invoke`` so a set
+        ``cancel_event`` can stop execution between completed nodes — the same
+        points the checkpointer persists to, so the thread is always left in a
+        cleanly resumable state. Returns ``(last_state, interrupted)``.
+        """
         self.create_thread({"thread_id": thread_id, "if_exists": "do_nothing"})
         lock = self._thread_lock(thread_id)
         with lock:
@@ -168,27 +211,60 @@ class LocalAgentRuntime:
                 context = payload.get("context")
                 if not isinstance(context, Mapping):
                     context = {}
-                graph_input = payload.get("input")
                 config = _runtime_config(
                     thread_id,
                     payload.get("config"),
                     payload.get("metadata"),
                     context,
                 )
+                graph_input = payload.get("input")
+                if graph_input is None:
+                    # No new input: resume from the checkpoint only if there is
+                    # pending work, else this is a harmless no-op turn.
+                    pending = graph.get_state(config)
+                    if not getattr(pending, "next", None):
+                        graph_input = {}
                 try:
-                    result = graph.invoke(
+                    stream = graph.stream(
                         graph_input,
                         config=config,
                         context=dict(context),
+                        stream_mode="values",
                     )
                 except TypeError as exc:
                     if "context" not in str(exc):
                         raise
-                    result = graph.invoke(graph_input, config=config)
+                    stream = graph.stream(
+                        graph_input, config=config, stream_mode="values"
+                    )
+                interrupted = False
+                last_chunk: Any = None
+                # Bind the cancel event as the ambient signal so a nested
+                # invoke_with_stream call deep inside a boundary handler (where the
+                # real per-turn reasoning loop actually runs) can observe it too —
+                # this outer loop only ever yields once per root-graph superstep,
+                # which in practice wraps one whole boundary dispatch.
+                cancel_token = (
+                    active_agent_stream_cancel.set(cancel_event)
+                    if cancel_event is not None
+                    else None
+                )
+                try:
+                    try:
+                        for chunk in stream:
+                            last_chunk = chunk
+                            if cancel_event is not None and cancel_event.is_set():
+                                interrupted = True
+                                break
+                    except AgentStreamInterrupted:
+                        interrupted = True
+                finally:
+                    if cancel_token is not None:
+                        active_agent_stream_cancel.reset(cancel_token)
                 snapshot = graph.get_state(config)
                 values = dict(getattr(snapshot, "values", {}) or {})
                 self._update_thread_values(thread_id, values)
-                return _json_ready(result)
+                return last_chunk, interrupted
             finally:
                 self._set_thread_status(thread_id, "idle")
 
@@ -199,8 +275,13 @@ class LocalAgentRuntime:
         payload: Mapping[str, Any],
     ) -> None:
         self._set_run_status(thread_id, run_id, "running")
+        key = (thread_id, run_id)
+        with self._lock:
+            cancel_event = self._cancel_events.get(key)
         try:
-            self.wait_for_run(thread_id, payload)
+            _result, interrupted = self._run_graph(
+                thread_id, payload, cancel_event=cancel_event
+            )
         except Exception as exc:
             logger.exception(
                 "LCSP local Agent Server asynchronous run failed",
@@ -210,7 +291,9 @@ class LocalAgentRuntime:
             self._set_thread_status(thread_id, "error")
             self._set_run_status(thread_id, run_id, "error")
             return
-        self._set_run_status(thread_id, run_id, "success")
+        self._set_run_status(
+            thread_id, run_id, "interrupted" if interrupted else "success"
+        )
 
     def get_state(self, thread_id: str) -> dict[str, Any]:
         self.create_thread({"thread_id": thread_id, "if_exists": "do_nothing"})
@@ -384,6 +467,12 @@ async def create_run(request: Request) -> JSONResponse:
     return JSONResponse(_json_ready(runtime.create_run(thread_id, payload)))
 
 
+async def list_runs(request: Request) -> JSONResponse:
+    runtime: LocalAgentRuntime = request.app.state.runtime
+    thread_id = request.path_params["thread_id"]
+    return JSONResponse(_json_ready(runtime.list_runs(thread_id)))
+
+
 async def get_run(request: Request) -> JSONResponse:
     runtime: LocalAgentRuntime = request.app.state.runtime
     thread_id = request.path_params["thread_id"]
@@ -418,6 +507,7 @@ app = Starlette(
         Route("/threads", create_thread, methods=["POST"]),
         Route("/threads/{thread_id}", get_thread, methods=["GET"]),
         Route("/threads/{thread_id}/runs", create_run, methods=["POST"]),
+        Route("/threads/{thread_id}/runs", list_runs, methods=["GET"]),
         Route("/threads/{thread_id}/runs/wait", wait_for_run, methods=["POST"]),
         Route(
             "/threads/{thread_id}/runs/{run_id}",

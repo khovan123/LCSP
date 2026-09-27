@@ -35,6 +35,9 @@ from orchestration.agent_stream import (
     activate_agent_stream,
     publish_agent_stream_event,
 )
+from tools.common.capabilities.workflow.recovery.interview_pause_boundary import (
+    INTERVIEW_PAUSE_COMMAND,
+)
 from tools.legal.sources.recovery.legal_corpus_recovery_driver import (
     LEGAL_CORPUS_RECOVERY_COMMAND,
 )
@@ -77,6 +80,12 @@ AGENT_INVOCATION_BOUNDARIES: tuple[AgentInvocationBoundary, ...] = (
         "tools.common.capabilities.workflow.recovery.interview_boundary:AssessmentInterviewResumeBoundary",
         "assessment.interview-answer-submitted",
         "command.assessment-interview.resume-agent.v1",
+    ),
+    AgentInvocationBoundary(
+        "assessment_interview_pause_requested",
+        "tools.common.capabilities.workflow.recovery.interview_pause_boundary:AssessmentInterviewPauseBoundary",
+        "assessment.interview-pause-requested",
+        INTERVIEW_PAUSE_COMMAND,
     ),
     AgentInvocationBoundary(
         "legal_rule_triage_requested",

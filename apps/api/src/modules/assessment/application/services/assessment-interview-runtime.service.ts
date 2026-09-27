@@ -1110,6 +1110,35 @@ export class AssessmentInterviewRuntimeService {
     return publicState(next.state);
   }
 
+  /**
+   * Cooperatively interrupts whatever Interview turn is currently running for
+   * this assessment, if any. Fire-and-forget by design: the worker no-ops if
+   * nothing is active, and thread state is untouched either way (the turn
+   * never got to persist anything before it was stopped), so this never needs
+   * a revision guard the way resumeFailedTurn does.
+   */
+  async pauseActiveTurn(input: {
+    assessmentId: string;
+    actor: RbacRequestContext;
+    correlationId: string;
+  }): Promise<void> {
+    await this.assertAssessmentVisible(input.assessmentId, input.actor);
+    const thread = await this.readThread(input.assessmentId);
+    await this.runInterviewTransaction(async (tx) => {
+      await this.outboxRepository.enqueue(
+        this.interviewAgentPauseCommand({
+          assessmentId: input.assessmentId,
+          workflowRunId:
+            thread.privateStore.targetedContinuation?.workflowRunId ??
+            thread.privateStore.workflowRunId,
+          actorId: input.actor.userId,
+          correlationId: input.correlationId,
+        }),
+        tx,
+      );
+    });
+  }
+
   async recordBlockedAction(input: {
     assessmentId: string;
     actor: RbacRequestContext;
@@ -2546,6 +2575,33 @@ export class AssessmentInterviewRuntimeService {
         pgeVersion: input.pgeVersion,
         guidanceVersion: input.guidanceVersion,
         resumeReason: input.resumeReason,
+      },
+    });
+  }
+
+  private interviewAgentPauseCommand(input: {
+    assessmentId: string;
+    workflowRunId?: string;
+    actorId: string;
+    correlationId: string;
+  }) {
+    return buildOutboxMessageInput({
+      aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
+      aggregateId: input.assessmentId,
+      eventType: ASSESSMENT_EVENT_TYPES.interviewAgentPauseRequestedOutbox,
+      assessmentId: input.assessmentId,
+      correlationId: input.correlationId,
+      causationId: input.correlationId,
+      actor: { id: input.actorId, type: AUDIT_ACTOR_TYPES.user },
+      result: ASSESSMENT_EVENT_TYPES.interviewAgentPauseRequestedOutbox,
+      redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
+      // Every click gets its own delivery; a pause request is not meant to be
+      // deduplicated against an earlier one the way a resume retry is.
+      idempotencyKey: `${input.assessmentId}:${input.correlationId}:${ASSESSMENT_EVENT_TYPES.interviewAgentPauseRequestedOutbox}`,
+      payload: {
+        assessmentId: input.assessmentId,
+        threadId: this.threadId(input.assessmentId),
+        workflowRunId: input.workflowRunId,
       },
     });
   }
