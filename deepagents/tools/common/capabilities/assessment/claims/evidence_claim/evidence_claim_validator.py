@@ -1,8 +1,12 @@
 """Fail closed when an LLM claim is not backed by material immutable provenance."""
 from __future__ import annotations
 
+import hashlib
+import json
 import re
+import shlex
 from dataclasses import replace
+from pathlib import PurePosixPath
 from typing import Any
 
 from tools.common.capabilities.evidence.graph.schema.models import ProgramEvidenceGraph
@@ -25,6 +29,36 @@ class EvidenceClaimValidationError(ValueError):
 
 
 _MAX_CLAIM_PROVENANCE_REFS = 8
+_DIRECT_SOURCE_SUFFIXES = frozenset(
+    {
+        ".py",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".cjs",
+        ".go",
+        ".java",
+        ".kt",
+        ".rs",
+        ".cs",
+        ".rb",
+        ".php",
+        ".swift",
+        ".dart",
+        ".sh",
+        ".sql",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".tf",
+        ".html",
+        ".vue",
+        ".svelte",
+    }
+)
 _TOKEN = re.compile(r"[A-Za-zÀ-ỹ0-9]+", re.UNICODE)
 _GENERIC_CRITERION_TOKENS = frozenset(
     {
@@ -249,7 +283,32 @@ class EvidenceClaimValidator:
             *claim.graph_path_refs,
             *claim.source_anchor_refs,
         }
+        if not 0 <= claim.confidence <= 1:
+            raise EvidenceClaimValidationError("claim confidence out of range")
+        if claim.claim_type in _CLOSED_CLAIM_TYPES and not claim.criterion:
+            raise EvidenceClaimValidationError(
+                "closed engineering claim requires a requiredEvidence criterion"
+            )
+        if claim.claim_type in _CLOSED_CLAIM_TYPES and claim.confidence <= 0:
+            raise EvidenceClaimValidationError(
+                "zero-confidence engineering claim cannot close a criterion"
+            )
         if not supplied_refs:
+            if (
+                claim.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+                and claim.value is None
+                and claim.confidence == 0
+                and claim.limitations
+            ):
+                return claim
+            if (
+                claim.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]
+                and claim.value is True
+                and claim.source_locations
+                and not topology_criterion_kind(claim.criterion)
+            ):
+                self._validate_direct_source_claim(claim, value)
+                return replace(claim, source_verified=True)
             raise EvidenceClaimValidationError(
                 "claim source locations did not resolve to governed repository provenance"
             )
@@ -268,17 +327,6 @@ class EvidenceClaimValidator:
         if unknown_paths:
             raise EvidenceClaimValidationError(
                 f"graph path ref does not resolve: {unknown_paths}"
-            )
-
-        if not 0 <= claim.confidence <= 1:
-            raise EvidenceClaimValidationError("claim confidence out of range")
-        if claim.claim_type in _CLOSED_CLAIM_TYPES and not claim.criterion:
-            raise EvidenceClaimValidationError(
-                "closed engineering claim requires a requiredEvidence criterion"
-            )
-        if claim.claim_type in _CLOSED_CLAIM_TYPES and claim.confidence <= 0:
-            raise EvidenceClaimValidationError(
-                "zero-confidence engineering claim cannot close a criterion"
             )
 
         if claim.claim_type in _CLOSED_CLAIM_TYPES:
@@ -466,6 +514,114 @@ class EvidenceClaimValidator:
         if start > max(1, line_count) or end > max(1, line_count):
             raise EvidenceClaimValidationError(
                 f"source location exceeds repository file bounds: {path}:{start}-{end}"
+            )
+
+    @classmethod
+    def _validate_direct_source_claim(
+        cls,
+        claim: EvidenceClaim,
+        graph: ProgramEvidenceGraph,
+    ) -> None:
+        """Accept positive source evidence only from the pinned, unchanged baseline."""
+        from tools.common.capabilities.platform.repository_sandbox import (
+            current_repository_backend,
+        )
+
+        backend = current_repository_backend()
+        scan_job_id = graph.provenance.get("scan_job_id")
+        if backend is None or not graph.snapshot_id or not scan_job_id:
+            raise EvidenceClaimValidationError(
+                "direct source evidence requires the pinned assessment repository"
+            )
+        marker = backend.download_files(["/.lcsp/repository.json"])
+        try:
+            metadata = json.loads(marker[0].content.decode("utf-8"))
+        except (
+            IndexError,
+            AttributeError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+        ) as error:
+            raise EvidenceClaimValidationError(
+                "assessment repository pin could not be verified"
+            ) from error
+        if not isinstance(metadata, dict) or (
+            metadata.get("snapshotId") != graph.snapshot_id
+            or metadata.get("scanJobId") != scan_job_id
+            or metadata.get("commitSha") != graph.commit_sha
+        ):
+            raise EvidenceClaimValidationError(
+                "assessment repository does not match the pinned evidence graph"
+            )
+        if not claim.criterion or len(claim.source_locations) > _MAX_CLAIM_PROVENANCE_REFS:
+            raise EvidenceClaimValidationError(
+                "direct source claim requires a bounded criterion and source set"
+            )
+
+        criterion_name = claim.criterion.strip().upper()
+        derived = cls._tokens(claim.criterion) - _GENERIC_CRITERION_TOKENS
+        criterion_tokens = set(
+            _CRITERION_EVIDENCE_TOKENS.get(criterion_name, frozenset(derived))
+        )
+        if not criterion_tokens:
+            raise EvidenceClaimValidationError(
+                "direct source claim has no material criterion terms"
+            )
+
+        relevant = False
+        for location in claim.source_locations:
+            path = cls._normalize_source_path(location.get("path"))
+            start = int(location["start_line"])
+            end = int(location["end_line"])
+            source_path = PurePosixPath(path)
+            if (
+                source_role(path) != SOURCE_ROLE_PRODUCTION
+                or (
+                    source_path.suffix.lower() not in _DIRECT_SOURCE_SUFFIXES
+                    and source_path.name not in {"Dockerfile", "Containerfile"}
+                )
+                or end - start >= 80
+            ):
+                raise EvidenceClaimValidationError(
+                    "direct source evidence must cite bounded production code"
+                )
+            baseline = backend.execute(
+                f"git rev-parse --verify {shlex.quote('HEAD:' + path)}"
+            )
+            baseline_hash = str(getattr(baseline, "output", "") or "").strip()
+            response = backend.download_files([f"/{path}"])
+            if not response or response[0].error or response[0].content is None:
+                raise EvidenceClaimValidationError("direct source citation is unavailable")
+            content = response[0].content
+            header = f"blob {len(content)}\0".encode("ascii")
+            digest = (
+                hashlib.sha1(header + content).hexdigest()
+                if len(baseline_hash) == 40
+                else hashlib.sha256(header + content).hexdigest()
+            )
+            if (
+                getattr(baseline, "exit_code", 1) != 0
+                or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", baseline_hash)
+                or digest != baseline_hash
+            ):
+                raise EvidenceClaimValidationError(
+                    "direct source citation differs from pinned repository baseline"
+                )
+            lines = content.decode("utf-8").splitlines()
+            excerpt = "\n".join(lines[start - 1 : end])
+            material_lines = [
+                line
+                for line in excerpt.splitlines()
+                if line.strip()
+                and not line.lstrip().startswith(("#", "//", "/*", "*", "--"))
+            ]
+            if material_lines and criterion_tokens.intersection(
+                cls._tokens("\n".join(material_lines))
+            ):
+                relevant = True
+        if not relevant:
+            raise EvidenceClaimValidationError(
+                "direct source claim requires criterion-aligned source content"
             )
 
     @staticmethod

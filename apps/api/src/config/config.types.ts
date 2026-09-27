@@ -78,6 +78,13 @@ export interface OutboxConfig {
   maxAttempts: number;
 }
 
+export interface PipelineReconciliationConfig {
+  enabled: boolean;
+  pollIntervalMs: number;
+  quietPeriodMs: number;
+  maxAttempts: number;
+}
+
 export interface SePayConfig {
   webhookSecret: string;
   timestampSkewSeconds: number;
@@ -151,6 +158,7 @@ export interface AppConfig {
   githubCredentialPersistence: GithubCredentialPersistenceConfig;
   rabbitmq: RabbitMqConfig;
   outbox: OutboxConfig;
+  pipelineReconciliation: PipelineReconciliationConfig;
   sepay: SePayConfig;
   crypto: CryptoConfig;
   worker: WorkerConfig;

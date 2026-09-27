@@ -35,7 +35,10 @@ import {
 } from "@lcsp/contracts/evidence";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { BILLING_ERROR_CODES } from "@lcsp/contracts/billing";
-import { INTERVIEW_TECHNICAL_COVERAGE_STATES } from "@lcsp/contracts/audit";
+import {
+  AUDIT_ACTOR_TYPES,
+  INTERVIEW_TECHNICAL_COVERAGE_STATES,
+} from "@lcsp/contracts/audit";
 
 import type { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import type { OutboxRepository } from "../../../../platform/outbox/outbox.repository.js";
@@ -1639,6 +1642,26 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             },
           }),
         }),
+      );
+    });
+
+    it("marks an automatic stalled-turn resume as a service action", async () => {
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
+        failedTurnThread(),
+      );
+      await service.resumeFailedTurn({
+        assessmentId: "assessment-1",
+        actor,
+        actorType: AUDIT_ACTOR_TYPES.service,
+        correlationId: "corr-reconciliation",
+        resume: { expectedSessionRevision: 2 },
+        allowStalled: true,
+      });
+      expect(mockOutboxRepository.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actor: { id: actor.userId, type: AUDIT_ACTOR_TYPES.service },
+        }),
+        mockTx,
       );
     });
 

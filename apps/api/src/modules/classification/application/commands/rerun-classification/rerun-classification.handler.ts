@@ -1,5 +1,4 @@
 import {
-  AUDIT_ACTOR_TYPES,
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
   AUDIT_RESOURCE_TYPES,
@@ -68,7 +67,7 @@ export class RerunClassificationHandler implements ICommandHandler<RerunClassifi
       causationId: evidenceReport.id,
       actor: {
         id: command.rbacContext.userId,
-        type: AUDIT_ACTOR_TYPES.user,
+        type: command.actorType,
       },
       result: SCAN_EVENT_TYPES.classificationRerunTriggeredAudit,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
@@ -90,6 +89,10 @@ export class RerunClassificationHandler implements ICommandHandler<RerunClassifi
         {
           eventType: SCAN_EVENT_TYPES.classificationRerunTriggeredAudit,
           actorId: command.rbacContext.userId,
+          actor: {
+            id: command.rbacContext.userId,
+            type: command.actorType,
+          },
           assessmentId: command.assessmentId,
           resourceType: AUDIT_RESOURCE_TYPES.technicalEvidenceReport,
           resourceId: evidenceReport.id,

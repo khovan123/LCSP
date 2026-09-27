@@ -7,6 +7,7 @@ import {
 import {
   AUDIT_ACTOR_TYPES,
   AUDIT_REDACTION_STATUSES,
+  type AuditActorType,
   INTERVIEW_AUDIT_EVENT_TYPES,
   INTERVIEW_TECHNICAL_COVERAGE_STATES,
   type InterviewAuditActorRef,
@@ -940,6 +941,7 @@ export class AssessmentInterviewRuntimeService {
     // Pipeline Continue has already proven no worker owns the turn, so a turn
     // that stalled without reporting FAILED (worker crash) is resumable too.
     allowStalled?: boolean;
+    actorType?: AuditActorType;
   }): Promise<AssessmentInterviewRuntimeState> {
     const resume = parseResumeInput(input.resume, input.correlationId);
     await this.assertAssessmentVisible(input.assessmentId, input.actor);
@@ -1055,6 +1057,7 @@ export class AssessmentInterviewRuntimeService {
           assessmentId: input.assessmentId,
           workflowRunId,
           actorId: input.actor.userId,
+          actorType: input.actorType,
           correlationId: input.correlationId,
           contextRevision: thread.contextRevision,
           questionId: target.questionId,
@@ -1086,7 +1089,9 @@ export class AssessmentInterviewRuntimeService {
       stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
       toolName: INTERVIEW_TOOL_NAME,
       summary:
-        "Customer resumed a failed Interview turn; Interview Agent sufficiency decision re-queued.",
+        input.actorType === AUDIT_ACTOR_TYPES.service
+          ? "Assessment reconciliation resumed a stalled Interview turn; Interview Agent sufficiency decision re-queued."
+          : "Customer resumed a failed Interview turn; Interview Agent sufficiency decision re-queued.",
       inputSummary: {
         questionId: next.questionId,
         resumeAttempt: next.attempt,
@@ -2541,6 +2546,7 @@ export class AssessmentInterviewRuntimeService {
     assessmentId: string;
     workflowRunId: string;
     actorId: string;
+    actorType?: AuditActorType;
     correlationId: string;
     contextRevision: number;
     questionId: string;
@@ -2561,7 +2567,10 @@ export class AssessmentInterviewRuntimeService {
       assessmentId: input.assessmentId,
       correlationId: input.correlationId,
       causationId: input.correlationId,
-      actor: { id: input.actorId, type: AUDIT_ACTOR_TYPES.user },
+      actor: {
+        id: input.actorId,
+        type: input.actorType ?? AUDIT_ACTOR_TYPES.user,
+      },
       result: ASSESSMENT_EVENT_TYPES.interviewAnswerSubmitted,
       redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
       idempotencyKey: `${input.assessmentId}:${input.contextRevision}:${input.resumeReason}:${input.questionId}:${ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox}${attemptSuffix}`,

@@ -45,7 +45,6 @@ import {
 } from "../../config/pipeline-continue";
 import { useAssessmentRuntimeViewModel } from "../../hooks/use-assessment-runtime-view-model";
 import type { AssessmentOverviewProps } from "../../types/assessment-overview.types";
-import { RUNTIME_THINKING_PHASES } from "../../types/workspace-runtime.types";
 import {
   deriveLatestAgentStreamTurnState,
   groupAgentStreamEventsByRun,
@@ -74,7 +73,6 @@ import {
 } from "../molecules/assessment-question-turn";
 import { InterviewAnswerHistory } from "../molecules/interview-answer-history";
 import { PostFindingFlowSteps } from "../molecules/post-finding-flow-steps";
-import { RuntimeThinkingActivity } from "../molecules/runtime-thinking-activity";
 import { TurnFooter } from "../molecules/turn-footer";
 import { AssessmentComposer } from "./assessment-composer";
 import { AssessmentTranscript } from "./assessment-transcript";
@@ -269,13 +267,10 @@ function AssessmentInterviewFlow({
     assessmentStatus,
   );
   const postFinding = selectPostFindingPresentation(normalized);
+  // Kept only as an autoScrollKey signal below: Planner/Investigator activity
+  // itself now renders exclusively through interviewTranscript (per-turn,
+  // interleaved with its own Q&A), not as these aggregate summary rows.
   const runtimeThinkingItems = selectRuntimeThinkingItems(normalized);
-  const plannerThinkingItems = runtimeThinkingItems.filter(
-    (item) => item.phase === RUNTIME_THINKING_PHASES.planner,
-  );
-  const investigatorThinkingItems = runtimeThinkingItems.filter(
-    (item) => item.phase === RUNTIME_THINKING_PHASES.investigator,
-  );
   const stageEvents = useMemo(
     () => groupAgentStreamEventsByStage(liveTimeline.agentStreamEvents ?? []),
     [liveTimeline.agentStreamEvents],
@@ -287,6 +282,26 @@ function AssessmentInterviewFlow({
       ),
     [stageEvents],
   );
+  // Only the Interview boundary can be cooperatively stopped/resumed today, so
+  // "paused" only ever comes from the Interview stage. But the stop icon must
+  // reflect whether the customer can type right now, not just Interview: while
+  // Planner, Investigate or Gate are still running the pipeline, this is not
+  // the customer's turn either, so those stages count toward "running" too.
+  const downstreamTurnRunning = useMemo(
+    () =>
+      [
+        ASSESSMENT_AGENT_STREAM_STAGES.planner,
+        ASSESSMENT_AGENT_STREAM_STAGES.investigate,
+        ASSESSMENT_AGENT_STREAM_STAGES.gate,
+      ].some(
+        (stage) =>
+          deriveLatestAgentStreamTurnState(stageEvents.byStage[stage]) ===
+          "running",
+      ),
+    [stageEvents],
+  );
+  const anyAgentTurnRunning =
+    interviewTurnState === "running" || downstreamTurnRunning;
   const runtimeInterviewState = interviewQuery.data;
   const interviewTurnTimestamp = normalized.identity.audit?.timestamp;
   const submitAnswer = useSubmitAssessmentInterviewAnswerMutation(assessmentId);
@@ -604,6 +619,7 @@ function AssessmentInterviewFlow({
       assessmentStatus !== null &&
       PIPELINE_CONTINUE_FINISHED_STATUSES.has(assessmentStatus)
     ) &&
+    !interviewHandoff.isGenuinelyPending &&
     !submitAnswer.isPending &&
     !recordBlockedAction.isPending &&
     !submitPostFindingDecision.isPending;
@@ -664,12 +680,6 @@ function AssessmentInterviewFlow({
               ),
             )}
 
-            {plannerThinkingItems.map((item) => (
-              <RuntimeThinkingActivity key={item.id} item={item} />
-            ))}
-            {investigatorThinkingItems.map((item) => (
-              <RuntimeThinkingActivity key={item.id} item={item} />
-            ))}
             <AgentStreamTimeline events={stageEvents.unstaged} />
 
             {interview.questionTurnProps ? (
@@ -852,9 +862,13 @@ function AssessmentInterviewFlow({
         onValueChange={handleComposerValueChange}
         onSubmit={handleSubmit}
         onResume={handleContinuePipeline}
-        turnRunning={interviewTurnState === "running"}
+        turnRunning={anyAgentTurnRunning}
         turnPaused={interviewTurnState === "paused"}
-        onInterruptTurn={() => interruptInterviewTurn.mutate()}
+        onInterruptTurn={
+          interviewTurnState === "running"
+            ? () => interruptInterviewTurn.mutate()
+            : undefined
+        }
         onResumeTurn={() => resumeInterviewTurn.mutate()}
         interruptingTurn={interruptInterviewTurn.isPending}
         resumingTurn={resumeInterviewTurn.isPending}

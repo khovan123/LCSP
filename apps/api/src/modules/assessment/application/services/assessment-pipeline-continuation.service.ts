@@ -1,4 +1,8 @@
-import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
+import {
+  ASSESSMENT_STATUS_CODES,
+  type AssessmentStatusCode,
+} from "@lcsp/contracts/assessment";
+import { AUDIT_ACTOR_TYPES, type AuditActorType } from "@lcsp/contracts/audit";
 import {
   ASSESSMENT_PIPELINE_CONTINUE_ACTIONS,
   ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES,
@@ -18,7 +22,7 @@ import { RerunClassificationCommand } from "../../../classification/application/
 import { AssessmentInterviewRuntimeService } from "./assessment-interview-runtime.service.js";
 import { AssessmentModelCreditPreflight } from "./assessment-model-credit-preflight.js";
 
-const FINISHED_ASSESSMENT_STATUSES = new Set<string>([
+export const FINISHED_ASSESSMENT_STATUSES = new Set<AssessmentStatusCode>([
   ASSESSMENT_STATUS_CODES.aiNotDetected,
   ASSESSMENT_STATUS_CODES.readyForReview,
 ]);
@@ -44,6 +48,7 @@ export class AssessmentPipelineContinuationService {
     assessmentId: string;
     actor: RbacRequestContext;
     correlationId: string;
+    actorType?: AuditActorType;
   }): Promise<AssessmentPipelineContinueResult> {
     await this.interviewRuntime.assertAssessmentVisible(
       input.assessmentId,
@@ -96,6 +101,7 @@ export class AssessmentPipelineContinuationService {
         correlationId: input.correlationId,
         resume: {},
         allowStalled: true,
+        actorType: input.actorType,
       });
       return {
         action: ASSESSMENT_PIPELINE_CONTINUE_ACTIONS.interviewTurnResumed,
@@ -111,6 +117,7 @@ export class AssessmentPipelineContinuationService {
         input.actor,
         input.correlationId,
         ASSESSMENT_PIPELINE_CONTINUE_RERUN_REASON,
+        input.actorType ?? AUDIT_ACTOR_TYPES.user,
       ),
     );
     return { action: ASSESSMENT_PIPELINE_CONTINUE_ACTIONS.downstreamRequeued };

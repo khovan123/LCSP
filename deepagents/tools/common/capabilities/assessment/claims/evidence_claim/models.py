@@ -57,6 +57,8 @@ class EvidenceClaim:
     criterion: str | None = None
     # Appended to preserve positional construction compatibility at this boundary.
     customer_context_refs: tuple[str, ...] = ()
+    # Set only by EvidenceClaimValidator after checking the pinned repository baseline.
+    source_verified: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

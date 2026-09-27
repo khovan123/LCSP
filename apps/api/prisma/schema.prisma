@@ -160,6 +160,7 @@ model Assessment {
   repositoryScanJobs         RepositoryScanJob[]
   repositorySnapshots        RepositorySnapshot[]
   runtimeEvents              AssessmentRuntimeEvent[]
+  pipelineReconciliation     PipelineReconciliation?
   interviewThreads           AssessmentInterviewThread[]
   targetedReanalysisRequests TargetedReanalysisRequest[]
   technicalEvidenceReports   TechnicalEvidenceReport[]
@@ -170,6 +171,15 @@ model Assessment {
   llmUsageEvents             LlmUsageEvent[]
 
   @@index([ownerId])
+}
+
+model PipelineReconciliation {
+  assessmentId  String     @id
+  attemptCount  Int        @default(0)
+  lastAttemptAt DateTime?
+  assessment    Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@map("AssessmentPipelineReconciliation")
 }
 
 model ReadinessExport {

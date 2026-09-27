@@ -138,6 +138,7 @@ class EngineeringInvestigationResult:
                 if item.get("evidence_refs")
                 or item.get("graph_path_refs")
                 or item.get("source_anchor_refs")
+                or item.get("technical_evidence")
             ),
             "evaluations_with_displayable_technical_evidence": sum(
                 1 for item in evaluation_payloads if item.get("technical_evidence")
@@ -353,7 +354,9 @@ class EngineeringInvestigationPipeline:
                     )
                     evaluations.append(evaluation)
                     technical_evidence_by_rule[evaluation.engineering_rule_id] = tuple(
-                        self._technical_evidence_displays(graph, evaluation.evidence_refs)
+                        self._technical_evidence_displays(
+                            graph, evaluation.evidence_refs, validated_rule_claims
+                        )
                     )
                     self._capture_verified_episode_after_evaluation(
                         engineering_rule=engineering_rule,
@@ -499,6 +502,8 @@ class EngineeringInvestigationPipeline:
                 validated.evidence_refs
                 or validated.graph_path_refs
                 or validated.source_anchor_refs
+                or (validated.source_locations and validated.source_verified)
+                or validated.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
             ):
                 result.append(validated)
         return tuple(result)
@@ -523,8 +528,9 @@ class EngineeringInvestigationPipeline:
     def _technical_evidence_displays(
         graph: ProgramEvidenceGraph,
         evidence_refs: tuple[str, ...],
+        claims: tuple[EvidenceClaim, ...] = (),
     ) -> list[dict[str, Any]]:
-        """Project immutable graph identities into safe source-location metadata.
+        """Project validated graph or direct-source provenance into safe metadata.
 
         TechnicalEvidenceReport persistence intentionally strips the full graph and
         retains only a worker-local graph reference. The API process cannot dereference
@@ -639,6 +645,23 @@ class EngineeringInvestigationPipeline:
                 add(from_node(node))
                 if len(displays) >= MAX_TECHNICAL_EVIDENCE_DISPLAY_ITEMS:
                     break
+
+        for claim in claims:
+            if not claim.source_verified:
+                continue
+            for location in claim.source_locations:
+                if len(displays) >= MAX_TECHNICAL_EVIDENCE_DISPLAY_ITEMS:
+                    break
+                add(
+                    {
+                        "kind": "SOURCE_LOCATION",
+                        "label": location.get("symbol") or location["path"],
+                        "file_path": location["path"],
+                        "symbol_ref": location.get("symbol"),
+                        "start_line": location["start_line"],
+                        "end_line": location["end_line"],
+                    }
+                )
 
         return displays[:MAX_TECHNICAL_EVIDENCE_DISPLAY_ITEMS]
 

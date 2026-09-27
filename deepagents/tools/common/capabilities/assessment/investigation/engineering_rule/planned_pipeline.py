@@ -904,7 +904,9 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                     },
                 )
             technical_evidence_by_rule[evaluation.engineering_rule_id] = tuple(
-                self._technical_evidence_displays(graph, evaluation.evidence_refs)
+                self._technical_evidence_displays(
+                    graph, evaluation.evidence_refs, validated_rule_claims
+                )
             )
             self._capture_verified_episode_after_evaluation(
                 engineering_rule=engineering_rule,

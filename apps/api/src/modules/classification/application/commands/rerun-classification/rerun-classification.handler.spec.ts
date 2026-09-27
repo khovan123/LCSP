@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { AUDIT_ACTOR_TYPES } from "@lcsp/contracts/audit";
 import {
   CLASSIFICATION_RERUN_STATUSES,
   SCAN_EVENT_TYPES,
@@ -124,6 +125,37 @@ describe("RerunClassificationHandler", () => {
         ),
       ),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it("records an automatic rerun as a service action", async () => {
+    const { handler, enqueue, writeInTx } = createHandler();
+    await handler.execute(
+      new RerunClassificationCommand(
+        "assessment-1",
+        { ...rbacContext, userId: "assessment-pipeline-reconciliation" },
+        "reconciliation-1",
+        undefined,
+        AUDIT_ACTOR_TYPES.service,
+      ),
+    );
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: {
+          id: "assessment-pipeline-reconciliation",
+          type: AUDIT_ACTOR_TYPES.service,
+        },
+      }),
+      expect.anything(),
+    );
+    expect(writeInTx).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: {
+          id: "assessment-pipeline-reconciliation",
+          type: AUDIT_ACTOR_TYPES.service,
+        },
+      }),
+      expect.anything(),
+    );
   });
 
   it("allows a fresh rerun after prior assessment results because the pinned evidence is replayed", async () => {

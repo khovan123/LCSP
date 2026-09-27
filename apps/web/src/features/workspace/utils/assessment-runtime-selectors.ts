@@ -361,6 +361,7 @@ export function selectInterviewHandoffPresentation(
     return {
       isStartupPending: false,
       canResumeFailedTurn: false,
+      isGenuinelyPending: false,
       messageKey: "pages.assessmentFlow.interview.aiNotDetectedDescription",
       placeholderKey: "pages.assessmentFlow.interview.aiNotDetectedPlaceholder",
     } as const;
@@ -422,9 +423,17 @@ export function selectInterviewHandoffPresentation(
     progress?.phase === INTERVIEW_PROGRESS_PHASES.failed &&
     messageKey === progressKey;
 
+  // True only in the freshest possible state: nothing has ever run for this
+  // Interview yet (no orchestration requested, no progress event, no answer
+  // on record). There is nothing to continue here, so Pipeline Continue must
+  // stay hidden instead of offering to restart a pipeline that simply hasn't
+  // been dispatched yet.
+  const isGenuinelyPending = messageKey === "pages.assessmentFlow.interview.pendingDescription";
+
   return {
     isStartupPending,
     canResumeFailedTurn,
+    isGenuinelyPending,
     messageKey,
     placeholderKey: canResumeFailedTurn
       ? "pages.assessmentFlow.interview.resumeFailedPlaceholder"

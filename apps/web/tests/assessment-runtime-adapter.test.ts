@@ -2011,6 +2011,9 @@ test("LCSP-272 HANDOFF: evidence ready without orchestration request stays truth
     handoff.placeholderKey,
     "pages.assessmentFlow.interview.pendingPlaceholder",
   );
+  // Nothing has run for Interview yet, so Pipeline Continue must stay hidden
+  // instead of offering to restart a pipeline that hasn't even been dispatched.
+  assert.equal(handoff.isGenuinelyPending, true);
   const resumed = {
     ...normalized,
     interview: {
@@ -2024,10 +2027,12 @@ test("LCSP-272 HANDOFF: evidence ready without orchestration request stays truth
       ],
     },
   };
+  const resumedHandoff = selectInterviewHandoffPresentation(resumed);
   assert.equal(
-    selectInterviewHandoffPresentation(resumed).messageKey,
+    resumedHandoff.messageKey,
     "pages.assessmentFlow.interview.continuingDescription",
   );
+  assert.equal(resumedHandoff.isGenuinelyPending, false);
 });
 
 test("LCSP-999 HANDOFF: a failed Interview turn offers Resume until a new progress phase arrives", () => {
@@ -2081,6 +2086,7 @@ test("LCSP-999 HANDOFF: a failed Interview turn offers Resume until a new progre
     ]),
   );
   assert.equal(failed.canResumeFailedTurn, true);
+  assert.equal(failed.isGenuinelyPending, false);
   assert.equal(
     failed.messageKey,
     "pages.assessmentFlow.interview.progressFailed",

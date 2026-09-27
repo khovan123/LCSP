@@ -7,7 +7,6 @@ import {
   CornerDownLeftIcon,
   Maximize2Icon,
   Minimize2Icon,
-  RotateCcwIcon,
 } from "lucide-react";
 import {
   useLayoutEffect,
@@ -250,14 +249,13 @@ export function AssessmentComposer({
       ) : showResumeAction ? (
         <Button
           type="button"
-          size="sm"
+          size="icon"
           disabled={resumeDisabled}
           aria-label={resumeLabel}
           onClick={handleResume}
-          className="absolute bottom-2 right-3 h-8 rounded-full px-3"
+          className="absolute bottom-2 right-3 size-8 rounded-full bg-transparent text-foreground hover:bg-accent disabled:bg-transparent"
         >
-          <RotateCcwIcon aria-hidden="true" />
-          {resumeLabel}
+          <CirclePlayIcon aria-hidden="true" />
         </Button>
       ) : (
         <Button

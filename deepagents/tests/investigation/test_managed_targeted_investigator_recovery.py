@@ -628,7 +628,7 @@ def test_initial_instruction_uses_bounded_packet_index_not_raw_graph_dump() -> N
     assert "Return only compact valid JSON" in instruction
 
 
-def test_managed_investigator_returns_unresolved_without_model_when_packet_has_no_citable_refs(
+def test_managed_investigator_explores_repository_when_packet_has_no_citable_refs(
     monkeypatch,
 ) -> None:
     packet = InvestigationPacket(
@@ -660,11 +660,16 @@ def test_managed_investigator_returns_unresolved_without_model_when_packet_has_n
         "checkpoint_url": "postgresql://must-not-be-used",
         "artifact_versions": dict(ARTIFACT_PINS),
     }
-    monkeypatch.setattr(
-        managed,
-        "_invoke_managed_investigator",
-        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("model must not run")),
-    )
+    called: list[dict[str, Any]] = []
+
+    def invoke(**kwargs):
+        called.append(kwargs)
+        handoff = _valid_handoff()
+        handoff["claims"][0]["engineering_rule_id"] = packet.engineering_rule_id
+        handoff["claims"][0]["evidence_refs"] = []
+        return handoff, "checkpoint-no-refs"
+
+    monkeypatch.setattr(managed, "_invoke_managed_investigator", invoke)
 
     claims = adapter.investigate(
         packet=packet,
@@ -674,6 +679,8 @@ def test_managed_investigator_returns_unresolved_without_model_when_packet_has_n
     )
 
     assert len(claims) == 1
+    assert len(called) == 1
+    assert "inspect the pinned repository" in called[0]["instruction"]
     assert claims[0].claim_type == "UNRESOLVED_ENGINEERING_FACT"
     assert claims[0].value is None
     assert claims[0].evidence_refs == ()

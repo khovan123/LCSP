@@ -469,6 +469,12 @@ describe("config()", () => {
         batchSize: 50,
         maxAttempts: 5,
       },
+      pipelineReconciliation: {
+        enabled: true,
+        pollIntervalMs: 60000,
+        quietPeriodMs: 900000,
+        maxAttempts: 3,
+      },
       crypto: { mfaSecretEncryptionKey: VALID_ENV.MFA_SECRET_ENCRYPTION_KEY },
       githubCredentialPersistence: {
         enabled: false,
