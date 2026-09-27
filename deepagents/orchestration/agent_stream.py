@@ -92,8 +92,8 @@ class BufferedAgentStreamEmitter:
     ) -> None:
         self._deliver = deliver
         self._queue: Queue[dict[str, Any] | None] = Queue(maxsize=max_pending)
+        self._best_effort_backlog_limit = max(1, min(max_pending - 1, 2))
         self._close_timeout_seconds = max(0.0, close_timeout_seconds)
-        self._stop = Event()
         self._closed = False
         self._thread = Thread(
             target=self._run,
@@ -105,10 +105,17 @@ class BufferedAgentStreamEmitter:
     def __call__(self, payload: dict[str, Any]) -> None:
         if self._closed:
             return
+        if (
+            not _is_critical_stream_payload(payload)
+            and self._queue.qsize() >= self._best_effort_backlog_limit
+        ):
+            # Token deltas and graph updates are best-effort. Do not let them
+            # queue ahead of the next durable model/tool turn.
+            return
         try:
             self._queue.put_nowait(payload)
         except Full:
-            if _is_durable_stream_payload(payload):
+            if _is_critical_stream_payload(payload):
                 try:
                     self._queue.put(payload, timeout=self._close_timeout_seconds)
                     return
@@ -132,15 +139,9 @@ class BufferedAgentStreamEmitter:
         except Full:
             pass
         self._thread.join(timeout=self._close_timeout_seconds)
-        if self._thread.is_alive():
-            self._stop.set()
-            try:
-                self._queue.put_nowait(None)
-            except Full:
-                pass
 
     def _run(self) -> None:
-        while not self._stop.is_set():
+        while True:
             payload = self._queue.get()
             try:
                 if payload is None:
@@ -152,6 +153,8 @@ class BufferedAgentStreamEmitter:
                     pass
             finally:
                 self._queue.task_done()
+                if self._closed and self._queue.empty():
+                    return
 
 
 @dataclass
@@ -1692,6 +1695,30 @@ def _sanitize_payload(payload: dict[str, Any]) -> dict[str, Any]:
 def _is_durable_stream_payload(payload: dict[str, Any]) -> bool:
     data = payload.get("data")
     return isinstance(data, dict) and data.get("durability") == DURABLE
+
+
+CRITICAL_STREAM_EVENT_TYPES = frozenset(
+    {
+        "BOUNDARY_STARTED",
+        "BOUNDARY_COMPLETED",
+        "BOUNDARY_FAILED",
+        "AGENT_STARTED",
+        "AGENT_COMPLETED",
+        "AGENT_FAILED",
+        "MODEL_CALL_STARTED",
+        "MODEL_CALL_COMPLETED",
+        "MODEL_CALL_FAILED",
+        "MODEL_CALL_TIMEOUT",
+        "PROVIDER_FALLBACK",
+        "CREDENTIAL_ROTATION",
+    }
+)
+
+
+def _is_critical_stream_payload(payload: dict[str, Any]) -> bool:
+    return _is_durable_stream_payload(payload) or payload.get(
+        "event_type"
+    ) in CRITICAL_STREAM_EVENT_TYPES
 
 
 def _safe_tool_arguments(value: Any) -> str:

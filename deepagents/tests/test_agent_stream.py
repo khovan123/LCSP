@@ -392,6 +392,59 @@ def test_buffered_emitter_never_blocks_agent_on_backpressure():
     release_delivery.set()
 
 
+def test_buffered_emitter_drops_excess_deltas_before_the_next_model_turn():
+    delivery_started = Event()
+    release_delivery = Event()
+    delivered_turn = Event()
+    received = []
+
+    def deliver(payload):
+        if payload["sequence"] == 1:
+            delivery_started.set()
+            release_delivery.wait(timeout=1.0)
+        received.append(payload["sequence"])
+        if payload["sequence"] == 4:
+            delivered_turn.set()
+
+    emitter = BufferedAgentStreamEmitter(deliver, max_pending=2)
+    emitter({"sequence": 1, "event_type": "BOUNDARY_STARTED"})
+    assert delivery_started.wait(timeout=0.5)
+    emitter({"sequence": 2, "event_type": "MODEL_CONTENT_DELTA"})
+    emitter({"sequence": 3, "event_type": "MODEL_CONTENT_DELTA"})
+    emitter({"sequence": 4, "event_type": "MODEL_RESULT", "data": {"durability": "DURABLE"}})
+    release_delivery.set()
+
+    assert delivered_turn.wait(timeout=0.5)
+    emitter.close()
+    assert received == [1, 2, 4]
+
+
+def test_buffered_emitter_keeps_pending_turn_after_bounded_close():
+    delivery_started = Event()
+    release_delivery = Event()
+    delivered_turn = Event()
+
+    def deliver(payload):
+        if payload["sequence"] == 1:
+            delivery_started.set()
+            release_delivery.wait(timeout=1.0)
+        if payload["sequence"] == 2:
+            delivered_turn.set()
+
+    emitter = BufferedAgentStreamEmitter(
+        deliver,
+        max_pending=1,
+        close_timeout_seconds=0.01,
+    )
+    emitter({"sequence": 1, "event_type": "BOUNDARY_STARTED"})
+    assert delivery_started.wait(timeout=0.5)
+    emitter({"sequence": 2, "event_type": "MODEL_RESULT", "data": {"durability": "DURABLE"}})
+    emitter.close()
+    release_delivery.set()
+
+    assert delivered_turn.wait(timeout=0.5)
+
+
 def test_stream_log_filter_hides_framework_noise_but_keeps_failures():
     noisy_info = logging.LogRecord(
         "httpx",

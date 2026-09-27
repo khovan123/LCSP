@@ -6,6 +6,7 @@ import {
   ASSESSMENT_AGENT_STREAM_EVENT_TYPES,
   ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS,
   ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS,
+  ASSESSMENT_AGENT_STREAM_STAGES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   type AssessmentAgentStreamEvent,
   type AssessmentRuntimeSummaryValue,
@@ -1098,12 +1099,14 @@ test("investigation renders one section per rule with its own activity and reaso
   assert.ok(firstRule);
   assert.match(firstRule.textContent ?? "", /Token validation/);
   const activities = firstRule.querySelectorAll("details[data-stream-activity]");
-  // One AI analysis row (reasoning, then output replaces it) and one tool row.
-  assert.equal(activities.length, 2);
-  const aiDetail =
-    firstRule.querySelector('[data-stream-kind="model"] [data-stream-detail]')
-      ?.textContent ?? "";
-  assert.equal(aiDetail, "Tokens are validated before use.");
+  // The two model messages and the tool call retain their own activity rows.
+  assert.equal(activities.length, 3);
+  const aiDetails = [...firstRule.querySelectorAll('[data-stream-kind="model"] [data-stream-detail]')]
+    .map((detail) => detail.textContent);
+  assert.deepEqual(aiDetails, [
+    "Token checks live in auth/tokens.py.",
+    "Tokens are validated before use.",
+  ]);
 
   const result = firstRule.querySelector("[data-stream-rule-result]")?.textContent ?? "";
   assert.match(result, /RULE_REQUIREMENT_MET/);
@@ -1114,11 +1117,11 @@ test("investigation renders one section per rule with its own activity and reaso
   // Lifecycle events are the section itself, never separate rows.
   assert.equal(
     container.querySelectorAll(":scope details[data-stream-activity]").length,
-    2,
+    3,
   );
 });
 
-test("every AI step streams into one analysis row with a step count", async () => {
+test("each AI step remains visible while the next step is running", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -1140,12 +1143,28 @@ test("every AI step streams into one analysis row with a step count", async () =
       { toolName: null, toolCallId: null },
     );
 
+  const firstTurn = [
+    event(0, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted, null, {
+      toolName: null,
+      toolCallId: null,
+    }),
+    step(1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted, "step-1"),
+    step(2, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted, "step-1"),
+  ];
+  await act(async () => {
+    root.render(<AgentStreamTimeline events={firstTurn} />);
+  });
+  assert.equal(container.querySelectorAll('[data-stream-kind="model"]').length, 1);
+  assert.equal(
+    container.querySelector<HTMLDetailsElement>('details[data-slot="agent-stream-timeline"]')?.open,
+    true,
+  );
+
   await act(async () => {
     root.render(
       <AgentStreamTimeline
         events={[
-          step(1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted, "step-1"),
-          step(2, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted, "step-1"),
+          ...firstTurn,
           step(3, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.credentialRotation, "step-2"),
           step(4, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted, "step-2"),
           step(5, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallHeartbeat, "step-2"),
@@ -1155,18 +1174,113 @@ test("every AI step streams into one analysis row with a step count", async () =
   });
 
   const modelRows = container.querySelectorAll('[data-stream-kind="model"]');
-  assert.equal(modelRows.length, 1);
-  assert.equal(modelRows[0]?.getAttribute("data-stream-status"), "running");
-  assert.equal(
-    modelRows[0]?.querySelector("[data-stream-repeat-count]")?.getAttribute(
-      "data-stream-repeat-count",
-    ),
-    "2",
-  );
+  assert.equal(modelRows.length, 2);
+  assert.equal(modelRows[0]?.getAttribute("data-stream-status"), "completed");
+  assert.equal(modelRows[1]?.getAttribute("data-stream-status"), "running");
   assert.equal(
     container.querySelectorAll("details[data-stream-activity]").length,
-    1,
+    3,
   );
+});
+
+test("scanner, interview, planner, and investigator publish visible turns before boundary completion", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const events: AssessmentAgentStreamEvent[] = [];
+  const stages = [
+    ASSESSMENT_AGENT_STREAM_STAGES.scanner,
+    ASSESSMENT_AGENT_STREAM_STAGES.interview,
+    ASSESSMENT_AGENT_STREAM_STAGES.planner,
+    ASSESSMENT_AGENT_STREAM_STAGES.investigate,
+  ];
+
+  for (const [index, stage] of stages.entries()) {
+    const sequence = index * 4;
+    events.push(
+      event(sequence, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted, null, {
+        stage,
+        messageId: null,
+        toolCallId: null,
+        toolName: null,
+      }),
+      event(sequence + 1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelRequest, {
+        schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+        kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.modelRequest,
+        durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+      }, { stage, messageId: `turn-${index}`, toolCallId: null, toolName: null }),
+      event(sequence + 2, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelResult, {
+        schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+        kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.modelOutput,
+        durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+        resultSummary: { text: `Turn ${index + 1} complete` },
+      }, {
+        stage,
+        messageId: `turn-${index}`,
+        toolCallId: null,
+        toolName: null,
+        status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+      }),
+    );
+    await act(async () => {
+      root.render(<AgentStreamTimeline events={[...events]} />);
+    });
+    const rows = container.querySelectorAll<HTMLElement>('[data-stream-kind="model"]');
+    assert.equal(rows.length, index + 1);
+    assert.equal(rows[index]?.getAttribute("data-stream-status"), "completed");
+    assert.match(rows[index]?.textContent ?? "", new RegExp(`Turn ${index + 1} complete`));
+    assert.equal(
+      container.querySelector<HTMLDetailsElement>('details[data-slot="agent-stream-timeline"]')?.open,
+      true,
+    );
+    events.push(event(sequence + 3, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted, null, {
+      stage,
+      messageId: null,
+      toolCallId: null,
+      toolName: null,
+      status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+    }));
+  }
+});
+
+test("late completion from a previous stage does not close the active agent turn", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+
+  await act(async () => {
+    root.render(
+      <AgentStreamTimeline events={[
+        event(1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted, null, {
+          stage: ASSESSMENT_AGENT_STREAM_STAGES.scanner,
+          messageId: null,
+          toolName: null,
+          toolCallId: null,
+        }),
+        event(2, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted, null, {
+          stage: ASSESSMENT_AGENT_STREAM_STAGES.interview,
+          messageId: null,
+          toolName: null,
+          toolCallId: null,
+        }),
+        event(3, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted, null, {
+          stage: ASSESSMENT_AGENT_STREAM_STAGES.scanner,
+          messageId: null,
+          toolName: null,
+          toolCallId: null,
+          status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+        }),
+      ]} />,
+    );
+  });
+
+  assert.equal(
+    container.querySelector<HTMLDetailsElement>('details[data-slot="agent-stream-timeline"]')?.open,
+    true,
+  );
+  assert.equal(container.querySelectorAll('[data-stream-status="running"]').length, 1);
 });
 
 test("budget and context trimming render as their own progress rows", async () => {
@@ -1208,7 +1322,7 @@ test("budget and context trimming render as their own progress rows", async () =
   );
 });
 
-test("repeated calls of one tool stream their latest target into one row", async () => {
+test("repeated tool calls retain each target and result", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -1265,23 +1379,18 @@ test("repeated calls of one tool stream their latest target into one row", async
   });
 
   const toolRows = container.querySelectorAll<HTMLElement>('[data-stream-kind="tool"]');
-  assert.equal(toolRows.length, 1);
-  const readRow = toolRows[0];
-  assert.ok(readRow);
-  assert.equal(readRow.getAttribute("data-stream-status"), "completed");
-  assert.equal(
-    readRow.querySelector("[data-stream-repeat-count]")?.getAttribute("data-stream-repeat-count"),
-    "4",
+  assert.equal(toolRows.length, 4);
+  assert.deepEqual(
+    [...toolRows].map((row) => row.querySelector("[data-stream-target]")?.textContent),
+    ["/src/app.py", "/src/app.py", "/src/other.py", "/src/app.py"],
   );
-  // The row's target and input/output follow the latest call.
-  assert.equal(readRow.querySelector("[data-stream-target]")?.textContent, "/src/app.py");
-  const text = readRow.textContent ?? "";
-  assert.match(text, /third page/);
-  assert.match(text, /"offset": 200/);
-  assert.doesNotMatch(text, /first page|second page|other file/);
+  for (const [index, text] of ["first page", "second page", "other file", "third page"].entries()) {
+    assert.equal(toolRows[index]?.getAttribute("data-stream-status"), "completed");
+    assert.match(toolRows[index]?.textContent ?? "", new RegExp(text));
+  }
 });
 
-test("tool activities group across tools and use their activity icon", async () => {
+test("tool activities keep one row per call and use their activity icon", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -1327,6 +1436,8 @@ test("tool activities group across tools and use their activity icon", async () 
   assert.deepEqual(icons, [
     "repositoryFilesInspected",
     "repositorySourceSearched",
+    "repositorySourceSearched",
+    "sourceFilesReviewed",
     "sourceFilesReviewed",
   ]);
   const counts = [
@@ -1336,10 +1447,10 @@ test("tool activities group across tools and use their activity icon", async () 
       row.querySelector("[data-stream-repeat-count]")?.getAttribute("data-stream-repeat-count") ??
       "1",
   );
-  assert.deepEqual(counts, ["1", "2", "2"]);
+  assert.deepEqual(counts, ["1", "1", "1", "1", "1"]);
 });
 
-test("repeated activities such as context trimming update one row", async () => {
+test("repeated activities such as context trimming retain each occurrence", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -1365,14 +1476,9 @@ test("repeated activities such as context trimming update one row", async () => 
   });
 
   const rows = container.querySelectorAll('[data-stream-kind="progress"]');
-  assert.equal(rows.length, 1);
-  assert.equal(
-    rows[0]?.querySelector("[data-stream-repeat-count]")?.getAttribute(
-      "data-stream-repeat-count",
-    ),
-    "3",
-  );
-  const technical =
-    rows[0]?.querySelector("[data-stream-technical-details]")?.textContent ?? "";
-  assert.match(technical, /"cleared_tool_results": 5/);
+  assert.equal(rows.length, 3);
+  for (const [index, count] of [2, 3, 5].entries()) {
+    const technical = rows[index]?.querySelector("[data-stream-technical-details]")?.textContent ?? "";
+    assert.match(technical, new RegExp(`"cleared_tool_results": ${count}`));
+  }
 });
