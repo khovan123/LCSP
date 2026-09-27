@@ -179,11 +179,11 @@ describe("LCSP-310 usage and pricing foundation", () => {
       where: { aggregateId: f.assessmentId },
     });
     expect(outbox).toHaveLength(1);
-    expect(outbox[0]!.payload).toMatchObject({
+    expect(outbox[0].payload).toMatchObject({
       evidenceReportId: "evidence-pinned",
       workflowRunId: f.runId,
     });
-    expect(outbox[0]!.payload).not.toHaveProperty("billing");
+    expect(outbox[0].payload).not.toHaveProperty("billing");
     expect(await pauses.hasPendingResume(f.assessmentId)).toBe(true);
     await pauses.pause(input);
     expect(

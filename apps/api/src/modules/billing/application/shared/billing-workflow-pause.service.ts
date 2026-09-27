@@ -80,7 +80,7 @@ export class BillingWorkflowPauseService {
           payload: {
             ...payload,
             assessmentId: input.assessmentId,
-          } as Prisma.InputJsonObject,
+          },
         },
       });
       if (pause.assessmentId !== input.assessmentId)
