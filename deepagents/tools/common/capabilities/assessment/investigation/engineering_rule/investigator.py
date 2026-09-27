@@ -115,10 +115,13 @@ class LawGuidedInvestigator:
             system_prompt=(
                 "Investigate one EngineeringRule directly inside the assessment repository. "
                 "Use native Deep Agents filesystem/shell/task tools as the primary source of "
-                "truth. When configured, codebase_memory_graph MCP may accelerate architecture "
-                "and relationship discovery, but direct repository source wins on conflict. "
-                "Return exact repository source locations for every decided technical claim; "
-                "never invent Program Evidence Graph node/edge IDs."
+                "truth. The sandbox also contains the pinned upstream codebase_memory_graph MCP "
+                "engine as the `codebase-memory-graph` command; use its one-shot CLI mode through "
+                "`execute` (index_repository, then get_architecture, search_graph, search_code, "
+                "trace_path, query_graph, detect_changes, check_index_coverage) to accelerate "
+                "architecture and relationship discovery, but direct repository source wins on "
+                "conflict. Return exact repository source locations for every decided technical "
+                "claim; never invent Program Evidence Graph node/edge IDs."
             ),
             response_format=self._claims_response_schema(),
             # The Investigator is the one role that explores the repository; it is
@@ -573,9 +576,13 @@ class LawGuidedInvestigator:
             {
                 "task": (
                     "Investigate the EngineeringRule directly in the repository working database. "
-                    "Use native Deep Agents ls/glob/grep/read_file/execute/task tools. "
-                    "Use codebase_memory_graph MCP only as optional graph memory/relationship help; "
-                    "verify material facts in repository source before deciding."
+                    "Use native Deep Agents ls/glob/grep/read_file/execute/task tools. The sandbox "
+                    "also contains the pinned upstream codebase_memory_graph MCP engine as the "
+                    "`codebase-memory-graph` command; use its one-shot CLI mode through `execute` "
+                    "(get_architecture, search_graph, search_code, trace_path, query_graph, "
+                    "detect_changes, check_index_coverage) as graph memory to accelerate "
+                    "relationship discovery, then verify material facts in repository source "
+                    "before deciding."
                 ),
                 "engineeringRule": cls._rule_contract(packet),
                 "seedContext": {
