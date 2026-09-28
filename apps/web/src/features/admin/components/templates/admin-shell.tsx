@@ -40,7 +40,6 @@ export function AdminShell({
   const resolvedName =
     adminName ??
     profile?.display_name ??
-    (profile?.email ? profile.email.split("@")[0] : undefined) ??
     fallbackName;
   const resolvedEmail = adminEmail ?? profile?.email ?? fallbackEmail;
 

@@ -75,6 +75,9 @@ export function AdminSidebar({
   const fallbackEmail = resolveAppMessage(
     "pages.admin.sidebar.identityFallbackEmail" as MessageKey,
   );
+  const adminRole = resolveAppMessage(
+    "pages.admin.sidebar.roleAdminLabel" as MessageKey,
+  );
   const resolvedAdminName = adminName ?? fallbackName;
   const resolvedAdminEmail = adminEmail ?? fallbackEmail;
 
@@ -238,8 +241,17 @@ export function AdminSidebar({
             {isLoading ? (
               <div className="size-8 shrink-0 rounded-full bg-sidebar-accent animate-pulse" />
             ) : (
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-admin-status-active-surface text-admin-status-active-foreground text-xs font-semibold">
-                {resolvedAdminName.charAt(0).toUpperCase()}
+              <div
+                className={cn(
+                  "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                  isBillingActive
+                    ? "bg-sidebar-accent text-sidebar-foreground"
+                    : "bg-admin-status-active-surface text-admin-status-active-foreground",
+                )}
+              >
+                {isBillingActive
+                  ? adminRole.charAt(0).toUpperCase()
+                  : resolvedAdminName.charAt(0).toUpperCase()}
               </div>
             )}
             <div className="flex min-w-0 flex-1 flex-col justify-center">
@@ -251,10 +263,10 @@ export function AdminSidebar({
               ) : (
                 <>
                   <span className="truncate text-[12.5px] font-medium text-sidebar-foreground">
-                    {resolvedAdminName}
+                    {isBillingActive ? resolvedAdminEmail : resolvedAdminName}
                   </span>
                   <span className="truncate text-[10.5px] text-muted-foreground">
-                    {resolvedAdminEmail}
+                    {isBillingActive ? adminRole : resolvedAdminEmail}
                   </span>
                 </>
               )}
