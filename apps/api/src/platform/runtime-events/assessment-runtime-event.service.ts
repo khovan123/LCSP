@@ -863,7 +863,8 @@ export class AssessmentRuntimeEventService {
     const interviewThreads = assessmentIds.size
       ? await this.safeInterviewThreads([...assessmentIds])
       : [];
-    const liveWindowStart = Date.now() - ASSESSMENT_PIPELINE_LIVENESS_WINDOW_SECONDS * 1_000;
+    const liveWindowStart =
+      Date.now() - ASSESSMENT_PIPELINE_LIVENESS_WINDOW_SECONDS * 1_000;
     const stageLifecycles = deriveStageLifecycles({
       assessmentIds,
       scanJobs: scanJobs.map((job) => ({
@@ -879,9 +880,7 @@ export class AssessmentRuntimeEventService {
       engineeringProgress,
       liveAssessmentIds: new Set(
         recentActivity
-          .filter(
-            (event) => Date.parse(event.emittedAt) >= liveWindowStart,
-          )
+          .filter((event) => Date.parse(event.emittedAt) >= liveWindowStart)
           .map((event) => event.assessmentId),
       ),
     });

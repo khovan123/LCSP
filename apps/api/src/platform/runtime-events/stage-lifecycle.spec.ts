@@ -77,7 +77,7 @@ function derive(overrides: Partial<StageLifecycleInput> = {}) {
     liveAssessmentIds: new Set<string>(),
     ...overrides,
   };
-  return deriveStageLifecycles(input)[0]!;
+  return deriveStageLifecycles(input)[0];
 }
 
 describe("deriveStageLifecycles", () => {

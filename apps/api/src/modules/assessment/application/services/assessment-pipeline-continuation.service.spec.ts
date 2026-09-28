@@ -187,7 +187,8 @@ describe("AssessmentPipelineContinuationService", () => {
     expect(recordControl).toHaveBeenCalledWith({
       assessmentId: "assessment-1",
       correlationId: "corr-continue",
-      reason: ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS.customerRequestedContinue,
+      reason:
+        ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS.customerRequestedContinue,
     });
     expect(execute).toHaveBeenCalledWith(
       new RerunClassificationCommand(

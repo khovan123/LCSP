@@ -2277,7 +2277,9 @@ describe("AssessmentRuntimeEventService.getPipelineLiveness", () => {
         take: 1,
       }),
     );
-    findMany.mockResolvedValue([{ waitingReason: "CUSTOMER_REQUESTED_CONTINUE" }]);
+    findMany.mockResolvedValue([
+      { waitingReason: "CUSTOMER_REQUESTED_CONTINUE" },
+    ]);
     await expect(
       service.isPipelineStoppedByCustomer("assessment-1"),
     ).resolves.toBe(false);

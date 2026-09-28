@@ -1862,7 +1862,8 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       expect(mockRuntimeEvents.recordPipelineControl).toHaveBeenCalledWith({
         assessmentId: "assessment-1",
         correlationId: "corr-pause-1",
-        reason: ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS.customerRequestedStop,
+        reason:
+          ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS.customerRequestedStop,
       });
     });
 

@@ -129,7 +129,8 @@ export class AssessmentPipelineContinuationService {
     await this.runtimeEvents.recordPipelineControl({
       assessmentId: input.assessmentId,
       correlationId: input.correlationId,
-      reason: ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS.customerRequestedContinue,
+      reason:
+        ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS.customerRequestedContinue,
     });
     const interview = await this.interviewRuntime.pipelineInterviewStatus(
       input.assessmentId,

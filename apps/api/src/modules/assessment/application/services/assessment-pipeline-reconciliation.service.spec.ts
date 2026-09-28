@@ -27,7 +27,8 @@ describe("AssessmentPipelineReconciliationService", () => {
   const updateMany =
     jest.fn<(...args: unknown[]) => Promise<{ count: number }>>();
   const continuePipeline = jest.fn<(...args: unknown[]) => Promise<unknown>>();
-  const isStoppedByCustomer = jest.fn<(...args: unknown[]) => Promise<boolean>>();
+  const isStoppedByCustomer =
+    jest.fn<(...args: unknown[]) => Promise<boolean>>();
   const config = {
     get: jest.fn<(key: string, fallback: number | boolean) => number | boolean>(
       (_key, fallback) => fallback,

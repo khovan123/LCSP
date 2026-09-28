@@ -79,8 +79,7 @@ export function deriveStageLifecycles(
   return [...new Set(input.assessmentIds)].map((assessmentId) => {
     const jobs = scanJobs.get(assessmentId) ?? [];
     const accepted = (evidence.get(assessmentId) ?? []).some(
-      (report) =>
-        report.status === TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+      (report) => report.status === TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
     );
     const scanner = deriveScanner(jobs, accepted);
     const interview = deriveInterview(threads.get(assessmentId));
@@ -130,7 +129,11 @@ function deriveScanner(
     // Completed without accepted evidence: usable, but not the full picture.
     return entry(STATES.partial, "scanJob", latest.status);
   }
-  return entry(STATES.queued, latest ? "scanJob" : "none", latest?.status ?? null);
+  return entry(
+    STATES.queued,
+    latest ? "scanJob" : "none",
+    latest?.status ?? null,
+  );
 }
 
 /** The thread's confirmed revision and open question own this row. */
@@ -196,7 +199,11 @@ function deriveInvestigator(
   }
   if (completed === 0 && (limited > 0 || failed > 0)) {
     // Every selected rule stopped for want of Scanner memory or context.
-    return entry(STATES.needsScannerEnrichment, "ruleClaims", `${limited + failed}`);
+    return entry(
+      STATES.needsScannerEnrichment,
+      "ruleClaims",
+      `${limited + failed}`,
+    );
   }
   if (completed > 0) {
     return entry(
