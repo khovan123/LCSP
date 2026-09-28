@@ -98,6 +98,14 @@ export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
     }
 
+    const user = await users.findById(userId);
+    if (!user) {
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
+    }
+    if (user.accessStatus !== USER_ACCESS_STATUSES.active) {
+      throw problemException(AUTH_ERROR_CODES.accountSuspended, correlationId);
+    }
+
     const existingEnrollment = await mfaEnrollments.findByUserId(userId);
     if (existingEnrollment && !session.isMfaVerified()) {
       let hasRecoverableSecretFailure = false;
@@ -114,14 +122,6 @@ export class EnrollMfaHandler implements ICommandHandler<EnrollMfaCommand> {
         // an existing TOTP secret (would let a stolen pre-MFA session hijack MFA).
         throw problemException(AUTH_ERROR_CODES.mfaRequired, correlationId);
       }
-    }
-
-    const user = await users.findById(userId);
-    if (!user) {
-      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId);
-    }
-    if (user.accessStatus !== USER_ACCESS_STATUSES.active) {
-      throw problemException(AUTH_ERROR_CODES.accountSuspended, correlationId);
     }
 
     const now = this.support.now();
