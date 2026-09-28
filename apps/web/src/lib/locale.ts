@@ -24,10 +24,22 @@ export function subscribeToAppLocale(onStoreChange: () => void) {
 
 export function setAppLocale(locale: Locale) {
   if (!LOCALES.includes(locale)) return;
+  if (appLocale === locale) return;
   appLocale = locale;
   if (typeof document !== "undefined") {
     document.cookie = `${APP_LOCALE_COOKIE}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
     window.dispatchEvent(new Event("lcsp:locale-change"));
+  }
+}
+
+export function initAppLocale(initialLocale?: Locale) {
+  if (initialLocale && LOCALES.includes(initialLocale)) {
+    appLocale = initialLocale;
+    return;
+  }
+  const cookieLocale = readCookieLocale();
+  if (cookieLocale) {
+    appLocale = cookieLocale;
   }
 }
 
@@ -37,3 +49,4 @@ export function hydrateAppLocaleFromCookie() {
     setAppLocale(cookieLocale);
   }
 }
+
