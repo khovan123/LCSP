@@ -236,7 +236,7 @@ describe("RerunClassificationHandler", () => {
       );
 
       expect(enqueue).toHaveBeenCalledTimes(1);
-      expect(enqueue.mock.calls[0]![0]).toEqual(
+      expect(enqueue.mock.calls[0][0]).toEqual(
         expect.objectContaining({
           payload: expect.objectContaining({ correlationId: "correlation-1" }),
         }),
@@ -309,11 +309,10 @@ describe("RerunClassificationHandler", () => {
       );
 
       expect(enqueue).toHaveBeenCalledTimes(2);
-      const firstKey = (enqueue.mock.calls[0]![0] as { idempotencyKey: string })
+      const firstKey = (enqueue.mock.calls[0][0] as { idempotencyKey: string })
         .idempotencyKey;
-      const secondKey = (
-        enqueue.mock.calls[1]![0] as { idempotencyKey: string }
-      ).idempotencyKey;
+      const secondKey = (enqueue.mock.calls[1][0] as { idempotencyKey: string })
+        .idempotencyKey;
       expect(secondKey).not.toBe(firstKey);
     } finally {
       jest.useRealTimers();
