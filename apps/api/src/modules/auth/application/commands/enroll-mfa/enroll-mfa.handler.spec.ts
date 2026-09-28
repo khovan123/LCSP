@@ -1,7 +1,4 @@
-import {
-  AUTH_ERROR_CODES,
-  USER_ACCESS_STATUSES,
-} from "@lcsp/contracts/auth";
+import { AUTH_ERROR_CODES, USER_ACCESS_STATUSES } from "@lcsp/contracts/auth";
 import { describe, expect, it, jest } from "@jest/globals";
 import { HttpException } from "@nestjs/common";
 
