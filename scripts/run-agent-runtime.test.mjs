@@ -52,7 +52,7 @@ test("agent runtime sets explicit local LangGraph concurrency", () => {
   assert.match(source, /LCSP_AGENT_RUNTIME_JOBS_PER_WORKER/u);
   assert.match(source, /--n-jobs-per-worker/u);
   assert.match(source, /resolvePositiveInteger/u);
-  assert.match(source, /"8"/u);
+  assert.match(source, /"1"/u);
 });
 
 

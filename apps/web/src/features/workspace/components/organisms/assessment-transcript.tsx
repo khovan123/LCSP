@@ -1,7 +1,7 @@
 "use client";
 
 import { resolveMessage } from "@lcsp/i18n";
-import { useEffect, useLayoutEffect, useRef, type ReactNode, type Ref } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type Ref } from "react";
 
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,8 @@ type ChatRailProps = {
   elementRef?: Ref<HTMLDivElement>;
 };
 
+const PINNED_BOTTOM_THRESHOLD_PX = 120;
+
 export function AssessmentTranscript({
   children,
   autoScrollKey,
@@ -29,13 +31,36 @@ export function AssessmentTranscript({
 }: AssessmentTranscriptProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const railRef = useRef<HTMLDivElement | null>(null);
+  const pinnedRef = useRef(true);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+
+  const handleScroll = () => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    pinnedRef.current =
+      viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <=
+      PINNED_BOTTOM_THRESHOLD_PX;
+    if (pinnedRef.current) setShowJumpToLatest(false);
+  };
+
+  const jumpToLatest = () => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    pinnedRef.current = true;
+    scrollToLatest(viewport);
+    setShowJumpToLatest(false);
+  };
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) {
       return;
     }
-    scrollToLatest(viewport);
+    if (pinnedRef.current) {
+      scrollToLatest(viewport);
+    } else {
+      setShowJumpToLatest(true);
+    }
   }, [autoScrollKey]);
 
   useEffect(() => {
@@ -44,29 +69,46 @@ export function AssessmentTranscript({
     if (!viewport || !rail || typeof ResizeObserver === "undefined") {
       return;
     }
-    const observer = new ResizeObserver(() => scrollToLatest(viewport));
+    const observer = new ResizeObserver(() => {
+      if (pinnedRef.current) {
+        scrollToLatest(viewport);
+      } else {
+        setShowJumpToLatest(true);
+      }
+    });
     observer.observe(viewport);
     observer.observe(rail);
     return () => observer.disconnect();
   }, []);
   return (
-    <div
-      ref={viewportRef}
-      data-slot="assessment-transcript"
-      role="log"
-      aria-live="polite"
-      aria-label={ariaLabel}
-      className={cn(
-        "no-scrollbar flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto",
-        className,
-      )}
-    >
-      <ChatRail
-        elementRef={railRef}
-        className="shrink-0 gap-4 pt-6 pb-4"
+    <div className={cn("relative flex min-h-0 flex-1 flex-col", className)}>
+      <div
+        ref={viewportRef}
+        data-slot="assessment-transcript"
+        role="log"
+        aria-live="polite"
+        aria-label={ariaLabel}
+        onScroll={handleScroll}
+        className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto"
       >
-        {children}
-      </ChatRail>
+        <ChatRail
+          elementRef={railRef}
+          className="shrink-0 gap-4 pt-6 pb-4"
+        >
+          {children}
+        </ChatRail>
+      </div>
+      {showJumpToLatest && (
+        <button
+          type="button"
+          data-slot="transcript-jump-to-latest"
+          aria-label={t("pages.appShell.chatJumpToLatest")}
+          onClick={jumpToLatest}
+          className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-border bg-background px-3 py-1.5 text-sm text-foreground shadow-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {t("pages.appShell.chatNewActivity")}
+        </button>
+      )}
     </div>
   );
 }

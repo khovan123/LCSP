@@ -24,6 +24,7 @@ export type AgentStreamRuleHeader = {
   status: AssessmentRuntimeRunStatus;
   planned: boolean;
   concept: string | null;
+  goals: string[];
   decision: string | null;
   reasonCode: string | null;
   claims: AgentStreamRuleClaim[];

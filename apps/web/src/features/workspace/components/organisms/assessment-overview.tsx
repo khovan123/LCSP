@@ -14,7 +14,7 @@ import {
 } from "@lcsp/contracts/evidence";
 import { REPOSITORY_CONNECTION_STATUSES } from "@lcsp/contracts/github-integration";
 import { resolveMessage } from "@lcsp/i18n";
-import { SaveIcon, TextCursorInputIcon } from "lucide-react";
+import { InfoIcon, SaveIcon, TextCursorInputIcon } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -62,7 +62,15 @@ import {
   selectRuntimeThinkingItems,
   selectWorkflowPresentation,
 } from "../../utils/assessment-runtime-selectors";
-import { AgentStreamTimeline } from "../molecules/agent-stream-timeline";
+import {
+  AgentStreamTimeline,
+  AGENT_STREAM_RUN_OUTCOMES,
+} from "../molecules/agent-stream-timeline";
+import {
+  scopeAgentStreamRunEvents,
+  shouldShowAgentStreamHistoryAction,
+} from "../../utils/agent-stream-projection";
+import { AgentStreamTurn } from "../molecules/agent-stream-turn";
 import {
   AgentMessage,
   AgentTurn,
@@ -73,7 +81,8 @@ import {
   AssessmentQuestionTurn,
   type AssessmentQuestionAnswerInput,
 } from "../molecules/assessment-question-turn";
-import { InterviewAnswerHistory } from "../molecules/interview-answer-history";
+import { InterviewCycleTurn } from "../molecules/interview-cycle-turn";
+import { InterviewOutputPanel } from "../molecules/interview-output-panel";
 import { PostFindingFlowSteps } from "../molecules/post-finding-flow-steps";
 import { TurnFooter } from "../molecules/turn-footer";
 import { AssessmentComposer } from "./assessment-composer";
@@ -212,6 +221,7 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
         </>
       }
       scanFailed={flow.scanFailed}
+      scannerActive={flow.scanActive}
       activeScanRunId={retryScan.data?.scanJobId ?? scanJob?.id ?? null}
       resetScannerActivity={retryScan.isPending}
       runtimeKey={[
@@ -230,6 +240,7 @@ function AssessmentInterviewFlow({
   interviewEnabled,
   scanner,
   scanFailed,
+  scannerActive,
   activeScanRunId,
   resetScannerActivity,
   runtimeKey,
@@ -238,6 +249,7 @@ function AssessmentInterviewFlow({
   interviewEnabled: boolean;
   scanner: ReactNode;
   scanFailed: boolean;
+  scannerActive: boolean;
   activeScanRunId: string | null;
   resetScannerActivity: boolean;
   runtimeKey: string;
@@ -284,11 +296,14 @@ function AssessmentInterviewFlow({
       ),
     [stageEvents],
   );
-  const billingPaused = groupAgentStreamEventsByRun(
-    liveTimeline.agentStreamEvents ?? [],
-  ).at(-1)?.events.some((event) =>
-    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused,
-  ) ?? false;
+  const billingPaused =
+    groupAgentStreamEventsByRun(liveTimeline.agentStreamEvents ?? [])
+      .at(-1)
+      ?.events.some(
+        (event) =>
+          event.eventType ===
+          ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused,
+      ) ?? false;
   // Cooperative stops belong to Interview; billing can pause any dispatch.
   // Downstream work still owns the turn while it is running.
   const downstreamTurnRunning = useMemo(
@@ -306,6 +321,32 @@ function AssessmentInterviewFlow({
   );
   const anyAgentTurnRunning =
     interviewTurnState === "running" || downstreamTurnRunning;
+  // Which downstream stage is actively running right now, if any — drives a
+  // composer placeholder that reflects what's really happening (planning,
+  // investigating, reviewing) instead of always saying "waiting on Interview"
+  // while Planner/Investigator/Gate are the ones doing the work.
+  const runningDownstreamStage = useMemo(() => {
+    const priority = [
+      ASSESSMENT_AGENT_STREAM_STAGES.gate,
+      ASSESSMENT_AGENT_STREAM_STAGES.investigate,
+      ASSESSMENT_AGENT_STREAM_STAGES.planner,
+    ] as const;
+    return (
+      priority.find(
+        (stage) =>
+          deriveLatestAgentStreamTurnState(stageEvents.byStage[stage]) ===
+          "running",
+      ) ?? null
+    );
+  }, [stageEvents]);
+  const downstreamPlaceholderKey =
+    runningDownstreamStage === ASSESSMENT_AGENT_STREAM_STAGES.gate
+      ? "pages.assessmentFlow.interview.gatePlaceholder"
+      : runningDownstreamStage === ASSESSMENT_AGENT_STREAM_STAGES.investigate
+        ? "pages.assessmentFlow.interview.investigatePlaceholder"
+        : runningDownstreamStage === ASSESSMENT_AGENT_STREAM_STAGES.planner
+          ? "pages.assessmentFlow.interview.plannerPlaceholder"
+          : null;
   const runtimeInterviewState = interviewQuery.data;
   const interviewTurnTimestamp = normalized.identity.audit?.timestamp;
   const submitAnswer = useSubmitAssessmentInterviewAnswerMutation(assessmentId);
@@ -413,12 +454,14 @@ function AssessmentInterviewFlow({
     } else if (composerAvailability.isEnabled) {
       composerPlaceholderKey = "pages.assessmentFlow.interview.placeholder";
     } else {
-      composerPlaceholderKey = interviewHandoff.placeholderKey;
+      composerPlaceholderKey =
+        downstreamPlaceholderKey ?? interviewHandoff.placeholderKey;
     }
   } else if (composerAvailability.isEnabled) {
     composerPlaceholderKey = "pages.assessmentFlow.interview.placeholder";
   } else {
-    composerPlaceholderKey = interviewHandoff.placeholderKey;
+    composerPlaceholderKey =
+      downstreamPlaceholderKey ?? interviewHandoff.placeholderKey;
   }
 
   const answerHistory = interview.answerHistory;
@@ -452,7 +495,27 @@ function AssessmentInterviewFlow({
       ]),
     [answerHistory, stageEvents],
   );
-  const transcriptTurns = splitCurrentInterviewActivity(interviewTranscript);
+  const scannerTurnEvents = useMemo(
+    () =>
+      resetScannerActivity
+        ? []
+        : scopeAgentStreamRunEvents(
+            stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.scanner],
+            activeScanRunId,
+          ),
+    [resetScannerActivity, stageEvents, activeScanRunId],
+  );
+  const onLoadOlderScannerActivity = () => {
+    void workspaceRuntime.loadMoreAgentStreamHistory(assessmentId);
+  };
+  const scannerHistoryAction = shouldShowAgentStreamHistoryAction(
+    liveTimeline.agentStreamHistory,
+    onLoadOlderScannerActivity,
+  );
+  const transcriptTurns = splitCurrentInterviewActivity(
+    interviewTranscript,
+    interview.questionTurnProps?.question,
+  );
   const autoScrollKey = [
     assessmentId,
     runtimeKey,
@@ -658,27 +721,50 @@ function AssessmentInterviewFlow({
     >
       <AssessmentTranscript autoScrollKey={autoScrollKey}>
         {scanner}
-        <AgentStreamTimeline
-          events={stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.scanner]}
-          activeRunId={activeScanRunId}
-          reset={resetScannerActivity}
-          history={liveTimeline.agentStreamHistory}
-          onLoadOlder={() => {
-            void workspaceRuntime.loadMoreAgentStreamHistory(assessmentId);
-          }}
-        />
+        {scannerTurnEvents.length > 0 || scannerHistoryAction ? (
+          <AgentStreamTurn
+            stages={[ASSESSMENT_AGENT_STREAM_STAGES.scanner]}
+            runId={activeScanRunId ?? scannerTurnEvents[0]?.runId ?? ""}
+            events={scannerTurnEvents}
+            stageEvents={{
+              [ASSESSMENT_AGENT_STREAM_STAGES.scanner]: scannerTurnEvents,
+            }}
+            outcomeOverride={
+              scannerActive
+                ? undefined
+                : scanFailed
+                  ? AGENT_STREAM_RUN_OUTCOMES.failed
+                  : AGENT_STREAM_RUN_OUTCOMES.completed
+            }
+            history={liveTimeline.agentStreamHistory}
+            onLoadOlder={onLoadOlderScannerActivity}
+          />
+        ) : null}
 
         {interviewEnabled ? (
           <>
+            {transcriptTurns.currentActivity.map((segment) => (
+              <AgentStreamTurn
+                key={`activity:${segment.turnKey}`}
+                stages={segment.stages}
+                runId={segment.runId}
+                events={segment.events}
+                stageEvents={segment.stageEvents}
+              />
+            ))}
+
             {transcriptTurns.history.map((turn) => (
-              <InterviewAnswerHistory
+              <InterviewCycleTurn
                 key={`answer:${turn.answer.questionId}:${turn.answer.answeredAt}`}
-                answer={turn.answer}
-                activity={turn.activity.map((segment) => (
-                  <AgentStreamTimeline
-                    key={`activity:${segment.stage}:${segment.turnKey}`}
+                cycle={turn}
+                activity={turn.followUpActivity.map((segment, index) => (
+                  <AgentStreamTurn
+                    key={`activity:${segment.turnKey}`}
+                    stages={segment.stages}
+                    runId={segment.runId}
                     events={segment.events}
-                    activeRunId={segment.runId}
+                    stageEvents={segment.stageEvents}
+                    output={turn.output[index]}
                   />
                 ))}
               />
@@ -799,21 +885,20 @@ function AssessmentInterviewFlow({
                 }
               >
                 <AgentMessage>
-                  <p className="mt-2 whitespace-pre-wrap break-words text-muted-foreground">
-                    {interview.assistantMessage ??
-                      t(interviewHandoff.messageKey)}
-                  </p>
+                  <InterviewOutputPanel
+                    icon={InfoIcon}
+                    label={
+                      interview.assistantMessage ??
+                      (interviewHandoff.messageKey ===
+                      "pages.assessmentFlow.interview.contextReadyHandoff"
+                        ? t("pages.assessment.noMoreQuestionsOutput")
+                        : t(interviewHandoff.messageKey))
+                    }
+                  />
                 </AgentMessage>
               </AgentTurn>
             )}
 
-            {transcriptTurns.currentActivity.map((segment) => (
-              <AgentStreamTimeline
-                key={`activity:${segment.stage}:${segment.turnKey}`}
-                events={segment.events}
-                activeRunId={segment.runId}
-              />
-            ))}
             <AgentStreamTimeline events={stageEvents.unstaged} />
 
             {postFinding ? (

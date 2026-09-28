@@ -23,6 +23,7 @@ from orchestration.agent_stream import (
     invoke_graph_with_stream,
     invoke_with_stream,
     publish_agent_stream_event,
+    publish_rule_decision,
     _should_forward_stream_log,
 )
 
@@ -231,6 +232,27 @@ def stream_session(events):
         boundary_name="engineering",
         emit_payload=events.append,
     )
+
+
+def test_planner_rule_decision_includes_investigation_goals():
+    events = []
+    with activate_agent_stream(stream_session(events)):
+        with agent_stream_stage(AGENT_STREAM_STAGES["planner"]):
+            publish_rule_decision(
+                "ER-7",
+                decision="SELECT",
+                concept="Token validation",
+                investigation_goals=("Verify tokens before use", "Check expiry handling"),
+            )
+
+    assert len(events) == 1
+    assert events[0]["event_type"] == "ENGINEERING_RULE"
+    assert events[0]["data"]["engineeringRuleId"] == "ER-7"
+    assert events[0]["data"]["concept"] == "Token validation"
+    assert events[0]["data"]["investigationGoals"] == [
+        "Verify tokens before use",
+        "Check expiry handling",
+    ]
 
 
 def test_invoke_with_stream_forwards_visible_events_and_returns_root_values():

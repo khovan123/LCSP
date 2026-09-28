@@ -41,7 +41,6 @@ from .managed_targeted_investigator import TargetedInterviewPending
 from tools.common.capabilities.assessment.planning.engineering_rule.plan_audit_result import PlannedEngineeringInvestigationResult
 from tools.common.capabilities.assessment.planning.engineering_rule.planning_business_scope import (
     BusinessAwareScopedEngineeringRulePlanningCandidate,
-    BusinessAwareScopedMaterialEngineeringRulePlanner,
     RulePlanningBusinessScopeProjector,
 )
 
@@ -97,9 +96,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             investigator=(investigator or LawGuidedInvestigator(model)),
             evaluator=evaluator,
         )
-        self._planner = planner or BusinessAwareScopedMaterialEngineeringRulePlanner(
-            planner_model
-        )
+        self._planner = planner or EngineeringRulePlanner(planner_model)
         self._corpus_recovery_driver = corpus_recovery_driver
 
     def run(
@@ -588,9 +585,15 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         candidate_by_id = {
             candidate.engineering_rule_id: candidate for candidate in candidates
         }
+        prepared_by_id = {
+            rule.engineering_rule_id: (rule, packet) for rule, packet in prepared
+        }
         planner_decisions: list[dict[str, Any]] = []
         for audit in plan.decision_audit:
             candidate = candidate_by_id.get(audit.engineering_rule_id)
+            prepared_rule, prepared_packet = prepared_by_id.get(
+                audit.engineering_rule_id, (None, None)
+            )
             decision_row = {
                 "engineering_rule_id": audit.engineering_rule_id,
                 "requested_decision": audit.requested_decision,
@@ -643,6 +646,10 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                     decision=audit.final_decision,
                     reason_code=audit.reason_code,
                     basis=audit.basis,
+                    concept=getattr(prepared_packet, "concept", None),
+                    investigation_goals=getattr(
+                        prepared_packet, "investigation_goals", ()
+                    ),
                 )
             self._emit_runtime_activity(
                 scan_job_id=scan_job_id,
@@ -672,15 +679,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                     "validationOverride": audit.validation_override,
                     "semanticPayloads": [
                         self._engineering_rule_semantic_payload(
-                            engineering_rule=next(
-                                (
-                                    rule
-                                    for rule, _packet in prepared
-                                    if rule.engineering_rule_id
-                                    == audit.engineering_rule_id
-                                ),
-                                None,
-                            ),
+                            engineering_rule=prepared_rule,
                             engineering_rule_id=audit.engineering_rule_id,
                             decision=audit.final_decision,
                             reason_code=audit.reason_code,

@@ -50,6 +50,20 @@ Như vậy đổi OS/folder script không tạo thêm nhiều nguồn config.
 
 ## Fedora
 
+LCSP development processes started with `pnpm dev`, `pnpm dev:app`, or
+`pnpm dev:docker` run in a systemd user scope with a memory limit. The limits
+are 2400M, 2800M, and 1500M respectively. Local PostgreSQL, RabbitMQ, and
+Redis have Docker limits of 512m, 512m, and 128m. The Docker agent worker is
+limited to 768m, and each repository sandbox defaults to 512m. The local agent
+runtime defaults to one concurrent job. These budgets target roughly 3–4 GiB
+for a normal local session. Multiple active repository sandboxes, Docker daemon
+overhead, and development setup commands can raise total host usage above 4 GiB.
+If a process reaches its limit, the kernel may terminate it; reduce the
+running services or raise the relevant limit for workloads that need more RAM.
+
+Restart local infrastructure with `pnpm dev:fogewise` to apply its new limits.
+The Linux app limit requires a working systemd user session.
+
 Local:
 
 ```bash

@@ -46,10 +46,17 @@ const agentRuntimeEventsModule =
 const agentRuntimeJobsPerWorker = resolvePositiveInteger(
   process.env.LCSP_AGENT_RUNTIME_JOBS_PER_WORKER ??
     rootEnv.LCSP_AGENT_RUNTIME_JOBS_PER_WORKER ??
-    "8",
+    "1",
   "LCSP_AGENT_RUNTIME_JOBS_PER_WORKER",
 );
 const isDarwin = process.platform === "darwin";
+const devMemoryLimits = {
+  dev: "2400M",
+  dev_app: "2800M",
+  dev_docker: "1500M",
+  agent_runtime: "2400M",
+};
+const devSandboxMemory = "512m";
 
 const targets = {
   proxy: {
@@ -211,6 +218,10 @@ const targets = {
       UV_LINK_MODE: rootEnv.UV_LINK_MODE ?? "copy",
       LCSP_LOCAL_GRAPH_DEV: "1",
       LCSP_AGENT_RUNTIME_JOBS_PER_WORKER: String(agentRuntimeJobsPerWorker),
+      LCSP_REPOSITORY_SANDBOX_MEMORY:
+        process.env.LCSP_REPOSITORY_SANDBOX_MEMORY ??
+        rootEnv.LCSP_REPOSITORY_SANDBOX_MEMORY ??
+        devSandboxMemory,
       ORCHESTRATION_DEBUG: defaultOrchestrationDebug,
       PHOENIX_TRACING: defaultPhoenixTracing,
       PHOENIX_COLLECTOR_ENDPOINT: defaultPhoenixCollectorEndpoint,
@@ -265,6 +276,25 @@ const groups = {
 };
 
 const selection = process.argv[2] ?? "help";
+if (process.platform === "linux" && devMemoryLimits[selection] && !process.env.LCSP_DEV_MEMORY_SCOPE) {
+  const result = spawnSync(
+    "systemd-run",
+    [
+      "--user",
+      "--scope",
+      "--collect",
+      "-p",
+      `MemoryMax=${devMemoryLimits[selection]}`,
+      "--setenv=LCSP_DEV_MEMORY_SCOPE=1",
+      process.execPath,
+      __filename,
+      selection,
+    ],
+    { cwd: repoRoot, env: process.env, stdio: "inherit", shell: false },
+  );
+  if (result.error) console.error(`[run] Cannot enforce development memory limit: ${result.error.message}`);
+  process.exit(result.status ?? 1);
+}
 await main();
 
 async function main() {
@@ -735,6 +765,8 @@ function dockerAgentRuntimeTarget() {
       "--rm",
       "--name",
       containerName,
+      "--memory",
+      "768m",
       "--add-host",
       "host.docker.internal:host-gateway",
       "--mount",
@@ -810,6 +842,7 @@ function dockerWorkerEnv() {
     "LCSP_REASONING_EFFORT",
     "LCSP_LANGSMITH_TRACING",
     "LCSP_AGENT_RUNTIME_JOBS_PER_WORKER",
+    "LCSP_REPOSITORY_SANDBOX_MEMORY",
     "WORKER_RUNTIME_VERSION",
     "WORKER_RUNTIME_BUILD_REF",
     "PHOENIX_TRACING",
@@ -854,6 +887,10 @@ function dockerWorkerEnv() {
       rootEnv.LCSP_LANGSMITH_TRACING ??
       "false",
     LCSP_GRAPH_STORAGE_PATH: "/app/deepagents/tmp",
+    LCSP_REPOSITORY_SANDBOX_MEMORY:
+      process.env.LCSP_REPOSITORY_SANDBOX_MEMORY ??
+      rootEnv.LCSP_REPOSITORY_SANDBOX_MEMORY ??
+      devSandboxMemory,
   };
 }
 

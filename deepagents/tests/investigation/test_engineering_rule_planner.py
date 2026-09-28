@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from orchestration.agent_stream import AgentStreamSession, activate_agent_stream
 from tools.common.capabilities.assessment.planning.engineering_rule.engineering_rule_planner import (
     ENGINEERING_RULE_PLAN_BASIS,
     ENGINEERING_RULE_PLAN_DECISIONS,
@@ -157,6 +158,41 @@ def _decision(rule_id: str, decision: str, reason_code: str, basis: list[str]) -
 
 def _prompt_payload(prompt: str) -> dict:
     return json.loads(prompt.rsplit("\n\n", 1)[1])
+
+
+def test_production_default_planner_invokes_without_source_prompt_or_fallback(native_agent) -> None:
+    from tools.common.capabilities.assessment.planning.engineering_rule.planning_business_scope import (
+        BusinessAwareScopedEngineeringRulePlanningCandidate,
+    )
+
+    native_agent.invoke.return_value = _structured_response([
+        _decision(rule_id, "SELECT", "BASELINE_CONTROL_RELEVANT", ["RULE_CONTRACT"])
+        for rule_id in ("eng-1", "eng-2")
+    ])
+    pipeline = PlannedEngineeringInvestigationPipeline(api_client=MagicMock())
+    candidates = tuple(
+        BusinessAwareScopedEngineeringRulePlanningCandidate(
+            **vars(_candidate(rule_id, source_hits=1))
+        )
+        for rule_id in ("eng-1", "eng-2")
+    )
+    plan = pipeline._planner.plan(
+        candidates=candidates,
+        confirmed_customer_context=_confirmed_context(),
+        graph=_graph(),
+        workflow_run_id="production-default-planner",
+    )
+
+    native_agent.invoke.assert_called_once()
+    assert plan.fallback_used is False
+    assert plan.selected_rule_ids == ("eng-1", "eng-2")
+    assert all(row.reason_code != "PLANNER_FAILURE" for row in plan.decision_audit)
+    prompt = native_agent.invoke.call_args.args[0]["messages"][0]["content"]
+    assert "repositoryEvidenceSummary" not in prompt
+    assert "planningBusinessScope" not in prompt
+    assert "scopeCoverage" not in prompt
+    assert "sourceSeed" not in prompt
+    assert "investigationGoals" in prompt
 
 
 def test_planner_selects_only_relevant_rules(native_agent) -> None:
@@ -646,13 +682,34 @@ def test_planned_pipeline_streams_planner_and_investigator_activity_when_scan_jo
     evidence_report = {
         "evidence_payload": {"evidence_graph": _graph().to_dict()}
     }
-    pipeline.run(
-        evidence_report=evidence_report,
-        workflow_run_id="workflow-1",
-        confirmed_customer_context=_confirmed_context(),
-        workspace_path=tmp_path,
-        scan_job_id="scan-1",
-    )
+    stream_events = []
+    with activate_agent_stream(
+        AgentStreamSession(
+            assessment_id="assessment-1",
+            run_id="workflow-1",
+            correlation_id="corr-1",
+            boundary_name="engineering_assessment_requested",
+            emit_payload=stream_events.append,
+        )
+    ):
+        pipeline.run(
+            evidence_report=evidence_report,
+            workflow_run_id="workflow-1",
+            confirmed_customer_context=_confirmed_context(),
+            workspace_path=tmp_path,
+            scan_job_id="scan-1",
+        )
+
+    planner_events = [
+        event
+        for event in stream_events
+        if event["event_type"] == "ENGINEERING_RULE"
+        and event.get("stage") == "PLANNER"
+    ]
+    assert [event["data"]["investigationGoals"] for event in planner_events] == [
+        ["inspect"],
+        ["inspect"],
+    ]
 
     calls = api_client.post_scan_runtime_event.call_args_list
     assert len(calls) == 4

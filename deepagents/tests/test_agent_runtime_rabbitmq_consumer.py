@@ -415,6 +415,44 @@ def test_boundary_timeout_settles_delivery_and_terminalizes_scan(monkeypatch):
     assert channel.nacked == [("delivery-timeout", False)]
 
 
+def test_engineering_timeout_journals_dispatch_failure_without_terminalizing_scan(monkeypatch):
+    from orchestration.agent_stream import AgentStreamSession
+    from tools.common.capabilities.agent_runtime import invocation
+
+    events = []
+    monkeypatch.setattr(
+        invocation, "_agent_stream_session",
+        lambda boundary, message, correlation: AgentStreamSession(
+            assessment_id=message["assessmentId"],
+            run_id=message["scanJobId"],
+            correlation_id=correlation,
+            boundary_name=boundary,
+            emit_payload=events.append,
+        ),
+    )
+    monkeypatch.setattr(
+        rabbitmq_consumer, "_worker_client_or_none",
+        lambda: pytest.fail("engineering timeout must not fail the Scanner"),
+    )
+    channel = FakeChannel()
+    rabbitmq_consumer._schedule_delivery_timeout_settlement(
+        state=rabbitmq_consumer.DeliverySettlementState(),
+        connection=FakeConnection(), channel=channel, delivery_tag="engineering-timeout",
+        routing_key="technical.evidence.accepted.v1", queue_name="engineering",
+        boundary_name="engineering_assessment_requested",
+        properties=SimpleNamespace(headers={"x-correlation-id": "corr-engineering"}),
+        body=json.dumps({"assessmentId": "assessment-1", "scanJobId": "scan-1"}).encode(),
+        requeue_on_error=True, retry_delays_seconds=(30,), timeout_seconds=0.1,
+    )
+    assert len(events) == 1
+    assert events[0]["event_type"] == "BOUNDARY_FAILED"
+    assert events[0]["status"] == "FAILED"
+    assert events[0]["correlation_id"] == "corr-engineering"
+    assert events[0]["run_id"] == "scan-1"
+    assert events[0]["data"]["reasonCode"] == "AGENT_RUNTIME_BOUNDARY_TIMEOUT"
+    assert channel.nacked == [("engineering-timeout", False)]
+
+
 def test_scan_terminal_failure_payload_never_uses_model_call_limit_error(monkeypatch):
     from tools.common.capabilities.agent_runtime.agent_server_client import (
         AgentServerRunError,

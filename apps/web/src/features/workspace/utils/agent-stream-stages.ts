@@ -6,6 +6,9 @@ import {
   type AssessmentInterviewAnswerHistoryItem,
 } from "@lcsp/contracts/evidence";
 
+import type { AgentStreamTurnOutput } from "../types/agent-stream-turn.types";
+import { projectAgentStreamTurnOutput } from "./agent-stream-turn-output";
+
 import type { AgentStreamStageEvents } from "../types/workspace-runtime.types.ts";
 
 /**
@@ -30,10 +33,24 @@ export function groupAgentStreamEventsByStage(
     return timestamp || left.sequence - right.sequence;
   });
   const firstStages = new Map<string, AssessmentAgentStreamStage>();
+  const downstreamStages = new Map<string, AssessmentAgentStreamStage>();
   for (const event of ordered) {
     const key = agentStreamTurnKey(event);
     if (event.stage !== null && !firstStages.has(key)) {
       firstStages.set(key, event.stage);
+    }
+    if (
+      event.stage !== null &&
+      event.stage !== ASSESSMENT_AGENT_STREAM_STAGES.scanner &&
+      event.stage !== ASSESSMENT_AGENT_STREAM_STAGES.interview &&
+      !downstreamStages.has(key)
+    ) {
+      downstreamStages.set(key, event.stage);
+    }
+  }
+  for (const [key, stage] of downstreamStages) {
+    if (firstStages.get(key) === ASSESSMENT_AGENT_STREAM_STAGES.scanner) {
+      firstStages.set(key, stage);
     }
   }
   const activeStages = new Map<string, AssessmentAgentStreamStage>();
@@ -43,6 +60,14 @@ export function groupAgentStreamEventsByStage(
   >();
   for (const event of ordered) {
     const key = agentStreamTurnKey(event);
+    // Engineering dispatch observers can report SCANNER progress while the
+    // Planner/Investigator runs. A dispatch that reaches a downstream stage
+    // cannot reopen the repository scan timeline.
+    const eventStage =
+      event.stage === ASSESSMENT_AGENT_STREAM_STAGES.scanner &&
+      downstreamStages.has(key)
+        ? null
+        : event.stage;
     const dispatchEnded =
       event.eventType ===
         ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted ||
@@ -59,10 +84,10 @@ export function groupAgentStreamEventsByStage(
         continue;
       }
     }
-    if (event.stage !== null) activeStages.set(key, event.stage);
+    if (eventStage !== null) activeStages.set(key, eventStage);
     // Untagged boundary envelopes belong to their own dispatch's stage, never
     // the previous Scanner run or a separate anonymous completed timeline.
-    const stage = event.stage ?? activeStages.get(key) ?? firstStages.get(key);
+    const stage = eventStage ?? activeStages.get(key) ?? firstStages.get(key);
     if (stage === undefined) {
       grouped.unstaged.push(event);
     } else {
@@ -181,24 +206,86 @@ function isCustomerRequestedStop(data: unknown): boolean {
   );
 }
 
+export type AgentStreamGroupedActivity = {
+  turnKey: string;
+  runId: string;
+  /** Every stage that participated in this one dispatch, first-touched order. */
+  stages: AssessmentAgentStreamStage[];
+  /** All of this dispatch's events across every participating stage, ordered. */
+  events: AssessmentAgentStreamEvent[];
+  /** The same events, split back out per stage — for stage-scoped output/rule
+   *  projection (Planner's own decisions vs. Investigator's own results). */
+  stageEvents: Partial<
+    Record<AssessmentAgentStreamStage, AssessmentAgentStreamEvent[]>
+  >;
+};
+
+/**
+ * One boundary dispatch (a single runId+correlationId) can span multiple
+ * stages when Planner/Investigator/Gate run synchronously inside it — the
+ * same turnKey shows up once per participating stage in stageRunGroups.
+ * Merge those into one grouped activity per turnKey, so the transcript shows
+ * one agent turn per dispatch, not one per stage.
+ */
+export function groupAgentStreamActivityByTurnKey(
+  stageRunGroups: Array<{
+    stage: AssessmentAgentStreamStage;
+    groups: AgentStreamRunGroup[];
+  }>,
+): AgentStreamGroupedActivity[] {
+  const byTurnKey = new Map<string, AgentStreamGroupedActivity>();
+  for (const { stage, groups } of stageRunGroups) {
+    for (const group of groups) {
+      let entry = byTurnKey.get(group.turnKey);
+      if (!entry) {
+        entry = {
+          turnKey: group.turnKey,
+          runId: group.runId,
+          stages: [],
+          events: [],
+          stageEvents: {},
+        };
+        byTurnKey.set(group.turnKey, entry);
+      }
+      entry.stages.push(stage);
+      entry.stageEvents[stage] = group.events;
+      entry.events.push(...group.events);
+    }
+  }
+  return [...byTurnKey.values()].map((entry) => ({
+    ...entry,
+    // Terminal events are deliberately copied into each stage for lifecycle
+    // closure. The merged raw dispatch contains each actual event only once.
+    events: uniqueAgentStreamEvents(entry.events).sort((left, right) => {
+      const emittedAt = left.emittedAt.localeCompare(right.emittedAt);
+      return emittedAt || left.sequence - right.sequence;
+    }),
+  }));
+}
+
+/** Keep the first copy so the outer boundary keeps its original stage. */
+function uniqueAgentStreamEvents(events: AssessmentAgentStreamEvent[]) {
+  const unique = new Map<string, AssessmentAgentStreamEvent>();
+  for (const event of events) {
+    if (!unique.has(event.eventId)) unique.set(event.eventId, event);
+  }
+  return [...unique.values()];
+}
+
 export type InterviewTranscriptSegment =
   | {
       kind: "answer";
       timestamp: number;
       answer: AssessmentInterviewAnswerHistoryItem;
     }
-  | {
+  | ({
       kind: "activity";
       timestamp: number;
-      stage: AssessmentAgentStreamStage;
-      turnKey: string;
-      runId: string;
-      events: AssessmentAgentStreamEvent[];
-    };
+    } & AgentStreamGroupedActivity);
 
 /**
- * Interleave past Interview answers with the agent activity that produced
- * each one, in the order they actually happened. Without this, every answer
+ * Interleave past Interview answers with follow-up agent activity,
+ * in the order they actually happened. Without this, every answer
  * renders first and every activity run renders afterward as one lump at the
  * end of the transcript, disconnected from the turn it belongs to.
  */
@@ -217,18 +304,13 @@ export function interleaveInterviewTranscript(
       answer,
     });
   }
-  for (const { stage, groups } of stageRunGroups) {
-    for (const group of groups) {
-      const first: AssessmentAgentStreamEvent | undefined = group.events[0];
-      segments.push({
-        kind: "activity",
-        timestamp: first ? Date.parse(first.emittedAt) || 0 : 0,
-        stage,
-        turnKey: group.turnKey,
-        runId: group.runId,
-        events: group.events,
-      });
-    }
+  for (const grouped of groupAgentStreamActivityByTurnKey(stageRunGroups)) {
+    const first: AssessmentAgentStreamEvent | undefined = grouped.events[0];
+    segments.push({
+      kind: "activity",
+      timestamp: first ? Date.parse(first.emittedAt) || 0 : 0,
+      ...grouped,
+    });
   }
   // Array.prototype.sort is stable, so same-timestamp ties (an activity run
   // starting the instant an answer is recorded) keep answers first.
@@ -236,25 +318,44 @@ export function interleaveInterviewTranscript(
   return segments;
 }
 
-/** Put the current agent's activity below its message, not above its question. */
+export type InterviewCycle = {
+  question: AssessmentInterviewAnswerHistoryItem["question"];
+  answer: AssessmentInterviewAnswerHistoryItem;
+  followUpActivity: AgentStreamGroupedActivity[];
+  /** Dispatch outputs remain stage-scoped; the turn renderer projects their results. */
+  output: AgentStreamTurnOutput[];
+  nextQuestion?: AssessmentInterviewAnswerHistoryItem["question"];
+};
+
+/** Assign a dispatch to the latest preceding answer, using its start time.
+ * Initial question-generation activity has no triggering answer and stays separate.
+ * A dispatch is never split when it continues beyond the next answer. */
 export function splitCurrentInterviewActivity(
   segments: InterviewTranscriptSegment[],
+  currentQuestion?: InterviewCycle["question"],
 ) {
-  let activity: Extract<
-    InterviewTranscriptSegment,
-    { events: AssessmentAgentStreamEvent[] }
-  >[] = [];
-  const history = segments.flatMap((segment) => {
-    if (segment.kind === "activity") {
-      activity.push(segment);
-      return [];
+  const history: InterviewCycle[] = [];
+  const currentActivity: AgentStreamGroupedActivity[] = [];
+  for (const segment of segments) {
+    if (segment.kind === "answer") {
+      history.push({
+        question: segment.answer.question,
+        answer: segment.answer,
+        followUpActivity: [],
+        output: [],
+      });
+    } else {
+      const cycle = history.at(-1);
+      if (cycle) {
+        cycle.followUpActivity.push(segment);
+        cycle.output.push(projectAgentStreamTurnOutput(segment.stageEvents));
+      } else currentActivity.push(segment);
     }
-    const turn = { answer: segment.answer, activity };
-    activity = [];
-    return [turn];
-  });
-  return {
-    history,
-    currentActivity: activity,
-  };
+  }
+  for (let index = 0; index < history.length - 1; index++) {
+    history[index]!.nextQuestion = history[index + 1]!.question;
+  }
+  const latest = history.at(-1);
+  if (latest && currentQuestion) latest.nextQuestion = currentQuestion;
+  return { history, currentActivity };
 }

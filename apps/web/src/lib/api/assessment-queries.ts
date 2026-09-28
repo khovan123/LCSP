@@ -59,15 +59,13 @@ export function useAssessmentInterviewStateQuery(
 }
 
 export function useAssessmentArtifactsQuery(assessmentId: string) {
+  // Refreshed by the workspace runtime SSE stream (workspace-runtime-provider.tsx),
+  // which invalidates this query on every runtime event for the assessment —
+  // no HTTP polling needed here.
   return useQuery({
     queryKey: apiQueryKeys.assessment.artifacts(assessmentId),
     queryFn: () => getAssessmentArtifactAvailability(assessmentId),
     enabled: assessmentId.length > 0,
-    refetchInterval: (query) => {
-      // A missing artifact projection is a valid pre-artifact state. Once the
-      // endpoint reports it, stop polling until an explicit invalidation.
-      return query.state.data === null ? false : 5_000;
-    },
   });
 }
 

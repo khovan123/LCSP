@@ -37,6 +37,13 @@ export type AssessmentQuestionAnswerInput = {
 type AssessmentQuestionTurnProps = {
   question: AssessmentInterviewQuestion;
   answerHistoryVisible?: boolean;
+  /** This is a resolved, already-answered turn (rendered from history), not
+   *  the live active question — hide interactive actions (Confirm/Adjust)
+   *  there's nothing left to act on. Deliberately separate from
+   *  answerHistoryVisible: that prop is also true for the LIVE active
+   *  question whenever any prior answer exists in the transcript, which is
+   *  not the same thing as this particular question being resolved. */
+  historical?: boolean;
   selectedChoiceIds?: string[];
   onSelectedChoiceIdsChange?: (choiceIds: string[]) => void;
   isAdjusting?: boolean;
@@ -54,6 +61,7 @@ type AssessmentQuestionTurnProps = {
 export function AssessmentQuestionTurn({
   question,
   answerHistoryVisible = false,
+  historical = false,
   selectedChoiceIds = [],
   onSelectedChoiceIdsChange,
   isAdjusting = false,
@@ -151,7 +159,8 @@ export function AssessmentQuestionTurn({
           </div>
         ) : null}
 
-        {question.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust ? (
+        {question.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust &&
+        !historical ? (
           <div
             data-slot="confirm-adjust-actions"
             className="flex flex-wrap items-center gap-2"

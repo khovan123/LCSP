@@ -323,6 +323,9 @@ export function WorkspaceRuntimeProvider({
             void queryClient.invalidateQueries({
               queryKey: apiQueryKeys.assessment.classification(assessmentId),
             });
+            void queryClient.invalidateQueries({
+              queryKey: apiQueryKeys.assessment.artifacts(assessmentId),
+            });
           }
         }
       }

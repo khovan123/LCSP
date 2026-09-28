@@ -1,3 +1,6 @@
+import { randomUUID } from "node:crypto";
+import { ASSESSMENT_PIPELINE_LIVENESS_WINDOW_SECONDS } from "@lcsp/contracts/evidence";
+import { OutboxStatus, Prisma } from "@prisma/client";
 import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
@@ -71,7 +74,7 @@ export class RerunClassificationHandler implements ICommandHandler<RerunClassifi
       },
       result: SCAN_EVENT_TYPES.classificationRerunTriggeredAudit,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
-      idempotencyKey: `${evidenceReport.id}:${command.correlationId}:engineering-assessment-rerun`,
+      idempotencyKey: `${evidenceReport.id}:engineering-assessment-rerun:${randomUUID()}`,
       payload: {
         evidenceReportId: evidenceReport.id,
         technicalEvidenceReportId: evidenceReport.id,
@@ -80,10 +83,46 @@ export class RerunClassificationHandler implements ICommandHandler<RerunClassifi
         scanJobId: evidenceReport.scanJobId,
         correlationId: command.correlationId,
         rerun: true,
+        rerunReason: command.reason ?? null,
       },
     });
 
-    await this.prisma.$transaction(async (tx) => {
+    const dispatchCorrelationId = await this.prisma.$transaction(async (tx) => {
+      // Serialize check-and-enqueue across API instances, including the first
+      // dispatch when there is no outbox row yet to lock.
+      const dispatchScope = JSON.stringify([
+        evidenceReport.id,
+        command.reason ?? null,
+      ]);
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${dispatchScope}))`;
+      const cutoff = new Date(
+        Date.now() - ASSESSMENT_PIPELINE_LIVENESS_WINDOW_SECONDS * 1000,
+      );
+      const recent = await tx.outboxMessage.findFirst({
+        where: {
+          aggregateId: evidenceReport.id,
+          eventType: SCAN_EVENT_TYPES.evidenceAccepted,
+          AND: [
+            { payload: { path: ["rerun"], equals: true } },
+            {
+              payload: {
+                path: ["rerunReason"],
+                equals: command.reason ?? Prisma.JsonNull,
+              },
+            },
+          ],
+          OR: [
+            { status: { in: [OutboxStatus.PENDING, OutboxStatus.FAILED] } },
+            { status: OutboxStatus.PUBLISHED, publishedAt: { gt: cutoff } },
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+        select: { payload: true },
+      });
+      if (recent) {
+        const payload = recent.payload as { correlationId?: string };
+        return payload.correlationId ?? command.correlationId;
+      }
       await this.outboxRepository.enqueue(event, tx);
       await this.auditWriter.writeInTx(
         {
@@ -109,12 +148,13 @@ export class RerunClassificationHandler implements ICommandHandler<RerunClassifi
         },
         tx,
       );
+      return command.correlationId;
     });
 
     return {
       technical_evidence_report_id: evidenceReport.id,
       status: CLASSIFICATION_RERUN_STATUSES.queued,
-      correlationId: command.correlationId,
+      correlationId: dispatchCorrelationId,
     };
   }
 }

@@ -320,6 +320,23 @@ def _pause_billing_dispatch(
     return {"boundary": boundary.name, "status": "WAITING", **saved}
 
 
+def report_external_boundary_timeout(
+    boundary_name: str,
+    message: dict[str, Any],
+    correlation_id: str,
+    reason_code: str,
+) -> None:
+    """Journal a deadline failure raised outside the in-process boundary handler."""
+    session = _agent_stream_session(boundary_name, message, correlation_id)
+    with activate_agent_stream(session):
+        publish_agent_stream_event(
+            "BOUNDARY_FAILED",
+            status="FAILED",
+            text="Agent Runtime boundary timed out",
+            data={"boundary": boundary_name, "reasonCode": reason_code},
+        )
+
+
 def _report_dispatch_failure(
     boundary_handler: AgentBoundaryBase,
     message: dict[str, Any],

@@ -27,6 +27,7 @@ from tools.common.capabilities.agent_runtime.boundary import NonRetryableAgentBo
 from tools.common.capabilities.agent_runtime.invocation import (
     invocation_boundary_manifest,
     load_boundary,
+    report_external_boundary_timeout,
 )
 from tools.common.capabilities.agent_runtime.agent_server_client import (
     DEFAULT_AGENT_SERVER_URL,
@@ -580,11 +581,29 @@ def _notify_scan_delivery_terminal_failure(
     summary: str,
     timeout_seconds: float | None = None,
 ) -> None:
-    if boundary_name != "scan_requested":
+    if (
+        boundary_name != "scan_requested"
+        and reason_code != SCAN_FAILURE_AGENT_RUNTIME_BOUNDARY_TIMEOUT
+    ):
         return
     try:
         message = _decode_message(body)
     except Exception:
+        return
+    if boundary_name != "scan_requested":
+        try:
+            report_external_boundary_timeout(
+                boundary_name,
+                message,
+                _correlation_id(
+                    message, getattr(properties, "headers", None), boundary_name
+                ),
+                reason_code,
+            )
+        except Exception:
+            LOGGER.warning(
+                "Agent Runtime deadline stream report failed boundary=%s", boundary_name
+            )
         return
     scan_job_id = _message_text(message, "scanJobId", "scan_job_id")
     if not scan_job_id:

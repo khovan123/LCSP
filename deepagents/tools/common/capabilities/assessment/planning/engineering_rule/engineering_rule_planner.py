@@ -602,7 +602,12 @@ class EngineeringRulePlanner:
             "confirmedStructuredBusinessContext": (
                 confirmed_customer_context.to_prompt_dict()
             ),
-            "engineeringRules": [row.to_prompt_dict() for row in candidates],
+            # Scoped candidates retain source metadata for deterministic validation,
+            # but the Planner's model input is fixed rules and confirmed context only.
+            "engineeringRules": [
+                EngineeringRulePlanningCandidate.to_prompt_dict(row)
+                for row in candidates
+            ],
         }
         return (
             "You are the LCSP EngineeringRule Planner. Decide which EngineeringRules the "

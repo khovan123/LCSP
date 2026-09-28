@@ -77,7 +77,13 @@ export type AssessmentRuntimeStepSkipReason =
 
 /** Planner reason codes the workspace projection needs to aggregate runtime activity. */
 export const ASSESSMENT_RUNTIME_PLAN_REASON_CODES = {
+  plannerFailure: "PLANNER_FAILURE",
   targetedExactResumePin: "TARGETED_EXACT_RESUME_PIN",
+} as const;
+
+export const ASSESSMENT_ENGINEERING_RULE_PLAN_DECISIONS = {
+  select: "SELECT",
+  skip: "SKIP",
 } as const;
 
 export const ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS = {

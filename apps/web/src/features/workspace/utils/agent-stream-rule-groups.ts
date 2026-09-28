@@ -38,17 +38,22 @@ export function projectAgentStreamRuleHeaders(
   events: AssessmentAgentStreamEvent[],
 ): Map<string, AgentStreamRuleHeader> {
   const headers = new Map<string, AgentStreamRuleHeader>();
-  const ordered = [...events].sort((left, right) => left.sequence - right.sequence);
+  const ordered = [...events].sort(
+    (left, right) => left.sequence - right.sequence,
+  );
   for (const event of ordered) {
     const semantic = ruleLifecycleSemantic(event);
     if (semantic === null) continue;
     const ruleId = ruleIdOf(event, semantic);
     if (ruleId === null) continue;
-    const header = headers.get(ruleId) ?? emptyRuleHeader(ruleId, event.sequence);
+    const header =
+      headers.get(ruleId) ?? emptyRuleHeader(ruleId, event.sequence);
     header.status = runStatus(event.status) ?? header.status;
     header.planned =
       header.planned || event.stage === ASSESSMENT_AGENT_STREAM_STAGES.planner;
     header.concept = stringValue(semantic.concept) ?? header.concept;
+    const goals = goalValues(semantic.investigationGoals);
+    if (goals.length > 0) header.goals = goals;
     header.decision = stringValue(semantic.decision) ?? header.decision;
     header.reasonCode = stringValue(semantic.reasonCode) ?? header.reasonCode;
     const claims = ruleClaims(semantic.resultSummary);
@@ -82,7 +87,11 @@ export function segmentAgentStreamRowsByRule<TRow extends RuleScopedRow>(
   };
 
   const entries = [
-    ...rows.map((row) => ({ sequence: row.firstSequence, row, ruleId: row.ruleId })),
+    ...rows.map((row) => ({
+      sequence: row.firstSequence,
+      row,
+      ruleId: row.ruleId,
+    })),
     ...[...headers.values()].map((header) => ({
       sequence: header.sequence,
       row: null,
@@ -127,13 +136,17 @@ function ruleIdOf(
   return event.engineeringRuleId ?? stringValue(semantic.engineeringRuleId);
 }
 
-function emptyRuleHeader(ruleId: string, sequence: number): AgentStreamRuleHeader {
+function emptyRuleHeader(
+  ruleId: string,
+  sequence: number,
+): AgentStreamRuleHeader {
   return {
     ruleId,
     sequence,
     status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
     planned: false,
     concept: null,
+    goals: [],
     decision: null,
     reasonCode: null,
     claims: [],
@@ -152,10 +165,12 @@ function ruleClaims(
       {
         claimType,
         criterion: stringValue(claim.criterion),
-        confidence: typeof claim.confidence === "number" ? claim.confidence : null,
+        confidence:
+          typeof claim.confidence === "number" ? claim.confidence : null,
         limitations: Array.isArray(claim.limitations)
           ? claim.limitations.filter(
-              (item): item is string => typeof item === "string" && item.length > 0,
+              (item): item is string =>
+                typeof item === "string" && item.length > 0,
             )
           : [],
         sourceLocations: stringValue(claim.sourceLocations),
@@ -165,15 +180,28 @@ function ruleClaims(
 }
 
 function runStatus(value: string | null): AssessmentRuntimeRunStatus | null {
-  return Object.values(ASSESSMENT_RUNTIME_RUN_STATUSES).find(
-    (status) => status === value,
-  ) ?? null;
+  return (
+    Object.values(ASSESSMENT_RUNTIME_RUN_STATUSES).find(
+      (status) => status === value,
+    ) ?? null
+  );
 }
 
 function stringValue(
   value: AssessmentRuntimeSummaryValue | undefined,
 ): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function goalValues(
+  value: AssessmentRuntimeSummaryValue | undefined,
+): string[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (goal): goal is string =>
+          typeof goal === "string" && goal.trim().length > 0,
+      )
+    : [];
 }
 
 function isSummaryRecord(

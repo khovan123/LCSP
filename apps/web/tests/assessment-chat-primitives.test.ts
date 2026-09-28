@@ -79,10 +79,12 @@ test("assessment transcript is the shared scrollable 680px rail primitive", asyn
   assert.doesNotMatch(source, /max-w-\[760px\]/);
 });
 
-test("assessment transcript stays pinned to latest output and preserves a fixed composer gap", async () => {
+test("assessment transcript follows only while pinned and preserves a fixed composer gap", async () => {
   const source = await readFile(transcriptPath, "utf8");
 
   assert.match(source, /useLayoutEffect/);
+  assert.match(source, /pinnedRef\.current/);
+  assert.match(source, /onScroll=\{handleScroll\}/);
   assert.match(source, /scrollToLatest\(viewport\)/);
   assert.match(source, /ResizeObserver/);
   assert.match(source, /observer\.observe\(viewport\)/);
@@ -91,9 +93,8 @@ test("assessment transcript stays pinned to latest output and preserves a fixed 
   assert.match(source, /behavior: "auto"/);
   assert.match(source, /shrink-0 gap-4 pt-6 pb-4/);
   assert.doesNotMatch(source, /mt-auto/);
-  assert.doesNotMatch(source, /AUTO_FOLLOW_THRESHOLD_PX/);
-  assert.doesNotMatch(source, /isFollowingLatestRef/);
-  assert.doesNotMatch(source, /onScroll=\{handleScroll\}/);
+  assert.match(source, /PINNED_BOTTOM_THRESHOLD_PX/);
+  assert.match(source, /transcript-jump-to-latest/);
   assert.doesNotMatch(source, /scrollIntoView/);
 });
 
@@ -109,6 +110,18 @@ test("assessment overview gates Interview behind repository and scanner runtime"
   assert.match(
     source,
     /<AssessmentTranscript autoScrollKey=\{autoScrollKey\}>/,
+  );
+});
+
+test("assessment overview renders the live current-turn activity before the next active question", async () => {
+  const source = await readFile(overviewPath, "utf8");
+
+  assert.match(source, /\{transcriptTurns\.currentActivity\.map\(/);
+  assert.match(source, /\{interview\.questionTurnProps \? \(/);
+  assert.ok(
+    source.indexOf("transcriptTurns.currentActivity.map((segment) => (") <
+      source.indexOf("{interview.questionTurnProps ? ("),
+    "currentActivity must render before the active question/assistant block, so the live transcript reads: previous question -> answer -> activity/output -> next question",
   );
 });
 

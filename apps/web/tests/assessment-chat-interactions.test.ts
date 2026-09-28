@@ -90,14 +90,18 @@ Object.defineProperty(testWindow.HTMLElement.prototype, "scrollTo", {
   configurable: true,
   value: () => undefined,
 });
-Object.defineProperty(testWindow.HTMLTextAreaElement.prototype, "scrollHeight", {
-  configurable: true,
-  get() {
-    // jsdom does not lay out Tailwind padding, so model the textarea's vertical
-    // chrome explicitly to keep row-growth assertions aligned with browsers.
-    return Math.max(1, this.value.split("\n").length) * 20 + 32;
+Object.defineProperty(
+  testWindow.HTMLTextAreaElement.prototype,
+  "scrollHeight",
+  {
+    configurable: true,
+    get() {
+      // jsdom does not lay out Tailwind padding, so model the textarea's vertical
+      // chrome explicitly to keep row-growth assertions aligned with browsers.
+      return Math.max(1, this.value.split("\n").length) * 20 + 32;
+    },
   },
-});
+);
 
 const actEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -107,8 +111,8 @@ actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
 const { createRoot } = await import("react-dom/client");
 const { ChatSingleSelect } =
   await import("../src/features/workspace/components/molecules/chat-single-select");
-const { InterviewAnswerHistory } =
-  await import("../src/features/workspace/components/molecules/interview-answer-history");
+const { InterviewCycleTurn } =
+  await import("../src/features/workspace/components/molecules/interview-cycle-turn");
 
 const { SelectionHistoryRow } =
   await import("../src/features/workspace/components/molecules/selection-history-row");
@@ -384,7 +388,10 @@ test("assessment composer grows from one to three rows before scrolling and offe
       onSubmit: () => undefined,
     }),
   );
-  const expandedHeight = Number.parseInt(getTextarea(container).style.height, 10);
+  const expandedHeight = Number.parseInt(
+    getTextarea(container).style.height,
+    10,
+  );
   assert.ok(expandedHeight > threeRowHeight);
   assert.ok(expandedHeight <= 352);
   assert.equal(getTextarea(container).style.overflowY, "auto");
@@ -404,7 +411,8 @@ function thinkingEvent(
     runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
     stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
     toolName: "engineering_rule_plan:eng-1",
-    summary: ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRulePlannerDecision,
+    summary:
+      ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRulePlannerDecision,
     inputSummary: { hiddenPrompt: "must not render" },
     outputSummary: {
       messageKey:
@@ -458,7 +466,9 @@ test("runtime thinking renders aggregated planner progress without rule ids or p
     assert.ok(!text.includes(hidden), `leaked ${hidden}`);
   }
   assert.equal(
-    container.querySelector("[data-runtime-thinking-id]")?.getAttribute("data-runtime-thinking-id"),
+    container
+      .querySelector("[data-runtime-thinking-id]")
+      ?.getAttribute("data-runtime-thinking-id"),
     "planner:evt-skip",
   );
 });
@@ -479,7 +489,8 @@ test("runtime thinking for a targeted resume aggregates skipped requirements ins
         messageParams: {
           decision: index === 0 ? "SELECT" : "SKIP",
           engineeringRuleId: `eng-${index + 1}`,
-          reasonCode: ASSESSMENT_RUNTIME_PLAN_REASON_CODES.targetedExactResumePin,
+          reasonCode:
+            ASSESSMENT_RUNTIME_PLAN_REASON_CODES.targetedExactResumePin,
         },
         reasonCode: ASSESSMENT_RUNTIME_PLAN_REASON_CODES.targetedExactResumePin,
       },
@@ -523,7 +534,6 @@ test("runtime thinking never renders legacy raw internal summaries", async () =>
     assert.ok(!text.includes(internal), `leaked ${internal}`);
   }
 });
-
 
 test("composer expands and collapses without changing the draft or submitting", async () => {
   const draft = "A long answer\n".repeat(30);
@@ -634,8 +644,7 @@ test("assessment transcript leaves short content at the top without synthetic bo
   assert.doesNotMatch(rail.className, /mt-auto/);
 });
 
-
-test("assessment transcript always anchors to the latest streamed output", async () => {
+test("assessment transcript follows new output while pinned and offers a jump after scrolling up", async () => {
   const { container, rerender } = await renderElement(
     transcriptElement("Initial", 1),
   );
@@ -644,17 +653,65 @@ test("assessment transcript always anchors to the latest streamed output", async
   const scrollState = setScrollState(transcript, scrollCalls);
 
   scrollState.top = 680;
+  await act(async () => transcript.dispatchEvent(new Event("scroll", { bubbles: true })));
   await rerender(transcriptElement("Next", 2));
   assert.equal(scrollCalls.length, 1);
   assert.equal(scrollCalls[0].top, 1000);
   assert.equal(scrollCalls[0].behavior, "auto");
 
   scrollState.top = 100;
+  await act(async () => transcript.dispatchEvent(new Event("scroll", { bubbles: true })));
+  assert.equal(container.querySelector('[data-slot="transcript-jump-to-latest"]'), null);
   scrollState.height = 1200;
   await rerender(transcriptElement("Later", 3));
-  assert.equal(scrollCalls.length, 2);
-  assert.equal(scrollCalls[1].top, 1200);
-  assert.equal(scrollCalls[1].behavior, "auto");
+  assert.equal(scrollCalls.length, 1);
+  assert.equal(scrollState.top, 100);
+  const jump = container.querySelector<HTMLButtonElement>('[data-slot="transcript-jump-to-latest"]');
+  assert.ok(jump);
+  assert.equal(jump.getAttribute("aria-label"), "Đến hoạt động mới nhất");
+  await click(jump);
+  assert.equal(scrollCalls.at(-1)?.top, 1200);
+  assert.equal(scrollState.top, 1200);
+  assert.equal(container.querySelector('[data-slot="transcript-jump-to-latest"]'), null);
+
+  scrollState.height = 1300;
+  await rerender(transcriptElement("Newest", 4));
+  assert.equal(scrollCalls.at(-1)?.top, 1300);
+});
+
+test("assessment transcript resize never pulls an unpinned reader to latest", async () => {
+  const originalObserver = globalThis.ResizeObserver;
+  let onResize: ResizeObserverCallback | undefined;
+  class TestResizeObserver {
+    constructor(callback: ResizeObserverCallback) { onResize = callback; }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  globalThis.ResizeObserver = TestResizeObserver as typeof ResizeObserver;
+  try {
+    const { container } = await renderElement(transcriptElement("Initial", 1));
+    const transcript = getTranscript(container);
+    const scrollCalls: ScrollToOptions[] = [];
+    const scrollState = setScrollState(transcript, scrollCalls);
+    scrollState.top = 100;
+    await act(async () => transcript.dispatchEvent(new Event("scroll", { bubbles: true })));
+    scrollState.height = 1200;
+    assert.ok(onResize);
+    await act(async () => onResize!([], {} as ResizeObserver));
+    assert.equal(scrollState.top, 100);
+    assert.equal(scrollCalls.length, 0);
+    assert.ok(container.querySelector('[data-slot="transcript-jump-to-latest"]'));
+
+    scrollState.top = 850;
+    await act(async () => transcript.dispatchEvent(new Event("scroll", { bubbles: true })));
+    assert.equal(container.querySelector('[data-slot="transcript-jump-to-latest"]'), null);
+    scrollState.height = 1400;
+    await act(async () => onResize!([], {} as ResizeObserver));
+    assert.equal(scrollCalls.at(-1)?.top, 1400);
+  } finally {
+    globalThis.ResizeObserver = originalObserver;
+  }
 });
 
 test("selection history row keeps completed value visible and non-interactive", async () => {
@@ -835,7 +892,7 @@ for (const control of [
   ]) {
     test(`answered ${control} retains disabled choices and saved selection with comment=${Boolean(comment)}`, async () => {
       const { container } = await renderElement(
-        React.createElement(InterviewAnswerHistory, {
+        React.createElement(InterviewCycleTurn, {
           answer: {
             questionId: "q-1",
             answeredAt: "2026-09-09T00:00:00Z",
@@ -883,10 +940,10 @@ for (const control of [
   }
 }
 
-test("confirmed interpretation history renders as an agent acknowledgement with timestamp", async () => {
+test("confirmed interpretation history renders through the structured question turn and an output status card, not a raw internal status message", async () => {
   const answeredAt = "2026-09-14T08:14:05.968Z";
   const { container } = await renderElement(
-    React.createElement(InterviewAnswerHistory, {
+    React.createElement(InterviewCycleTurn, {
       answer: {
         questionId: "q-confirm",
         answeredAt,
@@ -901,24 +958,104 @@ test("confirmed interpretation history renders as an agent acknowledgement with 
     }),
   );
 
-  const turns = Array.from(
-    container.querySelectorAll<HTMLElement>('[data-slot="agent-turn"]'),
+  // The confirmation question renders through the structured
+  // AssessmentQuestionTurn path, not as plain assistant paragraph text.
+  const questionTurn = container.querySelector(
+    '[data-slot="assessment-question-turn"]',
   );
-  const acknowledgementTurn = turns.find((turn) =>
-    turn.textContent?.includes("Customer confirmed prior material context."),
+  assert.ok(questionTurn);
+  assert.match(
+    questionTurn.textContent ?? "",
+    /Please confirm this interpretation\./,
   );
-  assert.ok(acknowledgementTurn);
-  assert.equal(acknowledgementTurn.dataset.role, "agent");
+  // A resolved (historical) confirmAdjust turn has nothing left to act on.
   assert.equal(
-    acknowledgementTurn.querySelector("time")?.getAttribute("datetime"),
+    questionTurn.querySelector('[data-slot="confirm-adjust-actions"]'),
+    null,
+  );
+
+  const questionAgentTurn = questionTurn.closest('[data-slot="agent-turn"]');
+  assert.equal(
+    questionAgentTurn?.querySelector("time")?.getAttribute("datetime"),
     answeredAt,
+  );
+
+  const customerConfirm = container.querySelector(
+    '[data-slot="interview-customer-confirmation"]',
+  );
+  assert.ok(customerConfirm);
+  assert.equal(
+    customerConfirm
+      .closest('[data-slot="agent-turn"]')
+      ?.getAttribute("data-role"),
+    "user",
+  );
+
+  // The internal status ("Customer confirmed prior material context.") is
+  // never rendered verbatim as a standalone chat message — it surfaces as a
+  // distinct output card instead.
+  const outputPanel = container.querySelector(
+    '[data-slot="interview-output-panel"]',
+  );
+  assert.ok(outputPanel);
+  assert.doesNotMatch(
+    container.textContent ?? "",
+    /Customer confirmed prior material context\./,
+  );
+});
+
+test('adjusted interpretation history shows the customer\'s own adjustment before the "context updated" output panel', async () => {
+  const answeredAt = "2026-09-14T08:20:00.000Z";
+  const { container } = await renderElement(
+    React.createElement(InterviewCycleTurn, {
+      answer: {
+        questionId: "q-adjust",
+        answeredAt,
+        summary: "Customer requested adjustment to prior material context.",
+        comment:
+          "Payment overrides require three-party authorization in production.",
+        question: {
+          id: "q-adjust",
+          intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
+          control: ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust,
+          prompt: "Please confirm this interpretation.",
+        },
+      },
+    }),
+  );
+
+  const questionTurn = container.querySelector(
+    '[data-slot="assessment-question-turn"]',
+  );
+  const comment = [...container.querySelectorAll("p")].find((node) =>
+    node.textContent?.includes(
+      "Payment overrides require three-party authorization in production.",
+    ),
+  );
+  const outputPanel = container.querySelector(
+    '[data-slot="interview-output-panel"]',
+  );
+  assert.ok(questionTurn && comment && outputPanel);
+  assert.ok(
+    questionTurn.compareDocumentPosition(comment) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    "the question must come before the customer's adjustment",
+  );
+  assert.ok(
+    comment.compareDocumentPosition(outputPanel) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    'the customer\'s adjustment must come before the "context updated" output panel',
+  );
+  assert.doesNotMatch(
+    container.textContent ?? "",
+    /Customer requested adjustment to prior material context\./,
   );
 });
 
 test("historical free-text questions render as agent turns with timestamp", async () => {
   const answeredAt = "2026-09-14T08:12:31.000Z";
   const { container } = await renderElement(
-    React.createElement(InterviewAnswerHistory, {
+    React.createElement(InterviewCycleTurn, {
       answer: {
         questionId: "q-free-text",
         answeredAt,
@@ -947,7 +1084,7 @@ test("turn timestamps render through the active locale instead of raw ISO", asyn
   for (const locale of ["vi", "en"] as const) {
     setAppLocale(locale);
     const { container } = await renderElement(
-      React.createElement(InterviewAnswerHistory, {
+      React.createElement(InterviewCycleTurn, {
         answer: {
           questionId: `q-locale-${locale}`,
           answeredAt,
