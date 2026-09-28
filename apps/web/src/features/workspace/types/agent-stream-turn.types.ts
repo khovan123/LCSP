@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type {
   AssessmentAgentStreamEvent,
   AssessmentAgentStreamStage,
@@ -28,5 +30,10 @@ export type AgentStreamTurnProps = {
   outcomeOverride?: AgentStreamRunOutcome;
   history?: WorkspaceRuntimeAgentStreamHistoryState;
   onLoadOlder?: () => void;
+  /** Turn results owned by the caller (e.g. an Interview answer's outcome);
+   *  rendered before Technical details so the raw feed always ends the turn. */
+  outputs?: ReactNode;
+  /** Planner's rule order for this dispatch; orders the Investigator's queue. */
+  planOrder?: readonly string[];
   className?: string;
 };

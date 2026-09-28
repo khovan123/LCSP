@@ -104,9 +104,17 @@ def test_investigator_uses_native_tools_and_structured_claims() -> None:
             workflow_run_id="workflow-1",
         )
 
-    assert "tools" not in captured
-    assert "native Deep Agents filesystem/shell/task tools" in captured["system_prompt"]
-    assert "codebase_memory_graph MCP" in captured["system_prompt"]
+    # Besides native filesystem/shell tools, the Investigator gets typed queries
+    # over the repository's pre-indexed Codebase Memory graph and is told to use them first.
+    assert [tool.name for tool in captured["tools"]] == [
+        "search_code_graph",
+        "trace_call_path",
+        "get_code_snippet",
+        "search_code_text",
+        "get_repository_architecture",
+    ]
+    assert "already indexed into a Codebase Memory graph" in captured["system_prompt"]
+    assert "direct source wins on conflict" in captured["system_prompt"]
     assert captured["response_format"] == LawGuidedInvestigator._claims_response_schema()
     assert claims[0].claim_type == "RULE_REQUIREMENT_MET"
     assert claims[0].source_locations == ({

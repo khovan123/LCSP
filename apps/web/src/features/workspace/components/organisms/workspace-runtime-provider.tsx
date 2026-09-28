@@ -44,6 +44,7 @@ const initialRuntime: WorkspaceRuntimeContextValue = {
   agentStreamHistoryByAssessmentId: {},
   latestRunIdByAssessmentId: {},
   postFindingByAssessmentId: {},
+  stageLifecycleByAssessmentId: {},
   getAssessmentRuntime: (): WorkspaceRuntimeAssessmentTimeline => ({
     currentRun: null,
     recentActivity: [],
@@ -635,6 +636,8 @@ function withAgentStreamEvents(
       connectionState: runtime.connectionState,
       lastEmittedAt: runtime.emittedAt,
       postFinding: runtime.postFindingByAssessmentId[assessmentId] ?? null,
+      stageLifecycle:
+        runtime.stageLifecycleByAssessmentId[assessmentId] ?? null,
     }),
   };
 }

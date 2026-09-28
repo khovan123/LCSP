@@ -10,6 +10,9 @@ from tools.common.capabilities.assessment.investigation.engineering_rule.intervi
     TechnicalRecoveryNotStarted,
     _has_authoritative_customer_ai_context,
 )
+from tools.common.capabilities.assessment.investigation.engineering_rule.deterministic_investigator import (
+    DeterministicSeedWindowInvestigator,
+)
 from tools.common.capabilities.assessment.investigation.engineering_rule.managed_targeted_investigator import (
     ManagedTargetedInvestigatorPipeline,
 )
@@ -307,6 +310,10 @@ def test_default_production_pipeline_uses_managed_targeted_investigator_bridge()
 
     assert isinstance(boundary._pipeline, ManagedTargetedInvestigatorPipeline)
     assert boundary._pipeline._delegate.__class__.__name__ == "PlannedEngineeringInvestigationPipeline"
+    assert isinstance(
+        boundary._pipeline._delegate._investigator,
+        DeterministicSeedWindowInvestigator,
+    )
 
 
 def test_initial_pge_event_bootstraps_interview_and_stops_before_pipeline() -> None:

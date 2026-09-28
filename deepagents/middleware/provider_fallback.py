@@ -10,6 +10,7 @@ from langchain.chat_models import init_chat_model
 from middleware.billing_metering import active_billing_metering
 from middleware.failure_policy import (
     TerminalCredentialError,
+    _error_codes,
     error_status,
     is_auth_failure,
     is_provider_capacity_failure,
@@ -101,6 +102,43 @@ def provider_fallback_failure(error: BaseException) -> bool:
     )
 
 
+# A used-up quota does not recover by waiting a cooldown; only plain 429s do.
+_QUOTA_EXHAUSTION_CODES = frozenset(
+    {
+        "billing_hard_limit_reached",
+        "insufficient_balance",
+        "insufficient_quota",
+        "quota_exceeded",
+    }
+)
+
+
+def _is_rate_limited_chain(error: BaseException) -> bool:
+    """Whether a failure is a plain 429 rate limit (not quota exhaustion or auth)."""
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if error_status(current) == 429 and not (
+            _error_codes(current) & _QUOTA_EXHAUSTION_CODES
+        ):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _primary_only_rate_limited(
+    current_provider: str | None, errors: list[BaseException]
+) -> bool:
+    """The first route tried was the primary and it failed only on rate limits."""
+    return (
+        current_provider is not None
+        and not _provider_route_disabled(current_provider)
+        and bool(errors)
+        and _is_rate_limited_chain(errors[0])
+    )
+
+
 def _exhaustion_error(errors: list[BaseException]) -> BaseException:
     """Report exhaustion truthfully: a contract failure on every route stays a schema error."""
     if errors and all(is_structured_output_rejection(error) for error in errors):
@@ -174,6 +212,16 @@ class ProviderFallbackMiddleware(AgentMiddleware):
         )
 
     @staticmethod
+    def _log_rate_limit_wait(provider: str | None) -> None:
+        logger.warning("MODEL_PROVIDER_RATE_LIMIT_WAIT", provider=provider or "unknown")
+        publish_agent_stream_event(
+            "CREDENTIAL_ROTATION",
+            status="WAITING",
+            text="waiting for provider rate limit to clear",
+            data={"provider": provider, "reason": "ALL_ROUTES_RATE_LIMITED"},
+        )
+
+    @staticmethod
     def _log_attempt(*, current_provider: str | None, provider: str, index: int) -> None:
         session = active_billing_metering()
         publish_visible = (
@@ -241,6 +289,19 @@ class ProviderFallbackMiddleware(AgentMiddleware):
                 first_error = first_error or error
                 errors.append(error)
 
+        if _primary_only_rate_limited(current_provider, errors):
+            # The primary route only deferred its cooling credentials to a later
+            # route that also failed. Rate limits are transient: wait out the
+            # cooldown on the primary instead of ending the task.
+            self._log_rate_limit_wait(current_provider)
+            try:
+                with further_provider_route(False):
+                    return handler(request)
+            except Exception as error:
+                if not provider_fallback_failure(error):
+                    raise
+                errors.append(error)
+
         exhausted = _exhaustion_error(errors)
         if exhausted is first_error:
             raise exhausted
@@ -279,6 +340,16 @@ class ProviderFallbackMiddleware(AgentMiddleware):
                     raise
                 _trip_provider_circuit(provider, error)
                 first_error = first_error or error
+                errors.append(error)
+
+        if _primary_only_rate_limited(current_provider, errors):
+            self._log_rate_limit_wait(current_provider)
+            try:
+                with further_provider_route(False):
+                    return await handler(request)
+            except Exception as error:
+                if not provider_fallback_failure(error):
+                    raise
                 errors.append(error)
 
         exhausted = _exhaustion_error(errors)

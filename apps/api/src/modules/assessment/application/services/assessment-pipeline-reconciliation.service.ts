@@ -159,6 +159,10 @@ export class AssessmentPipelineReconciliationService
         ) {
           continue;
         }
+        // The customer stopped this pipeline; only their Continue resumes it.
+        if (await this.continuation.isStoppedByCustomer(candidate.id)) {
+          continue;
+        }
         await this.reconcile(candidate.id, now, quietPeriodMs, maxAttempts);
       }
     } catch (error) {

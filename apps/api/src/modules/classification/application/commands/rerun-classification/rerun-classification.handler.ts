@@ -119,7 +119,7 @@ export class RerunClassificationHandler implements ICommandHandler<RerunClassifi
         orderBy: { createdAt: "desc" },
         select: { payload: true },
       });
-      if (recent) {
+      if (recent && !command.afterCustomerStop) {
         const payload = recent.payload as { correlationId?: string };
         return payload.correlationId ?? command.correlationId;
       }

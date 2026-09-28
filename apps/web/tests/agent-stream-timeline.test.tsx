@@ -82,7 +82,7 @@ test("completed scan job keeps Scanner done despite delayed running stream rows"
   assert.equal(container.querySelector(".animate-spin"), null);
   assert.match(
     container.querySelector("summary")?.textContent ?? "",
-    /Completed|Hoàn tất/,
+    /Completed|Hoàn tất|Xong/,
   );
 });
 
@@ -1609,10 +1609,14 @@ test("Planner shows selected goals as output and uses goals instead of rule IDs 
     output.textContent ?? "",
     /Inspect skipped path|ER-SELECT|ER-SKIP/,
   );
-  assert.equal(
-    container.querySelectorAll("[data-stream-planner-goal]").length,
-    1,
-  );
+  assert.equal(output.querySelectorAll("[data-stream-planner-goal]").length, 1);
+  // A skipped rule reads exactly like a selected one: its goals, not its ID.
+  const skipped = container.querySelector("[data-stream-planner-skipped]");
+  assert.ok(skipped);
+  const skippedGoals = skipped.querySelectorAll("[data-stream-planner-goal]");
+  assert.equal(skippedGoals.length, 1);
+  assert.equal(skippedGoals[0]?.textContent, "Inspect skipped path");
+  assert.doesNotMatch(skipped.textContent ?? "", /ER-SKIP/);
   const selectedActivity = container.querySelector(
     "[data-stream-rule='ER-SELECT'] summary",
   );
@@ -1745,8 +1749,8 @@ test("investigation renders one section per rule with its own activity and reaso
   const activities = firstRule.querySelectorAll(
     "details[data-stream-activity]",
   );
-  // The two model messages and the tool call retain their own activity rows.
-  assert.equal(activities.length, 3);
+  // The two model messages share one live AI row; the tool call keeps its own.
+  assert.equal(activities.length, 2);
   const aiDetails = [
     ...firstRule.querySelectorAll(
       '[data-stream-kind="model"] [data-stream-detail]',
@@ -1767,7 +1771,7 @@ test("investigation renders one section per rule with its own activity and reaso
   // Lifecycle events are the section itself, never separate rows.
   assert.equal(
     container.querySelectorAll(":scope details[data-stream-activity]").length,
-    3,
+    2,
   );
 });
 
@@ -1840,13 +1844,19 @@ test("each AI step remains visible while the next step is running", async () => 
     );
   });
 
+  // The running step updates the same AI row in place; the finished step
+  // stays inspectable inside it.
   const modelRows = container.querySelectorAll('[data-stream-kind="model"]');
-  assert.equal(modelRows.length, 2);
-  assert.equal(modelRows[0]?.getAttribute("data-stream-status"), "completed");
-  assert.equal(modelRows[1]?.getAttribute("data-stream-status"), "running");
+  assert.equal(modelRows.length, 1);
+  assert.equal(modelRows[0]?.getAttribute("data-stream-status"), "running");
+  assert.equal(
+    modelRows[0]?.querySelector("[data-stream-repeat-count]")?.textContent,
+    "×2",
+  );
+  assert.equal(modelRows[0]?.querySelectorAll("[data-stream-turn]").length, 2);
   assert.equal(
     container.querySelectorAll("details[data-stream-activity]").length,
-    3,
+    2,
   );
 });
 
@@ -1884,32 +1894,33 @@ test("completed AI turns group incrementally with a count and retain every turn 
   await act(async () => {
     root.render(<AgentStreamTimeline events={[result(1), running]} />);
   });
+  let rows = container.querySelectorAll('[data-stream-kind="model"]');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.getAttribute("data-stream-status"), "running");
   assert.equal(
-    container.querySelectorAll('[data-stream-kind="model"]').length,
-    2,
+    rows[0]?.querySelector("[data-stream-repeat-count]")?.textContent,
+    "×2",
   );
-  assert.equal(container.querySelector("[data-stream-repeat-count]"), null);
 
   await act(async () => {
     root.render(
       <AgentStreamTimeline events={[result(1), result(2), running]} />,
     );
   });
-  const rows = container.querySelectorAll('[data-stream-kind="model"]');
-  assert.equal(rows.length, 2);
-  assert.equal(rows[0]?.getAttribute("data-stream-status"), "completed");
+  rows = container.querySelectorAll('[data-stream-kind="model"]');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.getAttribute("data-stream-status"), "running");
   assert.equal(
     rows[0]?.querySelector("[data-stream-repeat-count]")?.textContent,
-    "×2",
+    "×3",
   );
-  assert.equal(rows[0]?.querySelectorAll("[data-stream-turn]").length, 2);
+  assert.equal(rows[0]?.querySelectorAll("[data-stream-turn]").length, 3);
   assert.deepEqual(
     [...rows[0]!.querySelectorAll("[data-stream-detail]")].map(
       (detail) => detail.textContent,
     ),
     ["Completed turn 1", "Completed turn 2"],
   );
-  assert.equal(rows[1]?.getAttribute("data-stream-status"), "running");
   assert.equal(
     container.querySelector<HTMLDetailsElement>(
       'details[data-slot="agent-stream-timeline"]',
@@ -2000,7 +2011,7 @@ test("repeated reads and AI completions update compact rows while preserving eve
   }
 });
 
-test("completed AI grouping never crosses unfinished tools, stages, rules, agents, or failures", async () => {
+test("AI grouping spans interleaved tools but never crosses stages, rules, agents, or failures", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -2058,15 +2069,17 @@ test("completed AI grouping never crosses unfinished tools, stages, rules, agent
       />,
     );
   });
-  assert.equal(
-    container.querySelectorAll('[data-stream-kind="model"]').length,
-    8,
-  );
+  // Steps 1, 3 and 9 share a scope, so the interleaved tool no longer splits
+  // them; every other scope and the failure keep their own row.
+  const modelRows = container.querySelectorAll('[data-stream-kind="model"]');
+  assert.equal(modelRows.length, 6);
   assert.equal(
     container.querySelectorAll('[data-stream-kind="tool"]').length,
     1,
   );
-  assert.equal(container.querySelector("[data-stream-repeat-count]"), null);
+  const counts = container.querySelectorAll("[data-stream-repeat-count]");
+  assert.equal(counts.length, 1);
+  assert.equal(counts[0]?.textContent, "×3");
   assert.equal(
     container.querySelectorAll('[data-stream-status="failed"]').length,
     1,
@@ -2347,7 +2360,7 @@ test("repeated tool calls retain each target and result", async () => {
   }
 });
 
-test("tool activities keep one row per call and use their activity icon", async () => {
+test("tool calls collapse into one row per activity and use their activity icon", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -2401,8 +2414,6 @@ test("tool activities keep one row per call and use their activity icon", async 
   assert.deepEqual(icons, [
     "repositoryFilesInspected",
     "repositorySourceSearched",
-    "repositorySourceSearched",
-    "sourceFilesReviewed",
     "sourceFilesReviewed",
   ]);
   const counts = [
@@ -2413,10 +2424,10 @@ test("tool activities keep one row per call and use their activity icon", async 
         .querySelector("[data-stream-repeat-count]")
         ?.getAttribute("data-stream-repeat-count") ?? "1",
   );
-  assert.deepEqual(counts, ["1", "1", "1", "1", "1"]);
+  assert.deepEqual(counts, ["1", "2", "2"]);
 });
 
-test("repeated activities such as context trimming retain each occurrence", async () => {
+test("repeated activities such as context trimming share one row that retains each occurrence", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -2442,10 +2453,15 @@ test("repeated activities such as context trimming retain each occurrence", asyn
   });
 
   const rows = container.querySelectorAll('[data-stream-kind="progress"]');
-  assert.equal(rows.length, 3);
+  assert.equal(rows.length, 1);
+  assert.equal(
+    rows[0]?.querySelector("[data-stream-repeat-count]")?.textContent,
+    "×3",
+  );
+  const turns = rows[0]!.querySelectorAll("[data-stream-turn]");
   for (const [index, count] of [2, 3, 5].entries()) {
     const technical =
-      rows[index]?.querySelector("[data-stream-technical-details]")
+      turns[index]?.querySelector("[data-stream-technical-details]")
         ?.textContent ?? "";
     assert.match(technical, new RegExp(`"cleared_tool_results": ${count}`));
   }
@@ -2530,19 +2546,22 @@ test("one pipeline dispatch spanning Planner and Investigator renders as a singl
     /classifies AI risk before the feature is used/,
   );
 
-  const technicalDetails = container.querySelector(
-    "[data-slot='agent-stream-turn-technical-details']",
+  // The investigated rule's raw codes stay reachable via its own Technical details.
+  const ruleTechnicalDetails = container.querySelector(
+    "[data-slot='agent-stream-rule-technical-details']",
   );
-  assert.ok(technicalDetails, "raw codes stay reachable via Technical details");
+  assert.ok(ruleTechnicalDetails, "raw codes stay reachable via Technical details");
   const clone = container.cloneNode(true) as HTMLElement;
   clone
-    .querySelector("[data-slot='agent-stream-turn-technical-details']")
-    ?.remove();
+    .querySelectorAll(
+      "[data-slot='agent-stream-turn-technical-details'], [data-slot='agent-stream-rule-technical-details']",
+    )
+    .forEach((node) => node.remove());
   const customerFacingText = clone.textContent ?? "";
   assert.doesNotMatch(customerFacingText, /ER-COMBINED/);
   assert.doesNotMatch(customerFacingText, /CLASSIFICATION_GATE_FOUND/);
   assert.match(
-    technicalDetails?.textContent ?? "",
+    ruleTechnicalDetails?.textContent ?? "",
     /CLASSIFICATION_GATE_FOUND/,
   );
 });
@@ -2622,7 +2641,8 @@ test("customer-facing Investigator output never shows raw ruleId, decision, or c
     );
   });
 
-  const output = container.querySelector("[data-stream-investigator-output]");
+  // A failed rule still surfaces its own result, inside its row.
+  const output = container.querySelector("[data-stream-investigator-rule-result]");
   assert.ok(output, "a failed investigation must still surface a result card");
   assert.doesNotMatch(
     output.textContent ?? "",
@@ -2892,4 +2912,142 @@ test("merged copied terminal events retain stage closure without duplicate React
     0,
     "deduplication must preserve terminal closure",
   );
+});
+
+test("agent turn thinks while running, then reports the measured duration, and ends with Technical details", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const stage = ASSESSMENT_AGENT_STREAM_STAGES.interview;
+  const started = event(1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted, null, {
+    stage,
+    emittedAt: "2026-09-20T00:00:00.000Z",
+  });
+  const completed = event(
+    2,
+    ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted,
+    null,
+    { stage, emittedAt: "2026-09-20T00:00:07.000Z" },
+  );
+  const render = (events: AssessmentAgentStreamEvent[]) =>
+    act(async () =>
+      root.render(
+        <AgentStreamTurn
+          stages={[stage]}
+          runId="run-1"
+          events={events}
+          stageEvents={{ [stage]: events }}
+          outputs={<p data-testid="turn-output">output</p>}
+        />,
+      ),
+    );
+
+  await render([started]);
+  assert.match(container.textContent ?? "", /Thinking\.\.\.|Đang suy nghĩ\.\.\./);
+  assert.doesNotMatch(container.textContent ?? "", /Thought for|Đã suy nghĩ/);
+
+  await render([started, completed]);
+  assert.match(container.textContent ?? "", /Thought for 7s|Đã suy nghĩ trong 7 giây/);
+  assert.doesNotMatch(container.textContent ?? "", /Thinking\.\.\.|Đang suy nghĩ/);
+
+  // The turn's own output comes first; the raw feed is always the last block.
+  const output = container.querySelector("[data-testid=turn-output]");
+  const technical = container.querySelector(
+    "[data-slot=agent-stream-turn-technical-details]",
+  );
+  assert.ok(output && technical);
+  assert.ok(
+    output.compareDocumentPosition(technical) &
+      document.defaultView!.Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+});
+
+test("Investigator lists each rule with its goal, status and only its own live activity in one turn", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const stage = ASSESSMENT_AGENT_STREAM_STAGES.investigate;
+  const ruleStep = (sequence: number, ruleId: string) =>
+    event(
+      sequence,
+      ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted,
+      { model_step_id: `step-${sequence}` },
+      {
+        stage,
+        engineeringRuleId: ruleId,
+        messageId: `m-${sequence}`,
+        status: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+      },
+    );
+  const events = [
+    event(1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted, null, { stage }),
+    {
+      ...engineeringRuleEvent(2, "AUTO::ER-1", ASSESSMENT_RUNTIME_RUN_STATUSES.completed, {
+        concept: "HEALTH_AI_DATA",
+        investigationGoals: ["Check data minimisation"],
+      }),
+      stage,
+    },
+    ruleStep(3, "AUTO::ER-1"),
+    {
+      ...engineeringRuleEvent(4, "AUTO::ER-2", ASSESSMENT_RUNTIME_RUN_STATUSES.running, {
+        investigationGoals: ["Check human oversight"],
+      }),
+      stage,
+    },
+    ruleStep(5, "AUTO::ER-2"),
+    ruleStep(6, "AUTO::ER-2"),
+  ];
+  await act(async () =>
+    root.render(
+      <AgentStreamTurn
+        stages={[stage]}
+        runId="run-1"
+        events={events}
+        stageEvents={{ [stage]: events }}
+      />,
+    ),
+  );
+
+  const rows = container.querySelectorAll("[data-stream-investigator-progress-rule]");
+  assert.equal(rows.length, 2);
+  const [done, running] = [...rows];
+  assert.match(done!.textContent ?? "", /Check data minimisation/);
+  assert.match(done!.textContent ?? "", /Investigated|Đã điều tra xong/);
+  assert.match(running!.textContent ?? "", /Check human oversight/);
+  assert.match(running!.textContent ?? "", /Investigating…|Đang điều tra…/);
+  // Rule IDs and codes never reach the customer-facing list (the raw feed
+  // behind Technical details may still carry them).
+  const customerRows = container
+    .querySelector("[data-stream-investigator-progress]")!
+    .cloneNode(true) as HTMLElement;
+  customerRows
+    .querySelectorAll("[data-slot='agent-stream-rule-technical-details']")
+    .forEach((node) => node.remove());
+  assert.doesNotMatch(customerRows.textContent ?? "", /AUTO::ER|HEALTH_AI_DATA/);
+  // The running rule shows its live activity (2 AI steps); a finished rule
+  // shows its result instead. Each rule ends with its own Technical details.
+  const liveCount = [...running!.querySelectorAll("[data-stream-repeat-count]")].find(
+    (node) => !node.closest("[data-slot='agent-stream-rule-technical-details']"),
+  );
+  assert.equal(liveCount?.textContent, "×2");
+  assert.ok(done!.querySelector("[data-stream-investigator-rule-result]"));
+  for (const row of [done!, running!]) {
+    const details = row.querySelector<HTMLDetailsElement>(
+      "[data-slot='agent-stream-rule-technical-details']",
+    );
+    assert.ok(details);
+    assert.equal(details.open, false);
+    assert.equal(row.lastElementChild?.lastElementChild, details);
+  }
+  // No combined Investigator feed: every event here belongs to a rule.
+  assert.equal(
+    container.querySelector("[data-slot='agent-stream-turn-technical-details']")
+      ?.querySelector("[data-stream-investigator-progress-rule]") ?? null,
+    null,
+  );
+  // Rules are rows of the single Investigator turn, not separate turns.
+  assert.equal(container.querySelectorAll("[data-slot=agent-turn]").length, 1);
 });

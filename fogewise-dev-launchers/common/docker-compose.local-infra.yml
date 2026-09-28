@@ -32,6 +32,9 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: fogewise
       RABBITMQ_DEFAULT_PASS: 10e0064b19b1dc9727458cdbb0e4f3998d8988628619d807
+      # Agent runs are not time-bounded (they take as long as model reasoning
+      # needs), so a held delivery must never be reclaimed by the broker.
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit consumer_timeout undefined"
     ports:
       - "127.0.0.1:5672:5672"
       - "127.0.0.1:15672:15672"

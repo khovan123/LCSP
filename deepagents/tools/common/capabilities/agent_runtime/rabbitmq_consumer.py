@@ -51,8 +51,6 @@ AGENT_RUNTIME_ATTEMPT_HEADER = "x-lcsp-agent-runtime-attempt"
 DEFAULT_API_READY_TIMEOUT_SECONDS = 60.0
 DEFAULT_API_READY_POLL_SECONDS = 0.5
 DEFAULT_BOUNDARY_WORKERS = 4
-DEFAULT_BOUNDARY_TIMEOUT_SECONDS = 900.0
-DEFAULT_SCAN_BOUNDARY_TIMEOUT_SECONDS = 1800.0
 DEFAULT_BROKER_ACK_TIMEOUT_SECONDS = 1800.0
 DEFAULT_SETTLEMENT_MARGIN_SECONDS = 120.0
 SCAN_FAILURE_AGENT_RUNTIME_BOUNDARY_TIMEOUT = "AGENT_RUNTIME_BOUNDARY_TIMEOUT"
@@ -968,23 +966,25 @@ def _effective_retry_delays(
     return tuple(max(fallback_delay_seconds, 0.0) for _ in range(max(fallback_max_redeliveries, 0)))
 
 
-def _boundary_timeout_seconds(boundary_name: str) -> float:
-    env_name = (
+def _boundary_timeout_seconds(boundary_name: str) -> float | None:
+    """Return the opt-in deadline for one boundary, or None for no deadline.
+
+    Agent work is not time-bounded: how long a run takes depends on model
+    reasoning, tool use and repository size, so no boundary has a default
+    deadline and the broker's consumer timeout is disabled instead (see
+    fogewise-dev-launchers). An operator can still opt in per boundary.
+    """
+    env_names = [
         "LCSP_AGENT_RUNTIME_BOUNDARY_TIMEOUT_"
-        f"{_env_boundary_name(boundary_name)}_SECONDS"
-    )
-    if os.getenv(env_name) is not None:
-        requested = _positive_float_env(env_name)
-    elif boundary_name == "scan_requested":
-        requested = _positive_float_env(
-            "LCSP_AGENT_RUNTIME_SCAN_BOUNDARY_TIMEOUT_SECONDS",
-            DEFAULT_SCAN_BOUNDARY_TIMEOUT_SECONDS,
-        )
-    else:
-        requested = _positive_float_env(
-            "LCSP_AGENT_RUNTIME_BOUNDARY_TIMEOUT_SECONDS",
-            DEFAULT_BOUNDARY_TIMEOUT_SECONDS,
-        )
+        f"{_env_boundary_name(boundary_name)}_SECONDS",
+    ]
+    if boundary_name == "scan_requested":
+        env_names.append("LCSP_AGENT_RUNTIME_SCAN_BOUNDARY_TIMEOUT_SECONDS")
+    env_names.append("LCSP_AGENT_RUNTIME_BOUNDARY_TIMEOUT_SECONDS")
+    env_name = next((name for name in env_names if os.getenv(name) is not None), None)
+    if env_name is None:
+        return None
+    requested = _positive_float_env(env_name)
     ack_timeout = _positive_float_env(
         "LCSP_AGENT_RUNTIME_BROKER_ACK_TIMEOUT_SECONDS",
         DEFAULT_BROKER_ACK_TIMEOUT_SECONDS,

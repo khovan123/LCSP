@@ -13,6 +13,7 @@ import {
   ASSESSMENT_INTERVIEW_MODES,
   ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS,
   ASSESSMENT_INTERVIEW_OUTCOMES,
+  ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS,
   ASSESSMENT_INTERVIEW_RESUME_REASONS,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
   ASSESSMENT_INTERVIEW_RESUME_MAX_ATTEMPTS,
@@ -345,6 +346,7 @@ type MockInterviewAudit = {
 };
 
 type MockRuntimeEvents = {
+  recordPipelineControl: jest.Mock<(...args: unknown[]) => Promise<void>>;
   recordToolStarted: jest.Mock<(...args: unknown[]) => Promise<void>>;
   recordToolWaitingInput: jest.Mock<(...args: unknown[]) => Promise<void>>;
   recordToolCompleted: jest.Mock<(...args: unknown[]) => Promise<void>>;
@@ -613,6 +615,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
     };
 
     mockRuntimeEvents = {
+      recordPipelineControl: jest
+        .fn<(...args: unknown[]) => Promise<void>>()
+        .mockResolvedValue(undefined),
       recordToolStarted: jest
         .fn<(...args: unknown[]) => Promise<void>>()
         .mockResolvedValue(undefined),
@@ -1853,6 +1858,12 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         }),
         mockTx,
       );
+      // The stop is durable so reconciliation does not resume it on its own.
+      expect(mockRuntimeEvents.recordPipelineControl).toHaveBeenCalledWith({
+        assessmentId: "assessment-1",
+        correlationId: "corr-pause-1",
+        reason: ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS.customerRequestedStop,
+      });
     });
 
     it("still enqueues the pause command when no Interview thread exists yet", async () => {

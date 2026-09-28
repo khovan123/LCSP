@@ -30,7 +30,20 @@ from tools.common.capabilities.assessment.planning.engineering_rule.engineering_
     PlannerContextPending,
 )
 from tools.common.capabilities.assessment.planning.engineering_rule.material_scope import material_planning_packet
-from tools.common.capabilities.assessment.investigation.engineering_rule.investigator import LawGuidedInvestigator
+from tools.common.capabilities.assessment.planning.engineering_rule.plan_store import engineering_rule_plan_key
+from tools.common.capabilities.assessment.planning.engineering_rule.rule_investigation_plan import (
+    batch_groups,
+    build_rule_investigation_plan,
+)
+from tools.common.capabilities.evidence.repository_analysis.intelligence_pack import (
+    repository_intelligence_pack_from_evidence,
+)
+from .seed_locations import starting_source_locations
+from tools.common.capabilities.assessment.investigation.engineering_rule.deterministic_investigator import (
+    DETERMINISTIC_INVESTIGATION_VERSION,
+    DeterministicSeedWindowInvestigator,
+    NeedsScannerEnrichment,
+)
 from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_EVIDENCE_CLAIM_TYPES,
     ENGINEERING_LIMITATION_CODES,
@@ -85,6 +98,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         evaluator=None,
         planner: EngineeringRulePlanner | None = None,
         corpus_recovery_driver=None,
+        plan_store=None,
     ) -> None:
         super().__init__(
             api_client=api_client,
@@ -93,11 +107,17 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             retriever=retriever,
             rule_service=rule_service,
             query_executor=query_executor,
-            investigator=(investigator or LawGuidedInvestigator(model)),
+            investigator=(investigator or DeterministicSeedWindowInvestigator(model)),
             evaluator=evaluator,
         )
         self._planner = planner or EngineeringRulePlanner(planner_model)
         self._corpus_recovery_driver = corpus_recovery_driver
+        # Opt-in: only the engineering-assessment boundary retries whole dispatches.
+        self._plan_store = plan_store
+        # Production may attach the legacy managed Investigator here, but the
+        # deterministic Investigator calls it only for a plan item carrying an
+        # approved, explicit fallbackReason.
+        self._agentic_fallback = None
 
     def run(
         self,
@@ -416,15 +436,94 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             ),
         }
         observability["repository_planning_context"] = {
-            "source": "LCSP_REPOSITORY_DATABASE",
-            "codebaseMemoryMcpOptional": True,
+            "codebaseMemoryRequired": True,
+            "scannerMemoryRequired": True,
+            "source": "LCSP_REPOSITORY_INTELLIGENCE_PACK",
+            "repositoryDiscoveryPolicy": "SCANNER_ONLY_DOWNSTREAM_SEED_FIRST",
         }
-        plan = self._planner.plan(
-            candidates=candidates,
-            confirmed_customer_context=confirmed_customer_context,
-            graph=graph,
+        # A retried dispatch (e.g. after the Investigator failed) reuses the plan it
+        # was executing when none of the Planner's inputs changed: re-planning
+        # would spend a full Planner run to reach the same decision.
+        pack = repository_intelligence_pack_from_evidence(evidence_report)
+        scanner_artifact_version = (
+            (pack or {}).get("artifactVersion") or _evidence_report_id(evidence_report)
+        )
+        candidate_rule_ids = [rule.engineering_rule_id for rule, _packet in prepared]
+        plan_key = engineering_rule_plan_key(
+            commit_sha=_commit_sha(evidence_report, graph),
+            context_revision=confirmed_customer_context.context_revision,
+            catalog_version_id=catalog_version_id,
+            corpus_version_id=corpus_version_id,
+            scanner_artifact_version=scanner_artifact_version,
+            candidate_rule_ids=candidate_rule_ids,
+        )
+        plan = self._plan_store.get(plan_key) if self._plan_store else None
+        plan_reused = plan is not None
+        if plan is not None:
+            logger.info(
+                "ENGINEERING_RULE_PLAN_REUSED",
+                selected_count=len(plan.selected_rule_ids),
+                skipped_count=len(plan.skipped_rule_ids),
+                workflow_run_id=workflow_run_id,
+                correlationId=correlation_id,
+            )
+        else:
+            plan = self._planner.plan(
+                candidates=candidates,
+                confirmed_customer_context=confirmed_customer_context,
+                graph=graph,
+                workflow_run_id=workflow_run_id,
+                correlation_id=correlation_id,
+            )
+            if self._plan_store:
+                self._plan_store.put(plan_key, plan)
+        # Durable routes for the Investigator: where each selected rule starts,
+        # what it may spend, and which rules share a source area.
+        investigation_plan = (
+            self._plan_store.get_investigation_plan(plan_key)
+            if self._plan_store
+            else None
+        )
+        if investigation_plan is None:
+            investigation_plan = build_rule_investigation_plan(
+                selected_rule_ids=list(plan.selected_rule_ids),
+                skipped_rule_ids=list(plan.skipped_rule_ids),
+                candidate_rule_ids=candidate_rule_ids,
+                rule_seeds={
+                    rule.engineering_rule_id: starting_source_locations(packet)
+                    for rule, packet in prepared
+                },
+                rule_concepts={
+                    rule.engineering_rule_id: getattr(packet, "concept", "")
+                    for rule, packet in prepared
+                },
+                required_evidence={
+                    rule.engineering_rule_id: list(
+                        getattr(packet, "required_evidence", ()) or ()
+                    )
+                    for rule, packet in prepared
+                },
+                intelligence_pack=pack,
+                commit_sha=_commit_sha(evidence_report, graph),
+                context_revision=confirmed_customer_context.context_revision,
+                rule_catalog_version=catalog_version_id,
+                legal_corpus_version=corpus_version_id,
+                scanner_artifact_version=scanner_artifact_version,
+                needs_context_rule_ids=[
+                    rule_id
+                    for need in plan.context_needs
+                    for rule_id in need.engineering_rule_ids
+                ],
+            )
+            if self._plan_store and not plan.context_needs:
+                self._plan_store.put_investigation_plan(plan_key, investigation_plan)
+        logger.info(
+            "RULE_INVESTIGATION_PLAN_READY",
+            selected_count=len(investigation_plan["items"]),
+            enrichment_count=len(investigation_plan["needsScannerEnrichmentRuleIds"]),
+            batch_groups=len(batch_groups(investigation_plan)),
             workflow_run_id=workflow_run_id,
-            correlation_id=correlation_id,
+            correlationId=correlation_id,
         )
         if plan.context_needs and self._request_planner_context(
             plan.context_needs[0],
@@ -435,6 +534,42 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             raise PlannerContextPending(
                 "Planner reopened Interview for Customer business context"
             )
+
+        configure_plan = getattr(self._investigator, "configure_plan", None)
+        if callable(configure_plan):
+            configure_plan(
+                investigation_plan=investigation_plan,
+                intelligence_pack=pack,
+                agentic_fallback=self._agentic_fallback,
+                fallback_observer=lambda event: self._emit_runtime_activity(
+                    scan_job_id=scan_job_id,
+                    event_type="TOOL_STARTED",
+                    run_status="RUNNING",
+                    tool_name=(
+                        "engineering_rule_investigation_fallback:"
+                        f"{event['engineeringRuleId']}"
+                    ),
+                    summary=ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS[
+                        "engineering_rule_investigated"
+                    ],
+                    output_summary={
+                        "outcome": "AGENTIC_FALLBACK",
+                        "engineeringRuleId": event["engineeringRuleId"],
+                        "fallbackReason": event["fallbackReason"],
+                        "triggerReason": event["triggerReason"],
+                    },
+                ),
+            )
+        observability["rule_investigation_plan"] = {
+            "planVersion": investigation_plan.get("planVersion"),
+            "planKey": investigation_plan.get("planKey"),
+            "investigationVersion": DETERMINISTIC_INVESTIGATION_VERSION,
+            "selectedCount": len(investigation_plan.get("items") or ()),
+            "needsScannerEnrichmentCount": len(
+                investigation_plan.get("needsScannerEnrichmentRuleIds") or ()
+            ),
+            "batchGroupCount": len(batch_groups(investigation_plan)),
+        }
 
         # Existing implementation continues below in this helper.
         return self._finish_planned_investigation(
@@ -455,6 +590,8 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             assessment_id=assessment_id,
             user_id=user_id,
             scan_job_id=scan_job_id,
+            plan_key=plan_key,
+            plan_reused=plan_reused,
         )
 
     def _request_planner_context(
@@ -520,6 +657,8 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         assessment_id: str | None,
         user_id: str | None,
         scan_job_id: str | None,
+        plan_key: str | None = None,
+        plan_reused: bool = False,
     ) -> EngineeringInvestigationResult:
         selected_ids = set(plan.selected_rule_ids)
         context_provenance = dict(plan.context_provenance)
@@ -650,6 +789,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                     investigation_goals=getattr(
                         prepared_packet, "investigation_goals", ()
                     ),
+                    plan_reused=plan_reused,
                 )
             self._emit_runtime_activity(
                 scan_job_id=scan_job_id,
@@ -703,6 +843,36 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 continue
 
             investigation_failed = False
+            needs_scanner_enrichment = False
+            # Resume: a rule this plan already finished in an earlier dispatch keeps
+            # its claims; only failed or never-started rules are investigated again.
+            stored_claims = (
+                self._plan_store.get_rule_claims(
+                    plan_key,
+                    engineering_rule.engineering_rule_id,
+                    investigation_version=DETERMINISTIC_INVESTIGATION_VERSION,
+                )
+                if self._plan_store and plan_key
+                else None
+            )
+            # Mark the Investigate step running now; otherwise it stays queued
+            # until the first rule finishes, and later reads "completed" while
+            # the remaining rules are still being investigated.
+            self._emit_runtime_activity(
+                scan_job_id=scan_job_id,
+                event_type="TOOL_STARTED",
+                run_status="RUNNING",
+                tool_name=(
+                    f"engineering_rule_investigation:"
+                    f"{engineering_rule.engineering_rule_id}"
+                ),
+                summary=ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS[
+                    "engineering_rule_investigated"
+                ],
+                output_summary={
+                    "engineeringRuleId": engineering_rule.engineering_rule_id,
+                },
+            )
             try:
                 with agent_stream_stage(
                     AGENT_STREAM_STAGES["investigate"]
@@ -711,16 +881,71 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                     concept=packet.concept,
                     required_evidence=packet.required_evidence,
                     investigation_goals=packet.investigation_goals,
-                    waiting_on=(TargetedInterviewPending, BillingBudgetExhausted),
+                    waiting_on=(
+                        TargetedInterviewPending,
+                        BillingBudgetExhausted,
+                        NeedsScannerEnrichment,
+                    ),
                 ) as rule_stream:
-                    rule_claims = self._investigator.investigate(
-                        packet=packet,
-                        graph=graph,
-                        workflow_run_id=workflow_run_id,
-                        correlation_id=correlation_id,
-                    )
+                    if stored_claims is not None:
+                        logger.info(
+                            "ENGINEERING_RULE_INVESTIGATION_REUSED",
+                            engineering_rule_id=engineering_rule.engineering_rule_id,
+                            claim_count=len(stored_claims),
+                            workflow_run_id=workflow_run_id,
+                            correlationId=correlation_id,
+                        )
+                        rule_claims = stored_claims
+                    else:
+                        rule_claims = self._investigator.investigate(
+                            packet=packet,
+                            graph=graph,
+                            workflow_run_id=workflow_run_id,
+                            correlation_id=correlation_id,
+                        )
+                        if self._plan_store and plan_key:
+                            self._plan_store.put_rule_claims(
+                                plan_key,
+                                engineering_rule.engineering_rule_id,
+                                rule_claims,
+                                investigation_version=(
+                                    DETERMINISTIC_INVESTIGATION_VERSION
+                                ),
+                            )
                     if rule_stream is not None:
                         rule_stream.complete(rule_claims)
+            except NeedsScannerEnrichment as error:
+                needs_scanner_enrichment = True
+                rule_claims = error.claims
+                limitations.append(
+                    ENGINEERING_LIMITATION_CODES["needs_scanner_enrichment"]
+                )
+                self._emit_runtime_activity(
+                    scan_job_id=scan_job_id,
+                    event_type="TOOL_WAITING_INPUT",
+                    run_status="WAITING",
+                    tool_name=(
+                        f"engineering_rule_investigation:"
+                        f"{engineering_rule.engineering_rule_id}"
+                    ),
+                    summary=ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS[
+                        "engineering_rule_investigated"
+                    ],
+                    output_summary={
+                        "outcome": "NEEDS_SCANNER_ENRICHMENT",
+                        "engineeringRuleId": engineering_rule.engineering_rule_id,
+                        "reason": error.reason,
+                        "semanticPayloads": [
+                            self._engineering_rule_semantic_payload(
+                                engineering_rule=engineering_rule,
+                                engineering_rule_id=engineering_rule.engineering_rule_id,
+                                status="WAITING",
+                                evidence_refs=list(packet.evidence_refs),
+                            )
+                        ],
+                    },
+                    waiting_reason="NEEDS_SCANNER_ENRICHMENT",
+                )
             except TargetedInterviewPending:
                 self._emit_runtime_activity(
                     scan_job_id=scan_job_id,
@@ -868,7 +1093,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 validated_rule_claims,
             )
             evaluations.append(evaluation)
-            if not investigation_failed:
+            if not investigation_failed and not needs_scanner_enrichment:
                 self._emit_runtime_activity(
                     scan_job_id=scan_job_id,
                     event_type="TOOL_COMPLETED",
@@ -907,18 +1132,20 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                     graph, evaluation.evidence_refs, validated_rule_claims
                 )
             )
-            self._capture_verified_episode_after_evaluation(
-                engineering_rule=engineering_rule,
-                claims=validated_rule_claims,
-                raw_claim_count=len(rule_claims),
-                evaluation=evaluation,
-                evidence_report=evidence_report,
-                workflow_run_id=workflow_run_id,
-                assessment_id=assessment_id,
-                user_id=user_id,
-                legal_rule_catalog_version_id=catalog_version_id,
-                legal_corpus_version_id=corpus_version_id,
-            )
+            # A reused rule's episode was captured when it first finished.
+            if stored_claims is None and not needs_scanner_enrichment:
+                self._capture_verified_episode_after_evaluation(
+                    engineering_rule=engineering_rule,
+                    claims=validated_rule_claims,
+                    raw_claim_count=len(rule_claims),
+                    evaluation=evaluation,
+                    evidence_report=evidence_report,
+                    workflow_run_id=workflow_run_id,
+                    assessment_id=assessment_id,
+                    user_id=user_id,
+                    legal_rule_catalog_version_id=catalog_version_id,
+                    legal_corpus_version_id=corpus_version_id,
+                )
             executed += 1
 
         status = "COMPLETE"
@@ -1391,3 +1618,17 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             )
             return True
         return False
+
+
+def _evidence_report_id(evidence_report: dict[str, Any]) -> str | None:
+    value = evidence_report.get("id") or evidence_report.get("evidence_report_id")
+    return str(value) if value else None
+
+
+def _commit_sha(evidence_report: dict[str, Any], graph: Any) -> str:
+    payload = evidence_report.get("evidence_payload") or evidence_report
+    if isinstance(payload, dict):
+        candidate = (payload.get("evidence_graph") or {}).get("commit_sha")
+        if candidate:
+            return str(candidate)
+    return str(getattr(graph, "commit_sha", "") or "")

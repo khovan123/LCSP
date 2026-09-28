@@ -96,14 +96,101 @@ def test_boundary_deadline_reaches_sync_thread_without_remote_cancel(monkeypatch
     assert active_agent_stream_cancel.get() is None
 
 
-def test_expired_boundary_does_not_start_hydration_or_work(monkeypatch):
+def test_expired_queued_boundary_reports_timeout_without_starting_work(monkeypatch):
+    reports = []
     monkeypatch.setattr(
         system_dispatch, "_dispatch_active_system_event",
         lambda *_args: pytest.fail("expired work must not start"),
     )
+    monkeypatch.setattr(
+        system_dispatch,
+        "report_external_boundary_timeout",
+        lambda *args: reports.append(args),
+    )
     from types import SimpleNamespace
 
-    with pytest.raises(AgentRuntimeBoundaryTimeout):
-        system_dispatch._dispatch_system_event(
-            {}, SimpleNamespace(context=LCSPRunContext(system_deadline_at=time.time() - 1))
+    result = system_dispatch._dispatch_system_event(
+        {},
+        SimpleNamespace(
+            context=LCSPRunContext(
+                system_boundary_name="engineering_assessment_requested",
+                system_event={"assessmentId": "assessment-1"},
+                correlation_id="corr-1",
+                system_deadline_at=time.time() - 1,
+            )
+        ),
+    )
+    assert result == {"jump_to": "end"}
+    assert reports == [
+        (
+            "engineering_assessment_requested",
+            {"assessmentId": "assessment-1"},
+            "corr-1",
+            "AGENT_RUNTIME_BOUNDARY_TIMEOUT",
         )
+    ]
+    assert active_agent_stream_cancel.get() is None
+
+
+def test_expired_queued_scan_reports_terminal_failure(monkeypatch):
+    from types import SimpleNamespace
+
+    reports = []
+    client = SimpleNamespace(
+        post_scan_terminal_failure=lambda scan_job_id, payload: reports.append(
+            (scan_job_id, payload)
+        )
+    )
+    monkeypatch.setattr(system_dispatch, "_worker_client", lambda: client)
+    monkeypatch.setattr(
+        system_dispatch,
+        "_dispatch_active_system_event",
+        lambda *_args: pytest.fail("expired scan must not start"),
+    )
+
+    result = system_dispatch._dispatch_system_event(
+        {},
+        SimpleNamespace(
+            context=LCSPRunContext(
+                system_boundary_name="scan_requested",
+                system_event={"scanJobId": "scan-1"},
+                correlation_id="corr-1",
+                system_deadline_at=time.time() - 1,
+            )
+        ),
+    )
+    assert result == {"jump_to": "end"}
+    assert reports[0][0] == "scan-1"
+    assert reports[0][1]["reason_code"] == "AGENT_RUNTIME_BOUNDARY_TIMEOUT"
+    assert reports[0][1]["status"] == "FAILED"
+
+
+def test_expired_queued_run_stops_when_api_is_still_starting(monkeypatch):
+    from types import SimpleNamespace
+
+    def api_not_ready(*_args):
+        raise ConnectionError("API not ready")
+
+    monkeypatch.setattr(
+        system_dispatch,
+        "_worker_client",
+        lambda: SimpleNamespace(
+            post_scan_terminal_failure=api_not_ready,
+        ),
+    )
+    monkeypatch.setattr(
+        system_dispatch,
+        "_dispatch_active_system_event",
+        lambda *_args: pytest.fail("expired scan must not start"),
+    )
+
+    assert system_dispatch._dispatch_system_event(
+        {},
+        SimpleNamespace(
+            context=LCSPRunContext(
+                system_boundary_name="scan_requested",
+                system_event={"scanJobId": "scan-1"},
+                system_deadline_at=time.time() - 1,
+            )
+        ),
+    ) == {"jump_to": "end"}

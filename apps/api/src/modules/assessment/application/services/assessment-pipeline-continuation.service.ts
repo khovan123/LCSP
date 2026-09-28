@@ -8,6 +8,7 @@ import {
   ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES,
   ASSESSMENT_PIPELINE_CONTINUE_RERUN_REASON,
   ASSESSMENT_PIPELINE_LIVENESS_WINDOW_SECONDS,
+  ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS,
   type AssessmentPipelineContinueResult,
 } from "@lcsp/contracts/evidence";
 import { HttpStatus, Injectable } from "@nestjs/common";
@@ -45,6 +46,11 @@ export class AssessmentPipelineContinuationService {
     private readonly creditPreflight: AssessmentModelCreditPreflight,
     private readonly billingPause: BillingWorkflowPauseService,
   ) {}
+
+  /** Whether the customer stopped the pipeline and has not continued it. */
+  isStoppedByCustomer(assessmentId: string): Promise<boolean> {
+    return this.runtimeEvents.isPipelineStoppedByCustomer(assessmentId);
+  }
 
   async continuePipeline(input: {
     assessmentId: string;
@@ -116,6 +122,15 @@ export class AssessmentPipelineContinuationService {
         },
       );
     }
+    // Continue lifts a customer stop; remember whether there was one so the
+    // rerun is not swallowed by the stopped dispatch's recent outbox row.
+    const afterCustomerStop =
+      await this.runtimeEvents.isPipelineStoppedByCustomer(input.assessmentId);
+    await this.runtimeEvents.recordPipelineControl({
+      assessmentId: input.assessmentId,
+      correlationId: input.correlationId,
+      reason: ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS.customerRequestedContinue,
+    });
     const interview = await this.interviewRuntime.pipelineInterviewStatus(
       input.assessmentId,
     );
@@ -149,6 +164,7 @@ export class AssessmentPipelineContinuationService {
         input.correlationId,
         ASSESSMENT_PIPELINE_CONTINUE_RERUN_REASON,
         input.actorType ?? AUDIT_ACTOR_TYPES.user,
+        afterCustomerStop,
       ),
     );
     return { action: ASSESSMENT_PIPELINE_CONTINUE_ACTIONS.downstreamRequeued };

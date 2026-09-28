@@ -5,6 +5,7 @@ from middleware.agent_run_budget import AgentRunBudgetMiddleware
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.billing_metering import BillingAgentRoleMiddleware
 from middleware.interview_runtime_context import inject_interview_runtime_context
+from middleware.tool_scope import AllowedToolsMiddleware
 from model_policy import INTERVIEW_MODEL_SPEC
 from tools.common.capabilities.agent_runtime.skill_loader import load_project_skill_package
 
@@ -41,11 +42,11 @@ covered topics. Never change guidanceVersion, promote strategy into canonical gu
 strategy hints as confirmed business facts or technical evidence.
 
 Repository/context guidance:
-1. The assessment repository is available through native Deep Agents filesystem and shell tools.
-   Inspect source only when a technical fact is necessary to decide whether a Customer-owned
-   clarification is material.
-2. When configured, codebase_memory_graph MCP tools may help understand architecture and
-   relationships, but direct repository source remains authoritative.
+1. You own Customer-owned business gaps only. You have no repository tools: the Scanner already
+   analysed the repository, and its Repository Intelligence Pack summary (architecture, domain
+   areas, AI findings, coverage) arrives in runtime metadata. Ground questions in those facts.
+2. If a decision would need a technical fact the summary does not carry, that is a technical
+   limitation to report, never a reason to ask the Customer an architectural question.
 3. Index and repository-analysis coverage gaps are limitations, never proof that a business
    behavior is absent. Never fabricate governed evidence refs; use an empty evidenceRefs list
    when no authorized runtime-provided ref supports a Customer-facing question.
@@ -134,7 +135,12 @@ SUBAGENT = {
     "tools": TOOLS,
     "model": INTERVIEW_MODEL_SPEC,
     "middleware": [
-        AgentRunBudgetMiddleware(),
+        # The Interview resolves Customer-owned business gaps from Scanner memory and
+        # thread context; it never rediscovers the repository. Deep Agents attaches
+        # filesystem/shell/task tools to every subagent, so they are hidden here, and
+        # one turn is one model call (plus a grace call for structured output).
+        AllowedToolsMiddleware(frozenset()),
+        AgentRunBudgetMiddleware(finalize_after=1, grace_calls=1),
         inject_interview_runtime_context,
         BillingAgentRoleMiddleware("interview"),
         *MODEL_GOVERNANCE_MIDDLEWARE,

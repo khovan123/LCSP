@@ -25,6 +25,7 @@ import {
   ASSESSMENT_INTERVIEW_READINESS_ERROR_CODES,
   ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS,
   ASSESSMENT_INTERVIEW_OUTCOMES,
+  ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS,
   ASSESSMENT_INTERVIEW_FLAGS,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
   ASSESSMENT_INTERVIEW_RESUME_MAX_ATTEMPTS,
@@ -1141,6 +1142,14 @@ export class AssessmentInterviewRuntimeService {
         }),
         tx,
       );
+    });
+    // The same stop covers a running Planner/Investigator dispatch. Record it so
+    // automatic reconciliation leaves the stopped pipeline until the customer
+    // presses Continue.
+    await this.runtimeEvents.recordPipelineControl({
+      assessmentId: input.assessmentId,
+      correlationId: input.correlationId,
+      reason: ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS.customerRequestedStop,
     });
   }
 

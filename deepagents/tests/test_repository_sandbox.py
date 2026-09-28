@@ -373,8 +373,11 @@ def test_codebase_memory_is_baked_into_docker_sandbox_without_host_graph_state()
     assert "cli list_projects" not in setup
     assert "cli index_repository" not in setup
 
-    assert "codebase-memory-graph cli index_repository" in analyzer
-    assert "check_index_coverage" in analyzer
+    # Indexing is no longer left to the agent: every dispatch indexes the
+    # hydrated repository first, and the agent queries it with typed tools.
+    assert "codebase-memory-graph cli index_repository" not in analyzer
+    assert "already indexed into a Codebase Memory graph" in analyzer
+    assert "tools=CODEBASE_MEMORY_GRAPH_TOOLS" in analyzer
     assert "Direct repository source remains authoritative" not in analyzer
     assert "source authority" in analyzer
 

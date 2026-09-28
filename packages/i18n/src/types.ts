@@ -250,6 +250,7 @@ export type PagesMessages = {
       evidenceProvenanceLinked: string;
       repositoryFilesInspected: string;
       repositorySourceSearched: string;
+      codebaseGraphQueried: string;
       sourceFilesReviewed: string;
       relevantFilesLocated: string;
       repositoryChangesReviewed: string;
@@ -305,6 +306,12 @@ export type PagesMessages = {
       gateCompleted: string;
       gateFailed: string;
       skippedGoals: string;
+      ruleInvestigating: string;
+      ruleInvestigated: string;
+      ruleFailed: string;
+      ruleWaiting: string;
+      ruleQueued: string;
+      ruleFallback: string;
     };
     agentStreamTechnicalSummary: {
       planning: string;
@@ -1623,6 +1630,11 @@ export type PagesMessages = {
     resumeSetupDescription: string;
     retrySetupState: string;
     thought: string;
+    thinking: {
+      running: string;
+      completed: string;
+      completedWithoutDuration: string;
+    };
     repositorySetupDescription: string;
     providerQuestion: string;
     providerHelp: string;

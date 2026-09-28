@@ -171,6 +171,13 @@ export function deriveLatestAgentStreamTurnState(
   let pausedByCustomer = false;
   let terminal = false;
   for (const event of latest.events) {
+    // The Investigator runs one agent per EngineeringRule; that agent finishing
+    // (or failing) ends its rule, not the turn — the next rule is still to come.
+    // A customer stop inside a rule does stop the whole turn.
+    const ruleScopedCustomerStop =
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentFailed &&
+      isCustomerRequestedStop(event.data);
+    if (event.engineeringRuleId && !ruleScopedCustomerStop) continue;
     if (
       event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused
     ) {
@@ -358,4 +365,93 @@ export function splitCurrentInterviewActivity(
   const latest = history.at(-1);
   if (latest && currentQuestion) latest.nextQuestion = currentQuestion;
   return { history, currentActivity };
+}
+
+/** One dispatch split into one agent turn per participating stage, so e.g.
+ *  the Investigator gets its own turn instead of growing inside the Planner's. */
+export type AgentStreamStageTurn = AgentStreamGroupedActivity & {
+  stage: AssessmentAgentStreamStage;
+  /** A later stage of the same dispatch has already started. */
+  superseded: boolean;
+};
+
+export function splitAgentStreamActivityByStage(
+  segment: AgentStreamGroupedActivity,
+): AgentStreamStageTurn[] {
+  const stages = segment.stages.filter(
+    (stage) =>
+      stage !== ASSESSMENT_AGENT_STREAM_STAGES.planner ||
+      !isReusedPlannerReplay(segment.stageEvents[stage] ?? []),
+  );
+  const staged = new Set(
+    segment.stages.flatMap((stage) => segment.stageEvents[stage] ?? []),
+  );
+  // Stage-less dispatch events (boundary bookkeeping, e.g. the dispatch's final
+  // failure) belong to whichever stage was active when they were emitted — a
+  // timeout during investigation must not mark the finished Planner failed.
+  const stageStarts = stages.map((stage) =>
+    Math.min(
+      ...(segment.stageEvents[stage] ?? []).map(
+        (event) => Date.parse(event.emittedAt) || 0,
+      ),
+    ),
+  );
+  const unstagedByIndex = new Map<number, AssessmentAgentStreamEvent[]>();
+  for (const event of segment.events) {
+    if (staged.has(event)) continue;
+    const at = Date.parse(event.emittedAt) || 0;
+    let owner = 0;
+    stageStarts.forEach((start, index) => {
+      if (start <= at) owner = index;
+    });
+    const owned = unstagedByIndex.get(owner);
+    if (owned) owned.push(event);
+    else unstagedByIndex.set(owner, [event]);
+  }
+  return stages.map((stage, index) => {
+    const superseded = index < stages.length - 1;
+    // Grouping copies the dispatch's end event into every participating
+    // stage; only the stage that was running when it ended owns it, so a
+    // finished Planner does not inherit the Investigator's failure or time.
+    const own = (segment.stageEvents[stage] ?? []).filter(
+      (event) => !superseded || !isDispatchEndEvent(event),
+    );
+    const events = [...(unstagedByIndex.get(index) ?? []), ...own].sort(
+      (a, b) => a.sequence - b.sequence,
+    );
+    return {
+      turnKey: `${segment.turnKey}:${stage}`,
+      runId: segment.runId,
+      stages: [stage],
+      stage,
+      events,
+      stageEvents: { [stage]: own },
+      superseded,
+    };
+  });
+}
+
+/** A cached plan republishes durable decisions for Investigator provenance.
+ * They remain in the journal, but must not become a second customer Planner turn. */
+function isReusedPlannerReplay(events: AssessmentAgentStreamEvent[]): boolean {
+  return events.some((event) => {
+    if (event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.engineeringRule) {
+      return false;
+    }
+    const data = event.data;
+    return (
+      data !== null &&
+      typeof data === "object" &&
+      !Array.isArray(data) &&
+      (data as Record<string, unknown>).planReused === true
+    );
+  });
+}
+
+function isDispatchEndEvent(event: AssessmentAgentStreamEvent): boolean {
+  return (
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted ||
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed ||
+    event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused
+  );
 }

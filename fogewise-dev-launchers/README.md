@@ -64,6 +64,14 @@ running services or raise the relevant limit for workloads that need more RAM.
 Restart local infrastructure with `pnpm dev:fogewise` to apply its new limits.
 The Linux app limit requires a working systemd user session.
 
+`pnpm run typecheck`, `pnpm run test:web`, `pnpm test`, and
+`pnpm --dir apps/api test` use a separate 3800M systemd user scope on Linux.
+The web test runner executes one file at a time, and API Jest uses one worker
+that is recycled after it exceeds 768 MB between suites. Run these checks after
+stopping the development stack when the host must stay under 4 GiB overall;
+the dev and check scopes have independent budgets. On CI, macOS, and Windows,
+the commands run normally without a systemd scope.
+
 Local:
 
 ```bash

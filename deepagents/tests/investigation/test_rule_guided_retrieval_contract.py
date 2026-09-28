@@ -102,7 +102,9 @@ def test_rule_contract_keeps_legal_retrieval_hints_separate_from_source_citation
     assert rule["retrievalHints"]["keywords"] == ["disclosure", "label", "watermark"]
     assert rule["requiredEvidence"] == ["AI_OUTPUT_SURFACE"]
     assert "sourceLocations" not in rule
-    assert any("native Deep Agents" in row for row in [payload["task"]])
+    # The task points the Investigator at the pre-indexed graph tools first.
+    assert "search_code_graph" in payload["task"]
+    assert "trace_call_path" in payload["task"]
 
 
 def test_finish_schema_requires_repository_source_locations() -> None:

@@ -189,8 +189,10 @@ def test_exact_resume_selects_only_affected_rule() -> None:
     assert not result.planner_fallback_used
     assert "openwiki" not in result.observability
     assert result.observability["repository_planning_context"] == {
-        "source": "LCSP_REPOSITORY_DATABASE",
-        "codebaseMemoryMcpOptional": True,
+        "codebaseMemoryRequired": True,
+        "scannerMemoryRequired": True,
+        "source": "LCSP_REPOSITORY_INTELLIGENCE_PACK",
+        "repositoryDiscoveryPolicy": "SCANNER_ONLY_DOWNSTREAM_SEED_FIRST",
     }
     assert ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"] not in (
         result.limitations
@@ -201,5 +203,6 @@ def test_exact_resume_selects_only_affected_rule() -> None:
         event["tool_name"]
         for event in emitted
         if event["tool_name"].startswith("engineering_rule_investigation:")
+        and event["event_type"] != "TOOL_STARTED"
     ]
     assert investigated == [f"engineering_rule_investigation:{AFFECTED_RULE_ID}"]

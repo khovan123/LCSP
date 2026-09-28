@@ -70,6 +70,8 @@ import {
   scopeAgentStreamRunEvents,
   shouldShowAgentStreamHistoryAction,
 } from "../../utils/agent-stream-projection";
+import { agentThinkingLabel } from "../../utils/agent-thinking-label";
+import { AgentStreamDispatchTurns } from "../molecules/agent-stream-dispatch-turns";
 import { AgentStreamTurn } from "../molecules/agent-stream-turn";
 import {
   AgentMessage,
@@ -81,7 +83,10 @@ import {
   AssessmentQuestionTurn,
   type AssessmentQuestionAnswerInput,
 } from "../molecules/assessment-question-turn";
-import { InterviewCycleTurn } from "../molecules/interview-cycle-turn";
+import {
+  InterviewCycleOutput,
+  InterviewCycleTurn,
+} from "../molecules/interview-cycle-turn";
 import { InterviewOutputPanel } from "../molecules/interview-output-panel";
 import { PostFindingFlowSteps } from "../molecules/post-finding-flow-steps";
 import { TurnFooter } from "../molecules/turn-footer";
@@ -206,6 +211,14 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
             }}
             activities={flow.activities}
             evidenceReady={flow.evidenceAccepted}
+            thinkingLabel={agentThinkingLabel(
+              flow.scanActive,
+              scopeAgentStreamRunEvents(
+                groupAgentStreamEventsByStage(timeline.agentStreamEvents ?? [])
+                  .byStage[ASSESSMENT_AGENT_STREAM_STAGES.scanner],
+                scanJob?.id ?? null,
+              ),
+            )}
             programEvidenceSummary={flow.programEvidenceSummary}
             canonicalOverview={evidenceOverviewQuery.data}
             scanFailed={flow.scanFailed}
@@ -318,6 +331,22 @@ function AssessmentInterviewFlow({
           "running",
       ),
     [stageEvents],
+  );
+  // A customer stop of Planner/Investigator/Gate: Continue resumes it through
+  // the pipeline (plan and finished rules are reused), not an Interview turn.
+  const downstreamTurnPaused = useMemo(
+    () =>
+      !downstreamTurnRunning &&
+      [
+        ASSESSMENT_AGENT_STREAM_STAGES.planner,
+        ASSESSMENT_AGENT_STREAM_STAGES.investigate,
+        ASSESSMENT_AGENT_STREAM_STAGES.gate,
+      ].some(
+        (stage) =>
+          deriveLatestAgentStreamTurnState(stageEvents.byStage[stage]) ===
+          "paused",
+      ),
+    [stageEvents, downstreamTurnRunning],
   );
   const anyAgentTurnRunning =
     interviewTurnState === "running" || downstreamTurnRunning;
@@ -698,6 +727,17 @@ function AssessmentInterviewFlow({
     if (!canContinuePipeline || continuePipeline.isPending) {
       return;
     }
+    requestContinuePipeline();
+  }
+
+  // Resuming a stopped Planner/Investigator does not depend on Interview
+  // composer state; the API decides whether the pipeline can continue.
+  function handleResumeStoppedPipeline() {
+    if (continuePipeline.isPending) return;
+    requestContinuePipeline();
+  }
+
+  function requestContinuePipeline() {
     continuePipeline.mutate(undefined, {
       onSuccess: (outcome) => {
         setLastSavedMessage(t(pipelineContinueMessageKey(outcome)));
@@ -707,6 +747,37 @@ function AssessmentInterviewFlow({
       },
     });
   }
+
+  const interviewThinkingLabel = agentThinkingLabel(
+    false,
+    groupAgentStreamEventsByRun(
+      stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.interview],
+    ).at(-1)?.events ?? [],
+  );
+  const handoffPanel = (
+    <InterviewOutputPanel
+      icon={InfoIcon}
+      label={
+        interview.assistantMessage ??
+        (interviewHandoff.messageKey ===
+        "pages.assessmentFlow.interview.contextReadyHandoff"
+          ? t("pages.assessment.noMoreQuestionsOutput")
+          : t(interviewHandoff.messageKey))
+      }
+    />
+  );
+  // The handoff status belongs to the answer's own agent turn when that turn is
+  // the latest thing on screen, so Technical details still ends the turn.
+  const lastHistoryTurn = transcriptTurns.history.at(-1);
+  const handoffInLatestActivity =
+    !interview.questionTurnProps &&
+    !interview.isFailed &&
+    !(
+      interview.isBlocked &&
+      customerActions.canSubmitBlockedAction &&
+      customerActions.availableBlockedActions.length > 0
+    ) &&
+    (lastHistoryTurn?.followUpActivity.length ?? 0) > 0;
 
   return (
     <main
@@ -723,6 +794,9 @@ function AssessmentInterviewFlow({
         {scanner}
         {scannerTurnEvents.length > 0 || scannerHistoryAction ? (
           <AgentStreamTurn
+            // A retried scan is a new run: remount so its disclosures start
+            // collapsed instead of inheriting the previous run's DOM state.
+            key={`scanner:${activeScanRunId ?? scannerTurnEvents[0]?.runId ?? ""}`}
             stages={[ASSESSMENT_AGENT_STREAM_STAGES.scanner]}
             runId={activeScanRunId ?? scannerTurnEvents[0]?.runId ?? ""}
             events={scannerTurnEvents}
@@ -744,38 +818,51 @@ function AssessmentInterviewFlow({
         {interviewEnabled ? (
           <>
             {transcriptTurns.currentActivity.map((segment) => (
-              <AgentStreamTurn
+              <AgentStreamDispatchTurns
                 key={`activity:${segment.turnKey}`}
-                stages={segment.stages}
-                runId={segment.runId}
-                events={segment.events}
-                stageEvents={segment.stageEvents}
+                segment={segment}
               />
             ))}
 
-            {transcriptTurns.history.map((turn) => (
-              <InterviewCycleTurn
-                key={`answer:${turn.answer.questionId}:${turn.answer.answeredAt}`}
-                cycle={turn}
-                activity={turn.followUpActivity.map((segment, index) => (
-                  <AgentStreamTurn
-                    key={`activity:${segment.turnKey}`}
-                    stages={segment.stages}
-                    runId={segment.runId}
-                    events={segment.events}
-                    stageEvents={segment.stageEvents}
-                    output={turn.output[index]}
-                  />
-                ))}
-              />
-            ))}
+            {transcriptTurns.history.map((turn, turnIndex) => {
+              const lastSegment = turn.followUpActivity.length - 1;
+              const ownsHandoff =
+                handoffInLatestActivity &&
+                turnIndex === transcriptTurns.history.length - 1;
+              return (
+                <InterviewCycleTurn
+                  key={`answer:${turn.answer.questionId}:${turn.answer.answeredAt}`}
+                  cycle={turn}
+                  activityOwnsOutput={lastSegment >= 0}
+                  activity={turn.followUpActivity.map((segment, index) => (
+                    <AgentStreamDispatchTurns
+                      key={`activity:${segment.turnKey}`}
+                      segment={segment}
+                      outputs={
+                        // The answer's result belongs to the dispatch that
+                        // processed it, not to later retries appended after it.
+                        index === 0 ? (
+                          <>
+                            <InterviewCycleOutput
+                              answer={turn.answer}
+                              question={turn.question}
+                            />
+                            {ownsHandoff ? handoffPanel : null}
+                          </>
+                        ) : undefined
+                      }
+                    />
+                  ))}
+                />
+              );
+            })}
 
             {interview.questionTurnProps ? (
               <AgentTurn
                 content={
                   <AgentMessage>
                     <ThoughtLine
-                      label={t("pages.assessmentFlow.interview.thought")}
+                      label={interviewThinkingLabel}
                     />
                     <p className="mt-2">
                       {t("pages.assessmentFlow.interview.readyDescription")}
@@ -819,7 +906,7 @@ function AssessmentInterviewFlow({
                 content={
                   <AgentMessage>
                     <ThoughtLine
-                      label={t("pages.assessmentFlow.interview.thought")}
+                      label={interviewThinkingLabel}
                     />
                     <p className="mt-2">
                       {t("pages.assessmentFlow.interview.readyDescription")}
@@ -877,26 +964,17 @@ function AssessmentInterviewFlow({
                 </AgentMessage>
               </AgentTurn>
             ) : (
-              <AgentTurn
-                footer={
-                  interviewTurnTimestamp ? (
-                    <TurnFooter timestamp={interviewTurnTimestamp} />
-                  ) : null
-                }
-              >
-                <AgentMessage>
-                  <InterviewOutputPanel
-                    icon={InfoIcon}
-                    label={
-                      interview.assistantMessage ??
-                      (interviewHandoff.messageKey ===
-                      "pages.assessmentFlow.interview.contextReadyHandoff"
-                        ? t("pages.assessment.noMoreQuestionsOutput")
-                        : t(interviewHandoff.messageKey))
-                    }
-                  />
-                </AgentMessage>
-              </AgentTurn>
+              handoffInLatestActivity ? null : (
+                <AgentTurn
+                  footer={
+                    interviewTurnTimestamp ? (
+                      <TurnFooter timestamp={interviewTurnTimestamp} />
+                    ) : null
+                  }
+                >
+                  <AgentMessage>{handoffPanel}</AgentMessage>
+                </AgentTurn>
+              )
             )}
 
             <AgentStreamTimeline events={stageEvents.unstaged} />
@@ -906,7 +984,7 @@ function AssessmentInterviewFlow({
                 content={
                   <AgentMessage>
                     <ThoughtLine
-                      label={t("pages.assessmentFlow.postFinding.thought")}
+                      label={agentThinkingLabel(false, [])}
                     />
                     <p className="mt-2">
                       {t("pages.assessmentFlow.postFinding.description")}
@@ -959,15 +1037,28 @@ function AssessmentInterviewFlow({
         onSubmit={handleSubmit}
         onResume={handleContinuePipeline}
         turnRunning={anyAgentTurnRunning}
-        turnPaused={billingPaused || interviewTurnState === "paused"}
+        turnPaused={
+          billingPaused ||
+          interviewTurnState === "paused" ||
+          downstreamTurnPaused
+        }
+        // One stop covers the Interview turn and the Planner/Investigator run.
         onInterruptTurn={
-          interviewTurnState === "running"
+          anyAgentTurnRunning
             ? () => interruptInterviewTurn.mutate()
             : undefined
         }
-        onResumeTurn={() => resumeInterviewTurn.mutate()}
+        onResumeTurn={
+          downstreamTurnPaused
+            ? handleResumeStoppedPipeline
+            : () => resumeInterviewTurn.mutate()
+        }
         interruptingTurn={interruptInterviewTurn.isPending}
-        resumingTurn={resumeInterviewTurn.isPending}
+        resumingTurn={
+          downstreamTurnPaused
+            ? continuePipeline.isPending
+            : resumeInterviewTurn.isPending
+        }
       />
     </main>
   );

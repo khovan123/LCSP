@@ -643,8 +643,10 @@ def test_all_provider_pools_exhaust_to_terminal_error(monkeypatch):
     with pytest.raises(TerminalCredentialError, match="provider routes exhausted"):
         _sync_chain(request, raw_handler)
     # The OpenAI pool tries both slots and hands over; the last (llm7) pool tries
-    # both slots, waits once, and retries the soonest slot.
-    assert raw_handler.call_count == 5
+    # both slots, waits once, and retries the soonest slot. Every failure was a
+    # plain rate limit, so the primary OpenAI pool then gets one waited retry of
+    # its own (bounded) before the task ends.
+    assert raw_handler.call_count == 8
 
 
 def test_current_provider_is_not_reentered_from_fallback_chain(monkeypatch):
@@ -850,3 +852,87 @@ def test_llm7_text_only_structured_answer_falls_back_to_google(monkeypatch):
         "llm7",
         "google_genai",
     ]
+
+
+class _StatusError(RuntimeError):
+    def __init__(self, status_code: int, code: str | None = None):
+        super().__init__(f"status {status_code}")
+        self.status_code = status_code
+        if code:
+            self.error_code = code
+
+
+class _RouteRequest:
+    def __init__(self, provider: str):
+        self.model = type("M", (), {"provider": provider})()
+
+    def override(self, *, model):
+        request = _RouteRequest(model.provider)
+        return request
+
+
+def _rate_limited_primary(code: str | None = None) -> BaseException:
+    from middleware.failure_policy import TerminalCredentialError
+
+    try:
+        raise _StatusError(429, code)
+    except _StatusError as cause:
+        try:
+            raise TerminalCredentialError("slots cooling") from cause
+        except TerminalCredentialError as error:
+            return error
+
+
+def _install_routes(monkeypatch):
+    import middleware.provider_fallback as fallback_module
+
+    monkeypatch.setattr(fallback_module, "model_provider", lambda model: model.provider)
+    monkeypatch.setattr(
+        fallback_module, "configured_fallback_providers", lambda: ("google_genai",)
+    )
+    monkeypatch.setattr(
+        fallback_module,
+        "fallback_model",
+        lambda provider: type("M", (), {"provider": provider})(),
+    )
+    monkeypatch.setattr(fallback_module, "_provider_route_disabled", lambda _p: False)
+    monkeypatch.setattr(fallback_module, "_trip_provider_circuit", lambda *_a: None)
+
+
+def test_rate_limited_primary_waits_out_its_cooldown_instead_of_ending_the_task(monkeypatch):
+    from middleware.token_fallback import _FURTHER_PROVIDER_ROUTE
+
+    _install_routes(monkeypatch)
+    calls: list[tuple[str, bool]] = []
+
+    def handler(request):
+        calls.append((request.model.provider, _FURTHER_PROVIDER_ROUTE.get()))
+        if len(calls) == 1:
+            raise _rate_limited_primary()
+        if len(calls) == 2:
+            raise _StatusError(503)
+        return ModelResponse(result=[])
+
+    result = ProviderFallbackMiddleware().wrap_model_call(_RouteRequest("llm7"), handler)
+
+    assert isinstance(result, ModelResponse)
+    # llm7 deferred (a later route existed), Google failed, then llm7 again with
+    # no later route: token fallback now waits for the cooldown and retries.
+    assert calls == [("llm7", True), ("google_genai", False), ("llm7", False)]
+
+
+def test_an_exhausted_quota_is_not_waited_on(monkeypatch):
+    from middleware.failure_policy import TerminalCredentialError
+
+    _install_routes(monkeypatch)
+    calls: list[str] = []
+
+    def handler(request):
+        calls.append(request.model.provider)
+        if len(calls) == 1:
+            raise _rate_limited_primary("insufficient_quota")
+        raise _StatusError(503)
+
+    with pytest.raises(TerminalCredentialError):
+        ProviderFallbackMiddleware().wrap_model_call(_RouteRequest("llm7"), handler)
+    assert calls == ["llm7", "google_genai"]

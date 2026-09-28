@@ -1,6 +1,7 @@
 import {
   ASSESSMENT_AGENT_STREAM_STAGES,
   ASSESSMENT_RUNTIME_PLAN_REASON_CODES,
+  ASSESSMENT_RUNTIME_RUN_STATUSES,
 } from "@lcsp/contracts/evidence";
 import { resolveMessage } from "@lcsp/i18n";
 
@@ -13,7 +14,9 @@ import {
   buildAgentStreamTurnHeadline,
   selectPlannerOutcomes,
 } from "../../utils/agent-stream-turn-copy";
+import { agentThinkingLabel } from "../../utils/agent-thinking-label";
 import { AgentStreamActivityLog } from "./agent-stream-activity-log";
+import { AgentStreamInvestigatorProgress } from "./agent-stream-investigator-progress";
 import { AgentStreamTimeline } from "./agent-stream-timeline";
 import {
   deriveAgentStreamRunOutcome,
@@ -23,7 +26,10 @@ import {
 } from "../../utils/agent-stream-projection";
 import { AgentStreamTechnicalSummary } from "./agent-stream-technical-summary";
 import { AgentStreamInvestigatorOutput } from "./agent-stream-investigator-output";
-import { AgentStreamPlannerOutput } from "./agent-stream-planner-output";
+import {
+  AgentStreamPlannerOutput,
+  AgentStreamRuleGoalList,
+} from "./agent-stream-planner-output";
 import {
   AgentMessage,
   AgentTurn,
@@ -47,6 +53,8 @@ export function AgentStreamTurn({
   outcomeOverride,
   history,
   onLoadOlder,
+  outputs,
+  planOrder,
   className,
 }: AgentStreamTurnProps) {
   const outcome = outcomeOverride ?? deriveAgentStreamRunOutcome(events);
@@ -55,6 +63,26 @@ export function AgentStreamTurn({
     onLoadOlder,
   );
   const { actor, message } = buildAgentStreamTurnHeadline(stages, outcome);
+  // Each investigated rule carries its own Technical details, so the
+  // Investigator's turn-level feed keeps only events outside any rule.
+  const investigating = stages.includes(
+    ASSESSMENT_AGENT_STREAM_STAGES.investigate,
+  );
+  const ruleOwned = new Set(
+    (stageEvents[ASSESSMENT_AGENT_STREAM_STAGES.investigate] ?? []).filter(
+      (event) => event.engineeringRuleId,
+    ),
+  );
+  const outsideRule = (event: (typeof events)[number]) => !ruleOwned.has(event);
+  const technicalEvents = investigating ? events.filter(outsideRule) : events;
+  const technicalStageEvents = investigating
+    ? Object.fromEntries(
+        Object.entries(stageEvents).map(([stage, items]) => [
+          stage,
+          (items ?? []).filter(outsideRule),
+        ]),
+      )
+    : stageEvents;
   const labels = turnLabels();
 
   const {
@@ -66,10 +94,44 @@ export function AgentStreamTurn({
     <AgentTurn className={className}>
       <AgentMessage>
         <ThoughtLine label={actor} />
+        {/* The Scanner step already carries this turn's thinking line. */}
+        {stages.includes(ASSESSMENT_AGENT_STREAM_STAGES.scanner) ? null : (
+          <ThinkingLine
+            label={agentThinkingLabel(
+              outcome === AGENT_STREAM_RUN_OUTCOMES.running,
+              events,
+            )}
+            className="mt-1 text-muted-foreground"
+          />
+        )}
         <ThinkingLine label={message} className="mt-1" />
 
         {stages.includes(ASSESSMENT_AGENT_STREAM_STAGES.scanner) ? (
           <AgentStreamActivityLog events={events} />
+        ) : null}
+
+        {stages.includes(ASSESSMENT_AGENT_STREAM_STAGES.investigate) ? (
+          <AgentStreamInvestigatorProgress
+            events={events}
+            dispatchRunning={outcome === AGENT_STREAM_RUN_OUTCOMES.running}
+            planOrder={
+              planOrder ??
+              plannerRuleHeaders
+                .filter((rule) => rule.planned)
+                .sort((a, b) => a.sequence - b.sequence)
+                .map((rule) => rule.ruleId)
+            }
+            // A rule cannot still be running once its dispatch has ended.
+            rules={
+              outcome === AGENT_STREAM_RUN_OUTCOMES.running
+                ? investigatorRuleHeaders
+                : investigatorRuleHeaders.map((rule) =>
+                    rule.status === ASSESSMENT_RUNTIME_RUN_STATUSES.running
+                      ? { ...rule, status: ASSESSMENT_RUNTIME_RUN_STATUSES.failed }
+                      : rule,
+                  )
+            }
+          />
         ) : null}
 
         {stages.includes(ASSESSMENT_AGENT_STREAM_STAGES.planner)
@@ -87,34 +149,36 @@ export function AgentStreamTurn({
             )
           : null}
 
-        {stages.includes(ASSESSMENT_AGENT_STREAM_STAGES.investigate) ? (
-          <AgentStreamInvestigatorOutput
-            rules={investigatorRuleHeaders}
-            dispatchFailed={isAgentStreamDispatchFailed(events)}
-          />
+        {/* Per-rule results live in each rule's row; only a dispatch-level
+            failure is summarised here. */}
+        {stages.includes(ASSESSMENT_AGENT_STREAM_STAGES.investigate) &&
+        isAgentStreamDispatchFailed(events) ? (
+          <AgentStreamInvestigatorOutput rules={[]} dispatchFailed />
         ) : null}
 
-        {events.length > 0 || showHistoryAction ? (
+        {outputs ? <div className="mt-3 space-y-3">{outputs}</div> : null}
+
+        {technicalEvents.length > 0 || showHistoryAction ? (
           <details
             className="mt-3 group/technical"
             data-slot="agent-stream-turn-technical-details"
           >
             <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-muted-foreground select-none">
               {labels.technicalDetails}
-              <span>· {events.length}</span>
+              <span>· {technicalEvents.length}</span>
             </summary>
             <AgentStreamTechnicalSummary
-              events={events}
-              stageEvents={stageEvents}
+              events={technicalEvents}
+              stageEvents={technicalStageEvents}
             />
             <details className="mt-2" data-stream-raw-events>
               <summary className="cursor-pointer text-xs text-muted-foreground">
                 {t("pages.appShell.agentStreamTechnicalSummary.rawEvents")} ·{" "}
-                {events.length}
+                {technicalEvents.length}
               </summary>
               <div className="mt-1.5">
                 <AgentStreamTimeline
-                  events={events}
+                  events={technicalEvents}
                   activeRunId={runId}
                   embedded
                   outcomeOverride={outcomeOverride}
@@ -146,8 +210,10 @@ function renderPlannerOutput(
       </div>
     );
   // A raw rule ID (e.g. "ER-7") means nothing to a customer, so a skipped
-  // rule only gets listed once it has a real concept to show instead.
-  const nameableSkipped = skipped.filter((rule) => rule.concept !== null);
+  // rule is listed exactly like a selected one: by its goals, else concept.
+  const nameableSkipped = skipped.filter(
+    (rule) => rule.goals.length > 0 || rule.concept !== null,
+  );
   if (selected.length === 0 && skipped.length === 0) return null;
   return (
     <>
@@ -163,17 +229,9 @@ function renderPlannerOutput(
             {labels.skippedGoals} · {skipped.length}
           </summary>
           {nameableSkipped.length > 0 ? (
-            <ul className="mt-2 list-disc space-y-1.5 pl-5">
-              {nameableSkipped.map((rule) => (
-                <li
-                  key={rule.ruleId}
-                  data-stream-planner-skipped-goal
-                  className="break-words"
-                >
-                  {rule.concept}
-                </li>
-              ))}
-            </ul>
+            <div data-stream-planner-skipped-goals>
+              <AgentStreamRuleGoalList rules={nameableSkipped} />
+            </div>
           ) : null}
         </details>
       ) : null}

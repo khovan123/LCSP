@@ -8,5 +8,8 @@ export class RerunClassificationCommand {
     public readonly correlationId: string,
     public readonly reason?: string,
     public readonly actorType: AuditActorType = AUDIT_ACTOR_TYPES.user,
+    /** The customer stopped the previous dispatch: its recent outbox row no
+     *  longer means "already running", so it must not swallow this rerun. */
+    public readonly afterCustomerStop = false,
   ) {}
 }

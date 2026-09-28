@@ -26,6 +26,7 @@ ENGINEERING_LIMITATION_CODES = {
     "investigation_returned_no_valid_claims": "INVESTIGATION_RETURNED_NO_VALID_CLAIMS",
     "model_limitation_code_invalid": "MODEL_LIMITATION_CODE_INVALID",
     "engineering_evidence_insufficient": "ENGINEERING_EVIDENCE_INSUFFICIENT",
+    "needs_scanner_enrichment": "NEEDS_SCANNER_ENRICHMENT",
     "conflicting_engineering_evidence": "CONFLICTING_ENGINEERING_EVIDENCE",
     "dynamic_path_unresolved": "DYNAMIC_PATH_UNRESOLVED",
     "external_boundary_unresolved": "EXTERNAL_BOUNDARY_UNRESOLVED",

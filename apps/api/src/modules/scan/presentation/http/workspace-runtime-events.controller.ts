@@ -145,6 +145,9 @@ export class WorkspaceRuntimeEventsController {
               post_finding: data.postFindingStates.map(
                 toPostFindingRuntimePayload,
               ),
+              // Stage status derived from durable artifacts; the sidebar and the
+              // composer both read this instead of guessing from the activity log.
+              stage_lifecycles: data.stageLifecycles,
             },
           })),
           catchError((error) => {

@@ -243,6 +243,7 @@ def test_planner_rule_decision_includes_investigation_goals():
                 decision="SELECT",
                 concept="Token validation",
                 investigation_goals=("Verify tokens before use", "Check expiry handling"),
+                plan_reused=True,
             )
 
     assert len(events) == 1
@@ -253,6 +254,7 @@ def test_planner_rule_decision_includes_investigation_goals():
         "Verify tokens before use",
         "Check expiry handling",
     ]
+    assert events[0]["data"]["planReused"] is True
 
 
 def test_invoke_with_stream_forwards_visible_events_and_returns_root_values():

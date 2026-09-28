@@ -376,6 +376,7 @@ def publish_rule_decision(
     basis: Any = (),
     concept: str | None = None,
     investigation_goals: Any = (),
+    plan_reused: bool = False,
 ) -> None:
     """Publish one Planner decision as its own entry under that rule."""
     token = active_agent_stream_rule.set(rule_id)
@@ -390,6 +391,7 @@ def publish_rule_decision(
                 engineeringRuleId=rule_id,
                 concept=_text(concept),
                 investigationGoals=_string_list(list(investigation_goals or ())),
+                planReused=plan_reused,
                 decision=_text(decision),
                 reasonCode=_text(reason_code),
                 resultSummary={"basis": _string_list(list(basis or ()))},

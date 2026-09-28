@@ -27,6 +27,7 @@ describe("AssessmentPipelineReconciliationService", () => {
   const updateMany =
     jest.fn<(...args: unknown[]) => Promise<{ count: number }>>();
   const continuePipeline = jest.fn<(...args: unknown[]) => Promise<unknown>>();
+  const isStoppedByCustomer = jest.fn<(...args: unknown[]) => Promise<boolean>>();
   const config = {
     get: jest.fn<(key: string, fallback: number | boolean) => number | boolean>(
       (_key, fallback) => fallback,
@@ -46,14 +47,28 @@ describe("AssessmentPipelineReconciliationService", () => {
     createMany.mockResolvedValue({ count: 1 });
     updateMany.mockResolvedValue({ count: 1 });
     continuePipeline.mockResolvedValue({});
+    isStoppedByCustomer.mockResolvedValue(false);
     service = new AssessmentPipelineReconciliationService(
       {
         assessment: { findMany },
         pipelineReconciliation: { createMany, updateMany },
       } as unknown as PrismaService,
       config as unknown as ConfigService,
-      { continuePipeline } as unknown as AssessmentPipelineContinuationService,
+      {
+        continuePipeline,
+        isStoppedByCustomer,
+      } as unknown as AssessmentPipelineContinuationService,
     );
+  });
+
+  it("never resumes a pipeline the customer stopped", async () => {
+    isStoppedByCustomer.mockResolvedValue(true);
+
+    await service.poll();
+
+    expect(isStoppedByCustomer).toHaveBeenCalledWith("assessment-1");
+    expect(continuePipeline).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
   it("selects only quiet unfinished assessments with accepted evidence and no active scan", async () => {

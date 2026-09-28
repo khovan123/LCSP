@@ -18,10 +18,18 @@ INTERVIEW_PAUSE_COMMAND = "command.assessment-interview.pause-agent.v1"
 # holds the matching short-circuit that keeps this from queuing behind the run it
 # targets.
 INTERRUPTED_BOUNDARY_NAME = "assessment_interview_resume_requested"
+# The same stop also covers the Planner -> Investigator engineering assessment.
+INTERRUPTED_BOUNDARY_NAMES = (
+    INTERRUPTED_BOUNDARY_NAME,
+    "engineering_assessment_requested",
+)
 
 
 class AssessmentInterviewPauseBoundary(AgentBoundaryBase):
-    """Cooperatively interrupt the assessment's active Interview turn, if any.
+    """Cooperatively interrupt the assessment's active agent run, if any.
+
+    That is the Interview turn or the Planner -> Investigator engineering
+    assessment; both run on the assessment's one LangGraph thread.
 
     In production this command is short-circuited inside
     ``agent_server_client.dispatch_agent_runtime_event`` before an Agent Server
@@ -36,13 +44,13 @@ class AssessmentInterviewPauseBoundary(AgentBoundaryBase):
     requires_rbac = False
 
     def handle(self, message: dict[str, Any], correlationId: str) -> None:
-        interrupt_agent_runtime_run(
-            INTERRUPTED_BOUNDARY_NAME, message, correlationId
-        )
+        for boundary_name in INTERRUPTED_BOUNDARY_NAMES:
+            interrupt_agent_runtime_run(boundary_name, message, correlationId)
 
 
 __all__ = [
     "INTERRUPTED_BOUNDARY_NAME",
+    "INTERRUPTED_BOUNDARY_NAMES",
     "INTERVIEW_PAUSE_COMMAND",
     "AssessmentInterviewPauseBoundary",
 ]

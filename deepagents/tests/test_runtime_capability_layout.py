@@ -35,6 +35,7 @@ def test_dispatch_runtime_groups_support_capabilities() -> None:
         "api_client.py",
         "artifact_storage.py",
         "callback_schemas.py",
+        "codebase_memory.py",
         "config.py",
         "correlation.py",
         "dev_unsafe_trace.py",

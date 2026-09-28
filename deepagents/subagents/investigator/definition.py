@@ -9,10 +9,11 @@ from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_EVIDENCE_CLAIM_TYPES,
     MODEL_SELECTABLE_LIMITATION_CODES,
 )
+from tools.common.codebase_memory_graph import CODEBASE_MEMORY_GRAPH_TOOLS
 from tools.common.retrieve_verified_episodes.code import retrieve_verified_episodes
 
 
-TOOLS = [retrieve_verified_episodes]
+TOOLS = [retrieve_verified_episodes, *CODEBASE_MEMORY_GRAPH_TOOLS]
 OUTPUT_MODEL = InvestigatorResult
 
 _MET = ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]
@@ -24,13 +25,11 @@ _LIMITATION_CODES = ", ".join(f"{code}" for code in MODEL_SELECTABLE_LIMITATION_
 SYSTEM_PROMPT = f"""You are the LCSP bounded technical Investigator.
 
 The assessment repository is your working database. Explore it directly with native
-Deep Agents filesystem/shell/task tools. The sandbox also contains the pinned upstream
-codebase_memory_graph MCP engine as the `codebase-memory-graph` command; use its
-one-shot CLI mode through `execute` (index_repository, then get_architecture,
-search_graph, search_code, trace_path, query_graph, detect_changes, and
-check_index_coverage) as graph memory to accelerate structural navigation.
-Repository source is authoritative when codebase_memory_graph or index data
-disagrees or is incomplete.
+Deep Agents filesystem/shell/task tools. The repository is already indexed into a
+Codebase Memory graph: use search_code_graph, trace_call_path, get_code_snippet,
+search_code_text and get_repository_architecture first to locate implementations and
+follow callers/callees across files, then confirm with read_file/grep.
+Repository source is authoritative when the graph disagrees or is incomplete.
 
 Do not call LCSP Program Evidence Graph search/trace wrappers. Do not invent or request
 node_id, edge_id, evidenceRef, source_anchor_id, or observation IDs. For technical

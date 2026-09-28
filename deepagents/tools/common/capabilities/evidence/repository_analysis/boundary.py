@@ -71,6 +71,7 @@ class RepositoryAnalysisBoundary(AgentBoundaryBase):
                 commit_sha=commit_sha,
                 scan_job_id=scan_job_id,
                 targeted_scope=targeted_scope,
+                assessment_id=_optional(message, "assessmentId", "assessment_id"),
             )
             callback = ScanCallbackPayload(
                 status=(

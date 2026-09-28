@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { AUDIT_ACTOR_TYPES } from "@lcsp/contracts/audit";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   ASSESSMENT_PIPELINE_CONTINUE_ACTIONS,
   ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES,
   ASSESSMENT_PIPELINE_CONTINUE_RERUN_REASON,
   ASSESSMENT_PIPELINE_LIVENESS_WINDOW_SECONDS,
+  ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS,
 } from "@lcsp/contracts/evidence";
 import { AssessmentStatus } from "@prisma/client";
 import type { CommandBus } from "@nestjs/cqrs";
@@ -44,6 +46,8 @@ describe("AssessmentPipelineContinuationService", () => {
     }>
   >;
   let assertCredits: jest.Mock<(...args: unknown[]) => Promise<void>>;
+  let stoppedByCustomer: jest.Mock<(...args: unknown[]) => Promise<boolean>>;
+  let recordControl: jest.Mock<(...args: unknown[]) => Promise<void>>;
   let service: AssessmentPipelineContinuationService;
   let findPause: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
   let resumePause: jest.Mock<(...args: unknown[]) => Promise<boolean>>;
@@ -95,6 +99,12 @@ describe("AssessmentPipelineContinuationService", () => {
     assertCredits = jest
       .fn<(...args: unknown[]) => Promise<void>>()
       .mockResolvedValue(undefined);
+    stoppedByCustomer = jest
+      .fn<(...args: unknown[]) => Promise<boolean>>()
+      .mockResolvedValue(false);
+    recordControl = jest
+      .fn<(...args: unknown[]) => Promise<void>>()
+      .mockResolvedValue(undefined);
     service = new AssessmentPipelineContinuationService(
       {
         assessment: { findUnique: findAssessment },
@@ -104,6 +114,8 @@ describe("AssessmentPipelineContinuationService", () => {
       interview as unknown as AssessmentInterviewRuntimeService,
       {
         getPipelineLiveness: liveness,
+        isPipelineStoppedByCustomer: stoppedByCustomer,
+        recordPipelineControl: recordControl,
       } as unknown as AssessmentRuntimeEventService,
       {
         assertAvailable: assertCredits,
@@ -158,9 +170,35 @@ describe("AssessmentPipelineContinuationService", () => {
         actor,
         "corr-continue",
         ASSESSMENT_PIPELINE_CONTINUE_RERUN_REASON,
+        AUDIT_ACTOR_TYPES.user,
+        false,
       ),
     );
     expect(interview.resumeFailedTurn).not.toHaveBeenCalled();
+  });
+
+  it("continuing after a customer stop lifts the stop and is never swallowed as a duplicate", async () => {
+    stoppedByCustomer.mockResolvedValue(true);
+
+    await expect(run()).resolves.toEqual({
+      action: ASSESSMENT_PIPELINE_CONTINUE_ACTIONS.downstreamRequeued,
+    });
+
+    expect(recordControl).toHaveBeenCalledWith({
+      assessmentId: "assessment-1",
+      correlationId: "corr-continue",
+      reason: ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS.customerRequestedContinue,
+    });
+    expect(execute).toHaveBeenCalledWith(
+      new RerunClassificationCommand(
+        "assessment-1",
+        actor,
+        "corr-continue",
+        ASSESSMENT_PIPELINE_CONTINUE_RERUN_REASON,
+        AUDIT_ACTOR_TYPES.user,
+        true,
+      ),
+    );
   });
 
   it("re-runs a failed or stalled Interview turn instead of skipping it", async () => {

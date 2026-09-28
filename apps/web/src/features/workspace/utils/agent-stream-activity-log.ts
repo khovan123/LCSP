@@ -8,6 +8,7 @@ import {
 } from "./agent-stream-projection";
 
 const VISIBLE_TOOL_ACTIVITIES = new Set([
+  "codebaseGraphQueried",
   "sourceFilesReviewed",
   "repositorySourceSearched",
 ]);

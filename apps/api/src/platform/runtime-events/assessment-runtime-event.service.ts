@@ -6,6 +6,8 @@ import {
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   ASSESSMENT_RUNTIME_ENGINEERING_PROGRESS_TOOL_NAMES,
   ASSESSMENT_RUNTIME_ENGINEERING_RULE_TOOL_PREFIXES,
+  ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS,
+  ASSESSMENT_RUNTIME_PIPELINE_CONTROL_TOOL_NAME,
   ASSESSMENT_RUNTIME_PLAN_REASON_CODES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   ASSESSMENT_RUNTIME_STAGE_CODES,
@@ -23,6 +25,7 @@ import {
   type AssessmentPostFindingActivity,
   type AssessmentPostFindingRuntimeState,
   type AssessmentRuntimeEventType,
+  type AssessmentRuntimePipelineControlReason,
   type AssessmentRuntimeEngineeringProgress,
   type AssessmentRuntimeActiveTool,
   type AssessmentRuntimeActivityEvent,
@@ -33,6 +36,11 @@ import {
   type AssessmentRuntimeSummaryValue,
 } from "@lcsp/contracts/evidence";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
+import { ASSESSMENT_PIPELINE_LIVENESS_WINDOW_SECONDS } from "@lcsp/contracts/evidence";
+import {
+  deriveStageLifecycles,
+  type StageLifecycleInterviewThread,
+} from "./stage-lifecycle.js";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import type { Prisma } from "@prisma/client";
 import { Injectable, Logger } from "@nestjs/common";
@@ -415,10 +423,16 @@ export class AssessmentRuntimeEventService {
       return { recorded: false, reason: "not_found" };
     }
     const isTerminalWorkerEvent = isTerminalWorkerRuntimeEvent(input.eventType);
-    if (isTerminalScanRuntimeStatus(scanJob.status) && !isTerminalWorkerEvent) {
+    // Planner/Investigator run after the scan finished, under the same scan job:
+    // their progress (e.g. a rule's investigation starting) must still record.
+    // Only scan-stage progress is rejected once the scan itself has ended.
+    const isDownstreamEvent =
+      input.stage === ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence;
+    const accepted = isTerminalWorkerEvent || isDownstreamEvent;
+    if (isTerminalScanRuntimeStatus(scanJob.status) && !accepted) {
       return { recorded: false, reason: "terminal" };
     }
-    if (!isActiveScanRuntimeStatus(scanJob.status) && !isTerminalWorkerEvent) {
+    if (!isActiveScanRuntimeStatus(scanJob.status) && !accepted) {
       return { recorded: false, reason: "inactive" };
     }
 
@@ -839,6 +853,38 @@ export class AssessmentRuntimeEventService {
       .slice(0, 50);
     const runs = deriveRuns(recentActivity).slice(0, 20);
     const postFindingStates = deriveLatestPostFindingStates(events);
+    // Stage status comes from durable artifacts, never from the activity log:
+    // see platform/runtime-events/stage-lifecycle.ts.
+    const assessmentIds = new Set<string>([
+      ...scanJobs.map((job) => job.assessmentId),
+      ...evidenceReports.map((report) => report.assessmentId),
+      ...recentActivity.map((event) => event.assessmentId),
+    ]);
+    const interviewThreads = assessmentIds.size
+      ? await this.safeInterviewThreads([...assessmentIds])
+      : [];
+    const liveWindowStart = Date.now() - ASSESSMENT_PIPELINE_LIVENESS_WINDOW_SECONDS * 1_000;
+    const stageLifecycles = deriveStageLifecycles({
+      assessmentIds,
+      scanJobs: scanJobs.map((job) => ({
+        assessmentId: job.assessmentId,
+        status: job.status,
+        updatedAt: job.updatedAt.toISOString(),
+      })),
+      evidenceReports: evidenceReports.map((report) => ({
+        assessmentId: report.assessmentId,
+        status: report.status,
+      })),
+      interviewThreads,
+      engineeringProgress,
+      liveAssessmentIds: new Set(
+        recentActivity
+          .filter(
+            (event) => Date.parse(event.emittedAt) >= liveWindowStart,
+          )
+          .map((event) => event.assessmentId),
+      ),
+    });
 
     return {
       emittedAt,
@@ -875,7 +921,33 @@ export class AssessmentRuntimeEventService {
         createdAt: report.createdAt.toISOString(),
       })),
       postFindingStates,
+      stageLifecycles,
     };
+  }
+
+  /** Interview threads for the lifecycle projection; never fails the snapshot. */
+  private async safeInterviewThreads(
+    assessmentIds: string[],
+  ): Promise<StageLifecycleInterviewThread[]> {
+    try {
+      const threads = await this.prisma.assessmentInterviewThread.findMany({
+        where: { assessmentId: { in: assessmentIds } },
+        select: {
+          assessmentId: true,
+          contextRevision: true,
+          processedRevision: true,
+          activeQuestionId: true,
+        },
+      });
+      return threads.map((thread) => ({
+        assessmentId: thread.assessmentId,
+        contextRevision: thread.contextRevision,
+        processedRevision: thread.processedRevision,
+        activeQuestionId: thread.activeQuestionId,
+      }));
+    } catch {
+      return [];
+    }
   }
 
   /**
@@ -902,6 +974,9 @@ export class AssessmentRuntimeEventService {
       asRecord(latest.outputSummaryJson)?.agentStreamEvent,
     )?.eventType;
     const endsRun =
+      // The customer stopped the pipeline; nothing is running any more.
+      latest.waitingReason ===
+        ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS.customerRequestedStop ||
       latest.runStatus === ASSESSMENT_RUNTIME_RUN_STATUSES.failed ||
       latest.runStatus === ASSESSMENT_RUNTIME_RUN_STATUSES.completed ||
       agentEventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed ||
@@ -910,6 +985,60 @@ export class AssessmentRuntimeEventService {
       agentEventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused;
     const recent = Date.now() - latest.createdAt.getTime() < windowMs;
     return { live: recent && !endsRun, lastActivityAt: latest.createdAt };
+  }
+
+  /**
+   * Record that the customer stopped or continued the assessment pipeline.
+   *
+   * The marker is scoped to the assessment's latest scan job run (the run every
+   * Planner/Investigator dispatch reports under). Without a scan job there is no
+   * downstream pipeline to stop, so nothing is recorded.
+   */
+  async recordPipelineControl(input: {
+    assessmentId: string;
+    correlationId: string;
+    reason: AssessmentRuntimePipelineControlReason;
+  }): Promise<void> {
+    const scanJob = await this.prisma.repositoryScanJob.findFirst({
+      where: { assessmentId: input.assessmentId },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (!scanJob) return;
+    const stopped =
+      input.reason ===
+      ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS.customerRequestedStop;
+    await this.recordEvent({
+      assessmentId: input.assessmentId,
+      runId: scanJob.id,
+      correlationId: input.correlationId,
+      eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runStageChanged,
+      runStatus: stopped
+        ? ASSESSMENT_RUNTIME_RUN_STATUSES.waiting
+        : ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+      stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+      toolName: ASSESSMENT_RUNTIME_PIPELINE_CONTROL_TOOL_NAME,
+      summary: stopped
+        ? "Customer stopped the assessment pipeline"
+        : "Customer continued the assessment pipeline",
+      waitingReason: input.reason,
+    });
+  }
+
+  /** Whether the customer's latest pipeline control was a stop. */
+  async isPipelineStoppedByCustomer(assessmentId: string): Promise<boolean> {
+    const [latest] = await this.safeFindMany({
+      where: {
+        assessmentId,
+        toolName: ASSESSMENT_RUNTIME_PIPELINE_CONTROL_TOOL_NAME,
+      },
+      orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
+      take: 1,
+    });
+    return (
+      latest?.waitingReason ===
+      ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS.customerRequestedStop
+    );
   }
 
   /**

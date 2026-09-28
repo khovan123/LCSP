@@ -41,10 +41,18 @@ COMMON_TOOL_NAMES: tuple[str, ...] = (
     "retrieve_legal_basis",
 )
 ORCHESTRATION_TOOL_NAMES: tuple[str, ...] = ("request_targeted_reanalysis",)
+# Typed queries over the repository's Codebase Memory graph (indexed per dispatch).
+CODEBASE_MEMORY_GRAPH_TOOL_NAMES: tuple[str, ...] = (
+    "search_code_graph",
+    "trace_call_path",
+    "get_code_snippet",
+    "search_code_text",
+    "get_repository_architecture",
+)
 EXPECTED_ROLE_TOOL_NAMES: dict[str, tuple[str, ...]] = {
     "interview": (),
     "planner": ("retrieve_verified_episodes",),
-    "investigator": ("retrieve_verified_episodes",),
+    "investigator": ("retrieve_verified_episodes", *CODEBASE_MEMORY_GRAPH_TOOL_NAMES),
 }
 
 
@@ -249,7 +257,7 @@ def test_tools_tree_contains_only_authored_agent_capabilities() -> None:
     }
     assert _directory_names(PROJECT_ROOT / "tools" / "common") == set(
         COMMON_TOOL_NAMES
-    ) | {"capabilities"}
+    ) | {"capabilities", "codebase_memory_graph"}
     assert _directory_names(PROJECT_ROOT / "tools" / "common" / "capabilities") == {
         "agentic_evidence",
         "assessment",

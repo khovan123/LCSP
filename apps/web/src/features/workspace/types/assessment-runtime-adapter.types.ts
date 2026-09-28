@@ -17,6 +17,7 @@ import {
   type RemediationApprovalStatus,
   type RemediationDecision,
   type VerificationResultStatus,
+  type AssessmentStageLifecycleProjection,
 } from "@lcsp/contracts/evidence";
 import {
   PROVIDER_CREDENTIAL_STATUSES,
@@ -323,6 +324,8 @@ export type AdapterArtifactAvailabilityInput = {
 };
 
 export type AdapterTimelineInput = {
+  /** Stage status the API derived from durable artifacts (absent on old APIs). */
+  stageLifecycle?: AssessmentStageLifecycleProjection | null;
   currentRun: WorkspaceRuntimeRun | null;
   recentActivity: WorkspaceRuntimeActivityItem[];
   engineeringProgress?: AssessmentRuntimeEngineeringProgress[];

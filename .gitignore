@@ -53,3 +53,6 @@ test-results/
 playwright-report/
 .pnpm-store/
 .billing/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+graft/

@@ -18,6 +18,7 @@ import {
   groupAgentStreamEventsByRun,
   groupAgentStreamEventsByStage,
   interleaveInterviewTranscript,
+  splitAgentStreamActivityByStage,
   splitCurrentInterviewActivity,
 } from "../src/features/workspace/utils/agent-stream-stages.ts";
 
@@ -661,4 +662,186 @@ test("scanner activity log keeps one row per activity kind whose count and value
   assert.equal(readsAfter?.count, 13);
   assert.match(readsAfter?.target ?? "", /file-12\.ts/);
   assert.equal(more.length, rows.length);
+});
+
+test("a dispatch that fails while investigating does not mark its finished Planner failed", () => {
+  const planner = ASSESSMENT_AGENT_STREAM_STAGES.planner;
+  const investigate = ASSESSMENT_AGENT_STREAM_STAGES.investigate;
+  const events = [
+    event(1, planner, { emittedAt: "2026-09-28T10:30:20.000Z" }),
+    event(2, planner, { emittedAt: "2026-09-28T10:32:22.000Z" }),
+    event(3, investigate, { emittedAt: "2026-09-28T10:32:23.000Z" }),
+    event(4, null, {
+      emittedAt: "2026-09-28T10:45:19.000Z",
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed,
+      status: ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+    }),
+  ];
+  const stages = groupAgentStreamEventsByStage(events);
+  const [segment] = groupAgentStreamActivityByTurnKey([
+    { stage: planner, groups: groupAgentStreamEventsByRun(stages.byStage[planner]) },
+    {
+      stage: investigate,
+      groups: groupAgentStreamEventsByRun(stages.byStage[investigate]),
+    },
+  ]);
+  const [plannerTurn, investigateTurn] = splitAgentStreamActivityByStage(segment!);
+
+  // Planner runs first and ends when it finished, without the dispatch failure.
+  assert.equal(plannerTurn!.stage, planner);
+  assert.equal(plannerTurn!.events.at(-1)?.emittedAt, "2026-09-28T10:32:22.000Z");
+  assert.ok(
+    plannerTurn!.events.every(
+      (item) => item.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed,
+    ),
+  );
+  // The failure belongs to the Investigator that was running when it happened.
+  assert.equal(investigateTurn!.stage, investigate);
+  assert.equal(
+    investigateTurn!.events.at(-1)?.eventType,
+    ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed,
+  );
+});
+
+test("a finished rule's investigator agent does not end the running Investigator turn", () => {
+  const investigate = ASSESSMENT_AGENT_STREAM_STAGES.investigate;
+  const events = [
+    event(1, investigate, {
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted,
+    }),
+    event(2, investigate, {
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentCompleted,
+      engineeringRuleId: "rule-1",
+    }),
+    event(3, investigate, { engineeringRuleId: "rule-2" }),
+  ];
+  // Rule 1 is done and rule 2 is running: the composer must still offer stop.
+  assert.equal(deriveLatestAgentStreamTurnState(events), "running");
+  assert.equal(
+    deriveLatestAgentStreamTurnState([
+      ...events,
+      event(4, investigate, {
+        eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted,
+      }),
+    ]),
+    "idle",
+  );
+});
+
+test("a customer stop inside a rule pauses the whole Investigator turn", () => {
+  const investigate = ASSESSMENT_AGENT_STREAM_STAGES.investigate;
+  const events = [
+    event(1, investigate, {
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted,
+    }),
+    event(2, investigate, {
+      eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentFailed,
+      engineeringRuleId: "rule-4",
+      data: { reasonCode: "CUSTOMER_REQUESTED_STOP" },
+    }),
+  ];
+  // The composer then offers Resume, which continues from rule 4.
+  assert.equal(deriveLatestAgentStreamTurnState(events), "paused");
+});
+
+test("an exact rerun keeps Investigator output without duplicating the reused Planner turn", () => {
+  const planner = ASSESSMENT_AGENT_STREAM_STAGES.planner;
+  const investigate = ASSESSMENT_AGENT_STREAM_STAGES.investigate;
+  const reusedDecision = event(1, planner, {
+    eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.engineeringRule,
+    engineeringRuleId: "ER-1",
+    data: {
+      planReused: true,
+      decision: "SELECT",
+    },
+  });
+  const enrichment = event(2, investigate, {
+    eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.engineeringRule,
+    engineeringRuleId: "ER-1",
+    data: { reasonCode: "NeedsScannerEnrichment" },
+  });
+  const [segment] = groupAgentStreamActivityByTurnKey([
+    { stage: planner, groups: groupAgentStreamEventsByRun([reusedDecision]) },
+    {
+      stage: investigate,
+      groups: groupAgentStreamEventsByRun([enrichment]),
+    },
+  ]);
+
+  const turns = splitAgentStreamActivityByStage(segment!);
+  assert.deepEqual(
+    turns.map((turn) => turn.stage),
+    [investigate],
+  );
+  assert.equal(turns[0]?.events[0]?.engineeringRuleId, "ER-1");
+});
+
+test("Codebase Memory graph queries show as their own activity row, not as grep", () => {
+  const events = [
+    ...toolCallEvents(1, "search_code_graph", "g-1", { name_pattern: ".*Consent.*" }),
+    ...toolCallEvents(3, "trace_call_path", "g-2", { function_name: "submit" }),
+    ...toolCallEvents(5, "grep", "t-1", { pattern: "consent" }),
+  ];
+  const rows = projectAgentStreamActivityLog(events);
+  const graph = rows.find((row) => row.key === "codebaseGraphQueried");
+  assert.ok(graph, "graph use must be visible in the activity log");
+  assert.equal(graph.count, 2);
+  assert.equal(
+    rows.find((row) => row.key === "repositorySourceSearched")?.count,
+    1,
+  );
+});
+
+test("the Investigator queue runs one rule at a time in plan order across retried attempts", async () => {
+  const { orderInvestigatorRuleQueue } = await import(
+    "../src/features/workspace/utils/agent-stream-investigator-progress.ts"
+  );
+  const header = (ruleId: string, status: string, sequence: number) => ({
+    ruleId,
+    sequence,
+    status: status as typeof ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+    planned: true,
+    concept: null,
+    goals: [],
+    decision: null,
+    reasonCode: null,
+    claims: [],
+  });
+  const investigate = ASSESSMENT_AGENT_STREAM_STAGES.investigate;
+  // Attempt 1 died on rule-3 and had touched rule-5; attempt 2 reused 1-2 and
+  // is now on rule-4. Loaded history starts mid-attempt, so first-seen order lies.
+  const events = [
+    event(10, investigate, { engineeringRuleId: "rule-3" }),
+    event(11, investigate, { engineeringRuleId: "rule-5" }),
+    event(20, investigate, { engineeringRuleId: "rule-1" }),
+    event(21, investigate, { engineeringRuleId: "rule-2" }),
+    event(22, investigate, { engineeringRuleId: "rule-4" }),
+  ];
+  const { rules, queuedRuleIds } = orderInvestigatorRuleQueue(
+    [
+      header("rule-5", ASSESSMENT_RUNTIME_RUN_STATUSES.running, 11),
+      header("rule-3", ASSESSMENT_RUNTIME_RUN_STATUSES.running, 10),
+      header("rule-1", ASSESSMENT_RUNTIME_RUN_STATUSES.completed, 20),
+      header("rule-2", ASSESSMENT_RUNTIME_RUN_STATUSES.completed, 21),
+      header("rule-4", ASSESSMENT_RUNTIME_RUN_STATUSES.running, 22),
+    ],
+    events,
+    ["rule-1", "rule-2", "rule-3", "rule-4", "rule-5"],
+    true,
+  );
+
+  assert.deepEqual(
+    rules.map((rule) => rule.ruleId),
+    ["rule-1", "rule-2", "rule-3", "rule-4", "rule-5"],
+  );
+  const statusOf = (id: string) => rules.find((rule) => rule.ruleId === id)?.status;
+  // Exactly one rule is running: the newest one.
+  assert.deepEqual(
+    rules.filter((rule) => rule.status === ASSESSMENT_RUNTIME_RUN_STATUSES.running).map((r) => r.ruleId),
+    ["rule-4"],
+  );
+  // Before it: the rule cut off by the dead attempt is stopped.
+  assert.equal(statusOf("rule-3"), ASSESSMENT_RUNTIME_RUN_STATUSES.failed);
+  // After it: waiting for this attempt to reach it.
+  assert.deepEqual([...queuedRuleIds], ["rule-5"]);
 });

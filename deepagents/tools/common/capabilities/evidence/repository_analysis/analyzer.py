@@ -20,7 +20,16 @@ from deepagents.backends import BackendProtocol
 from langchain.agents.middleware import TodoListMiddleware
 
 from harness import configure_lcsp_harness
+from tools.common.capabilities.platform.codebase_memory import (
+    CodebaseMemoryGraphReader,
+    active_codebase_memory_index,
+)
+from .intelligence_pack import (
+    REPOSITORY_INTELLIGENCE_PACK_KEY,
+    build_repository_intelligence_pack,
+)
 from middleware.agent_run_budget import AgentRunBudgetMiddleware
+from tools.common.codebase_memory_graph import CODEBASE_MEMORY_GRAPH_TOOLS
 from middleware.billing_metering import BillingAgentRoleMiddleware
 from middleware.model_governance import (
     MODEL_GOVERNANCE_MIDDLEWARE,
@@ -54,13 +63,12 @@ You are not limited to a predefined language scanner. Detect the repository's ac
 build systems, generated code, configuration, AI SDKs, HTTP clients, runtime indirection, queues,
 persistence, decision paths and human-review paths from the evidence you inspect.
 
-The sandbox also contains the pinned upstream Codebase Memory MCP engine as
-`codebase-memory-graph`. Use the engine's one-shot CLI mode through `execute`
-when structural navigation is useful; each CLI command invokes the same MCP tool
-implementation. Start broad analysis by indexing this checkout when useful:
-`codebase-memory-graph cli index_repository --repo-path /workspace/repository --name assessment --mode full`.
-Then use graph tools such as `get_architecture`, `search_graph`, `search_code`, `trace_path`,
-`query_graph`, `detect_changes`, and `check_index_coverage` to accelerate structural reasoning.
+The repository is already indexed into a Codebase Memory graph before you start. Navigate it with
+the graph tools first: `search_code_graph` to locate implementations (AI SDK clients, routes,
+decision/review paths), `trace_call_path` to follow callers/callees across files, `get_code_snippet`
+for exact source, `search_code_text` for text matches grouped by symbol, and
+`get_repository_architecture` for languages, packages and entry points. Use grep/read_file to confirm
+what the graph points you to rather than to rediscover structure file by file.
 Treat this graph as an index/memory aid, not source authority: inspect material source directly with
 read_file/grep/execute before grounding final evidence. For absence or exhaustive claims, check graph
 coverage and independently verify any skipped, excluded, partial, generated, dynamic, or unresolved area.
@@ -119,6 +127,7 @@ class RepositoryDeepAnalyzer:
         scan_job_id: str,
         targeted_scope: dict[str, Any] | None = None,
         backend: BackendProtocol | None = None,
+        assessment_id: str | None = None,
     ) -> RepositoryAnalysisArtifact:
         repository_backend = backend or self._backend or current_repository_backend()
         if repository_backend is None:
@@ -135,12 +144,13 @@ class RepositoryDeepAnalyzer:
         result = enforce_ai_absence_backstop(repository_backend, result)
         return RepositoryAnalysisArtifact(
             result=result,
-            evidence_payload=self._evidence_payload(
+            evidence_payload=self._evidence_payload_with_pack(
                 repository_backend,
                 result,
                 snapshot_id=snapshot_id,
                 commit_sha=commit_sha,
                 scan_job_id=scan_job_id,
+                assessment_id=assessment_id,
             ),
             tools_version={
                 "deepagents": version("deepagents"),
@@ -153,6 +163,43 @@ class RepositoryDeepAnalyzer:
                 ).hexdigest()
             },
         )
+
+    def _evidence_payload_with_pack(
+        self,
+        backend: BackendProtocol,
+        result: RepositoryAnalysisResult,
+        *,
+        snapshot_id: str,
+        commit_sha: str,
+        scan_job_id: str,
+        assessment_id: str | None,
+    ) -> dict[str, Any]:
+        """Attach the durable Repository Intelligence Pack to the scan evidence.
+
+        The Scanner is the only stage allowed broad discovery, and an accepted
+        report is immutable, so the pack must ship with this callback.
+        """
+        payload = self._evidence_payload(
+            backend,
+            result,
+            snapshot_id=snapshot_id,
+            commit_sha=commit_sha,
+            scan_job_id=scan_job_id,
+        )
+        execute = getattr(backend, "execute", None)
+        payload[REPOSITORY_INTELLIGENCE_PACK_KEY] = build_repository_intelligence_pack(
+            evidence_payload=payload,
+            assessment_id=assessment_id,
+            snapshot_id=snapshot_id,
+            commit_sha=commit_sha,
+            scan_job_id=scan_job_id,
+            scanner_version=REPOSITORY_ANALYSIS_VERSION,
+            index=active_codebase_memory_index(),
+            graph_reader=(
+                CodebaseMemoryGraphReader(execute) if callable(execute) else None
+            ),
+        )
+        return payload
 
     def _invoke(
         self,
@@ -193,6 +240,7 @@ class RepositoryDeepAnalyzer:
                     "model": model,
                 },
             ],
+            tools=CODEBASE_MEMORY_GRAPH_TOOLS,
             response_format=RepositoryAnalysisResult,
             debug=False,
         )

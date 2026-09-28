@@ -20,25 +20,33 @@ export function AgentStreamPlannerOutput({
           "pages.appShell.agentStreamRule.plannedGoals",
         )}
       </p>
-      <ol className="mt-2 list-decimal space-y-2 pl-5">
-        {rules.map((rule) => (
-          <li
-            key={rule.ruleId}
-            data-stream-planner-goal
-            className="break-words"
-          >
-            {rule.goals.length > 0 ? (
-              rule.goals.map((goal, index) => (
-                <p key={`${rule.ruleId}:${index}`}>{goal}</p>
-              ))
-            ) : (
-              // No investigationGoals yet — the concept is still a
-              // meaningful, human summary; never fall back to the raw ruleId.
-              <p>{rule.concept}</p>
-            )}
-          </li>
-        ))}
-      </ol>
+      <AgentStreamRuleGoalList rules={rules} />
     </div>
+  );
+}
+
+/** One entry per rule showing what it investigates — shared by selected and
+ *  skipped rules so both read the same way. */
+export function AgentStreamRuleGoalList({
+  rules,
+}: {
+  rules: AgentStreamRuleHeader[];
+}) {
+  return (
+    <ol className="mt-2 list-decimal space-y-2 pl-5">
+      {rules.map((rule) => (
+        <li key={rule.ruleId} data-stream-planner-goal className="break-words">
+          {rule.goals.length > 0 ? (
+            rule.goals.map((goal, index) => (
+              <p key={`${rule.ruleId}:${index}`}>{goal}</p>
+            ))
+          ) : (
+            // No investigationGoals yet — the concept is still a
+            // meaningful, human summary; never fall back to the raw ruleId.
+            <p>{rule.concept}</p>
+          )}
+        </li>
+      ))}
+    </ol>
   );
 }

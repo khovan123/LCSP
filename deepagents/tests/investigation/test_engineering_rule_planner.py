@@ -23,6 +23,9 @@ from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     EvidenceClaim,
     InvestigationPacket,
 )
+from tools.common.capabilities.assessment.investigation.engineering_rule.deterministic_investigator import (
+    NeedsScannerEnrichment,
+)
 from tools.common.capabilities.assessment.investigation.engineering_rule.planned_pipeline import PlannedEngineeringInvestigationPipeline
 from tools.common.capabilities.assessment.planning.engineering_rule.confirmed_business_context import (
     ConfirmedBusinessContextStatement,
@@ -595,8 +598,10 @@ def test_planned_pipeline_investigates_only_selected_rule(tmp_path) -> None:
     investigator.investigate.assert_called_once()
     planner.plan.assert_called_once()
     assert result.observability["repository_planning_context"] == {
-        "source": "LCSP_REPOSITORY_DATABASE",
-        "codebaseMemoryMcpOptional": True,
+        "codebaseMemoryRequired": True,
+        "scannerMemoryRequired": True,
+        "source": "LCSP_REPOSITORY_INTELLIGENCE_PACK",
+        "repositoryDiscoveryPolicy": "SCANNER_ONLY_DOWNSTREAM_SEED_FIRST",
     }
     confirmed_arg = planner.plan.call_args.kwargs["confirmed_customer_context"]
     assert confirmed_arg.context_revision == 3
@@ -712,7 +717,15 @@ def test_planned_pipeline_streams_planner_and_investigator_activity_when_scan_jo
     ]
 
     calls = api_client.post_scan_runtime_event.call_args_list
-    assert len(calls) == 4
+    assert len(calls) == 5
+    # The Investigate step reads RUNNING while a rule is being investigated,
+    # then its completion replaces that state.
+    investigation = [
+        call.args[1]["event_type"]
+        for call in calls
+        if call.args[1]["tool_name"] == "engineering_rule_investigation:eng-1"
+    ]
+    assert investigation == ["TOOL_STARTED", "TOOL_COMPLETED"]
     by_tool_name = {call.args[1]["tool_name"]: call.args[1] for call in calls}
     assert set(by_tool_name) == {
         "engineering_rule_plan_summary",
@@ -845,7 +858,7 @@ def test_planned_pipeline_streams_investigation_failure_as_runtime_activity(
     evidence_report = {
         "evidence_payload": {"evidence_graph": _graph().to_dict()}
     }
-    pipeline.run(
+    result = pipeline.run(
         evidence_report=evidence_report,
         workflow_run_id="workflow-1",
         confirmed_customer_context=_confirmed_context(),
@@ -871,6 +884,100 @@ def test_planned_pipeline_streams_investigation_failure_as_runtime_activity(
     # A failed investigation still reaches deterministic evaluation, but only one
     # runtime activity row (the failure) is emitted for that EngineeringRule.
     assert sum(1 for name in by_tool_name if name.endswith(":eng-1") and "investigation" in name) == 1
+
+
+def test_planned_pipeline_streams_scanner_enrichment_as_waiting_activity(
+    tmp_path,
+) -> None:
+    api_client = MagicMock()
+    api_client.get_active_legal_rule_catalog.return_value = {
+        "versionId": "catalog-v1",
+        "rules": [{"legalRuleId": "legal-1", "status": "APPROVED"}],
+    }
+    api_client.get_active_legal_corpus.return_value = {"versionId": "corpus-v1"}
+    api_client.get_legal_corpus_chunks.return_value = {
+        "chunks": [{"id": "LAW:A1", "content": "approved legal text"}]
+    }
+
+    rule = _engineering_rule("eng-1")
+    rule_service = MagicMock()
+    rule_service.get_or_compile.return_value = ([rule], True)
+    query_executor = MagicMock()
+    query_executor.execute.return_value = _packet("eng-1")
+    planner = MagicMock()
+    planner.plan.return_value = EngineeringRulePlan(
+        selected_rule_ids=("eng-1",),
+        skipped_rule_ids=(),
+        decision_audit=(
+            EngineeringRulePlanDecisionAudit(
+                engineering_rule_id="eng-1",
+                requested_decision="SELECT",
+                final_decision="SELECT",
+                reason_code="SOURCE_SCOPE_MATCH",
+                basis=("SOURCE",),
+            ),
+        ),
+    )
+
+    enrichment_claim = EvidenceClaim(
+        claim_id="claim-enrichment-1",
+        engineering_rule_id="eng-1",
+        claim_type="UNRESOLVED_ENGINEERING_FACT",
+        value=None,
+        evidence_refs=(),
+        confidence=0,
+        limitations=(ENGINEERING_LIMITATION_CODES["needs_scanner_enrichment"],),
+        criterion="CONTROL",
+    )
+    investigator = MagicMock()
+    investigator.investigate.side_effect = NeedsScannerEnrichment(
+        engineering_rule_id="eng-1",
+        reason="MISSING_STARTING_LOCATIONS",
+        claims=[enrichment_claim],
+    )
+    evaluator = MagicMock()
+    evaluator.evaluate.return_value = SimpleNamespace(
+        engineering_rule_id="eng-1",
+        status="UNKNOWN",
+        evidence_refs=(),
+    )
+
+    pipeline = PlannedEngineeringInvestigationPipeline(
+        api_client=api_client,
+        model="test:model",
+        retriever=MagicMock(),
+        rule_service=rule_service,
+        query_executor=query_executor,
+        investigator=investigator,
+        evaluator=evaluator,
+        planner=planner,
+    )
+    result = pipeline.run(
+        evidence_report={
+            "evidence_payload": {"evidence_graph": _graph().to_dict()}
+        },
+        workflow_run_id="workflow-1",
+        confirmed_customer_context=_confirmed_context(),
+        workspace_path=tmp_path,
+        scan_job_id="scan-1",
+    )
+
+    investigation_events = [
+        call.args[1]
+        for call in api_client.post_scan_runtime_event.call_args_list
+        if call.args[1]["tool_name"] == "engineering_rule_investigation:eng-1"
+    ]
+    assert [event["event_type"] for event in investigation_events] == [
+        "TOOL_STARTED",
+        "TOOL_WAITING_INPUT",
+    ]
+    waiting = investigation_events[-1]
+    assert waiting["run_status"] == "WAITING"
+    assert waiting["waiting_reason"] == "NEEDS_SCANNER_ENRICHMENT"
+    assert waiting["output_summary"]["outcome"] == "NEEDS_SCANNER_ENRICHMENT"
+    assert waiting["output_summary"]["reason"] == "MISSING_STARTING_LOCATIONS"
+    assert result.status == "PARTIAL"
+    assert ENGINEERING_LIMITATION_CODES["needs_scanner_enrichment"] in result.limitations
 
 
 def test_planned_pipeline_execution_failure_is_runtime_error_not_domain_limitation(
@@ -1144,8 +1251,10 @@ def test_planned_pipeline_uses_repository_planning_context(tmp_path) -> None:
     ]
     assert "openwiki" not in result.observability
     assert result.observability["repository_planning_context"] == {
-        "source": "LCSP_REPOSITORY_DATABASE",
-        "codebaseMemoryMcpOptional": True,
+        "codebaseMemoryRequired": True,
+        "scannerMemoryRequired": True,
+        "source": "LCSP_REPOSITORY_INTELLIGENCE_PACK",
+        "repositoryDiscoveryPolicy": "SCANNER_ONLY_DOWNSTREAM_SEED_FIRST",
     }
     assert result.observability["candidate_source_hit_distribution"][
         "candidate_count"
@@ -1650,3 +1759,205 @@ def test_pipeline_never_asks_without_trusted_assessment_user() -> None:
         is False
     )
     pipeline._api_client.post_interview_planner_context_need.assert_not_called()
+
+
+def test_retried_dispatch_reuses_the_stored_plan_and_finished_rules(tmp_path) -> None:
+    from tools.common.capabilities.assessment.planning.engineering_rule.plan_store import (
+        EphemeralEngineeringRulePlanStore,
+    )
+
+    api_client = MagicMock()
+    api_client.get_active_legal_rule_catalog.return_value = {
+        "versionId": "catalog-v1",
+        "rules": [
+            {"legalRuleId": "legal-1", "status": "APPROVED"},
+            {"legalRuleId": "legal-2", "status": "APPROVED"},
+        ],
+    }
+    api_client.get_active_legal_corpus.return_value = {"versionId": "corpus-v1"}
+    api_client.get_legal_corpus_chunks.return_value = {
+        "chunks": [{"id": "LAW:A1", "content": "approved legal text"}]
+    }
+    rules = {"legal-1": _engineering_rule("eng-1"), "legal-2": _engineering_rule("eng-2")}
+    rule_service = MagicMock()
+    rule_service.get_or_compile.side_effect = lambda legal_rule, *_a, **_k: (
+        [rules[legal_rule["legalRuleId"]]],
+        True,
+    )
+    query_executor = MagicMock()
+    query_executor.execute.side_effect = lambda rule, *_a, **_k: _packet(
+        rule.engineering_rule_id
+    )
+    planner = MagicMock()
+    planner.plan.return_value = EngineeringRulePlan(
+        selected_rule_ids=("eng-1",),
+        skipped_rule_ids=("eng-2",),
+        decision_audit=(
+            EngineeringRulePlanDecisionAudit(
+                engineering_rule_id="eng-1",
+                requested_decision="SELECT",
+                final_decision="SELECT",
+                reason_code="SOURCE_SCOPE_MATCH",
+                basis=("SOURCE",),
+            ),
+            EngineeringRulePlanDecisionAudit(
+                engineering_rule_id="eng-2",
+                requested_decision="SKIP",
+                final_decision="SKIP",
+                reason_code="NO_CUSTOMER_CONTEXT_OR_SOURCE_SCOPE_SIGNAL",
+                basis=(),
+            ),
+        ),
+    )
+    investigator = MagicMock()
+    investigator.investigate.return_value = []
+    evaluator = MagicMock()
+    evaluator.evaluate.return_value = SimpleNamespace(
+        engineering_rule_id="eng-1", status="COMPLIANT", evidence_refs=()
+    )
+    pipeline = PlannedEngineeringInvestigationPipeline(
+        api_client=api_client,
+        model="test:model",
+        retriever=MagicMock(),
+        rule_service=rule_service,
+        query_executor=query_executor,
+        investigator=investigator,
+        evaluator=evaluator,
+        planner=planner,
+        plan_store=EphemeralEngineeringRulePlanStore(),
+    )
+    evidence_report = {
+        "id": "evidence-1",
+        "evidence_payload": {"evidence_graph": _graph().to_dict()},
+    }
+
+    def dispatch() -> None:
+        pipeline.run(
+            evidence_report=evidence_report,
+            workflow_run_id="workflow-1",
+            confirmed_customer_context=_confirmed_context(),
+            workspace_path=tmp_path,
+        )
+
+    dispatch()
+    dispatch()
+
+    # The Planner ran once, and the rule the first dispatch already finished is
+    # reused rather than investigated again.
+    assert planner.plan.call_count == 1
+    assert [
+        call.kwargs["packet"].engineering_rule_id
+        for call in investigator.investigate.call_args_list
+    ] == ["eng-1"]
+
+
+def test_retry_resumes_only_the_rules_the_interrupted_dispatch_did_not_finish(tmp_path) -> None:
+    from tools.common.capabilities.assessment.planning.engineering_rule.plan_store import (
+        EphemeralEngineeringRulePlanStore,
+    )
+
+    class DispatchInterrupted(BaseException):
+        """Stands in for the boundary stopping the dispatch mid-investigation."""
+
+    api_client = MagicMock()
+    api_client.get_active_legal_rule_catalog.return_value = {
+        "versionId": "catalog-v1",
+        "rules": [
+            {"legalRuleId": "legal-1", "status": "APPROVED"},
+            {"legalRuleId": "legal-2", "status": "APPROVED"},
+        ],
+    }
+    api_client.get_active_legal_corpus.return_value = {"versionId": "corpus-v1"}
+    api_client.get_legal_corpus_chunks.return_value = {
+        "chunks": [{"id": "LAW:A1", "content": "approved legal text"}]
+    }
+    rules = {"legal-1": _engineering_rule("eng-1"), "legal-2": _engineering_rule("eng-2")}
+    rule_service = MagicMock()
+    rule_service.get_or_compile.side_effect = lambda legal_rule, *_a, **_k: (
+        [rules[legal_rule["legalRuleId"]]],
+        True,
+    )
+    query_executor = MagicMock()
+    query_executor.execute.side_effect = lambda rule, *_a, **_k: _packet(
+        rule.engineering_rule_id
+    )
+    planner = MagicMock()
+    planner.plan.return_value = EngineeringRulePlan(
+        selected_rule_ids=("eng-1", "eng-2"),
+        skipped_rule_ids=(),
+        decision_audit=tuple(
+            EngineeringRulePlanDecisionAudit(
+                engineering_rule_id=rule_id,
+                requested_decision="SELECT",
+                final_decision="SELECT",
+                reason_code="SOURCE_SCOPE_MATCH",
+                basis=("SOURCE",),
+            )
+            for rule_id in ("eng-1", "eng-2")
+        ),
+    )
+    finished_claim = EvidenceClaim(
+        claim_id="claim-eng-1",
+        engineering_rule_id="eng-1",
+        claim_type="RULE_REQUIREMENT_MET",
+        value=True,
+        evidence_refs=("evidence:ai:1",),
+        confidence=0.9,
+        criterion="Classification is recorded before use.",
+    )
+    investigated: list[str] = []
+    interrupt_eng_2 = True
+
+    def investigate(*, packet, **_kwargs):
+        investigated.append(packet.engineering_rule_id)
+        if packet.engineering_rule_id == "eng-1":
+            return [finished_claim]
+        if interrupt_eng_2:
+            raise DispatchInterrupted()
+        return []
+
+    investigator = MagicMock()
+    investigator.investigate.side_effect = investigate
+    evaluator = MagicMock()
+    evaluator.evaluate.side_effect = lambda rule, claims: SimpleNamespace(
+        engineering_rule_id=rule.engineering_rule_id,
+        status="COMPLIANT",
+        evidence_refs=(),
+    )
+    pipeline = PlannedEngineeringInvestigationPipeline(
+        api_client=api_client,
+        model="test:model",
+        retriever=MagicMock(),
+        rule_service=rule_service,
+        query_executor=query_executor,
+        investigator=investigator,
+        evaluator=evaluator,
+        planner=planner,
+        plan_store=EphemeralEngineeringRulePlanStore(),
+    )
+    evidence_report = {
+        "id": "evidence-1",
+        "evidence_payload": {"evidence_graph": _graph().to_dict()},
+    }
+
+    def dispatch():
+        return pipeline.run(
+            evidence_report=evidence_report,
+            workflow_run_id="workflow-1",
+            confirmed_customer_context=_confirmed_context(),
+            workspace_path=tmp_path,
+        )
+
+    with pytest.raises(DispatchInterrupted):
+        dispatch()
+    assert investigated == ["eng-1", "eng-2"]
+
+    interrupt_eng_2 = False
+    result = dispatch()
+
+    # "Tiếp tục" resumes: no re-planning, eng-1 is not investigated again,
+    # only the interrupted eng-2 runs, and the result still carries both.
+    assert planner.plan.call_count == 1
+    assert investigated == ["eng-1", "eng-2", "eng-2"]
+    assert [item.engineering_rule_id for item in result.evaluations] == ["eng-1", "eng-2"]
+    assert result.engineering_rules_executed == 2

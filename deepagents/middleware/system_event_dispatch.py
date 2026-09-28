@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from threading import Event, Timer
 from typing import Any, Mapping
@@ -16,10 +17,16 @@ from orchestration.agent_stream import (
     check_agent_execution_active,
 )
 from tools.common.capabilities.agent_runtime.boundary import AgentRuntimeBoundaryTimeout
-from tools.common.capabilities.agent_runtime.invocation import invoke_boundary
+from tools.common.capabilities.agent_runtime.invocation import (
+    invoke_boundary,
+    report_external_boundary_timeout,
+)
 from tools.common.capabilities.platform.callback_schemas import (
     SCAN_CALLBACK_STATUSES,
     ScanCallbackPayload,
+)
+from tools.common.capabilities.platform.codebase_memory import (
+    ensure_codebase_memory_index,
 )
 from tools.common.capabilities.platform.config import load_config
 from tools.common.capabilities.platform.api_client import WorkerApiClient
@@ -28,6 +35,10 @@ from tools.common.capabilities.platform.repository_sandbox import (
     ensure_repository_for_event,
     resolve_repository_thread_backend,
 )
+
+
+_LOGGER = logging.getLogger(__name__)
+_BOUNDARY_TIMEOUT_CODE = "AGENT_RUNTIME_BOUNDARY_TIMEOUT"
 
 
 class _SystemEventDispatchMiddleware(AgentMiddleware):
@@ -71,7 +82,11 @@ def _dispatch_system_event(state, runtime) -> dict[str, Any] | None:
     if context is not None and context.system_deadline_at is not None:
         remaining = context.system_deadline_at - time.time()
         if remaining <= 0:
-            cancel.set()
+            try:
+                _report_expired_queued_event(context)
+            finally:
+                active_agent_stream_cancel.reset(token)
+            return {"jump_to": "end"}
         else:
             timer = Timer(remaining, cancel.set)
             timer.daemon = True
@@ -97,6 +112,48 @@ def _dispatch_system_event(state, runtime) -> dict[str, Any] | None:
         active_agent_stream_cancel.reset(token)
 
 
+def _report_expired_queued_event(context: LCSPRunContext) -> None:
+    """Retire persisted work that was already timed out before execution began."""
+    if not context.system_boundary_name or not context.system_event:
+        return
+    correlation_id = (
+        context.correlation_id
+        or _event_text(context.system_event, "correlationId", "correlation_id")
+        or context.system_boundary_name
+    )
+    try:
+        if context.system_boundary_name == "scan_requested":
+            scan_job_id = _event_text(context.system_event, "scanJobId", "scan_job_id")
+            client = _worker_client()
+            if scan_job_id and client is not None:
+                client.post_scan_terminal_failure(
+                    scan_job_id,
+                    {
+                        "boundary_name": context.system_boundary_name,
+                        "reason_code": _BOUNDARY_TIMEOUT_CODE,
+                        "status": "FAILED",
+                        "summary": "LangGraph repository run expired before execution started",
+                        "timeout_seconds": None,
+                        "correlation_id": correlation_id,
+                    },
+                )
+        else:
+            report_external_boundary_timeout(
+                context.system_boundary_name,
+                dict(context.system_event),
+                correlation_id,
+                _BOUNDARY_TIMEOUT_CODE,
+            )
+    except Exception as error:
+        # The broker may already have settled the timed-out delivery, and the
+        # API can still be starting while persisted Agent Server runs wake up.
+        _LOGGER.warning(
+            "Unable to report expired queued Agent Runtime boundary %s: %s",
+            context.system_boundary_name,
+            type(error).__name__,
+        )
+
+
 def _dispatch_active_system_event(state, runtime) -> dict[str, Any] | None:
     _ = state
     context = _context(runtime.context)
@@ -118,17 +175,21 @@ def _dispatch_active_system_event(state, runtime) -> dict[str, Any] | None:
         run_status="RUNNING",
         summary="Repository scan runtime accepted the scan job",
     )
+    lifecycle = lambda event: _post_repository_lifecycle_event(  # noqa: E731
+        client,
+        scan_job_id,
+        event,
+    )
     try:
         ensure_repository_for_event(
             backend,
             context.system_boundary_name,
             context.system_event,
-            lifecycle=lambda event: _post_repository_lifecycle_event(
-                client,
-                scan_job_id,
-                event,
-            ),
+            lifecycle=lifecycle,
         )
+        # Agents query the repository through the Codebase Memory graph; index
+        # the hydrated snapshot before any of them starts (reused if current).
+        ensure_codebase_memory_index(backend, lifecycle=lifecycle)
     except Exception as exc:
         _post_repository_hydration_failed(client, scan_job_id, exc)
         if context.system_boundary_name == "scan_requested" and scan_job_id:
@@ -229,6 +290,30 @@ def _post_repository_lifecycle_event(
             "run_status": "RUNNING",
             "tool_name": "repository_sandbox_hydration",
             "summary": "Repository sandbox already hydrated",
+        },
+        "codebase_memory_indexing": {
+            "event_type": "TOOL_STARTED",
+            "run_status": "RUNNING",
+            "tool_name": "codebase_memory_index",
+            "summary": "Indexing repository into Codebase Memory graph",
+        },
+        "codebase_memory_indexed": {
+            "event_type": "TOOL_COMPLETED",
+            "run_status": "RUNNING",
+            "tool_name": "codebase_memory_index",
+            "summary": "Codebase Memory graph indexed",
+        },
+        "codebase_memory_index_reused": {
+            "event_type": "TOOL_COMPLETED",
+            "run_status": "RUNNING",
+            "tool_name": "codebase_memory_index",
+            "summary": "Codebase Memory graph already indexed",
+        },
+        "codebase_memory_index_failed": {
+            "event_type": "TOOL_FAILED",
+            "run_status": "FAILED",
+            "tool_name": "codebase_memory_index",
+            "summary": "Codebase Memory graph indexing failed",
         },
     }
     payload = mapping.get(event)

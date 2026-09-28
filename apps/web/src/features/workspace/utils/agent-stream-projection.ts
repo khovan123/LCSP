@@ -972,6 +972,15 @@ export function toolActivityKey(
   if (/\b(git\s+diff|git\s+status|git\s+log|git_review)\b/.test(searchable)) {
     return "repositoryChangesReviewed";
   }
+  // Typed queries over the pre-indexed Codebase Memory graph (checked before
+  // the generic search match so graph use stays visible as its own activity).
+  if (
+    /\b(search_code_graph|trace_call_path|get_code_snippet|search_code_text|get_repository_architecture|codebase-memory-graph)\b/.test(
+      searchable,
+    )
+  ) {
+    return "codebaseGraphQueried";
+  }
   if (/\b(grep|rg|search|search_nodes)\b/.test(searchable)) {
     return "repositorySourceSearched";
   }
@@ -1079,6 +1088,9 @@ export function streamActivityLabels() {
     ),
     repositorySourceSearched: t(
       "pages.appShell.agentStreamActivities.repositorySourceSearched",
+    ),
+    codebaseGraphQueried: t(
+      "pages.appShell.agentStreamActivities.codebaseGraphQueried",
     ),
     sourceFilesReviewed: t(
       "pages.appShell.agentStreamActivities.sourceFilesReviewed",

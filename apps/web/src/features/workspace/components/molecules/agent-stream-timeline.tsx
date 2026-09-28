@@ -44,6 +44,7 @@ import {
   shouldShowAgentStreamHistoryAction,
   projectStreamRows,
   groupRepeatedActivities,
+  STREAM_ROW_STATUSES,
   finalizeRuleHeaders,
   activityCopy,
   formatStreamValue,
@@ -84,7 +85,10 @@ export function AgentStreamTimeline({
   const visibleEvents = reset
     ? []
     : scopeAgentStreamRunEvents(events, activeRunId);
-  const rows = groupRepeatedActivities(projectStreamRows(visibleEvents));
+  const rows = settleRowsForOutcome(
+    groupRepeatedActivities(projectStreamRows(visibleEvents)),
+    outcomeOverride,
+  );
   const ruleHeaders = finalizeRuleHeaders(
     projectAgentStreamRuleHeaders(visibleEvents),
     visibleEvents,
@@ -214,6 +218,24 @@ export function AgentStreamTimeline({
         {detailsBlock}
       </AgentMessage>
     </AgentTurn>
+  );
+}
+
+/** An authoritative settled outcome closes rows whose end never streamed in. */
+function settleRowsForOutcome(
+  rows: ProjectedStreamRow[],
+  outcome: AgentStreamRunOutcome | undefined,
+): ProjectedStreamRow[] {
+  if (outcome === undefined || outcome === AGENT_STREAM_RUN_OUTCOMES.running)
+    return rows;
+  const status =
+    outcome === AGENT_STREAM_RUN_OUTCOMES.failed
+      ? STREAM_ROW_STATUSES.failed
+      : outcome === AGENT_STREAM_RUN_OUTCOMES.paused
+        ? STREAM_ROW_STATUSES.neutral
+        : STREAM_ROW_STATUSES.completed;
+  return rows.map((row) =>
+    row.status === STREAM_ROW_STATUSES.running ? { ...row, status } : row,
   );
 }
 

@@ -4,6 +4,7 @@ import type {
   AssessmentAgentStreamStage,
   AssessmentPostFindingRuntimeState,
   AssessmentRuntimeEngineeringProgress,
+  AssessmentStageLifecycleProjection,
 } from "@lcsp/contracts/evidence";
 
 export const WORKSPACE_RUNTIME_CONNECTION_STATES = {
@@ -93,6 +94,8 @@ export type WorkspaceRuntimeActivityItem = {
 };
 
 export type WorkspaceRuntimeAssessmentTimeline = {
+  /** Stage status from durable artifacts; null for an older API without it. */
+  stageLifecycle?: AssessmentStageLifecycleProjection | null;
   currentRun: WorkspaceRuntimeRun | null;
   recentActivity: WorkspaceRuntimeActivityItem[];
   engineeringProgress?: AssessmentRuntimeEngineeringProgress[];
@@ -122,6 +125,8 @@ type WorkspaceRuntimeSnapshot = {
   scanJobs: WorkspaceRuntimeScanJob[];
   evidenceReports: WorkspaceRuntimeEvidenceReport[];
   postFindingStates: AssessmentPostFindingRuntimeState[];
+  /** Stage status the API derived from durable artifacts, keyed by assessment. */
+  stageLifecycleByAssessmentId: Record<string, AssessmentStageLifecycleProjection>;
 };
 
 export type WorkspaceRuntimeContextValue = WorkspaceRuntimeSnapshot & {

@@ -68,6 +68,7 @@ def test_short_test_deadline_is_not_extended(monkeypatch):
 
 
 def test_invalid_settlement_margin_fails_before_consuming(monkeypatch):
+    monkeypatch.setenv("LCSP_AGENT_RUNTIME_BOUNDARY_TIMEOUT_SCAN_REQUESTED_SECONDS", "60")
     monkeypatch.setenv("LCSP_AGENT_RUNTIME_BROKER_ACK_TIMEOUT_SECONDS", "120")
     monkeypatch.setenv("LCSP_AGENT_RUNTIME_SETTLEMENT_MARGIN_SECONDS", "120")
     with pytest.raises(RuntimeError, match="Settlement margin"):
@@ -76,6 +77,7 @@ def test_invalid_settlement_margin_fails_before_consuming(monkeypatch):
 
 @pytest.mark.parametrize("value", ["nan", "inf", "0", "-1"])
 def test_broker_deadline_configuration_requires_finite_positive_values(monkeypatch, value):
+    monkeypatch.setenv("LCSP_AGENT_RUNTIME_BOUNDARY_TIMEOUT_SCAN_REQUESTED_SECONDS", "60")
     monkeypatch.setenv("LCSP_AGENT_RUNTIME_BROKER_ACK_TIMEOUT_SECONDS", value)
     with pytest.raises(RuntimeError, match="finite and > 0"):
         rabbitmq_consumer._boundary_timeout_seconds("scan_requested")
@@ -86,6 +88,25 @@ def test_long_boundary_budget_requires_matching_broker_budget(monkeypatch):
     monkeypatch.setenv("LCSP_AGENT_RUNTIME_BOUNDARY_TIMEOUT_SCAN_REQUESTED_SECONDS", "3600")
     monkeypatch.setenv("LCSP_AGENT_RUNTIME_SETTLEMENT_MARGIN_SECONDS", "120")
     assert rabbitmq_consumer._boundary_timeout_seconds("scan_requested") == 3600
+
+
+@pytest.mark.parametrize(
+    "boundary",
+    [
+        "scan_requested",
+        "engineering_assessment_requested",
+        "assessment_interview_resume_requested",
+    ],
+)
+def test_boundaries_have_no_deadline_unless_one_is_configured(monkeypatch, boundary):
+    # Agent reasoning time is not bounded; the broker consumer timeout is off.
+    for name in (
+        f"LCSP_AGENT_RUNTIME_BOUNDARY_TIMEOUT_{boundary.upper()}_SECONDS",
+        "LCSP_AGENT_RUNTIME_SCAN_BOUNDARY_TIMEOUT_SECONDS",
+        "LCSP_AGENT_RUNTIME_BOUNDARY_TIMEOUT_SECONDS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    assert rabbitmq_consumer._boundary_timeout_seconds(boundary) is None
 
 
 def test_terminal_claim_drops_delivery_without_dispatch(monkeypatch):

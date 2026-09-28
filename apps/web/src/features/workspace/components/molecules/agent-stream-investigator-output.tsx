@@ -165,6 +165,33 @@ function InvestigatorRule({
   );
 }
 
+/** One finished rule's result, as the Investigator's own output for that rule:
+ *  its outcome and each criterion-scoped finding with sources/confidence. */
+export function AgentStreamInvestigatorRuleResult({
+  rule,
+}: {
+  rule: AgentStreamRuleHeader;
+}) {
+  const labels = investigatorLabels();
+  return (
+    <div data-stream-investigator-rule-result className="text-sm">
+      <RuleOutcomeMessage
+        rule={rule}
+        labels={labels}
+        failed={rule.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed}
+        hasHeading
+      />
+      {rule.claims.map((claim, index) => (
+        <RuleClaimSummary
+          key={`${rule.ruleId}:${index}`}
+          claim={claim}
+          labels={labels}
+        />
+      ))}
+    </div>
+  );
+}
+
 function RuleOutcomeMessage({
   rule,
   labels,

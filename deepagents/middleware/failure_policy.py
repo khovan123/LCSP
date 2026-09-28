@@ -37,6 +37,16 @@ class TerminalSchemaError(ValueError):
     """Structured output repair would repeat a failed task."""
 
 
+class MalformedToolCallSample(RuntimeError):
+    """One model sample emitted tool calls that cannot execute as written.
+
+    Covers arguments cut off at the output-token cap and arguments that fail the
+    tool's own schema. Retryable: the rejected sample is discarded before any tool
+    runs and the same request is sampled again, so no error text is fed back as a
+    repair prompt. A failure that survives the bounded retries stays terminal.
+    """
+
+
 class AgentRunBudgetExceeded(RuntimeError):
     """One agent run used its whole model-call budget without finishing.
 

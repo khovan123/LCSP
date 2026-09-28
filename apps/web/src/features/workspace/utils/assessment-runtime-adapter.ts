@@ -6,6 +6,8 @@ import {
   ASSESSMENT_INTERVIEW_OUTCOMES,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
   ASSESSMENT_RUNTIME_EVENT_TYPES,
+  ASSESSMENT_RUNTIME_PIPELINE_CONTROL_TOOL_NAME,
+  ASSESSMENT_STAGE_LIFECYCLE_STATES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   ASSESSMENT_RUNTIME_STAGE_CODES,
   ASSESSMENT_TECHNICAL_COVERAGE_STATES,
@@ -16,6 +18,7 @@ import {
   type AssessmentInterviewQuestion,
   type AssessmentInterviewRuntimeState,
   type AssessmentPostFindingRuntimeState,
+  type AssessmentStageLifecycleProjection,
 } from "@lcsp/contracts/evidence";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
@@ -370,6 +373,7 @@ function normalizeWorkflow({
   repositorySnapshot: AdapterTimelineInput["repositorySnapshot"];
   latestScanJob: WorkspaceRuntimeScanJob | null;
 }): NormalizedAssessmentWorkflow {
+  const stageLifecycle = timeline?.stageLifecycle ?? null;
   const currentRun = timeline?.currentRun ?? null;
   const latestRunId = timeline?.latestRunId ?? currentRun?.runId ?? null;
   const recentActivity = scopeRuntimeActivity(
@@ -424,6 +428,7 @@ function normalizeWorkflow({
       repositorySnapshot,
       sanitizedInterview,
       latestScanJob,
+      stageLifecycle,
     }),
   };
 }
@@ -472,6 +477,7 @@ function normalizeRepository(
 }
 
 function normalizeWorkflowSteps({
+  stageLifecycle,
   currentRun,
   recentActivity,
   engineeringProgress,
@@ -485,6 +491,7 @@ function normalizeWorkflowSteps({
   repositorySnapshot: AdapterTimelineInput["repositorySnapshot"];
   sanitizedInterview: AssessmentInterviewRuntimeState | null;
   latestScanJob: WorkspaceRuntimeScanJob | null;
+  stageLifecycle: AssessmentStageLifecycleProjection | null;
 }): NormalizedWorkflowStep[] {
   const defaultSteps = [
     [
@@ -535,6 +542,10 @@ function normalizeWorkflowSteps({
     ),
   ]);
   for (const activity of [...recentActivity].reverse()) {
+    // Customer stop/continue markers are not agent work on any step.
+    if (activity.toolName === ASSESSMENT_RUNTIME_PIPELINE_CONTROL_TOOL_NAME) {
+      continue;
+    }
     const id = workflowStepIdForRuntimeActivity(activity);
     steps.set(id, {
       id,
@@ -592,8 +603,78 @@ function normalizeWorkflowSteps({
       detail: existingStep?.detail ?? null,
     });
   }
+  // A completed scan job is authoritative for the Scanner row. Later dispatches
+  // (Planner/Investigator retries) post SCAN-tagged bookkeeping such as
+  // "sandbox already hydrated" or run heartbeats; they never re-open the scan.
+  if (latestScanJob?.status === REPOSITORY_SCAN_JOB_STATUSES.completed) {
+    const id = ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.scanner;
+    const existingStep = steps.get(id);
+    if (existingStep) {
+      steps.set(id, {
+        ...existingStep,
+        status: NORMALIZED_WORKFLOW_STEP_STATUSES.completed,
+      });
+    }
+  }
   completeQueuedPredecessors(steps);
+  applyStageLifecycle(steps, stageLifecycle);
   return [...steps.values()];
+}
+
+/**
+ * The API's artifact-derived lifecycle wins over anything inferred from the
+ * activity log. Runtime events stay the technical detail; they no longer decide
+ * whether a stage finished, so the sidebar and the composer cannot disagree.
+ */
+function applyStageLifecycle(
+  steps: Map<string, NormalizedWorkflowStep>,
+  lifecycle: AssessmentStageLifecycleProjection | null | undefined,
+): void {
+  if (!lifecycle) return;
+  const mapping = [
+    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.scanner, lifecycle.scanner],
+    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.interview, lifecycle.interview],
+    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.planner, lifecycle.planner],
+    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.investigate, lifecycle.investigator],
+    [ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.gate, lifecycle.gate],
+  ] as const;
+  for (const [stepId, entry] of mapping) {
+    const status = workflowStatusForLifecycle(entry.state);
+    const existing = steps.get(stepId);
+    if (status && existing) {
+      steps.set(stepId, { ...existing, status });
+    }
+  }
+}
+
+function workflowStatusForLifecycle(
+  state: AssessmentStageLifecycleProjection["scanner"]["state"],
+): NormalizedWorkflowStep["status"] | null {
+  const S = ASSESSMENT_STAGE_LIFECYCLE_STATES;
+  switch (state) {
+    case S.queued:
+      return NORMALIZED_WORKFLOW_STEP_STATUSES.queued;
+    case S.running:
+      return NORMALIZED_WORKFLOW_STEP_STATUSES.running;
+    case S.done:
+    case S.contextConfirmed:
+    case S.planReady:
+    case S.claimsComplete:
+    case S.ready:
+      return NORMALIZED_WORKFLOW_STEP_STATUSES.completed;
+    case S.failed:
+      return NORMALIZED_WORKFLOW_STEP_STATUSES.failed;
+    case S.waitingForCustomer:
+    case S.blocked:
+    case S.needsContext:
+    case S.needsScannerEnrichment:
+    case S.partial:
+    case S.claimsPartial:
+    case S.timeout:
+      return NORMALIZED_WORKFLOW_STEP_STATUSES.waiting;
+    default:
+      return null;
+  }
 }
 
 function applyEngineeringRuleStepDetails(

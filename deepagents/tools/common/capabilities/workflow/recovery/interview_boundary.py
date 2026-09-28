@@ -19,6 +19,10 @@ from typing import Any, Callable
 
 from contracts.handoffs import InterviewResult
 from orchestration.result_validation import SpecialistHandoffValidationError
+from tools.common.capabilities.evidence.repository_analysis.intelligence_pack import (
+    repository_intelligence_pack_from_evidence,
+    summarize_pack_for_interview,
+)
 from tools.common.capabilities.agent_runtime.boundary import AgentBoundaryBase
 from tools.common.capabilities.platform.api_client import (
     InterviewDecisionRepairableCallbackError,
@@ -1064,7 +1068,12 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 question_id=question_id,
                 context_revision=context_revision,
                 resume_reason=resume_reason,
-                context=context,
+                # Scanner memory grounds the question; the server-owned context
+                # itself stays exactly as the API returned it.
+                context={
+                    **context,
+                    "repositoryIntelligence": self._repository_intelligence(context),
+                },
             )
             result = dispatcher.dispatch(
                 subagent_type="interview",
@@ -1651,6 +1660,27 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             stage=AGENT_STREAM_STAGES["interview"],
         )
 
+    def _repository_intelligence(self, context: dict) -> dict:
+        """Scanner memory summary for Interview grounding; never fails the turn."""
+        # Same derivation as the run context: pgeVersion is "<reportId>:<version>".
+        pge_version = str(context.get("pgeVersion") or "")
+        report_id = pge_version.split(":", 1)[0].strip()
+        if not report_id:
+            return {"available": False}
+        cached = getattr(self, "_repository_intelligence_cache", None)
+        if cached is not None and cached[0] == report_id:
+            return cached[1]
+        try:
+            client = self._api_client or self._load_api_client()
+            report = client.get_accepted_technical_evidence_report(str(report_id))
+            summary = summarize_pack_for_interview(
+                repository_intelligence_pack_from_evidence(report)
+            )
+        except Exception:
+            summary = {"available": False}
+        self._repository_intelligence_cache = (report_id, summary)
+        return summary
+
     def _load_api_client(self):
         from tools.common.capabilities.platform.api_client import WorkerApiClient
         from tools.common.capabilities.platform.config import load_config
@@ -1904,6 +1934,10 @@ def _interview_instruction(
         "pgeVersion": context.get("pgeVersion"),
         "technicalCoverageState": context.get("technicalCoverageState"),
         "coverageLimitations": list(context.get("coverageLimitations") or []),
+        # Scanner memory the Interview grounds its questions in; it has no
+        # repository tools of its own (see subagents/interview/definition.py).
+        "repositoryIntelligence": context.get("repositoryIntelligence")
+        or {"available": False},
         "guidanceVersion": context.get("guidanceVersion"),
         "workingStrategy": context.get(
             "workingStrategy",

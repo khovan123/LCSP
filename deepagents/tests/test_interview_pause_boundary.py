@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from tools.common.capabilities.workflow.recovery.interview_pause_boundary import (
     INTERRUPTED_BOUNDARY_NAME,
@@ -9,7 +9,7 @@ from tools.common.capabilities.workflow.recovery.interview_pause_boundary import
 )
 
 
-def test_handle_interrupts_the_interview_resume_boundarys_active_run() -> None:
+def test_handle_interrupts_the_interview_and_engineering_assessment_runs() -> None:
     boundary = AssessmentInterviewPauseBoundary(config=object())
     message = {"assessmentId": "assessment-1", "workflowRunId": "workflow-1"}
 
@@ -18,9 +18,11 @@ def test_handle_interrupts_the_interview_resume_boundarys_active_run() -> None:
     ) as interrupt:
         boundary.handle(message, "correlation-1")
 
-    interrupt.assert_called_once_with(
-        INTERRUPTED_BOUNDARY_NAME, message, "correlation-1"
-    )
+    # One customer stop covers whichever the assessment is running.
+    assert interrupt.call_args_list == [
+        call("assessment_interview_resume_requested", message, "correlation-1"),
+        call("engineering_assessment_requested", message, "correlation-1"),
+    ]
 
 
 def test_boundary_source_event_matches_the_published_command() -> None:

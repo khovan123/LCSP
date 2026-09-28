@@ -1648,6 +1648,53 @@ describe("AssessmentRuntimeEventService", () => {
     expect(assessmentRuntimeEvent.create).not.toHaveBeenCalled();
   });
 
+  it("records a Planner/Investigator start after the scan job completed", async () => {
+    const assessmentRuntimeEvent = {
+      findFirst: jest.fn().mockImplementation(() => Promise.resolve(null)),
+      create: jest.fn().mockImplementation(() => Promise.resolve({})),
+    };
+    const prisma = {
+      assessment: assessmentOwner(),
+      repositoryScanJob: {
+        findUnique: jest.fn().mockImplementation(() =>
+          Promise.resolve({
+            id: "scan-1",
+            assessmentId: "assessment-1",
+            correlationId: "corr-1",
+            status: "COMPLETED",
+          }),
+        ),
+      },
+      $transaction: jest.fn(
+        (
+          handler: (tx: {
+            assessmentRuntimeEvent: typeof assessmentRuntimeEvent;
+          }) => unknown,
+        ) => Promise.resolve(handler({ assessmentRuntimeEvent })),
+      ),
+    };
+    const service = new AssessmentRuntimeEventService(prisma as never);
+
+    // Downstream stages run after the scan, under the same scan job; their
+    // progress keeps the Investigate step live instead of being dropped.
+    await expect(
+      service.recordRepositoryAnalysisEvent({
+        scanJobId: "scan-1",
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+        toolName: "engineering_rule_investigation:eng-1",
+        summary: "ENGINEERING_RULE_INVESTIGATED",
+      }),
+    ).resolves.toEqual({ recorded: true });
+    expect(assessmentRuntimeEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
+      }),
+    });
+  });
+
   it("records repository-analysis-worker terminal close events after the scan job is terminal", async () => {
     const assessmentRuntimeEvent = {
       findFirst: jest.fn().mockImplementation(() => Promise.resolve(null)),
@@ -2198,6 +2245,42 @@ describe("AssessmentRuntimeEventService.getPipelineLiveness", () => {
         take: 1,
       }),
     );
+  });
+
+  it("is not live right after the customer stopped the pipeline", async () => {
+    const { service } = serviceWithLatest({
+      runStatus: "WAITING",
+      createdAt: new Date(),
+      waitingReason: "CUSTOMER_REQUESTED_STOP",
+      outputSummaryJson: null,
+    });
+
+    // Continue must be available immediately after a stop.
+    await expect(
+      service.getPipelineLiveness("assessment-1", WINDOW_MS),
+    ).resolves.toEqual(expect.objectContaining({ live: false }));
+  });
+
+  it("reports the pipeline stopped only while the latest control is a stop", async () => {
+    const { service, findMany } = serviceWithLatest({
+      waitingReason: "CUSTOMER_REQUESTED_STOP",
+    });
+    await expect(
+      service.isPipelineStoppedByCustomer("assessment-1"),
+    ).resolves.toBe(true);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          assessmentId: "assessment-1",
+          toolName: "customer_pipeline_control",
+        },
+        take: 1,
+      }),
+    );
+    findMany.mockResolvedValue([{ waitingReason: "CUSTOMER_REQUESTED_CONTINUE" }]);
+    await expect(
+      service.isPipelineStoppedByCustomer("assessment-1"),
+    ).resolves.toBe(false);
   });
 
   it("is not live after the boundary failed, however recent", async () => {

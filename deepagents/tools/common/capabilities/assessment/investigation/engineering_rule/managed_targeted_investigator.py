@@ -10,6 +10,7 @@ before deterministic evaluation or the outer assessment callback can continue.
 from __future__ import annotations
 
 from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
+from .seed_locations import node_source_location, starting_source_locations
 
 import hashlib
 import json
@@ -68,7 +69,13 @@ class TargetedInterviewPending(BaseException):
 
 
 class ManagedTargetedInvestigatorPipeline:
-    """Swap the direct investigator for the managed specialist inside one guarded run."""
+    """Attach the managed specialist as an explicit fallback inside one guarded run.
+
+    The delegate's deterministic seed-window Investigator remains the primary path.
+    It may call this adapter only when the durable Rule Investigation Plan carries
+    an approved ``fallbackReason``; ordinary weak evidence returns Scanner
+    enrichment instead of silently entering broad agentic discovery.
+    """
 
     def __init__(self, *, delegate: Any, config: Any, api_client: Any) -> None:
         self._delegate = delegate
@@ -96,11 +103,11 @@ class ManagedTargetedInvestigatorPipeline:
                 user_id=user_id,
                 correlation_id=correlation_id,
             )
-            previous_investigator = getattr(self._delegate, "_investigator", None)
+            previous_fallback = getattr(self._delegate, "_agentic_fallback", None)
             previous_api_client = getattr(self._delegate, "_api_client", None)
             if previous_api_client is None:
                 raise RuntimeError("planned pipeline is missing its legal-rule API client")
-            self._delegate._investigator = self._adapter
+            self._delegate._agentic_fallback = self._adapter
             self._delegate._api_client = _LegalPinningApiProxy(
                 previous_api_client,
                 self._adapter,
@@ -108,7 +115,7 @@ class ManagedTargetedInvestigatorPipeline:
             try:
                 return self._delegate.run(*args, **kwargs)
             finally:
-                self._delegate._investigator = previous_investigator
+                self._delegate._agentic_fallback = previous_fallback
                 self._delegate._api_client = previous_api_client
 
     def __getattr__(self, name: str) -> Any:
@@ -1149,7 +1156,11 @@ def _initial_instruction(
         "search: inspect the pinned repository with native tools and cite exact "
         "source_locations for supported claims. Do not infer absence from a missing "
         "graph hit. If source inspection cannot decide a criterion, return "
-        "UNRESOLVED_ENGINEERING_FACT with a specific limitation.\n"
+        "UNRESOLVED_ENGINEERING_FACT with a specific limitation. "
+        "Start from investigationPacket.startingSourceLocations: they are where the "
+        "Scanner already found this rule's evidence. Open them with get_code_snippet or "
+        "read_file and follow them with trace_call_path before any broad search; only "
+        "search the wider repository for what those locations do not answer.\n"
         + json.dumps(
             {
                 "artifactVersions": artifact_versions,
@@ -1182,6 +1193,7 @@ def _bounded_investigation_packet(packet: InvestigationPacket) -> dict[str, Any]
         "evidenceRefCount": len(packet.evidence_refs),
         "unresolvedFrontierCount": len(packet.unresolved_frontiers),
     }
+    raw["startingSourceLocations"] = starting_source_locations(packet)
     raw["evidence_refs"] = list(packet.evidence_refs)[
         :MAX_MANAGED_INVESTIGATOR_RESULT_REFS
     ]
@@ -1235,7 +1247,7 @@ def _compact_initial_result(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def _compact_graph_node(node: dict[str, Any]) -> dict[str, Any]:
-    return {
+    compact = {
         key: node.get(key)
         for key in (
             "node_id",
@@ -1246,6 +1258,12 @@ def _compact_graph_node(node: dict[str, Any]) -> dict[str, Any]:
         )
         if key in node
     }
+    # Where the Scanner found this node: the Investigator starts here instead of
+    # rediscovering the repository with broad searches.
+    location = node_source_location(node)
+    if location is not None:
+        compact["source"] = location
+    return compact
 
 
 def _compact_graph_edge(edge: dict[str, Any]) -> dict[str, Any]:

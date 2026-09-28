@@ -107,6 +107,24 @@ def test_dispatch_shares_deadline_and_deducts_scheduler_setup_time(monkeypatch):
     assert seen == [26.0]
 
 
+def test_dispatch_without_a_boundary_deadline_never_interrupts_the_run(monkeypatch):
+    monkeypatch.delenv("LCSP_AGENT_SERVER_RUN_TIMEOUT_SECONDS", raising=False)
+    fake_runs = _FakeRuns()
+    _install_client(monkeypatch, _FakeClient(fake_runs))
+    seen = []
+    monkeypatch.setattr(
+        agent_server_client,
+        "_poll_run_until_terminal",
+        lambda *_args, **kwargs: seen.append(kwargs["timeout_seconds"]),
+    )
+    agent_server_client.dispatch_agent_runtime_event(
+        "assessment_interview_resume_requested", {}, "corr-1", timeout_seconds=None
+    )
+    # No deadline reaches the worker's cancel timer or the poll loop.
+    assert fake_runs.created_context["system_deadline_at"] is None
+    assert seen == [None]
+
+
 def test_redelivered_scan_reattaches_active_boundary_run(monkeypatch):
     fake_runs = _FakeRuns(
         listed_runs=[
@@ -293,3 +311,45 @@ def test_dispatch_short_circuits_pause_command_without_creating_a_run(monkeypatc
             "action": "interrupt",
         }
     ]
+
+
+def test_customer_stop_interrupts_a_running_engineering_assessment(monkeypatch) -> None:
+    active = {
+        "run_id": "engineering-run",
+        "status": "running",
+        "metadata": {"lcsp_boundary_name": "engineering_assessment_requested"},
+    }
+    fake_runs = _FakeRuns(listed_runs=[active], refuse_cancel=False)
+    _install_client(monkeypatch, _FakeClient(fake_runs))
+
+    result = agent_server_client.dispatch_agent_runtime_event(
+        "assessment_interview_pause_requested",
+        {"assessmentId": "assessment-1"},
+        "corr-stop",
+    )
+
+    assert result == {"status": "interrupt_requested"}
+    # The Investigator's run is interrupted (checkpoints kept), not deleted.
+    assert [(c["run_id"], c["action"]) for c in fake_runs.cancel_calls] == [
+        ("engineering-run", "interrupt")
+    ]
+
+
+def test_an_interrupted_run_settles_without_error_so_it_is_not_retried(monkeypatch) -> None:
+    class _InterruptedRuns(_FakeRuns):
+        def get(self, _thread_id, run_id):
+            self.get_calls += 1
+            return {"run_id": run_id, "status": "interrupted", "metadata": {}}
+
+    fake_runs = _InterruptedRuns()
+    _install_client(monkeypatch, _FakeClient(fake_runs))
+
+    result = agent_server_client.dispatch_agent_runtime_event(
+        "engineering_assessment_requested",
+        {"assessmentId": "assessment-1", "scanJobId": "scan-1"},
+        "corr-1",
+    )
+
+    # A customer stop is not a failure: no exception, so the broker delivery is
+    # acked and the stopped Investigator does not restart until Continue.
+    assert result == {"status": "INTERRUPTED", "runId": "created-run"}

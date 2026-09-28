@@ -224,6 +224,7 @@ export const enPages = {
       evidenceProvenanceLinked: "Linked evidence to source provenance",
       repositoryFilesInspected: "Inspected repository files",
       repositorySourceSearched: "Searched repository source",
+      codebaseGraphQueried: "Queried Codebase Memory graph",
       sourceFilesReviewed: "Reviewed source files",
       relevantFilesLocated: "Located relevant repository files",
       repositoryChangesReviewed: "Reviewed repository changes",
@@ -283,6 +284,12 @@ export const enPages = {
       gateCompleted: "Finished the compliance review.",
       gateFailed: "Could not finish the compliance review.",
       skippedGoals: "Rules not selected for investigation",
+      ruleInvestigating: "Investigating…",
+      ruleInvestigated: "Investigated",
+      ruleFailed: "Investigation stopped",
+      ruleWaiting: "Waiting for more context",
+      ruleQueued: "Waiting its turn",
+      ruleFallback: "Rule {index}",
     },
     agentStreamTechnicalSummary: {
       planning: "Planning summary",
@@ -1673,6 +1680,11 @@ export const enPages = {
     resumeSetupDescription: "Continue from the last saved setup step.",
     retrySetupState: "Reload setup status",
     thought: "Thought for 2s",
+    thinking: {
+      running: "Thinking...",
+      completed: "Thought for {seconds}s",
+      completedWithoutDuration: "Thought",
+    },
     repositorySetupDescription:
       "Before the assessment can start, connect the repository I should scan. I will analyze the pinned source first, then begin the interview.",
     providerQuestion: "Choose Git provider",

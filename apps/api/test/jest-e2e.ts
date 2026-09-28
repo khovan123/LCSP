@@ -20,6 +20,7 @@ const config: Config = {
     "^(\\.{1,2}/.*)\\.js$": "$1",
   },
   maxWorkers: 1,
+  workerIdleMemoryLimit: "768MB",
   testTimeout: 30000,
 };
 

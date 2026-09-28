@@ -20,7 +20,6 @@ from tools.common.capabilities.platform.config import load_config
 
 DEFAULT_AGENT_SERVER_URL = "http://127.0.0.1:2024"
 DEFAULT_ASSISTANT_ID = "lcsp-agent"
-DEFAULT_AGENT_SERVER_RUN_TIMEOUT_SECONDS = 600.0
 DEFAULT_AGENT_SERVER_POLL_SECONDS = 0.5
 DEFAULT_AGENT_SERVER_PENDING_HEARTBEAT_SECONDS = 10.0
 _THREAD_NAMESPACE = UUID("b7b26975-09de-44e5-a7d5-c996523fd289")
@@ -40,9 +39,24 @@ class AgentServerRunError(NonRetryableAgentBoundaryError):
 # boundary's already-active run. These must never create their own Agent Server
 # run: with multitask_strategy="enqueue" that run would simply queue behind the
 # very run it exists to stop, arriving only after that run already finished.
-_INTERRUPT_TARGET_BOUNDARY_BY_COMMAND_BOUNDARY: dict[str, str] = {
-    "assessment_interview_pause_requested": "assessment_interview_resume_requested",
+_INTERRUPT_TARGET_BOUNDARIES_BY_COMMAND_BOUNDARY: dict[str, tuple[str, ...]] = {
+    # The customer's stop covers whatever the assessment is running: an
+    # Interview turn, or the Planner -> Investigator engineering assessment.
+    "assessment_interview_pause_requested": (
+        "assessment_interview_resume_requested",
+        "engineering_assessment_requested",
+    ),
 }
+# Run status LangGraph reports after ``runs.cancel(action="interrupt")``.
+_INTERRUPTED_RUN_STATUS = "interrupted"
+
+
+def _run_budget_seconds(timeout_seconds: float | None) -> float | None:
+    """The boundary's opt-in deadline, else an explicit operator override, else none."""
+    if timeout_seconds is not None and timeout_seconds > 0:
+        return timeout_seconds
+    override = _positive_float_env("LCSP_AGENT_SERVER_RUN_TIMEOUT_SECONDS", 0.0)
+    return override or None
 
 
 def dispatch_agent_runtime_event(
@@ -58,22 +72,18 @@ def dispatch_agent_runtime_event(
     runs.wait request. This exposes scheduler delay, detects terminal errors
     promptly, and lets the boundary deadline interrupt the actual LangGraph run.
     """
-    interrupt_target = _INTERRUPT_TARGET_BOUNDARY_BY_COMMAND_BOUNDARY.get(
+    interrupt_targets = _INTERRUPT_TARGET_BOUNDARIES_BY_COMMAND_BOUNDARY.get(
         boundary_name
     )
-    if interrupt_target is not None:
-        interrupt_agent_runtime_run(interrupt_target, message, correlation_id)
+    if interrupt_targets is not None:
+        for interrupt_target in interrupt_targets:
+            interrupt_agent_runtime_run(interrupt_target, message, correlation_id)
         return {"status": "interrupt_requested"}
 
-    budget = (
-        timeout_seconds
-        if timeout_seconds is not None and timeout_seconds > 0
-        else _positive_float_env(
-            "LCSP_AGENT_SERVER_RUN_TIMEOUT_SECONDS",
-            DEFAULT_AGENT_SERVER_RUN_TIMEOUT_SECONDS,
-        )
-    )
-    deadline_at = time.time() + budget
+    # No deadline unless the boundary opted into one: agent runs take as long
+    # as their reasoning needs.
+    budget = _run_budget_seconds(timeout_seconds)
+    deadline_at = time.time() + budget if budget is not None else None
     started_at = time.monotonic()
     thread_id = agent_thread_id(boundary_name, message, correlation_id)
     assessment_id = _find_text(message, "assessmentId", "assessment_id")
@@ -171,7 +181,11 @@ def dispatch_agent_runtime_event(
         run_id=run_id,
         run=run,
         observer=observer,
-        timeout_seconds=max(0.001, budget - (time.monotonic() - started_at)),
+        timeout_seconds=(
+            max(0.001, budget - (time.monotonic() - started_at))
+            if budget is not None
+            else None
+        ),
     )
 
 
@@ -185,14 +199,7 @@ def _poll_run_until_terminal(
     timeout_seconds: float | None,
 ) -> Any:
     """Poll a created/reused run to a terminal state and return its result values."""
-    deadline_seconds = (
-        timeout_seconds
-        if timeout_seconds is not None and timeout_seconds > 0
-        else _positive_float_env(
-            "LCSP_AGENT_SERVER_RUN_TIMEOUT_SECONDS",
-            DEFAULT_AGENT_SERVER_RUN_TIMEOUT_SECONDS,
-        )
-    )
+    deadline_seconds = _run_budget_seconds(timeout_seconds)
     poll_seconds = _positive_float_env(
         "LCSP_AGENT_SERVER_POLL_SECONDS",
         DEFAULT_AGENT_SERVER_POLL_SECONDS,
@@ -207,7 +214,7 @@ def _poll_run_until_terminal(
 
     while last_status in _ACTIVE_RUN_STATUSES:
         now = time.monotonic()
-        if now - started_at >= deadline_seconds:
+        if deadline_seconds is not None and now - started_at >= deadline_seconds:
             client.runs.cancel(
                 thread_id,
                 run_id,
@@ -279,6 +286,10 @@ def _poll_run_until_terminal(
             )
         last_status = current_status
 
+    if last_status == _INTERRUPTED_RUN_STATUS:
+        # A customer stop, not a failure: settle the delivery without a retry
+        # so the stopped work does not restart until the customer continues.
+        return {"status": "INTERRUPTED", "runId": run_id}
     state = client.threads.get_state(thread_id)
     if last_status != "success":
         _raise_for_terminal_run(last_status, state)
@@ -631,7 +642,6 @@ def _find_text(value: Any, *keys: str, depth: int = 5) -> str | None:
 __all__ = [
     "DEFAULT_AGENT_SERVER_URL",
     "DEFAULT_ASSISTANT_ID",
-    "DEFAULT_AGENT_SERVER_RUN_TIMEOUT_SECONDS",
     "AgentServerRunError",
     "agent_thread_id",
     "dispatch_agent_runtime_event",

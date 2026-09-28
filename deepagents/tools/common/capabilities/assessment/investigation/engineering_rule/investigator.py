@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
+from .seed_locations import starting_source_locations
+from tools.common.codebase_memory_graph import (
+    CODEBASE_MEMORY_GRAPH_GUIDANCE,
+    CODEBASE_MEMORY_GRAPH_TOOLS,
+)
 
 import hashlib
 import json
@@ -114,15 +119,11 @@ class LawGuidedInvestigator:
             backend=current_repository_backend(),
             system_prompt=(
                 "Investigate one EngineeringRule directly inside the assessment repository. "
-                "Use native Deep Agents filesystem/shell/task tools as the primary source of "
-                "truth. The sandbox also contains the pinned upstream codebase_memory_graph MCP "
-                "engine as the `codebase-memory-graph` command; use its one-shot CLI mode through "
-                "`execute` (index_repository, then get_architecture, search_graph, search_code, "
-                "trace_path, query_graph, detect_changes, check_index_coverage) to accelerate "
-                "architecture and relationship discovery, but direct repository source wins on "
-                "conflict. Return exact repository source locations for every decided technical "
+                f"{CODEBASE_MEMORY_GRAPH_GUIDANCE} "
+                "Return exact repository source locations for every decided technical "
                 "claim; never invent Program Evidence Graph node/edge IDs."
             ),
+            tools=CODEBASE_MEMORY_GRAPH_TOOLS,
             response_format=self._claims_response_schema(),
             # The Investigator is the one role that explores the repository; it is
             # not step-limited. Deep Agents summarization keeps its context bounded.
@@ -576,16 +577,16 @@ class LawGuidedInvestigator:
             {
                 "task": (
                     "Investigate the EngineeringRule directly in the repository working database. "
-                    "Use native Deep Agents ls/glob/grep/read_file/execute/task tools. The sandbox "
-                    "also contains the pinned upstream codebase_memory_graph MCP engine as the "
-                    "`codebase-memory-graph` command; use its one-shot CLI mode through `execute` "
-                    "(get_architecture, search_graph, search_code, trace_path, query_graph, "
-                    "detect_changes, check_index_coverage) as graph memory to accelerate "
-                    "relationship discovery, then verify material facts in repository source "
-                    "before deciding."
+                    f"{CODEBASE_MEMORY_GRAPH_GUIDANCE} Start from "
+                    "seedContext.startingSourceLocations (where the Scanner found this rule's "
+                    "evidence) and follow them with trace_call_path before searching wider. "
+                    "Verify material facts in repository source before deciding."
                 ),
                 "engineeringRule": cls._rule_contract(packet),
                 "seedContext": {
+                    # Where the Scanner already found this rule's evidence: open and
+                    # trace these first, before any broad repository search.
+                    "startingSourceLocations": starting_source_locations(packet),
                     "priorDeterministicObservationCount": ledger.total,
                     "unresolvedFrontierCount": len(packet.unresolved_frontiers),
                     "confirmedCustomerContextStored": bool(packet.confirmed_customer_context),

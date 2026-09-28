@@ -17,6 +17,8 @@ from langchain.agents.structured_output import (
     ToolStrategy,
 )
 from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.tools import BaseTool
+from pydantic import ValidationError
 from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
 from middleware.provider_fallback import ProviderFallbackMiddleware
 from middleware.provider_schema import ProviderSchemaCompatibilityMiddleware
@@ -24,6 +26,7 @@ from middleware.token_fallback import TokenFallbackMiddleware
 from middleware.billing_metering import BillingAgentRoleMiddleware, BillingMeteringMiddleware
 from middleware.failure_policy import (
     StructuredOutputRejected,
+    MalformedToolCallSample,
     TerminalSchemaError,
     retry_model_error,
 )
@@ -42,6 +45,12 @@ class StopSchemaRepairMiddleware(AgentMiddleware):
 
     @staticmethod
     def _check(request, response):
+        # A sample whose tool calls cannot execute would otherwise reach the tool
+        # node and end the whole run as a terminal schema error; discard it before
+        # any tool runs so ModelRetry re-samples the same request instead.
+        reason = _malformed_tool_call_reason(request, response)
+        if reason is not None:
+            raise MalformedToolCallSample(reason)
         output_format = request.response_format
         if output_format is None or isinstance(output_format, ProviderStrategy):
             return response
@@ -92,6 +101,37 @@ class StopSchemaRepairMiddleware(AgentMiddleware):
 
     async def awrap_model_call(self, request, handler):
         return self._check(request, await handler(request))
+
+
+_OUTPUT_CAP_FINISH_REASONS = frozenset({"length", "max_tokens", "MAX_TOKENS"})
+
+
+def _malformed_tool_call_reason(request, response) -> str | None:
+    schemas = {
+        tool.name: tool.tool_call_schema
+        for tool in (getattr(request, "tools", None) or ())
+        if isinstance(tool, BaseTool)
+    }
+    for message in response.result:
+        if not isinstance(message, AIMessage):
+            continue
+        if not (message.tool_calls or message.invalid_tool_calls):
+            continue
+        metadata = message.response_metadata or {}
+        finish = metadata.get("finish_reason") or metadata.get("stop_reason")
+        if str(finish) in _OUTPUT_CAP_FINISH_REASONS:
+            return "Model output hit the output-token cap while emitting tool calls"
+        if message.invalid_tool_calls:
+            return "Model emitted unparseable tool-call arguments"
+        for call in message.tool_calls:
+            schema = schemas.get(call["name"])
+            if schema is None or not hasattr(schema, "model_validate"):
+                continue
+            try:
+                schema.model_validate(call["args"])
+            except ValidationError:
+                return f"Model emitted invalid arguments for tool {call['name']}"
+    return None
 
 
 def _parse_text_structured_output(message: AIMessage, strategy: ToolStrategy):

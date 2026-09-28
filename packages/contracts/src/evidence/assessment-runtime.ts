@@ -25,6 +25,23 @@ export const ASSESSMENT_RUNTIME_RUN_STATUSES = {
 export type AssessmentRuntimeRunStatus =
   (typeof ASSESSMENT_RUNTIME_RUN_STATUSES)[keyof typeof ASSESSMENT_RUNTIME_RUN_STATUSES];
 
+/**
+ * Customer stop/continue of a running Planner/Investigator pipeline. The latest
+ * control marker decides whether the pipeline is stopped: automatic
+ * reconciliation never resumes a pipeline the customer stopped.
+ */
+export const ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS = {
+  customerRequestedStop: "CUSTOMER_REQUESTED_STOP",
+  customerRequestedContinue: "CUSTOMER_REQUESTED_CONTINUE",
+} as const;
+
+export type AssessmentRuntimePipelineControlReason =
+  (typeof ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS)[keyof typeof ASSESSMENT_RUNTIME_PIPELINE_CONTROL_REASONS];
+
+/** Tool name of the control markers; not agent activity, never a workflow step. */
+export const ASSESSMENT_RUNTIME_PIPELINE_CONTROL_TOOL_NAME =
+  "customer_pipeline_control";
+
 export const ASSESSMENT_RUNTIME_STAGE_CODES = {
   snapshot: "SNAPSHOT",
   scan: "SCAN",
@@ -372,6 +389,56 @@ export type AssessmentRuntimeRun = {
   updatedAt: string;
 };
 
+/**
+ * Stage lifecycle derived from durable artifacts and dispatch boundaries.
+ *
+ * Runtime events are an activity log, not the source of truth for whether a
+ * stage finished: a later Planner/Investigator dispatch posts scan-tagged
+ * bookkeeping, and a stage-less boundary failure belongs to whatever was
+ * running. The API therefore derives each stage from what durably exists
+ * (scan job, accepted evidence + Repository Intelligence Pack, confirmed
+ * context revision, plan, claims) so the sidebar and composer always agree.
+ */
+export const ASSESSMENT_STAGE_LIFECYCLE_STATES = {
+  queued: "QUEUED",
+  running: "RUNNING",
+  done: "DONE",
+  partial: "PARTIAL",
+  failed: "FAILED",
+  waitingForCustomer: "WAITING_FOR_CUSTOMER",
+  contextConfirmed: "CONTEXT_CONFIRMED",
+  blocked: "BLOCKED",
+  planReady: "PLAN_READY",
+  claimsPartial: "CLAIMS_PARTIAL",
+  claimsComplete: "CLAIMS_COMPLETE",
+  needsContext: "NEEDS_CONTEXT",
+  needsScannerEnrichment: "NEEDS_SCANNER_ENRICHMENT",
+  timeout: "TIMEOUT",
+  ready: "READY",
+} as const;
+
+export type AssessmentStageLifecycleState =
+  (typeof ASSESSMENT_STAGE_LIFECYCLE_STATES)[keyof typeof ASSESSMENT_STAGE_LIFECYCLE_STATES];
+
+export type AssessmentStageLifecycleEntry = {
+  state: AssessmentStageLifecycleState;
+  /** Durable artifact this state was derived from, for auditing the projection. */
+  source: string;
+  detail: string | null;
+};
+
+export type AssessmentStageLifecycle = {
+  scanner: AssessmentStageLifecycleEntry;
+  interview: AssessmentStageLifecycleEntry;
+  planner: AssessmentStageLifecycleEntry;
+  investigator: AssessmentStageLifecycleEntry;
+  gate: AssessmentStageLifecycleEntry;
+};
+
+export type AssessmentStageLifecycleProjection = AssessmentStageLifecycle & {
+  assessmentId: string;
+};
+
 export type AssessmentRuntimeSnapshot = {
   emittedAt: string;
   runs: AssessmentRuntimeRun[];
@@ -381,4 +448,6 @@ export type AssessmentRuntimeSnapshot = {
   scanJobs: unknown[];
   evidenceReports: unknown[];
   postFindingStates: AssessmentPostFindingRuntimeState[];
+  /** One entry per assessment the owner can see. */
+  stageLifecycles: AssessmentStageLifecycleProjection[];
 };

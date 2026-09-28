@@ -1173,6 +1173,24 @@ test("a finished scan job leaves the Scanner row to its runtime events", () => {
   );
 });
 
+test("a completed scan stays completed when a later Planner/Investigator dispatch posts SCAN bookkeeping", () => {
+  const timeline = rerunTimeline("asm-resume", REPOSITORY_SCAN_JOB_STATUSES.completed);
+  const resumed: AdapterTimelineInput = {
+    ...timeline,
+    recentActivity: [
+      runtimeActivity("asm-resume", 2, "LangGraph repository run resumed", {
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+      }),
+      ...timeline.recentActivity,
+    ],
+  };
+  assert.equal(
+    scannerStepStatus(resumed),
+    NORMALIZED_WORKFLOW_STEP_STATUSES.completed,
+  );
+});
+
 test("LCSP-272 right sidebar projects F04 scanner-passed and interview-running state", () => {
   const normalized = normalizeAssessmentRuntime({
     assessmentId: "asm-sidebar-f04",
@@ -2646,5 +2664,70 @@ test("completed workflow stages cannot fabricate READY textual artifacts when th
   assert.notEqual(
     normalized.artifacts.investigationNotes.availability,
     ASSESSMENT_ARTIFACT_AVAILABILITIES.ready,
+  );
+});
+
+test("artifact lifecycle from the API decides stage status, not runtime events", () => {
+  // Events say the scan is running again (downstream bookkeeping under the same
+  // scan job); the durable lifecycle says the scanner finished and the
+  // Investigator is working. The artifact wins.
+  const timeline = rerunTimeline("asm-lifecycle", REPOSITORY_SCAN_JOB_STATUSES.completed);
+  const withLifecycle: AdapterTimelineInput = {
+    ...timeline,
+    recentActivity: [
+      runtimeActivity("asm-lifecycle", 2, "LangGraph repository run resumed", {
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+      }),
+      ...timeline.recentActivity,
+    ],
+    stageLifecycle: {
+      assessmentId: "asm-lifecycle",
+      scanner: { state: "DONE", source: "acceptedEvidence", detail: null },
+      interview: { state: "CONTEXT_CONFIRMED", source: "confirmedContext", detail: null },
+      planner: { state: "PLAN_READY", source: "ruleInvestigationPlan", detail: "40/41" },
+      investigator: { state: "RUNNING", source: "dispatch", detail: null },
+      gate: { state: "QUEUED", source: "ruleClaims", detail: null },
+    },
+  };
+
+  const steps = normalizeAssessmentRuntime({
+    assessmentId: "asm-lifecycle",
+    timeline: withLifecycle,
+  }).workflow.steps;
+  const statusOf = (id: string) =>
+    steps.find((step) => step.id === id)?.status;
+
+  assert.equal(
+    statusOf(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.scanner),
+    NORMALIZED_WORKFLOW_STEP_STATUSES.completed,
+  );
+  assert.equal(
+    statusOf(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.planner),
+    NORMALIZED_WORKFLOW_STEP_STATUSES.completed,
+  );
+  assert.equal(
+    statusOf(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.investigate),
+    NORMALIZED_WORKFLOW_STEP_STATUSES.running,
+  );
+  assert.equal(
+    statusOf(ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.gate),
+    NORMALIZED_WORKFLOW_STEP_STATUSES.queued,
+  );
+});
+
+test("an assessment from before the lifecycle existed still renders", () => {
+  // Old API/snapshot: no stageLifecycle at all. The event-derived projection
+  // stays in charge instead of the sidebar breaking.
+  const steps = normalizeAssessmentRuntime({
+    assessmentId: "asm-legacy",
+    timeline: rerunTimeline("asm-legacy", REPOSITORY_SCAN_JOB_STATUSES.completed),
+  }).workflow.steps;
+
+  assert.ok(steps.length > 0);
+  assert.equal(
+    steps.find((step) => step.id === ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.scanner)
+      ?.status,
+    NORMALIZED_WORKFLOW_STEP_STATUSES.completed,
   );
 });

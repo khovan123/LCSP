@@ -94,8 +94,13 @@ def test_subagents_follow_deep_agents_dictionary_contract() -> None:
             expected_governance = MODEL_GOVERNANCE_MIDDLEWARE
         middleware = subagent["middleware"]
         if name == "interview":
-            assert isinstance(middleware[0], AgentRunBudgetMiddleware)
-            middleware = middleware[1:]
+            # The Interview resolves Customer-owned gaps only: no repository
+            # tools at all, and one model call per turn.
+            assert isinstance(middleware[0], AllowedToolsMiddleware)
+            assert middleware[0].allowed == frozenset()
+            assert isinstance(middleware[1], AgentRunBudgetMiddleware)
+            assert middleware[1].finalize_after == 1
+            middleware = middleware[2:]
         if name == "planner":
             # The Planner never reads source: Deep Agents' filesystem, shell and task
             # tools are hidden so only its own tools remain visible.
@@ -121,10 +126,17 @@ def test_pipeline_roles_do_not_receive_customer_context_or_resolver_tools() -> N
         "finish_legal_rule_triage_execution",
     )
     # Repository exploration comes from native Deep Agents filesystem/shell/task tools
-    # and optional codebase_memory_graph MCP, not authored PGE wrappers.
+    # plus typed queries over the pre-indexed Codebase Memory graph, not PGE wrappers.
     assert _tool_names(by_name["interview"]) == ()
     assert _tool_names(by_name["planner"]) == ("retrieve_verified_episodes",)
-    assert _tool_names(by_name["investigator"]) == ("retrieve_verified_episodes",)
+    assert _tool_names(by_name["investigator"]) == (
+        "retrieve_verified_episodes",
+        "search_code_graph",
+        "trace_call_path",
+        "get_code_snippet",
+        "search_code_text",
+        "get_repository_architecture",
+    )
     for role in ("planner", "investigator"):
         assert "get_assessment_context" not in _tool_names(by_name[role])
 
@@ -280,7 +292,9 @@ def test_investigator_prompt_uses_native_repo_and_direct_source_provenance() -> 
     )
 
     assert "assessment repository is your working database" in investigator_prompt
-    assert "codebase_memory_graph" in investigator_prompt
+    assert "already indexed into a" in investigator_prompt
+    assert "search_code_graph" in investigator_prompt
+    assert "trace_call_path" in investigator_prompt
     assert "Repository source is authoritative" in investigator_prompt
     assert "Do not call LCSP Program Evidence Graph search/trace wrappers" in investigator_prompt
     assert "source_locations" in investigator_prompt

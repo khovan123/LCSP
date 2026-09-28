@@ -27,6 +27,10 @@ from tools.common.capabilities.platform.repository_workspace import RepositoryWo
 from tools.triage.legal_rule_triage.contracts import LEGAL_RULE_TRIAGE_REQUEST_COMMAND
 
 from .pipeline import EngineeringInvestigationPipeline
+from tools.common.capabilities.assessment.planning.engineering_rule.plan_store import (
+    EngineeringRulePlanStore,
+)
+
 from .planned_pipeline import PlannedEngineeringInvestigationPipeline
 
 
@@ -91,6 +95,8 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
                 model=model,
                 planner_model=planner_model,
                 corpus_recovery_driver=_AssessmentLegalPreparationDeferredDriver(),
+                # A retried dispatch re-investigates without re-planning.
+                plan_store=EngineeringRulePlanStore.from_config(config),
             )
 
     def handle(self, message: dict[str, Any], correlationId: str) -> None:

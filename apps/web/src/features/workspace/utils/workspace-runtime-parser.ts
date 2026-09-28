@@ -10,6 +10,7 @@ import {
   type AssessmentAgentStreamEvent,
   type AssessmentPostFindingActivity,
   type AssessmentPostFindingRuntimeState,
+  type AssessmentStageLifecycleProjection,
   type AssessmentRuntimeEngineeringProgress,
 } from "@lcsp/contracts/evidence";
 
@@ -104,6 +105,14 @@ export function parseRuntimeEvent(
   const postFindingStates = Array.isArray(payload.post_finding)
     ? payload.post_finding.map(parsePostFindingState).filter(isDefined)
     : [];
+  // Stage status the API derived from durable artifacts (scan job, accepted
+  // evidence, confirmed context, plan, claims) rather than the activity log.
+  const stageLifecycleByAssessmentId = Object.fromEntries(
+    (Array.isArray(payload.stage_lifecycles) ? payload.stage_lifecycles : [])
+      .map(parseStageLifecycle)
+      .filter(isDefined)
+      .map((lifecycle) => [lifecycle.assessmentId, lifecycle]),
+  );
 
   const runsByAssessmentId = groupRunsByAssessmentId(runs);
   const recentActivityByAssessmentId =
@@ -132,6 +141,7 @@ export function parseRuntimeEvent(
     agentStreamHistoryByAssessmentId: {},
     latestRunIdByAssessmentId,
     postFindingByAssessmentId,
+    stageLifecycleByAssessmentId,
     getAssessmentRuntime: (assessmentId: string) => ({
       currentRun: runsByAssessmentId[assessmentId]?.[0] ?? null,
       recentActivity: recentActivityByAssessmentId[assessmentId] ?? [],
@@ -150,10 +160,40 @@ export function parseRuntimeEvent(
       connectionState: WORKSPACE_RUNTIME_CONNECTION_STATES.connected,
       lastEmittedAt: payload.emitted_at as string,
       postFinding: postFindingByAssessmentId[assessmentId] ?? null,
+      stageLifecycle: stageLifecycleByAssessmentId[assessmentId] ?? null,
     }),
     subscribeAssessmentRuntime: () => () => undefined,
     loadMoreAgentStreamHistory: () => Promise.resolve(false),
   };
+}
+
+const STAGE_LIFECYCLE_STAGES = [
+  "scanner",
+  "interview",
+  "planner",
+  "investigator",
+  "gate",
+] as const;
+
+function parseStageLifecycle(
+  value: unknown,
+): AssessmentStageLifecycleProjection | null {
+  const item = parseObject(value);
+  if (item === null || typeof item.assessmentId !== "string") return null;
+  const entries: Record<string, unknown> = {};
+  for (const stage of STAGE_LIFECYCLE_STAGES) {
+    const entry = parseObject(item[stage]);
+    if (entry === null || typeof entry.state !== "string") return null;
+    entries[stage] = {
+      state: entry.state,
+      source: typeof entry.source === "string" ? entry.source : "unknown",
+      detail: typeof entry.detail === "string" ? entry.detail : null,
+    };
+  }
+  return {
+    assessmentId: item.assessmentId,
+    ...entries,
+  } as AssessmentStageLifecycleProjection;
 }
 
 function parsePostFindingState(

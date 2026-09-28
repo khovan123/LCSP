@@ -204,7 +204,12 @@ def test_agent_stops_after_one_malformed_model_response(invalid_tool):
         response_format=ToolStrategy(Answer),
         middleware=[ModelRetryMiddleware(max_retries=2, retry_on=lambda e: False), StopSchemaRepairMiddleware()],
     )
-    with pytest.raises(TerminalSchemaError):
+    from middleware.failure_policy import MalformedToolCallSample
+
+    # Invalid tool arguments are rejected at the model boundary (retryable sample);
+    # invalid structured output stays a terminal schema error.
+    expected = MalformedToolCallSample if invalid_tool else TerminalSchemaError
+    with pytest.raises(expected):
         agent.invoke({"messages": [{"role": "user", "content": "count"}]})
     assert model.calls == 1
 
@@ -273,3 +278,135 @@ def test_tool_calling_answer_is_left_to_the_agent_loop():
     request = MagicMock(response_format=ToolStrategy(Answer))
 
     assert StopSchemaRepairMiddleware().wrap_model_call(request, MagicMock(return_value=response)) is response
+
+
+def test_tool_call_cut_off_by_the_output_cap_is_resampled_not_terminal():
+    from langchain.agents import create_agent
+    from langchain_core.language_models.chat_models import BaseChatModel
+    from langchain_core.messages import AIMessage
+    from langchain_core.outputs import ChatGeneration, ChatResult
+    from langchain_core.tools import tool
+    from middleware.failure_policy import retry_model_error
+    from middleware.model_governance import StopSchemaRepairMiddleware
+
+    executed: list[str] = []
+
+    class TruncatingModel(BaseChatModel):
+        calls: int = 0
+
+        @property
+        def _llm_type(self):
+            return "truncation-test"
+
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                # Arguments cut mid-JSON when the provider hit its output cap.
+                message = AIMessage(
+                    content="",
+                    invalid_tool_calls=[{
+                        "name": "execute", "args": '{"command": "sed -n', "id": "one",
+                        "error": None, "type": "invalid_tool_call",
+                    }],
+                    response_metadata={"finish_reason": "length"},
+                )
+            elif self.calls == 2:
+                message = AIMessage(content="", tool_calls=[{
+                    "name": "execute", "args": {"command": "ls"}, "id": "two", "type": "tool_call",
+                }])
+            else:
+                message = AIMessage(content="done")
+            return ChatResult(generations=[ChatGeneration(message=message)])
+
+    @tool
+    def execute(command: str) -> str:
+        """Run a command."""
+        executed.append(command)
+        return "ok"
+
+    model = TruncatingModel()
+    agent = create_agent(
+        model=model, tools=[execute],
+        middleware=[
+            ModelRetryMiddleware(max_retries=2, retry_on=retry_model_error, initial_delay=0),
+            StopSchemaRepairMiddleware(),
+        ],
+    )
+    agent.invoke({"messages": [{"role": "user", "content": "scan"}]})
+
+    assert model.calls == 3
+    # The cut-off call never reached the tool; only the re-sampled one ran.
+    assert executed == ["ls"]
+
+
+def test_complete_tool_call_is_not_mistaken_for_truncation():
+    from langchain_core.messages import AIMessage
+    from middleware.model_governance import StopSchemaRepairMiddleware
+
+    response = ModelResponse(result=[AIMessage(
+        content="",
+        tool_calls=[{"name": "execute", "args": {"command": "ls"}, "id": "one", "type": "tool_call"}],
+        response_metadata={"finish_reason": "tool_calls"},
+    )])
+    request = MagicMock(response_format=None)
+
+    assert StopSchemaRepairMiddleware().wrap_model_call(request, MagicMock(return_value=response)) is response
+
+
+def test_tool_call_with_schema_invalid_arguments_is_resampled_before_the_tool_runs():
+    from langchain.agents import create_agent
+    from langchain_core.language_models.chat_models import BaseChatModel
+    from langchain_core.messages import AIMessage
+    from langchain_core.outputs import ChatGeneration, ChatResult
+    from langchain_core.tools import tool
+    from middleware.failure_policy import retry_model_error
+    from middleware.model_governance import StopSchemaRepairMiddleware
+
+    executed: list[str] = []
+
+    class SloppyModel(BaseChatModel):
+        calls: int = 0
+
+        @property
+        def _llm_type(self):
+            return "invalid-args-test"
+
+        def bind_tools(self, tools, **kwargs):
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                # Completed normally, but the arguments miss the required field.
+                message = AIMessage(content="", tool_calls=[{
+                    "name": "execute", "args": {"cmd": "ls"}, "id": "one", "type": "tool_call",
+                }], response_metadata={"finish_reason": "tool_calls"})
+            elif self.calls == 2:
+                message = AIMessage(content="", tool_calls=[{
+                    "name": "execute", "args": {"command": "ls"}, "id": "two", "type": "tool_call",
+                }])
+            else:
+                message = AIMessage(content="done")
+            return ChatResult(generations=[ChatGeneration(message=message)])
+
+    @tool
+    def execute(command: str) -> str:
+        """Run a command."""
+        executed.append(command)
+        return "ok"
+
+    model = SloppyModel()
+    agent = create_agent(
+        model=model, tools=[execute],
+        middleware=[
+            ModelRetryMiddleware(max_retries=2, retry_on=retry_model_error, initial_delay=0),
+            StopSchemaRepairMiddleware(),
+        ],
+    )
+    agent.invoke({"messages": [{"role": "user", "content": "scan"}]})
+
+    assert model.calls == 3
+    assert executed == ["ls"]

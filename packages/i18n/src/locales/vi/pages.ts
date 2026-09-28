@@ -226,6 +226,7 @@ export const viPages = {
       evidenceProvenanceLinked: "Đã liên kết evidence với source provenance",
       repositoryFilesInspected: "Đã kiểm tra các file trong repository",
       repositorySourceSearched: "Đã tìm kiếm trong source repository",
+      codebaseGraphQueried: "Đã truy vấn Codebase Memory graph",
       sourceFilesReviewed: "Đã đọc và xem xét source file",
       relevantFilesLocated: "Đã xác định các file liên quan",
       repositoryChangesReviewed: "Đã rà soát thay đổi trong repository",
@@ -283,6 +284,12 @@ export const viPages = {
       gateCompleted: "Đã hoàn tất đánh giá tuân thủ.",
       gateFailed: "Không thể hoàn tất đánh giá tuân thủ.",
       skippedGoals: "Các rule không được chọn để điều tra",
+      ruleInvestigating: "Đang điều tra…",
+      ruleInvestigated: "Đã điều tra xong",
+      ruleFailed: "Điều tra bị dừng",
+      ruleWaiting: "Đang chờ thêm ngữ cảnh",
+      ruleQueued: "Đang chờ điều tra",
+      ruleFallback: "Rule {index}",
     },
     agentStreamTechnicalSummary: {
       planning: "Tóm tắt lập kế hoạch",
@@ -1674,6 +1681,11 @@ export const viPages = {
     resumeSetupDescription: "Tiếp tục từ bước thiết lập đã được lưu.",
     retrySetupState: "Tải lại trạng thái thiết lập",
     thought: "Đã suy nghĩ trong 2 giây",
+    thinking: {
+      running: "Đang suy nghĩ...",
+      completed: "Đã suy nghĩ trong {seconds} giây",
+      completedWithoutDuration: "Đã suy nghĩ",
+    },
     repositorySetupDescription:
       "Trước khi assessment bắt đầu, hãy kết nối repository cần quét. Tôi sẽ phân tích source đã pin trước, sau đó mới bắt đầu Interview.",
     providerQuestion: "Chọn Git provider",

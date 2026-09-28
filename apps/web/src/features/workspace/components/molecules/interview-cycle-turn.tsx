@@ -5,7 +5,10 @@ import { CheckIcon, Edit3Icon } from "lucide-react";
 import { appLocale } from "@/lib/locale";
 
 import { ASSESSMENT_CHAT_ROLES } from "../../types/assessment-chat.types";
-import type { InterviewCycleTurnProps } from "../../types/interview-cycle-turn.types";
+import type {
+  InterviewCycleOutputProps,
+  InterviewCycleTurnProps,
+} from "../../types/interview-cycle-turn.types";
 import { AgentMessage, AgentTurn } from "./agent-turn";
 import { AssessmentQuestionTurn } from "./assessment-question-turn";
 import { InterviewAnswerMessage } from "./interview-answer-message";
@@ -84,19 +87,33 @@ export function InterviewCycleTurn(props: InterviewCycleTurnProps) {
         </>
       )}
       {activity}
-      {isConfirmAdjustQuestion ? (
+      {isConfirmAdjustQuestion && !props.activityOwnsOutput ? (
         <AgentTurn>
-          <InterviewOutputPanel
-            icon={wasAdjusted ? Edit3Icon : CheckIcon}
-            label={
-              wasAdjusted
-                ? t("pages.assessment.adjustedContextOutput")
-                : t("pages.assessment.confirmedContextOutput")
-            }
-          />
+          <InterviewCycleOutput answer={answer} question={question} />
         </AgentTurn>
       ) : null}
     </div>
+  );
+}
+
+/** The cycle's result card (confirmed or adjusted context), if it has one. */
+export function InterviewCycleOutput({
+  answer,
+  question,
+}: InterviewCycleOutputProps) {
+  if (question?.control !== ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust) {
+    return null;
+  }
+  const wasAdjusted = Boolean(answer.comment?.trim());
+  return (
+    <InterviewOutputPanel
+      icon={wasAdjusted ? Edit3Icon : CheckIcon}
+      label={
+        wasAdjusted
+          ? t("pages.assessment.adjustedContextOutput")
+          : t("pages.assessment.confirmedContextOutput")
+      }
+    />
   );
 }
 
