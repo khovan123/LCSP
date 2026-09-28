@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { LocaleProviderProps } from "@/components/types/provider.types";
 import {
   getAppLocaleSnapshot,
@@ -12,11 +12,9 @@ export function LocaleProvider({
   children,
   initialLocale,
 }: LocaleProviderProps) {
-  const initializedRef = useRef(false);
-  if (!initializedRef.current) {
+  useState(() => {
     initAppLocale(initialLocale);
-    initializedRef.current = true;
-  }
+  });
 
   const currentLocale = useSyncExternalStore(
     subscribeToAppLocale,

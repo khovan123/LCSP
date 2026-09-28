@@ -36,8 +36,7 @@ export async function proxy(request: NextRequest) {
     requestHeaders.set("x-lcsp-locale", localeMatch[1]);
   } else {
     const cookieLocale = request.cookies.get(APP_LOCALE_COOKIE)?.value;
-    const resolvedLocale =
-      cookieLocale === "en" || cookieLocale === "vi" ? cookieLocale : "vi";
+    const resolvedLocale = cookieLocale === "vi" ? "vi" : "en";
     requestHeaders.set("x-lcsp-locale", resolvedLocale);
   }
 

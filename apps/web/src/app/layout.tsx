@@ -53,7 +53,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const headerLocale = (await headers()).get("x-lcsp-locale");
-  const initialLocale: Locale = headerLocale === "en" ? "en" : "vi";
+  const initialLocale: Locale = headerLocale === "vi" ? "vi" : "en";
 
   return (
     <html

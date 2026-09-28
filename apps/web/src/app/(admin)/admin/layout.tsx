@@ -14,7 +14,7 @@ export default async function AdminRouteLayout({
   children: ReactNode;
 }) {
   const headerLocale = (await headers()).get("x-lcsp-locale");
-  const initialLocale: Locale = headerLocale === "en" ? "en" : "vi";
+  const initialLocale: Locale = headerLocale === "vi" ? "vi" : "en";
 
   return <AdminShell initialLocale={initialLocale}>{children}</AdminShell>;
 }
