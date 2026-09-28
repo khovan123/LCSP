@@ -11,7 +11,7 @@ function readCookieLocale(): Locale | null {
   return LOCALES.includes(value as Locale) ? (value as Locale) : null;
 }
 
-export let appLocale: Locale = "en";
+export let appLocale: Locale = "vi";
 
 export function getAppLocaleSnapshot(): Locale {
   return appLocale;
