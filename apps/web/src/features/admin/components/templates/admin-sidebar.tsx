@@ -87,13 +87,13 @@ export function AdminSidebar({
   }
 
   const isUserAccountsActive =
-    pathname === "/admin/users" || pathname.startsWith("/admin/users/");
+    pathname === "/admin/users" || Boolean(pathname?.startsWith("/admin/users/"));
   const isOverviewActive =
     pathname === "/admin" ||
     pathname === "/admin/" ||
     pathname === "/admin/overview";
-  const isCorpusActive = pathname.startsWith("/admin/corpus");
-  const isBillingActive = pathname.startsWith("/admin/billing");
+  const isCorpusActive = Boolean(pathname?.startsWith("/admin/corpus"));
+  const isBillingActive = Boolean(pathname?.startsWith("/admin/billing"));
 
   const navItems = [
     {

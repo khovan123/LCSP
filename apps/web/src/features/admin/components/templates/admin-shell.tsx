@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { AdminSidebar } from "./admin-sidebar";
 
 type AdminShellProps = {
-  children: ReactNode;
+  children?: ReactNode;
   adminName?: string;
   adminEmail?: string;
 };
@@ -30,7 +30,7 @@ export function AdminShell({
     getAppLocaleSnapshot,
     getAppLocaleSnapshot,
   );
-  const isBillingRoute = pathname.startsWith("/admin/billing");
+  const isBillingRoute = Boolean(pathname?.startsWith("/admin/billing"));
   const { data: profile, isLoading } = useAuthSettingsProfileQuery();
   const fallbackName = resolveAppMessage(
     "pages.admin.sidebar.identityFallbackName" as MessageKey,
@@ -63,6 +63,7 @@ export function AdminShell({
 
       {/* Main Content Surface (1192px at 1440px desktop viewport) */}
       <main
+        key={locale}
         className={cn(
           "flex min-h-screen flex-1 min-w-0 flex-col overflow-y-auto px-10 py-8",
           isBillingRoute && "2xl:px-11.5 2xl:py-9",
