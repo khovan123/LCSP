@@ -135,6 +135,7 @@ def _confirmed_context(
     statement: str,
     *,
     revision: int,
+    resolves_criterion_id: str | None = None,
 ) -> dict[str, Any]:
     return {
         "assessmentId": assessment_id,
@@ -152,6 +153,11 @@ def _confirmed_context(
                 "createdAt": "2026-09-05T00:00:00Z",
                 "source": "CUSTOMER_CONFIRMED",
                 "resolutionState": "CONFIRMED",
+                **(
+                    {"resolvesCriterionId": resolves_criterion_id}
+                    if resolves_criterion_id
+                    else {}
+                ),
             }
         ],
         "limitations": ["customer-confirmed current statements only"],
@@ -461,6 +467,7 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
                     "decision_authority",
                     "A human manager must approve before action",
                     revision=3,
+                    resolves_criterion_id="CONTROL",
                 ),
                 "flags": [],
                 "blockedActions": [],
@@ -476,6 +483,7 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
                     "decision_authority",
                     "A human manager must approve before action",
                     revision=3,
+                    resolves_criterion_id="CONTROL",
                 ),
                 "flags": [],
                 "blockedActions": [],
@@ -491,6 +499,7 @@ def test_release_gate_crosses_real_api_outbox_checkpoint_and_callback(
                     "decision_authority",
                     "A human manager must approve before action",
                     revision=4,
+                    resolves_criterion_id="CONTROL",
                 ),
                 "flags": [],
                 "blockedActions": [],
