@@ -7,6 +7,8 @@ import {
 } from "@lcsp/contracts/assessment";
 import {
   CREDENTIAL_PROVIDERS,
+  GITHUB_CREDENTIAL_ERROR_CODES,
+  GITHUB_INTEGRATION_ERROR_CODES,
   type CredentialProvider,
 } from "@lcsp/contracts/github-integration";
 import { resolveMessage } from "@lcsp/i18n";
@@ -48,7 +50,7 @@ type RepositorySetupStepProps = {
 };
 
 export function RepositorySetupStep({
-  assessmentId,
+  assessmentId: initialAssessmentId,
 }: RepositorySetupStepProps) {
   const router = useRouter();
   const createAssessment = useCreateAssessmentMutation();
@@ -56,7 +58,7 @@ export function RepositorySetupStep({
   const credentialStatuses = useProviderCredentialStatusesQuery();
   const [workingAssessmentId, setWorkingAssessmentId] = useState<
     string | undefined
-  >(assessmentId);
+  >(initialAssessmentId);
   const [submitErrorKey, setSubmitErrorKey] = useState<string>();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
@@ -103,10 +105,11 @@ export function RepositorySetupStep({
     setIsSubmitting(true);
     setSubmitErrorKey(undefined);
     let newlyCreatedAssessmentId: string | undefined;
+    let connectionEstablished = false;
 
     try {
-      let currentAssessmentId = workingAssessmentId;
-      if (!currentAssessmentId) {
+      let assessmentId = workingAssessmentId;
+      if (!assessmentId) {
         const outcome = await createAssessment.mutateAsync({
           name: assessmentNameFromUrl(data.repositoryUrl),
         });
@@ -114,23 +117,26 @@ export function RepositorySetupStep({
           setSubmitErrorKey("pages.assessmentFlow.errors.createAssessment");
           return;
         }
-        currentAssessmentId = outcome.assessmentId;
+        assessmentId = outcome.assessmentId;
         newlyCreatedAssessmentId = outcome.assessmentId;
-        setWorkingAssessmentId(currentAssessmentId);
+        setWorkingAssessmentId(assessmentId);
       }
 
       const connection = await connectAssessmentRepository(
-        currentAssessmentId,
+        assessmentId,
         data.repositoryUrl,
       );
-      await startRepositoryAnalysis(currentAssessmentId, {
+      connectionEstablished = true;
+
+      await startRepositoryAnalysis(assessmentId, {
         connectionId: connection.connectionId,
         branch: connection.defaultBranch,
       });
-      router.replace(`/assessments/${currentAssessmentId}`);
+      router.replace(`/assessments/${assessmentId}`);
     } catch (error) {
-      // Rollback newly created uninitialized assessment to avoid orphan records in DB
-      if (newlyCreatedAssessmentId) {
+      // Only rollback newly created assessment if connection itself failed before source setup
+      // Per E5, if connection is established, preserve assessment & source so user can retry scan
+      if (newlyCreatedAssessmentId && !connectionEstablished) {
         try {
           await deleteAssessment.mutateAsync(newlyCreatedAssessmentId);
           setWorkingAssessmentId(undefined);
@@ -221,20 +227,30 @@ export function RepositorySetupStep({
 
 function resolveRepositorySetupErrorKey(error: unknown): string {
   if (error instanceof Error) {
-    const msg = error.message.toLowerCase();
+    const code = error.message;
     if (
-      msg.includes("credential-invalid") ||
-      msg.includes("credential-expired") ||
-      msg.includes("unauthorized")
+      code === GITHUB_CREDENTIAL_ERROR_CODES.credentialInvalid ||
+      code === GITHUB_CREDENTIAL_ERROR_CODES.credentialExpired ||
+      code === GITHUB_CREDENTIAL_ERROR_CODES.credentialRequired
     ) {
       return "pages.workspace.settingsHub.repositories.credentialInvalidDescription";
     }
     if (
-      msg.includes("repository-access-denied") ||
-      msg.includes("repository-unavailable") ||
-      msg.includes("repository-not-found")
+      code === GITHUB_CREDENTIAL_ERROR_CODES.repositoryAccessDenied ||
+      code === GITHUB_CREDENTIAL_ERROR_CODES.repositoryUnavailable
     ) {
       return "pages.workspace.settingsHub.repositories.repositoryDeniedDescription";
+    }
+    if (
+      code === GITHUB_CREDENTIAL_ERROR_CODES.credentialApprovalRequired
+    ) {
+      return "pages.workspace.settingsHub.repositories.approvalRequiredDescription";
+    }
+    if (
+      code === GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable ||
+      code === GITHUB_INTEGRATION_ERROR_CODES.cliConnectDisabled
+    ) {
+      return "pages.workspace.settingsHub.repositories.serviceUnavailableDescription";
     }
   }
   return "pages.assessmentFlow.errors.repositorySetup";
