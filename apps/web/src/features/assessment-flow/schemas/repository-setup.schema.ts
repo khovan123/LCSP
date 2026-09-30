@@ -40,3 +40,7 @@ export const repositorySetupSchema = z
       });
     }
   });
+
+export type RepositorySetupFormData = z.infer<typeof repositorySetupSchema>;
+
+
