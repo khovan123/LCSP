@@ -63,6 +63,7 @@ export class BillingWorkflowPauseService {
     }
     // Billing is reissued by the server outbox on resume, never replayed from
     // the spent reservation. The checkpoint retains the original pinned job.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { billing: _billing, ...payload } = input.payload;
     if (payload.assessmentId && payload.assessmentId !== input.assessmentId)
       throw new OwnershipMismatchError(

@@ -50,17 +50,17 @@ describe("RerunClassificationHandler", () => {
       },
       $executeRaw: jest.fn<() => Promise<number>>().mockResolvedValue(1),
       outboxMessage: {
-        findFirst: jest
-          .fn<() => Promise<unknown>>()
-          .mockImplementation(async () => {
-            const last = dispatches.at(-1);
-            return last &&
+        findFirst: jest.fn<() => Promise<unknown>>().mockImplementation(() => {
+          const last = dispatches.at(-1);
+          return Promise.resolve(
+            last &&
               (options?.pending ||
                 Date.now() - last.publishedAt <
                   ASSESSMENT_PIPELINE_LIVENESS_WINDOW_SECONDS * 1000)
               ? { payload: last.payload }
-              : null;
-          }),
+              : null,
+          );
+        }),
       },
       $transaction: jest.fn((callback: (tx: unknown) => Promise<unknown>) =>
         callback(prisma),
@@ -68,11 +68,12 @@ describe("RerunClassificationHandler", () => {
     } as unknown as jest.Mocked<PrismaService>;
     const enqueue = jest
       .fn<(...args: unknown[]) => Promise<void>>()
-      .mockImplementation(async (input) => {
+      .mockImplementation((input) => {
         dispatches.push({
           publishedAt: Date.now(),
           payload: (input as { payload: unknown }).payload,
         });
+        return Promise.resolve();
       });
     const outbox = { enqueue } as unknown as jest.Mocked<OutboxRepository>;
     const writeInTx = jest

@@ -60,18 +60,26 @@ function body(
 
 function harness(existing: { id: string; contextRevision: number } | null) {
   const ledger = {
-    findUnique: jest.fn(async (..._args: unknown[]) => existing),
-    updateMany: jest.fn(async (..._args: unknown[]) => ({ count: 1 })),
-    findUniqueOrThrow: jest.fn(async (..._args: unknown[]) => savedRow()),
-    create: jest.fn(async (..._args: unknown[]): Promise<unknown> =>
-      savedRow(),
-    ),
+    findUnique: jest
+      .fn<(...args: unknown[]) => Promise<unknown>>()
+      .mockResolvedValue(existing),
+    updateMany: jest
+      .fn<(...args: unknown[]) => Promise<unknown>>()
+      .mockResolvedValue({ count: 1 }),
+    findUniqueOrThrow: jest
+      .fn<(...args: unknown[]) => Promise<unknown>>()
+      .mockResolvedValue(savedRow()),
+    create: jest
+      .fn<(...args: unknown[]) => Promise<unknown>>()
+      .mockResolvedValue(savedRow()),
   };
   const prisma = {
     assessment: {
-      findUnique: jest.fn(async (..._args: unknown[]) => ({
-        id: "assessment-1",
-      })),
+      findUnique: jest
+        .fn<(...args: unknown[]) => Promise<unknown>>()
+        .mockResolvedValue({
+          id: "assessment-1",
+        }),
     },
     engineeringRuleAssessment: ledger,
   };

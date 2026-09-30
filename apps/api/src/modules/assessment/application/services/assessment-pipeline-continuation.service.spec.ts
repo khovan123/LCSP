@@ -122,7 +122,7 @@ describe("AssessmentPipelineContinuationService", () => {
       } as unknown as AssessmentModelCreditPreflight,
       {
         resume: resumePause,
-        hasPendingResume: async () => false,
+        hasPendingResume: () => Promise.resolve(false),
       } as unknown as BillingWorkflowPauseService,
     );
   });

@@ -4764,25 +4764,6 @@ function parseAiDiscoverySnippetRef(
   };
 }
 
-function sameStringSet(left: string[], right: string[]): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-  const rightSet = new Set(right);
-  return left.every((value) => rightSet.has(value));
-}
-
-function sameRecord(
-  left: Record<string, string>,
-  right: Record<string, string>,
-): boolean {
-  const leftEntries = Object.entries(left);
-  if (leftEntries.length !== Object.keys(right).length) {
-    return false;
-  }
-  return leftEntries.every(([key, value]) => right[key] === value);
-}
-
 function toJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }

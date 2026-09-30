@@ -6,10 +6,14 @@ import { ListRuleAssessmentsHandler } from "./list-rule-assessments.handler.js";
 import { ListRuleAssessmentsQuery } from "./list-rule-assessments.query.js";
 
 function handlerWith(assessment: { id: string } | null, rows: unknown[]) {
-  const findMany = jest.fn(async (..._args: unknown[]) => rows);
+  const findMany = jest
+    .fn<(...args: unknown[]) => Promise<unknown>>()
+    .mockResolvedValue(rows);
   const prisma = {
     assessment: {
-      findUnique: jest.fn(async (..._args: unknown[]) => assessment),
+      findUnique: jest
+        .fn<(...args: unknown[]) => Promise<unknown>>()
+        .mockResolvedValue(assessment),
     },
     engineeringRuleAssessment: { findMany },
   };

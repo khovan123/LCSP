@@ -69,8 +69,9 @@ describe("AssessmentInterviewSnippetService pinned snapshot integration", () => 
     const archivedSource = overrides?.source ?? source;
     const prisma = {
       technicalEvidenceReport: {
-        findFirst: jest.fn(async (..._args: unknown[]): Promise<unknown> =>
-          Promise.resolve({
+        findFirst: jest
+          .fn<(...args: unknown[]) => Promise<unknown>>()
+          .mockResolvedValue({
             evidencePayload: {
               ai_discovery: {
                 findings: [
@@ -84,25 +85,25 @@ describe("AssessmentInterviewSnippetService pinned snapshot integration", () => 
               },
             },
           }),
-        ),
       },
       repositorySnapshot: {
-        findFirst: jest.fn(async (..._args: unknown[]): Promise<unknown> =>
-          Promise.resolve({
+        findFirst: jest
+          .fn<(...args: unknown[]) => Promise<unknown>>()
+          .mockResolvedValue({
             id: "snapshot-1",
             commitSha: "abc123",
           }),
-        ),
       },
       repositoryScanJob: {
-        findFirst: jest.fn(async (..._args: unknown[]): Promise<unknown> =>
-          Promise.resolve({ id: "scan-1" }),
-        ),
+        findFirst: jest
+          .fn<(...args: unknown[]) => Promise<unknown>>()
+          .mockResolvedValue({ id: "scan-1" }),
       },
     };
     const queryBus = {
-      execute: jest.fn(async (..._args: unknown[]): Promise<unknown> =>
-        Promise.resolve({
+      execute: jest
+        .fn<(...args: unknown[]) => Promise<unknown>>()
+        .mockResolvedValue({
           snapshotId: "snapshot-1",
           commitSha: overrides?.commitSha ?? "abc123",
           repositoryFullName: "owner/repository",
@@ -112,7 +113,6 @@ describe("AssessmentInterviewSnippetService pinned snapshot integration", () => 
             tarGzip("repository-abc123/src/gateway.ts", archivedSource),
           ),
         }),
-      ),
     };
     return {
       service: new AssessmentInterviewSnippetService(
