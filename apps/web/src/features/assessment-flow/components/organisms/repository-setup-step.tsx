@@ -11,11 +11,13 @@ import {
   GITHUB_INTEGRATION_ERROR_CODES,
   type CredentialProvider,
 } from "@lcsp/contracts/github-integration";
-import { resolveMessage } from "@lcsp/i18n";
+import { resolveMessage, type MessageKey } from "@lcsp/i18n";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
+import { ConfirmAccessDialog } from "@/components/organisms/confirm-access-dialog";
+import type { ConfirmAccessOtpValues } from "@/components/schemas/confirm-access-dialog.schema";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   PROVIDER_CREDENTIAL_DIALOG_MODES,
@@ -26,12 +28,20 @@ import { AgentTurn } from "@/features/workspace/components/molecules/agent-turn"
 import { TurnFooter } from "@/features/workspace/components/molecules/turn-footer";
 import { AssessmentComposer } from "@/features/workspace/components/organisms/assessment-composer";
 import { AssessmentTranscript } from "@/features/workspace/components/organisms/assessment-transcript";
+import {
+  useAuthSettingsProfileQuery,
+  useMfaVerifyMutation,
+  usePasswordReauthMutation,
+} from "@/lib/api/auth-queries";
 import { useProviderCredentialStatusesQuery } from "@/lib/api/github-repository-queries";
 import {
   connectAssessmentRepository,
   startRepositoryAnalysis,
 } from "@/lib/api/repository-analysis-client";
-import { API_OUTCOME_KINDS } from "@/lib/api/outcome-kinds";
+import {
+  API_OUTCOME_KINDS,
+  API_REDIRECT_LOCATIONS,
+} from "@/lib/api/outcome-kinds";
 import {
   useCreateAssessmentMutation,
   useDeleteAssessmentMutation,
@@ -55,6 +65,9 @@ export function RepositorySetupStep({
   const router = useRouter();
   const createAssessment = useCreateAssessmentMutation();
   const deleteAssessment = useDeleteAssessmentMutation();
+  const profileQuery = useAuthSettingsProfileQuery();
+  const verifyMutation = useMfaVerifyMutation();
+  const passwordReauthMutation = usePasswordReauthMutation();
   const credentialStatuses = useProviderCredentialStatusesQuery();
   const [workingAssessmentId, setWorkingAssessmentId] = useState<
     string | undefined
@@ -66,6 +79,21 @@ export function RepositorySetupStep({
     useState<ProviderCredentialDialogMode>(
       PROVIDER_CREDENTIAL_DIALOG_MODES.connect,
     );
+
+  const [confirmAccessOpen, setConfirmAccessOpen] = useState(false);
+  const [pendingReauthRetry, setPendingReauthRetry] = useState<
+    (() => void) | null
+  >(null);
+  const [confirmAccessMfaError, setConfirmAccessMfaError] = useState<{
+    titleKey: MessageKey;
+    detailKey: MessageKey;
+  } | null>(null);
+  const [confirmAccessPasswordError, setConfirmAccessPasswordError] = useState<{
+    titleKey: MessageKey;
+    detailKey: MessageKey;
+  } | null>(null);
+
+  const profile = profileQuery.data;
 
   const form = useForm<RepositorySetupFormData>({
     resolver: zodResolver(repositorySetupSchema),
@@ -101,11 +129,101 @@ export function RepositorySetupStep({
       : undefined;
   const activeErrorKey = validationErrorKey ?? submitErrorKey;
 
+  function closeConfirmAccessDialog(cancelled = true) {
+    if (cancelled) {
+      setPendingReauthRetry(null);
+    }
+    setConfirmAccessOpen(false);
+    setConfirmAccessMfaError(null);
+    setConfirmAccessPasswordError(null);
+  }
+
+  async function handleConfirmAccessPasswordSubmit(values: {
+    password: string;
+  }) {
+    if (!pendingReauthRetry) return;
+    setConfirmAccessPasswordError(null);
+    const outcome = await passwordReauthMutation
+      .mutateAsync(values)
+      .catch(() => ({
+        kind: API_OUTCOME_KINDS.error,
+        titleKey: "pages.signIn.errors.requestFailedTitle" as const,
+        detailKey: "pages.signIn.errors.requestFailedDetail" as const,
+      }));
+
+    if (outcome.kind === API_OUTCOME_KINDS.invalid) {
+      setConfirmAccessPasswordError({
+        titleKey: "auth.errors.invalidCredentials.title",
+        detailKey: "auth.errors.invalidCredentials.detail",
+      });
+      return;
+    }
+
+    if (outcome.kind === API_OUTCOME_KINDS.sessionInvalid) {
+      setConfirmAccessPasswordError({
+        titleKey: "auth.errors.sessionInvalid.title",
+        detailKey: "auth.errors.sessionInvalid.detail",
+      });
+      return;
+    }
+
+    if (outcome.kind === API_OUTCOME_KINDS.error) {
+      setConfirmAccessPasswordError({
+        titleKey: outcome.titleKey,
+        detailKey: outcome.detailKey,
+      });
+      return;
+    }
+
+    const retry = pendingReauthRetry;
+    setPendingReauthRetry(null);
+    closeConfirmAccessDialog(false);
+    retry();
+  }
+
+  async function handleConfirmAccessOtpSubmit(values: ConfirmAccessOtpValues) {
+    setConfirmAccessMfaError(null);
+    const outcome = await verifyMutation.mutateAsync(values).catch(() => ({
+      kind: API_OUTCOME_KINDS.error,
+      titleKey: "pages.mfaVerify.errors.requestFailedTitle" as const,
+      detailKey: "pages.mfaVerify.errors.requestFailedDetail" as const,
+    }));
+
+    if (outcome.kind === API_OUTCOME_KINDS.verified) {
+      await profileQuery.refetch();
+      if (!pendingReauthRetry) {
+        closeConfirmAccessDialog(false);
+        return;
+      }
+      const retry = pendingReauthRetry;
+      setPendingReauthRetry(null);
+      closeConfirmAccessDialog(false);
+      retry();
+      return;
+    }
+
+    setConfirmAccessMfaError(
+      outcome.kind === API_OUTCOME_KINDS.sessionInvalid
+        ? {
+            titleKey: "auth.errors.sessionInvalid.title",
+            detailKey: "auth.errors.sessionInvalid.detail",
+          }
+        : outcome.kind === API_OUTCOME_KINDS.mfaRequired
+          ? {
+              titleKey: "auth.errors.mfaRequired.title",
+              detailKey: "auth.errors.mfaRequired.detail",
+            }
+          : {
+              titleKey: outcome.titleKey,
+              detailKey: outcome.detailKey,
+            },
+    );
+  }
+
   const handleSubmit = form.handleSubmit(async (data) => {
     setIsSubmitting(true);
     setSubmitErrorKey(undefined);
     let newlyCreatedAssessmentId: string | undefined;
-    let connectionEstablished = false;
 
     try {
       let assessmentId = workingAssessmentId;
@@ -126,7 +244,6 @@ export function RepositorySetupStep({
         assessmentId,
         data.repositoryUrl,
       );
-      connectionEstablished = true;
 
       await startRepositoryAnalysis(assessmentId, {
         connectionId: connection.connectionId,
@@ -134,9 +251,8 @@ export function RepositorySetupStep({
       });
       router.replace(`/assessments/${assessmentId}`);
     } catch (error) {
-      // Only rollback newly created assessment if connection itself failed before source setup
-      // Per E5, if connection is established, preserve assessment & source so user can retry scan
-      if (newlyCreatedAssessmentId && !connectionEstablished) {
+      // Full rollback for newly created uninitialized assessment if ANY step fails before scan job is started
+      if (newlyCreatedAssessmentId) {
         try {
           await deleteAssessment.mutateAsync(newlyCreatedAssessmentId);
           setWorkingAssessmentId(undefined);
@@ -216,9 +332,65 @@ export function RepositorySetupStep({
           mode={credentialDialogMode}
           onModeChange={setCredentialDialogMode}
           onOpenChange={setCredentialDialogOpen}
+          onReauthenticate={(retry) => {
+            setPendingReauthRetry(() => retry);
+            setConfirmAccessPasswordError(null);
+            setConfirmAccessMfaError(null);
+            setConfirmAccessOpen(true);
+          }}
           open={credentialDialogOpen}
           provider={credentialProvider}
           status={activeCredentialStatus ?? null}
+        />
+      ) : null}
+      {profile ? (
+        <ConfirmAccessDialog
+          open={confirmAccessOpen}
+          onOpenChange={(open) => {
+            if (open) {
+              setConfirmAccessOpen(true);
+              return;
+            }
+            closeConfirmAccessDialog(true);
+          }}
+          onPasswordSubmit={handleConfirmAccessPasswordSubmit}
+          accountLabelKey="pages.workspace.settingsHub.reauth.accountLabel"
+          accountHandle={profile.email}
+          avatarFallback={profile.email.slice(0, 1).toUpperCase()}
+          titleKey="pages.workspace.settingsHub.reauth.title"
+          descriptionKey="pages.workspace.settingsHub.reauth.description"
+          passwordLabelKey="pages.signIn.passwordLabel"
+          passwordPlaceholderKey="pages.workspace.settingsHub.reauth.passwordPlaceholder"
+          forgotPasswordHref={API_REDIRECT_LOCATIONS.recoveryRequest}
+          forgotPasswordLabelKey="pages.signIn.forgotPassword"
+          supportTitleKey="pages.workspace.settingsHub.reauth.supportTitle"
+          confirmLabelKey="pages.workspace.settingsHub.reauth.confirm"
+          confirmingLabelKey="pages.workspace.settingsHub.reauth.confirming"
+          closeLabelKey="pages.workspace.settingsHub.reauth.close"
+          errorTitleKey={confirmAccessPasswordError?.titleKey}
+          errorKey={confirmAccessPasswordError?.detailKey ?? null}
+          mfa={{
+            isEnabled: profile.mfa_enrolled,
+            isConfigured: profile.mfa_enrolled,
+            onSubmit: handleConfirmAccessOtpSubmit,
+            otpLabelKey: "pages.mfaVerify.otpLabel",
+            otpDescriptionKey: "pages.mfaVerify.otpDescription",
+            otpPlaceholderKey:
+              "pages.workspace.settingsHub.reauth.otpPlaceholder",
+            verifyLabelKey: "pages.workspace.settingsHub.reauth.verify",
+            verifyingLabelKey:
+              "pages.workspace.settingsHub.reauth.verifying",
+            switchToMfaLabelKey: profile.mfa_enrolled
+              ? "pages.workspace.settingsHub.reauth.useAuthenticator"
+              : "pages.workspace.settingsHub.reauth.setUpMfa",
+            switchToPasswordLabelKey:
+              "pages.workspace.settingsHub.reauth.usePassword",
+            onSetupRequest: () => {
+              router.push(API_REDIRECT_LOCATIONS.mfaEnroll);
+            },
+            errorTitleKey: confirmAccessMfaError?.titleKey,
+            errorKey: confirmAccessMfaError?.detailKey ?? null,
+          }}
         />
       ) : null}
     </main>
