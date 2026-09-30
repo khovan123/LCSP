@@ -489,30 +489,26 @@ function AssessmentInterviewFlow({
   }
 
   const answerHistory = interview.answerHistory;
-  const interviewTranscript = useMemo(
-    () =>
-      interleaveInterviewTranscript(answerHistory, [
-        {
-          stage: ASSESSMENT_AGENT_STREAM_STAGES.interview,
-          groups: groupAgentStreamEventsByRun(
-            stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.interview],
-          ),
-        },
-        {
-          stage: ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
-          groups: groupAgentStreamEventsByRun(
-            stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis],
-          ),
-        },
-        {
-          stage: ASSESSMENT_AGENT_STREAM_STAGES.gate,
-          groups: groupAgentStreamEventsByRun(
-            stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.gate],
-          ),
-        },
-      ]),
-    [answerHistory, stageEvents],
-  );
+  const interviewTranscript = interleaveInterviewTranscript(answerHistory, [
+    {
+      stage: ASSESSMENT_AGENT_STREAM_STAGES.interview,
+      groups: groupAgentStreamEventsByRun(
+        stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.interview],
+      ),
+    },
+    {
+      stage: ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
+      groups: groupAgentStreamEventsByRun(
+        stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis],
+      ),
+    },
+    {
+      stage: ASSESSMENT_AGENT_STREAM_STAGES.gate,
+      groups: groupAgentStreamEventsByRun(
+        stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.gate],
+      ),
+    },
+  ]);
   const scannerTurnEvents = useMemo(
     () =>
       resetScannerActivity
@@ -850,9 +846,7 @@ function AssessmentInterviewFlow({
               <AgentTurn
                 content={
                   <AgentMessage>
-                    <ThoughtLine
-                      label={interviewThinkingLabel}
-                    />
+                    <ThoughtLine label={interviewThinkingLabel} />
                     <p className="mt-2">
                       {t("pages.assessmentFlow.interview.readyDescription")}
                     </p>
@@ -895,9 +889,7 @@ function AssessmentInterviewFlow({
               <AgentTurn
                 content={
                   <AgentMessage>
-                    <ThoughtLine
-                      label={interviewThinkingLabel}
-                    />
+                    <ThoughtLine label={interviewThinkingLabel} />
                     <p className="mt-2">
                       {t("pages.assessmentFlow.interview.readyDescription")}
                     </p>
@@ -953,18 +945,16 @@ function AssessmentInterviewFlow({
                   {t("pages.appShell.chatActivityStatuses.failed")}
                 </AgentMessage>
               </AgentTurn>
-            ) : (
-              handoffInLatestActivity ? null : (
-                <AgentTurn
-                  footer={
-                    interviewTurnTimestamp ? (
-                      <TurnFooter timestamp={interviewTurnTimestamp} />
-                    ) : null
-                  }
-                >
-                  <AgentMessage>{handoffPanel}</AgentMessage>
-                </AgentTurn>
-              )
+            ) : handoffInLatestActivity ? null : (
+              <AgentTurn
+                footer={
+                  interviewTurnTimestamp ? (
+                    <TurnFooter timestamp={interviewTurnTimestamp} />
+                  ) : null
+                }
+              >
+                <AgentMessage>{handoffPanel}</AgentMessage>
+              </AgentTurn>
             )}
 
             <AgentStreamTimeline events={stageEvents.unstaged} />
@@ -973,9 +963,7 @@ function AssessmentInterviewFlow({
               <AgentTurn
                 content={
                   <AgentMessage>
-                    <ThoughtLine
-                      label={agentThinkingLabel(false, [])}
-                    />
+                    <ThoughtLine label={agentThinkingLabel(false, [])} />
                     <p className="mt-2">
                       {t("pages.assessmentFlow.postFinding.description")}
                     </p>
