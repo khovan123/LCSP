@@ -205,7 +205,8 @@ class _LedgerAnalystAgent:
         messages = payload.get("messages") if isinstance(payload, dict) else []
         instruction = ""
         if messages:
-            content = getattr(messages[-1], "content", None)
+            last = messages[-1]
+            content = last.get("content") if isinstance(last, dict) else getattr(last, "content", None)
             if isinstance(content, str):
                 instruction = content
             elif isinstance(content, list):
