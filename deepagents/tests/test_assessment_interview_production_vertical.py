@@ -289,7 +289,7 @@ def _completed_ledger_row(context: Any) -> dict[str, Any]:
     rule_id = context.engineering_rule_ids[0]
     criteria = []
     for criterion_id in context.criterion_ids:
-        evidence_ref = f"ev:{context.commit_sha}:src/recommendation_service.py:12-24"
+        evidence_ref = f"source:{context.commit_sha}:src/recommendation_service.py#L12-L24"
         criteria.append(
             {
                 "criterionId": criterion_id,
