@@ -250,7 +250,7 @@ def _needs_context_ledger_row(context: Any) -> dict[str, Any]:
     rule_id = context.engineering_rule_ids[0]
     digest = hashlib.sha256(ANALYST_QUESTION.encode("utf-8")).hexdigest()[:12]
     return {
-        "resultId": f"rar_prod_needs_{this_call_id(context)}",
+        "resultId": f"rar_prod_needs_{_call_id(context)}",
         "assessmentId": context.assessment_id,
         "engineeringRuleId": rule_id,
         "engineeringRuleVersion": context.engineering_rule_version,
@@ -310,7 +310,7 @@ def _completed_ledger_row(context: Any) -> dict[str, Any]:
             }
         )
     return {
-        "resultId": f"rar_prod_completed_{this_call_id(context)}",
+        "resultId": f"rar_prod_completed_{_call_id(context)}",
         "assessmentId": context.assessment_id,
         "engineeringRuleId": rule_id,
         "engineeringRuleVersion": context.engineering_rule_version,
