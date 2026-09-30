@@ -224,6 +224,7 @@ export function RepositorySetupStep({
     setIsSubmitting(true);
     setSubmitErrorKey(undefined);
     let newlyCreatedAssessmentId: string | undefined;
+    let connectionEstablished = false;
 
     try {
       let assessmentId = workingAssessmentId;
@@ -244,6 +245,7 @@ export function RepositorySetupStep({
         assessmentId,
         data.repositoryUrl,
       );
+      connectionEstablished = true;
 
       await startRepositoryAnalysis(assessmentId, {
         connectionId: connection.connectionId,
@@ -251,8 +253,9 @@ export function RepositorySetupStep({
       });
       router.replace(`/assessments/${assessmentId}`);
     } catch (error) {
-      // Full rollback for newly created uninitialized assessment if ANY step fails before scan job is started
-      if (newlyCreatedAssessmentId) {
+      // Rollback newly created uninitialized assessment only if connection itself failed before source setup
+      // Per E5, if connection is established, preserve assessment & source so user can retry scan
+      if (newlyCreatedAssessmentId && !connectionEstablished) {
         try {
           await deleteAssessment.mutateAsync(newlyCreatedAssessmentId);
           setWorkingAssessmentId(undefined);

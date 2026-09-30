@@ -45,11 +45,12 @@ export function deriveAssessmentFlowRuntime(input: {
     input.evidenceReport?.status ===
       TECHNICAL_EVIDENCE_REPORT_STATUSES.rejected;
 
-  const stage = !input.hasRepositoryConnection
-    ? ASSESSMENT_FLOW_STAGES.repositorySetup
-    : evidenceAccepted
-      ? ASSESSMENT_FLOW_STAGES.interview
-      : ASSESSMENT_FLOW_STAGES.scanner;
+  const stage =
+    !input.hasRepositoryConnection || !input.snapshot
+      ? ASSESSMENT_FLOW_STAGES.repositorySetup
+      : evidenceAccepted
+        ? ASSESSMENT_FLOW_STAGES.interview
+        : ASSESSMENT_FLOW_STAGES.scanner;
 
   const activities: ScannerActivityItem[] = SCANNER_ACTIVITY_CONFIG.map(
     (activity) => ({
