@@ -159,14 +159,13 @@ export type AgentStreamStageEvents = {
 };
 
 export const RUNTIME_THINKING_PHASES = {
-  planner: "PLANNER",
-  investigator: "INVESTIGATOR",
+  analysis: "ANALYSIS",
 } as const;
 
 export type RuntimeThinkingPhase =
   (typeof RUNTIME_THINKING_PHASES)[keyof typeof RUNTIME_THINKING_PHASES];
 
-/** Customer-facing aggregate of internal Planner/Investigator runtime telemetry. */
+/** Customer-facing aggregate of internal rule-selection/analysis runtime telemetry. */
 export type RuntimeThinkingItem = {
   id: string;
   phase: RuntimeThinkingPhase;

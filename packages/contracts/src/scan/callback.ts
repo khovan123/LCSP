@@ -106,12 +106,19 @@ export const ENGINEERING_LIMITATION_CODES = {
   investigationReturnedNoValidClaims: "INVESTIGATION_RETURNED_NO_VALID_CLAIMS",
   modelLimitationCodeInvalid: "MODEL_LIMITATION_CODE_INVALID",
   engineeringEvidenceInsufficient: "ENGINEERING_EVIDENCE_INSUFFICIENT",
-  needsScannerEnrichment: "NEEDS_SCANNER_ENRICHMENT",
   conflictingEngineeringEvidence: "CONFLICTING_ENGINEERING_EVIDENCE",
   dynamicPathUnresolved: "DYNAMIC_PATH_UNRESOLVED",
   externalBoundaryUnresolved: "EXTERNAL_BOUNDARY_UNRESOLVED",
   graphCoverageLimited: "GRAPH_COVERAGE_LIMITED",
   searchCoverageIncomplete: "SEARCH_COVERAGE_INCOMPLETE",
+  ruleConclusionWithheld: "RULE_CONCLUSION_WITHHELD",
+  activeCustomerConditionPending: "ACTIVE_CUSTOMER_CONDITION_PENDING",
+  conditionAskedUnresolved: "CONDITION_ASKED_UNRESOLVED",
+  interviewRegistrationFailed: "INTERVIEW_REGISTRATION_FAILED",
+  interviewNeedInvalid: "INTERVIEW_NEED_INVALID",
+  upstreamApplicabilityFactPending: "UPSTREAM_APPLICABILITY_FACT_PENDING",
+  criterionReanalysisPending: "CRITERION_REANALYSIS_PENDING",
+  agentDidNotSubmitCriterion: "AGENT_DID_NOT_SUBMIT_CRITERION",
 } as const;
 
 export type EngineeringLimitationCode =

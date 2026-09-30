@@ -294,7 +294,7 @@ function AssessmentInterviewFlow({
     assessmentStatus,
   );
   const postFinding = selectPostFindingPresentation(normalized);
-  // Kept only as an autoScrollKey signal below: Planner/Investigator activity
+  // Kept only as an autoScrollKey signal below: Rule-analysis activity
   // itself now renders exclusively through interviewTranscript (per-turn,
   // interleaved with its own Q&A), not as these aggregate summary rows.
   const runtimeThinkingItems = selectRuntimeThinkingItems(normalized);
@@ -322,8 +322,7 @@ function AssessmentInterviewFlow({
   const downstreamTurnRunning = useMemo(
     () =>
       [
-        ASSESSMENT_AGENT_STREAM_STAGES.planner,
-        ASSESSMENT_AGENT_STREAM_STAGES.investigate,
+        ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
         ASSESSMENT_AGENT_STREAM_STAGES.gate,
       ].some(
         (stage) =>
@@ -332,14 +331,13 @@ function AssessmentInterviewFlow({
       ),
     [stageEvents],
   );
-  // A customer stop of Planner/Investigator/Gate: Continue resumes it through
-  // the pipeline (plan and finished rules are reused), not an Interview turn.
+  // A customer stop of rule analysis/Gate: Continue resumes it through
+  // the pipeline (finished rules are reused), not an Interview turn.
   const downstreamTurnPaused = useMemo(
     () =>
       !downstreamTurnRunning &&
       [
-        ASSESSMENT_AGENT_STREAM_STAGES.planner,
-        ASSESSMENT_AGENT_STREAM_STAGES.investigate,
+        ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
         ASSESSMENT_AGENT_STREAM_STAGES.gate,
       ].some(
         (stage) =>
@@ -353,12 +351,11 @@ function AssessmentInterviewFlow({
   // Which downstream stage is actively running right now, if any — drives a
   // composer placeholder that reflects what's really happening (planning,
   // investigating, reviewing) instead of always saying "waiting on Interview"
-  // while Planner/Investigator/Gate are the ones doing the work.
+  // while rule analysis/Gate are the ones doing the work.
   const runningDownstreamStage = useMemo(() => {
     const priority = [
       ASSESSMENT_AGENT_STREAM_STAGES.gate,
-      ASSESSMENT_AGENT_STREAM_STAGES.investigate,
-      ASSESSMENT_AGENT_STREAM_STAGES.planner,
+      ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
     ] as const;
     return (
       priority.find(
@@ -371,11 +368,9 @@ function AssessmentInterviewFlow({
   const downstreamPlaceholderKey =
     runningDownstreamStage === ASSESSMENT_AGENT_STREAM_STAGES.gate
       ? "pages.assessmentFlow.interview.gatePlaceholder"
-      : runningDownstreamStage === ASSESSMENT_AGENT_STREAM_STAGES.investigate
+      : runningDownstreamStage === ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis
         ? "pages.assessmentFlow.interview.investigatePlaceholder"
-        : runningDownstreamStage === ASSESSMENT_AGENT_STREAM_STAGES.planner
-          ? "pages.assessmentFlow.interview.plannerPlaceholder"
-          : null;
+        : null;
   const runtimeInterviewState = interviewQuery.data;
   const interviewTurnTimestamp = normalized.identity.audit?.timestamp;
   const submitAnswer = useSubmitAssessmentInterviewAnswerMutation(assessmentId);
@@ -504,15 +499,9 @@ function AssessmentInterviewFlow({
           ),
         },
         {
-          stage: ASSESSMENT_AGENT_STREAM_STAGES.planner,
+          stage: ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
           groups: groupAgentStreamEventsByRun(
-            stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.planner],
-          ),
-        },
-        {
-          stage: ASSESSMENT_AGENT_STREAM_STAGES.investigate,
-          groups: groupAgentStreamEventsByRun(
-            stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.investigate],
+            stageEvents.byStage[ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis],
           ),
         },
         {
@@ -730,7 +719,7 @@ function AssessmentInterviewFlow({
     requestContinuePipeline();
   }
 
-  // Resuming a stopped Planner/Investigator does not depend on Interview
+  // Resuming a stopped rule analysis does not depend on Interview
   // composer state; the API decides whether the pipeline can continue.
   function handleResumeStoppedPipeline() {
     if (continuePipeline.isPending) return;
@@ -876,6 +865,7 @@ function AssessmentInterviewFlow({
                 }
                 terminalAction={
                   <AssessmentQuestionTurn
+                    assessmentId={assessmentId}
                     question={interview.questionTurnProps.question}
                     answerHistoryVisible={answerHistory.length > 0}
                     selectedChoiceIds={activeDraft.selectedChoiceIds}
@@ -1042,7 +1032,7 @@ function AssessmentInterviewFlow({
           interviewTurnState === "paused" ||
           downstreamTurnPaused
         }
-        // One stop covers the Interview turn and the Planner/Investigator run.
+        // One stop covers the Interview turn and the rule-analysis run.
         onInterruptTurn={
           anyAgentTurnRunning
             ? () => interruptInterviewTurn.mutate()

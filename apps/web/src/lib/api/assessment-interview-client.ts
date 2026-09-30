@@ -6,6 +6,7 @@ import {
   ASSESSMENT_INTERVIEW_FLAGS,
   ASSESSMENT_INTERVIEW_OUTCOMES,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
+  AI_DISCOVERY_SNIPPET_POLICIES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   FINAL_ASSESSMENT_RESULT_STATUSES,
   isPostFindingRuntimePhase,
@@ -25,6 +26,8 @@ import {
   type AssessmentInterviewQuestion,
   type AssessmentInterviewQuestionChoice,
   type AssessmentInterviewRuntimeState,
+  type AssessmentInterviewSourceSnippet,
+  type AiDiscoverySnippetRef,
   type CustomerAnswer,
   type NonEmptyArray,
   type SubmitInterviewAnswerCommand,
@@ -41,6 +44,15 @@ import { API_OUTCOME_KINDS } from "./outcome-kinds";
 export async function getAssessmentInterviewState(assessmentId: string) {
   return apiJson<AssessmentInterviewRuntimeState>(
     `/api/assessments/${encodeURIComponent(assessmentId)}/interview`,
+  );
+}
+
+export async function getAssessmentInterviewSourceSnippet(
+  assessmentId: string,
+  questionId: string,
+) {
+  return apiJson<AssessmentInterviewSourceSnippet>(
+    `/api/assessments/${encodeURIComponent(assessmentId)}/interview/questions/${encodeURIComponent(questionId)}/source-snippet`,
   );
 }
 
@@ -311,6 +323,37 @@ export function sanitizeAssessmentInterviewState(
   };
 }
 
+export function sanitizeAssessmentInterviewSourceSnippet(
+  value: unknown,
+): AssessmentInterviewSourceSnippet | null {
+  const record = objectRecord(value);
+  const snippetRef = sanitizeSnippetRef(record?.snippetRef);
+  if (
+    !record ||
+    !snippetRef ||
+    !Array.isArray(record.lines) ||
+    typeof record.redacted !== "boolean" ||
+    typeof record.truncated !== "boolean"
+  ) {
+    return null;
+  }
+  const lines = record.lines.map((value) => {
+    const line = objectRecord(value);
+    return line && Number.isInteger(line.line) && typeof line.text === "string"
+      ? { line: line.line as number, text: line.text }
+      : null;
+  });
+  if (lines.some((line) => line === null)) {
+    return null;
+  }
+  return {
+    snippetRef,
+    lines: lines.filter(isDefined),
+    redacted: record.redacted,
+    truncated: record.truncated,
+  };
+}
+
 export function sanitizeAssessmentPostFindingState(
   value: unknown,
 ): AssessmentPostFindingRuntimeState | null {
@@ -404,7 +447,41 @@ function sanitizeQuestion(value: unknown): AssessmentInterviewQuestion | null {
       (item): item is string => typeof item === "string",
     );
   }
+  const snippetRef = sanitizeSnippetRef(record.snippetRef);
+  if (snippetRef) {
+    question.snippetRef = snippetRef;
+  }
   return question;
+}
+
+function sanitizeSnippetRef(value: unknown): AiDiscoverySnippetRef | null {
+  const record = objectRecord(value);
+  if (
+    !record ||
+    typeof record.snapshot_id !== "string" ||
+    typeof record.commit_sha !== "string" ||
+    typeof record.file_path !== "string" ||
+    (record.symbol !== undefined && typeof record.symbol !== "string") ||
+    !Number.isInteger(record.start_line) ||
+    !Number.isInteger(record.end_line) ||
+    (record.start_line as number) < 1 ||
+    (record.end_line as number) < (record.start_line as number) ||
+    typeof record.evidence_hash !== "string" ||
+    record.snippet_policy !==
+      AI_DISCOVERY_SNIPPET_POLICIES.pinnedSnapshotBoundedRedacted
+  ) {
+    return null;
+  }
+  return {
+    snapshot_id: record.snapshot_id,
+    commit_sha: record.commit_sha,
+    file_path: record.file_path,
+    ...(record.symbol ? { symbol: record.symbol } : {}),
+    start_line: record.start_line as number,
+    end_line: record.end_line as number,
+    evidence_hash: record.evidence_hash,
+    snippet_policy: record.snippet_policy,
+  };
 }
 
 function sanitizeQuestionChoice(

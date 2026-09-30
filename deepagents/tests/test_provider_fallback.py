@@ -93,7 +93,7 @@ def _openai_model():
 
 def _llm7_model():
     return ChatOpenAI(
-        model="GLM-5.3-Flash",
+        model="minimax-m2.7",
         base_url="https://api.llm7.io/v1",
         use_responses_api=False,
         **credential_init_kwargs("llm7"),
@@ -191,7 +191,7 @@ def test_terminal_billing_delivery_failure_does_not_enter_provider_fallback(monk
     assert len(provider_calls) == 1
 
 
-def test_llm7_402_fallback_to_google_settles_single_successful_attempt(monkeypatch):
+def test_llm7_402_fallback_settles_failed_attempt_then_success(monkeypatch):
     import middleware.provider_fallback as fallback_module
 
     monkeypatch.setattr(fallback_module, "model_provider", lambda model: model.provider)
@@ -256,10 +256,21 @@ def test_llm7_402_fallback_to_google_settles_single_successful_attempt(monkeypat
         "reservation-1",
     ]
     assert len({invocation_id for _, invocation_id in claims}) == 2
-    assert len(payloads) == 1
-    assert payloads[0].reservationId == "reservation-1"
-    assert payloads[0].provider == "GOOGLE_GENAI"
-    assert payloads[0].invocationId == claims[-1][1]
+    assert len(payloads) == 2
+    assert [payload.reservationId for payload in payloads] == [
+        "reservation-1",
+        "reservation-1",
+    ]
+    assert [payload.provider for payload in payloads] == [
+        "LLM7",
+        "GOOGLE_GENAI",
+    ]
+    assert payloads[0].inputTokens is None
+    assert payloads[0].outputTokens is None
+    assert [payload.invocationId for payload in payloads] == [
+        claims[0][1],
+        claims[1][1],
+    ]
 
 
 def test_llm7_402_opens_run_scoped_circuit_and_skips_next_primary(monkeypatch):
@@ -337,7 +348,14 @@ def test_llm7_402_opens_run_scoped_circuit_and_skips_next_primary(monkeypatch):
     assert provider_calls == ["llm7", "google_genai", "google_genai"]
     assert session.provider_route_disabled("llm7") is True
     assert len(client.claims) == 3
-    assert len(client.payloads) == 2
+    assert len(client.payloads) == 3
+    assert [payload.provider for payload in client.payloads] == [
+        "LLM7",
+        "GOOGLE_GENAI",
+        "GOOGLE_GENAI",
+    ]
+    assert client.payloads[0].inputTokens is None
+    assert client.payloads[0].outputTokens is None
     assert [event_type for event_type, _ in stream_events] == [
         "PROVIDER_FALLBACK",
     ]
@@ -383,9 +401,9 @@ def test_llm7_upstream_unprocessable_fallback_preserves_tool_continuation_and_op
         reservation_id="reservation-tools",
         agent_role="investigator",
         reserved_provider="LLM7",
-        reserved_model="GLM-5.3-Flash",
+        reserved_model="minimax-m2.7",
         authorized_models={
-            ("LLM7", "GLM-5.3-Flash"),
+            ("LLM7", "minimax-m2.7"),
             ("GOOGLE_GENAI", "gemini-3.5-flash-lite"),
         },
         max_invocations=16,
@@ -409,7 +427,7 @@ def test_llm7_upstream_unprocessable_fallback_preserves_tool_continuation_and_op
         ),
     ]
     request = _BillingRequest(
-        _BillingModel("llm7", "GLM-5.3-Flash"),
+        _BillingModel("llm7", "minimax-m2.7"),
         messages=messages,
     )
     provider_calls = []
@@ -456,11 +474,14 @@ def test_llm7_upstream_unprocessable_fallback_preserves_tool_continuation_and_op
     ]
     assert session.provider_route_disabled("llm7") is True
     assert len(client.claims) == 3
-    assert len(client.payloads) == 2
+    assert len(client.payloads) == 3
     assert [payload.provider for payload in client.payloads] == [
+        "LLM7",
         "GOOGLE_GENAI",
         "GOOGLE_GENAI",
     ]
+    assert client.payloads[0].inputTokens is None
+    assert client.payloads[0].outputTokens is None
     assert [event_type for event_type, _ in stream_events] == [
         "PROVIDER_FALLBACK",
     ]

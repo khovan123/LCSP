@@ -11,6 +11,7 @@ from tools.common.capabilities.agent_runtime.boundary import (
     AgentBoundaryBase,
     NonRetryableAgentBoundaryError,
 )
+from middleware.failure_policy import is_provider_model_unavailable
 from tools.common.capabilities.platform.api_client import WorkerApiClient
 from tools.common.capabilities.platform.callback_schemas import (
     CallbackResponse,
@@ -52,10 +53,6 @@ class RepositoryAnalysisBoundary(AgentBoundaryBase):
         correlation_id = (
             _optional(message, "correlationId", "correlation_id") or correlationId
         )
-        targeted_scope = message.get("targetedReanalysis")
-        if not isinstance(targeted_scope, dict):
-            targeted_scope = None
-
         self._event(
             scan_job_id,
             "RUN_STARTED",
@@ -65,13 +62,20 @@ class RepositoryAnalysisBoundary(AgentBoundaryBase):
             input_summary={"snapshotId": snapshot_id, "commitSha": commit_sha},
         )
 
+        self._event(
+            scan_job_id,
+            "TOOL_STARTED",
+            "RUNNING",
+            "ai_discovery",
+            "Bounded AI discovery started against the hydrated repository.",
+            input_summary={"snapshotId": snapshot_id, "commitSha": commit_sha},
+        )
+
         try:
             artifact = self._analyzer.analyze(
                 snapshot_id=snapshot_id,
                 commit_sha=commit_sha,
                 scan_job_id=scan_job_id,
-                targeted_scope=targeted_scope,
-                assessment_id=_optional(message, "assessmentId", "assessment_id"),
             )
             callback = ScanCallbackPayload(
                 status=(
@@ -113,8 +117,6 @@ class RepositoryAnalysisBoundary(AgentBoundaryBase):
             output_summary={
                 "coverageState": artifact.result.coverage_state,
                 "aiGate": artifact.result.ai_discovery.gate,
-                "nodes": len(artifact.result.nodes),
-                "edges": len(artifact.result.edges),
                 "anchors": len(artifact.result.source_anchors),
             },
         )
@@ -168,6 +170,18 @@ def _optional(message: dict[str, Any], *names: str) -> str | None:
 
 
 def _terminal(error: Exception) -> bool:
+    """Whether this failure means the scan itself can never succeed.
+
+    The status codes here describe *our* API rejecting the scan callback — a
+    payload or state problem that redelivery cannot fix. A model provider also
+    reports an unusable model route as 400/404, which looks identical but is a
+    passing outage: the snapshot, the repository and the callback are all fine,
+    and the same scan succeeds once a route is available. Failing it terminally
+    marks the scan job FAILED and leaves the assessment with no evidence, so it
+    stays retryable and is left to provider fallback and queue redelivery.
+    """
+    if is_provider_model_unavailable(error):
+        return False
     if isinstance(error, httpx.HTTPStatusError):
         return error.response.status_code in _TERMINAL_SCAN_STATUS_CODES
     status_code = getattr(error, "status_code", None)

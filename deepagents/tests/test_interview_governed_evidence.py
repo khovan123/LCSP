@@ -69,7 +69,7 @@ def test_interview_contract_rejects_compatibility_only_and_legacy_modes() -> Non
 def test_interview_contract_requires_canonical_confirm_adjust_shape() -> None:
     result = InterviewResult(
         expectedContextRevision=0,
-        mode="INVESTIGATOR_RESOLUTION",
+        mode="BUSINESS_CONTEXT_RESOLUTION",
         outcome="WAITING_FOR_CUSTOMER",
         activeQuestion={
             "id": "confirm-approval",
@@ -97,7 +97,7 @@ def test_interview_contract_requires_canonical_confirm_adjust_shape() -> None:
     with pytest.raises(ValueError):
         InterviewResult(
             expectedContextRevision=0,
-            mode="INVESTIGATOR_RESOLUTION",
+            mode="BUSINESS_CONTEXT_RESOLUTION",
             outcome="WAITING_FOR_CUSTOMER",
             activeQuestion={
                 "id": "invalid-confirm",
@@ -600,7 +600,7 @@ def test_sanitize_customer_facing_text_strips_internal_orchestration_tokens() ->
         "by the customer through preceding confirmation turns, establishing sufficient "
         "and confirmed business context with CUSTOMER_CONFIRMED authority to proceed "
         "to CONTEXT_READY. The targeted loop uses resolutionCriteria before "
-        "CONTEXT_RESOLVED via INVESTIGATOR_RESOLUTION and TARGETED_EXACT_RESUME_PIN, "
+        "CONTEXT_RESOLVED via BUSINESS_CONTEXT_RESOLUTION and TARGETED_EXACT_RESUME_PIN, "
         "or WAITING_FOR_CUSTOMER / NEEDS_INPUT."
     )
     sanitized = sanitize_customer_facing_text(raw_text)
@@ -609,7 +609,7 @@ def test_sanitize_customer_facing_text_strips_internal_orchestration_tokens() ->
         "CUSTOMER_CONFIRMED",
         "CONTEXT_READY",
         "CONTEXT_RESOLVED",
-        "INVESTIGATOR_RESOLUTION",
+        "BUSINESS_CONTEXT_RESOLUTION",
         "TARGETED_EXACT_RESUME_PIN",
         "WAITING_FOR_CUSTOMER",
         "NEEDS_INPUT",

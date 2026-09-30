@@ -1,6 +1,6 @@
 # Verified Episode Memory Operations
 
-Verified episodes are reusable execution examples for Planner and Investigator.
+Verified episodes are reusable execution examples for the Repository Analyst.
 They are not factual authority for the current assessment run.
 
 Current production scope:

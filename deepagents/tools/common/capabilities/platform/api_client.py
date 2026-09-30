@@ -172,7 +172,9 @@ class WorkerApiClient:
         from tools.common.capabilities.platform.rbac_client import RbacClient
         self.rbac_client = RbacClient(self._base_url, self._api_key)
 
-    def _post_with_retry(self, path: str, payload: dict, *, redact: bool = True) -> dict:
+    def _post_with_retry(
+        self, path: str, payload: dict, *, redact: bool = True, method: str = "POST"
+    ) -> dict:
         """POST a sanitized payload with exponential retry for network/5xx failures.
 
         Known 409 duplicate codes are treated as idempotent success. Other 4xx
@@ -187,9 +189,10 @@ class WorkerApiClient:
         }
         safe_payload = self._redact_callback_payload(payload) if redact else dict(payload)
 
+        send = httpx.put if method == "PUT" else httpx.post
         for attempt in range(self._max_retries):
             try:
-                resp = httpx.post(
+                resp = send(
                     url,
                     json=safe_payload,
                     headers=headers,
@@ -925,20 +928,33 @@ class WorkerApiClient:
         return data
 
     def post_interview_targeted_need(self, assessment_id: str, payload: dict) -> dict:
-        """Persist a server-guarded Targeted Interview need and opaque continuation."""
+        """Register one BusinessContextNeed (needId, engineeringRuleId, criterionId, question,
+        observation, resolutionCriterionIds, evidenceRefs, contextRevision)."""
         path = InternalPath.INTERVIEW_TARGETED_NEED.format(assessment_id=assessment_id)
         data = self._post_with_retry(path, payload, redact=False)
         if not isinstance(data, dict):
             raise WorkerCallbackError("Interview targeted need response was invalid.")
         return data
 
-    def post_interview_planner_context_need(self, assessment_id: str, payload: dict) -> dict:
-        """Reopen Interview for one business fact the Planner needs to select rules."""
-        path = InternalPath.INTERVIEW_PLANNER_CONTEXT_NEED.format(assessment_id=assessment_id)
-        data = self._post_with_retry(path, payload, redact=False)
+    def put_rule_assessment(
+        self, assessment_id: str, engineering_rule_id: str, payload: dict
+    ) -> dict:
+        """Upsert the accepted per-rule assessment (RuleEvidenceIndex ledger row)."""
+        path = InternalPath.RULE_ASSESSMENT.format(
+            assessment_id=assessment_id, engineering_rule_id=engineering_rule_id
+        )
+        data = self._post_with_retry(path, payload, redact=False, method="PUT")
         if not isinstance(data, dict):
-            raise WorkerCallbackError("Interview planner context need response was invalid.")
+            raise WorkerCallbackError("Rule assessment response was invalid.")
         return data
+
+    def list_rule_assessments(self, assessment_id: str) -> list[dict]:
+        """List accepted per-rule assessments for one assessment."""
+        path = InternalPath.RULE_ASSESSMENTS.format(assessment_id=assessment_id)
+        data = self._get_with_retry(path)
+        if not isinstance(data, list):
+            raise WorkerCallbackError("Rule assessments response was invalid.")
+        return [item for item in data if isinstance(item, dict)]
 
     def dispatch_agentic_tool(self, payload: dict) -> dict:
         """Dispatch one already validated/authorized agentic tool to the trusted API."""

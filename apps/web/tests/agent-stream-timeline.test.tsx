@@ -7,11 +7,9 @@ import {
   ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS,
   ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS,
   ASSESSMENT_AGENT_STREAM_STAGES,
-  ASSESSMENT_ENGINEERING_RULE_PLAN_DECISIONS,
   ASSESSMENT_INTERVIEW_CONTROLS,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
-  ASSESSMENT_RUNTIME_PLAN_REASON_CODES,
   type AssessmentAgentStreamEvent,
   type AssessmentRuntimeSummaryValue,
 } from "@lcsp/contracts/evidence";
@@ -1227,7 +1225,7 @@ test("recovered provider attempts do not render as repeated terminal failures", 
             ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted,
             {
               provider: "llm7",
-              model: "GLM-5.3-Flash",
+              model: "minimax-m2.7",
               timeout_seconds: 30,
             },
             {
@@ -1241,7 +1239,7 @@ test("recovered provider attempts do not render as repeated terminal failures", 
             ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed,
             {
               provider: "llm7",
-              model: "GLM-5.3-Flash",
+              model: "minimax-m2.7",
               elapsed_seconds: 1,
               error_type: "UnprocessableEntityError",
             },
@@ -1543,92 +1541,6 @@ function engineeringRuleEvent(
   );
 }
 
-test("Planner shows selected goals as output and uses goals instead of rule IDs in activity", async () => {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-
-  const plannerEvents = [
-    {
-      ...engineeringRuleEvent(
-        1,
-        "ER-SELECT",
-        ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
-        {
-          decision: ASSESSMENT_ENGINEERING_RULE_PLAN_DECISIONS.select,
-          concept: "Token validation",
-          investigationGoals: [
-            "Verify tokens before use",
-            "Check expiry handling",
-          ],
-        },
-      ),
-      stage: ASSESSMENT_AGENT_STREAM_STAGES.planner,
-    },
-    {
-      ...engineeringRuleEvent(
-        2,
-        "ER-SKIP",
-        ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
-        {
-          decision: ASSESSMENT_ENGINEERING_RULE_PLAN_DECISIONS.skip,
-          investigationGoals: ["Inspect skipped path"],
-        },
-      ),
-      stage: ASSESSMENT_AGENT_STREAM_STAGES.planner,
-    },
-  ];
-  await act(async () => {
-    root.render(
-      <AgentStreamTurn
-        stages={[ASSESSMENT_AGENT_STREAM_STAGES.planner]}
-        runId="run-1"
-        events={plannerEvents}
-        stageEvents={{
-          [ASSESSMENT_AGENT_STREAM_STAGES.planner]: plannerEvents,
-        }}
-      />,
-    );
-  });
-
-  const timeline = container.querySelector(
-    "[data-slot='agent-stream-timeline']",
-  );
-  const output = container.querySelector("[data-stream-planner-output]");
-  assert.ok(timeline);
-  assert.ok(output);
-  assert.equal(
-    container.querySelectorAll("[data-stream-planner-output]").length,
-    1,
-  );
-  assert.equal(timeline.contains(output), false);
-  assert.match(output.textContent ?? "", /Verify tokens before use/);
-  assert.match(output.textContent ?? "", /Check expiry handling/);
-  assert.doesNotMatch(
-    output.textContent ?? "",
-    /Inspect skipped path|ER-SELECT|ER-SKIP/,
-  );
-  assert.equal(output.querySelectorAll("[data-stream-planner-goal]").length, 1);
-  // A skipped rule reads exactly like a selected one: its goals, not its ID.
-  const skipped = container.querySelector("[data-stream-planner-skipped]");
-  assert.ok(skipped);
-  const skippedGoals = skipped.querySelectorAll("[data-stream-planner-goal]");
-  assert.equal(skippedGoals.length, 1);
-  assert.equal(skippedGoals[0]?.textContent, "Inspect skipped path");
-  assert.doesNotMatch(skipped.textContent ?? "", /ER-SKIP/);
-  const selectedActivity = container.querySelector(
-    "[data-stream-rule='ER-SELECT'] summary",
-  );
-  assert.match(selectedActivity?.textContent ?? "", /Verify tokens before use/);
-  assert.doesNotMatch(selectedActivity?.textContent ?? "", /ER-SELECT/);
-
-  await act(async () =>
-    root.render(<AgentStreamTimeline events={plannerEvents} />),
-  );
-  assert.equal(container.querySelector("[data-stream-planner-output]"), null);
-});
-
 test("investigation renders one section per rule with its own activity and reasoning result", async () => {
   const container = document.createElement("div");
   document.body.append(container);
@@ -1790,7 +1702,7 @@ test("each AI step remains visible while the next step is running", async () => 
       eventType,
       {
         provider: "llm7",
-        model: "GLM-5.3-Flash",
+        model: "minimax-m2.7",
         elapsed_seconds: 1,
         model_step_id: modelStepId,
       },
@@ -2086,7 +1998,7 @@ test("AI grouping spans interleaved tools but never crosses stages, rules, agent
   );
 });
 
-test("scanner, interview, planner, and investigator publish visible turns before boundary completion", async () => {
+test("scanner, interview, and rule-analysis publish visible turns before boundary completion", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -2095,8 +2007,7 @@ test("scanner, interview, planner, and investigator publish visible turns before
   const stages = [
     ASSESSMENT_AGENT_STREAM_STAGES.scanner,
     ASSESSMENT_AGENT_STREAM_STAGES.interview,
-    ASSESSMENT_AGENT_STREAM_STAGES.planner,
-    ASSESSMENT_AGENT_STREAM_STAGES.investigate,
+    ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
   ];
 
   for (const [index, stage] of stages.entries()) {
@@ -2467,26 +2378,23 @@ test("repeated activities such as context trimming share one row that retains ea
   }
 });
 
-test("one pipeline dispatch spanning Planner and Investigator renders as a single AgentStreamTurn", async () => {
+test("one pipeline dispatch spanning Interview and rule-analysis renders as a single AgentStreamTurn", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
 
-  const plannerEvents = [
-    {
-      ...engineeringRuleEvent(
-        1,
-        "ER-COMBINED",
-        ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
-        {
-          decision: ASSESSMENT_ENGINEERING_RULE_PLAN_DECISIONS.select,
-          concept: "AI risk classification before use",
-          investigationGoals: ["Verify classification happens before use"],
-        },
-      ),
-      stage: ASSESSMENT_AGENT_STREAM_STAGES.planner,
-    },
+  const interviewEvents = [
+    event(
+      1,
+      ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelRequest,
+      {
+        schemaVersion: ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1,
+        kind: ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.modelRequest,
+        durability: ASSESSMENT_AGENT_STREAM_DURABILITY.durable,
+      },
+      { stage: ASSESSMENT_AGENT_STREAM_STAGES.interview },
+    ),
   ];
   const investigateEvents = [
     {
@@ -2510,7 +2418,7 @@ test("one pipeline dispatch spanning Planner and Investigator renders as a singl
           },
         },
       ),
-      stage: ASSESSMENT_AGENT_STREAM_STAGES.investigate,
+      stage: ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
     },
   ];
 
@@ -2518,14 +2426,14 @@ test("one pipeline dispatch spanning Planner and Investigator renders as a singl
     root.render(
       <AgentStreamTurn
         stages={[
-          ASSESSMENT_AGENT_STREAM_STAGES.planner,
-          ASSESSMENT_AGENT_STREAM_STAGES.investigate,
+          ASSESSMENT_AGENT_STREAM_STAGES.interview,
+          ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
         ]}
         runId="run-1"
-        events={[...plannerEvents, ...investigateEvents]}
+        events={[...interviewEvents, ...investigateEvents]}
         stageEvents={{
-          [ASSESSMENT_AGENT_STREAM_STAGES.planner]: plannerEvents,
-          [ASSESSMENT_AGENT_STREAM_STAGES.investigate]: investigateEvents,
+          [ASSESSMENT_AGENT_STREAM_STAGES.interview]: interviewEvents,
+          [ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis]: investigateEvents,
         }}
       />,
     );
@@ -2534,13 +2442,9 @@ test("one pipeline dispatch spanning Planner and Investigator renders as a singl
   assert.equal(
     container.querySelectorAll("[data-slot='agent-turn']").length,
     1,
-    "Planner and Investigator sharing a dispatch must render as ONE turn, not two",
+    "Interview and rule-analysis sharing a dispatch must render as ONE turn, not two",
   );
   assert.match(container.textContent ?? "", /LCSP Assessment Agent/);
-  assert.match(
-    container.textContent ?? "",
-    /Verify classification happens before use/,
-  );
   assert.match(
     container.textContent ?? "",
     /classifies AI risk before the feature is used/,
@@ -2566,50 +2470,6 @@ test("one pipeline dispatch spanning Planner and Investigator renders as a singl
   );
 });
 
-test("Planner output falls back to the rule's concept when investigationGoals have not streamed in yet", async () => {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-
-  const plannerEvents = [
-    {
-      ...engineeringRuleEvent(
-        1,
-        "ER-NO-GOALS",
-        ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
-        {
-          decision: ASSESSMENT_ENGINEERING_RULE_PLAN_DECISIONS.select,
-          concept: "Automated decision review path",
-        },
-      ),
-      stage: ASSESSMENT_AGENT_STREAM_STAGES.planner,
-    },
-  ];
-
-  await act(async () => {
-    root.render(
-      <AgentStreamTurn
-        stages={[ASSESSMENT_AGENT_STREAM_STAGES.planner]}
-        runId="run-1"
-        events={plannerEvents}
-        stageEvents={{
-          [ASSESSMENT_AGENT_STREAM_STAGES.planner]: plannerEvents,
-        }}
-      />,
-    );
-  });
-
-  assert.equal(
-    container.querySelectorAll("[data-stream-planner-goal]").length,
-    1,
-    "a selected rule with a concept must still show a planning summary",
-  );
-  assert.match(container.textContent ?? "", /Automated decision review path/);
-  const output = container.querySelector("[data-stream-planner-output]");
-  assert.doesNotMatch(output?.textContent ?? "", /ER-NO-GOALS/);
-});
-
 test("customer-facing Investigator output never shows raw ruleId, decision, or claimType", async () => {
   const container = document.createElement("div");
   document.body.append(container);
@@ -2624,25 +2484,25 @@ test("customer-facing Investigator output never shows raw ruleId, decision, or c
         ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
         { reasonCode: "MISSING_EVIDENCE" },
       ),
-      stage: ASSESSMENT_AGENT_STREAM_STAGES.investigate,
+      stage: ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
     },
   ];
 
   await act(async () => {
     root.render(
       <AgentStreamTurn
-        stages={[ASSESSMENT_AGENT_STREAM_STAGES.investigate]}
+        stages={[ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis]}
         runId="run-1"
         events={investigateEvents}
         stageEvents={{
-          [ASSESSMENT_AGENT_STREAM_STAGES.investigate]: investigateEvents,
+          [ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis]: investigateEvents,
         }}
       />,
     );
   });
 
   // A failed rule still surfaces its own result, inside its row.
-  const output = container.querySelector("[data-stream-investigator-rule-result]");
+  const output = container.querySelector("[data-stream-rule-analysis-rule-result]");
   assert.ok(output, "a failed investigation must still surface a result card");
   assert.doesNotMatch(
     output.textContent ?? "",
@@ -2657,7 +2517,7 @@ test("failed Investigator dispatch shows one summary and keeps rule failures in 
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const stage = ASSESSMENT_AGENT_STREAM_STAGES.investigate;
+  const stage = ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis;
   const events = [
     event(1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted, null, {
       stage,
@@ -2687,12 +2547,12 @@ test("failed Investigator dispatch shows one summary and keeps rule failures in 
     ),
   );
   assert.equal(
-    container.querySelectorAll("[data-stream-investigator-failure-summary]")
+    container.querySelectorAll("[data-stream-rule-analysis-failure-summary]")
       .length,
     1,
   );
   assert.equal(
-    container.querySelectorAll("[data-stream-investigator-rule]").length,
+    container.querySelectorAll("[data-stream-rule-analysis-rule]").length,
     0,
   );
   const technical = container.querySelector(
@@ -2715,7 +2575,7 @@ test("untagged dispatch timeout closes Investigator and shows one customer-safe 
   const types = ASSESSMENT_AGENT_STREAM_EVENT_TYPES;
   const events = [
     event(1, types.boundaryStarted, null, { stage: stages.interview }),
-    event(2, types.modelCallStarted, null, { stage: stages.investigate }),
+    event(2, types.modelCallStarted, null, { stage: stages.ruleAnalysis }),
     event(
       3,
       types.boundaryFailed,
@@ -2728,14 +2588,14 @@ test("untagged dispatch timeout closes Investigator and shows one customer-safe 
   ];
   const grouped = groupAgentStreamEventsByStage(events);
   const activity = groupAgentStreamActivityByTurnKey(
-    [stages.interview, stages.investigate].map((stage) => ({
+    [stages.interview, stages.ruleAnalysis].map((stage) => ({
       stage,
       groups: groupAgentStreamEventsByRun(grouped.byStage[stage]),
     })),
   )[0]!;
   assert.equal(activity.events.length, 3);
   assert.ok(
-    activity.stageEvents[stages.investigate]?.some(
+    activity.stageEvents[stages.ruleAnalysis]?.some(
       (item) => item.eventId === events[2]!.eventId,
     ),
   );
@@ -2746,7 +2606,7 @@ test("untagged dispatch timeout closes Investigator and shows one customer-safe 
   roots.push(root);
   await act(async () => root.render(<AgentStreamTurn {...activity} />));
   assert.equal(
-    container.querySelectorAll("[data-stream-investigator-failure-summary]")
+    container.querySelectorAll("[data-stream-rule-analysis-failure-summary]")
       .length,
     1,
   );
@@ -2765,88 +2625,11 @@ test("untagged dispatch timeout closes Investigator and shows one customer-safe 
   );
 });
 
-test("failed Planner fallback has a clean summary and no selected-goal output", async () => {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  const stage = ASSESSMENT_AGENT_STREAM_STAGES.planner;
-  const events = [
-    {
-      ...engineeringRuleEvent(
-        1,
-        "RAW_PLANNER_RULE",
-        ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
-        {
-          decision: ASSESSMENT_ENGINEERING_RULE_PLAN_DECISIONS.select,
-          reasonCode: ASSESSMENT_RUNTIME_PLAN_REASON_CODES.plannerFailure,
-        },
-      ),
-      stage,
-    },
-  ];
-  await act(async () =>
-    root.render(
-      <AgentStreamTurn
-        stages={[stage]}
-        runId="run-1"
-        events={events}
-        stageEvents={{ [stage]: events }}
-      />,
-    ),
-  );
-  const failure = container.querySelector(
-    "[data-stream-planner-failure-summary]",
-  );
-  assert.ok(failure);
-  assert.match(
-    failure.textContent ?? "",
-    /investigation planning|lập kế hoạch điều tra/,
-  );
-  assert.equal(container.querySelector("[data-stream-planner-output]"), null);
-  const technical = container.querySelector(
-    "[data-slot=agent-stream-turn-technical-details]",
-  );
-  assert.ok(technical?.querySelector("[data-stream-raw-events]"));
-  assert.match(technical?.textContent ?? "", /PLANNER_FAILURE/);
-  const customer = container.cloneNode(true) as HTMLElement;
-  customer
-    .querySelector("[data-slot=agent-stream-turn-technical-details]")
-    ?.remove();
-  assert.doesNotMatch(
-    customer.textContent ?? "",
-    /PLANNER_FAILURE|reasonCode|RAW_PLANNER_RULE/,
-  );
-  // Failure fallback metadata never masquerades as a successful selected plan.
-  const withMetadata = [
-    {
-      ...events[0]!,
-      data: {
-        ...(events[0]!.data as object),
-        concept: "Human review",
-        investigationGoals: ["Verify approval"],
-      },
-    },
-  ];
-  await act(async () =>
-    root.render(
-      <AgentStreamTurn
-        stages={[stage]}
-        runId="run-1"
-        events={withMetadata}
-        stageEvents={{ [stage]: withMetadata }}
-      />,
-    ),
-  );
-  assert.ok(container.querySelector("[data-stream-planner-failure-summary]"));
-  assert.equal(container.querySelector("[data-stream-planner-output]"), null);
-});
-
 test("merged copied terminal events retain stage closure without duplicate React keys", async () => {
   const stages = [
     ASSESSMENT_AGENT_STREAM_STAGES.interview,
-    ASSESSMENT_AGENT_STREAM_STAGES.planner,
-    ASSESSMENT_AGENT_STREAM_STAGES.investigate,
+    ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
+    ASSESSMENT_AGENT_STREAM_STAGES.gate,
   ];
   const events = [
     event(1, ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted, null, {
@@ -2968,7 +2751,7 @@ test("Investigator lists each rule with its goal, status and only its own live a
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const stage = ASSESSMENT_AGENT_STREAM_STAGES.investigate;
+  const stage = ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis;
   const ruleStep = (sequence: number, ruleId: string) =>
     event(
       sequence,
@@ -3011,7 +2794,7 @@ test("Investigator lists each rule with its goal, status and only its own live a
     ),
   );
 
-  const rows = container.querySelectorAll("[data-stream-investigator-progress-rule]");
+  const rows = container.querySelectorAll("[data-stream-rule-analysis-progress-rule]");
   assert.equal(rows.length, 2);
   const [done, running] = [...rows];
   assert.match(done!.textContent ?? "", /Check data minimisation/);
@@ -3021,7 +2804,7 @@ test("Investigator lists each rule with its goal, status and only its own live a
   // Rule IDs and codes never reach the customer-facing list (the raw feed
   // behind Technical details may still carry them).
   const customerRows = container
-    .querySelector("[data-stream-investigator-progress]")!
+    .querySelector("[data-stream-rule-analysis-progress]")!
     .cloneNode(true) as HTMLElement;
   customerRows
     .querySelectorAll("[data-slot='agent-stream-rule-technical-details']")
@@ -3033,7 +2816,7 @@ test("Investigator lists each rule with its goal, status and only its own live a
     (node) => !node.closest("[data-slot='agent-stream-rule-technical-details']"),
   );
   assert.equal(liveCount?.textContent, "×2");
-  assert.ok(done!.querySelector("[data-stream-investigator-rule-result]"));
+  assert.ok(done!.querySelector("[data-stream-rule-analysis-rule-result]"));
   for (const row of [done!, running!]) {
     const details = row.querySelector<HTMLDetailsElement>(
       "[data-slot='agent-stream-rule-technical-details']",
@@ -3045,7 +2828,7 @@ test("Investigator lists each rule with its goal, status and only its own live a
   // No combined Investigator feed: every event here belongs to a rule.
   assert.equal(
     container.querySelector("[data-slot='agent-stream-turn-technical-details']")
-      ?.querySelector("[data-stream-investigator-progress-rule]") ?? null,
+      ?.querySelector("[data-stream-rule-analysis-progress-rule]") ?? null,
     null,
   );
   // Rules are rows of the single Investigator turn, not separate turns.

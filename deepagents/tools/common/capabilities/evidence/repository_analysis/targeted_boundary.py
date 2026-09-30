@@ -1,20 +1,25 @@
-"""Governed targeted reanalysis over the Deep Agent repository analyzer."""
+"""Governed targeted reanalysis: re-run exactly one EngineeringRule through the assessment loop."""
 
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any
 
 from tools.common.capabilities.agent_runtime.boundary import (
     AgentBoundaryBase,
     NonRetryableAgentBoundaryError,
 )
+from tools.common.capabilities.assessment.investigation.engineering_rule.engineering_assessment_boundary import (
+    EngineeringAssessmentBoundary,
+)
+from tools.common.capabilities.assessment.planning.engineering_rule.confirmed_business_context import (
+    normalize_confirmed_structured_business_context,
+)
 from tools.common.capabilities.platform.api_client import WorkerApiClient
 from tools.common.capabilities.platform.correlation import set_correlationId
 from tools.common.capabilities.platform.logging import get_logger
-
-from .boundary import RepositoryAnalysisBoundary
 
 
 logger = get_logger(__name__)
@@ -25,11 +30,13 @@ TERMINAL_FAILURE_STATE = "FAILED"
 DLQ_FAILURE_STATE = "DLQ"
 SAFE_VALIDATION_FAILURE_CODE = "TARGETED_REANALYSIS_EVENT_MISMATCH"
 SAFE_DELIVERY_FAILURE_CODE = "TARGETED_REANALYSIS_WORKER_DELIVERY_EXHAUSTED"
-SAFE_UNRESOLVED_SCOPE_CODE = "TARGETED_REANALYSIS_SCOPE_UNRESOLVED"
-
-
-class RepositoryAnalysisRunner(Protocol):
-    def handle(self, message: dict, correlationId: str) -> object: ...
+# Old pathPrefixes/subjectRefs/ruleDiscoveryTaskIds rows (or a malformed ruleScope).
+SAFE_UNSUPPORTED_SCOPE_CODE = "TARGETED_REANALYSIS_SCOPE_UNSUPPORTED"
+SAFE_CONTEXT_UNAVAILABLE_CODE = "TARGETED_REANALYSIS_CONTEXT_UNAVAILABLE"
+SAFE_STALE_REVISION_CODE = "TARGETED_REANALYSIS_STALE_CONTEXT_REVISION"
+SCOPE_KEY = "ruleScope"
+_RULE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$")
+_MAX_CRITERIA = 50
 
 
 @dataclass(frozen=True)
@@ -45,8 +52,16 @@ class TargetedReanalysisEnvelope:
     delivery_attempt: int
 
 
+@dataclass(frozen=True)
+class TargetedRuleScope:
+    engineering_rule_id: str
+    criterion_ids: tuple[str, ...]
+    context_revision: int
+    prior_result_id: str | None = None
+
+
 class TargetedRepositoryAnalysisBoundary(AgentBoundaryBase):
-    """Validate and execute one API-authorized scoped Deep Agent reanalysis."""
+    """Validate one API-authorized request, then re-analyse and finalize exactly one rule."""
 
     boundary_source = TARGETED_REANALYSIS_BOUNDARY_SOURCE
     source_event = TARGETED_REANALYSIS_COMMAND
@@ -59,14 +74,14 @@ class TargetedRepositoryAnalysisBoundary(AgentBoundaryBase):
         rbac_client=None,
         *,
         api_client: WorkerApiClient | None = None,
-        analysis_runner: RepositoryAnalysisRunner | None = None,
+        assessment_boundary: EngineeringAssessmentBoundary | None = None,
     ) -> None:
         super().__init__(config, rbac_client)
         self._api_client = api_client or WorkerApiClient(
             config.nestjs_api_base_url,
             config.worker_api_key,
         )
-        self._analysis_runner = analysis_runner or RepositoryAnalysisBoundary(
+        self._assessment_boundary = assessment_boundary or EngineeringAssessmentBoundary(
             config,
             api_client=self._api_client,
         )
@@ -86,30 +101,93 @@ class TargetedRepositoryAnalysisBoundary(AgentBoundaryBase):
         ):
             return
 
+        rule_scope = self._rule_scope(envelope.normalized_scope)
+        if rule_scope is None:
+            self._fail_terminal(
+                envelope.request_id, TERMINAL_FAILURE_STATE, SAFE_UNSUPPORTED_SCOPE_CODE
+            )
+            raise NonRetryableAgentBoundaryError(
+                "targeted reanalysis requires the v3 ruleScope contract"
+            )
+        assessment_id = request.get("assessmentId")
+        report_id = request.get("inputEvidenceReportId")
+        if not assessment_id or not report_id:
+            self._fail_terminal(
+                envelope.request_id, TERMINAL_FAILURE_STATE, SAFE_CONTEXT_UNAVAILABLE_CODE
+            )
+            raise NonRetryableAgentBoundaryError(
+                "targeted reanalysis request has no assessment/evidence report"
+            )
+
         try:
-            path_prefixes = envelope.normalized_scope.get("pathPrefixes")
-            if not isinstance(path_prefixes, list) or not path_prefixes:
+            try:
+                confirmed_context = normalize_confirmed_structured_business_context(
+                    self._api_client.get_interview_worker_state(str(assessment_id)),
+                    assessment_id=str(assessment_id),
+                )
+            except ValueError as error:
+                # Customer context is not confirmed: redelivery cannot fix this.
                 self._fail_terminal(
                     envelope.request_id,
                     TERMINAL_FAILURE_STATE,
-                    SAFE_UNRESOLVED_SCOPE_CODE,
+                    SAFE_CONTEXT_UNAVAILABLE_CODE,
+                )
+                raise NonRetryableAgentBoundaryError(str(error)) from error
+            if confirmed_context.context_revision != rule_scope.context_revision:
+                self._fail_terminal(
+                    envelope.request_id,
+                    TERMINAL_FAILURE_STATE,
+                    SAFE_STALE_REVISION_CODE,
                 )
                 raise NonRetryableAgentBoundaryError(
-                    "targeted reanalysis requires API-resolved pathPrefixes"
+                    "targeted reanalysis contextRevision is not current"
                 )
-
-            self._analysis_runner.handle(
+            if rule_scope.prior_result_id:
+                prior = next(
+                    (
+                        row
+                        for row in self._api_client.list_rule_assessments(
+                            str(assessment_id)
+                        )
+                        if row.get("engineeringRuleId")
+                        == rule_scope.engineering_rule_id
+                    ),
+                    None,
+                )
+                if not prior or prior.get("resultId") != rule_scope.prior_result_id:
+                    self._fail_terminal(
+                        envelope.request_id,
+                        TERMINAL_FAILURE_STATE,
+                        SAFE_CONTEXT_UNAVAILABLE_CODE,
+                    )
+                    raise NonRetryableAgentBoundaryError(
+                        "targeted reanalysis priorResultId is not current"
+                    )
+            logger.info(
+                "RULE_TARGETED_REANALYSIS_REQUESTED",
+                requestId=envelope.request_id,
+                engineeringRuleId=rule_scope.engineering_rule_id,
+                correlationId=envelope.correlationId,
+            )
+            self._assessment_boundary.run_assessment(
                 {
-                    "scanJobId": envelope.scan_job_id,
-                    "snapshotId": envelope.snapshot_id,
-                    "commitSha": envelope.commit_sha,
+                    "assessmentId": str(assessment_id),
+                    "evidenceReportId": str(report_id),
                     "correlationId": envelope.correlationId,
-                    "targetedReanalysis": {
-                        "analyzerId": envelope.analyzer_id,
-                        "pathPrefixes": path_prefixes,
-                    },
                 },
                 envelope.correlationId,
+                confirmed_context=confirmed_context,
+                rule_scope={rule_scope.engineering_rule_id},
+            )
+            self._api_client.complete_targeted_reanalysis_request(
+                envelope.request_id,
+                output_evidence_report_id=str(report_id),
+            )
+            logger.info(
+                "RULE_TARGETED_REANALYSIS_COMPLETED",
+                requestId=envelope.request_id,
+                engineeringRuleId=rule_scope.engineering_rule_id,
+                correlationId=envelope.correlationId,
             )
         except NonRetryableAgentBoundaryError:
             raise
@@ -242,14 +320,62 @@ class TargetedRepositoryAnalysisBoundary(AgentBoundaryBase):
 
     @staticmethod
     def _is_scope(value: object) -> bool:
-        if not isinstance(value, dict) or len(value) != 1:
-            return False
-        key, values = next(iter(value.items()))
-        return (
-            key in {"pathPrefixes", "subjectRefs"}
-            and isinstance(values, list)
-            and all(isinstance(item, str) and item for item in values)
+        # Shape only: legacy scopes stay readable so they fail cleanly after claim.
+        return isinstance(value, dict)
+
+    @staticmethod
+    def _rule_scope(scope: object) -> TargetedRuleScope | None:
+        rule_scope = (
+            scope.get(SCOPE_KEY)
+            if isinstance(scope, dict) and set(scope) == {SCOPE_KEY}
+            else None
         )
+        if not isinstance(rule_scope, dict):
+            return None
+        allowed = {
+            "engineeringRuleId",
+            "criterionIds",
+            "contextRevision",
+            "priorResultId",
+        }
+        if set(rule_scope) - allowed or not {
+            "engineeringRuleId",
+            "criterionIds",
+            "contextRevision",
+        }.issubset(rule_scope):
+            return None
+        rule_id = rule_scope.get("engineeringRuleId")
+        criteria = rule_scope.get("criterionIds")
+        revision = rule_scope.get("contextRevision")
+        prior_result_id = rule_scope.get("priorResultId")
+        if (
+            isinstance(rule_id, str)
+            and _RULE_ID.fullmatch(rule_id)
+            and isinstance(criteria, list)
+            and 1 <= len(criteria) <= _MAX_CRITERIA
+            and len(criteria) == len(set(criteria))
+            and all(
+                isinstance(item, str) and _RULE_ID.fullmatch(item)
+                for item in criteria
+            )
+            and isinstance(revision, int)
+            and not isinstance(revision, bool)
+            and revision >= 0
+            and (
+                prior_result_id is None
+                or (
+                    isinstance(prior_result_id, str)
+                    and _RULE_ID.fullmatch(prior_result_id)
+                )
+            )
+        ):
+            return TargetedRuleScope(
+                engineering_rule_id=rule_id,
+                criterion_ids=tuple(criteria),
+                context_revision=revision,
+                prior_result_id=prior_result_id,
+            )
+        return None
 
     @staticmethod
     def _canonical_scope(value: object) -> str | None:
@@ -258,7 +384,4 @@ class TargetedRepositoryAnalysisBoundary(AgentBoundaryBase):
         return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
-__all__ = [
-    "TARGETED_REANALYSIS_COMMAND",
-    "TargetedRepositoryAnalysisBoundary",
-]
+__all__ = ["TargetedRepositoryAnalysisBoundary"]

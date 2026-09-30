@@ -352,8 +352,8 @@ def test_repository_analyzer_never_creates_a_child_sandbox() -> None:
     assert "create_sandbox(" not in source
     assert "RepositoryWorkspace" not in source
     assert "current_repository_backend()" in source
-    assert "persistent working database" in source
-    assert "repository-rooted backend" in source
+    assert "current LCSP repository sandbox backend" in source
+    assert "against the hydrated repository" in source
 
 
 def test_codebase_memory_is_baked_into_docker_sandbox_without_host_graph_state() -> None:
@@ -376,18 +376,27 @@ def test_codebase_memory_is_baked_into_docker_sandbox_without_host_graph_state()
     # Indexing is no longer left to the agent: every dispatch indexes the
     # hydrated repository first, and the agent queries it with typed tools.
     assert "codebase-memory-graph cli index_repository" not in analyzer
-    assert "already indexed into a Codebase Memory graph" in analyzer
+    assert "Codebase Memory index\nis already built" in analyzer
     assert "tools=CODEBASE_MEMORY_GRAPH_TOOLS" in analyzer
     assert "Direct repository source remains authoritative" not in analyzer
-    assert "source authority" in analyzer
+    assert "inspect source before reporting" in analyzer
 
 
 def test_default_assessment_pipeline_does_not_materialize_a_second_repo() -> None:
-    from tools.common.capabilities.assessment.investigation.engineering_rule.planned_pipeline import (
-        PlannedEngineeringInvestigationPipeline,
-    )
+    from subagents.repository_analyst.definition import SUBAGENT
 
-    assert PlannedEngineeringInvestigationPipeline.requires_code_workspace is False
+    # The per-rule analyze_rule path runs inside the pinned assessment repository:
+    # it never creates a child sandbox or code workspace, and the Repository
+    # Analyst returns its result through the governed submit_rule_assessment tool
+    # instead of a response_format handoff.
+    run_source = (
+        PROJECT_ROOT / "tools/common/capabilities/assessment/rule_assessment/run.py"
+    ).read_text(encoding="utf-8")
+    assert "create_sandbox(" not in run_source
+    assert "RepositoryWorkspace" not in run_source
+    assert "workspace_path" not in run_source
+    assert "SandboxClient" not in run_source
+    assert "response_format" not in SUBAGENT
 
 
 def test_system_event_middleware_dispatches_inside_resolved_docker_backend(monkeypatch) -> None:

@@ -14,7 +14,7 @@ PROVIDER_KEY_ENV = {
     "anthropic": ("ANTHROPIC_API_KEY",),
 }
 # One request timeout for every provider. Large Interview/Investigator prompts on
-# slower routes (e.g. LLM7 GLM) exceeded shorter per-provider limits on every slot.
+# slower routes (e.g. LLM7) exceeded shorter per-provider limits on every slot.
 DEFAULT_LLM_PROVIDER_TIMEOUT_SECONDS = 300.0
 # SDK value that disables SDK-internal retries when credential rotation owns retries.
 # langchain_google_genai maps max_retries to HttpRetryOptions(attempts=...): 0 means

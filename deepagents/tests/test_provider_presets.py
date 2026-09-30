@@ -38,7 +38,7 @@ if expected == "google_genai":
             "thinking_level": "minimal",
         }
 elif expected == "llm7":
-    assert p.ALL_LCSP_MODEL_SPECS == ("openai:GLM-5.3-Flash",)
+    assert p.ALL_LCSP_MODEL_SPECS == ("openai:minimax-m2.7",)
     expected_kwargs = {
         "base_url": "https://api.llm7.io/v1",
         "use_responses_api": False,
@@ -46,16 +46,16 @@ elif expected == "llm7":
     }
     expected_kwargs = {
         **expected_kwargs,
-        "profile": p.model_profile_for_route("llm7", "GLM-5.3-Flash"),
+        "profile": p.model_profile_for_route("llm7", "minimax-m2.7"),
     }
     # Deep Agents builds string specs (root and subagents) from this profile, so it
     # carries the same context window as an explicitly resolved agent model.
     assert model_provider_profile_for(p.ROOT_MODEL_SPEC).init_kwargs == expected_kwargs
     assert p.model_init_kwargs_for_agent(
-        agent_name="law_guided_investigator", model_spec=p.ROOT_MODEL_SPEC
+        agent_name="repository-analyst", model_spec=p.ROOT_MODEL_SPEC
     ) == expected_kwargs
     assert p.reasoning_policy_for_agent(
-        agent_name="law_guided_investigator", model_spec=p.ROOT_MODEL_SPEC
+        agent_name="repository-analyst", model_spec=p.ROOT_MODEL_SPEC
     ) == "unsupported_model"
 elif expected == "inception":
     assert p.ALL_LCSP_MODEL_SPECS == ("openai:mercury-2.5",)
@@ -73,10 +73,10 @@ elif expected == "inception":
     # carries the same context window as an explicitly resolved agent model.
     assert model_provider_profile_for(p.ROOT_MODEL_SPEC).init_kwargs == expected_kwargs
     assert p.model_init_kwargs_for_agent(
-        agent_name="law_guided_investigator", model_spec=p.ROOT_MODEL_SPEC
+        agent_name="repository-analyst", model_spec=p.ROOT_MODEL_SPEC
     ) == expected_kwargs
     assert p.reasoning_policy_for_agent(
-        agent_name="law_guided_investigator", model_spec=p.ROOT_MODEL_SPEC
+        agent_name="repository-analyst", model_spec=p.ROOT_MODEL_SPEC
     ) == "unsupported_model"
 else:
     assert p.ROOT_MODEL_SPEC == "openai:gpt-5-nano"
@@ -100,7 +100,7 @@ harness.register_provider_profile = lambda key, profile: registrations.append((k
 harness.register_harness_profile = lambda *_: None
 harness.configure_lcsp_harness()
 profiles = {key: dict(profile.init_kwargs) for key, profile in registrations}
-assert p.ALL_LCSP_MODEL_SPECS == ("openai:GLM-5.3-Flash",)
+assert p.ALL_LCSP_MODEL_SPECS == ("openai:minimax-m2.7",)
 assert profiles["openai"]["api_key"] == "llm7-first"
 assert profiles[p.ROOT_MODEL_SPEC]["api_key"] == "llm7-first"
 assert profiles[p.ROOT_MODEL_SPEC]["base_url"] == "https://api.llm7.io/v1"
@@ -152,3 +152,48 @@ def test_unknown_preset_fails_at_startup():
     )
     assert result.returncode != 0
     assert "LCSP_MODEL_PROVIDER must be one of" in result.stderr
+
+
+def test_billing_runtime_policy_accepts_effective_primary_and_fallback_models():
+    result = subprocess.run(
+        [sys.executable, "-c", "import model_policy"],
+        env=dict(
+            os.environ,
+            LCSP_MODEL_PROVIDER="llm7",
+            LLM_FALLBACK_PROVIDER_1="google_genai",
+            BILLING_METERING_ENABLED="true",
+            BILLING_RUNTIME_PROVIDER="LLM7",
+            BILLING_RUNTIME_MODEL="minimax-m2.7",
+            BILLING_AUTHORIZED_RUNTIME_MODELS=(
+                "LLM7:minimax-m2.7,GOOGLE_GENAI:gemini-3.5-flash-lite"
+            ),
+        ),
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_billing_runtime_policy_rejects_stale_primary_before_worker_startup():
+    result = subprocess.run(
+        [sys.executable, "-c", "import model_policy"],
+        env=dict(
+            os.environ,
+            LCSP_MODEL_PROVIDER="llm7",
+            LLM_FALLBACK_PROVIDER_1="google_genai",
+            BILLING_METERING_ENABLED="true",
+            BILLING_RUNTIME_PROVIDER="LLM7",
+            BILLING_RUNTIME_MODEL="GLM-5.3-Flash",
+            BILLING_AUTHORIZED_RUNTIME_MODELS=(
+                "LLM7:GLM-5.3-Flash,GOOGLE_GENAI:gemini-3.5-flash-lite"
+            ),
+        ),
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode != 0
+    assert "must match the effective LCSP primary runtime model" in result.stderr

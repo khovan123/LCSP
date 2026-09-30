@@ -19,12 +19,21 @@ from tools.common.capabilities.assessment.claims.evidence_claim.models import (
 from tools.common.capabilities.assessment.evaluation.engineering_rule.rule_evaluator import (
     EngineeringRuleEvaluator,
 )
-from tools.common.capabilities.assessment.investigation.engineering_rule.pipeline import (
-    EngineeringInvestigationPipeline,
+from tools.common.capabilities.assessment.rule_assessment.run import (
+    claims_for_rule,
+    finalize_rule_results,
+    rule_runtime_version,
+    technical_evidence_display,
+    usable_rule_result,
+)
+from tools.common.capabilities.assessment.rule_assessment.values import (
+    RULE_ANALYSIS_STATUSES,
+    RULE_ASSESSMENT_VALIDATOR_ID,
+    RULE_CRITERION_STATUSES,
+    RULE_EVIDENCE_KINDS,
 )
 from tools.common.capabilities.evidence.graph.schema.models import ProgramEvidenceGraph
 from tools.common.capabilities.platform import repository_sandbox
-from orchestration.result_validation import validate_specialist_handoff
 
 
 _CRITERION = "AI_INTERACTION_DISCLOSURE_CONTROL"
@@ -114,14 +123,63 @@ def test_pinned_production_source_can_close_positive_claim(monkeypatch) -> None:
     validated = EvidenceClaimValidator().validate(claim, _graph())
     assert validated.source_verified is True
     assert EngineeringRuleEvaluator().evaluate(_rule(), [validated]).status == "COMPLIANT"
-    assert EngineeringInvestigationPipeline._validated_claims_for_evaluation(
-        [claim], _graph()
-    ) == (validated,)
-    displays = EngineeringInvestigationPipeline._technical_evidence_displays(
-        _graph(), (), (validated,)
-    )
+
+    # The same pinned production source closes the criterion through the new
+    # per-rule runtime: the accepted assessment carries validator-stamped
+    # provenance, claims_for_rule mints the governed claim, and the evaluator
+    # stays COMPLIANT.
+    assessment = _governed_assessment()
+    assert usable_rule_result(
+        _rule(), assessment, commit_sha="abc123", applicability_status="MATCHED"
+    ) is True
+    (governed_claim,) = claims_for_rule(_rule(), assessment, commit_sha="abc123")
+    assert governed_claim.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]
+    assert governed_claim.value is True
+    assert EngineeringRuleEvaluator().evaluate(_rule(), [governed_claim]).status == "COMPLIANT"
+    displays = technical_evidence_display(assessment)
     assert displays[0]["file_path"] == "src/disclosure.py"
     assert displays[0]["start_line"] == 1
+
+
+def _governed_assessment() -> dict:
+    """Accepted rule assessment mirroring the pinned production source above."""
+    rule = _rule()
+    entry = {
+        "ref": "ref:disclosure",
+        "path": "src/disclosure.py",
+        "startLine": 1,
+        "endLine": 1,
+        "symbol": "show_disclosure_notice",
+        "provenance": {
+            "assessmentId": "assessment-1",
+            "repositoryVersion": "abc123",
+            "engineeringRuleId": "rule-1",
+            "criterionId": _CRITERION,
+            "validator": RULE_ASSESSMENT_VALIDATOR_ID,
+        },
+    }
+    return {
+        "resultId": "rar-rule-1",
+        "assessmentId": "assessment-1",
+        "engineeringRuleId": "rule-1",
+        "engineeringRuleVersion": rule_runtime_version(rule),
+        "repositoryVersion": "abc123",
+        "contextRevision": 1,
+        "status": RULE_ANALYSIS_STATUSES["completed"],
+        "criteria": [
+            {
+                "criterionId": _CRITERION,
+                "status": RULE_CRITERION_STATUSES["evidenceFound"],
+                "evidenceKind": RULE_EVIDENCE_KINDS["supportsRequirement"],
+                "evidenceRefs": [entry["ref"]],
+                "evidence": [entry],
+                "technicalFacts": [],
+                "limitations": [],
+            }
+        ],
+        "limitations": [],
+        "execution": {"attempt": 1},
+    }
 
 
 @pytest.mark.parametrize(
@@ -159,36 +217,31 @@ def test_direct_source_requires_repository_backend(monkeypatch) -> None:
         EvidenceClaimValidator().validate(_claim(), _graph())
 
 
-def test_handoff_accepts_source_citation_only_after_repository_validation(monkeypatch) -> None:
-    monkeypatch.setattr(repository_sandbox, "current_repository_backend", lambda: _Repository())
-    pins = {"repositorySnapshotId": "snapshot-1"}
-    payload = {
-        "status": "READY",
-        "artifact_versions": pins,
-        "claims": [
-            {
-                "claim_id": "claim-1",
-                "engineering_rule_id": "rule-1",
-                "claim_type": ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"],
-                "value": True,
-                "criterion": _CRITERION,
-                "source_locations": [
-                    {"path": "src/disclosure.py", "start_line": 1, "end_line": 1}
-                ],
-                "confidence": 0.9,
-                "limitations": [],
-            }
-        ],
-        "next_step": "GATE",
-    }
-    result = validate_specialist_handoff(
-        "investigator",
-        payload,
-        graph=_graph(),
-        pinned_rule_ids=("rule-1",),
-        pinned_versions=pins,
+def test_governed_claim_fails_closed_without_stamped_provenance() -> None:
+    # A source citation is accepted only with validator-stamped provenance binding
+    # it to this assessment, commit, rule and criterion. An unstamped entry fails
+    # closed to an unresolved claim (UNKNOWN), never to a decided outcome.
+    from unittest.mock import MagicMock
+
+    assessment = _governed_assessment()
+    entry = dict(assessment["criteria"][0]["evidence"][0])
+    entry.pop("provenance")
+    assessment["criteria"][0]["evidence"] = [entry]
+
+    (claim,) = claims_for_rule(_rule(), assessment, commit_sha="abc123")
+    assert claim.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+    assert claim.value is None
+    (evaluation,) = finalize_rule_results(
+        assessment_id="assessment-1",
+        rules=[_rule()],
+        api=MagicMock(),
+        applicability_facts={},
+        context_revision=1,
+        assessments=[assessment],
+        applicability={"rule-1": {"status": "MATCHED"}},
+        commit_sha="abc123",
     )
-    assert result.status == "READY"
+    assert evaluation.status == "UNKNOWN"
 
 
 def test_direct_source_cannot_bypass_closed_claim_value_or_confidence(monkeypatch) -> None:

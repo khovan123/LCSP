@@ -1,101 +1,53 @@
-"""Full-harness Deep Agent repository analysis.
+"""One bounded Deep Agent task for scan-time AI discovery.
 
-Each assessment owns a live repository working tree inside the LCSP Docker
-sandbox assigned to its durable thread. The pinned snapshot is only the
-immutable baseline for that working database. Repository analysis reuses the same
-repository-rooted backend; it never creates a child sandbox or host-local workspace.
-Language-specific scanners are intentionally not part of this path.
+Repository hydration and Codebase Memory indexing happen before this boundary in
+middleware/system_event_dispatch.py. EngineeringRule analysis is deliberately not
+part of this scan job; it runs independently, one rule at a time.
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
 from dataclasses import dataclass
 from importlib.metadata import version
 from typing import Any
 
 from deepagents import create_deep_agent
 from deepagents.backends import BackendProtocol
-from langchain.agents.middleware import TodoListMiddleware
 
 from harness import configure_lcsp_harness
-from tools.common.capabilities.platform.codebase_memory import (
-    CodebaseMemoryGraphReader,
-    active_codebase_memory_index,
-)
-from .intelligence_pack import (
-    REPOSITORY_INTELLIGENCE_PACK_KEY,
-    build_repository_intelligence_pack,
-)
 from middleware.agent_run_budget import AgentRunBudgetMiddleware
-from tools.common.codebase_memory_graph import CODEBASE_MEMORY_GRAPH_TOOLS
 from middleware.billing_metering import BillingAgentRoleMiddleware
-from middleware.model_governance import (
-    MODEL_GOVERNANCE_MIDDLEWARE,
-    governed_general_purpose_subagent,
-)
-from model_policy import INVESTIGATOR_MODEL_SPEC, resolve_agent_model
+from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from model_policy import REPOSITORY_ANALYST_MODEL_SPEC, resolve_agent_model
 from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
 from orchestration.technical_coverage_policy import attach_partial_coverage_policy
-from tools.common.capabilities.evidence.graph.schema.models import (
-    program_graph_content_hash,
-)
+from tools.common.capabilities.evidence.graph.schema.models import program_graph_content_hash
+from tools.common.capabilities.platform.logging import get_logger
 from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
+from tools.common.codebase_memory_graph import CODEBASE_MEMORY_GRAPH_TOOLS
 
-from .models import AiFinding, RepositoryAnalysisResult, SourceAnchor
+from .models import AiDiscovery, AiFinding, RepositoryAnalysisResult, SourceAnchor
 
+logger = get_logger(__name__)
 
-REPOSITORY_ANALYSIS_VERSION = "1.0.0"
-SCANNER_FINALIZE_AFTER_MODEL_CALLS = 80
-# Interview snippet locators are bounded to seven lines by the handoff contract and the
-# API snippet resolver; anchors may span a whole symbol, so findings point at its head.
+REPOSITORY_ANALYSIS_VERSION = "2.0.0"
+AI_DISCOVERY_FINALIZE_AFTER_MODEL_CALLS = 12
+AI_DISCOVERY_FAILED = "AI_DISCOVERY_FAILED"
 SNIPPET_REF_MAX_LINES = 7
 
-SYSTEM_PROMPT = """You are LCSP's repository evidence analyst running as a full Deep Agent.
+SYSTEM_PROMPT = """You perform one bounded AI-discovery pass over the assessed repository.
 
-The assessment repository is your persistent working database, like the checkout used by a coding
-CLI agent. The pinned snapshot is only its immutable baseline/provenance. Your filesystem root `/`
-and shell working directory are the repository itself; use ls, glob, grep, read_file, write_file,
-edit_file, execute, task/subagents and planning against that same working tree. `.lcsp/` is reserved
-for agent/runtime state and `.git/` is repository bookkeeping; neither is customer evidence.
-You are not limited to a predefined language scanner. Detect the repository's actual languages, frameworks,
-build systems, generated code, configuration, AI SDKs, HTTP clients, runtime indirection, queues,
-persistence, decision paths and human-review paths from the evidence you inspect.
+The repository is your native filesystem and shell working directory. Its Codebase Memory index
+is already built; use the supplied graph tools for navigation and inspect source before reporting
+evidence. Do not analyze EngineeringRules, legal criteria, compliance, or customer context. Do not
+create discovery tasks, plans, batches, graph-provider queries, or a repository evidence graph.
 
-The repository is already indexed into a Codebase Memory graph before you start. Navigate it with
-the graph tools first: `search_code_graph` to locate implementations (AI SDK clients, routes,
-decision/review paths), `trace_call_path` to follow callers/callees across files, `get_code_snippet`
-for exact source, `search_code_text` for text matches grouped by symbol, and
-`get_repository_architecture` for languages, packages and entry points. Use grep/read_file to confirm
-what the graph points you to rather than to rediscover structure file by file.
-Treat this graph as an index/memory aid, not source authority: inspect material source directly with
-read_file/grep/execute before grounding final evidence. For absence or exhaustive claims, check graph
-coverage and independently verify any skipped, excluded, partial, generated, dynamic, or unresolved area.
-Do not copy the Codebase Memory database into the LCSP evidence graph; emit only grounded semantic
-nodes/edges/source anchors in RepositoryAnalysisResult.
-
-Build a compact semantic evidence graph grounded only in source you actually inspected. Evidence
-must be represented by repository-relative file paths and line ranges; never return raw source
-code, prompts, secrets, credentials or full command output. Prefer stable semantic node/edge labels
-over prose. Mark inferred or dynamic relationships UNRESOLVED instead of inventing certainty.
-
-AI discovery gate:
-- AI_CONFIRMED only when you observed a concrete AI/model invocation or outbound AI call.
-- AI_ABSENT_CONFIRMED only after broad repository inventory/search is complete, all material
-  candidate paths were inspected, and there is no unresolved generated/dynamic/configured/runtime
-  frontier that could conceal AI use.
-- Otherwise AI_UNKNOWN.
-- AI_ABSENT_CONFIRMED requires coverage_state READY both globally and in ai_discovery.
-- Any material dynamic target, generated source gap, unreadable area, failed search/build command,
-  unsupported binary/config indirection, or unresolved outbound endpoint makes coverage PARTIAL
-  and prevents AI_ABSENT_CONFIRMED.
-
-Use task delegation when parallel exploration helps (for example separate languages or architecture
-areas). Use shell commands only inside the isolated sandbox and do not install or execute repository
-application dependencies unless inspection genuinely requires it. Static inspection is preferred.
-
-Return only the structured RepositoryAnalysisResult. Keep labels and notes concise and source-safe.
+Return only the small structured result. AI_CONFIRMED requires a concrete model invocation or
+outbound AI call. AI_ABSENT_CONFIRMED is allowed only after broad material coverage with no
+generated, dynamic, excluded, unreadable, or unresolved frontier; otherwise return AI_UNKNOWN.
+Report repository-relative anchors and compact metadata only, never raw source, prompts, secrets,
+credentials, or command output.
 """
 
 
@@ -108,12 +60,12 @@ class RepositoryAnalysisArtifact:
 
 
 class RepositoryDeepAnalyzer:
-    """Analyze one pinned repository snapshot using the native Deep Agents harness."""
+    """Run the single scan-time AI-discovery task against the hydrated repository."""
 
     def __init__(
         self,
         *,
-        model_spec: str = INVESTIGATOR_MODEL_SPEC,
+        model_spec: str = REPOSITORY_ANALYST_MODEL_SPEC,
         backend: BackendProtocol | None = None,
     ) -> None:
         self._model_spec = model_spec
@@ -125,32 +77,42 @@ class RepositoryDeepAnalyzer:
         snapshot_id: str,
         commit_sha: str,
         scan_job_id: str,
-        targeted_scope: dict[str, Any] | None = None,
         backend: BackendProtocol | None = None,
-        assessment_id: str | None = None,
+        **_: Any,
     ) -> RepositoryAnalysisArtifact:
         repository_backend = backend or self._backend or current_repository_backend()
         if repository_backend is None:
             raise RuntimeError(
                 "repository analysis requires the current LCSP repository sandbox backend"
             )
-        result = self._invoke(
-            repository_backend,
-            snapshot_id=snapshot_id,
-            commit_sha=commit_sha,
-            scan_job_id=scan_job_id,
-            targeted_scope=targeted_scope,
-        )
-        result = enforce_ai_absence_backstop(repository_backend, result)
+
+        failed = False
+        try:
+            result = self._invoke(
+                repository_backend,
+                snapshot_id=snapshot_id,
+                commit_sha=commit_sha,
+                scan_job_id=scan_job_id,
+            )
+            result = enforce_ai_absence_backstop(repository_backend, result)
+        except Exception as error:  # AI discovery is independently durable per A4
+            logger.warning(
+                "AI_DISCOVERY_FAILED",
+                scan_job_id=scan_job_id,
+                error_type=type(error).__name__,
+            )
+            result = _failed_ai_discovery_result()
+            failed = True
+
         return RepositoryAnalysisArtifact(
             result=result,
-            evidence_payload=self._evidence_payload_with_pack(
+            evidence_payload=self._evidence_payload(
                 repository_backend,
                 result,
                 snapshot_id=snapshot_id,
                 commit_sha=commit_sha,
                 scan_job_id=scan_job_id,
-                assessment_id=assessment_id,
+                ai_discovery_failed=failed,
             ),
             tools_version={
                 "deepagents": version("deepagents"),
@@ -164,43 +126,6 @@ class RepositoryDeepAnalyzer:
             },
         )
 
-    def _evidence_payload_with_pack(
-        self,
-        backend: BackendProtocol,
-        result: RepositoryAnalysisResult,
-        *,
-        snapshot_id: str,
-        commit_sha: str,
-        scan_job_id: str,
-        assessment_id: str | None,
-    ) -> dict[str, Any]:
-        """Attach the durable Repository Intelligence Pack to the scan evidence.
-
-        The Scanner is the only stage allowed broad discovery, and an accepted
-        report is immutable, so the pack must ship with this callback.
-        """
-        payload = self._evidence_payload(
-            backend,
-            result,
-            snapshot_id=snapshot_id,
-            commit_sha=commit_sha,
-            scan_job_id=scan_job_id,
-        )
-        execute = getattr(backend, "execute", None)
-        payload[REPOSITORY_INTELLIGENCE_PACK_KEY] = build_repository_intelligence_pack(
-            evidence_payload=payload,
-            assessment_id=assessment_id,
-            snapshot_id=snapshot_id,
-            commit_sha=commit_sha,
-            scan_job_id=scan_job_id,
-            scanner_version=REPOSITORY_ANALYSIS_VERSION,
-            index=active_codebase_memory_index(),
-            graph_reader=(
-                CodebaseMemoryGraphReader(execute) if callable(execute) else None
-            ),
-        )
-        return payload
-
     def _invoke(
         self,
         backend: BackendProtocol,
@@ -208,57 +133,43 @@ class RepositoryDeepAnalyzer:
         snapshot_id: str,
         commit_sha: str,
         scan_job_id: str,
-        targeted_scope: dict[str, Any] | None,
     ) -> RepositoryAnalysisResult:
         configure_lcsp_harness()
         model = resolve_agent_model(
-            agent_name="investigator",
+            agent_name="repository-analyst",
             model_spec=self._model_spec,
         )
         agent = create_deep_agent(
-            name="repository-analyst",
+            name="ai-discovery-analyst",
             model=model,
             backend=backend,
             system_prompt=SYSTEM_PROMPT,
             middleware=[
-                # Whole-repository analysis legitimately needs more steps than a
-                # single-rule investigation, but it must still converge.
-                AgentRunBudgetMiddleware(finalize_after=SCANNER_FINALIZE_AFTER_MODEL_CALLS),
-                TodoListMiddleware(),
-                BillingAgentRoleMiddleware("investigator"),
+                AgentRunBudgetMiddleware(
+                    finalize_after=AI_DISCOVERY_FINALIZE_AFTER_MODEL_CALLS
+                ),
+                BillingAgentRoleMiddleware("repository-analyst"),
                 *MODEL_GOVERNANCE_MIDDLEWARE,
-            ],
-            subagents=[
-                governed_general_purpose_subagent(model, billing_role="investigator"),
-                {
-                    "name": "repository-explorer",
-                    "description": (
-                        "Fork the current investigation to explore a language, package, "
-                        "framework, dependency surface, or architecture path in parallel."
-                    ),
-                    "mode": "fork",
-                    "model": model,
-                },
             ],
             tools=CODEBASE_MEMORY_GRAPH_TOOLS,
             response_format=RepositoryAnalysisResult,
             debug=False,
         )
-        scope_text = (
-            json.dumps(targeted_scope, ensure_ascii=False, sort_keys=True)
-            if targeted_scope
-            else "whole repository"
-        )
-        instruction = (
-            f"Analyze snapshot {snapshot_id} at commit {commit_sha or 'unknown'} for scan "
-            f"{scan_job_id}. Scope: {scope_text}. Build grounded technical evidence and decide "
-            "AI discovery coverage using the rules in your system instructions."
-        )
         response = invoke_with_stream(
             agent,
-            {"messages": [{"role": "user", "content": instruction}]},
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": (
+                            f"Discover AI use and technical coverage for snapshot {snapshot_id} "
+                            f"at commit {commit_sha or 'unknown'} (scan {scan_job_id})."
+                        ),
+                    }
+                ]
+            },
             config={
-                "configurable": {"thread_id": f"repository-analysis:{scan_job_id}"},
+                "configurable": {"thread_id": f"ai-discovery:{scan_job_id}"},
                 "metadata": {
                     "scan_job_id": scan_job_id,
                     "snapshot_id": snapshot_id,
@@ -268,7 +179,7 @@ class RepositoryDeepAnalyzer:
             stage=AGENT_STREAM_STAGES["scanner"],
         )
         if not isinstance(response, dict) or response.get("structured_response") is None:
-            raise RuntimeError("repository Deep Agent did not return structured_response")
+            raise RuntimeError("AI-discovery Deep Agent did not return structured_response")
         return RepositoryAnalysisResult.model_validate(response["structured_response"])
 
     @staticmethod
@@ -279,6 +190,7 @@ class RepositoryDeepAnalyzer:
         snapshot_id: str,
         commit_sha: str,
         scan_job_id: str,
+        ai_discovery_failed: bool = False,
     ) -> dict[str, Any]:
         anchors: list[dict[str, Any]] = []
         anchor_by_id: dict[str, dict[str, Any]] = {}
@@ -292,7 +204,6 @@ class RepositoryDeepAnalyzer:
             source_file = downloaded[0]
             if source_file.error or source_file.content is None:
                 continue
-            source_hash = "sha256:" + hashlib.sha256(source_file.content).hexdigest()
             body = {
                 "anchor_id": anchor.anchor_id,
                 "snapshot_id": snapshot_id,
@@ -301,62 +212,20 @@ class RepositoryDeepAnalyzer:
                 "symbol_ref": anchor.symbol_ref,
                 "start_line": anchor.start_line,
                 "end_line": anchor.end_line,
-                "source_hash": source_hash,
+                "source_hash": "sha256:"
+                + hashlib.sha256(source_file.content).hexdigest(),
             }
             anchors.append(body)
             anchor_by_id[anchor.anchor_id] = body
 
-        nodes = []
-        for node in result.nodes:
-            anchor = anchor_by_id.get(node.anchor_id or "")
-            nodes.append(
-                {
-                    "node_id": node.node_id,
-                    "node_type": node.node_type,
-                    "label": node.label,
-                    "source": (
-                        {
-                            "file_path": anchor["file_path"],
-                            "start_line": anchor["start_line"],
-                            "end_line": anchor["end_line"],
-                            "symbol_ref": anchor["symbol_ref"],
-                            "source_hash": anchor["source_hash"],
-                        }
-                        if anchor
-                        else None
-                    ),
-                    "semantic_types": node.semantic_types,
-                    "evidence_refs": [node.anchor_id] if anchor else [],
-                    "coverage_state": (
-                        "LIMITED" if node.resolution_state == "UNRESOLVED" else "SUFFICIENT"
-                    ),
-                    "origin": "DEEP_AGENT",
-                    "resolution_state": node.resolution_state,
-                }
-            )
-
-        edges = [
-            {
-                "edge_id": edge.edge_id,
-                "edge_type": edge.edge_type,
-                "source_node_id": edge.source_node_id,
-                "target_node_id": edge.target_node_id,
-                "confidence": edge.confidence,
-                "evidence_refs": [],
-                "coverage_state": (
-                    "LIMITED" if edge.resolution_state == "UNRESOLVED" else "SUFFICIENT"
-                ),
-                "origin": "DEEP_AGENT",
-                "resolution_state": edge.resolution_state,
-            }
-            for edge in result.edges
-        ]
-
-        findings = []
+        findings: list[dict[str, Any]] = []
         for finding in result.ai_discovery.findings:
             anchor = anchor_by_id.get(finding.anchor_id or "")
             body = finding.model_dump(exclude_none=True)
             body.pop("anchor_id", None)
+            body["evidence_refs"] = [
+                ref for ref in body.get("evidence_refs", []) if ref in anchor_by_id
+            ]
             if anchor:
                 body["snippet_ref"] = {
                     "snapshot_id": snapshot_id,
@@ -379,13 +248,15 @@ class RepositoryDeepAnalyzer:
             "graph_id": f"deep-agent:{scan_job_id}",
             "snapshot_id": snapshot_id,
             "commit_sha": commit_sha,
-            "node_count": len(nodes),
-            "edge_count": len(edges),
-            "nodes": nodes,
-            "edges": edges,
+            "node_count": 0,
+            "edge_count": 0,
+            "nodes": [],
+            "edges": [],
             "source_anchors": anchors,
             "indexes": {},
-            "unresolved_frontiers": result.unresolved_frontiers,
+            "unresolved_frontiers": list(
+                result.ai_discovery.material_unresolved_frontiers
+            ),
             "coverage_state": result.coverage_state,
             "coverage_notes": result.coverage_notes,
             "provenance": {
@@ -396,29 +267,49 @@ class RepositoryDeepAnalyzer:
             "graph_hash": "",
             "schema_version": "deep-agent-1.0.0",
         }
-        # Downstream investigation requires identifiable provenance (graph_id + hash).
         graph["graph_hash"] = program_graph_content_hash(graph)
-        payload = {
-            "summary": result.summary,
-            "languages": result.languages,
-            "frameworks": result.frameworks,
-            "technicalCoverageState": result.coverage_state,
-            "coverageLimitations": result.coverage_notes,
-            "evidence_graph": graph,
-            "ai_discovery": {
-                "schema_version": "1.0.0",
-                "gate": result.ai_discovery.gate,
-                "coverage_state": result.ai_discovery.coverage_state,
-                "findings": findings,
-                "material_unresolved_frontiers": result.ai_discovery.material_unresolved_frontiers,
-            },
-        }
-        # Initial Interview may start from PARTIAL coverage only with this auditable
-        # scanner-workflow decision (bounded, pinned, evidence-backed limitations).
-        return attach_partial_coverage_policy(payload)
+        return attach_partial_coverage_policy(
+            {
+                "commit_sha": commit_sha,
+                "summary": result.summary,
+                "languages": result.languages,
+                "frameworks": result.frameworks,
+                "coverage_state": result.coverage_state,
+                "technical_coverage": {
+                    "coverage_state": result.coverage_state,
+                    "limitations": list(result.coverage_notes),
+                },
+                "technicalCoverageState": result.coverage_state,
+                "coverageLimitations": result.coverage_notes,
+                "evidence_graph": graph,
+                "ai_discovery": {
+                    "schema_version": "1.0.0",
+                    "gate": result.ai_discovery.gate,
+                    "coverage_state": result.ai_discovery.coverage_state,
+                    "findings": findings,
+                    "material_unresolved_frontiers": (
+                        result.ai_discovery.material_unresolved_frontiers
+                    ),
+                    "limitations": [AI_DISCOVERY_FAILED] if ai_discovery_failed else [],
+                },
+            }
+        )
 
-# Deterministic contradiction check for the model's AI absence claim. Literal patterns
-# (backend grep is substring, not regex) mapped to a provider label.
+
+def _failed_ai_discovery_result() -> RepositoryAnalysisResult:
+    return RepositoryAnalysisResult(
+        summary="AI discovery could not complete.",
+        coverage_state="PARTIAL",
+        coverage_notes=[AI_DISCOVERY_FAILED],
+        ai_discovery=AiDiscovery(
+            gate="AI_UNKNOWN",
+            coverage_state="PARTIAL",
+            material_unresolved_frontiers=[AI_DISCOVERY_FAILED],
+        ),
+    )
+
+
+# Existing deterministic contradiction backstop. It only downgrades absence.
 _AI_IMPORT_SIGNALS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("import openai", ("**/*.py",), "openai"),
     ("from openai", ("**/*.py",), "openai"),
@@ -442,40 +333,29 @@ _JS_AI_MODULES: tuple[tuple[str, str], ...] = (
     ("langchain", "langchain"),
 )
 _AI_MANIFEST_SIGNALS: tuple[tuple[str, tuple[str, ...], str], ...] = (
-    *(
-        (f'"{module}' + ("" if module.endswith("/") else '"'), ("**/package.json",), provider)
-        for module, provider in _JS_AI_MODULES
-    ),
-    *(
-        (package, ("**/pyproject.toml", "**/requirements*.txt"), provider)
-        for package, provider in (
-            ("openai", "openai"),
-            ("anthropic", "anthropic"),
-            ("langchain", "langchain"),
-            ("google-genai", "google-genai"),
-            ("google-generativeai", "google-genai"),
-            ("litellm", "litellm"),
-        )
-    ),
+    *((f'"{module}' + ("" if module.endswith("/") else '"'), ("**/package.json",), provider)
+      for module, provider in _JS_AI_MODULES),
+    *((package, ("**/pyproject.toml", "**/requirements*.txt"), provider)
+      for package, provider in (
+          ("openai", "openai"),
+          ("anthropic", "anthropic"),
+          ("langchain", "langchain"),
+          ("google-genai", "google-genai"),
+          ("google-generativeai", "google-genai"),
+          ("litellm", "litellm"),
+      )),
 )
 _AI_SIGNALS = (
     *_AI_IMPORT_SIGNALS,
-    *(
-        (f'from {quote}{module}', _JS_SOURCE_GLOBS, provider)
-        for module, provider in _JS_AI_MODULES
-        for quote in ('"', "'")
-    ),
-    *(
-        (f'require("{module}', _JS_SOURCE_GLOBS, provider)
-        for module, provider in _JS_AI_MODULES
-    ),
+    *((f"from {quote}{module}", _JS_SOURCE_GLOBS, provider)
+      for module, provider in _JS_AI_MODULES for quote in ('"', "'")),
+    *((f'require("{module}', _JS_SOURCE_GLOBS, provider)
+      for module, provider in _JS_AI_MODULES),
     *_AI_MANIFEST_SIGNALS,
 )
 _NON_PRODUCT_SEGMENTS = frozenset(
-    {
-        "node_modules", ".venv", "venv", ".git", ".lcsp", "dist", "build", "vendor",
-        "site-packages", "__pycache__", "tests", "test", "__tests__", "fixtures",
-    }
+    {"node_modules", ".venv", "venv", ".git", ".lcsp", "dist", "build", "vendor",
+     "site-packages", "__pycache__", "tests", "test", "__tests__", "fixtures"}
 )
 _MAX_BACKSTOP_MATCHES = 50
 
@@ -488,7 +368,9 @@ def _product_path(path: str) -> bool:
     return not (name.startswith("test_") or ".spec." in name or ".test." in name)
 
 
-def _first_product_match(backend: BackendProtocol, pattern: str, globs: tuple[str, ...]):
+def _first_product_match(
+    backend: BackendProtocol, pattern: str, globs: tuple[str, ...]
+) -> Any:
     for glob in globs:
         found = backend.grep(pattern, path="/", glob=glob, max_count=_MAX_BACKSTOP_MATCHES)
         if getattr(found, "error", None):
@@ -502,29 +384,19 @@ def _first_product_match(backend: BackendProtocol, pattern: str, globs: tuple[st
 def enforce_ai_absence_backstop(
     backend: BackendProtocol, result: RepositoryAnalysisResult
 ) -> RepositoryAnalysisResult:
-    """Refuse a model-asserted AI_ABSENT_CONFIRMED that repository files contradict.
-
-    Absence is only legal under genuinely READY coverage (ai-discovery-gate.md), yet READY
-    is the model's own claim. Product imports or dependency declarations of AI SDKs are
-    provider references, so the gate drops to AI_UNKNOWN. The full repository pass has
-    already failed to trace a call from them, so another technical pass would repeat the
-    same miss: whether the product uses the SDK is one bounded Customer question. If the
-    deterministic search itself fails, absence is unproven technically and stays a frontier.
-    """
-    discovery = result.ai_discovery
-    if discovery.gate != "AI_ABSENT_CONFIRMED":
+    """Downgrade an AI-absence result contradicted by deterministic SDK signals."""
+    if result.ai_discovery.gate != "AI_ABSENT_CONFIRMED":
         return result
 
     hits: dict[str, dict[str, Any]] = {}
     frontiers: list[str] = []
     try:
         for pattern, globs, provider in _AI_SIGNALS:
-            if provider in hits:
-                continue
-            match = _first_product_match(backend, pattern, globs)
-            if match is not None:
-                hits[provider] = match
-    except Exception as error:  # noqa: BLE001 - any search failure leaves absence unproven
+            if provider not in hits:
+                match = _first_product_match(backend, pattern, globs)
+                if match is not None:
+                    hits[provider] = match
+    except Exception as error:
         frontiers.append(
             "AI absence could not be verified: deterministic SDK scan failed "
             f"({type(error).__name__})"
@@ -545,7 +417,10 @@ def enforce_ai_absence_backstop(
         line = int(match.get("line") or 1)
         anchors.append(
             SourceAnchor(
-                anchor_id=anchor_id, file_path=file_path, start_line=line, end_line=line
+                anchor_id=anchor_id,
+                file_path=file_path,
+                start_line=line,
+                end_line=line,
             ).model_dump()
         )
         findings.append(
@@ -573,23 +448,13 @@ def enforce_ai_absence_backstop(
     data["coverage_notes"] = [
         *data["coverage_notes"],
         "AI_ABSENT_CONFIRMED was downgraded to AI_UNKNOWN by the deterministic "
-        "AI SDK dependency/import check"
-        + (
-            " ("
-            + ", ".join(
-                f"{provider} at {str(match['path']).lstrip('/')}:{int(match.get('line') or 1)}"
-                for provider, match in sorted(hits.items())
-            )
-            + ")"
-            if hits
-            else ""
-        )
-        + ".",
+        "AI SDK dependency/import check.",
     ]
     return RepositoryAnalysisResult.model_validate(data)
 
 
 __all__ = [
+    "AI_DISCOVERY_FAILED",
     "REPOSITORY_ANALYSIS_VERSION",
     "RepositoryAnalysisArtifact",
     "RepositoryDeepAnalyzer",

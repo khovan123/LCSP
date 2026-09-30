@@ -246,12 +246,22 @@ export const enPages = {
         "Trimmed older tool results to stay within the context budget",
     },
     agentStreamRule: {
+      activity: {
+        ruleAnalysisStarted: "Analysis of this rule started",
+        ruleAnalysisCompleted: "Analysis of this rule finished",
+        ruleAnalysisNeedsContext: "Analysis needs more business context",
+        ruleAnalysisUnresolved: "Analysis could not establish every requirement",
+        ruleAnalysisFailed: "Analysis of this rule failed",
+        businessContextRequested: "Asked for business context",
+        businessContextResolved: "Business context received",
+        ruleAnalysisResumed: "Analysis resumed with the new context",
+        ruleApplicabilityEvaluated: "Checked whether this rule applies",
+        ruleCompletionGated: "Completion check applied",
+      },
       investigating: "Investigating rule",
       investigated: "Investigated rule",
       investigationFailed: "Rule investigation failed",
       waitingForInput: "Rule is waiting for customer input",
-      planned: "Planned rule",
-      plannedGoals: "Selected investigation goals",
       result: "Reasoning result",
       decision: "Decision",
       reason: "Reason",
@@ -262,19 +272,14 @@ export const enPages = {
     agentStreamTurn: {
       scannerActor: "LCSP Scanner",
       interviewActor: "LCSP",
-      plannerActor: "LCSP Planner",
-      investigatorActor: "LCSP Investigator",
+      ruleAnalysisActor: "LCSP Rule analysis",
       gateActor: "LCSP Reviewer",
-      assessmentAgentActor: "LCSP Assessment Agent",
       scannerRunning: "Preparing repository evidence…",
       scannerCompleted: "Repository evidence is ready.",
       scannerFailed: "Could not finish preparing repository evidence.",
       interviewRunning: "Reviewing your answer…",
       interviewCompleted: "Finished reviewing your answer.",
       interviewFailed: "Ran into a problem processing your answer.",
-      plannerRunning: "Reviewing engineering rules against this repository…",
-      plannerCompleted: "Selected the engineering rules worth investigating.",
-      plannerFailed: "Could not complete investigation planning.",
       investigateRunning: "Investigating the selected engineering rules…",
       investigateCompleted:
         "Finished investigating the selected engineering rules.",
@@ -283,7 +288,6 @@ export const enPages = {
       gateRunning: "Reviewing the investigation results…",
       gateCompleted: "Finished the compliance review.",
       gateFailed: "Could not finish the compliance review.",
-      skippedGoals: "Rules not selected for investigation",
       ruleInvestigating: "Investigating…",
       ruleInvestigated: "Investigated",
       ruleFailed: "Investigation stopped",
@@ -300,7 +304,7 @@ export const enPages = {
       failures: "Provider/model failures",
       rawEvents: "Raw events",
     },
-    agentStreamInvestigatorOutput: {
+    agentStreamRuleAnalysisOutput: {
       aggregatedFailed: "Investigations could not be completed",
       aggregatedWaiting: "Investigations need more information",
       completed: "Investigation completed.",
@@ -406,8 +410,7 @@ export const enPages = {
         scanner: "Scanner",
         interview: "Interview",
         rules: "Rules",
-        planner: "Planner",
-        investigate: "Investigate",
+        ruleAnalysis: "Rule analysis",
         gate: "Gate",
       },
       statuses: {
@@ -654,8 +657,7 @@ export const enPages = {
       showcaseWorkflowScanner: "Scanner",
       showcaseWorkflowInterview: "Interview",
       showcaseWorkflowRules: "Rules",
-      showcaseWorkflowPlanner: "Planner",
-      showcaseWorkflowInvestigate: "Investigate",
+      showcaseWorkflowRepositoryAnalyst: "Repository Analyst",
       showcaseWorkflowGate: "Gate",
       showcaseStatusPassed: "Passed",
       showcaseStatusRunning: "Running",
@@ -731,9 +733,9 @@ export const enPages = {
         "LCSP keeps orchestration, external access, and usage controls visible alongside the assessment instead of hiding them in separate tooling.",
       capabilityOneTitle: "Orchestrated assessment",
       capabilityOneDescription:
-        "Scanner, Interview, Rules, Planner, Investigate, and Gate work as one visible assessment flow.",
+        "Scan, Interview, Rule analysis, and a deterministic Gate work as one visible assessment flow.",
       capabilityOneMeta:
-        "Scanner · Interview · Rules · Planner · Investigate · Gate",
+        "Scan · Interview · Rule analysis · Gate",
       capabilityTwoTitle: "Controlled connectors",
       capabilityTwoDescription:
         "Connect GitHub, Bitbucket, or Azure DevOps while keeping repository and workspace scope explicit.",
@@ -1653,6 +1655,9 @@ export const enPages = {
     adjustPlaceholder: "Enter your adjustment or correction...",
     composerChooseConfirmAdjust: "Choose Confirm or Adjust above...",
     submitAnswer: "Send answer",
+    sourceCode: "Referenced source code",
+    sourceCodeLoading: "Loading referenced source code",
+    sourceCodeUnavailable: "The referenced source code is unavailable.",
     resumePipeline: "Resume",
     resumeQueued: "Resume queued for this assessment.",
     answerSavedForRuntime:
@@ -1839,7 +1844,6 @@ export const enPages = {
       pendingDescription:
         "Evidence is ready. Waiting for Interview orchestration to provide the first question.",
       pendingPlaceholder: "Waiting for Interview...",
-      plannerPlaceholder: "Planning the assessment...",
       investigatePlaceholder: "Investigating the selected rules...",
       gatePlaceholder: "Reviewing the investigation results...",
       aiNotDetectedDescription:
@@ -1884,26 +1888,20 @@ export const enPages = {
     },
     technicalEvidence: {
       progress: "Assessment progress",
-      plannerProgress: "Planner progress",
-      plannerFailed: "Planner limitation",
-      investigatorProgress: "Investigator progress",
-      investigatorFailed: "Investigator limitation",
-      plannerDecision:
-        "Planner {decision} EngineeringRule {engineeringRuleId} ({reasonCode})",
+      ruleAnalysisProgress: "Requirement analysis progress",
+      ruleAnalysisLimited: "Requirement analysis limitation",
+      ruleAnalysisSummary:
+        "Requirements analysed: {completed} of {eligible} in scope ({total} total). Pending: {pending}.",
+      ruleAnalysisNeedsContextSummary:
+        "Requirements waiting for your answer: {count}.",
+      ruleAnalysisUnresolvedSummary:
+        "Requirements the analysis could not establish from the repository: {count}.",
+      ruleAnalysisFailedSummary:
+        "Requirement analyses interrupted by a runtime error: {count}.",
       investigationFailed:
         "Investigation failed for EngineeringRule {engineeringRuleId}",
       investigated:
         "Investigated EngineeringRule {engineeringRuleId}: {evaluationStatus}",
-      plannerTargetedSummary:
-        "Requirements re-evaluated for the new answer: {selected}. Unrelated requirements skipped: {skipped}.",
-      plannerSummary:
-        "Requirements selected for investigation: {selected} of {total}. Out of scope for now: {skipped}.",
-      investigatorSummary:
-        "Requirements investigated: {investigated} of {selected}. Pending: {pending}.",
-      investigatorLimitedSummary:
-        "Requirement investigations that hit a limitation and stay unresolved: {failed}.",
-      investigatorRuntimeFailedSummary:
-        "Requirement investigations interrupted by a runtime error: {failed}.",
       readinessWaiting:
         "Assessment is waiting for READY EngineeringRules; automatic Legal Rule Triage was requested.",
     },
@@ -2161,7 +2159,6 @@ export const enPages = {
       inspectDataPath: "Inspect data path",
       findSimilarSymbols: "Find similar symbols",
       inspectDeploymentContext: "Inspect deployment context",
-      requestTargetedReanalysis: "Request targeted reanalysis",
       getAssessmentContext: "Read assessment context",
       getArtifactChain: "Read artifact chain",
       proposeMissingTargets: "Propose missing targets",
@@ -2330,7 +2327,7 @@ export const enPages = {
     observability: {
       title: "Runtime diagnostics",
       description:
-        "Review the planner and investigator signals that affected this classification run.",
+        "Review the rule-analysis signals that affected this classification run.",
       compileFailed: "Compile failed",
       candidates: "Candidates",
       claimsWithEvidence: "Claims with evidence",

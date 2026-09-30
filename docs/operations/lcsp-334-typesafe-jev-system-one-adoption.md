@@ -1,4 +1,8 @@
+> **Superseded by the Repository Analyst runtime (2026-09-30), see deepagents/FLOW.md.** The Planner/Investigator/Scanner-pipeline description below is historical.
+
 # LCSP-334 TypeSafe AI Jev System One adoption plan
+
+> Runtime superseded by the Repository Analyst runtime (2026-09-30), see deepagents/FLOW.md.
 
 ## Status
 

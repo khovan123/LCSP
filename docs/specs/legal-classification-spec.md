@@ -18,8 +18,8 @@ Single source of truth for direct EngineeringRule-based legal classification.
 
 ## EngineeringRule Investigation
 
-- Plan and investigate EngineeringRules by evidence-backed technical scope, not provider/model presence alone.
-- Every structured claim emitted by the investigator must carry provenance/evidence refs or it is ignored/fails closed.
+- Analyze EngineeringRules by evidence-backed technical scope, not provider/model presence alone.
+- Every criterion result submitted by the Repository Analyst must carry runtime-minted, LCSP-validated evidence refs or it is not accepted as evidence.
 - Every material legal conclusion requires citation coverage.
 - Missing citation or missing evidence refs blocks or degrades classification/output.
 - Policy-only documents cannot be treated as standalone mandatory legal obligations unless the spec identifies them as binding.

@@ -76,6 +76,13 @@ enum EngineeringRuleEvaluationStatus {
   NOT_APPLICABLE
 }
 
+enum RuleAnalysisStatus {
+  COMPLETED
+  NEEDS_CONTEXT
+  UNRESOLVED
+  FAILED
+}
+
 enum EngineeringEvidenceClaimType {
   RULE_REQUIREMENT_MET
   RULE_REQUIREMENT_NOT_MET
@@ -162,6 +169,7 @@ model Assessment {
   runtimeEvents              AssessmentRuntimeEvent[]
   pipelineReconciliation     PipelineReconciliation?
   interviewThreads           AssessmentInterviewThread[]
+  ruleAssessments            EngineeringRuleAssessment[]
   targetedReanalysisRequests TargetedReanalysisRequest[]
   technicalEvidenceReports   TechnicalEvidenceReport[]
   technicalProfiles          TechnicalProfile[]
@@ -612,6 +620,28 @@ model AssessmentInterviewThread {
   @@unique([assessmentId])
   @@index([assessmentId, contextRevision])
   @@index([assessmentId, activeQuestionId, contextRevision])
+  @@index([assessmentId, updatedAt])
+}
+
+/// Accepted per-EngineeringRule assessment: the RuleEvidenceIndex ledger (accepted evidence only).
+model EngineeringRuleAssessment {
+  id                     String             @id @default(uuid())
+  assessmentId           String
+  engineeringRuleId      String
+  engineeringRuleVersion String
+  repositoryVersion      String
+  contextRevision        Int
+  status                 RuleAnalysisStatus
+  resultId               String
+  criteria               Json
+  limitations            String[]
+  execution              Json
+  attempt                Int
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  assessment             Assessment         @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, engineeringRuleId])
   @@index([assessmentId, updatedAt])
 }
 

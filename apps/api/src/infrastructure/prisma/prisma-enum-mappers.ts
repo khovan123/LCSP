@@ -19,11 +19,16 @@ import {
   OutboxStatus as PrismaOutboxStatus,
   CredentialProvider as PrismaCredentialProvider,
   RepositoryConnectionStatus as PrismaRepositoryConnectionStatus,
+  RuleAnalysisStatus as PrismaRuleAnalysisStatus,
   RepositoryScanTriggerSource as PrismaRepositoryScanTriggerSource,
   RepositoryScanJobStatus as PrismaRepositoryScanJobStatus,
   RepositorySnapshotStatus as PrismaRepositorySnapshotStatus,
   VerifiedProfileStatus as PrismaVerifiedProfileStatus,
 } from "@prisma/client";
+import {
+  RULE_ANALYSIS_STATUSES,
+  type RuleAnalysisStatus,
+} from "@lcsp/contracts/evidence";
 import {
   ASSESSMENT_STATUS_CODES,
   type AssessmentStatusCode,
@@ -203,6 +208,20 @@ const PRISMA_ENGINEERING_RULE_EVALUATION_STATUS_TO_CONTRACT = {
   PrismaEngineeringRuleEvaluationStatus,
   EngineeringRuleEvaluationStatus
 >;
+
+const RULE_ANALYSIS_STATUS_TO_PRISMA = {
+  [RULE_ANALYSIS_STATUSES.completed]: PrismaRuleAnalysisStatus.COMPLETED,
+  [RULE_ANALYSIS_STATUSES.needsContext]: PrismaRuleAnalysisStatus.NEEDS_CONTEXT,
+  [RULE_ANALYSIS_STATUSES.unresolved]: PrismaRuleAnalysisStatus.UNRESOLVED,
+  [RULE_ANALYSIS_STATUSES.failed]: PrismaRuleAnalysisStatus.FAILED,
+} as const satisfies Record<RuleAnalysisStatus, PrismaRuleAnalysisStatus>;
+
+const PRISMA_RULE_ANALYSIS_STATUS_TO_CONTRACT = {
+  [PrismaRuleAnalysisStatus.COMPLETED]: RULE_ANALYSIS_STATUSES.completed,
+  [PrismaRuleAnalysisStatus.NEEDS_CONTEXT]: RULE_ANALYSIS_STATUSES.needsContext,
+  [PrismaRuleAnalysisStatus.UNRESOLVED]: RULE_ANALYSIS_STATUSES.unresolved,
+  [PrismaRuleAnalysisStatus.FAILED]: RULE_ANALYSIS_STATUSES.failed,
+} as const satisfies Record<PrismaRuleAnalysisStatus, RuleAnalysisStatus>;
 
 const ENGINEERING_EVIDENCE_CLAIM_TYPE_TO_PRISMA = {
   [ENGINEERING_EVIDENCE_CLAIM_TYPES.requirementMet]:
@@ -662,6 +681,18 @@ export function fromPrismaEngineeringRuleEvaluationStatus(
   status: PrismaEngineeringRuleEvaluationStatus,
 ): EngineeringRuleEvaluationStatus {
   return PRISMA_ENGINEERING_RULE_EVALUATION_STATUS_TO_CONTRACT[status];
+}
+
+export function toPrismaRuleAnalysisStatus(
+  status: RuleAnalysisStatus,
+): PrismaRuleAnalysisStatus {
+  return RULE_ANALYSIS_STATUS_TO_PRISMA[status];
+}
+
+export function fromPrismaRuleAnalysisStatus(
+  status: PrismaRuleAnalysisStatus,
+): RuleAnalysisStatus {
+  return PRISMA_RULE_ANALYSIS_STATUS_TO_CONTRACT[status];
 }
 
 export function toPrismaEngineeringEvidenceClaimType(

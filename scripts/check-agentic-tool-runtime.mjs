@@ -108,7 +108,6 @@ for (const tool of cqrsTools) {
 }
 
 const agentRuntimeCommandTools = [
-  "request_targeted_reanalysis",
   "resume_waiting_runs",
 ];
 for (const tool of agentRuntimeCommandTools) {

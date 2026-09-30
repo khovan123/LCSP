@@ -2,7 +2,7 @@
 
 The sandbox ships the pinned upstream Codebase Memory MCP engine as the
 ``codebase-memory-graph`` command. Agents query its graph through typed tools
-(see ``tools.common.capabilities.platform.codebase_memory_tools``); those queries
+(see ``tools.common.codebase_memory_graph``); those queries
 are only useful once the exact hydrated repository has been indexed, so every
 dispatch ensures that here instead of hoping an agent runs the indexer itself.
 
@@ -14,11 +14,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import shlex
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextvars import ContextVar
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Any
 
 from .repository_sandbox import REPOSITORY_META, REPOSITORY_ROOT
@@ -28,6 +27,14 @@ CODEBASE_MEMORY_PROJECT = "workspace-repository"
 _INDEX_STAMP = "/workspace/runtime/codebase-memory/lcsp-index-stamp.json"
 
 CodebaseMemoryLifecycle = Callable[[str], None]
+
+
+def codebase_memory_cli(tool: str, arguments: Mapping[str, Any]) -> str:
+    """Shell command running one Codebase Memory tool in one-shot CLI mode."""
+    return (
+        f"{CODEBASE_MEMORY_COMMAND} cli --quiet {shlex.quote(tool)} "
+        f"{shlex.quote(json.dumps(dict(arguments), separators=(',', ':')))}"
+    )
 
 
 @dataclass(frozen=True)
@@ -62,14 +69,6 @@ def _stamp_hash(marker: str) -> str:
 
 class CodebaseMemoryIndexError(RuntimeError):
     """The hydrated repository could not be indexed for graph queries."""
-
-
-def codebase_memory_cli(tool: str, arguments: dict[str, Any]) -> str:
-    """Shell command running one Codebase Memory MCP tool in one-shot CLI mode."""
-    return (
-        f"{CODEBASE_MEMORY_COMMAND} cli --quiet {shlex.quote(tool)} "
-        f"{shlex.quote(json.dumps(arguments, separators=(',', ':')))}"
-    )
 
 
 def ensure_codebase_memory_index(
@@ -122,112 +121,6 @@ def ensure_codebase_memory_index(
     return True
 
 
-@dataclass(frozen=True)
-class GraphLocation:
-    """One symbol the index knows about: where it is, never its source text."""
-
-    qualified_name: str
-    label: str
-    path: str
-    start_line: int | None
-    end_line: int | None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {key: value for key, value in asdict(self).items() if value is not None}
-
-
-_ROW = re.compile(r"^\s+(?P<qn>\S+)\s+(?P<label>\S+)\s+(?P<file>\S+)\s+(?P<lines>\S+)\s+\d+\s+\d+\s*$")
-
-
-_REF = re.compile(r"^\s+(?P<id>\d+)\s+(?P<prefix>\S+)\s*$")
-_REF_USE = re.compile(r"@(?P<id>\d+)\+")
-
-
-def _expander(output: str) -> Callable[[str], str]:
-    """Large results compress shared prefixes into a `results_refs` table and
-    use `@N+suffix` in rows (`results_ref_rule`); expand them back."""
-    refs: dict[str, str] = {}
-    in_refs = False
-    for line in output.splitlines():
-        if line.startswith("results_refs:"):
-            in_refs = True
-            continue
-        if in_refs:
-            ref = _REF.match(line)
-            if ref:
-                refs[ref["id"]] = ref["prefix"]
-                continue
-            in_refs = False
-    return lambda value: _REF_USE.sub(lambda m: refs.get(m["id"], m.group(0)), value)
-
-
-def parse_search_graph_rows(output: str) -> list[GraphLocation]:
-    """Parse the CLI's compact `qn label file lines in out` table."""
-    expand = _expander(output)
-    rows: list[GraphLocation] = []
-    for line in output.splitlines():
-        match = _ROW.match(line)
-        if not match or match["file"] == "-":
-            continue
-        start, _, end = match["lines"].partition("-")
-        rows.append(
-            GraphLocation(
-                qualified_name=expand(match["qn"]).strip('"'),
-                label=match["label"],
-                path=expand(match["file"]),
-                start_line=int(start) if start.isdigit() else None,
-                end_line=int(end) if end.isdigit() else None,
-            )
-        )
-    return rows
-
-
-def parse_search_graph_names(output: str) -> list[str]:
-    """Qualified names from a search table, including file-less rows (routes)."""
-    expand = _expander(output)
-    return [
-        expand(match["qn"]).strip('"')
-        for line in output.splitlines()
-        if (match := _ROW.match(line))
-    ]
-
-
-class CodebaseMemoryGraphReader:
-    """Bounded, deterministic queries against the indexed repository graph."""
-
-    def __init__(self, execute: Callable[..., Any]) -> None:
-        self._execute = execute
-
-    def search(
-        self,
-        *,
-        name_pattern: str | None = None,
-        label: str | None = None,
-        limit: int = 20,
-    ) -> list[GraphLocation]:
-        arguments: dict[str, Any] = {"project": CODEBASE_MEMORY_PROJECT, "limit": limit}
-        if name_pattern:
-            arguments["name_pattern"] = name_pattern
-        if label:
-            arguments["label"] = label
-        result = self._execute(codebase_memory_cli("search_graph", arguments))
-        if getattr(result, "exit_code", 1) != 0:
-            return []
-        return parse_search_graph_rows(_output(result))
-
-    def route_names(self, *, limit: int = 20) -> list[str]:
-        """HTTP route identifiers, which the index stores without a file."""
-        result = self._execute(
-            codebase_memory_cli(
-                "search_graph",
-                {"project": CODEBASE_MEMORY_PROJECT, "label": "Route", "limit": limit},
-            )
-        )
-        if getattr(result, "exit_code", 1) != 0:
-            return []
-        return parse_search_graph_names(_output(result))
-
-
 def _project_indexed(execute: Callable[..., Any]) -> bool:
     listing = _output(execute(codebase_memory_cli("list_projects", {})))
     return f"{CODEBASE_MEMORY_PROJECT} {REPOSITORY_ROOT}" in listing
@@ -243,14 +136,11 @@ def _emit(lifecycle: CodebaseMemoryLifecycle | None, event: str) -> None:
 
 
 __all__ = [
+    "CODEBASE_MEMORY_COMMAND",
     "CODEBASE_MEMORY_PROJECT",
-    "CodebaseMemoryGraphReader",
-    "CodebaseMemoryIndexIdentity",
-    "GraphLocation",
-    "active_codebase_memory_index",
-    "parse_search_graph_names",
-    "parse_search_graph_rows",
     "CodebaseMemoryIndexError",
+    "CodebaseMemoryIndexIdentity",
+    "active_codebase_memory_index",
     "codebase_memory_cli",
     "ensure_codebase_memory_index",
 ]

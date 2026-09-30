@@ -28,9 +28,9 @@ client, and runtime configuration no longer accepts the
 Provider credentials use the standard LangChain integration variables, while
 model selection uses the `LCSP_*_MODEL` `provider:model` policy variables.
 
-Classification, reporting, legal-rule planning/compilation, and EngineeringRule
-investigation now invoke `langchain.agents.create_agent` directly. Investigation
-graph and code-context operations are native `@tool` functions, claims use
-`response_format`, and framework middleware owns model retry, PII redaction, and
+Classification, reporting and legal-rule planning/compilation invoke
+`langchain.agents.create_agent` directly. EngineeringRule analysis is a
+`repository-analyst` Deep Agent task (see `deepagents/FLOW.md`) that submits through the
+governed `submit_rule_assessment` tool. Framework middleware owns model retry, PII redaction, and
 tool-call limits. The custom orchestration client, provider fallback client, and
 model-budget runtime have been deleted and must not be reintroduced.

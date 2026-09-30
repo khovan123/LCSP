@@ -11,7 +11,7 @@ from deepagents import create_deep_agent
 from middleware.agent_run_budget import AgentRunBudgetMiddleware
 from middleware.billing_metering import BillingAgentRoleMiddleware
 from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
-from model_policy import PLANNER_MODEL_SPEC, resolve_agent_model
+from model_policy import REPOSITORY_ANALYST_MODEL_SPEC, resolve_agent_model
 from tools.common.capabilities.evidence.graph.schema.vocabulary import EDGE_TYPES, NODE_TYPES
 from tools.common.capabilities.agent_runtime.skill_loader import load_project_skill
 
@@ -29,7 +29,7 @@ PROMPT_VERSION = "legal-to-engineering/v2"
 
 
 class EngineeringRuleCompiler:
-    def __init__(self, model: str = PLANNER_MODEL_SPEC) -> None:
+    def __init__(self, model: str = REPOSITORY_ANALYST_MODEL_SPEC) -> None:
         self._model = model
         self.triage = LegalChunkEngineeringRuleTriage(model)
 

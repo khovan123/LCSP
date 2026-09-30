@@ -35,7 +35,7 @@ decide the triage result for every chunk, convert only qualified Candidates into
 EngineeringRule proposals, and persist the result through the governed deterministic tool.
 
 This workflow belongs to legal-data preparation and is reasoning-independent from every customer
-Assessment. An Assessment may automatically request this separate workflow when its pre-Planner
+Assessment. An Assessment may automatically request this separate workflow when its pre-analysis
 EngineeringRule readiness gate finds missing READY rules, but the Assessment itself must never run
 Legal Rule Triage, compile a rule inline, or pass customer/repository context into Triage reasoning.
 

@@ -56,12 +56,11 @@ PRIVATE_GRAPH_KEYS = frozenset(
 
 # Customer-visible pipeline stage an event belongs to. Mirrors
 # ASSESSMENT_AGENT_STREAM_STAGES in packages/contracts so the workspace renders
-# one live timeline per stage (Scanner, Interview, Planner, Investigate, Gate).
+# one live timeline per stage (Scanner, Interview, Rule analysis, Gate).
 AGENT_STREAM_STAGES = {
     "scanner": "SCANNER",
     "interview": "INTERVIEW",
-    "planner": "PLANNER",
-    "investigate": "INVESTIGATE",
+    "rule_analysis": "RULE_ANALYSIS",
     "gate": "GATE",
 }
 
@@ -364,60 +363,6 @@ def agent_stream_rule_scope(
             raise
         if not scope.finished:
             scope.complete()
-    finally:
-        active_agent_stream_rule.reset(token)
-
-
-def publish_rule_decision(
-    rule_id: str,
-    *,
-    decision: str,
-    reason_code: str | None = None,
-    basis: Any = (),
-    concept: str | None = None,
-    investigation_goals: Any = (),
-    plan_reused: bool = False,
-) -> None:
-    """Publish one Planner decision as its own entry under that rule."""
-    token = active_agent_stream_rule.set(rule_id)
-    try:
-        publish_agent_stream_event(
-            "ENGINEERING_RULE",
-            status="COMPLETED",
-            text="engineering rule planning decision",
-            data=_semantic_payload(
-                "ENGINEERING_RULE",
-                durability=DURABLE,
-                engineeringRuleId=rule_id,
-                concept=_text(concept),
-                investigationGoals=_string_list(list(investigation_goals or ())),
-                planReused=plan_reused,
-                decision=_text(decision),
-                reasonCode=_text(reason_code),
-                resultSummary={"basis": _string_list(list(basis or ()))},
-                status="COMPLETED",
-            ),
-        )
-    finally:
-        active_agent_stream_rule.reset(token)
-
-
-def publish_rule_waiting(rule_id: str, *, reason_code: str) -> None:
-    """Publish that one rule waits for Customer context before it can be planned."""
-    token = active_agent_stream_rule.set(rule_id)
-    try:
-        publish_agent_stream_event(
-            "ENGINEERING_RULE",
-            status="WAITING",
-            text="engineering rule waiting for customer context",
-            data=_semantic_payload(
-                "ENGINEERING_RULE",
-                durability=DURABLE,
-                engineeringRuleId=rule_id,
-                reasonCode=_text(reason_code),
-                status="WAITING",
-            ),
-        )
     finally:
         active_agent_stream_rule.reset(token)
 
@@ -957,8 +902,8 @@ def _emit_message_event(
 
 def _content_deltas(message: AIMessage) -> list[tuple[str, str]]:
     deltas: list[tuple[str, str]] = []
-    # OpenAI-compatible reasoning models (GLM, DeepSeek, Qwen via llm7 and similar
-    # routes) return provider-visible reasoning beside the content, not inside it.
+    # OpenAI-compatible reasoning models (MiniMax, GLM, DeepSeek, Qwen via llm7 and
+    # similar routes) return provider-visible reasoning beside the content, not in it.
     provider_reasoning = _additional_reasoning_text(message)
     if provider_reasoning:
         deltas.append(("MODEL_REASONING_DELTA", provider_reasoning))
@@ -1845,6 +1790,4 @@ __all__ = [
     "invoke_graph_with_stream",
     "invoke_with_stream",
     "publish_agent_stream_event",
-    "publish_rule_decision",
-    "publish_rule_waiting",
 ]

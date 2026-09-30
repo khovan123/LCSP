@@ -1,180 +1,221 @@
 # LCSP Deep-Agent Orchestration
 
-This document defines the LCSP v3 native Deep Agents / LangGraph boundary.
+This document defines the LCSP native Deep Agents / LangGraph runtime (Repository
+Analyst runtime, 2026-09-30).
 
-The root is a **supervisor/orchestrator**, not another investigation worker. It
-owns bounded runtime context, thread/checkpoint execution memory, and the todo
-plan that drives specialized subagents through one canonical assessment pipeline.
+Principle: **Deep Agents is the agent runtime; LCSP keeps deterministic governance.**
+LCSP does not decide how an agent searches, reads or traces the repository. It owns
+authority, tenant scope, assessment/repository/rule identity, evidence provenance,
+legal applicability, customer-answer authority, persistence and the completion gate.
 
 ## Architecture
 
 ```text
-                         Root Orchestrator
-                                │
-             ┌──────────────────┼──────────────────┐
-             │                  │                  │
-       runtime context    checkpoint memory    write_todos
-             │                  │                  │
-             └──────────────────┴──────────────────┘
-                                │
-                                ▼
-                         assessment pipeline
-                                │
-                                ▼
-                             planner
-                                │
-                                ▼
-                          investigator
-                                │
-                    material fact unresolved?
-                       /                 \
-                     yes                  no
-                      │                    │
-                      ▼                    ▼
-                 NEEDS_INPUT       deterministic gate
-                      │                    │
-                      ▼                    ▼
-             targeted Interview           gap
-                      │                    │
-                      ▼                    ▼
-             resume investigator          report
+Scan job (worker)
+  hydrate pinned repository once  -> /workspace/repository
+  Codebase Memory index once      -> optional agent tool, never evidence
+  technical coverage
+  ONE bounded AI-discovery Deep Agent task
+      (independent prerequisite; failure => AI gate UNKNOWN + limitation
+       => aiDetected-gated rules UPSTREAM_FACT_PENDING; never all-or-nothing)
+                    │  accepted technical evidence event
+                    ▼
+Engineering assessment (deterministic Python per-rule loop = the single orchestrator)
+  resolve pinned READY EngineeringRules
+     └ not READY -> ENGINEERING_RULE_NOT_READY -> LEGAL_MAINTENANCE / triage handoff
+  deterministic applicability (RuleApplicabilityEvaluator)
+     MATCHED | NOT_GATED           -> eligible
+     NOT_APPLICABLE                -> stop, no analysis
+     BLOCKED_UNKNOWN_FACT          -> owner route, no analysis
+     UPSTREAM_FACT_PENDING         -> owner route, no analysis  (missing is never NOT_GATED)
+  for each eligible rule:
+     ONE repository-analyst Deep Agent task, dispatched directly
+     (no root-model turn per rule)
+        native filesystem/shell + codebase-memory tools
+        cite_repository_source / get_code_snippet  -> runtime-minted evidence refs
+        submit_rule_assessment (governed)          -> validate -> persist
+     per-rule ledger EngineeringRuleAssessment (RuleEvidenceIndex = accepted-evidence ledger)
+     BUSINESS_CONTEXT_REQUIRED -> BusinessContextNeed registered
+        -> Interview (customer-owned context only, never source)
+        -> governed answer resumes the SAME rule only
+  finalize_rule_results
+     claims from accepted criteria -> EngineeringRuleEvaluator
+     -> rule-completion gate -> classification callback -> gap -> report
 ```
 
-The important boundary is that **EngineeringRules are prepared/pinned inputs to
-the pipeline**. Planner and Investigator do not discover legal rules themselves.
-Runtime Interview gathers Customer-confirmed context before technical planning
-begins and handles targeted clarification only through Orchestration.
+The important boundaries:
+
+- **EngineeringRules are prepared/pinned inputs.** Legal corpus -> LegalRule ->
+  EngineeringRule compilation is LEGAL_MAINTENANCE (Workflow A, `triage`) and is separate
+  from per-assessment reasoning. There is no Legal Agent in the assessment runtime.
+- **One orchestrator.** The Python loop is the only assessment orchestrator. The root
+  model does not sequence assessment work and `instructions.md` describes no alternative
+  flow. There is no Planner, no Scanner rule pass, no Investigator, no RuleDiscoveryTask
+  engine, no DORMANT condition index and no graph pre-execution providers.
+- **Applicability is deterministic** and separate from repository evidence.
+- **A rule concludes only when every criterion is ready** (completion gate).
+- **FINAL_ABSENCE remains disabled.**
 
 ## Root supervisor concerns
 
-### Runtime context
+The root is now the LEGAL_MAINTENANCE supervisor. It delegates to `triage` with the
+built-in `task` tool and mirrors that work with `write_todos`
+(`TodoListMiddleware`). It has no assessment role.
 
-`orchestration.context.LCSPRunContext` carries immutable identifiers only:
+- **Runtime context.** `orchestration.context.LCSPRunContext` (frozen, set by the
+  dispatcher, never by a model): assessment/organization/user/workflow/checkpoint ids,
+  pinned artifact versions, `engineering_rule_ids` (exactly one for an analyst task),
+  `engineering_rule_version` (contract content hash), `criterion_ids`, `context_revision`,
+  `prior_evidence_refs` (accepted refs on resume) and `rule_execution_id` (fresh per
+  attempt). Propagated by `context_schema` so governed tools read trusted values.
+- **Memory.** LangGraph checkpointing is execution memory for the run and resume point
+  only. Authoritative data stays in the API/database: confirmed Interview context,
+  assessment state, per-rule results, approved legal corpus and EngineeringRules,
+  evaluation outcomes and report/audit artifacts.
 
-- assessment ID;
-- organization/user/workflow IDs;
-- checkpoint ID;
-- pinned artifact versions;
-- active EngineeringRule IDs.
+## Subagents
 
-Runtime context is propagated to subagents by `context_schema` and the bounded
-runtime-context middleware. It is not evidence and cannot be rewritten into a new
-authoritative value by a model.
+`subagents/__init__.FLOW_SUBAGENTS = [triage, interview, repository-analyst]`. Each has
+its own `definition.py` (name, model, prompt, minimal tools, middleware).
 
-### Memory
+### Repository Analyst
 
-Deep Agents/LangGraph thread checkpointing is the supervisor's execution
-memory for the current run and resume point.
+One task = one EngineeringRule. Input: rule concept/legal intent/goals, required-evidence
+criteria, authored `unresolvedConditions` as hints only, relevant confirmed Customer
+context, pinned repository identity, and prior accepted evidence on resume. The prompt is
+compact (rule, governed context, tools, constraints, output); it prescribes no navigation
+sequence. Tools: native filesystem/shell, `CODEBASE_MEMORY_GRAPH_TOOLS`,
+`cite_repository_source`, `submit_rule_assessment`, `retrieve_verified_episodes`
+(examples only). No `response_format`; a per-task model-call budget
+(`AgentRunBudgetMiddleware`, submit-preserving finalize) bounds the run.
 
-LCSP authoritative data remains in the API/database:
+### Interview
 
-- Customer-confirmed Interview context;
-- assessment state;
-- repository/Program Evidence Graph evidence;
-- approved legal corpus and EngineeringRules;
-- deterministic evaluation outcomes;
-- report/audit artifacts.
+Customer-owned business context only; never reads source. One distinction at a time,
+customer-safe neutral text, no rule ids or citations. The governed answer carries
+server-owned identity (`sourceNeedId` = needId, `engineeringRuleId`, `resolvedCriterionIds`),
+advances `contextRevision`, and resumes only the rule that owns the need.
 
-The runtime uses LangGraph checkpoint state as execution memory only. It must
-never become storage for assessment/customer state, repository source, legal
-conclusions, authorization decisions, or other tenant-scoped authority. The
-LCSP API/database and commit-pinned repository workspace remain the authority
-boundaries for those values.
+### Triage (LEGAL_MAINTENANCE)
 
-### Todos
+Unchanged and separate; see `instructions.md` Workflow A.
 
-Deep Agents v0.7+ makes todo planning opt-in. The root installs one
-`TodoListMiddleware`, exposing `write_todos` to the supervisor.
+## Rule assessment contract
 
-Todos mirror pipeline progress. Subagents do not own independent pipeline todo
-lists; each child receives one bounded stage, returns one compact handoff, and the
-root updates the supervisor todo state.
+Criterion statuses (`RULE_CRITERION_STATUSES`, contracts + Python mirror):
 
-## Canonical flow
+| Status | Meaning |
+| --- | --- |
+| `EVIDENCE_FOUND` | positive evidence exists; `evidenceKind` required: `SUPPORTS_REQUIREMENT` or `DEMONSTRATES_VIOLATION` |
+| `BUSINESS_CONTEXT_REQUIRED` | only the Customer can supply the fact; carries a `businessContextNeed` |
+| `TECHNICAL_UNRESOLVED` | technical gap; needs a limitation code |
+| `NOT_OBSERVED` | epistemic: "not established by this investigation". Never means absence; needs a limitation |
+
+Rule status: any BUSINESS_CONTEXT_REQUIRED -> `NEEDS_CONTEXT`; else any
+TECHNICAL_UNRESOLVED/NOT_OBSERVED -> `UNRESOLVED`; else `COMPLETED`. `FAILED` is written
+only by the runtime loop on provider/runtime failure, for that rule only. An omitted
+criterion becomes TECHNICAL_UNRESOLVED + `AGENT_DID_NOT_SUBMIT_CRITERION`.
+
+**Evidence refs are runtime-minted.** `cite_repository_source(path, startLine, endLine)` and
+`get_code_snippet` live-verify a range in the pinned repository and mint
+`source:{commitSha}:{path}#L{a}-L{b}~{mac}`, an HMAC bound to assessment, rule and execution
+(per-process key). `submit_rule_assessment` accepts only such refs, or canonical refs
+authorized in `prior_evidence_refs` on resume. The model never writes a ref. On success LCSP
+stamps provenance `{assessmentId, repositoryVersion, engineeringRuleId, criterionId,
+validator}` on each evidence entry; persisted refs are canonical (mac stripped). These tools
+only validate and mint; they never search or choose files.
+
+**Validation** (`validate_rule_assessment`): rule id/version and repository commit match the
+trusted context; criterion ids in the rule, no duplicates; EVIDENCE_FOUND needs verified
+evidence and a kind; BUSINESS_CONTEXT_REQUIRED needs a neutral, customer-safe need
+(one shared validator `rule_assessment/neutral_text.py`); limitations from the shared
+vocabulary. Errors return to the agent for correction and resubmit.
+
+**Finalize** (`finalize_rule_results`): SUPPORTS_REQUIREMENT -> `RULE_REQUIREMENT_MET`
+(source_verified); DEMONSTRATES_VIOLATION -> `RULE_REQUIREMENT_NOT_MET` on verified positive
+evidence (`EvidenceClaimValidator.validate_governed` checks the provenance binding and still
+rejects every absence claim); all other statuses -> `UNRESOLVED_ENGINEERING_FACT` with
+limitations. `ruleConclusionReady` = every criterion `EVIDENCE_FOUND`.
+
+**Rule-completion gate.** Item `{ruleId, ruleConclusionReady, unresolvedCriterionIds,
+activeNeedIds, applicability, contextRevision}`. Runs after the evaluator: when
+`ruleConclusionReady` is false, `COMPLIANT`/`NON_COMPLIANT` become `UNKNOWN` with typed
+limitations and provenance. Stale rule version or commit is deferred. `NOT_APPLICABLE` is a
+legal-scope outcome and is not withheld. FINAL_ABSENCE is disabled
+(`absence_may_finalize` is always False, `rule_assessment/absence_policy.py`).
+
+**Applicability.** `RuleApplicabilityEvaluator` over authored `requiredFacts`/`blockingFacts`:
+`MATCHED`, `NOT_APPLICABLE`, `BLOCKED_UNKNOWN_FACT`, `UPSTREAM_FACT_PENDING` (a fact an
+upstream authority settles, such as `aiDetected`, is not established: not analyzed, not
+excluded) and `NOT_GATED` (no authored facts; a missing evaluation is never NOT_GATED).
+It runs before analysis and again at finalize.
+
+## Business context and resume
+
+`BUSINESS_CONTEXT_REQUIRED` registers a `BusinessContextNeed` through the single targeted-need
+API route: `{needId, engineeringRuleId, criterionId, authoredConditionIndex?, question,
+observation, resolutionCriterionIds, evidenceRefs, contextRevision}`, state `ACTIVE` /
+`RESOLVED` / `CANCELLED`. The Interview asks the Customer; the governed answer is bound
+strictly to the need (unknown criterion or foreign need/rule identity is rejected; resolution
+requires every resolution criterion). The answer resumes the SAME rule via `analyze_rule` with
+its prior result and raised `contextRevision`. If any eligible rule still waits for context,
+no classification callback is posted; it posts when none wait.
+
+## Persistence and retry
+
+- **Ledger.** `EngineeringRuleAssessment`: one flat row per assessment + rule (upsert
+  `@@unique([assessmentId, engineeringRuleId])`), fields include status, criteria, limitations,
+  `contextRevision`, attempt, execution metadata. A stale write (`contextRevision` lower than
+  stored) is rejected. No workflow/lifecycle columns. Worker routes:
+  `PUT /internal/assessments/:id/rule-assessments/:ruleId` and
+  `GET /internal/assessments/:id/rule-assessments` (envelope `{ok,data}` / problem).
+- **AI discovery** persists as its own prerequisite result in the technical-evidence payload
+  and is independent of ledger rows; a failure never destroys accepted rule evidence.
+- **Failure isolation.** `analyze_rule` retries a provider/malformed-tool failure once; an
+  exhausted rule writes `FAILED` for that rule only, and the loop continues.
+- **Retry = targeted reanalysis.** Scope is exactly
+  `{ ruleScope: { engineeringRuleId, criterionIds, contextRevision, priorResultId? } }`; the
+  worker reruns that rule only and carries every other rule's ledger row forward.
+- Evidence display and interview snippets resolve canonical `source:` refs from ledger rows
+  (path and lines), not from any Scanner graph.
+
+## Observability
+
+Rule-level runtime activities (`RULE_ANALYSIS_ACTIVITIES`): `RULE_ANALYSIS_STARTED`,
+`RULE_ANALYSIS_COMPLETED`, `RULE_ANALYSIS_NEEDS_CONTEXT`, `RULE_ANALYSIS_UNRESOLVED`,
+`RULE_ANALYSIS_FAILED`, `BUSINESS_CONTEXT_REQUESTED`, `BUSINESS_CONTEXT_RESOLVED`,
+`RULE_ANALYSIS_RESUMED`, `RULE_APPLICABILITY_EVALUATED`, `RULE_COMPLETION_GATED`. They are
+published as scan runtime events (semantic kind `RULE_ANALYSIS`, field `activity`) and
+appear in the workspace Chat rule groups. The live agent stream (below) covers agent/model
+lifecycle; it is presentation only.
+
+## Agent-facing tools and harness boundary
 
 ```text
-initial_interview
-→ CONTEXT_READY
-→ plan
-→ investigate
-→ [NEEDS_BUSINESS_CONTEXT → targeted_interview → orchestration validation → resume investigator]*
-→ deterministic gate
-→ gap
-→ report
+tools/
+├── common/         # graph tools, submit_rule_assessment, cite_repository_source, ...
+├── legal/  triage/ # LEGAL_MAINTENANCE
+└── orchestration/
 ```
 
-The supervisor follows this sequence through `instructions.md` and delegates with
-Deep Agents' native `task` tool. LCSP does not maintain a second transition engine
-beside the Deep Agent/LangGraph runtime.
+Physical tool ownership is separate from subagent exposure: each subagent definition owns
+its exact `tools` list. The repository analyst gets the native Deep Agents filesystem and
+shell rooted at the assessment repository (`/` = repo root, CWD = repo root) plus the tools
+above. LCSP keeps `task` and root `write_todos`, and the default general-purpose subagent is
+governed. `.git/` and `.lcsp/` are never customer evidence.
 
-`NEEDS_BUSINESS_CONTEXT` and `resume` are orchestration states. The deterministic
-gate is not a subagent and cannot be called as a model tool.
-
-## Specialized subagents
-
-Each subagent has an independently reviewable definition:
+## Deterministic authority
 
 ```text
-subagents/
-├── planner/
-│   └── definition.py
-└── investigator/
-    └── definition.py
+repository-analyst submit -> validated, provenance-stamped criteria
+                          -> EvidenceClaim (MET / NOT_MET on positive evidence / UNRESOLVED)
+                          -> EngineeringRuleEvaluator -> rule-completion gate
+                          -> COMPLIANT | NON_COMPLIANT | UNKNOWN
 ```
 
-Every definition declares its own:
-
-- name and delegation description;
-- model;
-- system prompt;
-- minimal authored tool set;
-- runtime-context middleware;
-- output contract.
-
-### Planner
-
-Runs only after runtime Interview produces `CONTEXT_READY`.
-
-Tools:
-
-- `search_program_graph`
-- `get_scan_coverage`
-
-Responsibilities:
-
-- consume the fixed PipelineContext and EngineeringRules;
-- create the smallest technical investigation scope;
-- identify graph seeds and coverage limitations;
-- return `INVESTIGATE` or a precise `NEEDS_INPUT`.
-
-Planner cannot retrieve legal basis, reload Interview context, change the active rule
-set, or decide compliance.
-
-### Investigator
-
-Runs after Planner, or after Orchestration validates a targeted Interview
-continuation for the same plan.
-
-Tools:
-
-- `search_program_graph`
-- `trace_static_flow`
-- `inspect_data_path`
-- `inspect_decision_path`
-- `inspect_human_review_path`
-- `get_symbol_context`
-- `find_provider_invocations`
-
-Responsibilities:
-
-- investigate only the delegated technical scope;
-- preserve Program Evidence Graph provenance;
-- produce criterion-scoped evidence claims;
-- surface truncation/frontier/coverage limitations;
-- return one exact `NEEDS_BUSINESS_CONTEXT` when required.
-
-Investigator cannot fetch Interview/legal context, change EngineeringRules, or emit
-`COMPLIANT`, `NON_COMPLIANT`, or `UNKNOWN`.
+Agents gather and report positive evidence and customer-owned needs. They never decide
+applicability, risk tier, or compliance. Deterministic LCSP code owns applicability, evidence
+validation, claim evaluation, the completion gate and the authority trail.
 
 ## Model policy
 
@@ -185,8 +226,7 @@ Defaults live in `model_policy.py` and can be overridden by deployment env vars.
 | Root orchestrator   | `openai:gpt-5-nano`   | coordination, delegation, todo/state management                |
 | Legal triage        | `openai:gpt-5-nano`   | legal work-item triage                                         |
 | Interview           | `openai:gpt-5-nano`   | Customer business-context reasoning and clarification          |
-| Planner             | `openai:gpt-5-nano`   | high-reasoning scope construction                              |
-| Investigator        | `openai:gpt-5-nano`   | repeated tool-heavy technical investigation                    |
+| Repository Analyst  | `openai:gpt-5-nano`   | one EngineeringRule per task, tool-heavy repository analysis (`LCSP_REPOSITORY_ANALYST_MODEL`) |
 | Narrators/proposers | `openai:gpt-4.1-nano` | bounded narration and proposal fields without reasoning kwargs |
 
 OpenAI `provider:model` specs are constructed through an LCSP provider profile
@@ -195,10 +235,8 @@ that explicitly sets the Responses API client contract:
 enabled merely because the provider is OpenAI. LCSP attaches
 `reasoning={"effort": ...}` only when both conditions are true:
 
-1. the agent role is a reasoning owner (`root`, `triage`, `interview`, `planner`,
-   `investigator`, `lcsp-legal-chunk-triage`, `lcsp-engineering-rule-compiler`,
-   `lcsp-engineering-rule-planner`, `law_guided_investigator`, or
-   `lcsp-investigator-durable-execution`);
+1. the agent role is a reasoning owner (`root`, `triage`, `interview`, `repository-analyst`,
+   `lcsp-legal-chunk-triage`, `lcsp-engineering-rule-compiler`, or the AI-discovery task);
 2. the model is an OpenAI reasoning-capable model such as `gpt-5-mini`,
    `gpt-5.1`, `gpt-5.6-*`, or an o-series reasoning model.
 
@@ -226,7 +264,7 @@ reasoning roles receive `thinking_level="low"`; narrators/proposers receive `"mi
 Minimal reduces thinking but does not guarantee zero thinking tokens.
 The exact Google harness profile supports the reasoning root and subagents;
 narrators/proposers use the agent-scoped constructor with minimal thinking. LLM7 uses
-`GLM-5.3-Flash` for every role through its OpenAI-compatible endpoint. The
+`minimax-m2.7` for every role through its OpenAI-compatible endpoint. The
 transport remains LangChain OpenAI, but LCSP forces `use_responses_api=False`, routes
 credentials only from `LLM7_API_KEY`, and defaults to `https://api.llm7.io/v1`
 (`LLM7_BASE_URL` may override the endpoint). Inception uses `mercury-2.5` for
@@ -244,60 +282,6 @@ provider exhaustion remains terminal. Configure credentials independently for ev
 provider in the chain.
 
 All role models receive the same LCSP harness profile.
-
-## Agent-facing tool hierarchy
-
-Authored model-callable tools remain physically under `tools/`:
-
-```text
-tools/
-├── common/
-├── planner/
-├── investigator/
-└── orchestration/
-```
-
-Physical tool ownership and subagent exposure are intentionally separate. A tool
-being in `tools/common` does not mean every subagent receives it; each native
-subagent definition owns its exact `tools` list.
-
-The only authored root mutation is:
-
-- `request_targeted_reanalysis` — protected by human interrupt.
-
-## Deep Agents harness boundary
-
-LCSP keeps the built-in `task` delegation primitive and root `write_todos`, while
-restricting the rest of the harness:
-
-- default `general-purpose` subagent disabled;
-- `read_file` allowed only for Managed Skills under `/skills/**`;
-- `ls`, `write_file`, `edit_file`, `delete`, `glob`, `grep`, and `execute` hidden;
-- no shell sandbox in this assessment graph;
-- repository evidence must enter through governed LCSP tools.
-
-## Deterministic authority
-
-The model pipeline ends after validated investigation claims.
-
-```text
-Interview → Planner → Investigator
-                         │
-                         ▼
-                 validated EvidenceClaim
-                         │
-                         ▼
-              deterministic EngineeringRule gate
-                         │
-             ┌───────────┼───────────┐
-             ▼           ▼           ▼
-        COMPLIANT  NON_COMPLIANT   UNKNOWN
-```
-
-LLM agents plan and investigate. Runtime Interview and Orchestration own Customer
-context clarification. Deterministic LCSP code owns claim validation,
-EngineeringRule evaluation, gap derivation boundaries, and the final authority
-trail.
 
 ## Terminal schema failures
 

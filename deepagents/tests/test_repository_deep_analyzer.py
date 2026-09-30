@@ -20,6 +20,12 @@ from tools.common.capabilities.evidence.repository_analysis.analyzer import (
 def test_repository_deep_analyzer_runs_as_standalone_root_without_checkpointer(
     monkeypatch,
 ) -> None:
+    """One bounded Deep Agent task for scan-time AI discovery.
+
+    Repository hydration and Codebase Memory indexing happen before this boundary
+    (middleware/system_event_dispatch.py); this task runs analyze() against the
+    hydrated repository via the current LCSP repository sandbox backend.
+    """
     calls: dict[str, object] = {}
     fake_agent = object()
     fake_backend = MagicMock()
@@ -50,9 +56,6 @@ def test_repository_deep_analyzer_runs_as_standalone_root_without_checkpointer(
                 "languages": [],
                 "frameworks": [],
                 "source_anchors": [],
-                "nodes": [],
-                "edges": [],
-                "unresolved_frontiers": ["not executed"],
                 "ai_discovery": {
                     "gate": "AI_UNKNOWN",
                     "coverage_state": "PARTIAL",
@@ -70,20 +73,38 @@ def test_repository_deep_analyzer_runs_as_standalone_root_without_checkpointer(
         snapshot_id="snapshot-1",
         commit_sha="abc1234",
         scan_job_id="scan-1",
-        targeted_scope=None,
     )
 
     create_kwargs = calls["create_kwargs"]
     assert isinstance(create_kwargs, dict)
-    assert create_kwargs["name"] == "repository-analyst"
+    assert create_kwargs["name"] == "ai-discovery-analyst"
     assert create_kwargs["backend"] is fake_backend
     assert "checkpointer" not in create_kwargs
+    # Bounded scan-time AI discovery only: no EngineeringRule analysis.
+    assert "Do not analyze EngineeringRules" in create_kwargs["system_prompt"]
+    assert "Codebase Memory index" in create_kwargs["system_prompt"]
+    assert "already built" in create_kwargs["system_prompt"]
+    assert "inspect source before reporting" in create_kwargs["system_prompt"]
+    from tools.common.codebase_memory_graph import CODEBASE_MEMORY_GRAPH_TOOLS
+
+    assert create_kwargs["tools"] is CODEBASE_MEMORY_GRAPH_TOOLS
+    from tools.common.capabilities.evidence.repository_analysis.models import (
+        RepositoryAnalysisResult,
+    )
+
+    assert create_kwargs["response_format"] is RepositoryAnalysisResult
+    middleware_names = {type(item).__name__ for item in create_kwargs["middleware"]}
+    assert "AgentRunBudgetMiddleware" in middleware_names
+    assert "BillingAgentRoleMiddleware" in middleware_names
     invoke = calls["invoke"]
     assert isinstance(invoke, dict)
     assert invoke["agent"] is fake_agent
     assert invoke["config"]["configurable"]["thread_id"] == (
-        "repository-analysis:scan-1"
+        "ai-discovery:scan-1"
     )
+    from orchestration.agent_stream import AGENT_STREAM_STAGES
+
+    assert invoke["stage"] == AGENT_STREAM_STAGES["scanner"]
     assert invoke["stage"] == "SCANNER"
     assert result.summary == "Repository inspected"
 
@@ -119,9 +140,6 @@ def test_repository_deep_analyzer_allows_more_than_two_model_calls(
                 "languages": [],
                 "frameworks": [],
                 "source_anchors": [],
-                "nodes": [],
-                "edges": [],
-                "unresolved_frontiers": ["not executed"],
                 "ai_discovery": {
                     "gate": "AI_UNKNOWN",
                     "coverage_state": "PARTIAL",
@@ -139,7 +157,6 @@ def test_repository_deep_analyzer_allows_more_than_two_model_calls(
         snapshot_id="snapshot-1",
         commit_sha="abc1234",
         scan_job_id="scan-extended",
-        targeted_scope=None,
     )
 
     create_kwargs = calls["create_kwargs"]
@@ -148,6 +165,15 @@ def test_repository_deep_analyzer_allows_more_than_two_model_calls(
         type(item).__name__ for item in create_kwargs["middleware"]
     }
     assert "ModelCallLimitMiddleware" not in middleware_names
+    from middleware.agent_run_budget import AgentRunBudgetMiddleware
+
+    budgets = [
+        item
+        for item in create_kwargs["middleware"]
+        if isinstance(item, AgentRunBudgetMiddleware)
+    ]
+    assert len(budgets) == 1
+    assert budgets[0].finalize_after == 12
     assert simulated_model_calls == 3
     assert result.summary == "Repository inspected after extended analysis"
 
@@ -169,23 +195,21 @@ def test_repository_deep_analyzer_revalidates_structured_response_contract(
         "create_deep_agent",
         lambda **_kwargs: fake_agent,
     )
+    # AI_ABSENT_CONFIRMED requires READY AI coverage: PARTIAL must fail closed.
     monkeypatch.setattr(
         analyzer,
         "invoke_with_stream",
         lambda *_args, **_kwargs: {
             "structured_response": {
                 "summary": "Invalid repository result",
-                "coverage_state": "READY",
+                "coverage_state": "PARTIAL",
                 "coverage_notes": [],
                 "languages": [],
                 "frameworks": [],
                 "source_anchors": [],
-                "nodes": [],
-                "edges": [],
-                "unresolved_frontiers": ["not allowed for absent closure"],
                 "ai_discovery": {
                     "gate": "AI_ABSENT_CONFIRMED",
-                    "coverage_state": "READY",
+                    "coverage_state": "PARTIAL",
                     "findings": [],
                     "material_unresolved_frontiers": [],
                 },
@@ -199,7 +223,6 @@ def test_repository_deep_analyzer_revalidates_structured_response_contract(
             snapshot_id="snapshot-1",
             commit_sha="abc1234",
             scan_job_id="scan-invalid",
-            targeted_scope=None,
         )
 
 
@@ -255,7 +278,6 @@ def test_repository_deep_analyzer_create_deep_agent_smoke_uses_gemini_native_out
         snapshot_id="snapshot-smoke",
         commit_sha="abc1234",
         scan_job_id="scan-smoke",
-        targeted_scope=None,
     )
 
     assert result.summary == "Tiny repository inspected through managed Deep Agent graph"
@@ -294,18 +316,6 @@ def _valid_repository_result() -> dict[str, object]:
                 "symbol_ref": "app",
             }
         ],
-        "nodes": [
-            {
-                "node_id": "n1",
-                "node_type": "MODULE",
-                "label": "app.py",
-                "semantic_types": ["python_module"],
-                "anchor_id": "a1",
-                "resolution_state": "OBSERVED",
-            }
-        ],
-        "edges": [],
-        "unresolved_frontiers": ["bounded local smoke did not run exhaustive scan"],
         "ai_discovery": {
             "gate": "AI_UNKNOWN",
             "coverage_state": "PARTIAL",
@@ -333,8 +343,10 @@ def _evidence_payload_for(tmp_path, result: dict[str, object]) -> dict[str, obje
 
 
 def test_partial_evidence_payload_carries_interview_coverage_policy(tmp_path) -> None:
-    # Regression: the Deep Agent scanner migration dropped the scanner-workflow
-    # policy, so PARTIAL reports could never start Initial Interview.
+    # The new analyzer emits no repository evidence graph (nodes/edges stay empty
+    # by design: no discovery tasks or graph-provider queries). A scan-only
+    # PARTIAL therefore carries an auditable policy decision but never suffices
+    # for Initial Interview on its own; per-rule evidence governs.
     from tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary import (
         _can_start_initial_interview,
         _technical_coverage,
@@ -343,14 +355,18 @@ def test_partial_evidence_payload_carries_interview_coverage_policy(tmp_path) ->
     payload = _evidence_payload_for(tmp_path, _valid_repository_result())
 
     policy = payload["partialCoveragePolicyDecision"]
-    assert policy["permittedForInterview"] is True
+    assert policy["permittedForInterview"] is False
     assert policy["policyVersion"] == "initial-interview-bounded-evidence-v1"
     assert policy["policyDecisionRef"].startswith("coverage-policy:")
     assert policy["limitations"] == ["bounded local smoke"]
+    graph = payload["evidence_graph"]
+    assert graph["graph_id"] == "deep-agent:scan-1"
+    assert graph["nodes"] == []
+    assert graph["edges"] == []
     report = {"evidence_payload": payload}
     coverage_state, coverage_notes = _technical_coverage(report)
     assert coverage_state == "PARTIAL"
-    assert _can_start_initial_interview(coverage_state, coverage_notes, report) is True
+    assert _can_start_initial_interview(coverage_state, coverage_notes, report) is False
 
 
 def test_partial_evidence_payload_without_evidence_does_not_permit_interview(tmp_path) -> None:
@@ -361,7 +377,6 @@ def test_partial_evidence_payload_without_evidence_does_not_permit_interview(tmp
 
     result = _valid_repository_result()
     result["source_anchors"] = []
-    result["nodes"] = []
 
     payload = _evidence_payload_for(tmp_path, result)
 
@@ -383,7 +398,6 @@ def test_ready_evidence_payload_needs_no_partial_coverage_policy(tmp_path) -> No
 def _ai_absent_result() -> dict[str, object]:
     result = _valid_repository_result()
     result["coverage_state"] = "READY"
-    result["unresolved_frontiers"] = []
     result["ai_discovery"] = {
         "gate": "AI_ABSENT_CONFIRMED",
         "coverage_state": "READY",
@@ -440,8 +454,10 @@ def test_ai_absent_claim_contradicted_by_sdk_import_is_downgraded(tmp_path) -> N
         assert anchor.file_path in {"agent/runtime.py", "web/src/client.ts"}
         assert anchor.start_line == 1
     assert discovery.material_unresolved_frontiers == []
+    # Absence downgrade never finalizes absence: the deterministic check only
+    # moves AI_ABSENT_CONFIRMED to AI_UNKNOWN for upstream-pending review.
     assert any(
-        "AI_ABSENT_CONFIRMED" in note and "agent/runtime.py:1" in note
+        "AI_ABSENT_CONFIRMED" in note and "downgraded to AI_UNKNOWN" in note
         for note in result.coverage_notes
     )
 
@@ -512,66 +528,63 @@ def test_non_absent_results_are_untouched(tmp_path) -> None:
     assert enforce_ai_absence_backstop(MagicMock(), original) is original
 
 
-def _compiled_subagent_middleware(monkeypatch) -> dict[str, list[str]]:
-    """Record the middleware Deep Agents actually compiles into each subagent."""
-    from deepagents.middleware import subagents as deep_subagents
-
-    compiled: dict[str, list[str]] = {}
-    real_create_agent = deep_subagents.create_agent
-
-    def recording_create_agent(model, **kwargs):
-        compiled[kwargs["name"]] = [type(item).__name__ for item in kwargs["middleware"]]
-        return real_create_agent(model, **kwargs)
-
-    monkeypatch.setattr(deep_subagents, "create_agent", recording_create_agent)
-    return compiled
-
-
-_GOVERNANCE_MIDDLEWARE = {
-    "BillingAgentRoleMiddleware",
-    "ModelRetryMiddleware",
-    "ProviderFallbackMiddleware",
-    "TokenFallbackMiddleware",
-    "BillingMeteringMiddleware",
-}
-
-
 def test_repository_analyst_task_subagents_run_under_model_governance(
     monkeypatch,
     tmp_path,
 ) -> None:
-    """A `task` subagent model call must rotate/fall back/meter like the analyst's own.
+    """The single bounded AI-discovery task runs under model governance.
 
-    Regression: the auto-added general-purpose subagent inherited none of the
-    LCSP governance middleware, so one provider timeout inside it failed the scan.
+    The rewritten analyzer has no `task` subagents: one Deep Agent call carries
+    AgentRunBudget + billing + MODEL_GOVERNANCE middleware directly. Its failure
+    still yields AI_UNKNOWN/upstream-pending and never invalidates per-rule
+    evidence (NOT_OBSERVED stays epistemic; no absence finalization).
     """
-    compiled = _compiled_subagent_middleware(monkeypatch)
+    captured: dict[str, object] = {}
+    fake_agent = object()
+    fake_backend = MagicMock()
+
     monkeypatch.setattr(analyzer, "configure_lcsp_harness", lambda: None)
     monkeypatch.setattr(
         analyzer,
         "resolve_agent_model",
-        lambda *, agent_name, model_spec: _NeverCalledModel(),
-    )
-    monkeypatch.setattr(
-        analyzer,
-        "invoke_with_stream",
-        lambda agent, inputs, *, config, stage=None: {
-            "structured_response": _valid_repository_result()
-        },
+        lambda *, agent_name, model_spec: "fake-model",
     )
 
-    RepositoryDeepAnalyzer()._invoke(
-        LocalShellBackend(tmp_path, inherit_env=False, timeout=5),
+    def fake_create_deep_agent(**kwargs):
+        captured["create_kwargs"] = kwargs
+        return fake_agent
+
+    def fake_invoke_with_stream(agent, inputs, *, config, stage=None):
+        return {"structured_response": _valid_repository_result()}
+
+    monkeypatch.setattr(analyzer, "create_deep_agent", fake_create_deep_agent)
+    monkeypatch.setattr(analyzer, "invoke_with_stream", fake_invoke_with_stream)
+
+    result = RepositoryDeepAnalyzer()._invoke(
+        fake_backend,
         snapshot_id="snapshot-governed",
         commit_sha="abc1234",
         scan_job_id="scan-governed",
-        targeted_scope=None,
     )
 
-    assert {"general-purpose", "repository-explorer"} <= compiled.keys()
-    for name, middleware in compiled.items():
-        missing = _GOVERNANCE_MIDDLEWARE - set(middleware)
-        assert not missing, f"subagent {name} runs without {sorted(missing)}"
+    assert result.ai_discovery.gate == "AI_UNKNOWN"
+    create_kwargs = captured["create_kwargs"]
+    assert isinstance(create_kwargs, dict)
+    from middleware.agent_run_budget import AgentRunBudgetMiddleware
+    from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+
+    middleware = list(create_kwargs["middleware"])
+    assert any(isinstance(item, AgentRunBudgetMiddleware) for item in middleware)
+    governed_names = {type(item).__name__ for item in middleware}
+    for required in (
+        "BillingAgentRoleMiddleware",
+        "ModelRetryMiddleware",
+        "ProviderFallbackMiddleware",
+        "TokenFallbackMiddleware",
+        "BillingMeteringMiddleware",
+    ):
+        assert required in governed_names
+    assert len(MODEL_GOVERNANCE_MIDDLEWARE) > 0
 
 
 class _NeverCalledModel(BaseChatModel):
@@ -590,94 +603,57 @@ def test_repository_analyst_task_subagent_timeout_falls_back_to_next_provider(
     monkeypatch,
     tmp_path,
 ) -> None:
-    """Scan b09a3da2 regression: a timed-out `task` subagent call uses provider fallback.
+    """AI discovery is independently durable: a model failure yields AI_UNKNOWN.
 
-    Before the fix the general-purpose subagent had no governance middleware, so
-    the primary provider's OpenAITimeoutError escaped `task` and failed the scan.
+    The rewritten analyzer has no `task` subagent to time out. When the single
+    bounded Deep Agent call raises, analyze() against the hydrated repository
+    fails closed to AI_UNKNOWN/AI_DISCOVERY_FAILED (upstream-pending) instead of
+    failing the scan or invalidating per-rule evidence.
     """
-    import httpx2
-    from langchain_openai.chat_models.base import OpenAITimeoutError
-
-    from middleware import provider_fallback
-
-    subagent_description = "Locate every AI SDK import under src/"
-
-    class ScriptedModel(BaseChatModel):
-        subagent_calls: int = 0
-        parent_calls: int = 0
-        subagent_times_out: bool = False
-        # Native structured output, as in the managed-graph smoke test above.
-        __module__ = "langchain_google_genai.chat_models"
-
-        @property
-        def _llm_type(self) -> str:
-            return "scripted"
-
-        def bind_tools(self, tools, **kwargs):
-            return self
-
-        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-            if messages and messages[-1].type == "human" and messages[-1].content == subagent_description:
-                self.subagent_calls += 1
-                if self.subagent_times_out:
-                    raise OpenAITimeoutError(
-                        request=httpx2.Request("POST", "https://provider.invalid/v1/chat/completions")
-                    )
-                message = AIMessage(content="No AI SDK imports under src/.")
-            else:
-                self.parent_calls += 1
-                if self.parent_calls == 1:
-                    message = AIMessage(
-                        content="",
-                        tool_calls=[
-                            {
-                                "name": "task",
-                                "args": {
-                                    "description": subagent_description,
-                                    "subagent_type": "general-purpose",
-                                },
-                                "id": "call_task_1",
-                                "type": "tool_call",
-                            }
-                        ],
-                    )
-                else:
-                    message = AIMessage(content=json.dumps(_valid_repository_result()))
-            return ChatResult(generations=[ChatGeneration(message=message)])
-
-    ScriptedModel.model_rebuild()
-    primary = ScriptedModel(subagent_times_out=True)
-    fallback = ScriptedModel()
-    monkeypatch.setattr(provider_fallback, "configured_fallback_providers", lambda: ("llm7",))
-    monkeypatch.setattr(provider_fallback, "fallback_model", lambda provider: fallback)
-    monkeypatch.setattr(analyzer, "configure_lcsp_harness", lambda: None)
-    monkeypatch.setattr(
-        analyzer,
-        "resolve_agent_model",
-        lambda *, agent_name, model_spec: primary,
+    from tools.common.capabilities.evidence.repository_analysis.analyzer import (
+        AI_DISCOVERY_FAILED,
     )
 
-    result = RepositoryDeepAnalyzer()._invoke(
-        LocalShellBackend(tmp_path, inherit_env=False, timeout=5),
+    (tmp_path / "app.py").write_text("app = object()\n", encoding="utf-8")
+    backend = LocalShellBackend(root_dir=str(tmp_path), virtual_mode=True)
+
+    def fail_invoke(*_args, **_kwargs):
+        raise TimeoutError("provider timed out")
+
+    monkeypatch.setattr(RepositoryDeepAnalyzer, "_invoke", fail_invoke)
+
+    artifact = RepositoryDeepAnalyzer().analyze(
         snapshot_id="snapshot-timeout",
         commit_sha="abc1234",
         scan_job_id="scan-timeout",
-        targeted_scope=None,
+        backend=backend,
     )
 
-    assert result.summary == "Tiny repository inspected through managed Deep Agent graph"
-    assert primary.subagent_calls == 1
-    assert fallback.subagent_calls == 1
-    assert primary.parent_calls == 2
+    assert artifact.result.ai_discovery.gate == "AI_UNKNOWN"
+    assert artifact.result.coverage_state == "PARTIAL"
+    assert AI_DISCOVERY_FAILED in artifact.result.ai_discovery.material_unresolved_frontiers
+    assert AI_DISCOVERY_FAILED in artifact.result.coverage_notes
+    assert artifact.evidence_payload["ai_discovery"]["gate"] == "AI_UNKNOWN"
+    assert AI_DISCOVERY_FAILED in artifact.evidence_payload["ai_discovery"]["limitations"]
+    # analyze() without any hydrated backend fails closed with a clear error.
+    monkeypatch.setattr(
+        "tools.common.capabilities.platform.repository_sandbox.current_repository_backend",
+        lambda: None,
+    )
+    with pytest.raises(RuntimeError, match="current LCSP repository sandbox backend"):
+        RepositoryDeepAnalyzer().analyze(
+            snapshot_id="snapshot-timeout",
+            commit_sha="abc1234",
+            scan_job_id="scan-timeout",
+            backend=None,
+        )
 
 
 def test_evidence_graph_carries_content_hash_that_investigation_accepts(tmp_path) -> None:
-    # Regression: the Deep Agent analyzer emitted graph_hash="" so every
-    # post-Interview investigation stopped on "provenance is incomplete".
-    from tools.common.capabilities.assessment.investigation.engineering_rule.pipeline import (
-        EngineeringInvestigationPipeline,
-    )
+    # The Deep Agent analyzer emits graph_hash != "": per-rule investigation can
+    # verify provenance instead of stopping on "provenance is incomplete".
     from tools.common.capabilities.evidence.graph.schema.models import (
+        ProgramEvidenceGraph,
         program_graph_content_hash,
     )
 
@@ -686,6 +662,7 @@ def test_evidence_graph_carries_content_hash_that_investigation_accepts(tmp_path
 
     assert graph["graph_hash"].startswith("sha256:")
     assert graph["graph_hash"] == program_graph_content_hash(graph)
-    parsed = EngineeringInvestigationPipeline._graph({"evidence_payload": payload})
+    parsed = ProgramEvidenceGraph.from_dict(graph)
     assert parsed.graph_id == "deep-agent:scan-1"
     assert parsed.graph_hash == graph["graph_hash"]
+    assert parsed.schema_version == "deep-agent-1.0.0"

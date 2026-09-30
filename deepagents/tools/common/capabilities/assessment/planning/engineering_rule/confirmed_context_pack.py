@@ -1,6 +1,6 @@
 """Confirmed Context Pack: what the Customer owns, normalized for downstream stages.
 
-The Interview owns business-context gaps; the Planner and Investigator consume its
+The Interview owns business-context gaps; the Repository Analyst consumes its
 result. The thread already stores Customer-confirmed statements
 (:mod:`confirmed_business_context`); this module projects them into the fixed
 business dimensions downstream stages actually route on — oversight model,

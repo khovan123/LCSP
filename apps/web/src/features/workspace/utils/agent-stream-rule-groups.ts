@@ -2,11 +2,12 @@ import {
   ASSESSMENT_AGENT_STREAM_EVENT_TYPES,
   ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS,
   ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS,
-  ASSESSMENT_AGENT_STREAM_STAGES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
+  RULE_ANALYSIS_ACTIVITIES,
   type AssessmentAgentStreamEvent,
   type AssessmentRuntimeRunStatus,
   type AssessmentRuntimeSummaryValue,
+  type RuleAnalysisActivity,
 } from "@lcsp/contracts/evidence";
 
 import {
@@ -49,8 +50,7 @@ export function projectAgentStreamRuleHeaders(
     const header =
       headers.get(ruleId) ?? emptyRuleHeader(ruleId, event.sequence);
     header.status = runStatus(event.status) ?? header.status;
-    header.planned =
-      header.planned || event.stage === ASSESSMENT_AGENT_STREAM_STAGES.planner;
+    header.activity = ruleActivity(semantic.activity) ?? header.activity;
     header.concept = stringValue(semantic.concept) ?? header.concept;
     const goals = goalValues(semantic.investigationGoals);
     if (goals.length > 0) header.goals = goals;
@@ -122,11 +122,18 @@ function ruleLifecycleSemantic(
   if (
     data === null ||
     data.schemaVersion !== ASSESSMENT_AGENT_STREAM_SCHEMA_VERSIONS.semanticV1 ||
-    data.kind !== ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.engineeringRule
+    (data.kind !== ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.engineeringRule &&
+      data.kind !== ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.ruleAnalysis)
   ) {
     return null;
   }
   return ruleIdOf(event, data) === null ? null : data;
+}
+
+function ruleActivity(value: unknown): RuleAnalysisActivity | null {
+  return (Object.values(RULE_ANALYSIS_ACTIVITIES) as unknown[]).includes(value)
+    ? (value as RuleAnalysisActivity)
+    : null;
 }
 
 function ruleIdOf(
@@ -144,7 +151,7 @@ function emptyRuleHeader(
     ruleId,
     sequence,
     status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
-    planned: false,
+    activity: null,
     concept: null,
     goals: [],
     decision: null,

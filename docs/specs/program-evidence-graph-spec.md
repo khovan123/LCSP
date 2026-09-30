@@ -41,7 +41,7 @@ Identifiers may retain bounded semantics (`Applicant.cccd` -> `PII.GOVERNMENT_ID
 
 ## Investigation behavior
 
-During repository analysis the agent uses the repository itself as the working database and may use Codebase Memory for navigation. After persistence, downstream planning/investigation may consume the sanitized Program Evidence Graph as a compact compatibility artifact, but claims that require source grounding must preserve direct source anchors and coverage limitations.
+During repository analysis the agent uses the repository itself as the working database and may use Codebase Memory for navigation. After persistence, downstream per-rule analysis and display may consume the sanitized Program Evidence Graph as a compact compatibility artifact, but claims that require source grounding must preserve direct source anchors and coverage limitations.
 
 Retired custom repository graph query tools are not model-callable runtime tools. Native Deep Agents filesystem/search/shell/subagent capabilities are the primary repository exploration surface.
 

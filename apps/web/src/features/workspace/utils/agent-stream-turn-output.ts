@@ -5,19 +5,14 @@ import type {
 } from "../types/agent-stream-turn.types";
 import { projectAgentStreamRuleHeaders } from "./agent-stream-rule-groups";
 
-/** Keep planning decisions separate from actual investigation results. */
+/** Fold the rule-analysis events of the turn into one header per rule. */
 export function projectAgentStreamTurnOutput(
   stageEvents: AgentStreamTurnProps["stageEvents"],
 ): AgentStreamTurnOutput {
   return {
-    plannerRules: [
+    ruleAnalysisRules: [
       ...projectAgentStreamRuleHeaders(
-        stageEvents[ASSESSMENT_AGENT_STREAM_STAGES.planner] ?? [],
-      ).values(),
-    ],
-    investigatorRules: [
-      ...projectAgentStreamRuleHeaders(
-        stageEvents[ASSESSMENT_AGENT_STREAM_STAGES.investigate] ?? [],
+        stageEvents[ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis] ?? [],
       ).values(),
     ],
   };

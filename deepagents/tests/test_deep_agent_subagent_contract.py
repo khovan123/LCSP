@@ -17,16 +17,14 @@ from middleware.runtime_context import inject_lcsp_runtime_context
 from model_policy import (
     ALL_LCSP_MODEL_SPECS,
     DEFAULT_INTERVIEW_MODEL_SPEC,
-    DEFAULT_INVESTIGATOR_MODEL_SPEC,
+    DEFAULT_REPOSITORY_ANALYST_MODEL_SPEC,
     DEFAULT_NARRATOR_MODEL_SPEC,
-    DEFAULT_PLANNER_MODEL_SPEC,
     DEFAULT_REASONING_EFFORT,
     DEFAULT_ROOT_MODEL_SPEC,
     DEFAULT_TRIAGE_MODEL_SPEC,
     INTERVIEW_MODEL_SPEC,
-    INVESTIGATOR_MODEL_SPEC,
     NARRATOR_MODEL_SPEC,
-    PLANNER_MODEL_SPEC,
+    REPOSITORY_ANALYST_MODEL_SPEC,
     REASONING_EFFORT,
     RESPONSES_OUTPUT_VERSION,
     ROOT_MODEL_SPEC,
@@ -43,10 +41,6 @@ from model_policy import (
 from subagents import FLOW_SUBAGENTS
 from contracts.handoffs import (
     InterviewResult,
-    InvestigatorRequirementMetClaim,
-    InvestigatorResult,
-    PlannerResult,
-    ProvenanceRef,
     SPECIALIST_RESPONSE_FORMATS,
     TriageResult,
 )
@@ -61,13 +55,12 @@ def _tool_names(subagent: dict[str, object]) -> tuple[str, ...]:
 
 def test_subagents_follow_deep_agents_dictionary_contract() -> None:
     by_name = {item["name"]: item for item in FLOW_SUBAGENTS}
-    assert tuple(by_name) == ("triage", "interview", "planner", "investigator")
+    assert tuple(by_name) == ("triage", "interview", "repository-analyst")
 
     expected_models = {
         "triage": TRIAGE_MODEL_SPEC,
         "interview": INTERVIEW_MODEL_SPEC,
-        "planner": PLANNER_MODEL_SPEC,
-        "investigator": INVESTIGATOR_MODEL_SPEC,
+        "repository-analyst": REPOSITORY_ANALYST_MODEL_SPEC,
     }
     for name, subagent in by_name.items():
         assert {
@@ -77,12 +70,10 @@ def test_subagents_follow_deep_agents_dictionary_contract() -> None:
             "tools",
             "model",
             "middleware",
-            "response_format",
         } <= set(subagent)
         assert subagent["model"] == expected_models[name]
         assert str(subagent["system_prompt"]).strip()
         assert len(str(subagent["description"])) >= 80
-        expected_role = "triage" if name == "triage" else name
         if name == "interview":
             expected_prefix = [inject_interview_runtime_context]
             expected_governance = MODEL_GOVERNANCE_MIDDLEWARE
@@ -101,18 +92,21 @@ def test_subagents_follow_deep_agents_dictionary_contract() -> None:
             assert isinstance(middleware[1], AgentRunBudgetMiddleware)
             assert middleware[1].finalize_after == 1
             middleware = middleware[2:]
-        if name == "planner":
-            # The Planner never reads source: Deep Agents' filesystem, shell and task
-            # tools are hidden so only its own tools remain visible.
-            assert isinstance(middleware[0], AllowedToolsMiddleware)
-            assert middleware[0].allowed == frozenset({"retrieve_verified_episodes"})
-            middleware = middleware[1:]
-        # The Investigator is the exploring role and is deliberately not step-limited.
-        assert not any(isinstance(item, AgentRunBudgetMiddleware) for item in middleware)
+        if name == "repository-analyst":
+            # Exploring role: bounded by a model-call budget, but the budget's finalize
+            # phase must keep the governed submit tool so a budget hit can still report.
+            budgets = [item for item in middleware if isinstance(item, AgentRunBudgetMiddleware)]
+            assert len(budgets) == 1
+            assert "submit_rule_assessment" in budgets[0].finalize_tools
+            middleware = [item for item in middleware if item is not budgets[0]]
+        else:
+            assert not any(
+                isinstance(item, AgentRunBudgetMiddleware) for item in middleware[1:]
+            ) or name == "interview"
         assert middleware[:1] == expected_prefix
         role_middleware = middleware[1]
         assert isinstance(role_middleware, BillingAgentRoleMiddleware)
-        assert role_middleware.agent_role == expected_role
+        assert role_middleware.agent_role == name
         assert middleware[2:] == list(expected_governance)
 
 
@@ -128,79 +122,35 @@ def test_pipeline_roles_do_not_receive_customer_context_or_resolver_tools() -> N
     # Repository exploration comes from native Deep Agents filesystem/shell/task tools
     # plus typed queries over the pre-indexed Codebase Memory graph, not PGE wrappers.
     assert _tool_names(by_name["interview"]) == ()
-    assert _tool_names(by_name["planner"]) == ("retrieve_verified_episodes",)
-    assert _tool_names(by_name["investigator"]) == (
-        "retrieve_verified_episodes",
+    assert _tool_names(by_name["repository-analyst"]) == (
         "search_code_graph",
         "trace_call_path",
         "get_code_snippet",
         "search_code_text",
         "get_repository_architecture",
+        "cite_repository_source",
+        "submit_rule_assessment",
+        "retrieve_verified_episodes",
     )
-    for role in ("planner", "investigator"):
-        assert "get_assessment_context" not in _tool_names(by_name[role])
+    assert "get_assessment_context" not in _tool_names(by_name["repository-analyst"])
+    assert "retrieve_legal_basis" not in _tool_names(by_name["repository-analyst"])
 
     # LCSP-285: Interview must not receive EngineeringRule retrieval or verified episode tools
     for disallowed in ("get_finding_detail", "retrieve_verified_episodes", "retrieve_legal_basis"):
         assert disallowed not in _tool_names(by_name["interview"])
 
 
-def test_all_specialists_expose_pydantic_response_formats() -> None:
+def test_only_customer_facing_specialists_expose_pydantic_response_formats() -> None:
     by_name = {item["name"]: item for item in FLOW_SUBAGENTS}
 
     assert by_name["triage"]["response_format"] is TriageResult
     assert by_name["interview"]["response_format"] is InterviewResult
-    assert by_name["planner"]["response_format"] is PlannerResult
-    assert by_name["investigator"]["response_format"] is InvestigatorResult
+    # The analyst reports through the governed submit_rule_assessment tool, never free JSON.
+    assert "response_format" not in by_name["repository-analyst"]
     assert SPECIALIST_RESPONSE_FORMATS == {
         "interview": InterviewResult,
-        "planner": PlannerResult,
-        "investigator": InvestigatorResult,
         "triage": TriageResult,
     }
-
-
-def test_structured_handoffs_match_deep_research_report_fields() -> None:
-    provenance = ProvenanceRef(
-        ref="evidence:1",
-        source_kind="PROGRAM_GRAPH",
-        artifact_version="ter-1",
-    )
-    assert provenance.ref == "evidence:1"
-
-    planner = PlannerResult(
-        status="INVESTIGATE",
-        engineering_rule_ids=["ENG-1"],
-        artifact_versions={"technicalEvidenceReportId": "ter-1"},
-        coverage_state="COMPLETE",
-        selected_scope=[
-            {
-                "ref": "node:ai",
-                "criterion": "AI invocation exists",
-            }
-        ],
-        unresolved_facts=[],
-        next_step="INVESTIGATE",
-    )
-    assert planner.coverage_state == "COMPLETE"
-
-    investigator = InvestigatorResult(
-        status="READY",
-        artifact_versions={"technicalEvidenceReportId": "ter-1"},
-        claims=[
-            InvestigatorRequirementMetClaim(
-                claim_id="claim-1",
-                engineering_rule_id="ENG-1",
-                claim_type="RULE_REQUIREMENT_MET",
-                value=True,
-                evidence_refs=["evidence:1"],
-                confidence=0.9,
-                criterion="AI invocation exists",
-            )
-        ],
-        next_step="GATE",
-    )
-    assert investigator.next_step == "GATE"
 
 
 def test_engineering_rules_are_pinned_inputs_not_subagent_discovery() -> None:
@@ -208,16 +158,17 @@ def test_engineering_rules_are_pinned_inputs_not_subagent_discovery() -> None:
         encoding="utf-8"
     )
     instructions = (PROJECT_ROOT / "instructions.md").read_text(encoding="utf-8")
-    planner_prompt = str(
-        next(item for item in FLOW_SUBAGENTS if item["name"] == "planner")["system_prompt"]
+    analyst_prompt = str(
+        next(item for item in FLOW_SUBAGENTS if item["name"] == "repository-analyst")[
+            "system_prompt"
+        ]
     )
 
-    assert "engineering_rule_ids" in context_source
-    assert "already-selected" in instructions
-    assert "EngineeringRule IDs" in instructions
-    assert "EngineeringRules are fixed" in planner_prompt
-    assert "do not fetch, rewrite or" in planner_prompt
-    assert "re-rank them" in planner_prompt
+    # Trusted, dispatcher-set identity: a model can never choose its own rule or version.
+    for field in ("engineering_rule_ids", "engineering_rule_version", "criterion_ids", "prior_evidence_refs"):
+        assert field in context_source
+    assert "repository-analyst" in instructions
+    assert "One task = one EngineeringRule" in analyst_prompt
 
 
 def test_interview_prompt_states_every_enforced_control_shape_rule() -> None:
@@ -284,38 +235,38 @@ def test_interview_snippet_ref_is_bounded_locator_only() -> None:
         )
 
 
-def test_investigator_prompt_uses_native_repo_and_direct_source_provenance() -> None:
-    investigator_prompt = str(
-        next(item for item in FLOW_SUBAGENTS if item["name"] == "investigator")[
+def test_repository_analyst_prompt_is_compact_and_governed() -> None:
+    prompt = str(
+        next(item for item in FLOW_SUBAGENTS if item["name"] == "repository-analyst")[
             "system_prompt"
         ]
     )
 
-    assert "assessment repository is your working database" in investigator_prompt
-    assert "already indexed into a" in investigator_prompt
-    assert "search_code_graph" in investigator_prompt
-    assert "trace_call_path" in investigator_prompt
-    assert "Repository source is authoritative" in investigator_prompt
-    assert "Do not call LCSP Program Evidence Graph search/trace wrappers" in investigator_prompt
-    assert "source_locations" in investigator_prompt
-    assert "Absence of a grep/index hit alone is never" in investigator_prompt
+    assert "assessed repository is your working database" in prompt
+    assert "Repository source is authoritative" in prompt
+    assert "submit_rule_assessment" in prompt
+    assert "cite_repository_source" in prompt
+    assert "never write a ref" in prompt
+    assert "never proof" in prompt
+    # No prescribed repository navigation sequence (LCSP does not steer how it searches).
+    for forbidden in ("first ", "then grep", "step 1", "Step 1"):
+        assert forbidden not in prompt
+    assert len(prompt.splitlines()) < 40
 
 
 def test_default_role_models_match_lcsp_cost_and_reasoning_policy() -> None:
     assert DEFAULT_ROOT_MODEL_SPEC == "openai:gpt-5-nano"
     assert DEFAULT_TRIAGE_MODEL_SPEC == "openai:gpt-5-nano"
-    assert DEFAULT_PLANNER_MODEL_SPEC == "openai:gpt-5-nano"
     assert DEFAULT_INTERVIEW_MODEL_SPEC == "openai:gpt-5-nano"
-    assert DEFAULT_INVESTIGATOR_MODEL_SPEC == "openai:gpt-5-nano"
+    assert DEFAULT_REPOSITORY_ANALYST_MODEL_SPEC == "openai:gpt-5-nano"
     assert DEFAULT_NARRATOR_MODEL_SPEC == "openai:gpt-4.1-nano"
     assert DEFAULT_REASONING_EFFORT == "low"
     assert RESPONSES_OUTPUT_VERSION == "responses/v1"
 
     assert ROOT_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
     assert TRIAGE_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
-    assert PLANNER_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
     assert INTERVIEW_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
-    assert INVESTIGATOR_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
+    assert REPOSITORY_ANALYST_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
     assert NARRATOR_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
 
 
@@ -357,14 +308,14 @@ def test_openai_model_policy_gates_reasoning_by_model_capability() -> None:
 def test_agent_reasoning_policy_is_role_and_model_scoped() -> None:
     assert (
         reasoning_policy_for_agent(
-            agent_name="lcsp-engineering-rule-planner",
+            agent_name="repository-analyst",
             model_spec="openai:gpt-5-mini",
         )
         == "enabled"
     )
     assert (
         reasoning_policy_for_agent(
-            agent_name="lcsp-engineering-rule-planner",
+            agent_name="repository-analyst",
             model_spec="openai:gpt-4o-mini",
         )
         == "unsupported_model"
@@ -381,11 +332,11 @@ def test_agent_reasoning_policy_is_role_and_model_scoped() -> None:
         model_spec="openai:gpt-5-mini",
     )
     assert "reasoning" not in model_init_kwargs_for_agent(
-        agent_name="lcsp-engineering-rule-planner",
+        agent_name="repository-analyst",
         model_spec="openai:gpt-4o-mini",
     )
     assert model_init_kwargs_for_agent(
-        agent_name="lcsp-engineering-rule-planner",
+        agent_name="repository-analyst",
         model_spec="openai:gpt-5-mini",
     )["reasoning"] == {"effort": REASONING_EFFORT}
 
@@ -436,14 +387,12 @@ def test_effective_model_config_logs_responses_api_defaults() -> None:
     assert tuple(config.role for config in configs) == (
         "root",
         "triage",
-        "planner",
         "interview",
-        "investigator",
+        "repository-analyst",
         "narrator",
     )
     assert all(config.provider == "openai" for config in configs)
     assert tuple(config.model for config in configs) == (
-        "gpt-5-nano",
         "gpt-5-nano",
         "gpt-5-nano",
         "gpt-5-nano",
@@ -458,11 +407,9 @@ def test_effective_model_config_logs_responses_api_defaults() -> None:
         REASONING_EFFORT,
         REASONING_EFFORT,
         REASONING_EFFORT,
-        REASONING_EFFORT,
         "unset",
     )
     assert tuple(config.reasoning_policy for config in configs) == (
-        "enabled",
         "enabled",
         "enabled",
         "enabled",
@@ -556,8 +503,8 @@ def test_root_agent_uses_checked_in_instructions_context_and_todos() -> None:
 
     assert "LEGAL_MAINTENANCE" in instructions
     assert "triage" in instructions
-    assert "planner" in instructions
-    assert "investigator" in instructions
+    assert "repository-analyst" in instructions
+    assert "planner" not in instructions.lower()
     assert "write_todos" in instructions
     assert "deterministic gate" in instructions
 
@@ -567,3 +514,74 @@ def test_multi_tenant_agent_has_no_deployment_shared_model_memory() -> None:
     assert not (PROJECT_ROOT / "orchestration" / "memory.py").exists()
     instructions = (PROJECT_ROOT / "instructions.md").read_text(encoding="utf-8")
     assert "Memory is never authoritative evidence" in instructions
+
+
+def _injected_runtime_double() -> object:
+    """A ToolRuntime instance for schema-shape tests (never sent to a model)."""
+    from unittest.mock import MagicMock
+
+    from langchain.tools import ToolRuntime
+
+    double = MagicMock()
+    double.__class__ = ToolRuntime
+    return double
+
+
+def _governed_request_cases() -> list[tuple[type, dict]]:
+    from tools.common.codebase_memory_graph.code import (
+        GetArchitectureRequest,
+        GetCodeSnippetRequest,
+        SearchCodeGraphRequest,
+        SearchCodeTextRequest,
+        TraceCallPathRequest,
+    )
+    from tools.common.retrieve_verified_episodes.code import (
+        RetrieveVerifiedEpisodesRequest,
+    )
+    from tools.common.submit_rule_assessment.code import (
+        CiteRepositorySourceRequest,
+        SubmitRuleAssessmentRequest,
+    )
+
+    return [
+        (
+            SubmitRuleAssessmentRequest,
+            {
+                "engineering_rule_id": "ENG-1",
+                "engineering_rule_version": "v1",
+                "repository_version": "sha",
+                "criteria": [],
+            },
+        ),
+        (
+            CiteRepositorySourceRequest,
+            {"path": "src/a.py", "start_line": 1, "end_line": 2},
+        ),
+        (RetrieveVerifiedEpisodesRequest, {"owner_agent": "planner"}),
+        (SearchCodeGraphRequest, {"name_pattern": "review"}),
+        (TraceCallPathRequest, {"function_name": "review_control"}),
+        (GetCodeSnippetRequest, {"qualified_name": "review_control"}),
+        (SearchCodeTextRequest, {"pattern": "review"}),
+        (GetArchitectureRequest, {"aspects": ["auth"]}),
+    ]
+
+
+@pytest.mark.parametrize(
+    "request_model,model_args",
+    [pytest.param(cls, args, id=cls.__name__) for cls, args in _governed_request_cases()],
+)
+def test_governed_tool_schemas_tolerate_injected_runtime(request_model, model_args) -> None:
+    """Root cause: ToolNode merges the injected ToolRuntime into tool args before
+    explicit-schema validation. A forbid-schema without RuntimeInjectedInput rejects
+    the runtime key, langgraph filters the error as injected (empty message the model
+    cannot correct), and governance kills the run with TerminalSchemaError — every
+    governed-tool call failed deterministically in live runs while .func unit tests
+    passed. Fix: strip only an actual ToolRuntime; model-authored extras stay rejected.
+    """
+    merged = dict(model_args)
+    merged["runtime"] = _injected_runtime_double()
+    validated = request_model.model_validate(merged)
+    assert "runtime" not in validated.model_dump()
+
+    with pytest.raises(Exception):
+        request_model.model_validate({**model_args, "model_authored_bogus": 1})

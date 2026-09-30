@@ -33,7 +33,7 @@ export const FINISHED_ASSESSMENT_STATUSES = new Set<AssessmentStatusCode>([
  * One Customer "Continue" for a paused or stopped assessment pipeline. The API,
  * not the browser, decides which step to restart: a failed or stalled Interview
  * turn is re-run, otherwise the accepted technical evidence is re-sent so the
- * gated engineering assessment (rules, planner, investigation, gate) resumes
+ * gated engineering assessment (rules, repository analysis, gate) resumes
  * from the governed Interview context already on record.
  */
 @Injectable()

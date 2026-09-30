@@ -88,8 +88,11 @@ class AgentRunBudgetMiddleware(AgentMiddleware):
         finalize_after: int | None = None,
         grace_calls: int | None = None,
         keep_tool_results: int = DEFAULT_KEEP_TOOL_RESULTS,
+        finalize_tools: frozenset[str] = frozenset(),
     ) -> None:
         super().__init__()
+        # Governed completion tools (e.g. submit_rule_assessment) stay callable at finalize.
+        self.finalize_tools = frozenset(finalize_tools)
         self.finalize_after = max(
             1,
             finalize_after
@@ -103,6 +106,16 @@ class AgentRunBudgetMiddleware(AgentMiddleware):
             else _positive_env(GRACE_CALLS_ENV, DEFAULT_GRACE_MODEL_CALLS),
         )
         self.keep_tool_results = max(1, keep_tool_results)
+
+    def _finalize_instruction(self) -> str:
+        if not self.finalize_tools:
+            return FINALIZE_INSTRUCTION
+        names = ", ".join(sorted(self.finalize_tools))
+        return (
+            "The investigation budget for this run is used up. Do not investigate further. "
+            f"Call {names} now with only what you have already verified; report anything "
+            "you could not establish as unresolved with a limitation instead of guessing."
+        )
 
     @property
     def max_model_calls(self) -> int:
@@ -181,8 +194,12 @@ class AgentRunBudgetMiddleware(AgentMiddleware):
             data=self._budget_data(calls, reason),
         )
         return request.override(
-            tools=[],
-            messages=[*messages, HumanMessage(content=FINALIZE_INSTRUCTION)],
+            tools=[
+                tool
+                for tool in getattr(request, "tools", None) or []
+                if _tool_name(tool) in self.finalize_tools
+            ],
+            messages=[*messages, HumanMessage(content=self._finalize_instruction())],
         )
 
     def _trim_tool_results(
@@ -276,3 +293,7 @@ __all__ = [
     "AgentRunBudgetMiddleware",
     "FINALIZE_INSTRUCTION",
 ]
+
+
+def _tool_name(tool: Any) -> str | None:
+    return getattr(tool, "name", None) or (tool.get("name") if isinstance(tool, dict) else None)

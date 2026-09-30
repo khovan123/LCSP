@@ -2,8 +2,8 @@
 
 ## Root Cause
 
-Reservation exhaustion used to pass through the generic Planner fallback and
-per-requirement Investigator exception handlers. One spend guard could therefore
+Reservation exhaustion used to pass through generic fallbacks and per-rule
+exception handlers. One spend guard could therefore
 produce runtime failures for every remaining requirement. A completed dispatch
 could also leave activities open in stages it had visited before its final stage.
 
@@ -20,12 +20,12 @@ could also leave activities open in stages it had visited before its final stage
   engineering resumes engineering directly, without submitting the answer again.
 - Source scans retain their original job/snapshot and wait in
   `WAITING_FOR_CREDITS`. Terminal jobs cannot be revived by this path.
-- Managed Investigator resumes the failed checkpoint node with `None` input.
-  Completed READY results are reused only after validating their pinned rule,
-  artifact versions, graph evidence, and confirmed customer statement references.
+- The per-rule loop resumes from the durable `EngineeringRuleAssessment` ledger.
+  Completed rule rows are reused only after validating their pinned rule version,
+  repository commit, and `contextRevision`; only unfinished rules are re-run.
 - Dispatch activity identity is `(runId, correlationId)`. Its outer terminal
   event closes every participating stage in that dispatch, never another turn.
-  Billing pause is neutral waiting; genuine Investigator failures remain failed.
+  Billing pause is neutral waiting; genuine rule-analysis failures remain failed (`FAILED` for that rule only).
 
 ## Account Reservation Auto Refill
 

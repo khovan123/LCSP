@@ -9,9 +9,8 @@ from langchain.agents.structured_output import (
 from langchain_core.tools import StructuredTool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
-from contracts.handoffs import InvestigatorResult
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.provider_schema import (
     ProviderSchemaCompatibilityMiddleware,
@@ -43,6 +42,38 @@ def _gemini() -> ChatGoogleGenerativeAI:
     return ChatGoogleGenerativeAI(model="gemini-3.5-flash-lite", google_api_key="test-key")
 
 
+class _NoRefsClaim(BaseModel):
+    """Shape contract: this claim carries no refs at all (maxItems 0), not a cost bound."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_refs: list[str] = Field(default_factory=list, max_length=0)
+
+
+class _MetClaim(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    claim_id: str
+    confidence: float = Field(ge=0, le=1)
+    evidence_refs: list[str] = Field(default_factory=list, max_length=50)
+
+
+class _Need(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resolution_criteria: list[str] = Field(min_length=1, max_length=10)
+
+
+class SyntheticResult(BaseModel):
+    """Synthetic complex structured result (bounded arrays, nested defs, extra=forbid)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: str
+    claims: list[_MetClaim | _NoRefsClaim] = Field(default_factory=list, max_length=200)
+    need: _Need | None = None
+
+
 def test_model_governance_installs_provider_schema_compatibility() -> None:
     assert any(
         isinstance(item, ProviderSchemaCompatibilityMiddleware)
@@ -51,7 +82,7 @@ def test_model_governance_installs_provider_schema_compatibility() -> None:
 
 
 def test_relaxing_removes_every_array_upper_bound_and_keeps_other_constraints() -> None:
-    schema = InvestigatorResult.model_json_schema()
+    schema = SyntheticResult.model_json_schema()
     relaxed = relax_array_upper_bounds(schema)
 
     def positive_upper_bounds(node) -> int:
@@ -65,25 +96,18 @@ def test_relaxing_removes_every_array_upper_bound_and_keeps_other_constraints() 
     assert positive_upper_bounds(schema) > 0
     # Every expansion-costly (>0) maxItems is gone...
     assert positive_upper_bounds(relaxed) == 0
-    # ...but the 3 maxItems:0 on InvestigatorScopeNotApplicableClaim are a shape contract
-    # (that claim_type must not carry these refs at all), not an expansion-cost bound, and
-    # must survive relaxation untouched.
-    scope_properties = relaxed["$defs"]["InvestigatorScopeNotApplicableClaim"]["properties"]
-    for field in ("evidence_refs", "graph_path_refs", "source_anchor_refs"):
-        assert scope_properties[field]["maxItems"] == 0, field
+    # ...but maxItems:0 is a shape contract (that claim must not carry refs at all), not an
+    # expansion-cost bound, and must survive relaxation untouched.
+    scope_properties = relaxed["$defs"]["_NoRefsClaim"]["properties"]
+    assert scope_properties["evidence_refs"]["maxItems"] == 0
     # Lower bounds and value ranges cost the provider nothing, so they must survive.
     assert relaxed["properties"]["claims"]["items"] == schema["properties"]["claims"]["items"]
-    assert (
-        relaxed["$defs"]["InvestigatorRequirementMetClaim"]["properties"]["confidence"][
-            "maximum"
-        ]
-        == 1
-    )
-    assert relaxed["$defs"]["BusinessContextNeed"]["properties"]["resolution_criteria"]["minItems"] == 1
+    assert relaxed["$defs"]["_MetClaim"]["properties"]["confidence"]["maximum"] == 1
+    assert relaxed["$defs"]["_Need"]["properties"]["resolution_criteria"]["minItems"] == 1
 
 
 def test_gemini_schema_strips_unsupported_additional_properties_recursively() -> None:
-    schema = InvestigatorResult.model_json_schema()
+    schema = SyntheticResult.model_json_schema()
     relaxed = relax_array_upper_bounds(schema)
 
     def count_key(node, key: str) -> int:
@@ -103,28 +127,19 @@ def test_the_relaxed_schema_does_not_widen_the_validated_contract() -> None:
     # The provider stops rejecting oversize arrays, so Pydantic must still refuse them.
     payload = {
         "status": "READY",
-        "artifact_versions": {"technicalEvidenceReportId": "report-1"},
         "claims": [
-            {
-                "claim_id": f"claim-{index}",
-                "engineering_rule_id": "rule-1",
-                "claim_type": "UNRESOLVED_ENGINEERING_FACT",
-                "value": None,
-                "confidence": 0.5,
-            }
-            for index in range(201)
+            {"claim_id": f"claim-{index}", "confidence": 0.5} for index in range(201)
         ],
-        "next_step": "GATE",
     }
     with pytest.raises(Exception):
-        InvestigatorResult.model_validate(payload)
+        SyntheticResult.model_validate(payload)
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
 @pytest.mark.asyncio
 async def test_gemini_receives_a_relaxed_schema_in_the_same_strategy(asynchronous) -> None:
     middleware = ProviderSchemaCompatibilityMiddleware()
-    request = _request(_gemini(), ProviderStrategy(InvestigatorResult))
+    request = _request(_gemini(), ProviderStrategy(SyntheticResult))
     handler = AsyncMock() if asynchronous else MagicMock()
 
     if asynchronous:
@@ -134,7 +149,7 @@ async def test_gemini_receives_a_relaxed_schema_in_the_same_strategy(asynchronou
 
     forwarded = handler.call_args.args[0].response_format
     assert isinstance(forwarded, ProviderStrategy)
-    assert forwarded.schema == relax_array_upper_bounds(InvestigatorResult.model_json_schema())
+    assert forwarded.schema == relax_array_upper_bounds(SyntheticResult.model_json_schema())
     assert handler.call_args.args[0].model_settings["automatic_function_calling"] == {
         "disable": True
     }
@@ -142,7 +157,7 @@ async def test_gemini_receives_a_relaxed_schema_in_the_same_strategy(asynchronou
 
 def test_gemini_tool_strategy_switches_to_native_provider_strategy() -> None:
     middleware = ProviderSchemaCompatibilityMiddleware()
-    request = _request(_gemini(), ToolStrategy(InvestigatorResult))
+    request = _request(_gemini(), ToolStrategy(SyntheticResult))
     handler = MagicMock()
 
     middleware.wrap_model_call(request, handler)
@@ -150,13 +165,13 @@ def test_gemini_tool_strategy_switches_to_native_provider_strategy() -> None:
     forwarded = handler.call_args.args[0].response_format
     assert isinstance(forwarded, ProviderStrategy)
     assert forwarded.schema == relax_array_upper_bounds(
-        InvestigatorResult.model_json_schema()
+        SyntheticResult.model_json_schema()
     )
 
 
 def test_gemini_auto_strategy_switches_to_native_provider_strategy() -> None:
     middleware = ProviderSchemaCompatibilityMiddleware()
-    request = _request(_gemini(), AutoStrategy(InvestigatorResult))
+    request = _request(_gemini(), AutoStrategy(SyntheticResult))
     handler = MagicMock()
 
     middleware.wrap_model_call(request, handler)
@@ -164,7 +179,7 @@ def test_gemini_auto_strategy_switches_to_native_provider_strategy() -> None:
     forwarded = handler.call_args.args[0].response_format
     assert isinstance(forwarded, ProviderStrategy)
     assert forwarded.schema == relax_array_upper_bounds(
-        InvestigatorResult.model_json_schema()
+        SyntheticResult.model_json_schema()
     )
 
 
@@ -199,16 +214,16 @@ def test_gemini_provider_strategy_without_schema_relaxation_is_preserved() -> No
 
 
 def test_provider_facing_gemini_schema_does_not_mutate_canonical_schema() -> None:
-    canonical_schema = InvestigatorResult.model_json_schema()
+    canonical_schema = SyntheticResult.model_json_schema()
     middleware = ProviderSchemaCompatibilityMiddleware()
-    request = _request(_gemini(), AutoStrategy(InvestigatorResult))
+    request = _request(_gemini(), AutoStrategy(SyntheticResult))
     handler = MagicMock()
 
     middleware.wrap_model_call(request, handler)
 
     forwarded = handler.call_args.args[0].response_format
     assert isinstance(forwarded, ProviderStrategy)
-    assert InvestigatorResult.model_json_schema() == canonical_schema
+    assert SyntheticResult.model_json_schema() == canonical_schema
 
 
 def test_gemini_tool_schema_strips_unsupported_additional_properties() -> None:
@@ -247,7 +262,7 @@ def test_gemini_tool_schema_strips_unsupported_additional_properties() -> None:
 
 def test_openai_requests_are_forwarded_untouched() -> None:
     middleware = ProviderSchemaCompatibilityMiddleware()
-    response_format = ProviderStrategy(InvestigatorResult)
+    response_format = ProviderStrategy(SyntheticResult)
     request = _request(ChatOpenAI(model="gpt-5-mini", api_key="test-key"), response_format)
     handler = MagicMock()
 
@@ -272,7 +287,7 @@ def test_raw_schema_without_array_upper_bounds_still_disables_gemini_afc() -> No
 
 def _llm7() -> ChatOpenAI:
     return ChatOpenAI(
-        model="GLM-5.3-Flash",
+        model="minimax-m2.7",
         base_url="https://api.llm7.io/v1",
         api_key="llm7-test-token",
         use_responses_api=False,

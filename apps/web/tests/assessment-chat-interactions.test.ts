@@ -10,9 +10,9 @@ import type { Root } from "react-dom/client";
 import {
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
-  ASSESSMENT_RUNTIME_PLAN_REASON_CODES,
   ASSESSMENT_RUNTIME_STAGE_CODES,
-  ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS,
+  RULE_ANALYSIS_ACTIVITIES,
+  RULE_ANALYSIS_SUMMARY_TOOL,
   ASSESSMENT_INTERVIEW_CONTROLS,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
 } from "@lcsp/contracts/evidence";
@@ -410,19 +410,11 @@ function thinkingEvent(
     eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
     runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.waiting,
     stage: ASSESSMENT_RUNTIME_STAGE_CODES.technicalEvidence,
-    toolName: "engineering_rule_plan:eng-1",
-    summary:
-      ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRulePlannerDecision,
-    inputSummary: { hiddenPrompt: "must not render" },
+    toolName: "rule_analysis:eng-1",
+    summary: "rule analysis progress",
+    inputSummary: null,
     outputSummary: {
-      messageKey:
-        ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRulePlannerDecision,
-      messageParams: {
-        decision: "SELECT",
-        engineeringRuleId: "eng-1",
-        reasonCode: "SOURCE_SCOPE_MATCH",
-      },
-      hiddenRationale: "must not render",
+      activity: RULE_ANALYSIS_ACTIVITIES.ruleAnalysisCompleted,
     },
     errorSummary: null,
     startedAt: null,
@@ -434,15 +426,34 @@ function thinkingEvent(
   };
 }
 
-test("runtime thinking renders aggregated planner progress without rule ids or payloads", async () => {
-  const [item] = projectRuntimeThinking([
-    thinkingEvent({
-      eventId: "evt-skip",
-      sequence: 2,
-      eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped,
-      toolName: "engineering_rule_plan:eng-2",
-    }),
-    thinkingEvent({}),
+function thinkingSummaryEvent(
+  overrides: Partial<WorkspaceRuntimeActivityItem> = {},
+): WorkspaceRuntimeActivityItem {
+  return thinkingEvent({
+    eventId: "evt-rule-analysis-summary",
+    toolName: RULE_ANALYSIS_SUMMARY_TOOL,
+    outputSummary: {
+      contextRevision: 3,
+      engineeringRuleCount: 5,
+      eligibleCount: 4,
+    },
+    ...overrides,
+  });
+}
+
+test("runtime thinking renders aggregated rule-analysis progress without rule ids or activity codes", async () => {
+  const [item] = projectRuntimeThinking([], [
+    {
+      assessmentId: "asm-runtime-thinking",
+      runId: "scan-runtime-thinking",
+      contextRevision: 3,
+      engineeringRuleCount: 5,
+      eligibleCount: 4,
+      completed: 1,
+      needsContext: 1,
+      unresolved: 0,
+      failed: 0,
+    },
   ]);
   assert.ok(item);
 
@@ -451,17 +462,13 @@ test("runtime thinking renders aggregated planner progress without rule ids or p
   );
 
   const text = container.textContent ?? "";
-  assert.match(text, /Tiến độ Planner/);
-  assert.match(text, /Yêu cầu được chọn để điều tra: 1\/2/);
+  assert.match(text, /Yêu cầu đã phân tích: 1\/4 trong phạm vi/);
   for (const hidden of [
     "eng-1",
     "eng-2",
     "EngineeringRule",
-    "SOURCE_SCOPE_MATCH",
-    "SELECT",
-    ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRulePlannerDecision,
-    "hiddenPrompt",
-    "hiddenRationale",
+    "RULE_ANALYSIS_COMPLETED",
+    "rule_analysis:eng-1",
   ]) {
     assert.ok(!text.includes(hidden), `leaked ${hidden}`);
   }
@@ -469,68 +476,64 @@ test("runtime thinking renders aggregated planner progress without rule ids or p
     container
       .querySelector("[data-runtime-thinking-id]")
       ?.getAttribute("data-runtime-thinking-id"),
-    "planner:evt-skip",
+    "analysis:asm-runtime-thinking:scan-runtime-thinking",
   );
 });
 
-test("runtime thinking for a targeted resume aggregates skipped requirements instead of dumping SKIP events", async () => {
-  const events = Array.from({ length: 41 }, (_, index) =>
+test("runtime thinking derives progress from the rule-analysis activity window", async () => {
+  const items = projectRuntimeThinking([
+    thinkingSummaryEvent({ sequence: 1 }),
     thinkingEvent({
-      eventId: `evt-plan-${index}`,
-      sequence: index + 1,
-      toolName: `engineering_rule_plan:eng-${index + 1}`,
-      eventType:
-        index === 0
-          ? ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted
-          : ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped,
+      eventId: "evt-rule-1",
+      sequence: 2,
+      toolName: "rule_analysis:eng-1",
       outputSummary: {
-        messageKey:
-          ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS.engineeringRulePlannerDecision,
-        messageParams: {
-          decision: index === 0 ? "SELECT" : "SKIP",
-          engineeringRuleId: `eng-${index + 1}`,
-          reasonCode:
-            ASSESSMENT_RUNTIME_PLAN_REASON_CODES.targetedExactResumePin,
-        },
-        reasonCode: ASSESSMENT_RUNTIME_PLAN_REASON_CODES.targetedExactResumePin,
+        activity: RULE_ANALYSIS_ACTIVITIES.ruleAnalysisCompleted,
       },
     }),
-  ).reverse();
-  const items = projectRuntimeThinking(events);
-  assert.equal(items.length, 1);
-
-  const { container } = await renderElement(
-    React.createElement(RuntimeThinkingActivity, { item: items[0]! }),
-  );
-
-  const text = container.textContent ?? "";
-  assert.match(
-    text,
-    /Yêu cầu được đánh giá lại theo câu trả lời mới: 1\. Yêu cầu không liên quan được bỏ qua: 40\./,
-  );
-  assert.ok(!text.includes("TARGETED_EXACT_RESUME_PIN"));
-  assert.ok(!text.includes("SKIP"));
-});
-
-test("runtime thinking never renders legacy raw internal summaries", async () => {
-  const legacySummary =
-    "TARGETED_EXACT_RESUME_PIN CUSTOMER_CONFIRMED INVESTIGATOR_RESOLUTION resolutionCriteria CONTEXT_RESOLVED";
-  const items = projectRuntimeThinking([
     thinkingEvent({
-      toolName: "engineering_rule_investigation:eng-1",
-      summary: legacySummary,
-      outputSummary: null,
+      eventId: "evt-rule-2",
+      sequence: 3,
+      toolName: "rule_analysis:eng-2",
+      outputSummary: {
+        activity: RULE_ANALYSIS_ACTIVITIES.ruleAnalysisNeedsContext,
+      },
     }),
   ]);
-  assert.equal(items.length, 1);
+  assert.equal(items.length, 2);
 
   const { container } = await renderElement(
     React.createElement(RuntimeThinkingActivity, { item: items[0]! }),
   );
 
   const text = container.textContent ?? "";
-  assert.match(text, /Tiến độ Investigator/);
-  for (const internal of legacySummary.split(" ")) {
+  assert.match(text, /Yêu cầu đã phân tích: 1\/4 trong phạm vi/);
+  assert.ok(!text.includes("eng-1"));
+  assert.ok(!text.includes("eng-2"));
+  assert.ok(!text.includes("RULE_ANALYSIS_NEEDS_CONTEXT"));
+});
+
+test("runtime thinking never renders raw rule ids or activity codes", async () => {
+  const items = projectRuntimeThinking([
+    thinkingSummaryEvent({ sequence: 1 }),
+    thinkingEvent({
+      eventId: "evt-rule-9",
+      sequence: 2,
+      toolName: "rule_analysis:eng-9",
+      outputSummary: {
+        activity: RULE_ANALYSIS_ACTIVITIES.ruleAnalysisFailed,
+      },
+    }),
+  ]);
+  assert.equal(items.length, 2);
+
+  const { container } = await renderElement(
+    React.createElement(RuntimeThinkingActivity, { item: items[0]! }),
+  );
+
+  const text = container.textContent ?? "";
+  assert.match(text, /Yêu cầu đã phân tích: 0\/4 trong phạm vi/);
+  for (const internal of ["eng-9", "RULE_ANALYSIS_FAILED"]) {
     assert.ok(!text.includes(internal), `leaked ${internal}`);
   }
 });

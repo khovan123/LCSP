@@ -270,12 +270,22 @@ export type PagesMessages = {
       agentContextTrimmed: string;
     };
     agentStreamRule: {
+      activity: {
+        ruleAnalysisStarted: string;
+        ruleAnalysisCompleted: string;
+        ruleAnalysisNeedsContext: string;
+        ruleAnalysisUnresolved: string;
+        ruleAnalysisFailed: string;
+        businessContextRequested: string;
+        businessContextResolved: string;
+        ruleAnalysisResumed: string;
+        ruleApplicabilityEvaluated: string;
+        ruleCompletionGated: string;
+      };
       investigating: string;
       investigated: string;
       investigationFailed: string;
       waitingForInput: string;
-      planned: string;
-      plannedGoals: string;
       result: string;
       decision: string;
       reason: string;
@@ -286,26 +296,20 @@ export type PagesMessages = {
     agentStreamTurn: {
       scannerActor: string;
       interviewActor: string;
-      plannerActor: string;
-      investigatorActor: string;
+      ruleAnalysisActor: string;
       gateActor: string;
-      assessmentAgentActor: string;
       scannerRunning: string;
       scannerCompleted: string;
       scannerFailed: string;
       interviewRunning: string;
       interviewCompleted: string;
       interviewFailed: string;
-      plannerRunning: string;
-      plannerCompleted: string;
-      plannerFailed: string;
       investigateRunning: string;
       investigateCompleted: string;
       investigateFailed: string;
       gateRunning: string;
       gateCompleted: string;
       gateFailed: string;
-      skippedGoals: string;
       ruleInvestigating: string;
       ruleInvestigated: string;
       ruleFailed: string;
@@ -322,7 +326,7 @@ export type PagesMessages = {
       failures: string;
       rawEvents: string;
     };
-    agentStreamInvestigatorOutput: {
+    agentStreamRuleAnalysisOutput: {
       aggregatedFailed: string;
       aggregatedWaiting: string;
       completed: string;
@@ -426,8 +430,7 @@ export type PagesMessages = {
         scanner: string;
         interview: string;
         rules: string;
-        planner: string;
-        investigate: string;
+        ruleAnalysis: string;
         gate: string;
       };
       statuses: {
@@ -635,8 +638,7 @@ export type PagesMessages = {
       showcaseWorkflowScanner: string;
       showcaseWorkflowInterview: string;
       showcaseWorkflowRules: string;
-      showcaseWorkflowPlanner: string;
-      showcaseWorkflowInvestigate: string;
+      showcaseWorkflowRepositoryAnalyst: string;
       showcaseWorkflowGate: string;
       showcaseStatusPassed: string;
       showcaseStatusRunning: string;
@@ -1608,6 +1610,9 @@ export type PagesMessages = {
     adjustPlaceholder: string;
     composerChooseConfirmAdjust: string;
     submitAnswer: string;
+    sourceCode: string;
+    sourceCodeLoading: string;
+    sourceCodeUnavailable: string;
     resumePipeline: string;
     resumeQueued: string;
     answerSavedForRuntime: string;
@@ -1782,7 +1787,6 @@ export type PagesMessages = {
       contextReadyHandoff: string;
       contextResolvedHandoff: string;
       pendingPlaceholder: string;
-      plannerPlaceholder: string;
       investigatePlaceholder: string;
       gatePlaceholder: string;
       aiNotDetectedDescription: string;
@@ -1798,16 +1802,12 @@ export type PagesMessages = {
     };
     technicalEvidence: {
       progress: string;
-      plannerProgress: string;
-      plannerFailed: string;
-      investigatorProgress: string;
-      investigatorFailed: string;
-      plannerTargetedSummary: string;
-      plannerSummary: string;
-      investigatorSummary: string;
-      investigatorLimitedSummary: string;
-      investigatorRuntimeFailedSummary: string;
-      plannerDecision: string;
+      ruleAnalysisProgress: string;
+      ruleAnalysisLimited: string;
+      ruleAnalysisSummary: string;
+      ruleAnalysisNeedsContextSummary: string;
+      ruleAnalysisUnresolvedSummary: string;
+      ruleAnalysisFailedSummary: string;
       investigationFailed: string;
       investigated: string;
       readinessWaiting: string;

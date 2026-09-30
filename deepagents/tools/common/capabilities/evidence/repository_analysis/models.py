@@ -1,8 +1,4 @@
-"""Structured output produced by the repository Deep Agent.
-
-The model never persists raw repository source. Evidence is represented by
-snapshot-pinned file/line anchors and compact semantic graph facts.
-"""
+"""Small structured result for the bounded scan-time AI discovery task."""
 
 from __future__ import annotations
 
@@ -13,11 +9,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class SourceAnchor(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    anchor_id: str
-    file_path: str
+    anchor_id: str = Field(max_length=120)
+    file_path: str = Field(max_length=1024)
     start_line: int = Field(ge=1)
     end_line: int = Field(ge=1)
-    symbol_ref: str | None = None
+    symbol_ref: str | None = Field(default=None, max_length=300)
 
     @model_validator(mode="after")
     def validate_anchor(self) -> "SourceAnchor":
@@ -29,29 +25,9 @@ class SourceAnchor(BaseModel):
         return self
 
 
-class EvidenceNode(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    node_id: str
-    node_type: str
-    label: str
-    anchor_id: str | None = None
-    semantic_types: list[str] = Field(default_factory=list)
-    resolution_state: Literal["OBSERVED", "CORROBORATED", "INFERRED", "UNRESOLVED"] = "OBSERVED"
-
-
-class EvidenceEdge(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    edge_id: str
-    edge_type: str
-    source_node_id: str
-    target_node_id: str
-    confidence: float = Field(ge=0, le=1)
-    resolution_state: Literal["OBSERVED", "CORROBORATED", "INFERRED", "UNRESOLVED"] = "OBSERVED"
-
-
 class AiFinding(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    evidence_id: str
+    evidence_id: str = Field(max_length=120)
     state: Literal[
         "CONFIRMED_AI_CALL",
         "POSSIBLE_AI_CALL",
@@ -61,13 +37,13 @@ class AiFinding(BaseModel):
     ]
     resolution_state: Literal["OBSERVED", "CORROBORATED", "INFERRED", "UNRESOLVED"]
     kind: Literal["SDK_INVOCATION", "OUTBOUND_API", "PROVIDER_REFERENCE", "DYNAMIC_TARGET"]
-    provider: str | None = None
-    host: str | None = None
-    path: str | None = None
-    method: str | None = None
-    endpoint_source: str | None = None
-    payload_hints: list[str] = Field(default_factory=list)
-    runtime_guard: str | None = None
+    provider: str | None = Field(default=None, max_length=120)
+    host: str | None = Field(default=None, max_length=240)
+    path: str | None = Field(default=None, max_length=1024)
+    method: str | None = Field(default=None, max_length=32)
+    endpoint_source: str | None = Field(default=None, max_length=240)
+    payload_hints: list[str] = Field(default_factory=list, max_length=8)
+    runtime_guard: str | None = Field(default=None, max_length=300)
     clarification_owner: Literal["CUSTOMER", "TECHNICAL"] | None = None
     clarification_kind: Literal[
         "AI_PURPOSE_FEATURE_MAPPING",
@@ -75,16 +51,16 @@ class AiFinding(BaseModel):
         "OUTBOUND_AI_CONFIRMATION",
         "TARGETED_TECHNICAL_REANALYSIS",
     ] | None = None
-    evidence_refs: list[str] = Field(default_factory=list)
-    anchor_id: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list, max_length=8)
+    anchor_id: str | None = Field(default=None, max_length=120)
 
 
 class AiDiscovery(BaseModel):
     model_config = ConfigDict(extra="forbid")
     gate: Literal["AI_CONFIRMED", "AI_ABSENT_CONFIRMED", "AI_UNKNOWN"]
     coverage_state: Literal["READY", "PARTIAL", "UNAVAILABLE"]
-    findings: list[AiFinding] = Field(default_factory=list)
-    material_unresolved_frontiers: list[str] = Field(default_factory=list)
+    findings: list[AiFinding] = Field(default_factory=list, max_length=32)
+    material_unresolved_frontiers: list[str] = Field(default_factory=list, max_length=16)
 
     @model_validator(mode="after")
     def validate_absence_gate(self) -> "AiDiscovery":
@@ -95,15 +71,7 @@ class AiDiscovery(BaseModel):
                 raise ValueError(
                     "AI_ABSENT_CONFIRMED cannot carry material unresolved frontiers"
                 )
-            if any(
-                finding.state in {
-                    "CONFIRMED_AI_CALL",
-                    "POSSIBLE_AI_CALL",
-                    "AI_PROVIDER_REFERENCE",
-                    "UNRESOLVED_DYNAMIC",
-                }
-                for finding in self.findings
-            ):
+            if any(finding.state != "NO_AI_SIGNAL" for finding in self.findings):
                 raise ValueError(
                     "AI_ABSENT_CONFIRMED cannot coexist with positive or unresolved AI signals"
                 )
@@ -111,64 +79,29 @@ class AiDiscovery(BaseModel):
 
 
 class RepositoryAnalysisResult(BaseModel):
+    """Only the scan contracts still consumed after rule analysis moved per-rule."""
+
     model_config = ConfigDict(extra="forbid")
-    summary: str
+    summary: str = Field(max_length=600)
     coverage_state: Literal["READY", "PARTIAL", "UNAVAILABLE"]
-    coverage_notes: list[str] = Field(default_factory=list)
-    languages: list[str] = Field(default_factory=list)
-    frameworks: list[str] = Field(default_factory=list)
-    source_anchors: list[SourceAnchor] = Field(default_factory=list)
-    nodes: list[EvidenceNode] = Field(default_factory=list)
-    edges: list[EvidenceEdge] = Field(default_factory=list)
-    unresolved_frontiers: list[str] = Field(default_factory=list)
+    coverage_notes: list[str] = Field(default_factory=list, max_length=16)
+    languages: list[str] = Field(default_factory=list, max_length=32)
+    frameworks: list[str] = Field(default_factory=list, max_length=32)
+    source_anchors: list[SourceAnchor] = Field(default_factory=list, max_length=32)
     ai_discovery: AiDiscovery
 
     @model_validator(mode="after")
-    def validate_coverage_and_graph(self) -> "RepositoryAnalysisResult":
-        if self.ai_discovery.gate == "AI_ABSENT_CONFIRMED":
-            if self.coverage_state != "READY":
-                raise ValueError(
-                    "AI_ABSENT_CONFIRMED requires READY repository coverage"
-                )
-            if self.unresolved_frontiers:
-                raise ValueError(
-                    "AI_ABSENT_CONFIRMED cannot carry repository unresolved frontiers"
-                )
-
+    def validate_result(self) -> "RepositoryAnalysisResult":
+        if self.ai_discovery.gate == "AI_ABSENT_CONFIRMED" and self.coverage_state != "READY":
+            raise ValueError("AI_ABSENT_CONFIRMED requires READY repository coverage")
         anchor_ids = [anchor.anchor_id for anchor in self.source_anchors]
         if len(anchor_ids) != len(set(anchor_ids)):
             raise ValueError("source anchor ids must be unique")
-        node_ids = [node.node_id for node in self.nodes]
-        if len(node_ids) != len(set(node_ids)):
-            raise ValueError("evidence node ids must be unique")
-        edge_ids = [edge.edge_id for edge in self.edges]
-        if len(edge_ids) != len(set(edge_ids)):
-            raise ValueError("evidence edge ids must be unique")
-
         known_anchors = set(anchor_ids)
-        known_nodes = set(node_ids)
-        for node in self.nodes:
-            if node.anchor_id is not None and node.anchor_id not in known_anchors:
-                raise ValueError(f"node references unknown anchor: {node.anchor_id}")
-        for edge in self.edges:
-            if (
-                edge.source_node_id not in known_nodes
-                or edge.target_node_id not in known_nodes
-            ):
-                raise ValueError(f"edge references unknown node: {edge.edge_id}")
         for finding in self.ai_discovery.findings:
             if finding.anchor_id is not None and finding.anchor_id not in known_anchors:
-                raise ValueError(
-                    f"AI finding references unknown anchor: {finding.anchor_id}"
-                )
+                raise ValueError(f"AI finding references unknown anchor: {finding.anchor_id}")
         return self
 
 
-__all__ = [
-    "AiDiscovery",
-    "AiFinding",
-    "EvidenceEdge",
-    "EvidenceNode",
-    "RepositoryAnalysisResult",
-    "SourceAnchor",
-]
+__all__ = ["AiDiscovery", "AiFinding", "RepositoryAnalysisResult", "SourceAnchor"]

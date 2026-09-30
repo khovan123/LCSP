@@ -248,12 +248,22 @@ export const viPages = {
         "Đã lược bớt kết quả tool cũ để giữ trong giới hạn context",
     },
     agentStreamRule: {
+      activity: {
+        ruleAnalysisStarted: "Đã bắt đầu phân tích rule này",
+        ruleAnalysisCompleted: "Đã phân tích xong rule này",
+        ruleAnalysisNeedsContext: "Phân tích cần thêm ngữ cảnh nghiệp vụ",
+        ruleAnalysisUnresolved: "Phân tích chưa xác lập được đầy đủ yêu cầu",
+        ruleAnalysisFailed: "Phân tích rule này thất bại",
+        businessContextRequested: "Đã hỏi ngữ cảnh nghiệp vụ",
+        businessContextResolved: "Đã nhận ngữ cảnh nghiệp vụ",
+        ruleAnalysisResumed: "Đã tiếp tục phân tích với ngữ cảnh mới",
+        ruleApplicabilityEvaluated: "Đã kiểm tra rule này có áp dụng hay không",
+        ruleCompletionGated: "Đã áp dụng bước kiểm tra hoàn tất",
+      },
       investigating: "Đang điều tra rule",
       investigated: "Đã điều tra rule",
       investigationFailed: "Điều tra rule thất bại",
       waitingForInput: "Rule đang chờ thông tin từ khách hàng",
-      planned: "Đã lập kế hoạch rule",
-      plannedGoals: "Mục tiêu điều tra đã chọn",
       result: "Kết quả suy luận",
       decision: "Quyết định",
       reason: "Lý do",
@@ -264,26 +274,20 @@ export const viPages = {
     agentStreamTurn: {
       scannerActor: "LCSP Scanner",
       interviewActor: "LCSP",
-      plannerActor: "LCSP Planner",
-      investigatorActor: "LCSP Investigator",
+      ruleAnalysisActor: "LCSP Rule analysis",
       gateActor: "LCSP Reviewer",
-      assessmentAgentActor: "LCSP Assessment Agent",
       scannerRunning: "Đang chuẩn bị evidence từ repository…",
       scannerCompleted: "Evidence từ repository đã sẵn sàng.",
       scannerFailed: "Không thể hoàn tất chuẩn bị evidence từ repository.",
       interviewRunning: "Đang xử lý câu trả lời…",
       interviewCompleted: "Đã xem xét xong câu trả lời của bạn.",
       interviewFailed: "Gặp sự cố khi xử lý câu trả lời của bạn.",
-      plannerRunning: "Đang xem xét các engineering rule dựa trên repository này…",
-      plannerCompleted: "Đã chọn các engineering rule cần điều tra.",
-      plannerFailed: "Không thể hoàn tất lập kế hoạch điều tra.",
       investigateRunning: "Đang điều tra các engineering rule đã chọn…",
       investigateCompleted: "Đã điều tra xong các engineering rule đã chọn.",
       investigateFailed: "Không thể hoàn tất điều tra các engineering rule đã chọn.",
       gateRunning: "Đang xem xét kết quả điều tra…",
       gateCompleted: "Đã hoàn tất đánh giá tuân thủ.",
       gateFailed: "Không thể hoàn tất đánh giá tuân thủ.",
-      skippedGoals: "Các rule không được chọn để điều tra",
       ruleInvestigating: "Đang điều tra…",
       ruleInvestigated: "Đã điều tra xong",
       ruleFailed: "Điều tra bị dừng",
@@ -300,7 +304,7 @@ export const viPages = {
       failures: "Lỗi nhà cung cấp/mô hình",
       rawEvents: "Sự kiện gốc",
     },
-    agentStreamInvestigatorOutput: {
+    agentStreamRuleAnalysisOutput: {
       aggregatedFailed: "Không thể hoàn tất các điều tra",
       aggregatedWaiting: "Các điều tra cần thêm thông tin",
       completed: "Đã hoàn tất điều tra.",
@@ -407,8 +411,7 @@ export const viPages = {
         scanner: "Scanner",
         interview: "Interview",
         rules: "Rules",
-        planner: "Planner",
-        investigate: "Investigate",
+        ruleAnalysis: "Rule analysis",
         gate: "Gate",
       },
       statuses: {
@@ -655,8 +658,7 @@ export const viPages = {
       showcaseWorkflowScanner: "Bộ quét",
       showcaseWorkflowInterview: "Phỏng vấn",
       showcaseWorkflowRules: "Quy tắc",
-      showcaseWorkflowPlanner: "Lập kế hoạch",
-      showcaseWorkflowInvestigate: "Điều tra",
+      showcaseWorkflowRepositoryAnalyst: "Phân tích kho mã",
       showcaseWorkflowGate: "Cổng kiểm tra",
       showcaseStatusPassed: "Đạt",
       showcaseStatusRunning: "Đang chạy",
@@ -738,9 +740,9 @@ export const viPages = {
         "LCSP hiển thị điều phối, quyền truy cập bên ngoài và kiểm soát mức sử dụng ngay cạnh phiên đánh giá thay vì giấu trong công cụ riêng.",
       capabilityOneTitle: "Phiên đánh giá được điều phối",
       capabilityOneDescription:
-        "Scanner, Interview, Rules, Planner, Investigate và Gate hoạt động như một luồng đánh giá được hiển thị rõ ràng.",
+        "Quét, Phỏng vấn, Phân tích quy tắc và Cổng kiểm tra xác định hoạt động như một luồng đánh giá được hiển thị rõ ràng.",
       capabilityOneMeta:
-        "Bộ quét · Phỏng vấn · Quy tắc · Lập kế hoạch · Điều tra · Cổng kiểm tra",
+        "Quét · Phỏng vấn · Phân tích quy tắc · Cổng kiểm tra",
       capabilityTwoTitle: "Connector có kiểm soát",
       capabilityTwoDescription:
         "Kết nối GitHub, Bitbucket hoặc Azure DevOps trong khi vẫn xác định rõ phạm vi kho mã và không gian làm việc.",
@@ -1654,6 +1656,9 @@ export const viPages = {
     adjustPlaceholder: "Nhập nội dung điều chỉnh hoặc bổ sung...",
     composerChooseConfirmAdjust: "Chọn Xác nhận hoặc Điều chỉnh ở trên...",
     submitAnswer: "Gửi câu trả lời",
+    sourceCode: "Mã nguồn liên quan",
+    sourceCodeLoading: "Đang tải mã nguồn liên quan",
+    sourceCodeUnavailable: "Không thể tải mã nguồn liên quan.",
     resumePipeline: "Tiếp tục",
     resumeQueued: "Đã đưa assessment vào hàng đợi tiếp tục.",
     answerSavedForRuntime:
@@ -1840,7 +1845,6 @@ export const viPages = {
       pendingDescription:
         "Evidence đã sẵn sàng. Đang chờ orchestration cung cấp câu hỏi Interview đầu tiên.",
       pendingPlaceholder: "Đang chờ Interview...",
-      plannerPlaceholder: "Đang lập kế hoạch đánh giá...",
       investigatePlaceholder: "Đang điều tra các rule đã chọn...",
       gatePlaceholder: "Đang xem xét kết quả điều tra...",
       aiNotDetectedDescription:
@@ -1881,26 +1885,20 @@ export const viPages = {
     },
     technicalEvidence: {
       progress: "Tiến độ assessment",
-      plannerProgress: "Tiến độ Planner",
-      plannerFailed: "Không thể hoàn tất lập kế hoạch điều tra.",
-      investigatorProgress: "Tiến độ Investigator",
-      investigatorFailed: "Giới hạn Investigator",
-      plannerDecision:
-        "Planner ghi nhận {decision} cho EngineeringRule {engineeringRuleId} ({reasonCode})",
+      ruleAnalysisProgress: "Tiến độ phân tích yêu cầu",
+      ruleAnalysisLimited: "Giới hạn phân tích yêu cầu",
+      ruleAnalysisSummary:
+        "Yêu cầu đã phân tích: {completed}/{eligible} trong phạm vi (tổng {total}). Đang chờ: {pending}.",
+      ruleAnalysisNeedsContextSummary:
+        "Yêu cầu đang chờ câu trả lời của bạn: {count}.",
+      ruleAnalysisUnresolvedSummary:
+        "Yêu cầu mà phân tích chưa xác lập được từ repository: {count}.",
+      ruleAnalysisFailedSummary:
+        "Lượt phân tích yêu cầu bị gián đoạn bởi lỗi runtime: {count}.",
       investigationFailed:
         "Điều tra EngineeringRule {engineeringRuleId} không thành công",
       investigated:
         "Đã điều tra EngineeringRule {engineeringRuleId}: {evaluationStatus}",
-      plannerTargetedSummary:
-        "Yêu cầu được đánh giá lại theo câu trả lời mới: {selected}. Yêu cầu không liên quan được bỏ qua: {skipped}.",
-      plannerSummary:
-        "Yêu cầu được chọn để điều tra: {selected}/{total}. Tạm thời ngoài phạm vi: {skipped}.",
-      investigatorSummary:
-        "Yêu cầu đã điều tra: {investigated}/{selected}. Đang chờ: {pending}.",
-      investigatorLimitedSummary:
-        "Lượt điều tra yêu cầu gặp giới hạn và chưa kết luận: {failed}.",
-      investigatorRuntimeFailedSummary:
-        "Lượt điều tra yêu cầu bị gián đoạn bởi lỗi runtime: {failed}.",
       readinessWaiting:
         "Assessment đang chờ EngineeringRules trạng thái READY; Legal Rule Triage tự động đã được yêu cầu.",
     },
@@ -2158,7 +2156,6 @@ export const viPages = {
       inspectDataPath: "Kiểm tra đường dẫn dữ liệu",
       findSimilarSymbols: "Tìm symbol tương tự",
       inspectDeploymentContext: "Kiểm tra ngữ cảnh triển khai",
-      requestTargetedReanalysis: "Yêu cầu phân tích lại có mục tiêu",
       getAssessmentContext: "Đọc ngữ cảnh assessment",
       getArtifactChain: "Đọc chuỗi artifact",
       proposeMissingTargets: "Đề xuất mục tiêu bị thiếu",
@@ -2325,7 +2322,7 @@ export const viPages = {
     observability: {
       title: "Chẩn đoán runtime",
       description:
-        "Kiểm tra các tín hiệu planner và investigator đã ảnh hưởng phiên phân loại này.",
+        "Kiểm tra các tín hiệu phân tích rule đã ảnh hưởng phiên phân loại này.",
       compileFailed: "Compile lỗi",
       candidates: "Candidate",
       claimsWithEvidence: "Claim có bằng chứng",

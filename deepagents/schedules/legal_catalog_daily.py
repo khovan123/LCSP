@@ -19,10 +19,10 @@ LEGAL_CATALOG_MAINTENANCE_PROMPT = (
         "schedule and Triage reasoning never select or inspect customer Assessments. After "
         "`finish_legal_rule_triage_execution` releases the singleton, deterministic orchestration "
         "reconciles every Assessment checkpoint currently waiting on EngineeringRule readiness. "
-        "An Assessment whose pre-Planner readiness gate finds missing READY EngineeringRules "
+        "An Assessment whose pre-analysis readiness gate finds missing READY EngineeringRules "
         "automatically checkpoints and emits its own bounded ENGINEERING_RULE_NOT_READY Triage "
         "trigger; no admin/operator manual trigger is required. Do not start Context Wizard, "
-        "Planner, Investigator, Resolver, or any customer assessment flow from Triage reasoning. "
+        "Repository Analyst, Resolver, or any customer assessment flow from Triage reasoning. "
         "Do not use customer assessment context, repository findings, user answers, or targeted "
         "repository reanalysis to make Legal Rule Triage decisions."
 )

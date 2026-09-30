@@ -14,6 +14,7 @@ from middleware.failure_policy import (
     error_status,
     is_auth_failure,
     is_provider_capacity_failure,
+    is_provider_model_unavailable,
     is_provider_route_incompatibility,
     is_structured_output_rejection,
     is_terminal_task_error,
@@ -90,6 +91,9 @@ def provider_fallback_failure(error: BaseException) -> bool:
         return True
     if is_provider_route_incompatibility(error):
         return True
+    # The model route is down; the request is fine and another provider has it.
+    if is_provider_model_unavailable(error):
+        return True
     # The provider's model could not produce the contract; another provider may.
     if is_structured_output_rejection(error):
         return True
@@ -149,6 +153,10 @@ def _exhaustion_error(errors: list[BaseException]) -> BaseException:
 def provider_circuit_breaker_failure(error: BaseException) -> bool:
     """Return whether this provider route should stay disabled for the active run."""
     if is_provider_route_incompatibility(error) or is_structured_output_rejection(error):
+        return True
+    # A model the provider has withdrawn or overloaded will not recover inside
+    # this run, so stop re-selecting the route that just reported it.
+    if is_provider_model_unavailable(error):
         return True
     if is_terminal_task_error(error):
         return False

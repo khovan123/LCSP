@@ -12,7 +12,7 @@ import { projectAgentStreamTurnOutput } from "./agent-stream-turn-output";
 import type { AgentStreamStageEvents } from "../types/workspace-runtime.types.ts";
 
 /**
- * Split live agent events by pipeline stage so Interview, Planner, Investigate and
+ * Split live agent events by pipeline stage so Interview, Investigate and
  * Gate each stream on their own timeline, exactly like the Scanner does.
  */
 export function groupAgentStreamEventsByStage(
@@ -22,8 +22,7 @@ export function groupAgentStreamEventsByStage(
     byStage: {
       [ASSESSMENT_AGENT_STREAM_STAGES.scanner]: [],
       [ASSESSMENT_AGENT_STREAM_STAGES.interview]: [],
-      [ASSESSMENT_AGENT_STREAM_STAGES.planner]: [],
-      [ASSESSMENT_AGENT_STREAM_STAGES.investigate]: [],
+      [ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis]: [],
       [ASSESSMENT_AGENT_STREAM_STAGES.gate]: [],
     },
     unstaged: [],
@@ -61,7 +60,7 @@ export function groupAgentStreamEventsByStage(
   for (const event of ordered) {
     const key = agentStreamTurnKey(event);
     // Engineering dispatch observers can report SCANNER progress while the
-    // Planner/Investigator runs. A dispatch that reaches a downstream stage
+    // rule analysis runs. A dispatch that reaches a downstream stage
     // cannot reopen the repository scan timeline.
     const eventStage =
       event.stage === ASSESSMENT_AGENT_STREAM_STAGES.scanner &&
@@ -77,7 +76,7 @@ export function groupAgentStreamEventsByStage(
       const stages = participatingStages.get(key);
       if (stages?.size) {
         // The outer boundary may be Interview while its synchronous children
-        // are Planner/Investigator. End every participant of this dispatch only.
+        // are rule-analysis stages. End every participant of this dispatch only.
         for (const participant of stages) {
           grouped.byStage[participant].push({ ...event, stage: participant });
         }
@@ -171,7 +170,7 @@ export function deriveLatestAgentStreamTurnState(
   let pausedByCustomer = false;
   let terminal = false;
   for (const event of latest.events) {
-    // The Investigator runs one agent per EngineeringRule; that agent finishing
+    // Rule analysis runs one agent per EngineeringRule; that agent finishing
     // (or failing) ends its rule, not the turn — the next rule is still to come.
     // A customer stop inside a rule does stop the whole turn.
     const ruleScopedCustomerStop =
@@ -221,7 +220,7 @@ export type AgentStreamGroupedActivity = {
   /** All of this dispatch's events across every participating stage, ordered. */
   events: AssessmentAgentStreamEvent[];
   /** The same events, split back out per stage — for stage-scoped output/rule
-   *  projection (Planner's own decisions vs. Investigator's own results). */
+   *  projection (selection decisions vs. per-rule analysis results). */
   stageEvents: Partial<
     Record<AssessmentAgentStreamStage, AssessmentAgentStreamEvent[]>
   >;
@@ -229,7 +228,7 @@ export type AgentStreamGroupedActivity = {
 
 /**
  * One boundary dispatch (a single runId+correlationId) can span multiple
- * stages when Planner/Investigator/Gate run synchronously inside it — the
+ * stages when analysis/Gate run synchronously inside it — the
  * same turnKey shows up once per participating stage in stageRunGroups.
  * Merge those into one grouped activity per turnKey, so the transcript shows
  * one agent turn per dispatch, not one per stage.
@@ -368,7 +367,7 @@ export function splitCurrentInterviewActivity(
 }
 
 /** One dispatch split into one agent turn per participating stage, so e.g.
- *  the Investigator gets its own turn instead of growing inside the Planner's. */
+ *  the analysis gets its own turn instead of growing inside the Interview's. */
 export type AgentStreamStageTurn = AgentStreamGroupedActivity & {
   stage: AssessmentAgentStreamStage;
   /** A later stage of the same dispatch has already started. */
@@ -378,17 +377,13 @@ export type AgentStreamStageTurn = AgentStreamGroupedActivity & {
 export function splitAgentStreamActivityByStage(
   segment: AgentStreamGroupedActivity,
 ): AgentStreamStageTurn[] {
-  const stages = segment.stages.filter(
-    (stage) =>
-      stage !== ASSESSMENT_AGENT_STREAM_STAGES.planner ||
-      !isReusedPlannerReplay(segment.stageEvents[stage] ?? []),
-  );
+  const stages = segment.stages;
   const staged = new Set(
     segment.stages.flatMap((stage) => segment.stageEvents[stage] ?? []),
   );
   // Stage-less dispatch events (boundary bookkeeping, e.g. the dispatch's final
   // failure) belong to whichever stage was active when they were emitted — a
-  // timeout during investigation must not mark the finished Planner failed.
+  // timeout during investigation must not mark the finished Interview failed.
   const stageStarts = stages.map((stage) =>
     Math.min(
       ...(segment.stageEvents[stage] ?? []).map(
@@ -412,7 +407,7 @@ export function splitAgentStreamActivityByStage(
     const superseded = index < stages.length - 1;
     // Grouping copies the dispatch's end event into every participating
     // stage; only the stage that was running when it ended owns it, so a
-    // finished Planner does not inherit the Investigator's failure or time.
+    // finished stage does not inherit the next stage's failure or time.
     const own = (segment.stageEvents[stage] ?? []).filter(
       (event) => !superseded || !isDispatchEndEvent(event),
     );
@@ -428,23 +423,6 @@ export function splitAgentStreamActivityByStage(
       stageEvents: { [stage]: own },
       superseded,
     };
-  });
-}
-
-/** A cached plan republishes durable decisions for Investigator provenance.
- * They remain in the journal, but must not become a second customer Planner turn. */
-function isReusedPlannerReplay(events: AssessmentAgentStreamEvent[]): boolean {
-  return events.some((event) => {
-    if (event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.engineeringRule) {
-      return false;
-    }
-    const data = event.data;
-    return (
-      data !== null &&
-      typeof data === "object" &&
-      !Array.isArray(data) &&
-      (data as Record<string, unknown>).planReused === true
-    );
   });
 }
 

@@ -10,13 +10,12 @@ import type { AgentStreamRuleHeader } from "./agent-stream-rule.types";
 import type { WorkspaceRuntimeAgentStreamHistoryState } from "./workspace-runtime.types";
 
 export type AgentStreamTurnOutput = {
-  plannerRules: AgentStreamRuleHeader[];
-  investigatorRules: AgentStreamRuleHeader[];
+  ruleAnalysisRules: AgentStreamRuleHeader[];
 };
 
 export type AgentStreamTurnProps = {
   output?: AgentStreamTurnOutput;
-  /** Every stage this one dispatch touched (e.g. [PLANNER, INVESTIGATE] when
+  /** Every stage this one dispatch touched (e.g. [INTERVIEW, RULE_ANALYSIS] when
    *  they ran synchronously inside the same boundary call). */
   stages: AssessmentAgentStreamStage[];
   /** One grouped dispatch's events, already scoped to a single turn by the caller. */
@@ -33,7 +32,5 @@ export type AgentStreamTurnProps = {
   /** Turn results owned by the caller (e.g. an Interview answer's outcome);
    *  rendered before Technical details so the raw feed always ends the turn. */
   outputs?: ReactNode;
-  /** Planner's rule order for this dispatch; orders the Investigator's queue. */
-  planOrder?: readonly string[];
   className?: string;
 };

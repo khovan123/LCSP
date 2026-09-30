@@ -449,7 +449,7 @@ def test_model_request_diagnostic_logs_shape_without_prompt_or_tool_content(monk
         agent_role="investigator",
     )
     request = SimpleNamespace(
-        model=SimpleNamespace(provider="llm7", model_name="GLM-5.3-Flash"),
+        model=SimpleNamespace(provider="llm7", model_name="minimax-m2.7"),
         messages=[
             HumanMessage(content="private prompt must not be logged"),
             AIMessage(
@@ -481,7 +481,7 @@ def test_model_request_diagnostic_logs_shape_without_prompt_or_tool_content(monk
     )
     assert event == "MODEL_REQUEST_DIAGNOSTIC"
     assert fields["provider"] == "llm7"
-    assert fields["model"] == "GLM-5.3-Flash"
+    assert fields["model"] == "minimax-m2.7"
     assert fields["message_roles"] == ["user", "assistant(tool_calls)", "tool"]
     assert fields["tool_count"] == 1
     assert fields["tool_result_count"] == 1
@@ -500,7 +500,7 @@ def test_model_request_diagnostic_logs_shape_without_prompt_or_tool_content(monk
     assert "/workspace/repository" not in serialized
 
 
-def test_model_call_timeout_event_emits_without_settling_usage(monkeypatch):
+def test_model_call_timeout_records_unavailable_usage_and_releases_claim(monkeypatch):
     from middleware import billing_metering
 
     events = []
@@ -534,10 +534,42 @@ def test_model_call_timeout_event_emits_without_settling_usage(monkeypatch):
     timeout = events[-1][1]
     assert timeout["data"]["provider"] == "google_genai"
     assert timeout["data"]["error_type"] == "TimeoutError"
-    assert client.payloads == []
+    assert len(client.payloads) == 1
+    unavailable = client.payloads[0]
+    assert unavailable.provider == "GOOGLE_GENAI"
+    assert unavailable.model == "gemini-test"
+    assert unavailable.providerResponseId is None
+    assert unavailable.inputTokens is None
+    assert unavailable.outputTokens is None
 
 
-def test_key_fallback_attempts_charge_only_the_returned_response(monkeypatch):
+@pytest.mark.asyncio
+async def test_async_model_call_failure_records_unavailable_usage():
+    client = FakeClient()
+    session = BillingMeteringSession(
+        api_client=client,
+        assessment_id="assessment-async-failure",
+        run_id="run-async-failure",
+        reservation_id="reservation-async-failure",
+        agent_role="investigator",
+    )
+    request = SimpleNamespace(
+        model=SimpleNamespace(provider="google_genai", model_name="gemini-test")
+    )
+
+    async def fail(_request):
+        raise ConnectionError("provider connection failed")
+
+    with activate_billing_metering(session), pytest.raises(ConnectionError):
+        await BillingMeteringMiddleware().awrap_model_call(request, fail)
+
+    assert len(client.payloads) == 1
+    assert client.payloads[0].provider == "GOOGLE_GENAI"
+    assert client.payloads[0].inputTokens is None
+    assert client.payloads[0].outputTokens is None
+
+
+def test_key_fallback_records_failed_attempt_without_charging_it(monkeypatch):
     from middleware import token_fallback
     from middleware.token_fallback import TokenFallbackMiddleware
 
@@ -586,9 +618,13 @@ def test_key_fallback_attempts_charge_only_the_returned_response(monkeypatch):
         )
 
     assert attempts == [0, 1]
-    assert len(client.payloads) == 1
-    assert client.payloads[0].providerResponseId == "resp-after-fallback"
-    assert client.payloads[0].assessmentId == "assessment-fallback"
+    assert len(client.payloads) == 2
+    failed, succeeded = client.payloads
+    assert failed.providerResponseId is None
+    assert failed.inputTokens is None
+    assert failed.outputTokens is None
+    assert succeeded.providerResponseId == "resp-after-fallback"
+    assert succeeded.assessmentId == "assessment-fallback"
 
 
 def test_output_cap_preserves_authorized_identity_for_settlement():
@@ -1023,7 +1059,7 @@ def test_request_shape_diagnostic_stays_bounded_for_long_runs():
     request = SimpleNamespace(messages=messages, tools=[])
 
     fields = _request_shape_diagnostic(
-        request, SimpleNamespace(provider="llm7", model_name="GLM-5.3-Flash")
+        request, SimpleNamespace(provider="llm7", model_name="minimax-m2.7")
     )
 
     assert fields["message_count"] == 401

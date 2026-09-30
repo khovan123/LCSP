@@ -18,7 +18,7 @@ INTERVIEW_SKILL_REFERENCES = (
     "references/adaptive-rules.md",
     "references/context-sufficiency.md",
     "references/evidence-reasoning.md",
-    "references/investigator-resolution.md",
+    "references/business-context-resolution.md",
     "references/conflict-handling.md",
     "references/question-strategy.md",
     "references/terminology-contract.md",
@@ -42,11 +42,11 @@ covered topics. Never change guidanceVersion, promote strategy into canonical gu
 strategy hints as confirmed business facts or technical evidence.
 
 Repository/context guidance:
-1. You own Customer-owned business gaps only. You have no repository tools: the Scanner already
-   analysed the repository, and its Repository Intelligence Pack summary (architecture, domain
-   areas, AI findings, coverage) arrives in runtime metadata. Ground questions in those facts.
-2. If a decision would need a technical fact the summary does not carry, that is a technical
-   limitation to report, never a reason to ask the Customer an architectural question.
+1. You own Customer-owned business gaps only. You have no repository tools and never see source:
+   you receive only the bounded, Customer-safe need (question intent, why it is needed, the
+   resolution criteria) and the private Customer context. Ground questions in those.
+2. If a decision would need a technical fact, that is a technical limitation to report, never a
+   reason to ask the Customer an architectural question.
 3. Index and repository-analysis coverage gaps are limitations, never proof that a business
    behavior is absent. Never fabricate governed evidence refs; use an empty evidenceRefs list
    when no authorized runtime-provided ref supports a Customer-facing question.
@@ -73,14 +73,17 @@ Boundary rules:
   lossless.
 - Contradictory Customer revisions must become CONFLICTED or ask a CLARIFY question; never last-write-
   wins.
-- For targeted clarification, use only needId, businessContextNeed, resolutionCriteria and
-  originatingInvestigationReference. Do not expose or invent continuation internals.
+- BUSINESS_CONTEXT_RESOLUTION resolves exactly one BUSINESS_CONTEXT_REQUIRED need for one rule
+  analysis. Use only targetedNeed (needId, question, observation, resolutionCriterionIds) and
+  originatingRuleAnalysisReference. Ask one customer-owned distinction at a time; the customer's
+  answer is stored and the runtime deterministically reassesses that same rule. You never
+  investigate, read repository source, or decide the rule outcome; never mention rule ids,
+  citations or runtime mechanics to the customer. Do not expose or invent continuation internals.
 
 Output contract:
 Return exactly one JSON object matching InterviewResult:
 - expectedContextRevision: the latest private Customer context revision you reasoned over.
-- mode: INITIAL_INTERVIEW or INVESTIGATOR_RESOLUTION only. PRE_PLANNER is normalized before
-  specialist dispatch and must never appear in this structured output.
+- mode: INITIAL_INTERVIEW or BUSINESS_CONTEXT_RESOLUTION only.
 - outcome: WAITING_FOR_CUSTOMER, CONTEXT_READY, CONTEXT_RESOLVED, BLOCKED_OR_UNRESOLVED, or FAILED.
 - activeQuestion: required only when WAITING_FOR_CUSTOMER; intent is ASK or CLARIFY; control is one of
   FREE_TEXT, BOOLEAN, SINGLE_SELECT, MULTI_SELECT, or CONFIRM_ADJUST. CONFIRM_ADJUST requires
@@ -104,10 +107,10 @@ Return exactly one JSON object matching InterviewResult:
   provide a non-empty statementId, topic, statement, optional normalizedValue/scope, and evidenceRefs. Runtime
   owns assessmentId, respondent identity, timestamps, source and CONFIRMED resolution provenance.
   Resolving a targeted need with CONTEXT_RESOLVED additionally requires one statement per
-  supplied `resolutionCriteria` entry whose `topic` is that entry copied character for character,
+  `resolutionCriterionIds` entry, with statement.resolvesCriterionId set to that exact id,
   supported by the customer's answer. Do not supply confirmedContext.authority or statement
-  source/resolutionState; those are API-owned provenance. The runtime matches criteria to statement
-  topics by exact string, so a reworded, translated or summarised topic is rejected.
+  source/resolutionState; those are API-owned provenance. The runtime matches criteria by
+  resolvesCriterionId; an unknown id is rejected. statement.topic stays a short human-readable description.
   statement.evidenceRefs may contain only authorized governed evidence refs from the private input.
   Never put sourceVersion, pgeVersion, raw artifact ids, version strings, repository snapshot ids, or
   technical evidence report ids directly in statement.evidenceRefs; leave evidenceRefs empty when
@@ -135,8 +138,8 @@ SUBAGENT = {
     "tools": TOOLS,
     "model": INTERVIEW_MODEL_SPEC,
     "middleware": [
-        # The Interview resolves Customer-owned business gaps from Scanner memory and
-        # thread context; it never rediscovers the repository. Deep Agents attaches
+        # The Interview resolves Customer-owned business gaps from the bounded need and
+        # thread context; it never reads the repository. Deep Agents attaches
         # filesystem/shell/task tools to every subagent, so they are hidden here, and
         # one turn is one model call (plus a grace call for structured output).
         AllowedToolsMiddleware(frozenset()),

@@ -32,6 +32,24 @@ class LCSPRunContext:
     system_deadline_at: float | None = None
     system_event: dict[str, Any] = field(default_factory=dict)
     repository_path: str | None = None
+    # One repository-analyst task = one EngineeringRule. Trusted, set by the runtime loop.
+    engineering_rule_version: str | None = None  # runtime contract contentHash
+    criterion_ids: tuple[str, ...] = ()  # the rule's requiredEvidence
+    context_revision: int = 0
+    prior_evidence_refs: tuple[str, ...] = ()  # accepted refs from a previous result (resume)
+    rule_execution_id: str | None = None  # fresh per analyze_rule attempt; scopes minted evidence refs
+
+
+def coerce_run_context(value: Any) -> LCSPRunContext | None:
+    """The trusted run context from a tool runtime's ``context`` (object or mapping)."""
+    if isinstance(value, LCSPRunContext):
+        return value
+    if isinstance(value, dict):
+        try:
+            return LCSPRunContext(**value)
+        except TypeError:
+            return None
+    return None
 
 
 def bounded_context_lines(context: LCSPRunContext | None) -> tuple[str, ...]:

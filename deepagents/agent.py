@@ -26,7 +26,7 @@ from middleware.system_event_dispatch import dispatch_agent_runtime_system_event
 from middleware.triage_singleton import guard_triage_singleton_task
 from model_policy import effective_model_configs
 from orchestration.context import LCSPRunContext
-from subagents import FLOW_SUBAGENTS
+from subagents import TRIAGE_SUBAGENT
 from tools.mcp import load_optional_mcp_tools
 from tools.common.capabilities.platform.repository_sandbox import (
     REPOSITORY_SKILLS,
@@ -36,12 +36,9 @@ from tools.common.capabilities.platform.logging import (
     get_logger,
     suppress_langgraph_heartbeat_logs,
 )
-from tools.orchestration.request_targeted_reanalysis.code import (
-    request_targeted_reanalysis,
-)
 
 
-ROOT_TOOLS = [request_targeted_reanalysis, *load_optional_mcp_tools()]
+ROOT_TOOLS = [*load_optional_mcp_tools()]
 SYSTEM_PROMPT = (Path(__file__).with_name("instructions.md")).read_text(
     encoding="utf-8"
 )
@@ -97,12 +94,11 @@ def create_root_agent(*, checkpointer=None, store=None):
         ],
         context_schema=LCSPRunContext,
         subagents=[
-            *FLOW_SUBAGENTS,
+            # LEGAL_MAINTENANCE only. repository-analyst / interview are run by the
+            # deterministic assessment loop through RootSubagentDispatcher, never `task`.
+            TRIAGE_SUBAGENT,
             governed_general_purpose_subagent(LCSP_MODEL_SPEC, billing_role="root"),
         ],
-        interrupt_on={
-            "request_targeted_reanalysis": True,
-        },
         checkpointer=checkpointer,
         store=store,
     )

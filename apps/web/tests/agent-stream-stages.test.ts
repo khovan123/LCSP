@@ -75,14 +75,14 @@ test("outer dispatch termination closes every participating stage but no other t
       }),
       event(2, null, { eventType: types.boundaryStarted }),
       event(3, stages.interview),
-      event(4, stages.planner),
-      event(5, stages.investigate),
+      event(4, stages.gate),
+      event(5, stages.ruleAnalysis),
       event(6, stages.interview, { eventType: terminal }),
     ]);
     for (const stage of [
       stages.interview,
-      stages.planner,
-      stages.investigate,
+      stages.gate,
+      stages.ruleAnalysis,
     ]) {
       const end = grouped.byStage[stage].at(-1)!;
       assert.equal(end.eventType, terminal);
@@ -105,9 +105,9 @@ test("agent stream events split into one timeline per pipeline stage", () => {
       correlationId: "scan-dispatch",
     }),
     event(2, ASSESSMENT_AGENT_STREAM_STAGES.interview),
-    event(3, ASSESSMENT_AGENT_STREAM_STAGES.planner),
-    event(4, ASSESSMENT_AGENT_STREAM_STAGES.investigate),
-    event(5, ASSESSMENT_AGENT_STREAM_STAGES.planner),
+    event(3, ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis),
+    event(4, ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis),
+    event(5, ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis),
     event(6, ASSESSMENT_AGENT_STREAM_STAGES.gate),
     event(7, null, { correlationId: "unattributed-dispatch" }),
   ]);
@@ -123,12 +123,8 @@ test("agent stream events split into one timeline per pipeline stage", () => {
     [2],
   );
   assert.deepEqual(
-    sequences(grouped.byStage[ASSESSMENT_AGENT_STREAM_STAGES.planner]),
-    [3, 5],
-  );
-  assert.deepEqual(
-    sequences(grouped.byStage[ASSESSMENT_AGENT_STREAM_STAGES.investigate]),
-    [4],
+    sequences(grouped.byStage[ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis]),
+    [3, 4, 5],
   );
   assert.deepEqual(
     sequences(grouped.byStage[ASSESSMENT_AGENT_STREAM_STAGES.gate]),
@@ -343,17 +339,17 @@ test("downstream dispatch Scanner-tagged observer events never reopen the scan",
       correlationId: "engineering-dispatch",
       eventType: types.runtimeEvent,
     }),
-    event(4, stages.planner, {
+    event(4, stages.ruleAnalysis, {
       correlationId: "engineering-dispatch",
     }),
-    event(5, stages.investigate, {
+    event(5, stages.ruleAnalysis, {
       correlationId: "engineering-dispatch",
     }),
   ]);
   assert.deepEqual(grouped.byStage[stages.scanner].map((item) => item.eventId), [scanner.eventId]);
   assert.equal(deriveLatestAgentStreamTurnState(grouped.byStage[stages.scanner]), "idle");
-  assert.equal(deriveLatestAgentStreamTurnState(grouped.byStage[stages.investigate]), "running");
-  assert.ok(grouped.byStage[stages.planner].some((item) => item.eventId === "event-3"));
+  assert.equal(deriveLatestAgentStreamTurnState(grouped.byStage[stages.ruleAnalysis]), "running");
+  assert.ok(grouped.byStage[stages.ruleAnalysis].some((item) => item.eventId === "event-3"));
 });
 
 test("untagged interview envelopes join their own turn instead of a standalone timeline", () => {
@@ -396,20 +392,20 @@ test("untagged interview envelopes join their own turn instead of a standalone t
 
 test("untagged progress follows stage transitions only inside the same dispatch", () => {
   const grouped = groupAgentStreamEventsByStage([
-    event(1, ASSESSMENT_AGENT_STREAM_STAGES.planner),
+    event(1, ASSESSMENT_AGENT_STREAM_STAGES.interview),
     event(2, null),
-    event(3, ASSESSMENT_AGENT_STREAM_STAGES.investigate),
+    event(3, ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis),
     event(4, null),
     event(5, null, { correlationId: "unknown-dispatch" }),
   ]);
   assert.deepEqual(
-    grouped.byStage[ASSESSMENT_AGENT_STREAM_STAGES.planner].map(
+    grouped.byStage[ASSESSMENT_AGENT_STREAM_STAGES.interview].map(
       (item) => item.sequence,
     ),
     [1, 2],
   );
   assert.deepEqual(
-    grouped.byStage[ASSESSMENT_AGENT_STREAM_STAGES.investigate].map(
+    grouped.byStage[ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis].map(
       (item) => item.sequence,
     ),
     [3, 4],
@@ -486,8 +482,7 @@ test("interview transcript interleaves each turn's activity between its own answ
           }),
         ]),
       },
-      { stage: ASSESSMENT_AGENT_STREAM_STAGES.planner, groups: [] },
-      { stage: ASSESSMENT_AGENT_STREAM_STAGES.investigate, groups: [] },
+      { stage: ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis, groups: [] },
       { stage: ASSESSMENT_AGENT_STREAM_STAGES.gate, groups: [] },
     ],
   );
@@ -519,12 +514,12 @@ test("turn state reflects only the latest run, not an earlier paused one", () =>
   assert.equal(state, "running");
 });
 
-test("Planner and Investigator sharing one dispatch merge into one grouped activity", () => {
+test("Interview and rule-analysis sharing one dispatch merge into one grouped activity", () => {
   const sharedRunGroups = [
     {
-      stage: ASSESSMENT_AGENT_STREAM_STAGES.planner,
+      stage: ASSESSMENT_AGENT_STREAM_STAGES.interview,
       groups: groupAgentStreamEventsByRun([
-        event(1, ASSESSMENT_AGENT_STREAM_STAGES.planner, {
+        event(1, ASSESSMENT_AGENT_STREAM_STAGES.interview, {
           runId: "run-1",
           correlationId: "shared-dispatch",
           emittedAt: "2026-09-27T00:00:00.000Z",
@@ -532,9 +527,9 @@ test("Planner and Investigator sharing one dispatch merge into one grouped activ
       ]),
     },
     {
-      stage: ASSESSMENT_AGENT_STREAM_STAGES.investigate,
+      stage: ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
       groups: groupAgentStreamEventsByRun([
-        event(2, ASSESSMENT_AGENT_STREAM_STAGES.investigate, {
+        event(2, ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis, {
           runId: "run-1",
           correlationId: "shared-dispatch",
           emittedAt: "2026-09-27T00:01:00.000Z",
@@ -544,10 +539,10 @@ test("Planner and Investigator sharing one dispatch merge into one grouped activ
   ];
   const grouped = groupAgentStreamActivityByTurnKey(sharedRunGroups);
   assert.equal(grouped.length, 1);
-  assert.deepEqual([...grouped[0]!.stages].sort(), ["INVESTIGATE", "PLANNER"]);
+  assert.deepEqual([...grouped[0]!.stages].sort(), ["INTERVIEW", "RULE_ANALYSIS"]);
   assert.equal(grouped[0]!.events.length, 2);
-  assert.equal(grouped[0]!.stageEvents.PLANNER?.length, 1);
-  assert.equal(grouped[0]!.stageEvents.INVESTIGATE?.length, 1);
+  assert.equal(grouped[0]!.stageEvents.INTERVIEW?.length, 1);
+  assert.equal(grouped[0]!.stageEvents.RULE_ANALYSIS?.length, 1);
 
   // The interleaved transcript must carry the same merge through, and the
   // append-only history invariant must still hold on the merged segment.
@@ -569,7 +564,7 @@ test("Planner and Investigator sharing one dispatch merge into one grouped activ
     [
       ...(history[0]?.followUpActivity[0] as { stages: string[] }).stages,
     ].sort(),
-    ["INVESTIGATE", "PLANNER"],
+    ["INTERVIEW", "RULE_ANALYSIS"],
   );
 });
 
@@ -664,12 +659,12 @@ test("scanner activity log keeps one row per activity kind whose count and value
   assert.equal(more.length, rows.length);
 });
 
-test("a dispatch that fails while investigating does not mark its finished Planner failed", () => {
-  const planner = ASSESSMENT_AGENT_STREAM_STAGES.planner;
-  const investigate = ASSESSMENT_AGENT_STREAM_STAGES.investigate;
+test("a dispatch that fails during rule analysis does not mark its finished Interview failed", () => {
+  const interview = ASSESSMENT_AGENT_STREAM_STAGES.interview;
+  const investigate = ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis;
   const events = [
-    event(1, planner, { emittedAt: "2026-09-28T10:30:20.000Z" }),
-    event(2, planner, { emittedAt: "2026-09-28T10:32:22.000Z" }),
+    event(1, interview, { emittedAt: "2026-09-28T10:30:20.000Z" }),
+    event(2, interview, { emittedAt: "2026-09-28T10:32:22.000Z" }),
     event(3, investigate, { emittedAt: "2026-09-28T10:32:23.000Z" }),
     event(4, null, {
       emittedAt: "2026-09-28T10:45:19.000Z",
@@ -679,23 +674,23 @@ test("a dispatch that fails while investigating does not mark its finished Plann
   ];
   const stages = groupAgentStreamEventsByStage(events);
   const [segment] = groupAgentStreamActivityByTurnKey([
-    { stage: planner, groups: groupAgentStreamEventsByRun(stages.byStage[planner]) },
+    { stage: interview, groups: groupAgentStreamEventsByRun(stages.byStage[interview]) },
     {
       stage: investigate,
       groups: groupAgentStreamEventsByRun(stages.byStage[investigate]),
     },
   ]);
-  const [plannerTurn, investigateTurn] = splitAgentStreamActivityByStage(segment!);
+  const [interviewTurn, investigateTurn] = splitAgentStreamActivityByStage(segment!);
 
-  // Planner runs first and ends when it finished, without the dispatch failure.
-  assert.equal(plannerTurn!.stage, planner);
-  assert.equal(plannerTurn!.events.at(-1)?.emittedAt, "2026-09-28T10:32:22.000Z");
+  // Interview runs first and ends when it finished, without the dispatch failure.
+  assert.equal(interviewTurn!.stage, interview);
+  assert.equal(interviewTurn!.events.at(-1)?.emittedAt, "2026-09-28T10:32:22.000Z");
   assert.ok(
-    plannerTurn!.events.every(
+    interviewTurn!.events.every(
       (item) => item.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed,
     ),
   );
-  // The failure belongs to the Investigator that was running when it happened.
+  // The failure belongs to the rule analysis that was running when it happened.
   assert.equal(investigateTurn!.stage, investigate);
   assert.equal(
     investigateTurn!.events.at(-1)?.eventType,
@@ -704,7 +699,7 @@ test("a dispatch that fails while investigating does not mark its finished Plann
 });
 
 test("a finished rule's investigator agent does not end the running Investigator turn", () => {
-  const investigate = ASSESSMENT_AGENT_STREAM_STAGES.investigate;
+  const investigate = ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis;
   const events = [
     event(1, investigate, {
       eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted,
@@ -729,7 +724,7 @@ test("a finished rule's investigator agent does not end the running Investigator
 });
 
 test("a customer stop inside a rule pauses the whole Investigator turn", () => {
-  const investigate = ASSESSMENT_AGENT_STREAM_STAGES.investigate;
+  const investigate = ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis;
   const events = [
     event(1, investigate, {
       eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryStarted,
@@ -742,38 +737,6 @@ test("a customer stop inside a rule pauses the whole Investigator turn", () => {
   ];
   // The composer then offers Resume, which continues from rule 4.
   assert.equal(deriveLatestAgentStreamTurnState(events), "paused");
-});
-
-test("an exact rerun keeps Investigator output without duplicating the reused Planner turn", () => {
-  const planner = ASSESSMENT_AGENT_STREAM_STAGES.planner;
-  const investigate = ASSESSMENT_AGENT_STREAM_STAGES.investigate;
-  const reusedDecision = event(1, planner, {
-    eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.engineeringRule,
-    engineeringRuleId: "ER-1",
-    data: {
-      planReused: true,
-      decision: "SELECT",
-    },
-  });
-  const enrichment = event(2, investigate, {
-    eventType: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.engineeringRule,
-    engineeringRuleId: "ER-1",
-    data: { reasonCode: "NeedsScannerEnrichment" },
-  });
-  const [segment] = groupAgentStreamActivityByTurnKey([
-    { stage: planner, groups: groupAgentStreamEventsByRun([reusedDecision]) },
-    {
-      stage: investigate,
-      groups: groupAgentStreamEventsByRun([enrichment]),
-    },
-  ]);
-
-  const turns = splitAgentStreamActivityByStage(segment!);
-  assert.deepEqual(
-    turns.map((turn) => turn.stage),
-    [investigate],
-  );
-  assert.equal(turns[0]?.events[0]?.engineeringRuleId, "ER-1");
 });
 
 test("Codebase Memory graph queries show as their own activity row, not as grep", () => {
@@ -792,22 +755,22 @@ test("Codebase Memory graph queries show as their own activity row, not as grep"
   );
 });
 
-test("the Investigator queue runs one rule at a time in plan order across retried attempts", async () => {
-  const { orderInvestigatorRuleQueue } = await import(
-    "../src/features/workspace/utils/agent-stream-investigator-progress.ts"
+test("the rule-analysis queue runs one rule at a time in plan order across retried attempts", async () => {
+  const { orderRuleAnalysisRuleQueue } = await import(
+    "../src/features/workspace/utils/agent-stream-rule-analysis-progress.ts"
   );
   const header = (ruleId: string, status: string, sequence: number) => ({
     ruleId,
     sequence,
     status: status as typeof ASSESSMENT_RUNTIME_RUN_STATUSES.running,
-    planned: true,
+    activity: null,
     concept: null,
     goals: [],
     decision: null,
     reasonCode: null,
     claims: [],
   });
-  const investigate = ASSESSMENT_AGENT_STREAM_STAGES.investigate;
+  const investigate = ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis;
   // Attempt 1 died on rule-3 and had touched rule-5; attempt 2 reused 1-2 and
   // is now on rule-4. Loaded history starts mid-attempt, so first-seen order lies.
   const events = [
@@ -817,7 +780,7 @@ test("the Investigator queue runs one rule at a time in plan order across retrie
     event(21, investigate, { engineeringRuleId: "rule-2" }),
     event(22, investigate, { engineeringRuleId: "rule-4" }),
   ];
-  const { rules, queuedRuleIds } = orderInvestigatorRuleQueue(
+  const { rules, queuedRuleIds } = orderRuleAnalysisRuleQueue(
     [
       header("rule-5", ASSESSMENT_RUNTIME_RUN_STATUSES.running, 11),
       header("rule-3", ASSESSMENT_RUNTIME_RUN_STATUSES.running, 10),

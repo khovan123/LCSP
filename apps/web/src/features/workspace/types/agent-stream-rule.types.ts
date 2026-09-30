@@ -1,4 +1,7 @@
-import type { AssessmentRuntimeRunStatus } from "@lcsp/contracts/evidence";
+import type {
+  AssessmentRuntimeRunStatus,
+  RuleAnalysisActivity,
+} from "@lcsp/contracts/evidence";
 
 export const AGENT_STREAM_SEGMENT_KINDS = {
   row: "ROW",
@@ -22,7 +25,8 @@ export type AgentStreamRuleHeader = {
   ruleId: string;
   sequence: number;
   status: AssessmentRuntimeRunStatus;
-  planned: boolean;
+  /** Latest RULE_ANALYSIS_* activity reported for this rule, when any. */
+  activity: RuleAnalysisActivity | null;
   concept: string | null;
   goals: string[];
   decision: string | null;

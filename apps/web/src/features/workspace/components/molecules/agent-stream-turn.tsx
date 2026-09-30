@@ -1,22 +1,17 @@
 import {
   ASSESSMENT_AGENT_STREAM_STAGES,
-  ASSESSMENT_RUNTIME_PLAN_REASON_CODES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
 } from "@lcsp/contracts/evidence";
 import { resolveMessage } from "@lcsp/i18n";
 
 import { appLocale } from "@/lib/locale";
 
-import type { AgentStreamRuleHeader } from "../../types/agent-stream-rule.types";
 import type { AgentStreamTurnProps } from "../../types/agent-stream-turn.types";
 import { projectAgentStreamTurnOutput } from "../../utils/agent-stream-turn-output";
-import {
-  buildAgentStreamTurnHeadline,
-  selectPlannerOutcomes,
-} from "../../utils/agent-stream-turn-copy";
+import { buildAgentStreamTurnHeadline } from "../../utils/agent-stream-turn-copy";
 import { agentThinkingLabel } from "../../utils/agent-thinking-label";
 import { AgentStreamActivityLog } from "./agent-stream-activity-log";
-import { AgentStreamInvestigatorProgress } from "./agent-stream-investigator-progress";
+import { AgentStreamRuleAnalysisProgress } from "./agent-stream-rule-analysis-progress";
 import { AgentStreamTimeline } from "./agent-stream-timeline";
 import {
   deriveAgentStreamRunOutcome,
@@ -25,11 +20,7 @@ import {
   shouldShowAgentStreamHistoryAction,
 } from "../../utils/agent-stream-projection";
 import { AgentStreamTechnicalSummary } from "./agent-stream-technical-summary";
-import { AgentStreamInvestigatorOutput } from "./agent-stream-investigator-output";
-import {
-  AgentStreamPlannerOutput,
-  AgentStreamRuleGoalList,
-} from "./agent-stream-planner-output";
+import { AgentStreamRuleAnalysisOutput } from "./agent-stream-rule-analysis-output";
 import {
   AgentMessage,
   AgentTurn,
@@ -39,7 +30,7 @@ import {
 
 /**
  * One customer-visible turn for one pipeline dispatch — which may span
- * several stages at once (Planner and Investigator commonly run
+ * several stages at once (Interview and rule analysis can run
  * synchronously inside the same boundary call). One headline, then each
  * participating stage's own output section, then the raw feed collapsed
  * behind Technical details.
@@ -54,7 +45,6 @@ export function AgentStreamTurn({
   history,
   onLoadOlder,
   outputs,
-  planOrder,
   className,
 }: AgentStreamTurnProps) {
   const outcome = outcomeOverride ?? deriveAgentStreamRunOutcome(events);
@@ -64,12 +54,12 @@ export function AgentStreamTurn({
   );
   const { actor, message } = buildAgentStreamTurnHeadline(stages, outcome);
   // Each investigated rule carries its own Technical details, so the
-  // Investigator's turn-level feed keeps only events outside any rule.
+  // Rule analysis' turn-level feed keeps only events outside any rule.
   const investigating = stages.includes(
-    ASSESSMENT_AGENT_STREAM_STAGES.investigate,
+    ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
   );
   const ruleOwned = new Set(
-    (stageEvents[ASSESSMENT_AGENT_STREAM_STAGES.investigate] ?? []).filter(
+    (stageEvents[ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis] ?? []).filter(
       (event) => event.engineeringRuleId,
     ),
   );
@@ -85,10 +75,8 @@ export function AgentStreamTurn({
     : stageEvents;
   const labels = turnLabels();
 
-  const {
-    plannerRules: plannerRuleHeaders,
-    investigatorRules: investigatorRuleHeaders,
-  } = output ?? projectAgentStreamTurnOutput(stageEvents);
+  const { ruleAnalysisRules: ruleAnalysisRuleHeaders } =
+    output ?? projectAgentStreamTurnOutput(stageEvents);
 
   return (
     <AgentTurn className={className}>
@@ -110,22 +98,15 @@ export function AgentStreamTurn({
           <AgentStreamActivityLog events={events} />
         ) : null}
 
-        {stages.includes(ASSESSMENT_AGENT_STREAM_STAGES.investigate) ? (
-          <AgentStreamInvestigatorProgress
+        {stages.includes(ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis) ? (
+          <AgentStreamRuleAnalysisProgress
             events={events}
             dispatchRunning={outcome === AGENT_STREAM_RUN_OUTCOMES.running}
-            planOrder={
-              planOrder ??
-              plannerRuleHeaders
-                .filter((rule) => rule.planned)
-                .sort((a, b) => a.sequence - b.sequence)
-                .map((rule) => rule.ruleId)
-            }
             // A rule cannot still be running once its dispatch has ended.
             rules={
               outcome === AGENT_STREAM_RUN_OUTCOMES.running
-                ? investigatorRuleHeaders
-                : investigatorRuleHeaders.map((rule) =>
+                ? ruleAnalysisRuleHeaders
+                : ruleAnalysisRuleHeaders.map((rule) =>
                     rule.status === ASSESSMENT_RUNTIME_RUN_STATUSES.running
                       ? { ...rule, status: ASSESSMENT_RUNTIME_RUN_STATUSES.failed }
                       : rule,
@@ -134,26 +115,11 @@ export function AgentStreamTurn({
           />
         ) : null}
 
-        {stages.includes(ASSESSMENT_AGENT_STREAM_STAGES.planner)
-          ? renderPlannerOutput(
-              plannerRuleHeaders,
-              labels,
-              deriveAgentStreamRunOutcome(
-                stageEvents[ASSESSMENT_AGENT_STREAM_STAGES.planner] ?? [],
-              ) === AGENT_STREAM_RUN_OUTCOMES.failed ||
-                plannerRuleHeaders.some(
-                  (rule) =>
-                    rule.reasonCode ===
-                    ASSESSMENT_RUNTIME_PLAN_REASON_CODES.plannerFailure,
-                ),
-            )
-          : null}
-
         {/* Per-rule results live in each rule's row; only a dispatch-level
             failure is summarised here. */}
-        {stages.includes(ASSESSMENT_AGENT_STREAM_STAGES.investigate) &&
+        {stages.includes(ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis) &&
         isAgentStreamDispatchFailed(events) ? (
-          <AgentStreamInvestigatorOutput rules={[]} dispatchFailed />
+          <AgentStreamRuleAnalysisOutput rules={[]} dispatchFailed />
         ) : null}
 
         {outputs ? <div className="mt-3 space-y-3">{outputs}</div> : null}
@@ -194,56 +160,9 @@ export function AgentStreamTurn({
   );
 }
 
-function renderPlannerOutput(
-  ruleHeaders: AgentStreamRuleHeader[],
-  labels: ReturnType<typeof turnLabels>,
-  failed: boolean,
-) {
-  const { selected, skipped } = selectPlannerOutcomes(ruleHeaders);
-  if (failed && selected.length === 0)
-    return (
-      <div
-        data-stream-planner-failure-summary
-        className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-      >
-        {labels.plannerFailed}
-      </div>
-    );
-  // A raw rule ID (e.g. "ER-7") means nothing to a customer, so a skipped
-  // rule is listed exactly like a selected one: by its goals, else concept.
-  const nameableSkipped = skipped.filter(
-    (rule) => rule.goals.length > 0 || rule.concept !== null,
-  );
-  if (selected.length === 0 && skipped.length === 0) return null;
-  return (
-    <>
-      {selected.length > 0 ? (
-        <AgentStreamPlannerOutput rules={selected} />
-      ) : null}
-      {skipped.length > 0 ? (
-        <details
-          data-stream-planner-skipped
-          className="mt-3 min-w-0 text-sm text-foreground"
-        >
-          <summary className="cursor-pointer font-medium select-none">
-            {labels.skippedGoals} · {skipped.length}
-          </summary>
-          {nameableSkipped.length > 0 ? (
-            <div data-stream-planner-skipped-goals>
-              <AgentStreamRuleGoalList rules={nameableSkipped} />
-            </div>
-          ) : null}
-        </details>
-      ) : null}
-    </>
-  );
-}
-
 function turnLabels() {
   return {
     technicalDetails: t("pages.appShell.agentStreamTechnicalDetails"),
-    plannerFailed: t("pages.appShell.agentStreamTurn.plannerFailed"),
-    skippedGoals: t("pages.appShell.agentStreamTurn.skippedGoals"),
   };
 }
 

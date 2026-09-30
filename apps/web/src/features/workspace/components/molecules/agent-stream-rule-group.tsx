@@ -13,6 +13,7 @@ import type { ReactNode } from "react";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
+import { RULE_ANALYSIS_ACTIVITY_KEYS } from "../../config/rule-analysis-activity-keys";
 import type {
   AgentStreamRuleClaim,
   AgentStreamRuleHeader,
@@ -46,9 +47,7 @@ export function AgentStreamRuleGroup({
   const labels = ruleLabels();
   const running = header.status === ASSESSMENT_RUNTIME_RUN_STATUSES.running;
   const failed = header.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed;
-  const description = header.planned
-    ? (header.goals[0] ?? header.concept)
-    : (header.concept ?? header.ruleId);
+  const description = header.concept ?? header.ruleId;
 
   return (
     <div
@@ -90,9 +89,12 @@ export function AgentStreamRuleGroup({
           </span>
           <ChevronDown className="size-3 shrink-0 text-muted-foreground transition-transform duration-200 group-open/rule:rotate-180" />
         </summary>
-        {header.concept && header.planned && header.goals.length > 0 ? (
-          <div className="mt-1 break-words text-muted-foreground">
-            {header.concept}
+        {header.activity ? (
+          <div
+            data-stream-rule-activity={header.activity}
+            className="mt-1 break-words text-muted-foreground"
+          >
+            {t(RULE_ANALYSIS_ACTIVITY_KEYS[header.activity])}
           </div>
         ) : null}
         {children ? <div className="mt-2 space-y-0.5">{children}</div> : null}
@@ -222,7 +224,6 @@ function ruleTitle(
   if (header.status === ASSESSMENT_RUNTIME_RUN_STATUSES.waiting) {
     return labels.waitingForInput;
   }
-  if (header.planned) return labels.planned;
   switch (header.status) {
     case ASSESSMENT_RUNTIME_RUN_STATUSES.completed:
       return labels.investigated;
@@ -241,7 +242,6 @@ function ruleLabels() {
       "pages.appShell.agentStreamRule.investigationFailed",
     ),
     waitingForInput: t("pages.appShell.agentStreamRule.waitingForInput"),
-    planned: t("pages.appShell.agentStreamRule.planned"),
     result: t("pages.appShell.agentStreamRule.result"),
     decision: t("pages.appShell.agentStreamRule.decision"),
     reason: t("pages.appShell.agentStreamRule.reason"),

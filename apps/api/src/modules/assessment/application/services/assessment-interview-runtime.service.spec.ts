@@ -25,7 +25,6 @@ import {
   INTERVIEW_FRONTIER_OWNERS,
   INTERVIEW_PROGRESS_PHASES,
   INTERVIEW_TECHNICAL_CONTRACT_VERSION,
-  LEGACY_ASSESSMENT_INTERVIEW_MODES,
   POST_FINDING_RUNTIME_PHASES,
   REMEDIATION_APPROVAL_STATUSES,
   REMEDIATION_DECISIONS,
@@ -47,7 +46,12 @@ import type { AssessmentRuntimeEventService } from "../../../../platform/runtime
 import type { InterviewAuditService } from "../../../audit/application/services/interview-audit.service.js";
 import type { BillingAccountingKernel } from "../../../billing/application/shared/billing-accounting.kernel.js";
 import type { ConfigService } from "@nestjs/config";
-import { AssessmentInterviewRuntimeService } from "./assessment-interview-runtime.service.js";
+import { readFileSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
+import {
+  AssessmentInterviewRuntimeService,
+  materializeConfirmedStructuredBusinessContext,
+} from "./assessment-interview-runtime.service.js";
 import { AssessmentModelCreditPreflight } from "./assessment-model-credit-preflight.js";
 import { missingInitialPlanningContextDimensions } from "./interview-minimum-planning-context.js";
 
@@ -226,13 +230,12 @@ function targetedResolutionThreadFixture(): Record<string, unknown> {
         needId: "need-1",
         businessContextNeed: "Who approves this action?",
         resolutionCriteria: ["decision_authority"],
-        originatingInvestigationReference: "inv-ref-1",
+        originatingRuleAnalysisReference: "inv-ref-1",
         sourceVersion: "snap-1:sha-123456",
         pgeVersion: "report-1:v1",
       },
       targetedContinuation: {
-        originatingInvestigationReference: "inv-ref-1",
-        investigatorExecutionId: "exec-1",
+        originatingRuleAnalysisReference: "inv-ref-1",
         workflowRunId: "10000000-0000-4000-8000-000000000001",
         checkpointId: "cp-1",
         affectedRuleIds: ["ENG-1"],
@@ -281,22 +284,15 @@ function targetedNeedRegistrationPayload(
 ): Record<string, unknown> {
   return {
     actorId: "investigator-1",
-    needId: "need-data-residency",
-    businessContextNeed: "Clarify cloud provider region",
-    resolutionCriteria: ["Customer specifies AWS or GCP region"],
-    whyNeeded: "This determines the operational deployment location.",
-    governedEvidenceRefs: ["evidence:region-config"],
-    originatingInvestigationReference: "inv-ref-404",
-    investigatorExecutionId: "exec-1",
+    needId: "need:rule-1:criterion-region:0123456789ab",
+    engineeringRuleId: "rule-1",
+    criterionId: "criterion-region",
+    question: "Which cloud provider region hosts production?",
+    observation: "The deployment location is not stated in the repository.",
+    resolutionCriterionIds: ["criterion-region"],
+    evidenceRefs: ["evidence:region-config"],
+    contextRevision: 2,
     workflowRunId: "10000000-0000-4000-8000-000000000010",
-    checkpointId: "cp-1",
-    affectedRuleIds: ["rule-1"],
-    artifactVersions: {
-      technicalEvidenceReportId: "report-1",
-      repositorySnapshotId: "snap-1",
-      legalRuleCatalogVersionId: "catalog-1",
-      legalCorpusVersionId: "corpus-1",
-    },
     ...overrides,
   };
 }
@@ -314,6 +310,9 @@ type MockPrismaDelegates = {
   };
   repositorySnapshot: {
     findFirst: jest.Mock<() => Promise<{ id: string; commitSha: string }>>;
+  };
+  engineeringRuleAssessment: {
+    findMany: jest.Mock<() => Promise<unknown[]>>;
   };
   technicalEvidenceReport: {
     findFirst: jest.Mock<
@@ -571,6 +570,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             id: "snap-1",
             commitSha: "sha-123456",
           }),
+      },
+      engineeringRuleAssessment: {
+        findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
       },
       technicalEvidenceReport: {
         findFirst: jest
@@ -1908,119 +1910,6 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
     });
   });
 
-  describe("registerPlannerContextNeedForWorker", () => {
-    const plannerNeed = {
-      actorId: "user-1",
-      needId: "planner:abc",
-      businessContextNeed: "Whether the product is offered to patients.",
-      resolutionCriteria: ["Customer states whether patients use the product"],
-      whyNeeded: "It decides which safeguards apply.",
-      affectedRuleIds: ["rule-1", "rule-2"],
-      workflowRunId: "10000000-0000-4000-8000-000000000010",
-    };
-
-    function mockThread(
-      state: AssessmentInterviewRuntimeState,
-      privateContextJson: Record<string, unknown> = {},
-    ) {
-      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
-        assessmentId: "assessment-1",
-        contextRevision: 2,
-        processedRevision: 2,
-        activeQuestionId: null,
-        stateJson: state,
-        privateContextJson: {
-          revisions: [],
-          workflowRunId: "10000000-0000-4000-8000-000000000001",
-          ...privateContextJson,
-        },
-        sourceVersion: "snap-1:sha-123456",
-        pgeVersion: "report-1:v1",
-      });
-    }
-
-    it("reopens a ready Interview and resumes the Interview agent for the Planner need", async () => {
-      mockThread({
-        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
-        contextRevision: 2,
-      });
-
-      const result = await service.registerPlannerContextNeedForWorker({
-        assessmentId: "assessment-1",
-        correlationId: "corr-planner-1",
-        need: plannerNeed,
-      });
-
-      expect(result.registered).toBe(true);
-      expect(result.state.outcome).toBe(
-        ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
-      );
-      expect(
-        mockTx.assessmentInterviewThread.upsert as jest.Mock<
-          (input: unknown) => Promise<Record<string, unknown>>
-        >,
-      ).toHaveBeenCalledWith(
-        expect.objectContaining({
-          update: expect.objectContaining({
-            privateContextJson: expect.objectContaining({
-              plannerContextNeed: expect.objectContaining({
-                needId: "planner:abc",
-                affectedRuleIds: ["rule-1", "rule-2"],
-              }),
-              plannerContextNeedIds: ["planner:abc"],
-            }),
-          }),
-        }),
-      );
-      expect(mockOutboxRepository.enqueue).toHaveBeenCalledWith(
-        expect.objectContaining({
-          eventType: "command.assessment-interview.resume-agent.v1",
-          payload: expect.objectContaining({
-            // The Interview thread keeps its own root workflow run.
-            workflowRunId: "10000000-0000-4000-8000-000000000001",
-            questionId: "planner:abc",
-            resumeReason:
-              ASSESSMENT_INTERVIEW_RESUME_REASONS.plannerContextRequired,
-          }),
-        }),
-        mockTx,
-      );
-    });
-
-    it("never asks the same Planner need twice", async () => {
-      mockThread(
-        {
-          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
-          contextRevision: 3,
-        },
-        { plannerContextNeedIds: ["planner:abc"] },
-      );
-
-      const result = await service.registerPlannerContextNeedForWorker({
-        assessmentId: "assessment-1",
-        correlationId: "corr-planner-2",
-        need: plannerNeed,
-      });
-
-      expect(result.registered).toBe(false);
-      expect(mockOutboxRepository.enqueue).not.toHaveBeenCalled();
-    });
-
-    it("rejects an incomplete Planner need", async () => {
-      await expect(
-        service.registerPlannerContextNeedForWorker({
-          assessmentId: "assessment-1",
-          correlationId: "corr-planner-3",
-          need: { ...plannerNeed, resolutionCriteria: [] },
-        }),
-      ).rejects.toMatchObject({
-        response: {
-          problem: { code: "INTERVIEW_PLANNER_NEED_INVALID", status: 400 },
-        },
-      });
-    });
-  });
-
   describe("registerTargetedNeedForWorker", () => {
     it("atomically records targeted clarification started in transaction", async () => {
       const readyState: AssessmentInterviewRuntimeState = {
@@ -2061,25 +1950,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       await service.registerTargetedNeedForWorker({
         assessmentId: "assessment-1",
         correlationId: "corr-target-1",
-        target: {
-          actorId: "investigator-1",
-          needId: "need-data-residency",
-          businessContextNeed: "Clarify cloud provider region",
-          resolutionCriteria: ["Customer specifies AWS or GCP region"],
-          whyNeeded: "This determines the operational deployment location.",
-          governedEvidenceRefs: ["evidence:region-config"],
-          originatingInvestigationReference: "inv-ref-404",
-          investigatorExecutionId: "exec-1",
-          workflowRunId: "10000000-0000-4000-8000-000000000010",
-          checkpointId: "cp-1",
-          affectedRuleIds: ["rule-1"],
-          artifactVersions: {
-            technicalEvidenceReportId: "report-1",
-            repositorySnapshotId: "snap-1",
-            legalRuleCatalogVersionId: "catalog-1",
-            legalCorpusVersionId: "corpus-1",
-          },
-        },
+        target: targetedNeedRegistrationPayload() as never,
       });
 
       expect(
@@ -2092,24 +1963,19 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             privateContextJson: expect.objectContaining({
               workflowRunId: "10000000-0000-4000-8000-000000000001",
               targetedNeed: expect.objectContaining({
-                needId: "need-data-residency",
-                businessContextNeed: "Clarify cloud provider region",
-                resolutionCriteria: ["Customer specifies AWS or GCP region"],
-                whyNeeded:
-                  "This determines the operational deployment location.",
+                needId: "need:rule-1:criterion-region:0123456789ab",
+                state: "ACTIVE",
+                engineeringRuleId: "rule-1",
+                criterionId: "criterion-region",
+                question: "Which cloud provider region hosts production?",
+                resolutionCriterionIds: ["criterion-region"],
                 governedEvidenceRefs: ["evidence:region-config"],
               }),
               targetedContinuation: expect.objectContaining({
-                investigatorExecutionId: "exec-1",
+                needId: "need:rule-1:criterion-region:0123456789ab",
+                engineeringRuleId: "rule-1",
+                contextRevision: 2,
                 workflowRunId: "10000000-0000-4000-8000-000000000010",
-                checkpointId: "cp-1",
-                affectedRuleIds: ["rule-1"],
-                artifactVersions: {
-                  technicalEvidenceReportId: "report-1",
-                  repositorySnapshotId: "snap-1",
-                  legalRuleCatalogVersionId: "catalog-1",
-                  legalCorpusVersionId: "corpus-1",
-                },
               }),
             }),
           }),
@@ -2131,7 +1997,8 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       ).toHaveBeenCalledWith(
         expect.objectContaining({
           assessmentId: "assessment-1",
-          originatingInvestigationReference: "inv-ref-404",
+          originatingRuleAnalysisReference:
+            "rule:rule-1:need:rule-1:criterion-region:0123456789ab",
           sessionId: "interview:assessment-1",
           threadId: "interview:assessment-1",
           runId: "10000000-0000-4000-8000-000000000010",
@@ -2162,27 +2029,25 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           revisions: [],
           workflowRunId: "10000000-0000-4000-8000-000000000001",
           targetedNeed: {
-            needId: "need-data-residency",
-            businessContextNeed: "Clarify cloud provider region",
-            resolutionCriteria: ["Customer specifies AWS or GCP region"],
-            whyNeeded: "This determines the operational deployment location.",
+            needId: "need:rule-1:criterion-region:0123456789ab",
+            state: "ACTIVE",
+            engineeringRuleId: "rule-1",
+            criterionId: "criterion-region",
+            question: "Which cloud provider region hosts production?",
+            observation: "The deployment location is not stated.",
+            resolutionCriterionIds: ["criterion-region"],
             governedEvidenceRefs: ["evidence:region-config"],
-            originatingInvestigationReference: "inv-ref-404",
+            contextRevision: 2,
+            originatingRuleAnalysisReference: "inv-ref-404",
             sourceVersion: "snap-1:sha-123456",
             pgeVersion: "report-1:v1",
           },
           targetedContinuation: {
-            originatingInvestigationReference: "inv-ref-404",
-            investigatorExecutionId: "exec-1",
+            originatingRuleAnalysisReference: "inv-ref-404",
+            needId: "need:rule-1:criterion-region:0123456789ab",
+            engineeringRuleId: "rule-1",
+            contextRevision: 2,
             workflowRunId: "10000000-0000-4000-8000-000000000010",
-            checkpointId: "cp-1",
-            affectedRuleIds: ["rule-1"],
-            artifactVersions: {
-              technicalEvidenceReportId: "report-1",
-              repositorySnapshotId: "snap-1",
-              legalRuleCatalogVersionId: "catalog-1",
-              legalCorpusVersionId: "corpus-1",
-            },
             sourceVersion: "snap-1:sha-123456",
             pgeVersion: "report-1:v1",
           },
@@ -2310,27 +2175,25 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           revisions: [],
           workflowRunId: "10000000-0000-4000-8000-000000000001",
           targetedNeed: {
-            needId: "need-data-residency",
-            businessContextNeed: "Clarify cloud provider region",
-            resolutionCriteria: ["Customer specifies AWS or GCP region"],
-            whyNeeded: "This determines the operational deployment location.",
+            needId: "need:rule-1:criterion-region:0123456789ab",
+            state: "ACTIVE",
+            engineeringRuleId: "rule-1",
+            criterionId: "criterion-region",
+            question: "Which cloud provider region hosts production?",
+            observation: "The deployment location is not stated.",
+            resolutionCriterionIds: ["criterion-region"],
             governedEvidenceRefs: ["evidence:region-config"],
-            originatingInvestigationReference: "inv-ref-404",
+            contextRevision: 2,
+            originatingRuleAnalysisReference: "inv-ref-404",
             sourceVersion: "snap-1:sha-123456",
             pgeVersion: "report-1:v1",
           },
           targetedContinuation: {
-            originatingInvestigationReference: "inv-ref-404",
-            investigatorExecutionId: "exec-1",
+            originatingRuleAnalysisReference: "inv-ref-404",
+            needId: "need:rule-1:criterion-region:0123456789ab",
+            engineeringRuleId: "rule-1",
+            contextRevision: 2,
             workflowRunId: "10000000-0000-4000-8000-000000000010",
-            checkpointId: "cp-1",
-            affectedRuleIds: ["rule-1"],
-            artifactVersions: {
-              technicalEvidenceReportId: "report-1",
-              repositorySnapshotId: "snap-1",
-              legalRuleCatalogVersionId: "catalog-1",
-              legalCorpusVersionId: "corpus-1",
-            },
             sourceVersion: "snap-1:sha-123456",
             pgeVersion: "report-1:v1",
           },
@@ -2396,21 +2259,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         service.registerTargetedNeedForWorker({
           assessmentId: "assessment-1",
           correlationId: "corr-target-invalid",
-          target: {
-            actorId: "investigator-1",
-            needId: "need-invalid",
-            businessContextNeed: "Clarify deployment owner",
-            resolutionCriteria: ["deployment_owner"],
-            originatingInvestigationReference: "inv-ref-invalid",
-            investigatorExecutionId: "exec-invalid",
-            workflowRunId: "run-invalid",
-            checkpointId: "cp-invalid",
-            affectedRuleIds: ["rule-1"],
-            artifactVersions: {
-              technicalEvidenceReportId: "report-1",
-              repositorySnapshotId: "snap-1",
-            },
-          },
+          target: targetedNeedRegistrationPayload({ needId: "need-invalid", question: "" }) as never,
         }),
       ).rejects.toMatchObject({
         response: { code: "INTERVIEW_TARGETED_NEED_INVALID" },
@@ -2422,23 +2271,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         service.registerTargetedNeedForWorker({
           assessmentId: "assessment-1",
           correlationId: "corr-target-leak",
-          target: {
-            actorId: "investigator-1",
-            needId: "need-leak",
-            businessContextNeed: "Clarify EngineeringRule ENG-7 handling",
-            resolutionCriteria: ["risk category for EU AI Act"],
-            originatingInvestigationReference: "inv-ref-leak",
-            investigatorExecutionId: "exec-leak",
-            workflowRunId: "20000000-0000-4000-8000-000000000001",
-            checkpointId: "cp-leak",
-            affectedRuleIds: ["ENG-7"],
-            artifactVersions: {
-              technicalEvidenceReportId: "report-1",
-              repositorySnapshotId: "snap-1",
-              legalRuleCatalogVersionId: "catalog-1",
-              legalCorpusVersionId: "corpus-1",
-            },
-          },
+          target: targetedNeedRegistrationPayload({ question: "Clarify EngineeringRule ENG-7 handling" }) as never,
         }),
       ).rejects.toMatchObject({
         response: { code: "INTERVIEW_TARGETED_NEED_NON_NEUTRAL" },
@@ -2454,7 +2287,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           correlationId: "corr-legacy-mode",
           decision: {
             expectedContextRevision: 2,
-            mode: LEGACY_ASSESSMENT_INTERVIEW_MODES.prePlanner,
+            mode: "PRE_PLANNER",
             outcome: ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved,
           } as never,
         }),
@@ -2696,7 +2529,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           correlationId: "corr-target-non-structured",
           decision: {
             expectedContextRevision: 2,
-            mode: "INVESTIGATOR_RESOLUTION",
+            mode: "BUSINESS_CONTEXT_RESOLUTION",
             outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
             contextAuthority:
               ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
@@ -3008,7 +2841,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           correlationId: "corr-target-unsatisfied",
           decision: {
             expectedContextRevision: 2,
-            mode: "INVESTIGATOR_RESOLUTION",
+            mode: "BUSINESS_CONTEXT_RESOLUTION",
             outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
             contextAuthority:
               ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
@@ -3037,7 +2870,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           correlationId: "corr-target-structured-resolved",
           decision: {
             expectedContextRevision: 2,
-            mode: "INVESTIGATOR_RESOLUTION",
+            mode: "BUSINESS_CONTEXT_RESOLUTION",
             outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
             contextAuthority:
               ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
@@ -3061,7 +2894,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         expect(result).toMatchObject({
           outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
           continuation: expect.objectContaining({
-            investigatorExecutionId: "exec-1",
+            engineeringRuleId: "ENG-1",
             checkpointId: "cp-1",
           }),
         });
@@ -3070,14 +2903,14 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             runId: "10000000-0000-4000-8000-000000000001",
             outputSummary: expect.objectContaining({
               interviewWorkflowEvent:
-                ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.investigationResumed,
+                ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.ruleReassessmentResumed,
               interviewWorkflowEvents: [
                 ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewContextResolved,
-                ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.investigationResumed,
+                ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.ruleReassessmentResumed,
               ],
               orchestratorAction:
-                ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.resumeExactInvestigator,
-              interviewMode: "INVESTIGATOR_RESOLUTION",
+                ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.resumeSameRule,
+              interviewMode: "BUSINESS_CONTEXT_RESOLUTION",
             }),
           }),
         );
@@ -3113,7 +2946,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         correlationId: "corr-target-downstream-impact",
         decision: {
           expectedContextRevision: 2,
-          mode: "INVESTIGATOR_RESOLUTION",
+          mode: "BUSINESS_CONTEXT_RESOLUTION",
           outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
           contextAuthority:
             ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
@@ -3138,7 +2971,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             ],
             orchestratorAction:
               ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.selectiveRerunRescope,
-            interviewMode: "INVESTIGATOR_RESOLUTION",
+            interviewMode: "BUSINESS_CONTEXT_RESOLUTION",
           }),
         }),
       );
@@ -3158,7 +2991,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         correlationId: "corr-target-not-initial-gated",
         decision: {
           expectedContextRevision: 2,
-          mode: "INVESTIGATOR_RESOLUTION",
+          mode: "BUSINESS_CONTEXT_RESOLUTION",
           outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
           contextAuthority:
             ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
@@ -3493,7 +3326,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
             correlationId: "corr-target-structured-unconfirmed",
             decision: {
               expectedContextRevision: 2,
-              mode: "INVESTIGATOR_RESOLUTION",
+              mode: "BUSINESS_CONTEXT_RESOLUTION",
               outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
               contextAuthority:
                 ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
@@ -4982,7 +4815,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           correlationId: "corr-target-fake-statement-ref",
           decision: {
             expectedContextRevision: 2,
-            mode: "INVESTIGATOR_RESOLUTION",
+            mode: "BUSINESS_CONTEXT_RESOLUTION",
             outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
             contextAuthority:
               ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
@@ -5055,25 +4888,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         service.registerTargetedNeedForWorker({
           assessmentId: "assessment-1",
           correlationId: "corr-target-fabricated-ref",
-          target: {
-            actorId: "user-1",
-            needId: "need-fabricated-ref",
-            businessContextNeed: "Who approves this action?",
-            resolutionCriteria: ["decision_authority"],
-            governedEvidenceRefs: ["evidence:fabricated:cross_assessment_999"],
-            originatingInvestigationReference:
-              "investigator:exec-1:need-fabricated-ref",
-            investigatorExecutionId: "exec-1",
-            workflowRunId: "20000000-0000-4000-8000-000000000001",
-            checkpointId: "cp-target-1",
-            affectedRuleIds: ["ENG-1"],
-            artifactVersions: {
-              technicalEvidenceReportId: "report-1",
-              repositorySnapshotId: "snap-1",
-              legalRuleCatalogVersionId: "catalog-1",
-              legalCorpusVersionId: "corpus-1",
-            },
-          },
+          target: targetedNeedRegistrationPayload({ evidenceRefs: ["evidence:fabricated:cross_assessment_999"] }) as never,
         }),
       ).rejects.toMatchObject({
         response: {
@@ -5096,7 +4911,7 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         correlationId: "corr-runtime-owned-confirmed-context",
         decision: {
           expectedContextRevision: 2,
-          mode: "INVESTIGATOR_RESOLUTION",
+          mode: "BUSINESS_CONTEXT_RESOLUTION",
           outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
           contextAuthority:
             ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
@@ -5322,5 +5137,101 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         "secret:governed:evidence:ref:1",
       );
     });
+  });
+});
+
+describe("server-owned identity of a governed answer to a BusinessContextNeed", () => {
+  const need = JSON.parse(
+    readFileSync(resolvePath(process.cwd(), "test/fixtures/business-context-need.json"), "utf8"),
+  ) as {
+    needId: string;
+    engineeringRuleId: string;
+    criterionId: string;
+    question: string;
+    observation: string;
+    resolutionCriterionIds: string[];
+    contextRevision: number;
+  };
+  const pending = {
+    needId: need.needId,
+    state: "ACTIVE",
+    engineeringRuleId: need.engineeringRuleId,
+    criterionId: need.criterionId,
+    question: need.question,
+    observation: need.observation,
+    resolutionCriterionIds: need.resolutionCriterionIds,
+    contextRevision: need.contextRevision,
+    originatingRuleAnalysisReference: `rule:${need.engineeringRuleId}:${need.needId}`,
+    sourceVersion: "s",
+    pgeVersion: "p",
+  };
+  const revision = {
+    questionId: need.needId,
+    answer: {},
+    actorId: "user-1",
+    answeredAt: "2026-09-30T00:00:00.000Z",
+    contextRevision: 7,
+    priorRevision: 6,
+    authority: "CUSTOMER_STATED",
+    sourceVersion: "s",
+    pgeVersion: "p",
+    governedEvidenceRefs: [],
+  } as never;
+  const materialize = (
+    statements: Array<Record<string, unknown>>,
+    previous?: unknown,
+    withNeed: typeof pending | null = pending,
+  ) =>
+    materializeConfirmedStructuredBusinessContext(
+      { statements },
+      new Set<string>(),
+      "assessment-1",
+      revision,
+      "corr",
+      { need: (withNeed ?? undefined) as never, previousStatements: previous },
+    ) as { contextRevision: number; statements: Array<Record<string, unknown>> };
+
+  it("stamps need, rule and criterion identity itself, from the need it registered", () => {
+    const result = materialize([
+      { statementId: "s1", topic: "reworded topic", statement: "A person approves first.", resolvesCriterionId: need.resolutionCriterionIds[0] },
+    ]);
+    expect(result.contextRevision).toBe(7);
+    expect(result.statements[0]).toMatchObject({
+      sourceNeedId: need.needId,
+      engineeringRuleId: need.engineeringRuleId,
+      resolvedCriterionIds: [need.resolutionCriterionIds[0]],
+    });
+  });
+
+  it("never copies an id the model wrote, and drops a criterion the need does not list", () => {
+    const result = materialize([
+      { statementId: "s1", topic: "t", statement: "x", sourceNeedId: "need:forged", resolvedCriterionIds: ["forged"] },
+      { statementId: "s2", topic: "t", statement: "x", resolvesCriterionId: "forged" },
+    ]);
+    for (const statement of result.statements) {
+      expect(statement).not.toHaveProperty("sourceNeedId");
+      expect(statement).not.toHaveProperty("resolvedCriterionIds");
+    }
+  });
+
+  it("stamps nothing when no need is pending", () => {
+    const result = materialize(
+      [{ statementId: "s1", topic: "t", statement: "x", resolvesCriterionId: need.resolutionCriterionIds[0] }],
+      undefined,
+      null,
+    );
+    expect(result.statements[0]).not.toHaveProperty("sourceNeedId");
+  });
+
+  it("keeps the identity when a later turn re-emits the same statement", () => {
+    const first = materialize([
+      { statementId: "s1", topic: "t", statement: "x", resolvesCriterionId: need.resolutionCriterionIds[0] },
+    ]);
+    const later = materialize(
+      [{ statementId: "s1", topic: "t", statement: "x" }],
+      first.statements,
+      null,
+    );
+    expect(later.statements[0]).toMatchObject({ sourceNeedId: need.needId });
   });
 });

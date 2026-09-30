@@ -13,6 +13,14 @@ The persisted Scanner projection is `evidence_payload.ai_discovery` with evidenc
 `UNRESOLVED_DYNAMIC`, and gate states `AI_CONFIRMED`, `AI_UNKNOWN`, and
 `AI_ABSENT_CONFIRMED`. Provider/package/config presence alone is not model invocation.
 
+## Producer and failure
+
+`ai_discovery` is produced by ONE bounded AI-discovery Deep Agent task in the scan job
+(Repository Analyst runtime, 2026-09-30; see `deepagents/FLOW.md`). It is an independent
+prerequisite persisted with the technical evidence. A model/provider failure yields gate
+`AI_UNKNOWN` with limitation `AI_DISCOVERY_FAILED`; the scan still completes, accepted rule
+evidence is never destroyed, and rules gated on `aiDetected` become `UPSTREAM_FACT_PENDING`.
+
 ## Gate
 
 `AI_CONFIRMED` requires governed invocation/API evidence. A model invocation whose runtime

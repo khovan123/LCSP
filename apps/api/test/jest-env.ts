@@ -45,7 +45,7 @@ process.env.LCSP_MODEL_PRICING_SNAPSHOTS ??= JSON.stringify([
   },
   {
     provider: "LLM7",
-    model: "GLM-5.3-Flash",
+    model: "minimax-m2.7",
     version: 1,
     effectiveAt: "2026-01-01T00:00:00.000Z",
     inputPricePerMillion: "0.15000000",

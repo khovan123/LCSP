@@ -10,7 +10,7 @@ from ..entrypoints.tool_entrypoints import (
     AgenticToolExecutionContext, evaluate_gap_matrix,
     get_admin_source_catalog, get_artifact_chain,
     get_gap_evidence_trace, get_gap_requirements, get_legal_corpus_readiness,
-    get_reconciliation_context, request_targeted_reanalysis,
+    get_reconciliation_context,
     resume_waiting_runs, retrieve_legal_basis, validate_citation_set,
 )
 from ..entrypoints.legal_tool_entrypoints import (
@@ -36,7 +36,6 @@ def _binding(name, target, entrypoint, downstream): return ToolBinding(name, tar
 
 ENGINEERING_RULE_AGENTIC_TOOL_BINDINGS = (
     _binding("resume_waiting_runs", ToolRuntimeTarget.AGENT_RUNTIME_COMMAND, resume_waiting_runs, "ResumeWaitingRunsCommand"),
-    _binding("request_targeted_reanalysis", ToolRuntimeTarget.AGENT_RUNTIME_COMMAND, request_targeted_reanalysis, "RequestTargetedReanalysisCommand"),
     _binding("propose_gap_remediation", ToolRuntimeTarget.PYTHON_LOCAL, propose_gap_remediation, "Python remediation over GetGapEvidenceTraceQuery"),
     _binding("get_gap_evidence_trace", ToolRuntimeTarget.NEST_CQRS, get_gap_evidence_trace, "GetGapEvidenceTraceQuery"),
     _binding("get_reconciliation_context", ToolRuntimeTarget.NEST_CQRS, get_reconciliation_context, "GetReconciliationContextQuery"),

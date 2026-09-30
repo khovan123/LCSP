@@ -8,6 +8,8 @@ companions:
 sources: []
 ---
 
+> **Superseded by the Repository Analyst runtime (2026-09-30), see deepagents/FLOW.md.**
+
 > **Canonical contract.** This SPEC and its companions define the agentic evidence orchestration contract for LCSP.
 
 # Agentic Evidence Orchestration

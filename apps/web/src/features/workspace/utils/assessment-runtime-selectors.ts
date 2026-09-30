@@ -193,13 +193,8 @@ export function selectAssessmentRuntimeSidebarPresentation(
       ASSESSMENT_SIDEBAR_STATUSES.queued,
     ),
     sidebarWorkflowItem(
-      ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.planner,
-      "pages.appShell.assessmentSidebar.workflow.planner",
-      ASSESSMENT_SIDEBAR_STATUSES.queued,
-    ),
-    sidebarWorkflowItem(
-      ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.investigate,
-      "pages.appShell.assessmentSidebar.workflow.investigate",
+      ASSESSMENT_SIDEBAR_WORKFLOW_STAGES.ruleAnalysis,
+      "pages.appShell.assessmentSidebar.workflow.ruleAnalysis",
       ASSESSMENT_SIDEBAR_STATUSES.queued,
     ),
     sidebarWorkflowItem(
@@ -338,9 +333,7 @@ export function selectComposerAvailability(
   normalized: NormalizedAssessmentRuntime,
 ) {
   const actions = normalized.customerActions;
-  const isEnabled =
-    actions.canUseComposer &&
-    normalized.availability === ASSESSMENT_RUNTIME_AVAILABILITIES.ready;
+  const isEnabled = actions.canUseComposer;
   const placeholderKey = actions.canAnswerQuestion
     ? "pages.appShell.chatComposerPlaceholder"
     : "pages.assessment.noActiveInterviewQuestion";
@@ -452,7 +445,7 @@ export function selectAssessmentScreenProjection(
     return postFindingScreenProjection(normalized.postFinding.phase);
   }
 
-  // Targeted loop: Investigator paused + Interview running
+  // Targeted loop: Rule analysis paused + Interview running
   if (workflow.isTargetedClarificationLoop) {
     return ASSESSMENT_SCREEN_PROJECTIONS.f09;
   }
@@ -501,8 +494,6 @@ export function selectAssessmentScreenProjection(
 
   // Stage-based projections
   if (
-    workflow.stage === "INVESTIGATE" ||
-    workflow.stage === "investigate" ||
     workflow.stage === ASSESSMENT_RUNTIME_STAGE_CODES.classification
   ) {
     return ASSESSMENT_SCREEN_PROJECTIONS.f10;

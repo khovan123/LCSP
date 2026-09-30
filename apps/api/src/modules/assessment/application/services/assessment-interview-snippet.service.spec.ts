@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { Readable } from "node:stream";
 import { gzipSync } from "node:zlib";
 
@@ -9,6 +9,10 @@ import type { AiDiscoverySnippetRef } from "@lcsp/contracts/evidence";
 import { AssessmentInterviewSnippetService } from "./assessment-interview-snippet.service.js";
 
 function tarGzip(path: string, source: Buffer): Buffer {
+  return gzipSync(Buffer.concat([tarEntry(path, source), Buffer.alloc(1024)]));
+}
+
+function tarEntry(path: string, source: Buffer): Buffer {
   const header = Buffer.alloc(512);
   header.write(path, 0, Math.min(Buffer.byteLength(path), 100), "utf8");
   header.write(
@@ -19,7 +23,7 @@ function tarGzip(path: string, source: Buffer): Buffer {
   );
   header[156] = "0".charCodeAt(0);
   const padding = Buffer.alloc((512 - (source.length % 512)) % 512);
-  return gzipSync(Buffer.concat([header, source, padding, Buffer.alloc(1024)]));
+  return Buffer.concat([header, source, padding]);
 }
 
 function oversizedTarGzip(path: string, claimedSize: number): Buffer {
@@ -65,38 +69,53 @@ describe("AssessmentInterviewSnippetService pinned snapshot integration", () => 
     const archivedSource = overrides?.source ?? source;
     const prisma = {
       technicalEvidenceReport: {
-        findFirst: jest.fn(() =>
-          Promise.resolve({
-            evidencePayload: {
-              ai_discovery: { findings: [{ snippet_ref: snippetRef(source) }] },
-            },
-          }),
+        findFirst: jest.fn(
+          async (..._args: unknown[]): Promise<unknown> =>
+            Promise.resolve({
+              evidencePayload: {
+                ai_discovery: {
+                  findings: [
+                    {
+                      snippet_ref: {
+                        ...snippetRef(source),
+                        symbol: null,
+                      } as unknown as AiDiscoverySnippetRef,
+                    },
+                  ],
+                },
+              },
+            }),
         ),
       },
       repositorySnapshot: {
-        findFirst: jest.fn(() =>
-          Promise.resolve({
-            id: "snapshot-1",
-            commitSha: "abc123",
-          }),
+        findFirst: jest.fn(
+          async (..._args: unknown[]): Promise<unknown> =>
+            Promise.resolve({
+              id: "snapshot-1",
+              commitSha: "abc123",
+            }),
         ),
       },
       repositoryScanJob: {
-        findFirst: jest.fn(() => Promise.resolve({ id: "scan-1" })),
+        findFirst: jest.fn(
+          async (..._args: unknown[]): Promise<unknown> =>
+            Promise.resolve({ id: "scan-1" }),
+        ),
       },
     };
     const queryBus = {
-      execute: jest.fn(() =>
-        Promise.resolve({
-          snapshotId: "snapshot-1",
-          commitSha: overrides?.commitSha ?? "abc123",
-          repositoryFullName: "owner/repository",
-          contentType: "application/gzip",
-          resolvedUrl: "https://example.invalid/archive",
-          stream: Readable.from(
-            tarGzip("repository-abc123/src/gateway.ts", archivedSource),
-          ),
-        }),
+      execute: jest.fn(
+        async (..._args: unknown[]): Promise<unknown> =>
+          Promise.resolve({
+            snapshotId: "snapshot-1",
+            commitSha: overrides?.commitSha ?? "abc123",
+            repositoryFullName: "owner/repository",
+            contentType: "application/gzip",
+            resolvedUrl: "https://example.invalid/archive",
+            stream: Readable.from(
+              tarGzip("repository-abc123/src/gateway.ts", archivedSource),
+            ),
+          }),
       ),
     };
     return {
@@ -141,6 +160,57 @@ describe("AssessmentInterviewSnippetService pinned snapshot integration", () => 
     expect(Buffer.byteLength(rendered, "utf8")).toBeLessThanOrEqual(4096);
     expect(result.redacted).toBe(true);
     expect(result.truncated).toBe(true);
+  });
+
+  it("drains the compressed archive after finding the target so the cache tee can finish", async () => {
+    const { service, queryBus } = harness();
+    const archiveBytes = gzipSync(
+      Buffer.concat([
+        tarEntry("repository-abc123/src/gateway.ts", source),
+        tarEntry("repository-abc123/trailing.bin", randomBytes(256 * 1024)),
+        Buffer.alloc(1024),
+      ]),
+    );
+    let offset = 0;
+    let scheduled = false;
+    const archiveStream = new Readable({
+      read() {
+        if (scheduled) return;
+        scheduled = true;
+        setImmediate(() => {
+          scheduled = false;
+          if (offset >= archiveBytes.length) {
+            this.push(null);
+            return;
+          }
+          const end = Math.min(offset + 512, archiveBytes.length);
+          this.push(archiveBytes.subarray(offset, end));
+          offset = end;
+        });
+      },
+    });
+    const terminalEvent = new Promise<"end" | "close">((resolve) => {
+      archiveStream.once("end", () => resolve("end"));
+      archiveStream.once("close", () => resolve("close"));
+    });
+    queryBus.execute.mockResolvedValueOnce({
+      snapshotId: "snapshot-1",
+      commitSha: "abc123",
+      repositoryFullName: "owner/repository",
+      contentType: "application/gzip",
+      resolvedUrl: "https://example.invalid/archive",
+      stream: archiveStream,
+    });
+
+    await service.resolve({
+      assessmentId: "assessment-1",
+      correlationId: "corr-cache-drain",
+      evidenceReportId: "report-1",
+      snippetRef: snippetRef(source),
+    });
+
+    await expect(terminalEvent).resolves.toBe("end");
+    expect(offset).toBe(archiveBytes.length);
   });
 
   it("rejects archive bytes that do not match the pinned evidence hash", async () => {

@@ -19,16 +19,25 @@ database.
    /workspace/repository.
 3. The repository-rooted Deep Agents backend exposes native filesystem, search,
    shell, planning, and subagent capabilities against that working tree.
-4. The repository analyst is created with `deepagents.create_deep_agent` and
-   the LCSP repository sandbox backend.
+4. The scan job runs ONE bounded AI-discovery Deep Agent task with the LCSP
+   repository sandbox backend. It is an independent prerequisite: failure yields
+   AI gate `AI_UNKNOWN` with a failure limitation, never an all-or-nothing scan.
+   Per-rule analysis is not part of the scan job (see below).
 5. Codebase Memory MCP 0.11.0 is available inside the Docker sandbox as an
    optional structural index and relationship memory.
 6. Direct repository source is authoritative. Graph-memory results accelerate
    discovery but never replace source verification.
-7. The Deep Agent emits the compatibility evidence graph, source anchors,
-   coverage state, unresolved frontiers, and AI-discovery gate.
+7. The scan job records technical coverage and the AI-discovery gate
+   (`ai_discovery`), with source anchors for AI findings.
 8. Existing scan-job and TechnicalEvidenceReport APIs persist the result for
    downstream TechnicalProfile, investigation, reconciliation, and legal flows.
+
+## Per-rule assessment
+
+After the scan, a deterministic per-rule loop resolves pinned READY EngineeringRules,
+evaluates legal applicability, and runs one `repository-analyst` Deep Agent task per eligible
+rule in the same sandbox. Results are validated by the governed `submit_rule_assessment`
+tool and persisted per rule (`EngineeringRuleAssessment`). See `deepagents/FLOW.md`.
 
 ## Thread and sandbox lifecycle
 

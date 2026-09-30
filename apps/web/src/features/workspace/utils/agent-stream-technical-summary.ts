@@ -17,11 +17,8 @@ export function projectAgentStreamTechnicalSummary(
     (row) => row.activity === "sourceFilesReviewed" && row.status === "completed",
   );
   return {
-    planning: projectAgentStreamRuleHeaders(
-      stageEvents[ASSESSMENT_AGENT_STREAM_STAGES.planner] ?? [],
-    ).size,
     investigation: projectAgentStreamRuleHeaders(
-      stageEvents[ASSESSMENT_AGENT_STREAM_STAGES.investigate] ?? [],
+      stageEvents[ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis] ?? [],
     ).size,
     sourceFiles: new Set(sourceRows.map((row) => row.target).filter(Boolean))
       .size,

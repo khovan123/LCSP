@@ -52,6 +52,7 @@ import {
   TARGETED_REANALYSIS_CAPACITY_POLICY,
   TARGETED_REANALYSIS_CHECKPOINT_STATES,
   TARGETED_REANALYSIS_REQUEST_STATES,
+  type TargetedReanalysisRuleScope,
   type TargetedReanalysisTerminalState,
 } from "@lcsp/contracts/scan";
 
@@ -86,13 +87,7 @@ interface ScanStatusRequest {
 interface TargetedReanalysisRequestBody {
   inputArtifactVersion: string;
   analyzerId: string;
-  scope:
-    | {
-        pathPrefixes: string[];
-      }
-    | {
-        subjectRefs: string[];
-      };
+  scope: { ruleScope: TargetedReanalysisRuleScope };
   reasonRequirementId: string;
   idempotencyKey: string;
 }
@@ -812,8 +807,13 @@ const TARGETED_REANALYSIS_ANALYZERS = new Set([
 ]);
 const EVIDENCE_REPORT_ID = /^ter_[A-Za-z0-9_-]{8,120}$/;
 const REASON_REQUIREMENT_ID = /^requirement:[A-Za-z0-9_-]{1,120}$/;
-const PATH_PREFIX = /^(?!\/|.*\.\.)[A-Za-z0-9._/-]+\/$/;
-const SUBJECT_REF = /^(finding|symbol|node):[A-Za-z0-9_-]{8,120}$/;
+const RULE_SCOPE_KEYS = new Set([
+  "engineeringRuleId",
+  "criterionIds",
+  "contextRevision",
+  "priorResultId",
+]);
+const RULE_SCOPE_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{16,128}$/;
 const TARGETED_REANALYSIS_KEYS = new Set([
   "inputArtifactVersion",
@@ -866,57 +866,52 @@ function parseTargetedReanalysisInput(
     invalidTargetedReanalysisRequest(correlationId);
   }
 
-  const safePathPrefixes = readStringArray(scope.pathPrefixes);
-  const safeSubjectRefs = readStringArray(scope.subjectRefs);
-  const hasPathPrefixes = safePathPrefixes !== null;
-  const hasSubjectRefs = safeSubjectRefs !== null;
-  if (Number(hasPathPrefixes) + Number(hasSubjectRefs) !== 1) {
+  const ruleScope = parseTargetedReanalysisRuleScope(scope, correlationId);
+  return {
+    inputArtifactVersion,
+    analyzerId,
+    scope: { ruleScope },
+    reasonRequirementId,
+    idempotencyKey,
+  };
+}
+
+/**
+ * Validates the only supported retry scope: one EngineeringRule, its criteria, and the
+ * confirmed-context revision the retry is pinned to.
+ */
+function parseTargetedReanalysisRuleScope(
+  scope: Record<string, unknown>,
+  correlationId: string,
+): TargetedReanalysisRuleScope {
+  const raw = scope.ruleScope;
+  if (Object.keys(scope).length !== 1 || !isRecord(raw)) {
     invalidTargetedReanalysisRequest(correlationId);
   }
-
-  if (hasPathPrefixes) {
-    if (
-      safePathPrefixes.length === 0 ||
-      safePathPrefixes.length >
-        REQUEST_TARGETED_REANALYSIS_TOOL.maxPathPrefixes ||
-      new Set(safePathPrefixes).size !== safePathPrefixes.length ||
-      safePathPrefixes.some(
-        (item) => typeof item !== "string" || !PATH_PREFIX.test(item),
-      )
-    ) {
-      invalidTargetedReanalysisRequest(correlationId);
-    }
-    return {
-      inputArtifactVersion,
-      analyzerId,
-      scope: { pathPrefixes: [...safePathPrefixes].sort() },
-      reasonRequirementId,
-      idempotencyKey,
-    };
-  }
-
-  if (!safeSubjectRefs) {
-    invalidTargetedReanalysisRequest(correlationId);
-  }
-
-  const validatedSubjectRefs = safeSubjectRefs;
+  const { engineeringRuleId, contextRevision, priorResultId } = raw;
+  const criterionIds = readStringArray(raw.criterionIds);
   if (
-    validatedSubjectRefs.length === 0 ||
-    validatedSubjectRefs.length >
-      REQUEST_TARGETED_REANALYSIS_TOOL.maxSubjectRefs ||
-    new Set(validatedSubjectRefs).size !== validatedSubjectRefs.length ||
-    validatedSubjectRefs.some(
-      (item) => typeof item !== "string" || !SUBJECT_REF.test(item),
-    )
+    Object.keys(raw).some((key) => !RULE_SCOPE_KEYS.has(key)) ||
+    typeof engineeringRuleId !== "string" ||
+    !RULE_SCOPE_ID.test(engineeringRuleId) ||
+    !criterionIds ||
+    criterionIds.length === 0 ||
+    criterionIds.length > REQUEST_TARGETED_REANALYSIS_TOOL.maxCriterionIds ||
+    new Set(criterionIds).size !== criterionIds.length ||
+    criterionIds.some((item) => !RULE_SCOPE_ID.test(item)) ||
+    typeof contextRevision !== "number" ||
+    !Number.isSafeInteger(contextRevision) ||
+    contextRevision < 0 ||
+    (priorResultId !== undefined &&
+      (typeof priorResultId !== "string" || !RULE_SCOPE_ID.test(priorResultId)))
   ) {
     invalidTargetedReanalysisRequest(correlationId);
   }
   return {
-    inputArtifactVersion,
-    analyzerId,
-    scope: { subjectRefs: [...validatedSubjectRefs].sort() },
-    reasonRequirementId,
-    idempotencyKey,
+    engineeringRuleId,
+    criterionIds: [...criterionIds].sort(),
+    contextRevision,
+    ...(typeof priorResultId === "string" ? { priorResultId } : {}),
   };
 }
 

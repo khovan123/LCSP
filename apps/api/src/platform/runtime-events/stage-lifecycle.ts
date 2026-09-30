@@ -10,8 +10,8 @@ import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 /**
  * Stage lifecycle derived from durable artifacts, not from the activity log.
  *
- * Runtime events cannot answer "is this stage done": a later Planner or
- * Investigator dispatch posts scan-tagged bookkeeping under the same scan job,
+ * Runtime events cannot answer "is this stage done": a later
+ * repository-analyst dispatch posts scan-tagged bookkeeping under the same scan job,
  * and a boundary failure can arrive with no stage at all. Every state below is
  * therefore read from something that durably exists — the scan job, the accepted
  * evidence report, the interview thread's confirmed revision, and the durable
@@ -71,9 +71,11 @@ export function deriveStageLifecycles(
   const threads = new Map(
     input.interviewThreads.map((thread) => [thread.assessmentId, thread]),
   );
-  const progress = new Map(
-    input.engineeringProgress.map((item) => [item.assessmentId, item]),
-  );
+  // Progress arrives newest run first; the newest run owns the assessment.
+  const progress = new Map<string, AssessmentRuntimeEngineeringProgress>();
+  for (const item of input.engineeringProgress) {
+    if (!progress.has(item.assessmentId)) progress.set(item.assessmentId, item);
+  }
   const live = input.liveAssessmentIds ?? new Set<string>();
 
   return [...new Set(input.assessmentIds)].map((assessmentId) => {
@@ -89,8 +91,12 @@ export function deriveStageLifecycles(
       assessmentId,
       scanner,
       interview,
-      planner: derivePlanner(engineering, scanner, isLive),
-      investigator: deriveInvestigator(engineering, isLive),
+      ruleAnalysis: deriveRuleAnalysis(
+        engineering,
+        scanner,
+        interview,
+        isLive,
+      ),
       gate: deriveGate(engineering),
     };
   });
@@ -154,62 +160,62 @@ function deriveInterview(
   return entry(STATES.running, "interviewThread");
 }
 
-/** The durable plan owns this row; the dispatch only says whether it is moving. */
-function derivePlanner(
+function pendingRules(progress: AssessmentRuntimeEngineeringProgress): number {
+  return Math.max(
+    progress.eligibleCount -
+      progress.completed -
+      progress.needsContext -
+      progress.unresolved -
+      progress.failed,
+    0,
+  );
+}
+
+/** Rule-analysis progress owns this row: complete only when no eligible rule is pending. */
+function deriveRuleAnalysis(
   progress: AssessmentRuntimeEngineeringProgress | undefined,
   scanner: AssessmentStageLifecycleEntry,
+  interview: AssessmentStageLifecycleEntry,
   isLive: boolean,
 ): AssessmentStageLifecycleEntry {
   if (!progress) {
-    if (scanner.state !== STATES.done && scanner.state !== STATES.partial) {
+    // `isLive` is assessment-scoped, not stage-scoped: it only says the newest
+    // dispatch is still beating, which is true for every stage that has not
+    // produced an artifact yet. Rule analysis cannot start before the scan has
+    // produced evidence and the Interview has confirmed the customer context,
+    // so until then this row stays queued however live the assessment is.
+    if (
+      (scanner.state !== STATES.done && scanner.state !== STATES.partial) ||
+      interview.state !== STATES.contextConfirmed
+    ) {
       return entry(STATES.queued, "none");
     }
     return entry(isLive ? STATES.running : STATES.queued, "dispatch");
   }
-  const planner = progress.planner;
-  if ((planner?.selectedCount ?? 0) + (planner?.skippedCount ?? 0) > 0) {
+  const pending = pendingRules(progress);
+  const notEstablished = progress.unresolved + progress.failed;
+  if (pending === 0 && progress.needsContext > 0) {
+    // Rules that stopped for missing customer context are not finished: the
+    // count is excluded from `pending`, so without this a run with one done rule
+    // and many blocked ones reads as complete.
     return entry(
-      STATES.planReady,
-      "ruleInvestigationPlan",
-      `${planner.selectedCount}/${planner.candidateCount}`,
+      STATES.needsContext,
+      "ruleAnalysis",
+      `${progress.completed} done, ${progress.needsContext} need context`,
     );
   }
-  return entry(isLive ? STATES.running : STATES.queued, "dispatch");
-}
-
-/** Rule claims own this row: complete only when no selected rule is pending. */
-function deriveInvestigator(
-  progress: AssessmentRuntimeEngineeringProgress | undefined,
-  isLive: boolean,
-): AssessmentStageLifecycleEntry {
-  const investigator = progress?.investigator;
-  if (!investigator) {
-    return entry(isLive ? STATES.running : STATES.queued, "dispatch");
-  }
-  const completed = investigator.completedCount ?? 0;
-  const pending = investigator.pendingCount ?? 0;
-  const limited = investigator.domainLimitedCount ?? 0;
-  const failed = investigator.limitedOrFailedCount ?? 0;
   if (pending > 0) {
     return entry(
       isLive ? STATES.running : STATES.claimsPartial,
-      "ruleClaims",
-      `${completed} done, ${pending} pending`,
+      "ruleAnalysis",
+      `${progress.completed} done, ${pending} pending`,
     );
   }
-  if (completed === 0 && (limited > 0 || failed > 0)) {
-    // Every selected rule stopped for want of Scanner memory or context.
+  if (progress.completed > 0 || notEstablished > 0) {
     return entry(
-      STATES.needsScannerEnrichment,
-      "ruleClaims",
-      `${limited + failed}`,
-    );
-  }
-  if (completed > 0) {
-    return entry(
-      limited + failed > 0 ? STATES.claimsPartial : STATES.claimsComplete,
-      "ruleClaims",
-      `${completed} done`,
+      notEstablished > 0 ? STATES.claimsPartial : STATES.claimsComplete,
+      "ruleAnalysis",
+      `${progress.completed} done`,
     );
   }
   return entry(isLive ? STATES.running : STATES.queued, "dispatch");
@@ -218,14 +224,15 @@ function deriveInvestigator(
 function deriveGate(
   progress: AssessmentRuntimeEngineeringProgress | undefined,
 ): AssessmentStageLifecycleEntry {
-  const investigator = progress?.investigator;
-  if (!investigator) return entry(STATES.queued, "none");
-  const pending = investigator.pendingCount ?? 0;
-  const completed = investigator.completedCount ?? 0;
-  if (pending === 0 && completed > 0) {
-    return entry(STATES.ready, "ruleClaims");
+  if (!progress) return entry(STATES.queued, "none");
+  if (
+    pendingRules(progress) === 0 &&
+    progress.needsContext === 0 &&
+    progress.completed > 0
+  ) {
+    return entry(STATES.ready, "ruleAnalysis");
   }
-  return entry(STATES.queued, "ruleClaims");
+  return entry(STATES.queued, "ruleAnalysis");
 }
 
 function groupBy<TItem>(

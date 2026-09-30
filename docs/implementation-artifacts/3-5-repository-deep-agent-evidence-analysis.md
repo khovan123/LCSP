@@ -1,3 +1,5 @@
+> **Superseded by the Repository Analyst runtime (2026-09-30), see deepagents/FLOW.md.** The Planner/Investigator/Scanner-pipeline description below is historical.
+
 # Story 3.5: Repository Deep Agent Evidence Analysis
 
 Status: review

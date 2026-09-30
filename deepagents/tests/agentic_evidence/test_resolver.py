@@ -112,7 +112,7 @@ def test_resolver_rejects_schema_invalid_call_before_rbac_or_handler() -> None:
 def test_resolver_rejects_non_model_tool_before_rbac_even_if_registered() -> None:
     registry = build_engineering_rule_agentic_registry()
     registry.register_handler(
-        "request_targeted_reanalysis",
+        "resume_waiting_runs",
         lambda _request: {"status": "READY"},
     )
     authorizer = AllowAuthorizer()
@@ -123,8 +123,8 @@ def test_resolver_rejects_non_model_tool_before_rbac_even_if_registered() -> Non
         match="AGENTIC_TOOL_NOT_MODEL_CALLABLE",
     ):
         resolver._invoke_capability(
-            "request_targeted_reanalysis",
-            resolver._registry.capability("request_targeted_reanalysis"),
+            "resume_waiting_runs",
+            resolver._registry.capability("resume_waiting_runs"),
             {},
             context(),
         )

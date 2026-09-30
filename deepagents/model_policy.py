@@ -22,9 +22,8 @@ from provider_credentials import (
 
 DEFAULT_ROOT_MODEL_SPEC = "openai:gpt-5-nano"
 DEFAULT_TRIAGE_MODEL_SPEC = "openai:gpt-5-nano"
-DEFAULT_PLANNER_MODEL_SPEC = "openai:gpt-5-nano"
 DEFAULT_INTERVIEW_MODEL_SPEC = "openai:gpt-5-nano"
-DEFAULT_INVESTIGATOR_MODEL_SPEC = "openai:gpt-5-nano"
+DEFAULT_REPOSITORY_ANALYST_MODEL_SPEC = "openai:gpt-5-nano"
 DEFAULT_NARRATOR_MODEL_SPEC = "openai:gpt-4.1-nano"
 
 DEFAULT_REASONING_EFFORT = "low"
@@ -46,12 +45,8 @@ REASONING_AGENT_NAMES = frozenset(
         "triage",
         "lcsp-legal-chunk-triage",
         "lcsp-engineering-rule-compiler",
-        "planner",
-        "lcsp-engineering-rule-planner",
         "interview",
-        "investigator",
-        "law_guided_investigator",
-        "lcsp-investigator-durable-execution",
+        "repository-analyst",
     }
 )
 NON_REASONING_AGENT_NAMES = frozenset(
@@ -127,8 +122,8 @@ PROVIDER_PRESETS = {
         "google_genai:gemini-3.5-flash-lite",
     ),
     "llm7": ProviderPreset(
-        "openai:GLM-5.3-Flash",
-        "openai:GLM-5.3-Flash",
+        "openai:minimax-m2.7",
+        "openai:minimax-m2.7",
     ),
     "inception": ProviderPreset(
         "openai:mercury-2.5",
@@ -138,12 +133,13 @@ PROVIDER_PRESETS = {
 GOOGLE_THINKING_LEVEL = "low"
 MODEL_CONTEXT_WINDOWS = {
     ("google_genai", "gemini-3.5-flash-lite"): 1_000_000,
-    ("llm7", "GLM-5.3-Flash"): 256_000,
+    # Provider-declared window (GET /v1/models): 180k, tools + json_mode.
+    ("llm7", "minimax-m2.7"): 180_000,
     ("inception", "mercury-2.5"): 128_000,
 }
 MODEL_OUTPUT_WINDOWS = {
     ("google_genai", "gemini-3.5-flash-lite"): 8_192,
-    ("llm7", "GLM-5.3-Flash"): 8_192,
+    ("llm7", "minimax-m2.7"): 8_192,
     ("inception", "mercury-2.5"): 8_192,
 }
 
@@ -274,24 +270,21 @@ ROOT_MODEL_SPEC, ROOT_MODEL_SOURCE = _model_spec(
 TRIAGE_MODEL_SPEC, TRIAGE_MODEL_SOURCE = _model_spec(
     "LCSP_TRIAGE_MODEL", DEFAULT_TRIAGE_MODEL_SPEC
 )
-PLANNER_MODEL_SPEC, PLANNER_MODEL_SOURCE = _model_spec(
-    "LCSP_PLANNER_MODEL", DEFAULT_PLANNER_MODEL_SPEC
-)
 INTERVIEW_MODEL_SPEC, INTERVIEW_MODEL_SOURCE = _model_spec(
     "LCSP_INTERVIEW_MODEL", DEFAULT_INTERVIEW_MODEL_SPEC
 )
-INVESTIGATOR_MODEL_SPEC, INVESTIGATOR_MODEL_SOURCE = _model_spec(
-    "LCSP_INVESTIGATOR_MODEL", DEFAULT_INVESTIGATOR_MODEL_SPEC
+REPOSITORY_ANALYST_MODEL_SPEC, REPOSITORY_ANALYST_MODEL_SOURCE = _model_spec(
+    "LCSP_REPOSITORY_ANALYST_MODEL", DEFAULT_REPOSITORY_ANALYST_MODEL_SPEC
 )
+# Alias for the scan-job AI-discovery task (analyzer.py, owned by the scanner workstream).
 NARRATOR_MODEL_SPEC, NARRATOR_MODEL_SOURCE = _model_spec(
     "LCSP_NARRATOR_MODEL", DEFAULT_NARRATOR_MODEL_SPEC
 )
 
 SUBAGENT_MODEL_SPECS = {
     "triage": TRIAGE_MODEL_SPEC,
-    "planner": PLANNER_MODEL_SPEC,
     "interview": INTERVIEW_MODEL_SPEC,
-    "investigator": INVESTIGATOR_MODEL_SPEC,
+    "repository-analyst": REPOSITORY_ANALYST_MODEL_SPEC,
 }
 
 # Every model used by this graph receives the same LCSP harness restrictions.
@@ -300,13 +293,92 @@ ALL_LCSP_MODEL_SPECS = tuple(
         (
             ROOT_MODEL_SPEC,
             TRIAGE_MODEL_SPEC,
-            PLANNER_MODEL_SPEC,
             INTERVIEW_MODEL_SPEC,
-            INVESTIGATOR_MODEL_SPEC,
+            REPOSITORY_ANALYST_MODEL_SPEC,
             NARRATOR_MODEL_SPEC,
         )
     )
 )
+
+
+def _runtime_identity_for_provider(provider: str) -> tuple[str, str]:
+    """Return the logical pricing identity for one code-owned provider preset."""
+    canonical = canonical_provider(provider)
+    preset = PROVIDER_PRESETS.get(canonical)
+    if preset is None:
+        raise RuntimeError(f"Unsupported LCSP runtime provider: {provider}")
+    return canonical.upper(), model_name_from_spec(preset.reasoning_model)
+
+
+def _billing_authorized_models(value: str) -> set[tuple[str, str]]:
+    models: set[tuple[str, str]] = set()
+    for entry in value.split(","):
+        provider, separator, model = entry.strip().partition(":")
+        if not separator or not provider.strip() or not model.strip():
+            raise RuntimeError(
+                "BILLING_AUTHORIZED_RUNTIME_MODELS must use PROVIDER:model entries"
+            )
+        models.add((provider.strip().upper(), model.strip()))
+    return models
+
+
+def _fallback_runtime_identities() -> set[tuple[str, str]]:
+    providers: list[tuple[int, str]] = []
+    prefix = "LLM_FALLBACK_PROVIDER_"
+    for name, value in os.environ.items():
+        if not name.startswith(prefix) or not value.strip():
+            continue
+        index = name.removeprefix(prefix)
+        if not index.isdigit():
+            continue
+        providers.append((int(index), value.strip()))
+    return {
+        _runtime_identity_for_provider(provider)
+        for _, provider in sorted(providers)
+    }
+
+
+def _validate_billing_runtime_policy() -> None:
+    """Fail at worker startup when billing and effective model routes have drifted."""
+    if (os.getenv("BILLING_METERING_ENABLED") or "").strip().lower() not in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return
+    primary = (
+        _runtime_identity_for_provider(SELECTED_PROVIDER)
+        if SELECTED_PROVIDER
+        else (
+            route_provider_for_model_spec(ROOT_MODEL_SPEC).upper(),
+            model_name_from_spec(ROOT_MODEL_SPEC),
+        )
+    )
+    configured_primary = (
+        (os.getenv("BILLING_RUNTIME_PROVIDER") or "").strip().upper(),
+        (os.getenv("BILLING_RUNTIME_MODEL") or "").strip(),
+    )
+    if configured_primary != primary:
+        raise RuntimeError(
+            "BILLING_RUNTIME_PROVIDER/BILLING_RUNTIME_MODEL must match the "
+            f"effective LCSP primary runtime model {primary[0]}:{primary[1]}"
+        )
+    authorized = _billing_authorized_models(
+        os.getenv("BILLING_AUTHORIZED_RUNTIME_MODELS") or ""
+    )
+    missing = ({primary} | _fallback_runtime_identities()) - authorized
+    if missing:
+        formatted = ", ".join(
+            f"{provider}:{model}" for provider, model in sorted(missing)
+        )
+        raise RuntimeError(
+            "BILLING_AUTHORIZED_RUNTIME_MODELS must include the effective LCSP "
+            f"runtime models: {formatted}"
+        )
+
+
+_validate_billing_runtime_policy()
 
 
 def openai_responses_base_init_kwargs() -> dict[str, object]:
@@ -492,9 +564,8 @@ def effective_model_configs() -> tuple[EffectiveModelConfig, ...]:
     role_specs = (
         ("root", ROOT_MODEL_SPEC, ROOT_MODEL_SOURCE),
         ("triage", TRIAGE_MODEL_SPEC, TRIAGE_MODEL_SOURCE),
-        ("planner", PLANNER_MODEL_SPEC, PLANNER_MODEL_SOURCE),
         ("interview", INTERVIEW_MODEL_SPEC, INTERVIEW_MODEL_SOURCE),
-        ("investigator", INVESTIGATOR_MODEL_SPEC, INVESTIGATOR_MODEL_SOURCE),
+        ("repository-analyst", REPOSITORY_ANALYST_MODEL_SPEC, REPOSITORY_ANALYST_MODEL_SOURCE),
         ("narrator", NARRATOR_MODEL_SPEC, NARRATOR_MODEL_SOURCE),
     )
     configs: list[EffectiveModelConfig] = []

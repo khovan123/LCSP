@@ -200,7 +200,7 @@ function isGovernedSnippetRef(
     const candidateEvidenceHash = candidate.evidence_hash;
     if (
       typeof candidateFilePath !== "string" ||
-      (candidateSymbol !== undefined && typeof candidateSymbol !== "string") ||
+      (candidateSymbol != null && typeof candidateSymbol !== "string") ||
       typeof candidateEvidenceHash !== "string"
     ) {
       return false;
@@ -250,6 +250,7 @@ async function readFileFromGzipTar(
   const target = normalizeArchivePath(filePath);
 
   let uncompressedBytes = 0;
+  let drainArchiveForCache = false;
   try {
     while (true) {
       const header = await reader.readExactly(TAR_BLOCK_SIZE);
@@ -283,15 +284,17 @@ async function readFileFromGzipTar(
         const body = await reader.readExactly(member.size);
         if (!body) break;
         await reader.skip(paddingFor(member.size));
-        input.destroy();
+        drainArchiveForCache = true;
+        input.unpipe(gunzip);
         gunzip.destroy();
+        input.resume();
         return body;
       }
 
       await reader.skip(memberBytes);
     }
   } finally {
-    input.destroy();
+    if (!drainArchiveForCache) input.destroy();
     gunzip.destroy();
   }
 

@@ -385,9 +385,23 @@ async def test_typed_auth_opens_provider_circuit_and_later_calls_skip_that_provi
     # Google is tried once, its run-scoped circuit opens, and the next call skips it.
     assert provider_calls == ["google_genai", "llm7", "llm7"]
     assert session.provider_route_disabled("google_genai") is True
-    # One invocation claim per provider attempt, usage only for the two successes.
+    # One invocation claim per provider attempt. The failed google attempt settles
+    # a zero-charge "unavailable" payload via record_unavailable(); the two llm7
+    # successes settle normal usage.
     assert len(client.claims) == 3
-    assert len(client.payloads) == 2
+    assert len(client.payloads) == 3
+    assert [payload.provider for payload in client.payloads] == [
+        "GOOGLE_GENAI",
+        "LLM7",
+        "LLM7",
+    ]
+    unavailable = client.payloads[0]
+    assert unavailable.provider == "GOOGLE_GENAI"
+    assert unavailable.model == "gemini-3.5-flash-lite"
+    assert unavailable.providerResponseId is None
+    assert unavailable.inputTokens is None
+    assert unavailable.outputTokens is None
+    assert unavailable.totalTokens is None
 
 
 @pytest.mark.parametrize("auth_error", [_google_auth_error, _google_permission_error])
@@ -411,24 +425,29 @@ async def test_model_retry_never_resends_typed_auth_failure_on_same_credential(a
 
 def test_non_retryable_boundary_failures_are_terminal_at_the_boundary():
     from tools.common.capabilities.agent_runtime.boundary import NonRetryableAgentBoundaryError
-    from tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary import (
-        TechnicalRecoveryNotStarted,
+    from tools.common.capabilities.workflow.recovery.interview_boundary import (
+        InterviewTechnicalCoverageRecoveryRequired,
     )
 
     # Never redelivered, so the invocation's billing reservation must be released.
     assert is_terminal_boundary_error(NonRetryableAgentBoundaryError("scan job is terminal")) is True
-    assert is_terminal_boundary_error(TechnicalRecoveryNotStarted("recovery not requested")) is True
+    assert is_terminal_boundary_error(
+        InterviewTechnicalCoverageRecoveryRequired("technical coverage recovery required")
+    ) is True
     # Model-stack routing is unchanged: these are boundary outcomes, not model errors.
     assert is_terminal_task_error(NonRetryableAgentBoundaryError("scan job is terminal")) is False
+    assert is_terminal_task_error(
+        InterviewTechnicalCoverageRecoveryRequired("technical coverage recovery required")
+    ) is False
 
 
 @pytest.mark.parametrize(
     ("error_factory", "released"),
     [
         (lambda: __import__(
-            "tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary",
-            fromlist=["TechnicalRecoveryNotStarted"],
-        ).TechnicalRecoveryNotStarted("recovery not requested"), True),
+            "tools.common.capabilities.workflow.recovery.interview_boundary",
+            fromlist=["InterviewTechnicalCoverageRecoveryRequired"],
+        ).InterviewTechnicalCoverageRecoveryRequired("technical coverage recovery required"), True),
         (lambda: RuntimeError("transient provider outage"), False),
     ],
 )

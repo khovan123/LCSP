@@ -1,20 +1,12 @@
 from __future__ import annotations
 
+import re
 from types import SimpleNamespace
 import pytest
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-
 from tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary import (
     InterviewGatedEngineeringAssessmentBoundary,
-    TechnicalRecoveryNotStarted,
     _has_authoritative_customer_ai_context,
-)
-from tools.common.capabilities.assessment.investigation.engineering_rule.deterministic_investigator import (
-    DeterministicSeedWindowInvestigator,
-)
-from tools.common.capabilities.assessment.investigation.engineering_rule.managed_targeted_investigator import (
-    ManagedTargetedInvestigatorPipeline,
 )
 from tools.common.capabilities.agent_runtime.boundary import NonRetryableAgentBoundaryError
 from tools.common.capabilities.platform.api_client import WorkerCallbackError
@@ -25,6 +17,13 @@ class FakeApi:
         self.state = state
         self.seeded = []
         self.ai_not_detected = []
+        self.events = []
+
+    def post_scan_runtime_event(self, scan_job_id, payload):
+        self.events.append((scan_job_id, payload))
+
+    def limitation_codes(self):
+        return [p["summary"] for _, p in self.events if p["tool_name"].startswith("technical_limitation:")]
 
     def post_assessment_ai_not_detected(self, assessment_id, payload):
         self.ai_not_detected.append((assessment_id, payload))
@@ -71,60 +70,13 @@ class FakeDispatcher:
         }
 
 
-def _reanalysis_call(call_id: str = "call-reanalysis-1") -> AIMessage:
-    return AIMessage(
-        content="",
-        tool_calls=[
-            {
-                "id": call_id,
-                "name": "request_targeted_reanalysis",
-                "args": {"analyzerId": "pge", "reason": "coverage recovery"},
-            }
-        ],
-    )
-
-
-class RecordingRoot:
-    """Root that requests the approval-gated reanalysis tool (the real recovery action)."""
-
-    def __init__(self, reply=None, history=()) -> None:
-        self.calls = []
-        self._reply = reply if reply is not None else [_reanalysis_call()]
-        self._history = list(history)
-
-    def invoke(self, payload, config=None):
-        self.calls.append((payload, config))
-        instruction = HumanMessage(content=payload["messages"][0]["content"])
-        return {"messages": [*self._history, instruction, *self._reply]}
-
-
-def _text_only_root(history=()) -> RecordingRoot:
-    # Observed in production (LLM7 codestral): a plain refusal with no tool call.
-    return RecordingRoot(
-        reply=[AIMessage(content="I'm sorry, but I currently don't have the necessary tools.")],
-        history=history,
-    )
-
-
-class NoopPipeline:
-    def run(self, **kwargs):
-        raise AssertionError("pipeline must not run during Initial Interview bootstrap")
-
-
-class NoopWorkspace:
-    def cleanup(self, _job_id):
-        return None
-
-
-def _boundary(api, dispatcher, recovery_root=None):
+def _boundary(api, dispatcher):
     return InterviewGatedEngineeringAssessmentBoundary(
         SimpleNamespace(),
         api_client=api,
         interview_dispatcher=dispatcher,
-        recovery_root=recovery_root,
-        investigation_pipeline=NoopPipeline(),
-        snapshot_client=SimpleNamespace(),
-        code_workspace=NoopWorkspace(),
+        retriever=SimpleNamespace(),
+        rule_service=SimpleNamespace(),
         triage_trigger_publisher=lambda _payload: None,
     )
 
@@ -135,6 +87,7 @@ def _report():
         "snapshot_id": "snapshot-1",
         "schema_version": "2.0.0",
         "user_id": "user-test-owner",
+        "scan_job_id": "scan-1",
         "evidence_payload": {
             "evidence_graph": {
                 "coverage_state": "PARTIAL",
@@ -219,33 +172,32 @@ def test_stale_accepted_evidence_event_is_terminal_before_interview_dispatch() -
 def test_invalid_partial_policy_never_dispatches_interview(invalid_policy):
     api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
     dispatcher = FakeDispatcher()
-    root = RecordingRoot()
     report = _report()
     report["evidence_payload"]["evidence_graph"]["partialCoveragePolicyDecision"] = invalid_policy
-    _boundary(api, dispatcher, root)._prepare_interview(
+    _boundary(api, dispatcher)._prepare_interview(
         evidence_report=report, evidence_report_id="ter-1",
         assessment_id="assessment-1", correlation_id="corr",
     )
     assert dispatcher.calls == []
     assert api.seeded == []
-    assert len(root.calls) == 1
+    # Fail closed with a typed activity (no root/model prompt, nothing queued).
+    assert api.limitation_codes() == ["TECHNICAL_COVERAGE_RECOVERY_REQUIRED"]
 
 
-def test_coverage_callback_rejection_routes_to_recovery(monkeypatch):
+def test_coverage_callback_rejection_emits_recovery_activity_without_seeding(monkeypatch):
     from tools.common.capabilities.platform.api_client import InterviewCoverageCallbackError
     api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
     def reject(*args):
         raise InterviewCoverageCallbackError("coverage changed")
     monkeypatch.setattr(api, "post_interview_initial_question", reject)
     dispatcher = FakeDispatcher()
-    root = RecordingRoot()
-    _boundary(api, dispatcher, root)._prepare_interview(
+    _boundary(api, dispatcher)._prepare_interview(
         evidence_report=_report(), evidence_report_id="ter-1",
         assessment_id="assessment-1", correlation_id="corr",
         workflow_run_id="workflow-1",
     )
     assert len(dispatcher.calls) == 1
-    assert len(root.calls) == 1
+    assert api.limitation_codes() == ["TECHNICAL_COVERAGE_RECOVERY_REQUIRED"]
     assert api.seeded == []
 
 
@@ -297,23 +249,31 @@ def _structured_context(*, revision: int = 2):
     }
 
 
-def test_default_production_pipeline_uses_managed_targeted_investigator_bridge() -> None:
-    boundary = InterviewGatedEngineeringAssessmentBoundary(
-        SimpleNamespace(
-            langgraph_checkpoint_database_url="postgresql://lcsp:lcsp@db/lcsp"
+def test_rule_scope_message_is_forwarded_to_the_scoped_rule_run(monkeypatch) -> None:
+    api = FakeApi(
+        {
+            "outcome": "CONTEXT_READY",
+            "contextRevision": 2,
+            "confirmedContext": _structured_context(revision=2),
+        }
+    )
+    api.get_accepted_technical_evidence_report = lambda _report_id: _report()
+    boundary = _boundary(api, FakeDispatcher())
+    seen = {}
+    monkeypatch.setattr(
+        boundary,
+        "run_assessment",
+        lambda message, corr, *, confirmed_context, rule_scope=None: seen.update(
+            scope=rule_scope, revision=confirmed_context.context_revision
         ),
-        api_client=FakeApi({"outcome": "CONTEXT_READY", "contextRevision": 1}),
-        snapshot_client=SimpleNamespace(),
-        code_workspace=NoopWorkspace(),
-        triage_trigger_publisher=lambda _payload: None,
     )
 
-    assert isinstance(boundary._pipeline, ManagedTargetedInvestigatorPipeline)
-    assert boundary._pipeline._delegate.__class__.__name__ == "PlannedEngineeringInvestigationPipeline"
-    assert isinstance(
-        boundary._pipeline._delegate._investigator,
-        DeterministicSeedWindowInvestigator,
+    boundary.handle(
+        {"evidenceReportId": "ter-1", "assessmentId": "assessment-1", "ruleScope": ["rule-a"]},
+        "corr-scope",
     )
+
+    assert seen == {"scope": ("rule-a",), "revision": 2}
 
 
 def test_initial_pge_event_bootstraps_interview_and_stops_before_pipeline() -> None:
@@ -349,9 +309,8 @@ def test_initial_pge_event_bootstraps_interview_and_stops_before_pipeline() -> N
 def test_ready_no_ai_gate_short_circuits_before_interview_dispatch() -> None:
     api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
     dispatcher = FakeDispatcher()
-    root = RecordingRoot()
 
-    result = _boundary(api, dispatcher, root)._prepare_interview(
+    result = _boundary(api, dispatcher)._prepare_interview(
         evidence_report=_ai_report("AI_ABSENT_CONFIRMED", []),
         evidence_report_id="ter-no-ai",
         assessment_id="assessment-1",
@@ -362,7 +321,6 @@ def test_ready_no_ai_gate_short_circuits_before_interview_dispatch() -> None:
     assert result is None
     assert dispatcher.calls == []
     assert api.seeded == []
-    assert root.calls == []
     # The assessment ends as "AI not detected" instead of waiting for a question.
     assert api.ai_not_detected == [
         ("assessment-1", {"technicalEvidenceReportId": "ter-no-ai"})
@@ -505,7 +463,7 @@ def test_no_ai_gate_does_not_override_authoritative_customer_confirmed_ai_contex
     assert api.ai_not_detected == []
 
 
-def test_mixed_customer_and_technical_ai_uncertainty_routes_to_reanalysis_before_ready_context() -> None:
+def test_technical_ai_uncertainty_never_blocks_ready_context_and_emits_typed_activity() -> None:
     customer = _ai_finding("OUTBOUND_API", "OUTBOUND_AI_CONFIRMATION")
     technical = _ai_finding(
         "DYNAMIC_TARGET", "TARGETED_TECHNICAL_REANALYSIS", owner="TECHNICAL"
@@ -521,9 +479,8 @@ def test_mixed_customer_and_technical_ai_uncertainty_routes_to_reanalysis_before
             "confirmedContext": _structured_context(revision=2),
         }
     )
-    root = RecordingRoot()
 
-    result = _boundary(api, FakeDispatcher(), root)._prepare_interview(
+    result = _boundary(api, FakeDispatcher())._prepare_interview(
         evidence_report=report,
         evidence_report_id="ter-mixed",
         assessment_id="assessment-1",
@@ -531,31 +488,10 @@ def test_mixed_customer_and_technical_ai_uncertainty_routes_to_reanalysis_before
         workflow_run_id="workflow-mixed",
     )
 
-    assert result is None
-    assert len(root.calls) == 1
-    assert root.calls[0][1]["metadata"]["trigger"] == "AI_DISCOVERY_REANALYSIS_REQUIRED"
-
-def test_confirmed_ai_invocation_asks_purpose_and_feature_not_is_this_ai() -> None:
-    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
-    dispatcher = FakeDispatcher()
-    finding = _ai_finding("SDK_INVOCATION", "AI_PURPOSE_FEATURE_MAPPING")
-    finding["provider"] = "OPENAI"
-
-    _boundary(api, dispatcher)._prepare_interview(
-        evidence_report=_ai_report("AI_CONFIRMED", [finding]),
-        evidence_report_id="ter-ai",
-        assessment_id="assessment-1",
-        correlation_id="corr-ai",
-        workflow_run_id="workflow-ai",
-    )
-
-    assert dispatcher.calls == []
-    question = api.seeded[0][1]["activeQuestion"]
-    assert question["control"] == "FREE_TEXT"
-    assert "what is this AI call used for" in question["prompt"]
-    assert "Web/Mobile/API feature or module" in question["prompt"]
-    assert "does this endpoint invoke" not in question["prompt"].lower()
-    assert "is this an ai" not in question["prompt"].lower()
+    # No root recovery prompt: the gate stays UNKNOWN (gated rules become pending
+    # deterministically) and ungated rules still run.
+    assert result is not None and result.context_revision == 2
+    assert api.limitation_codes() == ["AI_DISCOVERY_UNRESOLVED"]
 
 
 def test_runtime_guard_asks_only_assessed_environment_reachability() -> None:
@@ -607,15 +543,14 @@ def test_custom_outbound_candidate_uses_yes_no_unsure_and_stable_identity() -> N
     assert dispatcher.calls == []
 
 
-def test_technical_ai_unknown_routes_to_reanalysis_not_customer_question() -> None:
+def test_technical_ai_unknown_emits_activity_and_does_not_invent_a_customer_question() -> None:
     api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
     dispatcher = FakeDispatcher()
-    root = RecordingRoot()
     finding = _ai_finding(
         "PROVIDER_REFERENCE", "TARGETED_TECHNICAL_REANALYSIS", owner="TECHNICAL"
     )
 
-    _boundary(api, dispatcher, root)._prepare_interview(
+    _boundary(api, dispatcher)._prepare_interview(
         evidence_report=_ai_report("AI_UNKNOWN", [finding]),
         evidence_report_id="ter-provider-ref",
         assessment_id="assessment-1",
@@ -623,16 +558,18 @@ def test_technical_ai_unknown_routes_to_reanalysis_not_customer_question() -> No
         workflow_run_id="workflow-provider-ref",
     )
 
-    assert dispatcher.calls == []
-    assert api.seeded == []
-    assert root.calls[0][1]["metadata"]["trigger"] == "AI_DISCOVERY_REANALYSIS_REQUIRED"
+    assert api.limitation_codes() == ["AI_DISCOVERY_UNRESOLVED"]
+    # The technical finding is never turned into a deterministic customer AI question.
+    assert all(
+        "PROVIDER_REFERENCE" not in str(call["instruction"]).split("aiDiscovery")[0]
+        for call in dispatcher.calls
+    )
 
 
-def test_unavailable_coverage_routes_to_orchestration_before_interview() -> None:
+def test_unavailable_coverage_fails_closed_before_interview() -> None:
     api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
     dispatcher = FakeDispatcher()
-    root = RecordingRoot()
-    boundary = _boundary(api, dispatcher, recovery_root=root)
+    boundary = _boundary(api, dispatcher)
     report = _report()
     report["evidence_payload"]["evidence_graph"]["coverage_state"] = "UNAVAILABLE"
 
@@ -646,19 +583,14 @@ def test_unavailable_coverage_routes_to_orchestration_before_interview() -> None
     assert result is None
     assert dispatcher.calls == []
     assert api.seeded == []
-    assert len(root.calls) == 1
-    assert (
-        root.calls[0][1]["metadata"]["trigger"]
-        == "TECHNICAL_COVERAGE_RECOVERY_REQUIRED"
-    )
-    assert "Do not enter Initial Interview" in root.calls[0][0]["messages"][0]["content"]
+    assert api.limitation_codes() == ["TECHNICAL_COVERAGE_RECOVERY_REQUIRED"]
+    assert api.events[0][1]["output_summary"]["coverageState"] == "UNAVAILABLE"
 
 
-def test_unknown_coverage_routes_to_recovery_before_interview() -> None:
+def test_unknown_coverage_fails_closed_before_interview() -> None:
     api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
     dispatcher = FakeDispatcher()
-    root = RecordingRoot()
-    boundary = _boundary(api, dispatcher, recovery_root=root)
+    boundary = _boundary(api, dispatcher)
     report = _report()
     report["evidence_payload"]["evidence_graph"]["coverage_state"] = "unknown"
 
@@ -671,15 +603,13 @@ def test_unknown_coverage_routes_to_recovery_before_interview() -> None:
 
     assert dispatcher.calls == []
     assert api.seeded == []
-    assert root.calls[0][1]["metadata"]["trigger"] == "TECHNICAL_COVERAGE_RECOVERY_REQUIRED"
-    assert "Coverage state: UNAVAILABLE" in root.calls[0][0]["messages"][0]["content"]
+    assert api.events[0][1]["output_summary"]["coverageState"] == "UNAVAILABLE"
 
 
-def test_partial_without_preserved_limitations_routes_to_recovery() -> None:
+def test_partial_without_preserved_limitations_fails_closed() -> None:
     api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
     dispatcher = FakeDispatcher()
-    root = RecordingRoot()
-    boundary = _boundary(api, dispatcher, recovery_root=root)
+    boundary = _boundary(api, dispatcher)
     report = _report()
     report["evidence_payload"]["evidence_graph"]["coverage_notes"] = []
     report["evidence_payload"]["evidence_graph"]["partialCoveragePolicyDecision"]["limitations"] = []
@@ -693,7 +623,7 @@ def test_partial_without_preserved_limitations_routes_to_recovery() -> None:
 
     assert dispatcher.calls == []
     assert api.seeded == []
-    assert "Coverage state: PARTIAL" in root.calls[0][0]["messages"][0]["content"]
+    assert api.events[0][1]["output_summary"]["coverageState"] == "PARTIAL"
 
 
 def test_limited_pge_coverage_normalizes_to_permitted_partial() -> None:
@@ -791,93 +721,6 @@ def test_existing_waiting_question_never_reboots_initial_interview() -> None:
     assert api.seeded == []
 
 
-def _unavailable_report():
-    report = _report()
-    report["evidence_payload"]["evidence_graph"]["coverage_state"] = "UNAVAILABLE"
-    return report
-
-
-def test_coverage_recovery_without_reanalysis_request_fails_loudly() -> None:
-    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
-    dispatcher = FakeDispatcher()
-    root = _text_only_root()
-
-    with pytest.raises(TechnicalRecoveryNotStarted) as caught:
-        _boundary(api, dispatcher, root)._prepare_interview(
-            evidence_report=_unavailable_report(),
-            evidence_report_id="ter-1",
-            assessment_id="assessment-1",
-            correlation_id="corr-text-only",
-        )
-
-    # Never redelivered: the same prompt to the same model would repeat the refusal.
-    assert isinstance(caught.value, NonRetryableAgentBoundaryError)
-    assert "TECHNICAL_COVERAGE_RECOVERY_REQUIRED" in str(caught.value)
-    assert dispatcher.calls == []
-    assert api.seeded == []
-    assert len(root.calls) == 1
-
-
-def test_ai_discovery_recovery_without_reanalysis_request_fails_loudly() -> None:
-    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
-    dispatcher = FakeDispatcher()
-    finding = _ai_finding(
-        "PROVIDER_REFERENCE", "TARGETED_TECHNICAL_REANALYSIS", owner="TECHNICAL"
-    )
-
-    with pytest.raises(TechnicalRecoveryNotStarted) as caught:
-        _boundary(api, dispatcher, _text_only_root())._prepare_interview(
-            evidence_report=_ai_report("AI_UNKNOWN", [finding]),
-            evidence_report_id="ter-provider-ref",
-            assessment_id="assessment-1",
-            correlation_id="corr-provider-ref",
-            workflow_run_id="workflow-provider-ref",
-        )
-
-    assert "AI_DISCOVERY_REANALYSIS_REQUIRED" in str(caught.value)
-    assert dispatcher.calls == []
-    assert api.seeded == []
-
-
-def test_reanalysis_request_from_an_earlier_run_does_not_count(monkeypatch) -> None:
-    # Recovery threads are persistent; only this invocation's reply is evidence.
-    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
-    earlier = [
-        HumanMessage(content="earlier recovery instruction"),
-        _reanalysis_call("call-earlier"),
-        ToolMessage(content="approved", tool_call_id="call-earlier", name="request_targeted_reanalysis"),
-    ]
-
-    with pytest.raises(TechnicalRecoveryNotStarted):
-        _boundary(api, FakeDispatcher(), _text_only_root(history=earlier))._prepare_interview(
-            evidence_report=_unavailable_report(),
-            evidence_report_id="ter-1",
-            assessment_id="assessment-1",
-            correlation_id="corr-stale-history",
-        )
-
-
-def test_executed_reanalysis_tool_result_counts_as_recovery() -> None:
-    api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
-    root = RecordingRoot(
-        reply=[
-            _reanalysis_call("call-now"),
-            ToolMessage(content="queued", tool_call_id="call-now", name="request_targeted_reanalysis"),
-            AIMessage(content="Targeted reanalysis requested."),
-        ]
-    )
-
-    result = _boundary(api, FakeDispatcher(), root)._prepare_interview(
-        evidence_report=_unavailable_report(),
-        evidence_report_id="ter-1",
-        assessment_id="assessment-1",
-        correlation_id="corr-executed",
-    )
-
-    assert result is None
-    assert len(root.calls) == 1
-
-
 def test_api_client_posts_ai_not_detected_to_internal_route(monkeypatch) -> None:
     from tools.common.capabilities.platform.api_client import WorkerApiClient
 
@@ -937,10 +780,9 @@ def test_backstop_sdk_references_start_interview_instead_of_parked_reanalysis(tm
         "material_unresolved_frontiers"
     ]
     api = FakeApi({"outcome": "WAITING_FOR_CUSTOMER", "contextRevision": 0})
-    root = RecordingRoot()
     dispatcher = FakeDispatcher()
 
-    result = _boundary(api, dispatcher, root)._prepare_interview(
+    result = _boundary(api, dispatcher)._prepare_interview(
         evidence_report=report,
         evidence_report_id="ter-1",
         assessment_id="assessment-1",
@@ -949,7 +791,6 @@ def test_backstop_sdk_references_start_interview_instead_of_parked_reanalysis(tm
     )
 
     assert result is None
-    assert root.calls == []
     assert dispatcher.calls == []
     assert len(api.seeded) == 1
     question = api.seeded[0][1]["activeQuestion"]

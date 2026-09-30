@@ -91,7 +91,7 @@ def test_global_binding_index_covers_all_canonical_tools() -> None:
     assert len(names) == len(set(names))
     # Scanner bindings are intentionally absent; repository analysis is owned
     # by the Deep Agents repository-analysis boundary.
-    assert len(names) == 23
+    assert len(names) == 22
     assert not any(name.startswith("run_") and "semantic_analysis" in name for name in names)
     assert runtime_binding("build_legal_chunks").downstream_target == "LegalChunkBuilder.build"
     assert (

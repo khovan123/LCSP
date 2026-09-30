@@ -434,6 +434,21 @@ class BillingMeteringSession:
                 return
             raise BillingMeteringError(error) from error
 
+    def record_unavailable(
+        self,
+        model: Any,
+        invocation_id: str,
+        *,
+        agent_role: str | None = None,
+    ) -> None:
+        """Settle a failed provider attempt as zero-charge unavailable usage."""
+        self.record(
+            None,
+            model,
+            invocation_id,
+            agent_role=agent_role,
+        )
+
 
 _active_session: ContextVar[BillingMeteringSession | None] = ContextVar(
     "active_billing_metering_session", default=None
@@ -923,6 +938,11 @@ class BillingMeteringMiddleware(AgentMiddleware):
             response = handler(request)
         except Exception as error:
             telemetry.fail(error)
+            session.record_unavailable(
+                billing_model,
+                invocation_id,
+                agent_role=active_billing_agent_role(),
+            )
             raise
         telemetry.complete()
         session.record(
@@ -970,6 +990,11 @@ class BillingMeteringMiddleware(AgentMiddleware):
             response = await handler(request)
         except Exception as error:
             telemetry.fail(error)
+            session.record_unavailable(
+                billing_model,
+                invocation_id,
+                agent_role=active_billing_agent_role(),
+            )
             raise
         telemetry.complete()
         session.record(

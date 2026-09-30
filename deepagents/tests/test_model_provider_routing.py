@@ -87,13 +87,13 @@ def test_shared_provider_timeout_env_applies_to_every_provider(monkeypatch) -> N
 def test_agent_constructor_kwargs_gate_reasoning_by_agent_and_model() -> None:
     assert (
         reasoning_policy_for_agent(
-            agent_name="law_guided_investigator",
+            agent_name="repository-analyst",
             model_spec="openai:gpt-5-mini",
         )
         == "enabled"
     )
     assert model_init_kwargs_for_agent(
-        agent_name="law_guided_investigator",
+        agent_name="repository-analyst",
         model_spec="openai:gpt-5-mini",
     )["reasoning"] == {"effort": REASONING_EFFORT}
 
@@ -109,11 +109,11 @@ def test_agent_constructor_kwargs_gate_reasoning_by_agent_and_model() -> None:
         model_spec="openai:gpt-5-mini",
     )
     assert "reasoning" not in model_init_kwargs_for_agent(
-        agent_name="law_guided_investigator",
+        agent_name="repository-analyst",
         model_spec="openai:gpt-4o-mini",
     )
     assert model_init_kwargs_for_agent(
-        agent_name="law_guided_investigator",
+        agent_name="repository-analyst",
         model_spec="anthropic:claude-sonnet-4-6",
     ) == {}
 

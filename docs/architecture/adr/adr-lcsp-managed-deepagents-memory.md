@@ -1,5 +1,7 @@
 # ADR: LCSP Agent Runtime Memory Boundary
 
+> Runtime superseded by the Repository Analyst runtime (2026-09-30), see deepagents/FLOW.md.
+
 Status: Accepted
 
 Date: 2026-08-30
@@ -24,7 +26,7 @@ LCSP uses checkpoint-first, authority-separated memory:
 
 ## Consequences
 
-Specialists must return typed handoffs. Runtime identity must come from trusted runtime context or deterministic service envelopes, not model-authored arguments. Investigator claims must be schema-valid and, when graph evidence is available, pass `EvidenceClaimValidator` before deterministic compliance evaluation can consume them.
+Specialists must return typed handoffs. Runtime identity must come from trusted runtime context or deterministic service envelopes, not model-authored arguments. Repository-analyst claims must be schema-valid and, when graph evidence is available, pass `EvidenceClaimValidator` before deterministic rule assessment can consume them.
 
 Semantic ranking, deduplication, TTL, and consolidation are background concerns over verified
 episodes only. They cannot promote an episode into authoritative assessment, legal, repository, or

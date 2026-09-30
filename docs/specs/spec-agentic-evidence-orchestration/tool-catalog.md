@@ -1,5 +1,7 @@
 # Tool Catalog
 
+> **Superseded by the Repository Analyst runtime (2026-09-30), see deepagents/FLOW.md.**
+
 All tools are worker-owned, schema-validated capabilities. They return references and sanitized metadata; raw repository source, secrets, full prompts, and full AST bodies are forbidden.
 
 ## Shared invocation contract

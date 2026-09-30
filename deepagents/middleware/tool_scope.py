@@ -1,8 +1,8 @@
 """Limit which tools one agent role may see and call.
 
 Deep Agents attaches filesystem, shell and ``task`` tools to every subagent. Some LCSP
-roles must not read the repository at all (the Planner decides only from fixed
-EngineeringRules and Customer-confirmed context), so this middleware advertises only
+roles must not read the repository at all (the Interview sees only the bounded
+Customer-safe need and Customer context), so this middleware advertises only
 the role's own tools and rejects any other tool name the model still emits.
 """
 

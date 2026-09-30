@@ -41,7 +41,7 @@ class AgentServerRunError(NonRetryableAgentBoundaryError):
 # very run it exists to stop, arriving only after that run already finished.
 _INTERRUPT_TARGET_BOUNDARIES_BY_COMMAND_BOUNDARY: dict[str, tuple[str, ...]] = {
     # The customer's stop covers whatever the assessment is running: an
-    # Interview turn, or the Planner -> Investigator engineering assessment.
+    # Interview turn, or the per-rule Repository Analyst engineering assessment.
     "assessment_interview_pause_requested": (
         "assessment_interview_resume_requested",
         "engineering_assessment_requested",

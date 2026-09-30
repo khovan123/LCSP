@@ -18,7 +18,7 @@ INTERVIEW_PAUSE_COMMAND = "command.assessment-interview.pause-agent.v1"
 # holds the matching short-circuit that keeps this from queuing behind the run it
 # targets.
 INTERRUPTED_BOUNDARY_NAME = "assessment_interview_resume_requested"
-# The same stop also covers the Planner -> Investigator engineering assessment.
+# The same stop also covers the per-rule Repository Analyst engineering assessment.
 INTERRUPTED_BOUNDARY_NAMES = (
     INTERRUPTED_BOUNDARY_NAME,
     "engineering_assessment_requested",
@@ -28,7 +28,7 @@ INTERRUPTED_BOUNDARY_NAMES = (
 class AssessmentInterviewPauseBoundary(AgentBoundaryBase):
     """Cooperatively interrupt the assessment's active agent run, if any.
 
-    That is the Interview turn or the Planner -> Investigator engineering
+    That is the Interview turn or the per-rule Repository Analyst engineering
     assessment; both run on the assessment's one LangGraph thread.
 
     In production this command is short-circuited inside

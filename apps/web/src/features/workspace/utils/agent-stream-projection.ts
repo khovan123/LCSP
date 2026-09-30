@@ -522,7 +522,7 @@ export function terminalOutcomesByRun(
         ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted ||
       runtimeType === "RUN_COMPLETED"
     ) {
-      // Dispatch completion means processing ended, not Investigator success.
+      // Dispatch completion means processing ended, not rule-analysis success.
       if (outcomes.get(key) !== TERMINAL_OUTCOMES.failed)
         outcomes.set(key, TERMINAL_OUTCOMES.completed);
     }

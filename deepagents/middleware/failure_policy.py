@@ -27,6 +27,20 @@ _PROVIDER_ROUTE_INCOMPATIBILITY_CODES = frozenset(
         "upstream_unprocessable_request",
     }
 )
+# The route is down, not the request. Providers report a withdrawn, overloaded or
+# not-yet-live model as a 400/404 "invalid request", which reads exactly like a
+# malformed payload but is the opposite: the request is fine and the same request
+# succeeds on another provider. Classified separately so provider fallback runs
+# instead of the task dying on a route outage.
+_PROVIDER_MODEL_UNAVAILABLE_CODES = frozenset(
+    {
+        "model_decommissioned",
+        "model_not_available",
+        "model_not_found",
+        "model_overloaded",
+        "model_unavailable",
+    }
+)
 
 
 class TerminalCredentialError(RuntimeError):
@@ -109,7 +123,7 @@ def _error_codes(error: BaseException) -> set[str]:
                         if isinstance(value, str) and value.strip():
                             codes.add(value.strip().lower())
         text = str(current).lower()
-        for code in _PROVIDER_CAPACITY_CODES:
+        for code in _PROVIDER_CAPACITY_CODES | _PROVIDER_MODEL_UNAVAILABLE_CODES:
             if code in text:
                 codes.add(code)
         current = current.__cause__ or current.__context__
@@ -150,6 +164,16 @@ def is_provider_route_incompatibility(error: BaseException) -> bool:
     )
 
 
+def is_provider_model_unavailable(error: BaseException) -> bool:
+    """Return whether the provider said the model route is unusable right now.
+
+    Not a terminal task error: the agent turn is well formed, so the same request
+    on another provider is expected to succeed. Not retried on the same route
+    either — a withdrawn or overloaded model does not come back within a turn.
+    """
+    return bool(_error_codes(error) & _PROVIDER_MODEL_UNAVAILABLE_CODES)
+
+
 def is_terminal_task_error(error: BaseException) -> bool:
     seen: set[int] = set()
     current: BaseException | None = error
@@ -168,8 +192,10 @@ def is_terminal_task_error(error: BaseException) -> bool:
         if type(current).__name__ == "BillingFinalizationError":
             return True
         # Provider request/schema rejection cannot succeed with the same request.
+        # A model-unavailability code arrives with the same status but means the
+        # route is down, not the request, so it stays non-terminal and falls back.
         status = getattr(current, "status_code", None) or getattr(current, "code", None)
-        if status in (400, 404, 422):
+        if status in (400, 404, 422) and not is_provider_model_unavailable(current):
             return True
         # A non-retryable credential rejection only rules out the same credential; it is
         # classified by is_auth_failure so credential/provider fallback can continue.
@@ -212,4 +238,7 @@ def retry_model_error(error: Exception) -> bool:
         not is_terminal_task_error(error)
         and not is_auth_failure(error)
         and not is_provider_capacity_failure(error)
+        # Resending to a model the provider just called unavailable only burns
+        # the retry budget that provider fallback needs.
+        and not is_provider_model_unavailable(error)
     )

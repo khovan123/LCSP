@@ -9,11 +9,16 @@ Direct repository source stays authoritative for every claim.
 
 from __future__ import annotations
 
+import json
 from typing import Any, Literal
 
-from langchain.tools import tool
-from pydantic import BaseModel, ConfigDict, Field
+from langchain.tools import ToolRuntime, tool
+from pydantic import ConfigDict, Field
 
+from tools.common.capabilities.assessment.rule_assessment.evidence_refs import (
+    cite_verified_source,
+    has_rule_execution,
+)
 from tools.common.capabilities.platform.codebase_memory import (
     CODEBASE_MEMORY_PROJECT,
     codebase_memory_cli,
@@ -21,6 +26,8 @@ from tools.common.capabilities.platform.codebase_memory import (
 from tools.common.capabilities.platform.repository_sandbox import (
     current_repository_backend,
 )
+from orchestration.context import coerce_run_context
+from tools.common.runtime_envelope import RuntimeInjectedInput
 
 _MAX_OUTPUT_CHARS = 12_000
 
@@ -41,7 +48,7 @@ def _run(tool_name: str, arguments: dict[str, Any]) -> str:
     return output or "(no results)"
 
 
-class SearchCodeGraphRequest(BaseModel):
+class SearchCodeGraphRequest(RuntimeInjectedInput):
     model_config = ConfigDict(extra="forbid")
 
     name_pattern: str | None = Field(
@@ -81,7 +88,7 @@ def search_code_graph(
     )
 
 
-class TraceCallPathRequest(BaseModel):
+class TraceCallPathRequest(RuntimeInjectedInput):
     model_config = ConfigDict(extra="forbid")
 
     function_name: str = Field(
@@ -108,7 +115,7 @@ def trace_call_path(
     )
 
 
-class GetCodeSnippetRequest(BaseModel):
+class GetCodeSnippetRequest(RuntimeInjectedInput):
     model_config = ConfigDict(extra="forbid")
 
     qualified_name: str = Field(
@@ -116,13 +123,40 @@ class GetCodeSnippetRequest(BaseModel):
     )
 
 
+def _snippet_range(output: str) -> tuple[str, int, int] | None:
+    try:
+        body = json.loads(output)
+        path = body.get("file_path") or body.get("path") or body.get("file")
+        start = body.get("start_line") or body.get("startLine")
+        end = body.get("end_line") or body.get("endLine")
+        return str(path), int(start), int(end)
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
 @tool(args_schema=GetCodeSnippetRequest)
-def get_code_snippet(qualified_name: str) -> str:
-    """Return the exact source of one symbol with its file and line range."""
-    return _run("get_code_snippet", {"qualified_name": qualified_name})
+def get_code_snippet(qualified_name: str, runtime: ToolRuntime = None) -> str:
+    """Return the exact source of one symbol with its file and line range.
+
+    Inside a rule task the result also ends with an evidenceRef citing that range.
+    """
+    output = _run("get_code_snippet", {"qualified_name": qualified_name})
+    context = coerce_run_context(getattr(runtime, "context", None))
+    if not has_rule_execution(context):
+        return output
+    located = _snippet_range(output)
+    if located is None:
+        return output
+    try:
+        citation = cite_verified_source(
+            context, *located, getattr(context, "repository_path", None)
+        )
+    except Exception:  # noqa: BLE001 - navigation still works without a citable ref
+        return output
+    return f"{output}\n\nevidenceRef: {citation['evidenceRef']}"
 
 
-class SearchCodeTextRequest(BaseModel):
+class SearchCodeTextRequest(RuntimeInjectedInput):
     model_config = ConfigDict(extra="forbid")
 
     pattern: str = Field(description="Text or regex to find in source.")
@@ -135,7 +169,7 @@ def search_code_text(pattern: str, limit: int = 20) -> str:
     return _run("search_code", {"pattern": pattern, "limit": limit})
 
 
-class GetArchitectureRequest(BaseModel):
+class GetArchitectureRequest(RuntimeInjectedInput):
     model_config = ConfigDict(extra="forbid")
 
     aspects: list[str] = Field(

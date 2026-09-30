@@ -37,10 +37,10 @@ export const INTERVIEW_PROGRESS_PHASES = {
 export type InterviewProgressPhase =
   (typeof INTERVIEW_PROGRESS_PHASES)[keyof typeof INTERVIEW_PROGRESS_PHASES];
 
-/** Canonical Interview reasoning modes. PRE_PLANNER is input-only compatibility. */
+/** Canonical Interview reasoning modes. */
 export const ASSESSMENT_INTERVIEW_MODES = {
   initialInterview: "INITIAL_INTERVIEW",
-  investigatorResolution: "INVESTIGATOR_RESOLUTION",
+  businessContextResolution: "BUSINESS_CONTEXT_RESOLUTION",
 } as const;
 
 export type AssessmentInterviewMode =
@@ -55,36 +55,6 @@ export const ASSESSMENT_INTERVIEW_READINESS_ERROR_CODES = {
 
 export type AssessmentInterviewReadinessErrorCode =
   (typeof ASSESSMENT_INTERVIEW_READINESS_ERROR_CODES)[keyof typeof ASSESSMENT_INTERVIEW_READINESS_ERROR_CODES];
-
-export const LEGACY_ASSESSMENT_INTERVIEW_MODES = {
-  prePlanner: "PRE_PLANNER",
-} as const;
-
-export type LegacyAssessmentInterviewMode =
-  (typeof LEGACY_ASSESSMENT_INTERVIEW_MODES)[keyof typeof LEGACY_ASSESSMENT_INTERVIEW_MODES];
-
-export type LegacyInterviewMode = LegacyAssessmentInterviewMode;
-
-export type AssessmentInterviewModeCompatibilityInput =
-  AssessmentInterviewMode | LegacyAssessmentInterviewMode;
-
-export type InterviewModeCompatibilityInput =
-  AssessmentInterviewModeCompatibilityInput;
-
-export function normalizeAssessmentInterviewMode(
-  value: unknown,
-): CanonicalAssessmentInterviewMode | undefined {
-  if (
-    value === ASSESSMENT_INTERVIEW_MODES.initialInterview ||
-    value === LEGACY_ASSESSMENT_INTERVIEW_MODES.prePlanner
-  ) {
-    return ASSESSMENT_INTERVIEW_MODES.initialInterview;
-  }
-  if (value === ASSESSMENT_INTERVIEW_MODES.investigatorResolution) {
-    return ASSESSMENT_INTERVIEW_MODES.investigatorResolution;
-  }
-  return undefined;
-}
 
 export const ASSESSMENT_INTERVIEW_QUESTION_INTENTS = {
   ask: "ASK",
@@ -212,7 +182,7 @@ export const ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS = {
   continueToEngineeringRule: "CONTINUE_TO_ENGINEERING_RULE",
   keepBusinessContextBlocked: "KEEP_BUSINESS_CONTEXT_BLOCKED",
   routeRuntimeRecovery: "ROUTE_RUNTIME_RECOVERY",
-  resumeExactInvestigator: "RESUME_EXACT_INVESTIGATOR",
+  resumeSameRule: "RESUME_SAME_RULE",
   selectiveRerunRescope: "SELECTIVE_RERUN_RESCOPE",
 } as const;
 
@@ -228,7 +198,7 @@ export const ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS = {
   interviewBlockedOrUnresolved: "INTERVIEW_BLOCKED_OR_UNRESOLVED",
   interviewFailed: "INTERVIEW_FAILED",
   downstreamReevaluationStarted: "DOWNSTREAM_REEVALUATION_STARTED",
-  investigationResumed: "INVESTIGATION_RESUMED",
+  ruleReassessmentResumed: "RULE_REASSESSMENT_RESUMED",
 } as const;
 
 export type AssessmentInterviewWorkflowEvent =
@@ -236,8 +206,7 @@ export type AssessmentInterviewWorkflowEvent =
 
 /** Why the Interview agent is resumed without a new Customer answer. */
 export const ASSESSMENT_INTERVIEW_RESUME_REASONS = {
-  investigatorResolutionRequired: "INVESTIGATOR_RESOLUTION_REQUIRED",
-  plannerContextRequired: "PLANNER_CONTEXT_REQUIRED",
+  businessContextResolutionRequired: "BUSINESS_CONTEXT_RESOLUTION_REQUIRED",
 } as const;
 
 export type AssessmentInterviewResumeReason =
@@ -640,12 +609,21 @@ export type SubmitInterviewAnswerCommand = {
   answer: CustomerAnswer;
 };
 
-export type InvestigatorNeed = {
-  businessContextNeed: string;
-  resolutionCriteria: string;
-  whyNeeded?: string;
-  relatedEvidenceRefs?: string[];
-  originatingInvestigationReference: string;
+/**
+ * One customer-owned business fact a single EngineeringRule criterion needs. The
+ * question and observation are customer-safe and neutral; an answer resolves only
+ * `needId` and its `resolutionCriterionIds`.
+ */
+export type BusinessContextNeed = {
+  needId: string;
+  engineeringRuleId: string;
+  criterionId: string;
+  authoredConditionIndex?: number;
+  question: string;
+  observation: string;
+  resolutionCriterionIds: string[];
+  evidenceRefs: string[];
+  contextRevision: number;
 };
 
 export type InterviewTurnSnapshot = {
@@ -727,16 +705,16 @@ export type InterviewAgentInputCommon = {
 
 export type InitialInterviewAgentInput = InterviewAgentInputCommon & {
   mode: typeof ASSESSMENT_INTERVIEW_MODES.initialInterview;
-  investigatorNeed?: never;
+  businessContextNeed?: never;
 };
 
-export type InvestigatorResolutionAgentInput = InterviewAgentInputCommon & {
-  mode: typeof ASSESSMENT_INTERVIEW_MODES.investigatorResolution;
-  investigatorNeed: InvestigatorNeed;
+export type BusinessContextResolutionAgentInput = InterviewAgentInputCommon & {
+  mode: typeof ASSESSMENT_INTERVIEW_MODES.businessContextResolution;
+  businessContextNeed: BusinessContextNeed;
 };
 
 export type InterviewAgentInput =
-  InitialInterviewAgentInput | InvestigatorResolutionAgentInput;
+  InitialInterviewAgentInput | BusinessContextResolutionAgentInput;
 
 export type UnresolvedBusinessContext = {
   topic: string;
@@ -1330,7 +1308,7 @@ export function isCustomerAnswer(value: unknown): value is CustomerAnswer {
   );
 }
 
-function isInvestigatorNeed(value: unknown): value is InvestigatorNeed {
+function isBusinessContextNeed(value: unknown): value is BusinessContextNeed {
   if (!isRecord(value)) {
     return false;
   }
@@ -1338,17 +1316,27 @@ function isInvestigatorNeed(value: unknown): value is InvestigatorNeed {
     hasExactKeys(
       value,
       [
-        "businessContextNeed",
-        "resolutionCriteria",
-        "originatingInvestigationReference",
+        "needId",
+        "engineeringRuleId",
+        "criterionId",
+        "question",
+        "observation",
+        "resolutionCriterionIds",
+        "evidenceRefs",
+        "contextRevision",
       ],
-      ["whyNeeded", "relatedEvidenceRefs"],
+      ["authoredConditionIndex"],
     ) &&
-    isString(value.businessContextNeed) &&
-    isString(value.resolutionCriteria) &&
-    isString(value.originatingInvestigationReference) &&
-    isOptionalString(value, "whyNeeded") &&
-    isOptionalStringArray(value, "relatedEvidenceRefs")
+    isString(value.needId) &&
+    isString(value.engineeringRuleId) &&
+    isString(value.criterionId) &&
+    isString(value.question) &&
+    isString(value.observation) &&
+    isStringArray(value.resolutionCriterionIds) &&
+    isStringArray(value.evidenceRefs) &&
+    isNumber(value.contextRevision) &&
+    (!("authoredConditionIndex" in value) ||
+      isNumber(value.authoredConditionIndex))
   );
 }
 
@@ -1525,8 +1513,8 @@ export function isInterviewAgentInput(
   ];
   const commonOptionalKeys = ["incomingCustomerTurn", "workingStrategy"];
   const modeOptionalKeys =
-    value.mode === ASSESSMENT_INTERVIEW_MODES.investigatorResolution
-      ? ["investigatorNeed"]
+    value.mode === ASSESSMENT_INTERVIEW_MODES.businessContextResolution
+      ? ["businessContextNeed"]
       : [];
   if (
     !hasExactKeys(value, commonRequiredKeys, [
@@ -1562,11 +1550,11 @@ export function isInterviewAgentInput(
     return false;
   }
   if (value.mode === ASSESSMENT_INTERVIEW_MODES.initialInterview) {
-    return !("investigatorNeed" in value);
+    return !("businessContextNeed" in value);
   }
   return (
-    value.mode === ASSESSMENT_INTERVIEW_MODES.investigatorResolution &&
-    isInvestigatorNeed(value.investigatorNeed)
+    value.mode === ASSESSMENT_INTERVIEW_MODES.businessContextResolution &&
+    isBusinessContextNeed(value.businessContextNeed)
   );
 }
 

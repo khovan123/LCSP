@@ -1,4 +1,5 @@
 import type { AssessmentPostFindingRuntimeState } from "./assessment-post-finding-runtime.ts";
+import type { RuleAnalysisActivity } from "./rule-assessment.ts";
 
 export const ASSESSMENT_RUNTIME_EVENT_TYPES = {
   runStarted: "RUN_STARTED",
@@ -26,7 +27,7 @@ export type AssessmentRuntimeRunStatus =
   (typeof ASSESSMENT_RUNTIME_RUN_STATUSES)[keyof typeof ASSESSMENT_RUNTIME_RUN_STATUSES];
 
 /**
- * Customer stop/continue of a running Planner/Investigator pipeline. The latest
+ * Customer stop/continue of a running repository-analysis pipeline. The latest
  * control marker decides whether the pipeline is stopped: automatic
  * reconciliation never resumes a pipeline the customer stopped.
  */
@@ -92,19 +93,7 @@ export const ASSESSMENT_RUNTIME_STEP_SKIP_REASONS = {
 export type AssessmentRuntimeStepSkipReason =
   (typeof ASSESSMENT_RUNTIME_STEP_SKIP_REASONS)[keyof typeof ASSESSMENT_RUNTIME_STEP_SKIP_REASONS];
 
-/** Planner reason codes the workspace projection needs to aggregate runtime activity. */
-export const ASSESSMENT_RUNTIME_PLAN_REASON_CODES = {
-  plannerFailure: "PLANNER_FAILURE",
-  targetedExactResumePin: "TARGETED_EXACT_RESUME_PIN",
-} as const;
-
-export const ASSESSMENT_ENGINEERING_RULE_PLAN_DECISIONS = {
-  select: "SELECT",
-  skip: "SKIP",
-} as const;
-
 export const ASSESSMENT_RUNTIME_SUMMARY_MESSAGE_KEYS = {
-  engineeringRulePlannerDecision: "ENGINEERING_RULE_PLANNER_DECISION",
   engineeringRuleInvestigationFailed: "ENGINEERING_RULE_INVESTIGATION_FAILED",
   engineeringRuleInvestigated: "ENGINEERING_RULE_INVESTIGATED",
   engineeringRuleReadinessWaiting: "ENGINEERING_RULE_READINESS_WAITING",
@@ -151,6 +140,7 @@ export const ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS = {
   decisionModel: "DECISION_MODEL",
   reasoningSummary: "REASONING_SUMMARY",
   runtimeProgress: "RUNTIME_PROGRESS",
+  ruleAnalysis: "RULE_ANALYSIS",
 } as const;
 
 export type AssessmentAgentStreamSemanticKind =
@@ -197,6 +187,8 @@ export type AssessmentAgentStreamSemanticPayload = {
   requiredEvidence?: string[];
   decision?: string;
   reasonCode?: string;
+  /** Rule-analysis lifecycle step (RULE_ANALYSIS_ACTIVITIES) for RULE_ANALYSIS events. */
+  activity?: RuleAnalysisActivity;
   evaluationStatus?: string;
   claimCount?: number;
   skillName?: string;
@@ -276,8 +268,7 @@ export function isAssessmentAgentStreamEventType(
 export const ASSESSMENT_AGENT_STREAM_STAGES = {
   scanner: "SCANNER",
   interview: "INTERVIEW",
-  planner: "PLANNER",
-  investigate: "INVESTIGATE",
+  ruleAnalysis: "RULE_ANALYSIS",
   gate: "GATE",
 } as const;
 
@@ -290,6 +281,25 @@ export function isAssessmentAgentStreamStage(
   return Object.values(ASSESSMENT_AGENT_STREAM_STAGES).includes(
     value as AssessmentAgentStreamStage,
   );
+}
+
+/**
+ * Read alias for agent-stream events persisted before the Investigator stage
+ * was renamed. Remove once no persisted `agentStreamEvent.stage` still holds
+ * "INVESTIGATE" (runtime-event retention window elapsed).
+ */
+const LEGACY_AGENT_STREAM_STAGE_ALIASES: Readonly<Record<string, string>> = {
+  INVESTIGATE: ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
+};
+
+export function normalizePersistedAgentStreamStage(
+  value: unknown,
+): AssessmentAgentStreamStage | null {
+  const mapped =
+    typeof value === "string"
+      ? (LEGACY_AGENT_STREAM_STAGE_ALIASES[value] ?? value)
+      : value;
+  return isAssessmentAgentStreamStage(mapped) ? mapped : null;
 }
 
 export type AssessmentAgentStreamEvent = {
@@ -339,37 +349,21 @@ export type AssessmentRuntimeActivityEvent = {
   waitingReason: string | null;
 };
 
-export const ASSESSMENT_RUNTIME_ENGINEERING_PROGRESS_TOOL_NAMES = {
-  plannerSummary: "engineering_rule_plan_summary",
-  investigatorSummary: "engineering_rule_investigation_summary",
-} as const;
-
-export const ASSESSMENT_RUNTIME_ENGINEERING_RULE_TOOL_PREFIXES = {
-  planner: "engineering_rule_plan:",
-  investigator: "engineering_rule_investigation:",
-} as const;
-
+/**
+ * Rule-analysis progress derived from the runtime events the repository-analyst loop
+ * emits (`rule_analysis_summary` once, `rule_analysis:{engineeringRuleId}` per rule).
+ * Pending rules are eligibleCount minus the four terminal counts.
+ */
 export type AssessmentRuntimeEngineeringProgress = {
   assessmentId: string;
   runId: string;
-  planningBatchId: string;
-  contextRevisionUsed: number | null;
-  targeted: boolean;
-  approximate: boolean;
-  planner: {
-    candidateCount: number;
-    selectedCount: number;
-    skippedCount: number;
-  };
-  investigator: {
-    selectedCount: number;
-    completedCount: number;
-    domainLimitedCount: number;
-    limitedOrFailedCount: number;
-    waitingForInputCount: number;
-    runtimeFailedCount: number;
-    pendingCount: number;
-  };
+  contextRevision: number | null;
+  engineeringRuleCount: number;
+  eligibleCount: number;
+  completed: number;
+  needsContext: number;
+  unresolved: number;
+  failed: number;
 };
 
 export type AssessmentRuntimeActiveTool = {
@@ -393,11 +387,11 @@ export type AssessmentRuntimeRun = {
  * Stage lifecycle derived from durable artifacts and dispatch boundaries.
  *
  * Runtime events are an activity log, not the source of truth for whether a
- * stage finished: a later Planner/Investigator dispatch posts scan-tagged
+ * stage finished: a later repository-analyst dispatch posts scan-tagged
  * bookkeeping, and a stage-less boundary failure belongs to whatever was
  * running. The API therefore derives each stage from what durably exists
- * (scan job, accepted evidence + Repository Intelligence Pack, confirmed
- * context revision, plan, claims) so the sidebar and composer always agree.
+ * (scan job, accepted evidence, confirmed context revision, per-rule
+ * assessments) so the sidebar and composer always agree.
  */
 export const ASSESSMENT_STAGE_LIFECYCLE_STATES = {
   queued: "QUEUED",
@@ -408,11 +402,9 @@ export const ASSESSMENT_STAGE_LIFECYCLE_STATES = {
   waitingForCustomer: "WAITING_FOR_CUSTOMER",
   contextConfirmed: "CONTEXT_CONFIRMED",
   blocked: "BLOCKED",
-  planReady: "PLAN_READY",
   claimsPartial: "CLAIMS_PARTIAL",
   claimsComplete: "CLAIMS_COMPLETE",
   needsContext: "NEEDS_CONTEXT",
-  needsScannerEnrichment: "NEEDS_SCANNER_ENRICHMENT",
   timeout: "TIMEOUT",
   ready: "READY",
 } as const;
@@ -430,8 +422,7 @@ export type AssessmentStageLifecycleEntry = {
 export type AssessmentStageLifecycle = {
   scanner: AssessmentStageLifecycleEntry;
   interview: AssessmentStageLifecycleEntry;
-  planner: AssessmentStageLifecycleEntry;
-  investigator: AssessmentStageLifecycleEntry;
+  ruleAnalysis: AssessmentStageLifecycleEntry;
   gate: AssessmentStageLifecycleEntry;
 };
 

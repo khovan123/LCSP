@@ -59,7 +59,6 @@ def _array(
     return schema
 
 
-_RELATIVE_PREFIX = {"type": "string", "pattern": r"^(?!/|.*\.\.)[A-Za-z0-9._/-]+/$"}
 _START_REF = {"type": "string", "pattern": r"^(symbol|finding|node):[A-Za-z0-9_-]{8,120}$"}
 _GAP_ROW_REF = {"type": "string", "pattern": r"^gap-row:[A-Za-z0-9_-]{6,80}$"}
 
@@ -181,68 +180,6 @@ AGENTIC_TOOL_SPECS: tuple[AgenticToolSpec, ...] = (
             },
             required=("maxResults",),
             min_properties=1,
-        ),
-    ),
-    AgenticToolSpec(
-        name="request_targeted_reanalysis",
-        description=(
-            "Queue one allow-listed analyzer over bounded pinned evidence scope. "
-            "Orchestrator-only; direct model access is prohibited."
-        ),
-        exposure="ORCHESTRATOR_ONLY",
-        mutation=True,
-        max_items=100,
-        max_depth=3,
-        max_bytes=131_072,
-        max_duration_ms=10_000,
-        required_artifacts=("technicalEvidenceReportId",),
-        input_schema=_closed_object(
-            {
-                "inputArtifactVersion": {
-                    "type": "string",
-                    "pattern": r"^ter_[A-Za-z0-9_-]{8,120}$",
-                },
-                "analyzerId": {
-                    "type": "string",
-                    "enum": ["DEEP_AGENT_REPOSITORY_ANALYSIS"],
-                },
-                "scope": _closed_object(
-                    {
-                        "pathPrefixes": _array(
-                            _RELATIVE_PREFIX,
-                            min_items=1,
-                            max_items=20,
-                            unique=True,
-                        ),
-                        "subjectRefs": _array(
-                            {
-                                "type": "string",
-                                "pattern": r"^(finding|symbol|node):[A-Za-z0-9_-]{8,120}$",
-                            },
-                            min_items=1,
-                            max_items=50,
-                            unique=True,
-                        ),
-                    },
-                    min_properties=1,
-                    max_properties=1,
-                ),
-                "reasonRequirementId": {
-                    "type": "string",
-                    "pattern": r"^requirement:[A-Za-z0-9_-]{8,120}$",
-                },
-                "idempotencyKey": {
-                    "type": "string",
-                    "pattern": r"^[A-Za-z0-9_-]{16,128}$",
-                },
-            },
-            required=(
-                "inputArtifactVersion",
-                "analyzerId",
-                "scope",
-                "reasonRequirementId",
-                "idempotencyKey",
-            ),
         ),
     ),
     AgenticToolSpec(

@@ -31,6 +31,8 @@ def test_dispatch_runtime_groups_support_capabilities() -> None:
     assert not root.exists()
 
     platform = PROJECT_ROOT / "tools" / "common" / "capabilities" / "platform"
+    # The evidence/graph/query/ builder runtime was intentionally deleted;
+    # graph_runtime.py + graph schema vocabulary remain as infrastructure only.
     assert _implementation_files(platform) == {
         "api_client.py",
         "artifact_storage.py",
@@ -51,9 +53,30 @@ def test_dispatch_runtime_groups_support_capabilities() -> None:
         "rbac_client.py",
         "repository_snapshot_client.py",
         "repository_workspace.py",
-        "source_clarification.py",
+        "subject_repository_tools.py",
         "tracing.py",
     }
+
+    # New capability layout: Codebase Memory graph tools, subject repository
+    # root guard, and governed submit_rule_assessment tools.
+    from tools.common.codebase_memory_graph import CODEBASE_MEMORY_GRAPH_TOOLS
+    from tools.common.capabilities.platform import subject_repository_tools
+
+    assert {getattr(tool, "name", "") for tool in CODEBASE_MEMORY_GRAPH_TOOLS} == {
+        "search_code_graph",
+        "trace_call_path",
+        "get_code_snippet",
+        "search_code_text",
+        "get_repository_architecture",
+    }
+    assert subject_repository_tools.SUBJECT_REPOSITORY_ROOT == "/workspace/repository"
+    from tools.common.submit_rule_assessment import (
+        cite_repository_source,
+        submit_rule_assessment,
+    )
+
+    assert submit_rule_assessment.name == "submit_rule_assessment"
+    assert cite_repository_source.name == "cite_repository_source"
 
 
 def _assert_import_blocked(module_name: str) -> None:
@@ -75,14 +98,17 @@ def test_flat_dispatch_clarification_import_is_not_supported() -> None:
 def test_program_graph_runtime_groups_owned_capabilities() -> None:
     root = PROJECT_ROOT / "tools" / "common" / "capabilities" / "evidence" / "graph"
 
-    assert _directories(root) == {"schema", "query"}
+    # The evidence/graph/query/ directory was intentionally deleted; only the
+    # schema vocabulary remains, with graph_runtime.py as infrastructure only.
+    assert _directories(root) == {"schema"}
+    assert not (root / "query").exists()
     assert _implementation_files(root) == set()
     assert _implementation_files(root / "schema") == {
         "models.py",
         "source_roles.py",
         "vocabulary.py",
     }
-    assert _implementation_files(root / "query") == {"query_engine.py"}
+    assert (PROJECT_ROOT / "tools" / "common" / "capabilities" / "platform" / "graph_runtime.py").exists()
 
 
 def test_flat_program_graph_import_is_not_supported() -> None:
@@ -91,9 +117,15 @@ def test_flat_program_graph_import_is_not_supported() -> None:
 
 def test_graph_schema_and_query_import_without_legacy_builder_runtime() -> None:
     schema = importlib.import_module("tools.common.capabilities.evidence.graph.schema.models")
-    query_engine = importlib.import_module("tools.common.capabilities.evidence.graph.query.query_engine")
+    vocabulary = importlib.import_module(
+        "tools.common.capabilities.evidence.graph.schema.vocabulary"
+    )
     assert schema is not None
-    assert query_engine is not None
+    assert vocabulary is not None
+    assert hasattr(vocabulary, "PROGRAM_GRAPH_SCHEMA_VERSION")
+    # The graph/query builder runtime was intentionally deleted: it must stay
+    # unimportable while schema vocabulary remains as infrastructure only.
+    _assert_import_blocked("tools.common.capabilities.evidence.graph.query.query_engine")
     _assert_import_blocked(
         "tools.common.capabilities.evidence.graph.construction.assembly.builder"
     )

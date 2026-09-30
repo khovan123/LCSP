@@ -84,7 +84,6 @@ class LegalRuleTriageBoundary(AgentBoundaryBase):
                 "trigger": trigger,
             },
             thread_id=f"triage:{idempotency_key}",
-            reenter_root=False,
         )
 
         if result.get("status") == "ALREADY_RUNNING":

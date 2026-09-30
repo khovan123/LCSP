@@ -9,6 +9,7 @@ import {
 import { resolveMessage } from "@lcsp/i18n";
 import {
   CheckIcon,
+  Code2Icon,
   Edit3Icon,
   HelpCircleIcon,
   SaveIcon,
@@ -20,6 +21,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
+import { useAssessmentInterviewSourceSnippetQuery } from "@/lib/api/assessment-queries";
 
 import { ChatMultiSelect } from "./chat-multi-select";
 import { ChatSingleSelect } from "./chat-single-select";
@@ -35,6 +37,7 @@ export type AssessmentQuestionAnswerInput = {
 };
 
 type AssessmentQuestionTurnProps = {
+  assessmentId?: string;
   question: AssessmentInterviewQuestion;
   answerHistoryVisible?: boolean;
   /** This is a resolved, already-answered turn (rendered from history), not
@@ -59,6 +62,7 @@ type AssessmentQuestionTurnProps = {
 };
 
 export function AssessmentQuestionTurn({
+  assessmentId,
   question,
   answerHistoryVisible = false,
   historical = false,
@@ -112,6 +116,13 @@ export function AssessmentQuestionTurn({
 
       <div className="space-y-3">
         <p className="text-sm leading-6 text-foreground">{question.prompt}</p>
+
+        {assessmentId && question.snippetRef && !historical ? (
+          <QuestionSourceSnippet
+            assessmentId={assessmentId}
+            question={question}
+          />
+        ) : null}
 
         {question.control === ASSESSMENT_INTERVIEW_CONTROLS.boolean ? (
           <ChatSingleSelect
@@ -247,6 +258,67 @@ export function AssessmentQuestionTurn({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function QuestionSourceSnippet({
+  assessmentId,
+  question,
+}: {
+  assessmentId: string;
+  question: AssessmentInterviewQuestion;
+}) {
+  const snippet = useAssessmentInterviewSourceSnippetQuery(
+    assessmentId,
+    question.id,
+  );
+  const ref = question.snippetRef!;
+
+  return (
+    <section
+      data-slot="question-source-snippet"
+      aria-label={t("pages.assessment.sourceCode")}
+      className="overflow-hidden rounded-lg border bg-muted/30"
+    >
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-3 py-2 text-xs text-muted-foreground">
+        <Code2Icon className="size-3.5 shrink-0" />
+        <span className="font-medium text-foreground">
+          {t("pages.assessment.sourceCode")}
+        </span>
+        <span className="break-all font-mono">
+          {ref.file_path}:{ref.start_line}-{ref.end_line}
+        </span>
+      </div>
+      {snippet.isPending ? (
+        <div className="space-y-2 p-3" aria-busy="true">
+          <div className="h-3 w-4/5 animate-pulse rounded-sm bg-muted" />
+          <div className="h-3 w-3/5 animate-pulse rounded-sm bg-muted" />
+          <span className="sr-only">
+            {t("pages.assessment.sourceCodeLoading")}
+          </span>
+        </div>
+      ) : snippet.data ? (
+        <pre className="max-h-72 overflow-auto p-3 text-xs leading-5">
+          <code>
+            {snippet.data.lines.map((sourceLine) => (
+              <span key={sourceLine.line} className="flex min-w-max">
+                <span
+                  aria-hidden="true"
+                  className="w-10 shrink-0 select-none text-right text-muted-foreground"
+                >
+                  {sourceLine.line}
+                </span>
+                <span className="pl-4">{sourceLine.text || " "}</span>
+              </span>
+            ))}
+          </code>
+        </pre>
+      ) : (
+        <p className="p-3 text-xs text-muted-foreground">
+          {t("pages.assessment.sourceCodeUnavailable")}
+        </p>
+      )}
+    </section>
   );
 }
 

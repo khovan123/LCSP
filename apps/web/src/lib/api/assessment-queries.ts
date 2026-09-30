@@ -13,6 +13,7 @@ import {
   buildSubmitInterviewAnswerCommand,
   continueAssessmentPipeline,
   getAssessmentInterviewState,
+  getAssessmentInterviewSourceSnippet,
   pauseAssessmentInterviewTurn,
   recordAssessmentInterviewBlockedAction,
   resumeAssessmentInterviewTurn,
@@ -55,6 +56,21 @@ export function useAssessmentInterviewStateQuery(
     queryKey: apiQueryKeys.assessment.interview(assessmentId),
     queryFn: () => getAssessmentInterviewState(assessmentId),
     enabled: enabled && assessmentId.length > 0,
+  });
+}
+
+export function useAssessmentInterviewSourceSnippetQuery(
+  assessmentId: string,
+  questionId: string,
+) {
+  return useQuery({
+    queryKey: apiQueryKeys.assessment.interviewSourceSnippet(
+      assessmentId,
+      questionId,
+    ),
+    queryFn: () =>
+      getAssessmentInterviewSourceSnippet(assessmentId, questionId),
+    enabled: assessmentId.length > 0 && questionId.length > 0,
   });
 }
 

@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -22,6 +23,8 @@ import { CreateAssessmentCommand } from "../../application/commands/create-asses
 import { CompleteRepositorySetupCommand } from "../../application/commands/complete-repository-setup/complete-repository-setup.command.js";
 import { DeleteAssessmentCommand } from "../../application/commands/delete-assessment/delete-assessment.command.js";
 import { RenameAssessmentCommand } from "../../application/commands/rename-assessment/rename-assessment.command.js";
+import { PutRuleAssessmentCommand } from "../../application/commands/put-rule-assessment/put-rule-assessment.command.js";
+import { ListRuleAssessmentsQuery } from "../../application/queries/list-rule-assessments/list-rule-assessments.query.js";
 import { MarkAiNotDetectedCommand } from "../../application/commands/mark-ai-not-detected/mark-ai-not-detected.command.js";
 import { GetAssessmentQuery } from "../../application/queries/get-assessment/get-assessment.query.js";
 import { GetAssessmentReadinessQuery } from "../../application/queries/get-assessment-readiness/get-assessment-readiness.query.js";
@@ -421,21 +424,6 @@ export class InternalAssessmentInterviewController {
     );
   }
 
-  @Post(":assessmentId/planner-context-needs")
-  async registerPlannerContextNeed(
-    @Param("assessmentId") assessmentId: string,
-    @Body() body: unknown,
-    @Req() request: AuthenticatedRequest,
-  ) {
-    return resultEnvelope(
-      await this.interviewRuntime.registerPlannerContextNeedForWorker({
-        assessmentId,
-        correlationId: request.correlationId ?? "worker-interview-context",
-        need: body as never,
-      }),
-    );
-  }
-
   @Post(":assessmentId/targeted-needs")
   async registerTargetedNeed(
     @Param("assessmentId") assessmentId: string,
@@ -509,6 +497,52 @@ export class InternalAssessmentInterviewController {
         technicalEvidenceReportId,
         workflowRunId,
       }),
+    );
+  }
+}
+
+/**
+ * Worker-key routes for the accepted per-rule assessment ledger (RuleEvidenceIndex).
+ */
+@Controller("internal/assessments")
+@UseGuards(WorkerApiKeyGuard)
+export class InternalRuleAssessmentController {
+  constructor(
+    private readonly commandBus: CommandBus,
+    private readonly queryBus: QueryBus,
+  ) {}
+
+  @Put(":assessmentId/rule-assessments/:engineeringRuleId")
+  async putRuleAssessment(
+    @Param("assessmentId") assessmentId: string,
+    @Param("engineeringRuleId") engineeringRuleId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new PutRuleAssessmentCommand(
+          assessmentId,
+          engineeringRuleId,
+          body,
+          request.correlationId ?? "worker-rule-assessment",
+        ),
+      ),
+    );
+  }
+
+  @Get(":assessmentId/rule-assessments")
+  async listRuleAssessments(
+    @Param("assessmentId") assessmentId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new ListRuleAssessmentsQuery(
+          assessmentId,
+          request.correlationId ?? "worker-rule-assessment",
+        ),
+      ),
     );
   }
 }

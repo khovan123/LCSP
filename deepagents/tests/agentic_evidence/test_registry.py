@@ -20,10 +20,9 @@ EXPECTED_TOOLS = {
     "propose_gap_remediation",
     "get_gap_evidence_trace",
     "get_reconciliation_context",
-    "request_targeted_reanalysis",
     "get_artifact_chain",
 }
-NON_MODEL_TOOLS = {"resume_waiting_runs", "request_targeted_reanalysis"}
+NON_MODEL_TOOLS = {"resume_waiting_runs"}
 MODEL_TOOLS = EXPECTED_TOOLS - NON_MODEL_TOOLS
 
 
@@ -39,14 +38,6 @@ def valid_input_for(tool_name: str) -> dict:
         return {"maxResults": 10}
     if tool_name == "get_artifact_chain":
         return {"anchor": {"assessmentId": "assessment:abcdefgh"}}
-    if tool_name == "request_targeted_reanalysis":
-        return {
-            "inputArtifactVersion": "ter_12345678",
-            "analyzerId": "DEEP_AGENT_REPOSITORY_ANALYSIS",
-            "scope": {"pathPrefixes": ["apps/api/"]},
-            "reasonRequirementId": "requirement:12345678",
-            "idempotencyKey": "request_1234567890",
-        }
     if tool_name == "resume_waiting_runs":
         return {
             "activationRecordRef": "corpus-approval:abc123",
@@ -158,10 +149,7 @@ def test_tool_specific_json_schema_is_enforced_before_dispatch() -> None:
 
 def test_mutation_requires_idempotency_key() -> None:
     registry = build_engineering_rule_agentic_registry()
-    request = request_for(
-        "request_targeted_reanalysis",
-        artifact_versions={"technicalEvidenceReportId": "ter-1"},
-    )
+    request = request_for("resume_waiting_runs")
     with pytest.raises(
         AgenticToolValidationError,
         match="AGENTIC_TOOL_IDEMPOTENCY_KEY_REQUIRED",
@@ -171,12 +159,9 @@ def test_mutation_requires_idempotency_key() -> None:
 
 def test_system_and_orchestrator_tools_are_never_model_callable() -> None:
     registry = build_engineering_rule_agentic_registry()
+    # Retry/reanalysis is an API-driven ruleScope rerun, never a registered agentic tool.
+    assert "request_targeted_reanalysis" not in registry.names()
     for request in (
-        request_for(
-            "request_targeted_reanalysis",
-            idempotency_key="request-12345678",
-            artifact_versions={"technicalEvidenceReportId": "ter-1"},
-        ),
         request_for("resume_waiting_runs", idempotency_key="request-87654321"),
     ):
         with pytest.raises(

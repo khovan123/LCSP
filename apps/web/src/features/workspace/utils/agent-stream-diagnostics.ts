@@ -1,6 +1,5 @@
 import {
   ASSESSMENT_AGENT_STREAM_STAGES,
-  ASSESSMENT_ENGINEERING_RULE_PLAN_DECISIONS,
   type AssessmentAgentStreamEvent,
   type AssessmentAgentStreamStage,
 } from "@lcsp/contracts/evidence";
@@ -18,17 +17,16 @@ export type AgentStreamDispatchDiagnostic = {
   firstEmittedAt: string;
   lastEmittedAt: string;
   eventCount: number;
-  plannerSelectedRuleIds: string[];
-  investigatorRuleIds: string[];
+  ruleAnalysisRuleIds: string[];
   terminalStatus: ReturnType<typeof deriveAgentStreamRunOutcome>;
 };
 
 /**
  * Temporary triage helper: summarize a raw agent-stream event journal by
- * dispatch (runId+correlationId), so a suspected duplicate Planner+
- * Investigator run can be told apart from a frontend rendering artifact.
+ * dispatch (runId+correlationId), so a suspected duplicate
+ * rule-analysis run can be told apart from a frontend rendering artifact.
  *
- * Two SEPARATE dispatch summaries sharing the same planner/investigator
+ * Two SEPARATE dispatch summaries sharing the same rule-analysis
  * rule sets but DIFFERENT runId/correlationId means the backend genuinely
  * dispatched twice (not a frontend grouping bug — grouping only ever merges
  * events that already share one runId+correlationId). One dispatch summary
@@ -82,14 +80,9 @@ export function diagnoseAgentStreamDispatches(
       });
       const stageEvents = (stage: AssessmentAgentStreamStage) =>
         ordered.filter((event) => event.stage === stage);
-      const plannerHeaders = [
-        ...projectAgentStreamRuleHeaders(
-          stageEvents(ASSESSMENT_AGENT_STREAM_STAGES.planner),
-        ).values(),
-      ];
       const investigatorHeaders = [
         ...projectAgentStreamRuleHeaders(
-          stageEvents(ASSESSMENT_AGENT_STREAM_STAGES.investigate),
+          stageEvents(ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis),
         ).values(),
       ];
       return {
@@ -101,14 +94,7 @@ export function diagnoseAgentStreamDispatches(
         firstEmittedAt: ordered[0]?.emittedAt ?? "",
         lastEmittedAt: ordered.at(-1)?.emittedAt ?? "",
         eventCount: ordered.length,
-        plannerSelectedRuleIds: plannerHeaders
-          .filter(
-            (header) =>
-              header.decision ===
-              ASSESSMENT_ENGINEERING_RULE_PLAN_DECISIONS.select,
-          )
-          .map((header) => header.ruleId),
-        investigatorRuleIds: investigatorHeaders.map((header) => header.ruleId),
+        ruleAnalysisRuleIds: investigatorHeaders.map((header) => header.ruleId),
         terminalStatus: deriveAgentStreamRunOutcome(ordered),
       } satisfies AgentStreamDispatchDiagnostic;
     })

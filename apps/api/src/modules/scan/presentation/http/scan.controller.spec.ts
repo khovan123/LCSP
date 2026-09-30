@@ -144,7 +144,7 @@ describe("ScanController role-only RBAC", () => {
       {
         inputArtifactVersion: "ter_12345678",
         analyzerId: "DEEP_AGENT_REPOSITORY_ANALYSIS",
-        scope: { pathPrefixes: ["src/web/"] },
+        scope: { ruleScope: { engineeringRuleId: "ENG-1", criterionIds: ["criterion-a"], contextRevision: 1 } },
         reasonRequirementId: "requirement:gap_12345678",
         idempotencyKey: "request_targeted_reanalysis_0001",
       },
@@ -386,7 +386,7 @@ describe("InternalScanController", () => {
         userId: "user-1",
         inputArtifactVersion: "ter_12345678",
         analyzerId: "DEEP_AGENT_REPOSITORY_ANALYSIS",
-        scope: { pathPrefixes: ["apps/api/"] },
+        scope: { ruleScope: { engineeringRuleId: "ENG-1", criterionIds: ["criterion-a"], contextRevision: 1 } },
         reasonRequirementId: "requirement:gap_12345678",
         idempotencyKey: "request_targeted_reanalysis_0001",
       },
@@ -461,7 +461,7 @@ describe("InternalScanController", () => {
         assessment_id: "assessment-1",
         run_id: "run-1",
         event_type: ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelContentDelta,
-        stage: ASSESSMENT_AGENT_STREAM_STAGES.planner,
+        stage: ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
       },
       "corr-header",
     );
@@ -478,7 +478,7 @@ describe("InternalScanController", () => {
     expect(publishAgentStreamEvent).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        stage: ASSESSMENT_AGENT_STREAM_STAGES.planner,
+        stage: ASSESSMENT_AGENT_STREAM_STAGES.ruleAnalysis,
       }),
     );
     expect(publishAgentStreamEvent).toHaveBeenNthCalledWith(

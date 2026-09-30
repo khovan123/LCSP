@@ -17,27 +17,21 @@ from typing import Any, Iterable, Mapping
 import re
 
 from middleware.redaction import redact_string
+from tools.common.capabilities.assessment.rule_assessment.neutral_text import (
+    IDENTIFIER_LEAK_PATTERNS,
+)
 
+# Structured `key: "value"` forms run first so the value is stripped with the key;
+# the shared identifier patterns then cover the bare tokens.
 INTERNAL_DISALLOWED_PATTERNS = [
-    re.compile(r"\b(?:ENG|ER|LR)-\d+\b", re.IGNORECASE),
-    re.compile(r"\b(?:EngineeringRule|LegalRule)\b", re.IGNORECASE),
     re.compile(r"\bcheckpoint(?:Id)?\s*[:=]\s*['\"][^'\"]+['\"]", re.IGNORECASE),
     re.compile(r"\bthread(?:Id)?\s*[:=]\s*['\"][^'\"]+['\"]", re.IGNORECASE),
     re.compile(r"\bcontinuation(?:Token)?\s*[:=]\s*['\"][^'\"]+['\"]", re.IGNORECASE),
     re.compile(r"\bcp-[A-Za-z0-9_-]+\b", re.IGNORECASE),
-    re.compile(r"\bcheckpoint(?:Id)?\b", re.IGNORECASE),
-    re.compile(r"\bcontinuation(?: token)?\b", re.IGNORECASE),
-    re.compile(r"\bLangGraph\b", re.IGNORECASE),
-    re.compile(r"\bthread(?:Id)?\b", re.IGNORECASE),
     re.compile(r"\bnode:[0-9a-fA-F-]{8,}\b", re.IGNORECASE),
     re.compile(r"\bsymbol:[a-zA-Z0-9_.:/-]+\b", re.IGNORECASE),
-    re.compile(
-        r"\b(?:CUSTOMER_CONFIRMED|CUSTOMER_STATED|CONTEXT_READY|CONTEXT_RESOLVED"
-        r"|INTERVIEW_CONTEXT_READY_REQUIRES_AUTHORITY|INVESTIGATOR_RESOLUTION"
-        r"|TARGETED_EXACT_RESUME_PIN|WAITING_FOR_CUSTOMER|BLOCKED_OR_UNRESOLVED"
-        r"|NEEDS_INPUT|PRE_PLANNER|DECISION_PATH_UNRESOLVED)\b"
-    ),
-    re.compile(r"\bresolutionCriteria\b"),
+    re.compile(r"\b(?:resolutionCriterionIds|resolvesCriterionId)\b"),
+    *IDENTIFIER_LEAK_PATTERNS,
 ]
 
 SECRET_CONFIG_PATTERNS = [

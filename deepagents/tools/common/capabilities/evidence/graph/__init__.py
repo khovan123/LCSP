@@ -1,6 +1,5 @@
-"""Program Evidence Graph schema and deterministic query runtime."""
+"""Program Evidence Graph schema."""
 
-from .query.query_engine import GraphQueryResult, ProgramGraphQueryEngine
 from .schema.models import (
     ProgramEdge,
     ProgramEvidenceGraph,
@@ -11,8 +10,6 @@ from .schema.models import (
 from .schema.vocabulary import EDGE_TYPES, NODE_TYPES, PROGRAM_GRAPH_SCHEMA_VERSION
 
 __all__ = [
-    "GraphQueryResult",
-    "ProgramGraphQueryEngine",
     "ProgramEdge",
     "ProgramEvidenceGraph",
     "ProgramNode",

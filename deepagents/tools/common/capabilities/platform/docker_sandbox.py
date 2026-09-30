@@ -469,6 +469,11 @@ def _create_container_args(spec: DockerSandboxSpec) -> list[str]:
         "-d",
         "--name",
         spec.container_name,
+        # PID 1 is `sleep`, which never reaps. Codebase Memory's CLI leaves a detached
+        # child behind on every invocation; orphans reparent to PID 1 and stay zombies,
+        # each holding a slot of --pids-limit until the sandbox can no longer fork.
+        # A reaping init (docker-init) keeps the pid budget flat.
+        "--init",
         "--label",
         f"{SANDBOX_LABEL}=true",
         "--label",

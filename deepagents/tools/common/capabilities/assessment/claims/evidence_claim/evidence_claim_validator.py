@@ -6,7 +6,7 @@ import json
 import re
 import shlex
 from dataclasses import replace
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from tools.common.capabilities.evidence.graph.schema.models import ProgramEvidenceGraph
@@ -22,6 +22,13 @@ from tools.common.capabilities.assessment.claims.evidence_claim.claim_topology i
     validate_claim_topology,
 )
 from tools.common.capabilities.assessment.claims.evidence_claim.models import ENGINEERING_EVIDENCE_CLAIM_TYPES, EvidenceClaim
+from tools.common.capabilities.assessment.rule_assessment.absence_policy import (
+    absence_may_finalize,
+)
+from tools.common.capabilities.assessment.rule_assessment.values import (
+    RULE_ASSESSMENT_VALIDATOR_ID,
+    RULE_EVIDENCE_KINDS,
+)
 
 
 class EvidenceClaimValidationError(ValueError):
@@ -251,6 +258,90 @@ _CLOSED_CLAIM_TYPES = frozenset(
 )
 
 
+def normalize_source_path(value: Any) -> str:
+    """Repository-relative POSIX path, or a validation error when it escapes the source."""
+    path = str(value or "").replace("\\", "/").lstrip("/")
+    parts = [part for part in path.split("/") if part not in {"", "."}]
+    if (
+        not parts
+        or any(part == ".." for part in parts)
+        or parts[0] in {".git", ".lcsp"}
+    ):
+        raise EvidenceClaimValidationError(
+            "source location must remain inside customer repository source"
+        )
+    return "/".join(parts)
+
+
+_DOCUMENTATION_SUFFIXES = frozenset({".md", ".markdown", ".rst", ".txt", ".adoc"})
+_DOCUMENTATION_STEMS = ("README", "CHANGELOG", "LICENSE", "NOTICE", "CONTRIBUTING")
+
+
+def is_implementation_evidence_path(value: Any) -> bool:
+    """Production source that can close a criterion.
+
+    Test/spec/script/example/generated files are excluded, and so is prose documentation:
+    a README describes behaviour, it does not implement it. Configuration stays admissible.
+    """
+    path = PurePosixPath(normalize_source_path(value))
+    return (
+        source_role(str(path)) == SOURCE_ROLE_PRODUCTION
+        and path.suffix.lower() not in _DOCUMENTATION_SUFFIXES
+        and not path.name.upper().startswith(_DOCUMENTATION_STEMS)
+    )
+
+
+def verify_repository_source(
+    path: str,
+    start: int,
+    end: int,
+    repository_root: str | Path | None = None,
+    *,
+    required: bool = False,
+) -> None:
+    """Verify a citation against the live assessment repository when available.
+
+    ``required=True`` (the governed rule-assessment boundary) fails closed when neither a
+    sandbox backend nor a repository root is available.
+
+    The sandbox backend is authoritative; ``repository_root`` is the on-disk fallback for
+    runs that have a hydrated checkout but no sandbox backend bound.
+    """
+    from tools.common.capabilities.platform.repository_sandbox import (
+        current_repository_backend,
+    )
+
+    backend = current_repository_backend()
+    if backend is not None:
+        responses = backend.download_files([f"/{path}"])
+        content = None if not responses or responses[0].error else responses[0].content
+    elif repository_root:
+        root = Path(repository_root).resolve()
+        target = (root / path).resolve()
+        content = target.read_bytes() if target.is_relative_to(root) and target.is_file() else None
+    elif required:
+        raise EvidenceClaimValidationError(
+            "no repository database is available to verify source locations"
+        )
+    else:
+        # Deterministic unit/offline flows still validate against pinned graph anchors.
+        return
+    if content is None:
+        raise EvidenceClaimValidationError(
+            f"source location does not exist in repository database: {path}"
+        )
+    try:
+        line_count = len(content.decode("utf-8").splitlines())
+    except UnicodeDecodeError as error:
+        raise EvidenceClaimValidationError(
+            f"source location is not UTF-8 source text: {path}"
+        ) from error
+    if start > max(1, line_count) or end > max(1, line_count):
+        raise EvidenceClaimValidationError(
+            f"source location exceeds repository file bounds: {path}:{start}-{end}"
+        )
+
+
 class EvidenceClaimValidator:
     """Validate and minimize claim provenance against persisted graph identities.
 
@@ -262,11 +353,86 @@ class EvidenceClaimValidator:
     asserted topology rather than merely naming individually valid nodes.
     """
 
+    def validate_governed(
+        self,
+        claim: EvidenceClaim,
+        *,
+        assessment_id: str,
+        commit_sha: str,
+    ) -> EvidenceClaim:
+        """Validate a claim minted from an already-verified rule assessment (no graph).
+
+        Accepts NOT_MET only as positive violation evidence (``evidence_kind``).
+        ``source_verified`` is set only by the rule-assessment boundary after the live
+        source check, so provenance is the verified ``source_locations`` themselves.
+        """
+        if claim.absence_scan is not None:
+            return self._validate_absence_claim(claim)
+        if not 0 <= claim.confidence <= 1:
+            raise EvidenceClaimValidationError("claim confidence out of range")
+        if claim.claim_type != ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]:
+            # ``source_verified`` alone is not trusted: the runtime-stamped provenance must
+            # bind every source location to this assessment, commit, rule and criterion.
+            provenance = claim.evidence_provenance
+            if not assessment_id or not commit_sha or not provenance or any(
+                p.get("validator") != RULE_ASSESSMENT_VALIDATOR_ID
+                or p.get("assessmentId") != assessment_id
+                or p.get("repositoryVersion") != commit_sha
+                or p.get("engineeringRuleId") != claim.engineering_rule_id
+                or p.get("criterionId") != claim.criterion
+                for p in provenance
+            ):
+                raise EvidenceClaimValidationError(
+                    "evidence provenance does not bind to this assessment, commit, rule and criterion"
+                )
+        if claim.claim_type != ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"] and any(
+            not is_implementation_evidence_path(location.get("path") or "")
+            for location in claim.source_locations
+        ):
+            raise EvidenceClaimValidationError(
+                "test/spec/script/example/generated/documentation evidence cannot close MET/NOT_MET"
+            )
+        if claim.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_not_met"]:
+            # Positive violation evidence only: verified source showing contradicting
+            # behaviour. Absence is rejected above and never reaches here.
+            if not (
+                claim.source_verified
+                and claim.criterion
+                and claim.value is False
+                and claim.confidence > 0
+                and claim.source_locations
+                and claim.evidence_kind == RULE_EVIDENCE_KINDS["demonstratesViolation"]
+            ):
+                raise EvidenceClaimValidationError(
+                    "NOT_MET requires verified source locations marked DEMONSTRATES_VIOLATION"
+                )
+            return claim
+        if claim.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]:
+            if not (claim.source_verified and claim.criterion and claim.value is True):
+                raise EvidenceClaimValidationError(
+                    "closed engineering claim requires verified source evidence for a criterion"
+                )
+            if not (claim.source_locations or claim.evidence_refs):
+                raise EvidenceClaimValidationError(
+                    "closed engineering claim requires source evidence"
+                )
+            return claim
+        if claim.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]:
+            if claim.value is not None or not claim.limitations:
+                raise EvidenceClaimValidationError(
+                    "unresolved claim requires no value and at least one limitation"
+                )
+            return claim
+        raise EvidenceClaimValidationError("unsupported governed claim type")
+
     def validate(
         self,
         claim: EvidenceClaim,
         graph: ProgramEvidenceGraph | dict,
     ) -> EvidenceClaim:
+        if claim.absence_scan is not None:
+            # A search manifest, not graph provenance: nothing here resolves in the graph.
+            return self._validate_absence_claim(claim)
         value = (
             graph
             if isinstance(graph, ProgramEvidenceGraph)
@@ -353,7 +519,15 @@ class EvidenceClaimValidator:
             source_anchor_refs=selected["anchor"],
         )
 
-    @classmethod
+    @staticmethod
+    def _validate_absence_claim(claim: EvidenceClaim) -> EvidenceClaim:
+        """Absence never finalizes a rule: FINAL_ABSENCE is disabled (see absence_policy)."""
+        if not absence_may_finalize(claim.absence_scan):
+            raise EvidenceClaimValidationError(
+                "absence cannot be finalised from a deterministic keyword scan"
+            )
+        raise EvidenceClaimValidationError("absence claims are not accepted")
+
     def _resolve_source_locations(
         cls,
         claim: EvidenceClaim,
@@ -382,7 +556,7 @@ class EvidenceClaimValidator:
         for raw in claim.source_locations:
             if not isinstance(raw, dict):
                 raise EvidenceClaimValidationError("source location must be an object")
-            path = cls._normalize_source_path(raw.get("path") or raw.get("file_path"))
+            path = normalize_source_path(raw.get("path") or raw.get("file_path"))
             try:
                 start = int(raw.get("start_line") or raw.get("startLine"))
                 end = int(raw.get("end_line") or raw.get("endLine"))
@@ -393,7 +567,7 @@ class EvidenceClaimValidator:
             if start < 1 or end < start:
                 raise EvidenceClaimValidationError("source location line range is invalid")
             symbol = str(raw.get("symbol") or raw.get("symbol_ref") or "").strip() or None
-            cls._verify_repository_source(path, start, end)
+            verify_repository_source(path, start, end)
             normalized.append(
                 {
                     "path": path,
@@ -405,7 +579,7 @@ class EvidenceClaimValidator:
 
             matched = False
             for anchor in anchor_rows:
-                if cls._normalize_source_path(anchor.get("file_path")) != path:
+                if normalize_source_path(anchor.get("file_path")) != path:
                     continue
                 if symbol and anchor.get("symbol_ref") and str(anchor.get("symbol_ref")) != symbol:
                     continue
@@ -435,7 +609,7 @@ class EvidenceClaimValidator:
                     source = node.get("source")
                     if not isinstance(source, dict):
                         continue
-                    if cls._normalize_source_path(
+                    if normalize_source_path(
                         source.get("file_path") or source.get("filePath")
                     ) != path:
                         continue
@@ -462,20 +636,6 @@ class EvidenceClaimValidator:
         )
 
     @staticmethod
-    def _normalize_source_path(value: Any) -> str:
-        path = str(value or "").replace("\\", "/").lstrip("/")
-        parts = [part for part in path.split("/") if part not in {"", "."}]
-        if (
-            not parts
-            or any(part == ".." for part in parts)
-            or parts[0] in {".git", ".lcsp"}
-        ):
-            raise EvidenceClaimValidationError(
-                "source location must remain inside customer repository source"
-            )
-        return "/".join(parts)
-
-    @staticmethod
     def _ranges_overlap(
         start: int,
         end: int,
@@ -488,33 +648,6 @@ class EvidenceClaimValidator:
         except (TypeError, ValueError):
             return True
         return not (end < left or start > right)
-
-    @staticmethod
-    def _verify_repository_source(path: str, start: int, end: int) -> None:
-        """Verify citations against the live assessment repository when available."""
-        from tools.common.capabilities.platform.repository_sandbox import (
-            current_repository_backend,
-        )
-
-        backend = current_repository_backend()
-        if backend is None:
-            # Deterministic unit/offline flows still validate against pinned graph anchors.
-            return
-        responses = backend.download_files([f"/{path}"])
-        if not responses or responses[0].error or responses[0].content is None:
-            raise EvidenceClaimValidationError(
-                f"source location does not exist in repository database: {path}"
-            )
-        try:
-            line_count = len(responses[0].content.decode("utf-8").splitlines())
-        except UnicodeDecodeError as error:
-            raise EvidenceClaimValidationError(
-                f"source location is not UTF-8 source text: {path}"
-            ) from error
-        if start > max(1, line_count) or end > max(1, line_count):
-            raise EvidenceClaimValidationError(
-                f"source location exceeds repository file bounds: {path}:{start}-{end}"
-            )
 
     @classmethod
     def _validate_direct_source_claim(
@@ -570,7 +703,7 @@ class EvidenceClaimValidator:
 
         relevant = False
         for location in claim.source_locations:
-            path = cls._normalize_source_path(location.get("path"))
+            path = normalize_source_path(location.get("path"))
             start = int(location["start_line"])
             end = int(location["end_line"])
             source_path = PurePosixPath(path)

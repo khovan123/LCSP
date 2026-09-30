@@ -188,7 +188,7 @@ AGENT_INVOCATION_BOUNDARIES: tuple[AgentInvocationBoundary, ...] = (
 
 _LOGGER = logging.getLogger(__name__)
 # Default live-stream stage for boundaries that serve exactly one stage. The
-# engineering assessment boundary spans Interview, Planner, Investigate and
+# engineering assessment boundary spans Interview, Repository Analyst (Investigate) and
 # Gate, so each of those invocations names its own stage instead.
 _BOUNDARY_STREAM_STAGES = {
     "scan_requested": AGENT_STREAM_STAGES["scanner"],

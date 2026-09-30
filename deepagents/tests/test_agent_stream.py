@@ -23,7 +23,6 @@ from orchestration.agent_stream import (
     invoke_graph_with_stream,
     invoke_with_stream,
     publish_agent_stream_event,
-    publish_rule_decision,
     _should_forward_stream_log,
 )
 
@@ -232,29 +231,6 @@ def stream_session(events):
         boundary_name="engineering",
         emit_payload=events.append,
     )
-
-
-def test_planner_rule_decision_includes_investigation_goals():
-    events = []
-    with activate_agent_stream(stream_session(events)):
-        with agent_stream_stage(AGENT_STREAM_STAGES["planner"]):
-            publish_rule_decision(
-                "ER-7",
-                decision="SELECT",
-                concept="Token validation",
-                investigation_goals=("Verify tokens before use", "Check expiry handling"),
-                plan_reused=True,
-            )
-
-    assert len(events) == 1
-    assert events[0]["event_type"] == "ENGINEERING_RULE"
-    assert events[0]["data"]["engineeringRuleId"] == "ER-7"
-    assert events[0]["data"]["concept"] == "Token validation"
-    assert events[0]["data"]["investigationGoals"] == [
-        "Verify tokens before use",
-        "Check expiry handling",
-    ]
-    assert events[0]["data"]["planReused"] is True
 
 
 def test_invoke_with_stream_forwards_visible_events_and_returns_root_values():
@@ -603,13 +579,13 @@ def test_invoke_with_stream_tags_every_event_with_its_pipeline_stage():
         invoke_with_stream(
             FakeAgent(),
             {"messages": []},
-            stage=AGENT_STREAM_STAGES["planner"],
+            stage=AGENT_STREAM_STAGES["rule_analysis"],
         )
         planner_count = len(events)
         invoke_with_stream(FakeAgent(), {"messages": []})
 
     assert planner_count
-    assert {event.get("stage") for event in events[:planner_count]} == {"PLANNER"}
+    assert {event.get("stage") for event in events[:planner_count]} == {"RULE_ANALYSIS"}
     assert events[planner_count:]
     assert all("stage" not in event for event in events[planner_count:])
 
@@ -620,7 +596,7 @@ def test_nested_stage_wins_over_session_default_and_enclosing_stage():
     session.stage = AGENT_STREAM_STAGES["scanner"]
     boundaries = []
     with activate_agent_stream(session):
-        with agent_stream_stage(AGENT_STREAM_STAGES["investigate"]):
+        with agent_stream_stage(AGENT_STREAM_STAGES["rule_analysis"]):
             invoke_with_stream(
                 FakeAgent(),
                 {"messages": []},
@@ -634,7 +610,7 @@ def test_nested_stage_wins_over_session_default_and_enclosing_stage():
     stages = [event["stage"] for event in events]
     first, second = boundaries
     assert set(stages[:first]) == {"INTERVIEW"}
-    assert set(stages[first:second]) == {"INVESTIGATE"}
+    assert set(stages[first:second]) == {"RULE_ANALYSIS"}
     assert set(stages[second:]) == {"SCANNER"}
 
 
@@ -654,11 +630,11 @@ def test_new_boundary_session_does_not_inherit_scanner_stage_and_restores_parent
             interview_end = len(events)
             with activate_agent_stream(engineering):
                 publish_agent_stream_event("BOUNDARY_STARTED")
-                invoke_with_stream(FakeAgent(), {"messages": []}, stage=AGENT_STREAM_STAGES["planner"])
+                invoke_with_stream(FakeAgent(), {"messages": []}, stage=AGENT_STREAM_STAGES["rule_analysis"])
             publish_agent_stream_event("BOUNDARY_COMPLETED")
     assert {event.get("stage") for event in events[:interview_end]} == {"INTERVIEW"}
     assert "stage" not in events[interview_end]
-    assert {event.get("stage") for event in events[interview_end + 1:-1]} == {"PLANNER"}
+    assert {event.get("stage") for event in events[interview_end + 1:-1]} == {"RULE_ANALYSIS"}
     assert events[-1]["stage"] == "SCANNER"
 
 

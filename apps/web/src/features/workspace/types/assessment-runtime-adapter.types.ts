@@ -88,8 +88,7 @@ export const ASSESSMENT_SIDEBAR_WORKFLOW_STAGES = {
   scanner: "SCANNER",
   interview: "INTERVIEW",
   rules: "RULES",
-  planner: "PLANNER",
-  investigate: "INVESTIGATE",
+  ruleAnalysis: "RULE_ANALYSIS",
   gate: "GATE",
 } as const;
 

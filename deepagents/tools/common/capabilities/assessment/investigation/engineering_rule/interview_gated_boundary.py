@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
-
 import hashlib
 import json
 import logging
@@ -14,17 +12,9 @@ from orchestration.dispatcher import RootSubagentDispatcher
 from orchestration.result_validation import SpecialistHandoffValidationError
 from subagents.interview.customer_safe_projection import MAX_LISTED_ALLOWED_REFS
 from decision.shadow import InterviewRoutingPacket, observer_from_api_client
-from tools.common.capabilities.agent_runtime.boundary import NonRetryableAgentBoundaryError
 from tools.common.capabilities.platform.api_client import InterviewCoverageCallbackError
 
 from .engineering_assessment_boundary import EngineeringAssessmentBoundary
-from .managed_targeted_investigator import (
-    ManagedTargetedInvestigatorPipeline,
-    TargetedInterviewPending,
-)
-from tools.common.capabilities.assessment.planning.engineering_rule.engineering_rule_planner import (
-    PlannerContextPending,
-)
 from tools.common.capabilities.assessment.planning.engineering_rule.confirmed_business_context import (
     ConfirmedStructuredBusinessContext,
     normalize_confirmed_structured_business_context,
@@ -39,8 +29,10 @@ _TERMINAL_WAITING_OUTCOMES = {
     "FAILED",
 }
 
-# The only authored root assessment mutation (approval-gated); see instructions.md.
-_TECHNICAL_RECOVERY_TOOL = "request_targeted_reanalysis"
+# Typed runtime activities for a technical gap. Recovery is an explicit rescan through the
+# scan rerun API (customer/operator action), never a model decision.
+AI_DISCOVERY_UNRESOLVED = "AI_DISCOVERY_UNRESOLVED"
+TECHNICAL_COVERAGE_RECOVERY_REQUIRED = "TECHNICAL_COVERAGE_RECOVERY_REQUIRED"
 
 _CANONICAL_COVERAGE_STATES = {
     "READY": "READY",
@@ -51,33 +43,6 @@ _CANONICAL_COVERAGE_STATES = {
 }
 
 
-class TechnicalRecoveryNotStarted(NonRetryableAgentBoundaryError):
-    """Root orchestration ended a required technical recovery without requesting it.
-
-    Initial Interview cannot start until recovery produces newly accepted evidence, so
-    completing the boundary here would leave the assessment waiting with nothing queued.
-    """
-
-
-class _ConfirmedContextPipeline:
-    """Inject only server-guarded confirmed Customer context into the existing pipeline."""
-
-    def __init__(
-        self,
-        delegate: Any,
-        confirmed_context: ConfirmedStructuredBusinessContext,
-    ) -> None:
-        self._delegate = delegate
-        self._confirmed_context = confirmed_context
-
-    def run(self, *args: Any, **kwargs: Any) -> Any:
-        kwargs["confirmed_customer_context"] = self._confirmed_context
-        return self._delegate.run(*args, **kwargs)
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._delegate, name)
-
-
 class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary):
     """Production accepted-evidence boundary with decision-before-downstream Interview gating."""
 
@@ -85,19 +50,12 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
         self,
         *args: Any,
         interview_dispatcher: Any | None = None,
-        recovery_root: Any | None = None,
         **kwargs: Any,
     ) -> None:
-        injected_pipeline = kwargs.get("investigation_pipeline")
+        # One dispatcher serves both the Interview gate and the per-rule analyst tasks.
+        kwargs.setdefault("dispatcher", interview_dispatcher)
         super().__init__(*args, **kwargs)
         self._interview_dispatcher = interview_dispatcher
-        self._recovery_root = recovery_root
-        if injected_pipeline is None:
-            self._pipeline = ManagedTargetedInvestigatorPipeline(
-                delegate=self._pipeline,
-                config=self._config,
-                api_client=self._api_client,
-            )
 
     def handle(self, message: dict[str, Any], correlationId: str) -> None:
         evidence_report_id = self._evidence_report_id(message)
@@ -126,24 +84,13 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
         )
         if confirmed_context is None:
             return
-
-        original_pipeline = self._pipeline
-        self._pipeline = _ConfirmedContextPipeline(original_pipeline, confirmed_context)
-        try:
-            try:
-                super().handle(message, correlationId)
-            except TargetedInterviewPending:
-                # The managed Investigator already persisted the exact child
-                # execution/checkpoint and queued Targeted Interview. Do not emit a
-                # classification callback or continue deterministic evaluation until
-                # that exact execution is resumed with guarded Customer context.
-                return
-            except PlannerContextPending:
-                # The Planner reopened Interview for a Customer fact. When Interview
-                # is CONTEXT_READY again this boundary re-runs and plans with it.
-                return
-        finally:
-            self._pipeline = original_pipeline
+        rule_scope = message.get("ruleScope")
+        self.run_assessment(
+            message,
+            correlationId,
+            confirmed_context=confirmed_context,
+            rule_scope=tuple(str(item) for item in rule_scope) if isinstance(rule_scope, list) else None,
+        )
 
     def _prepare_interview(
         self,
@@ -179,36 +126,18 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
                         {"technicalEvidenceReportId": evidence_report_id},
                     )
                     return None
-            else:
-                self._route_ai_discovery_to_recovery(
-                    assessment_id=assessment_id,
-                    evidence_report_id=evidence_report_id,
-                    ai_discovery=ai_discovery,
-                    correlation_id=correlation_id,
-                )
-                return None
 
         if not _can_start_initial_interview(coverage_state, coverage_notes, evidence_report):
-            self._route_coverage_to_recovery(
-                assessment_id=assessment_id,
-                evidence_report_id=evidence_report_id,
-                coverage_state=coverage_state,
-                coverage_notes=coverage_notes,
-                correlation_id=correlation_id,
+            self._emit_technical_limitation(
+                evidence_report, TECHNICAL_COVERAGE_RECOVERY_REQUIRED, coverageState=coverage_state
             )
             return None
 
-        # Scanner/PGE-owned uncertainty is independent of Customer-owned clarification.
-        # A Customer question may exist, but downstream assessment must not resume while
-        # material technical frontiers remain unresolved.
+        # Scanner/PGE-owned AI uncertainty is an independent upstream fact: the gate stays
+        # UNKNOWN, aiDetected stays pending (deterministic applicability marks gated rules
+        # UPSTREAM_FACT_PENDING) and ungated rules still run. No model decides recovery.
         if ai_discovery and ai_discovery.get("gate") == "AI_UNKNOWN" and _has_technical_ai_uncertainty(ai_discovery):
-            self._route_ai_discovery_to_recovery(
-                assessment_id=assessment_id,
-                evidence_report_id=evidence_report_id,
-                ai_discovery=ai_discovery,
-                correlation_id=correlation_id,
-            )
-            return None
+            self._emit_technical_limitation(evidence_report, AI_DISCOVERY_UNRESOLVED, coverageState=coverage_state)
 
         if outcome == "CONTEXT_READY":
             return normalize_confirmed_structured_business_context(
@@ -364,7 +293,6 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
                         },
                         thread_id=f"interview:{assessment_id}",
                         context=run_context,
-                        reenter_root=False,
                     )
                 finally:
                     reset_active_turn_evidence_ledger(ledger_token)
@@ -454,174 +382,34 @@ class InterviewGatedEngineeringAssessmentBoundary(EngineeringAssessmentBoundary)
         try:
             self._api_client.post_interview_initial_question(assessment_id, handoff)
         except InterviewCoverageCallbackError:
-            self._route_coverage_to_recovery(
-                assessment_id=assessment_id,
-                evidence_report_id=evidence_report_id,
-                coverage_state=coverage_state,
-                coverage_notes=coverage_notes,
-                correlation_id=correlation_id,
+            self._emit_technical_limitation(
+                evidence_report, TECHNICAL_COVERAGE_RECOVERY_REQUIRED, coverageState=coverage_state
             )
         return None
 
-    def _route_ai_discovery_to_recovery(
-        self,
-        *,
-        assessment_id: str,
-        evidence_report_id: str,
-        ai_discovery: dict[str, Any],
-        correlation_id: str,
+    def _emit_technical_limitation(
+        self, evidence_report: dict[str, Any], code: str, **details: Any
     ) -> None:
-        root = self._recovery_root
-        if root is None:
-            from agent import agent
-
-            root = agent
-        bounded = {
-            "gate": ai_discovery.get("gate"),
-            "coverageState": ai_discovery.get("coverage_state"),
-            "technicalFindingKinds": sorted(
+        """Best-effort typed runtime activity for a technical gap (no root/model prompt)."""
+        scan_job_id = self._scan_job_id(evidence_report)
+        post = getattr(self._api_client, "post_scan_runtime_event", None)
+        if not scan_job_id or post is None:
+            return
+        try:
+            post(
+                scan_job_id,
                 {
-                    str(item.get("clarification_kind") or "")
-                    for item in ai_discovery.get("findings", [])
-                    if isinstance(item, dict)
-                    and item.get("clarification_owner") == "TECHNICAL"
-                }
-            )[:16],
-            "materialUnresolvedFrontiers": list(
-                ai_discovery.get("material_unresolved_frontiers") or []
-            )[:16],
-        }
-        result = invoke_with_stream(root,
-            {"messages": [{"role": "user", "content": (
-                "AI discovery is technically unresolved. Do not ask the Customer to solve a "
-                "scanner/static-analysis gap and do not enter EngineeringRule, Planner, or "
-                "Investigator. Run targeted Scanner/PGE reanalysis for the pinned evidence, "
-                "then re-enter from newly accepted technical evidence. Do not infer a provider "
-                "or model from an unknown/custom endpoint. "
-                f"Assessment: {assessment_id}. Evidence report: {evidence_report_id}. "
-                f"Bounded AI discovery: {json.dumps(bounded, ensure_ascii=False, sort_keys=True)}"
-            )}]},
-            config={"configurable": {"thread_id": f"assessment:{assessment_id}:ai-discovery-recovery"},
-                    "metadata": {"assessment_id": assessment_id,
-                                 "technical_evidence_report_id": evidence_report_id,
-                                 "correlationId": correlation_id,
-                                 "trigger": "AI_DISCOVERY_REANALYSIS_REQUIRED"}},
-            stage=AGENT_STREAM_STAGES["scanner"],
-        )
-        _require_technical_recovery_request(
-            result,
-            trigger="AI_DISCOVERY_REANALYSIS_REQUIRED",
-            assessment_id=assessment_id,
-            evidence_report_id=evidence_report_id,
-        )
-
-    def _route_coverage_to_recovery(
-        self,
-        *,
-        assessment_id: str,
-        evidence_report_id: str,
-        coverage_state: str,
-        coverage_notes: list[str],
-        correlation_id: str,
-    ) -> None:
-        root = self._recovery_root
-        if root is None:
-            from agent import agent
-
-            root = agent
-        result = invoke_with_stream(root,
-            {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": (
-                            "Technical evidence coverage cannot start Initial Interview. Do not enter "
-                            "Initial Interview, "
-                            "EngineeringRule, Planner, or Investigator. Run Root Orchestration recovery "
-                            "for the pinned technical evidence first (for example targeted re-analysis or "
-                            "a governed re-scan), then re-enter the assessment only from newly accepted "
-                            "technical evidence. "
-                            "PARTIAL coverage requires a persisted policy with permittedForInterview=true, "
-                            "policyDecisionRef, policyVersion, and non-empty limitations. Coverage notes "
-                            "alone do not authorize Interview. Do not manufacture a policy approval. "
-                            f"Assessment: {assessment_id}. Evidence report: {evidence_report_id}. "
-                            f"Coverage state: {coverage_state}. "
-                            f"Bounded coverage notes: {json.dumps(coverage_notes, ensure_ascii=False)}"
-                        ),
-                    }
-                ]
-            },
-            config={
-                "configurable": {
-                    "thread_id": f"assessment:{assessment_id}:coverage-recovery"
+                    "event_type": "TOOL_WAITING_INPUT",
+                    "run_status": "WAITING",
+                    "stage": "TECHNICAL_EVIDENCE",
+                    "tool_name": f"technical_limitation:{code}",
+                    "summary": code,
+                    "waiting_reason": code,
+                    "output_summary": {"activity": code, **details},
                 },
-                "metadata": {
-                    "assessment_id": assessment_id,
-                    "technical_evidence_report_id": evidence_report_id,
-                    "correlationId": correlation_id,
-                    "trigger": "TECHNICAL_COVERAGE_RECOVERY_REQUIRED",
-                },
-            },
-            stage=AGENT_STREAM_STAGES["scanner"],
-        )
-        _require_technical_recovery_request(
-            result,
-            trigger="TECHNICAL_COVERAGE_RECOVERY_REQUIRED",
-            assessment_id=assessment_id,
-            evidence_report_id=evidence_report_id,
-        )
-
-
-def _message_field(message: Any, key: str) -> Any:
-    if isinstance(message, dict):
-        return message.get(key)
-    return getattr(message, key, None)
-
-
-def _requested_technical_recovery(result: Any) -> bool:
-    """Return whether this invocation's reply requested (or ran) targeted reanalysis.
-
-    Recovery threads are persistent, so only messages after the latest instruction
-    count. The tool is approval-gated: a pending call is held at the interrupt.
-    """
-    messages = result.get("messages") if isinstance(result, dict) else None
-    if not isinstance(messages, list):
-        return False
-    latest_instruction = max(
-        (
-            index
-            for index, message in enumerate(messages)
-            if (_message_field(message, "type") or _message_field(message, "role"))
-            in {"human", "user"}
-        ),
-        default=-1,
-    )
-    for message in messages[latest_instruction + 1:]:
-        for call in _message_field(message, "tool_calls") or []:
-            if _message_field(call, "name") == _TECHNICAL_RECOVERY_TOOL:
-                return True
-        if (
-            _message_field(message, "type") == "tool"
-            and _message_field(message, "name") == _TECHNICAL_RECOVERY_TOOL
-        ):
-            return True
-    return False
-
-
-def _require_technical_recovery_request(
-    result: Any,
-    *,
-    trigger: str,
-    assessment_id: str,
-    evidence_report_id: str,
-) -> None:
-    if _requested_technical_recovery(result):
-        return
-    raise TechnicalRecoveryNotStarted(
-        f"{trigger}: root orchestration ended without requesting "
-        f"{_TECHNICAL_RECOVERY_TOOL}; Initial Interview cannot start "
-        f"(assessment {assessment_id}, evidence report {evidence_report_id})"
-    )
+            )
+        except Exception:  # noqa: BLE001 - progress must never fail an assessment
+            _LOGGER.warning("technical limitation activity not delivered: %s", code)
 
 
 def _technical_coverage(evidence_report: dict[str, Any]) -> tuple[str, list[str]]:
@@ -702,11 +490,16 @@ def _ai_discovery(evidence_report: dict[str, Any]) -> dict[str, Any] | None:
     gate = str(value.get("gate") or "")
     if gate not in {"AI_CONFIRMED", "AI_ABSENT_CONFIRMED", "AI_UNKNOWN"}:
         return None
+    coverage_state = str(value.get("coverage_state") or value.get("coverageState") or "UNAVAILABLE")
+    if gate == "AI_ABSENT_CONFIRMED" and (
+        coverage_state != "READY" or _technical_coverage(evidence_report)[0] != "READY"
+    ):
+        gate = "AI_UNKNOWN"  # absence is governed only with READY coverage; otherwise unknown
     findings = value.get("findings")
     return {
         "schema_version": str(value.get("schema_version") or value.get("schemaVersion") or "1.0.0"),
         "gate": gate,
-        "coverage_state": str(value.get("coverage_state") or value.get("coverageState") or "UNAVAILABLE"),
+        "coverage_state": coverage_state,
         "findings": [item for item in findings if isinstance(item, dict)][:64]
         if isinstance(findings, list)
         else [],
@@ -1010,7 +803,7 @@ def _initial_interview_instruction(
         )[:MAX_LISTED_ALLOWED_REFS],
     }
     return (
-        "Run INITIAL_INTERVIEW before any EngineeringRule, Planner or Investigator work. "
+        "Run INITIAL_INTERVIEW before any EngineeringRule analysis. "
         "Use only this bounded technical coverage/provenance and governed AI-discovery summary to decide the first Customer question. "
         "Missing technical evidence is not proof that a business behavior does not exist. "
         "Do not infer Customer confirmation from PGE/documentary evidence. "
