@@ -3696,6 +3696,11 @@ function parseStoredTargetedContinuation(
     originatingRuleAnalysisReference,
     needId: typeof record.needId === "string" ? record.needId : "",
     engineeringRuleId: engineeringRuleId ?? "",
+    criterionId:
+      typeof record.criterionId === "string" ? record.criterionId : undefined,
+    resolutionCriterionIds: Array.isArray(record.resolutionCriterionIds)
+      ? stringList(record.resolutionCriterionIds)
+      : undefined,
     contextRevision:
       typeof record.contextRevision === "number" ? record.contextRevision : 0,
     workflowRunId: record.workflowRunId,
