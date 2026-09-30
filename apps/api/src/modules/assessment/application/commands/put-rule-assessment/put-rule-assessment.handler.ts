@@ -21,9 +21,7 @@ import { PutRuleAssessmentCommand } from "./put-rule-assessment.command.js";
  * stale-contextRevision guard, no lifecycle of its own.
  */
 @CommandHandler(PutRuleAssessmentCommand)
-export class PutRuleAssessmentHandler
-  implements ICommandHandler<PutRuleAssessmentCommand>
-{
+export class PutRuleAssessmentHandler implements ICommandHandler<PutRuleAssessmentCommand> {
   constructor(private readonly prisma: PrismaService) {}
 
   async execute(
@@ -168,9 +166,11 @@ export class PutRuleAssessmentHandler
         { status: HttpStatus.CONFLICT },
       );
     }
-    const saved = await this.prisma.engineeringRuleAssessment.findUniqueOrThrow({
-      where,
-    });
+    const saved = await this.prisma.engineeringRuleAssessment.findUniqueOrThrow(
+      {
+        where,
+      },
+    );
     return rowToAcceptedRuleAssessment(saved);
   }
 }

@@ -11,7 +11,9 @@ import {
 
 const STATES = ASSESSMENT_STAGE_LIFECYCLE_STATES;
 
-function progress(overrides: Partial<AssessmentRuntimeEngineeringProgress> = {}) {
+function progress(
+  overrides: Partial<AssessmentRuntimeEngineeringProgress> = {},
+) {
   return [
     {
       assessmentId: "assessment-1",

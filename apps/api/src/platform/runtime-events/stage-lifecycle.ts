@@ -91,12 +91,7 @@ export function deriveStageLifecycles(
       assessmentId,
       scanner,
       interview,
-      ruleAnalysis: deriveRuleAnalysis(
-        engineering,
-        scanner,
-        interview,
-        isLive,
-      ),
+      ruleAnalysis: deriveRuleAnalysis(engineering, scanner, interview, isLive),
       gate: deriveGate(engineering),
     };
   });

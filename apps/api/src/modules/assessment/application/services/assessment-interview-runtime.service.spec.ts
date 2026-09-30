@@ -2259,7 +2259,10 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         service.registerTargetedNeedForWorker({
           assessmentId: "assessment-1",
           correlationId: "corr-target-invalid",
-          target: targetedNeedRegistrationPayload({ needId: "need-invalid", question: "" }) as never,
+          target: targetedNeedRegistrationPayload({
+            needId: "need-invalid",
+            question: "",
+          }) as never,
         }),
       ).rejects.toMatchObject({
         response: { code: "INTERVIEW_TARGETED_NEED_INVALID" },
@@ -2271,7 +2274,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         service.registerTargetedNeedForWorker({
           assessmentId: "assessment-1",
           correlationId: "corr-target-leak",
-          target: targetedNeedRegistrationPayload({ question: "Clarify EngineeringRule ENG-7 handling" }) as never,
+          target: targetedNeedRegistrationPayload({
+            question: "Clarify EngineeringRule ENG-7 handling",
+          }) as never,
         }),
       ).rejects.toMatchObject({
         response: { code: "INTERVIEW_TARGETED_NEED_NON_NEUTRAL" },
@@ -4888,7 +4893,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         service.registerTargetedNeedForWorker({
           assessmentId: "assessment-1",
           correlationId: "corr-target-fabricated-ref",
-          target: targetedNeedRegistrationPayload({ evidenceRefs: ["evidence:fabricated:cross_assessment_999"] }) as never,
+          target: targetedNeedRegistrationPayload({
+            evidenceRefs: ["evidence:fabricated:cross_assessment_999"],
+          }) as never,
         }),
       ).rejects.toMatchObject({
         response: {
@@ -5142,7 +5149,10 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
 
 describe("server-owned identity of a governed answer to a BusinessContextNeed", () => {
   const need = JSON.parse(
-    readFileSync(resolvePath(process.cwd(), "test/fixtures/business-context-need.json"), "utf8"),
+    readFileSync(
+      resolvePath(process.cwd(), "test/fixtures/business-context-need.json"),
+      "utf8",
+    ),
   ) as {
     needId: string;
     engineeringRuleId: string;
@@ -5189,11 +5199,19 @@ describe("server-owned identity of a governed answer to a BusinessContextNeed", 
       revision,
       "corr",
       { need: (withNeed ?? undefined) as never, previousStatements: previous },
-    ) as { contextRevision: number; statements: Array<Record<string, unknown>> };
+    ) as {
+      contextRevision: number;
+      statements: Array<Record<string, unknown>>;
+    };
 
   it("stamps need, rule and criterion identity itself, from the need it registered", () => {
     const result = materialize([
-      { statementId: "s1", topic: "reworded topic", statement: "A person approves first.", resolvesCriterionId: need.resolutionCriterionIds[0] },
+      {
+        statementId: "s1",
+        topic: "reworded topic",
+        statement: "A person approves first.",
+        resolvesCriterionId: need.resolutionCriterionIds[0],
+      },
     ]);
     expect(result.contextRevision).toBe(7);
     expect(result.statements[0]).toMatchObject({
@@ -5205,8 +5223,19 @@ describe("server-owned identity of a governed answer to a BusinessContextNeed", 
 
   it("never copies an id the model wrote, and drops a criterion the need does not list", () => {
     const result = materialize([
-      { statementId: "s1", topic: "t", statement: "x", sourceNeedId: "need:forged", resolvedCriterionIds: ["forged"] },
-      { statementId: "s2", topic: "t", statement: "x", resolvesCriterionId: "forged" },
+      {
+        statementId: "s1",
+        topic: "t",
+        statement: "x",
+        sourceNeedId: "need:forged",
+        resolvedCriterionIds: ["forged"],
+      },
+      {
+        statementId: "s2",
+        topic: "t",
+        statement: "x",
+        resolvesCriterionId: "forged",
+      },
     ]);
     for (const statement of result.statements) {
       expect(statement).not.toHaveProperty("sourceNeedId");
@@ -5216,7 +5245,14 @@ describe("server-owned identity of a governed answer to a BusinessContextNeed", 
 
   it("stamps nothing when no need is pending", () => {
     const result = materialize(
-      [{ statementId: "s1", topic: "t", statement: "x", resolvesCriterionId: need.resolutionCriterionIds[0] }],
+      [
+        {
+          statementId: "s1",
+          topic: "t",
+          statement: "x",
+          resolvesCriterionId: need.resolutionCriterionIds[0],
+        },
+      ],
       undefined,
       null,
     );
@@ -5225,7 +5261,12 @@ describe("server-owned identity of a governed answer to a BusinessContextNeed", 
 
   it("keeps the identity when a later turn re-emits the same statement", () => {
     const first = materialize([
-      { statementId: "s1", topic: "t", statement: "x", resolvesCriterionId: need.resolutionCriterionIds[0] },
+      {
+        statementId: "s1",
+        topic: "t",
+        statement: "x",
+        resolvesCriterionId: need.resolutionCriterionIds[0],
+      },
     ]);
     const later = materialize(
       [{ statementId: "s1", topic: "t", statement: "x" }],

@@ -144,7 +144,13 @@ describe("ScanController role-only RBAC", () => {
       {
         inputArtifactVersion: "ter_12345678",
         analyzerId: "DEEP_AGENT_REPOSITORY_ANALYSIS",
-        scope: { ruleScope: { engineeringRuleId: "ENG-1", criterionIds: ["criterion-a"], contextRevision: 1 } },
+        scope: {
+          ruleScope: {
+            engineeringRuleId: "ENG-1",
+            criterionIds: ["criterion-a"],
+            contextRevision: 1,
+          },
+        },
         reasonRequirementId: "requirement:gap_12345678",
         idempotencyKey: "request_targeted_reanalysis_0001",
       },
@@ -386,7 +392,13 @@ describe("InternalScanController", () => {
         userId: "user-1",
         inputArtifactVersion: "ter_12345678",
         analyzerId: "DEEP_AGENT_REPOSITORY_ANALYSIS",
-        scope: { ruleScope: { engineeringRuleId: "ENG-1", criterionIds: ["criterion-a"], contextRevision: 1 } },
+        scope: {
+          ruleScope: {
+            engineeringRuleId: "ENG-1",
+            criterionIds: ["criterion-a"],
+            contextRevision: 1,
+          },
+        },
         reasonRequirementId: "requirement:gap_12345678",
         idempotencyKey: "request_targeted_reanalysis_0001",
       },

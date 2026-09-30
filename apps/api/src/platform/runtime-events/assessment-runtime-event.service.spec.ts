@@ -1709,7 +1709,7 @@ describe("AssessmentRuntimeEventService", () => {
       runtimeEventRow({
         id: `evt-live-rule-${index}-${activity}`,
         sequence: index + 1,
-        eventType: eventType as never,
+        eventType: eventType,
         runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
         toolName: `rule_analysis:eng-${index}`,
         outputSummaryJson: { activity, engineeringRuleId: `eng-${index}` },
@@ -1734,19 +1734,43 @@ describe("AssessmentRuntimeEventService", () => {
       // 13 completed, 3 unresolved, 1 needs context, 1 failed, 1 still running.
       for (let index = 1; index <= 13; index += 1) {
         events.push(
-          ruleEvent(index, "RULE_ANALYSIS_STARTED", ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted),
-          ruleEvent(index, "RULE_ANALYSIS_COMPLETED", ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted),
+          ruleEvent(
+            index,
+            "RULE_ANALYSIS_STARTED",
+            ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
+          ),
+          ruleEvent(
+            index,
+            "RULE_ANALYSIS_COMPLETED",
+            ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+          ),
         );
       }
       for (let index = 14; index <= 16; index += 1) {
         events.push(
-          ruleEvent(index, "RULE_ANALYSIS_UNRESOLVED", ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted),
+          ruleEvent(
+            index,
+            "RULE_ANALYSIS_UNRESOLVED",
+            ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+          ),
         );
       }
       events.push(
-        ruleEvent(17, "RULE_ANALYSIS_NEEDS_CONTEXT", ASSESSMENT_RUNTIME_EVENT_TYPES.toolWaitingInput),
-        ruleEvent(18, "RULE_ANALYSIS_FAILED", ASSESSMENT_RUNTIME_EVENT_TYPES.toolFailed),
-        ruleEvent(19, "RULE_ANALYSIS_STARTED", ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted),
+        ruleEvent(
+          17,
+          "RULE_ANALYSIS_NEEDS_CONTEXT",
+          ASSESSMENT_RUNTIME_EVENT_TYPES.toolWaitingInput,
+        ),
+        ruleEvent(
+          18,
+          "RULE_ANALYSIS_FAILED",
+          ASSESSMENT_RUNTIME_EVENT_TYPES.toolFailed,
+        ),
+        ruleEvent(
+          19,
+          "RULE_ANALYSIS_STARTED",
+          ASSESSMENT_RUNTIME_EVENT_TYPES.toolStarted,
+        ),
       );
       // Event sequences must be unique and ascending.
       return events.map((event, position) => ({

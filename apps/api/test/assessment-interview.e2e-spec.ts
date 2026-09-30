@@ -1203,7 +1203,10 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       resolvedState.continuation.originatingRuleAnalysisReference,
       "rule:ENG-1:need:ENG-1:decision_authority:0123456789ab",
     );
-    assert.equal(resolvedState.continuation.needId, "need:ENG-1:decision_authority:0123456789ab");
+    assert.equal(
+      resolvedState.continuation.needId,
+      "need:ENG-1:decision_authority:0123456789ab",
+    );
     assert.equal(resolvedState.continuation.engineeringRuleId, "ENG-1");
     assert.equal(resolvedState.continuation.contextRevision, 1);
     assert.equal(resolvedState.continuation.workflowRunId, "workflow-run-1");
@@ -1360,7 +1363,10 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       ),
     );
     const registrationPayload = jsonRecord(registrationEvent.payload);
-    assert.equal(registrationPayload.questionId, "need:ENG-42:deployment_approval_owner:0123456789ab");
+    assert.equal(
+      registrationPayload.questionId,
+      "need:ENG-42:deployment_approval_owner:0123456789ab",
+    );
     assert.equal(
       registrationPayload.resumeReason,
       "BUSINESS_CONTEXT_RESOLUTION_REQUIRED",

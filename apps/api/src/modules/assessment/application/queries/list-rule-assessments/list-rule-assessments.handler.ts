@@ -9,9 +9,7 @@ import { rowToAcceptedRuleAssessment } from "../../mappers/rule-assessment.mappe
 import { ListRuleAssessmentsQuery } from "./list-rule-assessments.query.js";
 
 @QueryHandler(ListRuleAssessmentsQuery)
-export class ListRuleAssessmentsHandler
-  implements IQueryHandler<ListRuleAssessmentsQuery>
-{
+export class ListRuleAssessmentsHandler implements IQueryHandler<ListRuleAssessmentsQuery> {
   constructor(private readonly prisma: PrismaService) {}
 
   async execute(

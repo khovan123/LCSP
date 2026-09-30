@@ -70,7 +70,13 @@ describe("RequestTargetedReanalysisHandler admission", () => {
           assessmentId: "assessment-1",
           inputArtifactVersion: "ter-1",
           analyzerId: "DEEP_AGENT_REPOSITORY_ANALYSIS",
-          scope: { ruleScope: { engineeringRuleId: "ENG-1", criterionIds: ["criterion-b", "criterion-a"], contextRevision: 3 } },
+          scope: {
+            ruleScope: {
+              engineeringRuleId: "ENG-1",
+              criterionIds: ["criterion-b", "criterion-a"],
+              contextRevision: 3,
+            },
+          },
           reasonRequirementId: "requirement:1",
           idempotencyKey: "idempotency-key-0001",
         },
@@ -143,7 +149,13 @@ describe("RequestTargetedReanalysisHandler admission", () => {
             assessmentId: "assessment-1",
             inputArtifactVersion: "ter-1",
             analyzerId: "DEEP_AGENT_REPOSITORY_ANALYSIS",
-            scope: { ruleScope: { engineeringRuleId: "ENG-1", criterionIds: ["criterion-b", "criterion-a"], contextRevision: 3 } },
+            scope: {
+              ruleScope: {
+                engineeringRuleId: "ENG-1",
+                criterionIds: ["criterion-b", "criterion-a"],
+                contextRevision: 3,
+              },
+            },
             reasonRequirementId: "requirement:1",
             idempotencyKey: "idempotency-key-queued-cap-0001",
           },
@@ -190,20 +202,30 @@ describe("RequestTargetedReanalysisHandler admission", () => {
       technicalEvidenceReport: {
         // No file path anywhere in the artifact: only a task-id scope can work here.
         findFirst: jest.fn().mockImplementation(() =>
-          Promise.resolve({ id: "ter-1", snapshotId: "snapshot-1", evidencePayload: {} }),
+          Promise.resolve({
+            id: "ter-1",
+            snapshotId: "snapshot-1",
+            evidencePayload: {},
+          }),
         ),
       },
       repositorySnapshot: {
-        findFirst: jest.fn().mockImplementation(() =>
-          Promise.resolve({ id: "snapshot-1", commitSha: "commit-1" }),
-        ),
+        findFirst: jest
+          .fn()
+          .mockImplementation(() =>
+            Promise.resolve({ id: "snapshot-1", commitSha: "commit-1" }),
+          ),
       },
       $transaction: jest.fn((handler: (tx: typeof transaction) => unknown) =>
         Promise.resolve(handler(transaction)),
       ),
     };
-    const outbox = { enqueue: jest.fn().mockImplementation(() => Promise.resolve()) };
-    const auditWriter = { write: jest.fn().mockImplementation(() => Promise.resolve()) };
+    const outbox = {
+      enqueue: jest.fn().mockImplementation(() => Promise.resolve()),
+    };
+    const auditWriter = {
+      write: jest.fn().mockImplementation(() => Promise.resolve()),
+    };
     const handler = new RequestTargetedReanalysisHandler(
       prisma as never,
       auditWriter as never,
@@ -216,7 +238,13 @@ describe("RequestTargetedReanalysisHandler admission", () => {
           assessmentId: "assessment-1",
           inputArtifactVersion: "ter-1",
           analyzerId: "DEEP_AGENT_REPOSITORY_ANALYSIS",
-          scope: { ruleScope: { engineeringRuleId: "ENG-1", criterionIds: ["criterion-b", "criterion-a"], contextRevision: 3 } },
+          scope: {
+            ruleScope: {
+              engineeringRuleId: "ENG-1",
+              criterionIds: ["criterion-b", "criterion-a"],
+              contextRevision: 3,
+            },
+          },
           reasonRequirementId: "requirement:CONTEXT_CONDITION_RESOLVED",
           idempotencyKey: "idempotency-key-rule-0001",
         },
@@ -243,7 +271,11 @@ describe("RequestTargetedReanalysisHandler admission", () => {
   });
 
   it("rejects a legacy path scope", async () => {
-    const handler = new RequestTargetedReanalysisHandler({} as never, {} as never, {} as never);
+    const handler = new RequestTargetedReanalysisHandler(
+      {} as never,
+      {} as never,
+      {} as never,
+    );
     let caught: unknown;
     try {
       await handler.execute(
@@ -264,8 +296,9 @@ describe("RequestTargetedReanalysisHandler admission", () => {
       caught = error;
     }
     expect(
-      (caught as { getResponse: () => { problem?: { code?: string } } }).getResponse().problem
-        ?.code,
+      (
+        caught as { getResponse: () => { problem?: { code?: string } } }
+      ).getResponse().problem?.code,
     ).toBe(SCAN_ERROR_CODES.targetedReanalysisInvalidScope);
   });
 });

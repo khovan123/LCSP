@@ -8,7 +8,9 @@ import { ListRuleAssessmentsQuery } from "./list-rule-assessments.query.js";
 function handlerWith(assessment: { id: string } | null, rows: unknown[]) {
   const findMany = jest.fn(async (..._args: unknown[]) => rows);
   const prisma = {
-    assessment: { findUnique: jest.fn(async (..._args: unknown[]) => assessment) },
+    assessment: {
+      findUnique: jest.fn(async (..._args: unknown[]) => assessment),
+    },
     engineeringRuleAssessment: { findMany },
   };
   return {

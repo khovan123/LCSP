@@ -63,7 +63,9 @@ function harness(existing: { id: string; contextRevision: number } | null) {
     findUnique: jest.fn(async (..._args: unknown[]) => existing),
     updateMany: jest.fn(async (..._args: unknown[]) => ({ count: 1 })),
     findUniqueOrThrow: jest.fn(async (..._args: unknown[]) => savedRow()),
-    create: jest.fn(async (..._args: unknown[]): Promise<unknown> => savedRow()),
+    create: jest.fn(async (..._args: unknown[]): Promise<unknown> =>
+      savedRow(),
+    ),
   };
   const prisma = {
     assessment: {
@@ -190,7 +192,7 @@ describe("PutRuleAssessmentHandler", () => {
   it("rejects evidence provenance that does not match the assessment/rule/criterion", async () => {
     const { handler, ledger } = harness(null);
     const b = body();
-    b.criteria[0]!.evidence[0]!.provenance.engineeringRuleId = "rule-other";
+    b.criteria[0].evidence[0].provenance.engineeringRuleId = "rule-other";
     expect((await rejection(run(handler, b))).getStatus()).toBe(422);
     expect(ledger.create).not.toHaveBeenCalled();
   });
@@ -199,8 +201,8 @@ describe("PutRuleAssessmentHandler", () => {
     const { handler, ledger } = harness(null);
     const b = body();
     const macRef = `${REF}~0123456789abcdef01234567`;
-    b.criteria[0]!.evidenceRefs = [macRef];
-    b.criteria[0]!.evidence[0]!.ref = macRef;
+    b.criteria[0].evidenceRefs = [macRef];
+    b.criteria[0].evidence[0].ref = macRef;
     expect((await rejection(run(handler, b))).getStatus()).toBe(422);
     expect(ledger.create).not.toHaveBeenCalled();
   });

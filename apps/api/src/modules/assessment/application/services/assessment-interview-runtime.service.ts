@@ -1392,10 +1392,7 @@ export class AssessmentInterviewRuntimeService {
       const currentWorkflowRunId =
         thread.privateStore.targetedContinuation?.workflowRunId ??
         thread.privateStore.workflowRunId;
-      if (
-        target &&
-        input.contextRevision < thread.contextRevision
-      ) {
+      if (target && input.contextRevision < thread.contextRevision) {
         return thread.privateStore.workflowRunId ?? currentWorkflowRunId;
       }
       return currentWorkflowRunId;
@@ -1546,7 +1543,8 @@ export class AssessmentInterviewRuntimeService {
       await this.interviewAudit.recordTargetedClarification(
         {
           assessmentId: input.assessmentId,
-          originatingRuleAnalysisReference: targetedNeed.originatingRuleAnalysisReference,
+          originatingRuleAnalysisReference:
+            targetedNeed.originatingRuleAnalysisReference,
           interviewContextRevision: String(thread.contextRevision ?? 0),
           sessionId: this.threadId(input.assessmentId),
           threadId: this.threadId(input.assessmentId),
@@ -1768,7 +1766,8 @@ export class AssessmentInterviewRuntimeService {
           ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved &&
         decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer;
       const isTargetedBootstrap =
-        decision.mode === ASSESSMENT_INTERVIEW_MODES.businessContextResolution &&
+        decision.mode ===
+          ASSESSMENT_INTERVIEW_MODES.businessContextResolution &&
         decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
         thread.state.outcome ===
           ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
@@ -3698,11 +3697,11 @@ function parseStoredTargetedContinuation(
     checkpointId:
       typeof record.checkpointId === "string" ? record.checkpointId : undefined,
     artifactVersions: artifactVersions
-      ? (Object.fromEntries(
+      ? Object.fromEntries(
           Object.entries(artifactVersions).filter(
             (entry): entry is [string, string] => typeof entry[1] === "string",
           ),
-        ) as Record<string, string>)
+        )
       : undefined,
     sourceVersion: record.sourceVersion,
     pgeVersion: record.pgeVersion,
@@ -3858,7 +3857,9 @@ function assertGuardedDecision(
     correlationId,
   );
   if (activeBusinessContextNeed(thread.privateStore)) {
-    if (decision.mode !== ASSESSMENT_INTERVIEW_MODES.businessContextResolution) {
+    if (
+      decision.mode !== ASSESSMENT_INTERVIEW_MODES.businessContextResolution
+    ) {
       throw problemException(
         "INTERVIEW_TARGETED_MODE_REQUIRED",
         correlationId,
@@ -3881,7 +3882,11 @@ function assertGuardedDecision(
   }
   const boundNeed = activeBusinessContextNeed(thread.privateStore);
   if (boundNeed && decision.confirmedContext) {
-    assertAnswerBoundToNeed(decision.confirmedContext, boundNeed, correlationId);
+    assertAnswerBoundToNeed(
+      decision.confirmedContext,
+      boundNeed,
+      correlationId,
+    );
   }
   assertTargetedQuestionBounded(decision, thread, correlationId);
   if (
@@ -3953,7 +3958,8 @@ function assertGuardedDecision(
         (criterion) => !confirmedContextSatisfiesCriterion(context, criterion),
       )
     : target.resolutionCriterionIds.filter(
-        (criterionId) => !confirmedContextResolvesCriterion(context, criterionId),
+        (criterionId) =>
+          !confirmedContextResolvesCriterion(context, criterionId),
       );
   if (missing.length > 0) {
     throw problemException(
@@ -4528,11 +4534,9 @@ function assertAnswerBoundToNeed(
       statement.engineeringRuleId !== undefined &&
       statement.engineeringRuleId !== need.engineeringRuleId;
     if (foreignNeed || foreignRule) {
-      throw problemException(
-        "INTERVIEW_ANSWER_NEED_MISMATCH",
-        correlationId,
-        { status: HttpStatus.CONFLICT },
-      );
+      throw problemException("INTERVIEW_ANSWER_NEED_MISMATCH", correlationId, {
+        status: HttpStatus.CONFLICT,
+      });
     }
   }
 }
