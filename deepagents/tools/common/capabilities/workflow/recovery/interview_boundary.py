@@ -1283,6 +1283,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             InterviewGatedEngineeringAssessmentBoundary(
                 self._config,
                 api_client=self._api_client,
+                interview_dispatcher=self._dispatcher,
             ).handle(
                 {
                     "assessmentId": assessment_id,

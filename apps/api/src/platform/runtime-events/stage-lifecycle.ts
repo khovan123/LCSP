@@ -132,7 +132,7 @@ function deriveScanner(
   }
   return entry(
     STATES.queued,
-    latest ? "scanJob" : "none",
+    latest ? "scanJob" : "noDurableArtifact",
     latest?.status ?? null,
   );
 }
@@ -141,7 +141,7 @@ function deriveScanner(
 function deriveInterview(
   thread: StageLifecycleInterviewThread | undefined,
 ): AssessmentStageLifecycleEntry {
-  if (!thread) return entry(STATES.queued, "none");
+  if (!thread) return entry(STATES.queued, "noDurableArtifact");
   if (thread.activeQuestionId) {
     return entry(STATES.waitingForCustomer, "interviewThread");
   }
@@ -183,7 +183,7 @@ function deriveRuleAnalysis(
       (scanner.state !== STATES.done && scanner.state !== STATES.partial) ||
       interview.state !== STATES.contextConfirmed
     ) {
-      return entry(STATES.queued, "none");
+      return entry(STATES.queued, "noDurableArtifact");
     }
     return entry(isLive ? STATES.running : STATES.queued, "dispatch");
   }
@@ -219,7 +219,7 @@ function deriveRuleAnalysis(
 function deriveGate(
   progress: AssessmentRuntimeEngineeringProgress | undefined,
 ): AssessmentStageLifecycleEntry {
-  if (!progress) return entry(STATES.queued, "none");
+  if (!progress) return entry(STATES.queued, "noDurableArtifact");
   if (
     pendingRules(progress) === 0 &&
     progress.needsContext === 0 &&
