@@ -234,6 +234,9 @@ type TargetedInterviewContinuation = {
   originatingRuleAnalysisReference: string;
   needId: string;
   engineeringRuleId: string;
+  criterionId?: string;
+  /** Criteria the worker may bind a resolved answer to; absent on pre-existing rows. */
+  resolutionCriterionIds?: string[];
   contextRevision: number;
   workflowRunId: string;
   checkpointId?: string;
@@ -1494,6 +1497,8 @@ export class AssessmentInterviewRuntimeService {
         originatingRuleAnalysisReference,
         needId: target.needId,
         engineeringRuleId: target.engineeringRuleId,
+        criterionId: target.criterionId,
+        resolutionCriterionIds: target.resolutionCriterionIds,
         contextRevision: target.contextRevision,
         workflowRunId: target.workflowRunId,
         checkpointId: target.checkpointId,
