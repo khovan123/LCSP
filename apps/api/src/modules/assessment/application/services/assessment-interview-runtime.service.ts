@@ -4518,6 +4518,7 @@ function assertAnswerBoundToNeed(
     const claimed = statement.resolvesCriterionId;
     if (
       claimed !== undefined &&
+      claimed !== null &&
       (typeof claimed !== "string" ||
         !need.resolutionCriterionIds.includes(claimed))
     ) {
