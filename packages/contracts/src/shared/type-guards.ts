@@ -1,5 +1,5 @@
 /**
- * Reusable runtime type guards for web data payloads.
+ * Shared Type Guards and Sanitizers for @lcsp/contracts.
  */
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -22,4 +22,10 @@ export function isNumber(value: unknown): value is number {
 
 export function isBoolean(value: unknown): value is boolean {
   return typeof value === "boolean";
+}
+
+export function cleanString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
 }

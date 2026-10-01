@@ -11,7 +11,8 @@ import {
   parseGitLabRepositoryUrl,
 } from "@lcsp/contracts/github-integration";
 
-import { isRecord, isString } from "../type-guards.ts";
+import { isRecord, isString } from "@lcsp/contracts/shared";
+
 import { apiRequest } from "./api-request.ts";
 
 export type StartRepositoryAnalysisInput = {
