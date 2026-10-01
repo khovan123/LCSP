@@ -7,7 +7,7 @@ import {
   cleanString,
   isNumber,
   isRecord,
-} from "../../../common/utils/index.js";
+} from "@lcsp/contracts/shared";
 import { setProblemResponseMetadata } from "./error-response-metadata.js";
 import {
   defaultErrorCodeForStatus,
