@@ -8,10 +8,16 @@ import {
   READINESS_MODES,
 } from "@lcsp/contracts/assessment";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
-import { REPOSITORY_CONNECTION_STATUSES, REPOSITORY_SNAPSHOT_STATUSES } from "@lcsp/contracts/github-integration";
+import {
+  REPOSITORY_CONNECTION_STATUSES,
+  REPOSITORY_SNAPSHOT_STATUSES,
+} from "@lcsp/contracts/github-integration";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
-import { toPrismaEvidenceAcceptanceStatus, fromPrismaRepositoryScanJobStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
+import {
+  toPrismaEvidenceAcceptanceStatus,
+  fromPrismaRepositoryScanJobStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { problemException } from "../../../../../platform/http/filters/error.factory.js";
 import {
   ASSESSMENT_REPOSITORY,
@@ -93,7 +99,8 @@ export class GetAssessmentReadinessHandler implements IQueryHandler<GetAssessmen
         })
       : null;
     const setupCompleted = Boolean(
-      connection && snapshot &&
+      connection &&
+      snapshot &&
       assessment.status !== ASSESSMENT_STATUS_CODES.wizardInProgress,
     );
 
@@ -101,33 +108,40 @@ export class GetAssessmentReadinessHandler implements IQueryHandler<GetAssessmen
       repository_setup: {
         assessmentId: assessment.id,
         assessmentStatus: assessment.status,
-        connection: connection ? {
-          connectionId: connection.id,
-          provider: String(connection.provider),
-          repositoryId: connection.repositoryId,
-          repositoryFullName: connection.repositoryFullName,
-          defaultBranch: connection.defaultBranch,
-          status: String(connection.status),
-        } : null,
-        snapshot: snapshot && connection ? {
-          id: snapshot.id,
-          assessmentId: snapshot.assessmentId,
-          connectionId: snapshot.connectionId,
-          provider: String(connection.provider),
-          repositoryFullName: snapshot.repositoryFullName,
-          branch: snapshot.branch,
-          commitSha: snapshot.commitSha,
-          createdAt: snapshot.createdAt.toISOString(),
-        } : null,
-        scanJob: scanJob ? {
-          id: scanJob.id,
-          assessmentId: scanJob.assessmentId,
-          snapshotId: scanJob.snapshotId,
-          status: fromPrismaRepositoryScanJobStatus(scanJob.status),
-          attemptCount: scanJob.attemptCount,
-          blockedReason: scanJob.blockedReason,
-          updatedAt: scanJob.updatedAt.toISOString(),
-        } : null,
+        connection: connection
+          ? {
+              connectionId: connection.id,
+              provider: String(connection.provider),
+              repositoryId: connection.repositoryId,
+              repositoryFullName: connection.repositoryFullName,
+              defaultBranch: connection.defaultBranch,
+              status: String(connection.status),
+            }
+          : null,
+        snapshot:
+          snapshot && connection
+            ? {
+                id: snapshot.id,
+                assessmentId: snapshot.assessmentId,
+                connectionId: snapshot.connectionId,
+                provider: String(connection.provider),
+                repositoryFullName: snapshot.repositoryFullName,
+                branch: snapshot.branch,
+                commitSha: snapshot.commitSha,
+                createdAt: snapshot.createdAt.toISOString(),
+              }
+            : null,
+        scanJob: scanJob
+          ? {
+              id: scanJob.id,
+              assessmentId: scanJob.assessmentId,
+              snapshotId: scanJob.snapshotId,
+              status: fromPrismaRepositoryScanJobStatus(scanJob.status),
+              attemptCount: scanJob.attemptCount,
+              blockedReason: scanJob.blockedReason,
+              updatedAt: scanJob.updatedAt.toISOString(),
+            }
+          : null,
       },
       classification_locked: acceptedEvidence === null,
       missing_evidence:
