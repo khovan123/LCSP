@@ -13,6 +13,8 @@ Canonical state transitions for the A-to-Z runnable MVP. Physical enums remain o
 - Final document requires classification, GapAnalysis, citations, and no unresolved conflict.
 - Manager completion never depends on external collaborator participation.
 - RBAC is the authorization source of truth for all user and service transitions.
+- Business Context edits cannot mutate a running assessment's pinned context revision. During active execution they must be blocked or queued for a later reassessment/new run.
+- Repository write capability is verified only for an approved remediation PR action, immediately before mutation.
 - Structured attestation is `SUPERSEDED_FOR_ACTIVE_MVP` and has no active state machine.
 
 ## Assessment
@@ -96,6 +98,26 @@ or REJECTED
 - Duplicate delivery is idempotent and must not duplicate artifacts.
 - Idempotency key, retry/DLQ and replay behavior are governed by `docs/implementation/decisions/trusted-scan-trigger-retry-dlq-replay-decision.md`.
 
+## Business Context Revision
+
+States: `DRAFT`, `PINNED_FOR_RUN`, `QUEUED_FOR_NEXT_RUN`, `APPLIED`, `REJECTED`.
+
+```text
+DRAFT
+-> PINNED_FOR_RUN
+-> APPLIED
+
+DRAFT
+-> QUEUED_FOR_NEXT_RUN
+-> APPLIED
+or REJECTED
+```
+
+- `PINNED_FOR_RUN` is immutable for the active assessment run.
+- Customer edits during `RUNNING` cannot change `PINNED_FOR_RUN`; the system either rejects the edit with an actionable blocked state or creates `QUEUED_FOR_NEXT_RUN`.
+- `QUEUED_FOR_NEXT_RUN` becomes `APPLIED` only after the active run reaches a terminal state and a reassessment/new run starts.
+- All revision decisions record actor, prior revision, new revision, run id, and correlation id in AuditEvent.
+
 ## TechnicalEvidenceReport
 
 ```text
@@ -167,9 +189,34 @@ States: `DRAFT`, `APPROVED`, `SUPERSEDED`.
 
 - DRAFT becomes APPROVED only after Internal Legal Operator review.
 - APPROVED content is immutable.
+- Any legal-corpus content change creates a new DRAFT version; approved content is never edited in place.
 - A newer approved version may mark an older version SUPERSEDED.
-- Existing assessments retain their pinned version.
+- Existing assessments, evaluations, retrieval logs, and reports retain their pinned `legalCorpusVersionId/version`.
 - Rejected review remains unavailable and is recorded separately.
+
+## RemediationChangeRequest
+
+States: `PROPOSED`, `CUSTOMER_REVIEW`, `WRITE_CAPABILITY_CHECK`, `CREDENTIAL_UPDATE_REQUIRED`, `PATCH_READY`, `PR_CREATED`, `PATCHED_SCAN_REQUESTED`, `PATCHED_SCAN_COMPLETED`, `RE_EVALUATED`, `VERIFIED`, `BLOCKED`.
+
+```text
+PROPOSED
+-> CUSTOMER_REVIEW
+-> WRITE_CAPABILITY_CHECK
+-> CREDENTIAL_UPDATE_REQUIRED
+-> WRITE_CAPABILITY_CHECK
+-> PATCH_READY
+-> PR_CREATED
+-> PATCHED_SCAN_REQUESTED
+-> PATCHED_SCAN_COMPLETED
+-> RE_EVALUATED
+-> VERIFIED
+```
+
+- Customer approval is required before `WRITE_CAPABILITY_CHECK`.
+- Missing write capability moves to `CREDENTIAL_UPDATE_REQUIRED`; mutation remains blocked until the required PAT/credential capability is present.
+- `PR_CREATED` must persist branch, commit, pull request number/URL, patch version, actor, and correlation refs.
+- `PATCHED_SCAN_COMPLETED` and `RE_EVALUATED` are required before final remediation verification.
+- Current implementation evidence covers persisted Customer decision state only; all write-back, patched scan, and re-evaluation transitions remain documentation requirements until tests/evidence exist.
 
 ## Corpus Index Build
 
