@@ -13,7 +13,7 @@ import {
 } from "@lcsp/contracts/github-integration";
 import { resolveMessage, type MessageKey } from "@lcsp/i18n";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
 import { ConfirmAccessDialog } from "@/components/organisms/confirm-access-dialog";
@@ -66,7 +66,6 @@ export function RepositorySetupStep({
 }: RepositorySetupStepProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const submitInFlight = useRef(false);
   const createAssessment = useCreateAssessmentMutation();
   const profileQuery = useAuthSettingsProfileQuery();
   const verifyMutation = useMfaVerifyMutation();
@@ -162,8 +161,7 @@ export function RepositorySetupStep({
   }
 
   async function runSetup(data?: RepositorySetupFormData) {
-    if (submitInFlight.current) return;
-    submitInFlight.current = true;
+    if (isSubmitting) return;
     setIsSubmitting(true);
     setSubmitErrorKey(undefined);
     let assessmentId = workingAssessmentId;
@@ -202,7 +200,6 @@ export function RepositorySetupStep({
           await queryClient.invalidateQueries({ queryKey: apiQueryKeys.assessment.readiness(assessmentId) });
         }
       } finally {
-        submitInFlight.current = false;
         setIsSubmitting(false);
       }
     }
