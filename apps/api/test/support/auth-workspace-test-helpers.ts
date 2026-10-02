@@ -49,11 +49,6 @@ export type AuthFixture = {
   noMembershipUser: { id: string; email: string };
 };
 
-export function ensureTestMfaEncryptionKey(): void {
-  process.env.MFA_ENCRYPTION_KEY ??=
-    "test-only-mfa-encryption-key-do-not-use-in-prod";
-}
-
 export type MfaFixture = {
   userId: string;
   totpSecret: string;
@@ -443,31 +438,6 @@ export function pushPrismaSchema(): void {
     stdio: "pipe",
     shell,
   });
-
-  bootstrapModelPricingSnapshots(env, shell);
-}
-
-function bootstrapModelPricingSnapshots(
-  env: NodeJS.ProcessEnv,
-  shell: boolean,
-): void {
-  const configured = env.LCSP_MODEL_PRICING_SNAPSHOTS;
-  if (!configured) return;
-
-  const pnpmBinary = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-  execFileSync(
-    pnpmBinary,
-    ["exec", "tsx", "scripts/bootstrap-model-pricing-snapshots.ts"],
-    {
-      cwd: apiRoot,
-      env: {
-        ...env,
-        LCSP_MODEL_PRICING_SNAPSHOTS: configured,
-      },
-      stdio: "pipe",
-      shell,
-    },
-  );
 }
 
 export async function resetAuthWorkspaceDatabase(

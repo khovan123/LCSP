@@ -35,24 +35,6 @@ function findWorkspaceRoot(startDir: string): string {
 
 const SMTP_MAILBOX_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 const SMTP_DISPLAY_NAME_PATTERN = /^([^<>]+)<\s*([^<>]+)\s*>$/;
-const DEFAULT_ROOT_MODEL_SPEC = "openai:gpt-5-nano";
-const PROVIDER_ALIASES = {
-  google: "google_genai",
-  google_ai: "google_genai",
-  googleai: "google_genai",
-  gemini: "google_genai",
-} as const;
-const PROVIDER_PRESET_RUNTIME_MODELS = {
-  openai: { provider: "OPENAI", model: "gpt-5-nano" },
-  google_genai: { provider: "GOOGLE_GENAI", model: "gemini-3.5-flash-lite" },
-  llm7: { provider: "LLM7", model: "minimax-m2.7" },
-  inception: { provider: "INCEPTION", model: "mercury-2.5" },
-} as const;
-
-type RuntimeModelIdentity = {
-  provider: string;
-  model: string;
-};
 
 function paymentQrTemplateSchema() {
   return Joi.string()
@@ -99,158 +81,15 @@ function isValidSmtpFrom(value: string): boolean {
   );
 }
 
-function canonicalModelProvider(value: string): string {
-  const provider = value.trim().toLowerCase().replaceAll("-", "_");
-  return (
-    PROVIDER_ALIASES[provider as keyof typeof PROVIDER_ALIASES] ?? provider
-  );
-}
-
-function runtimeIdentityForProvider(
-  provider: string,
-): RuntimeModelIdentity | null {
-  const canonical = canonicalModelProvider(provider);
-  return (
-    PROVIDER_PRESET_RUNTIME_MODELS[
-      canonical as keyof typeof PROVIDER_PRESET_RUNTIME_MODELS
-    ] ?? null
-  );
-}
-
-function envText(value: unknown, fallback = ""): string {
-  if (value === undefined || value === null) return fallback;
-  if (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return String(value);
-  }
-  return "";
-}
-
-function runtimeIdentityForModelSpec(
-  spec: string,
-): RuntimeModelIdentity | null {
-  const [provider, ...modelParts] = spec.trim().split(":");
-  const model = modelParts.join(":").trim();
-  if (!provider?.trim() || !model) return null;
-  const canonical = canonicalModelProvider(provider);
-  return { provider: canonical.toUpperCase(), model };
-}
-
-function primaryRuntimeIdentity(
-  env: Record<string, unknown>,
-): RuntimeModelIdentity | null {
-  const selectedProvider = envText(env.LCSP_MODEL_PROVIDER).trim();
-  if (selectedProvider) return runtimeIdentityForProvider(selectedProvider);
-  return runtimeIdentityForModelSpec(
-    envText(env.LCSP_ROOT_AGENT_MODEL, DEFAULT_ROOT_MODEL_SPEC),
-  );
-}
-
-function fallbackRuntimeIdentities(
-  env: Record<string, unknown>,
-): RuntimeModelIdentity[] | null {
-  const indexed: Array<[number, RuntimeModelIdentity]> = [];
-  for (const [key, rawValue] of Object.entries(env)) {
-    const match = /^LLM_FALLBACK_PROVIDER_(\d+)$/u.exec(key);
-    if (!match) continue;
-    const provider = envText(rawValue).trim();
-    if (!provider) continue;
-    const identity = runtimeIdentityForProvider(provider);
-    if (!identity) return null;
-    indexed.push([Number(match[1]), identity]);
-  }
-  const seen = new Set<string>();
-  return indexed
-    .sort(([left], [right]) => left - right)
-    .flatMap(([, identity]) => {
-      const key = `${identity.provider}:${identity.model}`;
-      if (seen.has(key)) return [];
-      seen.add(key);
-      return [identity];
-    });
-}
-
-function parseBillingAuthorizedRuntimeModels(
-  value: unknown,
-): RuntimeModelIdentity[] | null {
-  const text = envText(value).trim();
-  if (!text) return [];
-  const models: RuntimeModelIdentity[] = [];
-  for (const entry of text.split(",")) {
-    const [provider, ...modelParts] = entry.trim().split(":");
-    const model = modelParts.join(":").trim();
-    if (!provider?.trim() || !model) return null;
-    models.push({ provider: provider.trim().toUpperCase(), model });
-  }
-  return models;
-}
-
-function containsRuntimeIdentity(
-  models: readonly RuntimeModelIdentity[],
-  identity: RuntimeModelIdentity,
-): boolean {
-  return models.some(
-    (candidate) =>
-      candidate.provider === identity.provider &&
-      candidate.model === identity.model,
-  );
-}
-
-function billingRuntimePolicyMatches(
-  env: Record<string, unknown>,
-):
-  | "valid"
-  | "invalidRuntime"
-  | "invalidAuthorizedModels"
-  | "primaryMismatch"
-  | "missingAuthorizedRuntime" {
-  if (env.BILLING_METERING_ENABLED !== true) return "valid";
-  const primary = primaryRuntimeIdentity(env);
-  const fallbacks = fallbackRuntimeIdentities(env);
-  if (!primary || !fallbacks) return "invalidRuntime";
-  const authorized = parseBillingAuthorizedRuntimeModels(
-    env.BILLING_AUTHORIZED_RUNTIME_MODELS,
-  );
-  if (!authorized) return "invalidAuthorizedModels";
-  const billingPrimary = {
-    provider: envText(env.BILLING_RUNTIME_PROVIDER).trim().toUpperCase(),
-    model: envText(env.BILLING_RUNTIME_MODEL).trim(),
-  };
-  if (
-    billingPrimary.provider !== primary.provider ||
-    billingPrimary.model !== primary.model
-  )
-    return "primaryMismatch";
-  const required = [primary, ...fallbacks];
-  return required.every((identity) =>
-    containsRuntimeIdentity(authorized, identity),
-  )
-    ? "valid"
-    : "missingAuthorizedRuntime";
-}
-
 export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
   return Joi.object({
     NODE_ENV: Joi.string()
       .valid(...Object.values(NODE_ENVS))
       .default(NODE_ENVS.development),
     DATABASE_URL: Joi.string().required(),
-    AUTH_BCRYPT_COST: Joi.number().integer().min(10).default(12),
-    AUTH_SESSION_TTL_SECONDS: Joi.number().integer().positive().default(86400),
-    JWT_SECRET: Joi.string().min(32).required(),
     OAUTH_GOOGLE_CLIENT_ID: Joi.string().allow("").default(""),
     OAUTH_GOOGLE_CLIENT_SECRET: Joi.string().allow("").default(""),
     OAUTH_ALLOWED_REDIRECT_ORIGINS: Joi.string().allow("").default(""),
-    OAUTH_ALLOWED_REDIRECT_URIS: Joi.string().required(),
-    GITHUB_APP_SLUG: Joi.string().required(),
-    GITHUB_APP_ID: Joi.string().required(),
-    GITHUB_APP_PRIVATE_KEY: Joi.string().required(),
-    GITHUB_APP_ALLOWED_REDIRECT_URIS: Joi.string().required(),
-    GITHUB_APP_CLIENT_ID: Joi.string().required(),
-    GITHUB_APP_CLIENT_SECRET: Joi.string().required(),
     GITHUB_CLI_EXECUTABLE_PATH: cliExecutablePathSchema(
       "GITHUB_CLI_EXECUTABLE_PATH",
       workspaceRoot,
@@ -295,7 +134,6 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
       "GITLAB_CLI_EXECUTABLE_PATH",
       workspaceRoot,
     ),
-    GITLAB_PROVIDER_ENABLED: Joi.boolean().default(false),
     GITLAB_CLI_TIMEOUT_MS: Joi.number().integer().positive().default(30000),
     GITLAB_CLI_MAX_JSON_OUTPUT_BYTES: Joi.number()
       .integer()
@@ -305,7 +143,6 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
       "BITBUCKET_CLI_EXECUTABLE_PATH",
       workspaceRoot,
     ),
-    BITBUCKET_PROVIDER_ENABLED: Joi.boolean().default(false),
     BITBUCKET_CLI_TIMEOUT_MS: Joi.number().integer().positive().default(30000),
     BITBUCKET_CLI_MAX_JSON_OUTPUT_BYTES: Joi.number()
       .integer()
@@ -315,7 +152,6 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
       "AZURE_DEVOPS_CLI_EXECUTABLE_PATH",
       workspaceRoot,
     ),
-    AZURE_DEVOPS_PROVIDER_ENABLED: Joi.boolean().default(false),
     AZURE_DEVOPS_CLI_TIMEOUT_MS: Joi.number()
       .integer()
       .positive()
@@ -324,22 +160,13 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
       .integer()
       .positive()
       .default(1048576),
-    GITHUB_CLI_CREDENTIAL_PERSISTENCE_ENABLED: Joi.boolean().default(false),
-    INTERVIEW_GUIDANCE_VERSION: Joi.string().trim().min(1).required(),
-    GITHUB_CLI_SNAPSHOT_PINNING_ENABLED: Joi.boolean().default(false),
-    GITHUB_CLI_ARCHIVE_RETRIEVAL_ENABLED: Joi.boolean().default(false),
-    GITHUB_CLI_CREDENTIAL_KEK_ACTIVE_VERSION: Joi.string()
-      .trim()
-      .allow("")
-      .default(""),
-    GITHUB_CLI_CREDENTIAL_KEK_KEYRING: Joi.string().trim().default("{}"),
+    GITHUB_CLI_CREDENTIAL_KEK_ACTIVE_VERSION: Joi.string().trim().required(),
+    GITHUB_CLI_CREDENTIAL_KEK_KEYRING: Joi.string().trim().required(),
     RABBITMQ_URL: Joi.string().required(),
     RABBITMQ_EXCHANGE: Joi.string().default("lcsp.events"),
-    OUTBOX_ENABLED: Joi.boolean().default(true),
     OUTBOX_POLL_INTERVAL_MS: Joi.number().integer().positive().default(1000),
     OUTBOX_BATCH_SIZE: Joi.number().integer().positive().default(50),
     OUTBOX_MAX_ATTEMPTS: Joi.number().integer().positive().default(5),
-    PIPELINE_RECONCILIATION_ENABLED: Joi.boolean().default(true),
     PIPELINE_RECONCILIATION_POLL_INTERVAL_MS: Joi.number()
       .integer()
       .positive()
@@ -427,119 +254,9 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
       then: paymentQrTemplateSchema().min(1).required(),
       otherwise: Joi.string().trim().allow("").default(""),
     }),
-    BILLING_METERING_ENABLED: Joi.boolean().default(
-      process.env.NODE_ENV === NODE_ENVS.production,
-    ),
-    BILLING_RESERVATION_CREDITS: Joi.alternatives().conditional(
-      "BILLING_METERING_ENABLED",
-      {
-        is: true,
-        then: Joi.string()
-          .trim()
-          .pattern(/^[1-9]\d*$/)
-          .required(),
-        otherwise: Joi.string().trim().allow("").default(""),
-      },
-    ),
-    BILLING_MAX_INVOCATION_CHARGE_CREDITS: Joi.alternatives().conditional(
-      "BILLING_METERING_ENABLED",
-      {
-        is: true,
-        then: Joi.string()
-          .trim()
-          .pattern(/^[1-9]\d*$/)
-          .required(),
-        otherwise: Joi.string().trim().allow("").default(""),
-      },
-    ),
-    BILLING_RUNTIME_PROVIDER: Joi.alternatives().conditional(
-      "BILLING_METERING_ENABLED",
-      {
-        is: true,
-        then: Joi.string().trim().min(1).required(),
-        otherwise: Joi.string().trim().allow("").default(""),
-      },
-    ),
-    BILLING_RUNTIME_MODEL: Joi.alternatives().conditional(
-      "BILLING_METERING_ENABLED",
-      {
-        is: true,
-        then: Joi.string().trim().min(1).required(),
-        otherwise: Joi.string().trim().allow("").default(""),
-      },
-    ),
-    BILLING_MAX_INPUT_TOKENS: Joi.alternatives().conditional(
-      "BILLING_METERING_ENABLED",
-      {
-        is: true,
-        then: Joi.string().trim().pattern(/^\d+$/).required(),
-        otherwise: Joi.string().trim().allow("").default(""),
-      },
-    ),
-    BILLING_MAX_OUTPUT_TOKENS: Joi.alternatives().conditional(
-      "BILLING_METERING_ENABLED",
-      {
-        is: true,
-        then: Joi.string().trim().pattern(/^\d+$/).required(),
-        otherwise: Joi.string().trim().allow("").default(""),
-      },
-    ),
-    BILLING_MAX_REASONING_TOKENS: Joi.alternatives().conditional(
-      "BILLING_METERING_ENABLED",
-      {
-        is: true,
-        then: Joi.string().trim().pattern(/^\d+$/).required(),
-        otherwise: Joi.string().trim().allow("").default(""),
-      },
-    ),
-    BILLING_MAX_INVOCATIONS_PER_GROUP: Joi.alternatives().conditional(
-      "BILLING_METERING_ENABLED",
-      {
-        is: true,
-        then: Joi.string()
-          .trim()
-          .pattern(/^[1-9]\d*$/)
-          .required(),
-        otherwise: Joi.string().trim().allow("").default(""),
-      },
-    ),
-    BILLING_MAX_INPUT_BYTES: Joi.alternatives().conditional(
-      "BILLING_METERING_ENABLED",
-      {
-        is: true,
-        then: Joi.string().trim().pattern(/^\d+$/).required(),
-        otherwise: Joi.string().trim().allow("").default(""),
-      },
-    ),
-    BILLING_AUTHORIZED_RUNTIME_MODELS: Joi.alternatives().conditional(
-      "BILLING_METERING_ENABLED",
-      {
-        is: true,
-        then: Joi.string().trim().min(1).required(),
-        otherwise: Joi.string().trim().allow("").default(""),
-      },
-    ),
   })
     .unknown(true)
     .custom((env: Record<string, unknown>, helpers) => {
-      if (
-        env.GITHUB_CLI_SNAPSHOT_PINNING_ENABLED === true &&
-        env.GITHUB_CLI_CREDENTIAL_PERSISTENCE_ENABLED !== true
-      ) {
-        return helpers.error("credentialKek.snapshotPinning");
-      }
-      if (
-        env.GITHUB_CLI_ARCHIVE_RETRIEVAL_ENABLED === true &&
-        (env.GITHUB_CLI_CREDENTIAL_PERSISTENCE_ENABLED !== true ||
-          env.GITHUB_CLI_SNAPSHOT_PINNING_ENABLED !== true)
-      ) {
-        return helpers.error("credentialKek.archiveRetrieval");
-      }
-      const billingRuntimeStatus = billingRuntimePolicyMatches(env);
-      if (billingRuntimeStatus !== "valid") {
-        return helpers.error(`billingRuntime.${billingRuntimeStatus}`);
-      }
-      if (env.GITHUB_CLI_CREDENTIAL_PERSISTENCE_ENABLED !== true) return env;
       const activeVersion = env.GITHUB_CLI_CREDENTIAL_KEK_ACTIVE_VERSION;
       const encodedKeyring = env.GITHUB_CLI_CREDENTIAL_KEK_KEYRING;
       if (typeof activeVersion !== "string" || activeVersion.length === 0) {
@@ -557,21 +274,9 @@ export function createConfigValidationSchema(workspaceRoot = process.cwd()) {
     })
     .messages({
       "credentialKek.activeVersion":
-        "GitHub CLI credential persistence requires an active KEK version",
+        "Repository credential storage requires an active KEK version",
       "credentialKek.keyring":
-        "GitHub CLI credential persistence requires a valid 32-byte base64 KEK keyring containing the active version",
-      "credentialKek.snapshotPinning":
-        "GitHub CLI snapshot pinning requires credential persistence",
-      "credentialKek.archiveRetrieval":
-        "GitHub CLI archive retrieval requires credential persistence and snapshot pinning",
-      "billingRuntime.invalidRuntime":
-        "Billing runtime policy must use a supported LCSP model provider",
-      "billingRuntime.invalidAuthorizedModels":
-        "BILLING_AUTHORIZED_RUNTIME_MODELS must use PROVIDER:model entries",
-      "billingRuntime.primaryMismatch":
-        "BILLING_RUNTIME_PROVIDER/BILLING_RUNTIME_MODEL must match the effective LCSP primary runtime model",
-      "billingRuntime.missingAuthorizedRuntime":
-        "BILLING_AUTHORIZED_RUNTIME_MODELS must include the effective LCSP primary and fallback runtime models",
+        "Repository credential storage requires a valid 32-byte base64 KEK keyring containing the active version",
       "string.paymentQrTemplate":
         '"BILLING_SEPAY_QR_URL_TEMPLATE" must include {amountVnd} and {paymentCode} placeholders',
     });
@@ -653,32 +358,12 @@ export function config(): AppConfig {
     database: {
       url: env.DATABASE_URL ?? "",
     },
-    auth: {
-      bcryptCost: Number(env.AUTH_BCRYPT_COST ?? 12),
-      sessionTtlSeconds: Number(env.AUTH_SESSION_TTL_SECONDS ?? 86400),
-      jwtSecret: env.JWT_SECRET ?? "",
-    },
     oauth: {
       googleClientId: env.OAUTH_GOOGLE_CLIENT_ID ?? "",
       googleClientSecret: env.OAUTH_GOOGLE_CLIENT_SECRET ?? "",
       allowedRedirectOrigins: parseRedirectOrigins(
-        env.OAUTH_ALLOWED_REDIRECT_ORIGINS ||
-          env.OAUTH_ALLOWED_REDIRECT_URIS ||
-          "",
+        env.OAUTH_ALLOWED_REDIRECT_ORIGINS ?? "",
       ),
-      allowedRedirectUris: parseRedirectUris(
-        env.OAUTH_ALLOWED_REDIRECT_URIS ?? "",
-      ),
-    },
-    github: {
-      appId: env.GITHUB_APP_ID ?? "",
-      appSlug: env.GITHUB_APP_SLUG ?? "",
-      allowedRedirectUris: parseRedirectUris(
-        env.GITHUB_APP_ALLOWED_REDIRECT_URIS ?? "",
-      ),
-      clientId: env.GITHUB_APP_CLIENT_ID ?? "",
-      clientSecret: env.GITHUB_APP_CLIENT_SECRET ?? "",
-      privateKey: env.GITHUB_APP_PRIVATE_KEY ?? "",
     },
     githubCli: {
       executablePath: resolveCliExecutablePath(env.GITHUB_CLI_EXECUTABLE_PATH),
@@ -701,8 +386,6 @@ export function config(): AppConfig {
       ),
     },
     gitlabCli: {
-      enabled:
-        (env.GITLAB_PROVIDER_ENABLED ?? "false").toLowerCase() === "true",
       executablePath: resolveCliExecutablePath(env.GITLAB_CLI_EXECUTABLE_PATH),
       timeoutMs: Number(env.GITLAB_CLI_TIMEOUT_MS ?? 30000),
       maxJsonOutputBytes: Number(
@@ -710,8 +393,6 @@ export function config(): AppConfig {
       ),
     },
     bitbucketCli: {
-      enabled:
-        (env.BITBUCKET_PROVIDER_ENABLED ?? "false").toLowerCase() === "true",
       executablePath: resolveCliExecutablePath(
         env.BITBUCKET_CLI_EXECUTABLE_PATH,
       ),
@@ -721,8 +402,6 @@ export function config(): AppConfig {
       ),
     },
     azureDevOpsCli: {
-      enabled:
-        (env.AZURE_DEVOPS_PROVIDER_ENABLED ?? "false").toLowerCase() === "true",
       executablePath: resolveCliExecutablePath(
         env.AZURE_DEVOPS_CLI_EXECUTABLE_PATH,
       ),
@@ -732,16 +411,6 @@ export function config(): AppConfig {
       ),
     },
     githubCredentialPersistence: {
-      enabled:
-        (
-          env.GITHUB_CLI_CREDENTIAL_PERSISTENCE_ENABLED ?? "false"
-        ).toLowerCase() === "true",
-      snapshotPinningEnabled:
-        (env.GITHUB_CLI_SNAPSHOT_PINNING_ENABLED ?? "false").toLowerCase() ===
-        "true",
-      archiveRetrievalEnabled:
-        (env.GITHUB_CLI_ARCHIVE_RETRIEVAL_ENABLED ?? "false").toLowerCase() ===
-        "true",
       activeKekVersion:
         env.GITHUB_CLI_CREDENTIAL_KEK_ACTIVE_VERSION?.trim() ?? "",
       encodedKekKeyring: env.GITHUB_CLI_CREDENTIAL_KEK_KEYRING ?? "{}",
@@ -751,13 +420,11 @@ export function config(): AppConfig {
       exchange: env.RABBITMQ_EXCHANGE ?? "lcsp.events",
     },
     outbox: {
-      enabled: env.OUTBOX_ENABLED !== "false",
       pollIntervalMs: Number(env.OUTBOX_POLL_INTERVAL_MS ?? 1000),
       batchSize: Number(env.OUTBOX_BATCH_SIZE ?? 50),
       maxAttempts: Number(env.OUTBOX_MAX_ATTEMPTS ?? 5),
     },
     pipelineReconciliation: {
-      enabled: env.PIPELINE_RECONCILIATION_ENABLED !== "false",
       pollIntervalMs: Number(
         env.PIPELINE_RECONCILIATION_POLL_INTERVAL_MS ?? 60000,
       ),
@@ -772,14 +439,8 @@ export function config(): AppConfig {
         env.SEPAY_WEBHOOK_TIMESTAMP_SKEW_SECONDS ?? 300,
       ),
     },
-    crypto: {
-      mfaSecretEncryptionKey: env.MFA_SECRET_ENCRYPTION_KEY ?? "",
-    },
     worker: {
       apiKey: env.WORKER_API_KEY ?? "",
-    },
-    internal: {
-      apiToken: env.INTERNAL_API_TOKEN ?? "test-internal-token",
     },
     email: {
       smtpHost: env.SMTP_HOST?.trim() ?? "",
@@ -803,26 +464,6 @@ export function config(): AppConfig {
         env.BILLING_SEPAY_BANK_ACCOUNT_NUMBER?.trim() ?? "",
       sePayAccountHolder: env.BILLING_SEPAY_ACCOUNT_HOLDER?.trim() ?? "",
       sePayQrUrlTemplate: env.BILLING_SEPAY_QR_URL_TEMPLATE?.trim() ?? "",
-      meteringEnabled:
-        (env.BILLING_METERING_ENABLED ??
-          (env.NODE_ENV === NODE_ENVS.production ? "true" : "false")) ===
-        "true",
-      reservationCredits: env.BILLING_RESERVATION_CREDITS?.trim() ?? "",
-      maxInvocationChargeCredits:
-        env.BILLING_MAX_INVOCATION_CHARGE_CREDITS?.trim() ?? "",
-      runtimeProvider: env.BILLING_RUNTIME_PROVIDER?.trim() ?? "",
-      runtimeModel: env.BILLING_RUNTIME_MODEL?.trim() ?? "",
-      maxInputTokens: env.BILLING_MAX_INPUT_TOKENS?.trim() ?? "",
-      maxInputBytes: env.BILLING_MAX_INPUT_BYTES?.trim() ?? "",
-      maxOutputTokens: env.BILLING_MAX_OUTPUT_TOKENS?.trim() ?? "",
-      maxReasoningTokens: env.BILLING_MAX_REASONING_TOKENS?.trim() ?? "",
-      maxInvocationsPerGroup:
-        env.BILLING_MAX_INVOCATIONS_PER_GROUP?.trim() ?? "",
-      authorizedRuntimeModels:
-        env.BILLING_AUTHORIZED_RUNTIME_MODELS?.trim() ?? "",
-    },
-    interview: {
-      guidanceVersion: env.INTERVIEW_GUIDANCE_VERSION?.trim() ?? "",
     },
   };
 }

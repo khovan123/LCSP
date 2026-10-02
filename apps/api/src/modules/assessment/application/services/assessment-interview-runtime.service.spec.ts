@@ -33,7 +33,6 @@ import {
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
-import { BILLING_ERROR_CODES } from "@lcsp/contracts/billing";
 import {
   AUDIT_ACTOR_TYPES,
   INTERVIEW_TECHNICAL_COVERAGE_STATES,
@@ -43,15 +42,12 @@ import type { PrismaService } from "../../../../infrastructure/prisma/prisma.ser
 import type { OutboxRepository } from "../../../../platform/outbox/outbox.repository.js";
 import type { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import type { InterviewAuditService } from "../../../audit/application/services/interview-audit.service.js";
-import type { BillingAccountingKernel } from "../../../billing/application/shared/billing-accounting.kernel.js";
-import type { ConfigService } from "@nestjs/config";
 import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import {
   AssessmentInterviewRuntimeService,
   materializeConfirmedStructuredBusinessContext,
 } from "./assessment-interview-runtime.service.js";
-import { AssessmentModelCreditPreflight } from "./assessment-model-credit-preflight.js";
 import { missingInitialPlanningContextDimensions } from "./interview-minimum-planning-context.js";
 
 const TEST_GUIDANCE_VERSION = "interview-context-test-v1";
@@ -1692,55 +1688,21 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       expect(mockOutboxRepository.enqueue).toHaveBeenCalledTimes(1);
     });
 
-    it("refuses resume with 402 when the owner wallet cannot cover the worker reservation", async () => {
+    it("resumes a failed turn without consulting the owner wallet (no 402)", async () => {
       mockTx.assessmentInterviewThread.findUnique.mockResolvedValue(
         failedTurnThread(),
       );
-      const rebuildProjection = jest
-        .fn<(userId: string) => Promise<{ availableBalance: bigint }>>()
-        .mockResolvedValue({ availableBalance: 10n });
-      const config = {
-        get: jest.fn((key: string, fallback?: unknown) =>
-          key === "billing.meteringEnabled"
-            ? true
-            : key === "billing.reservationCredits"
-              ? "100"
-              : fallback,
-        ),
-      };
-      Object.defineProperty(service, "creditPreflight", {
-        configurable: true,
-        value: new AssessmentModelCreditPreflight(
-          { assessment: mockTx.assessment } as unknown as PrismaService,
-          {
-            rebuildProjection,
-          } as unknown as BillingAccountingKernel,
-          config as unknown as ConfigService,
-        ),
-      });
 
+      // The service has no wallet, billing or pricing dependency at all.
       await expect(
         service.resumeFailedTurn({
           assessmentId: "assessment-1",
           actor,
-          correlationId: "corr-resume-no-credits",
+          correlationId: "corr-resume-zero-wallet",
           resume: {},
         }),
-      ).rejects.toMatchObject({
-        response: {
-          ok: false,
-          problem: {
-            status: 402,
-            code: BILLING_ERROR_CODES.insufficientCredits,
-            meta: { requiredCredits: "100", availableCredits: "10" },
-          },
-        },
-      });
-      expect(rebuildProjection).toHaveBeenCalledWith("user-1");
-      expect(mockOutboxRepository.enqueue).not.toHaveBeenCalled();
-      expect(
-        mockTx.assessmentInterviewThread.updateMany,
-      ).not.toHaveBeenCalled();
+      ).resolves.toBeDefined();
+      expect(mockOutboxRepository.enqueue).toHaveBeenCalledTimes(1);
     });
 
     it("rejects resume when the current revision has not failed", async () => {

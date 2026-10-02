@@ -4,16 +4,16 @@ from orchestration.agent_stream import invoke_with_stream
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from deepagents import create_deep_agent
 from middleware.agent_run_budget import AgentRunBudgetMiddleware
-from middleware.billing_metering import BillingAgentRoleMiddleware
+from middleware.usage_metering import AgentRoleMiddleware
 from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
-from model_policy import NARRATOR_MODEL_SPEC, resolve_agent_model
+from model_policy import resolve_agent_model
 
 
 class FinalReportGenerator:
     """Render evidence deterministically and use LLM only for bounded narration."""
 
-    def __init__(self, model: str = NARRATOR_MODEL_SPEC):
-        self._model = model
+    def __init__(self, role: str = "narrator"):
+        self._role = role
 
     def generate(
         self,
@@ -116,9 +116,7 @@ class FinalReportGenerator:
         """
         agent = create_deep_agent(
             name="lcsp-final-report-narrator",
-            model=resolve_agent_model(
-                agent_name="lcsp-final-report-narrator", model_spec=self._model
-            ),
+            model=resolve_agent_model(self._role),
             backend=current_repository_backend(),
             system_prompt=(
                 "You draft bounded LCSP assessment narration. Never make a legal "
@@ -126,7 +124,7 @@ class FinalReportGenerator:
             ),
             middleware=[
                 AgentRunBudgetMiddleware(),
-                BillingAgentRoleMiddleware("narrator"),
+                AgentRoleMiddleware("narrator"),
                 *MODEL_GOVERNANCE_MIDDLEWARE,
             ],
         )

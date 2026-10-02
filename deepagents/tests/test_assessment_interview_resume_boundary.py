@@ -2385,19 +2385,6 @@ def test_empty_initial_context_ready_is_missing_every_dimension():
     )
 
 
-def test_interview_dispatch_failure_reports_failed_progress_for_the_revision():
-    api = RecordingApi()
-    api.post_interview_progress = Mock()
-    boundary = AssessmentInterviewResumeBoundary(
-        SimpleNamespace(), api_client=api, dispatcher=RecordingDispatcher()
-    )
-
-    boundary.report_dispatch_failure(
-        _message(revision=8), "corr-1", RuntimeError("BILLING_INSUFFICIENT_CREDITS")
-    )
-
-    api.post_interview_progress.assert_called_once_with("assessment-1", 8, "FAILED")
-
 
 def test_api_unauthorized_evidence_ref_is_fed_back_to_the_specialist_verbatim() -> None:
     source_ref = "packages/api/src/features/ai/service.ts"

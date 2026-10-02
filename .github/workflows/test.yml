@@ -186,7 +186,6 @@ jobs:
       LCSP_TEST_POSTGRES_USER: postgres
       LCSP_TEST_POSTGRES_PASSWORD: postgres
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55435/lcsp_api_test?schema=public
-      INTERVIEW_GUIDANCE_VERSION: interview-guidance-ci-v1
     steps:
       - uses: actions/checkout@v4
 
@@ -218,7 +217,6 @@ jobs:
     if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
     env:
-      INTERVIEW_GUIDANCE_VERSION: interview-guidance-ci-v1
     services:
       postgres:
         image: postgres:16
@@ -397,19 +395,12 @@ jobs:
       WORKER_API_KEY: test-only-worker-api-key-at-least-32-chars
       PORT: 3101
       NODE_ENV: test
-      JWT_SECRET: test-only-jwt-secret-at-least-32-characters-long
-      OAUTH_ALLOWED_REDIRECT_URIS: http://localhost:3000/auth/callback
-      GITHUB_APP_SLUG: lcsp-app-test
-      GITHUB_APP_ID: 123456
-      GITHUB_APP_PRIVATE_KEY: test-only-private-key
-      GITHUB_APP_ALLOWED_REDIRECT_URIS: http://localhost:3000/github/callback
-      GITHUB_APP_CLIENT_ID: test-github-app-client-id
-      GITHUB_APP_CLIENT_SECRET: test-github-app-client-secret
       RABBITMQ_URL: amqp://guest:guest@127.0.0.1:5672
       MFA_SECRET_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      GITHUB_CLI_CREDENTIAL_KEK_ACTIVE_VERSION: ci-kek-v1
+      GITHUB_CLI_CREDENTIAL_KEK_KEYRING: '{"ci-kek-v1":"BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc="}'
       LEGAL_CHROMA_PATH: /tmp/lcsp-278-release-chroma
       LCSP_SNAPSHOT_ARCHIVE_CACHE_DIR: /tmp/lcsp-278-release-snapshot-cache
-      INTERVIEW_GUIDANCE_VERSION: interview-guidance-ci-v1
     steps:
       - uses: actions/checkout@v4
 

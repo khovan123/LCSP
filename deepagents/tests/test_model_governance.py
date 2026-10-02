@@ -7,7 +7,7 @@ from middleware.model_governance import (
     MODEL_GOVERNANCE_MIDDLEWARE,
     TRIAGE_MODEL_GOVERNANCE_MIDDLEWARE,
 )
-from middleware.billing_metering import BillingMeteringMiddleware
+from middleware.usage_metering import UsageMeteringMiddleware
 from middleware.provider_fallback import ProviderFallbackMiddleware
 from middleware.token_fallback import TokenFallbackMiddleware
 
@@ -48,11 +48,11 @@ def test_provider_fallback_wraps_same_provider_key_rotation() -> None:
     assert provider_index < token_index
 
 
-def test_billing_metering_is_the_innermost_governed_model_boundary() -> None:
+def test_usage_metering_is_the_innermost_governed_model_boundary() -> None:
     metering_index = next(
         index
         for index, item in enumerate(MODEL_GOVERNANCE_MIDDLEWARE)
-        if isinstance(item, BillingMeteringMiddleware)
+        if isinstance(item, UsageMeteringMiddleware)
     )
     assert metering_index == len(MODEL_GOVERNANCE_MIDDLEWARE) - 1
 

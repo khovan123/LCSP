@@ -14,7 +14,7 @@ from tools.common.capabilities.platform.callback_schemas import (
     ScanCallbackPayload,
     CallbackResponse,
     AIUsageFlowCallbackPayload,
-    BillingReservationPayload,
+    SettledUsagePayload,
     ConflictDetectionCallbackPayload,
     TechnicalProfileCallbackPayload,
 )
@@ -140,45 +140,32 @@ def test_t02_5xx_response(client, dummy_payload):
         assert mock_post.call_count == 3
 
 
-def test_billing_pricing_unavailable_is_not_hot_retried(client):
-    """Missing pricing catalog rows are provisioning errors, not transient API outages."""
-    payload = BillingReservationPayload(
+def test_post_settled_usage_sends_provider_reported_fields_without_reservation(client):
+    payload = SettledUsagePayload(
         assessmentId="assessment-1",
         runId="run-1",
-        amountCredits="8000",
-        maxChargeCredits="500",
+        invocationId="inv-1",
+        agentRole="triage",
         provider="LLM7",
-        model="minimax-m2.7",
-        maxInputTokens="65536",
-        maxInputBytes="262144",
-        maxOutputTokens="4096",
-        maxReasoningTokens="0",
-        maxInvocations="16",
-        authorizedModels=[
-            {"provider": "LLM7", "model": "minimax-m2.7"},
-            {"provider": "GOOGLE_GENAI", "model": "gemini-3.5-flash-lite"},
-        ],
-        idempotencyKey="billing-reservation-assessment-1",
+        model="future-model-v99",
+        inputTokens="10",
+        outputTokens="5",
+        occurredAt="2026-01-01T00:00:00Z",
     )
-    response = httpx.Response(
-        503,
-        json={
-            "ok": False,
-            "problem": {"code": "BILLING_PRICING_UNAVAILABLE"},
-        },
-    )
+    response = httpx.Response(200, json={"ok": True, "data": {"status": "ok"}})
 
     with patch(
         "tools.common.capabilities.platform.api_client.httpx.post",
         return_value=response,
     ) as mock_post:
-        with pytest.raises(WorkerCallbackError) as exc_info:
-            client.reserve_billing_credits(payload)
+        client.post_settled_usage(payload)
 
-    assert exc_info.value.status_code == 503
-    assert exc_info.value.error_code == "BILLING_PRICING_UNAVAILABLE"
-    assert "BILLING_PRICING_UNAVAILABLE" in str(exc_info.value)
-    assert mock_post.call_count == 1
+    body = mock_post.call_args.kwargs["json"]
+    assert "reservationId" not in body
+    assert body["inputTokens"] == "10"
+    assert not any("price" in k.lower() or "charge" in k.lower() for k in body)
+    with pytest.raises(ValidationError):
+        SettledUsagePayload(**{**payload.model_dump(), "reservationId": "r"})
 
 
 def test_t03_422_response(client, dummy_payload):

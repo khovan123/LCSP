@@ -9,7 +9,6 @@ export const API_OUTCOME_KINDS = {
   created: "created",
   disabled: "disabled",
   emailAlreadyExists: "email_already_exists",
-  insufficientCredits: "insufficient_credits",
   empty: "empty",
   error: "error",
   invalid: "invalid",

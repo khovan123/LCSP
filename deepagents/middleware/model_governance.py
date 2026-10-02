@@ -23,7 +23,7 @@ from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
 from middleware.provider_fallback import ProviderFallbackMiddleware
 from middleware.provider_schema import ProviderSchemaCompatibilityMiddleware
 from middleware.token_fallback import TokenFallbackMiddleware
-from middleware.billing_metering import BillingAgentRoleMiddleware, BillingMeteringMiddleware
+from middleware.usage_metering import AgentRoleMiddleware, UsageMeteringMiddleware
 from middleware.failure_policy import (
     StructuredOutputRejected,
     MalformedToolCallSample,
@@ -195,13 +195,13 @@ MODEL_GOVERNANCE_MIDDLEWARE = (
     StopSchemaRepairMiddleware(),
     # Keep metering innermost so provider retry, key rotation and fallback each
     # expose their actual downstream response to one governed billing boundary.
-    BillingMeteringMiddleware(),
+    UsageMeteringMiddleware(),
 )
 
 TRIAGE_MODEL_GOVERNANCE_MIDDLEWARE = MODEL_GOVERNANCE_MIDDLEWARE
 
 
-def governed_general_purpose_subagent(model, *, billing_role: str) -> dict:
+def governed_general_purpose_subagent(model, *, role: str) -> dict:
     """Replace Deep Agents' auto-added `general-purpose` subagent with a governed one.
 
     The default spec inherits only parent middleware that overrides its own slots,
@@ -211,5 +211,5 @@ def governed_general_purpose_subagent(model, *, billing_role: str) -> dict:
     return {
         **GENERAL_PURPOSE_SUBAGENT,
         "model": model,
-        "middleware": [BillingAgentRoleMiddleware(billing_role), *MODEL_GOVERNANCE_MIDDLEWARE],
+        "middleware": [AgentRoleMiddleware(role), *MODEL_GOVERNANCE_MIDDLEWARE],
     }

@@ -181,15 +181,11 @@ def is_terminal_task_error(error: BaseException) -> bool:
         seen.add(id(current))
         if isinstance(current, (TypeError, ValidationError, StructuredOutputError, TerminalSchemaError, TerminalCredentialError, AgentRunBudgetExceeded)):
             return True
-        if type(current).__name__ == "BillingBudgetExhausted":
-            return True
         # Our own API rejected this payload. The boundary re-runs the model on every
         # redelivery, so requeueing an identical rejected decision is an unbounded spend
         # that never converges; fail loudly instead. Duck-typed to keep the queue policy
         # independent of the API client module.
         if getattr(current, "callback_client_error", False):
-            return True
-        if type(current).__name__ == "BillingFinalizationError":
             return True
         # Provider request/schema rejection cannot succeed with the same request.
         # A model-unavailability code arrives with the same status but means the
@@ -215,7 +211,7 @@ def is_terminal_boundary_error(error: BaseException) -> bool:
     Inside the model stack an auth failure moves to another credential or provider. Once
     it escapes to a task boundary, every eligible route has already been tried, so
     redelivering the task would only resend a rejected credential. A non-retryable
-    boundary failure is never redelivered either, so its reservation can be released.
+    boundary failure is never redelivered either, so retrying is pointless.
     """
     return (
         is_terminal_task_error(error)

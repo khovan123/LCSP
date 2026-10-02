@@ -14,17 +14,17 @@ disable_langsmith_tracing_by_default()
 from deepagents import create_deep_agent
 from langchain.agents.middleware import TodoListMiddleware
 
-from harness import LCSP_MODEL_SPEC, configure_lcsp_harness
+from harness import configure_lcsp_harness
 from middleware.model_governance import (
     MODEL_GOVERNANCE_MIDDLEWARE,
     governed_general_purpose_subagent,
 )
-from middleware.billing_metering import BillingAgentRoleMiddleware
+from middleware.usage_metering import AgentRoleMiddleware
 from middleware.runtime_context import inject_lcsp_runtime_context
 from middleware.specialist_handoff_validation import validate_lcsp_specialist_task_handoff
 from middleware.system_event_dispatch import dispatch_agent_runtime_system_event
 from middleware.triage_singleton import guard_triage_singleton_task
-from model_policy import effective_model_configs
+from model_policy import effective_model_configs, resolve_agent_model
 from orchestration.context import LCSPRunContext
 from subagents import TRIAGE_SUBAGENT
 from tools.mcp import load_optional_mcp_tools
@@ -44,24 +44,21 @@ SYSTEM_PROMPT = (Path(__file__).with_name("instructions.md")).read_text(
 )
 
 
-# Register provider-aware model construction plus the same full harness profile
-# for the root and every child before Deep Agents resolves specs.
+# Register the same full harness profile for every configured model route; models
+# themselves are built per role by model_policy.resolve_agent_model.
 configure_lcsp_harness()
 suppress_langgraph_heartbeat_logs()
 logger = get_logger(__name__)
 for model_config in effective_model_configs():
     logger.info(
         "LCSP_EFFECTIVE_MODEL_CONFIG",
-        role=model_config.role,
-        provider=model_config.provider,
-        model=model_config.model,
-        source=model_config.source,
-        client=model_config.client,
-        router=model_config.router,
-        tools=model_config.tools,
-        reasoning_effort=model_config.reasoning_effort,
-        reasoning_policy=model_config.reasoning_policy,
-        output_version=model_config.output_version,
+        role=model_config["role"],
+        route_id=model_config["routeId"],
+        provider=model_config["provider"],
+        model=model_config["model"],
+        client=model_config["client"],
+        option_keys=model_config["optionKeys"],
+        fallback_route_ids=model_config["fallbackRouteIds"],
     )
 
 if os.environ.get("LCSP_LOCAL_GRAPH_DEV") == "1":
@@ -76,9 +73,10 @@ if os.environ.get("LCSP_LOCAL_GRAPH_DEV") == "1":
 
 def create_root_agent(*, checkpointer=None, store=None):
     """Build the native LCSP Deep Agent graph for local or hosted runtimes."""
+    root_model = resolve_agent_model("root")
     return create_deep_agent(
         name="lcsp-agent",
-        model=LCSP_MODEL_SPEC,
+        model=root_model,
         tools=ROOT_TOOLS,
         backend=RuntimeRepositoryBackend(),
         skills=[(REPOSITORY_SKILLS, "LCSP Runtime")],
@@ -88,7 +86,7 @@ def create_root_agent(*, checkpointer=None, store=None):
             guard_triage_singleton_task,
             validate_lcsp_specialist_task_handoff,
             inject_lcsp_runtime_context,
-            BillingAgentRoleMiddleware("root"),
+            AgentRoleMiddleware("root"),
             *MODEL_GOVERNANCE_MIDDLEWARE,
             TodoListMiddleware(),
         ],
@@ -96,8 +94,8 @@ def create_root_agent(*, checkpointer=None, store=None):
         subagents=[
             # LEGAL_MAINTENANCE only. repository-analyst / interview are run by the
             # deterministic assessment loop through RootSubagentDispatcher, never `task`.
-            TRIAGE_SUBAGENT,
-            governed_general_purpose_subagent(LCSP_MODEL_SPEC, billing_role="root"),
+            {**TRIAGE_SUBAGENT, "model": resolve_agent_model("triage")},
+            governed_general_purpose_subagent(root_model, role="root"),
         ],
         checkpointer=checkpointer,
         store=store,

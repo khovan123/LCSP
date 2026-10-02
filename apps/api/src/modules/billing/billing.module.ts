@@ -17,18 +17,13 @@ import { SePayReconciliationConsumer } from "./infrastructure/messaging/sepay-re
 import { SePayWebhookIngress } from "./infrastructure/security/sepay-webhook-ingress.js";
 import { OutboxModule } from "../../platform/outbox/outbox.module.js";
 import { AcceptSePayWebhookHandler } from "./application/commands/accept-sepay-webhook/accept-sepay-webhook.handler.js";
-import { ClaimBillingInvocationHandler } from "./application/commands/claim-billing-invocation/claim-billing-invocation.handler.js";
 import { CreateBillingOrderHandler } from "./application/commands/create-billing-order/create-billing-order.handler.js";
 import { ExpireBillingOrderHandler } from "./application/commands/expire-billing-order/expire-billing-order.handler.js";
 import { RejectBillingPaymentHandler } from "./application/commands/reject-billing-payment/reject-billing-payment.handler.js";
-import { ReleaseBillingReservationHandler } from "./application/commands/release-billing-reservation/release-billing-reservation.handler.js";
-import { ReleaseInactiveScanReservationsHandler } from "./application/commands/release-inactive-scan-reservations/release-inactive-scan-reservations.handler.js";
 import { ResolveBillingPaymentHandler } from "./application/commands/resolve-billing-payment/resolve-billing-payment.handler.js";
-import { ReserveBillingCreditsHandler } from "./application/commands/reserve-billing-credits/reserve-billing-credits.handler.js";
-import { SettleBillingUsageHandler } from "./application/commands/settle-billing-usage/settle-billing-usage.handler.js";
+import { RecordLlmUsageHandler } from "./application/commands/record-llm-usage/record-llm-usage.handler.js";
 import { ReconcileAcceptedSePayWebhookHandler } from "./application/commands/reconcile-accepted-sepay-webhook/reconcile-accepted-sepay-webhook.handler.js";
 import { EstimateBillingHandler } from "./application/queries/estimate-billing/estimate-billing.handler.js";
-import { EstimateUsageBillingHandler } from "./application/queries/estimate-usage-billing/estimate-usage-billing.handler.js";
 import { GetBillingOrderHandler } from "./application/queries/get-billing-order/get-billing-order.handler.js";
 import { GetBillingReconciliationHandler } from "./application/queries/get-billing-reconciliation/get-billing-reconciliation.handler.js";
 import { GetBillingWalletHandler } from "./application/queries/get-billing-wallet/get-billing-wallet.handler.js";
@@ -37,15 +32,12 @@ import { ListBillingReconciliationHandler } from "./application/queries/list-bil
 import { GetBillingRevenueSummaryHandler } from "./application/queries/get-billing-revenue-summary/get-billing-revenue-summary.handler.js";
 import { ListBillingTransactionsHandler } from "./application/queries/list-billing-transactions/list-billing-transactions.handler.js";
 import { ResolveBillingAssessmentOwnerHandler } from "./application/queries/resolve-billing-assessment-owner/resolve-billing-assessment-owner.handler.js";
-import { ResolveBillingReservationOwnerHandler } from "./application/queries/resolve-billing-reservation-owner/resolve-billing-reservation-owner.handler.js";
 import { GetBillingAdminDashboardHandler } from "./application/queries/get-admin-billing-dashboard/get-admin-billing-dashboard.handler.js";
 import { GetBillingAdminExportHandler } from "./application/queries/get-admin-billing-export/get-admin-billing-export.handler.js";
 import {
   BILLING_USAGE_KERNEL,
   BillingUsageKernel,
 } from "./application/shared/billing-usage.kernel.js";
-import { BillingPricingPreflightService } from "./application/shared/billing-pricing-preflight.service.js";
-import { BillingWorkflowPauseService } from "./application/shared/billing-workflow-pause.service.js";
 
 @Module({
   imports: [
@@ -71,29 +63,20 @@ import { BillingWorkflowPauseService } from "./application/shared/billing-workfl
     },
     BillingAccountingKernel,
     BillingPaymentKernel,
-    BillingPricingPreflightService,
-    BillingWorkflowPauseService,
     {
       provide: BILLING_USAGE_KERNEL,
       useFactory: (
         transactions: PrismaBillingTransaction,
-        accounting: BillingAccountingKernel,
         prisma: PrismaService,
-      ) => new BillingUsageKernel(transactions, accounting, prisma),
-      inject: [
-        BILLING_TRANSACTION_PORT,
-        BillingAccountingKernel,
-        PrismaService,
-      ],
+      ) => new BillingUsageKernel(transactions, prisma),
+      inject: [BILLING_TRANSACTION_PORT, PrismaService],
     },
     SePayReconciliationConsumer,
     SePayWebhookIngress,
     AcceptSePayWebhookHandler,
-    ClaimBillingInvocationHandler,
     CreateBillingOrderHandler,
     ExpireBillingOrderHandler,
     EstimateBillingHandler,
-    EstimateUsageBillingHandler,
     GetBillingOrderHandler,
     GetBillingAdminDashboardHandler,
     GetBillingAdminExportHandler,
@@ -104,19 +87,11 @@ import { BillingWorkflowPauseService } from "./application/shared/billing-workfl
     GetBillingRevenueSummaryHandler,
     ListBillingTransactionsHandler,
     RejectBillingPaymentHandler,
-    ReleaseBillingReservationHandler,
-    ReleaseInactiveScanReservationsHandler,
     ResolveBillingAssessmentOwnerHandler,
-    ResolveBillingReservationOwnerHandler,
     ResolveBillingPaymentHandler,
-    ReserveBillingCreditsHandler,
-    SettleBillingUsageHandler,
+    RecordLlmUsageHandler,
     ReconcileAcceptedSePayWebhookHandler,
   ],
-  exports: [
-    BillingAccountingKernel,
-    BillingPaymentKernel,
-    BillingWorkflowPauseService,
-  ],
+  exports: [BillingAccountingKernel, BillingPaymentKernel],
 })
 export class BillingModule {}

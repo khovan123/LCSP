@@ -241,7 +241,7 @@ export const enPages = {
       agentBudgetReached:
         "Step budget reached, finishing with the evidence already inspected",
       agentBudgetExhausted: "Agent did not finish within its step budget",
-      billingPaused: "Paused for billing. Add funds, then continue.",
+      boundaryPaused: "Paused. Continue when you are ready.",
       agentContextTrimmed:
         "Trimmed older tool results to stay within the context budget",
     },
@@ -303,6 +303,22 @@ export const enPages = {
       tools: "Tool calls/searches",
       failures: "Provider/model failures",
       rawEvents: "Raw events",
+    },
+    agentStreamUsage: {
+      input: "{value} in",
+      output: "{value} out",
+      total: "{value} tokens",
+      lines: "{value} lines",
+      items: "{value} results",
+      truncated: "truncated",
+      metrics: {
+        reasoning_tokens: "{value} reasoning",
+        thinking_tokens: "{value} thinking",
+        cached_input_tokens: "{value} cached",
+        cache_read_tokens: "{value} cache read",
+        cache_creation_input_tokens: "{value} cache write",
+        audio_tokens: "{value} audio",
+      },
     },
     agentStreamRuleAnalysisOutput: {
       aggregatedFailed: "Investigations could not be completed",
@@ -1244,7 +1260,7 @@ export const enPages = {
       billing: {
         title: "Billing",
         description:
-          "Add prepaid VND balance and use it for authoritative usage charges. Payment is settled by bank transfer.",
+          "Add prepaid VND balance by bank transfer. Assessments run independently of your balance.",
         loading: "Loading billing",
         errorTitle: "Billing is unavailable",
         errorDescription: "We could not load your wallet or billing history.",
@@ -1273,19 +1289,15 @@ export const enPages = {
         openExistingOrder: "Open existing order",
         confirmCreateAnotherOrder: "Confirm another order",
         cancelAdditionalOrder: "Don't create another order",
-        estimateTitle: "Usage estimate",
+        estimateTitle: "Top-up quote",
         estimateDescription:
-          "Informational guidance only. Actual usage charges are calculated from authoritative billable usage.",
-        estimatePrompt: "Enter a top-up amount to view the current estimate.",
-        estimateLoading: "Calculating estimate",
-        estimateError: "The estimate could not be loaded.",
-        effectiveProvider: "Effective provider",
-        effectiveModel: "Effective model",
-        estimatedUsageCharge: "Informational usage charge",
+          "Credits you receive for the amount you pay. Model usage does not debit your wallet.",
+        estimatePrompt: "Enter a top-up amount to view the quote.",
+        estimateLoading: "Calculating quote",
+        estimateAmount: "You pay",
+        estimateCredits: "Credits received",
+        estimateError: "The quote could not be loaded.",
         unavailable: "Unavailable",
-        insufficientPricingTitle: "Estimate unavailable",
-        insufficientPricingDescription:
-          "Pricing configuration is incomplete, so no usage estimate is shown. Your payment order can still be created.",
         activeOrderTitle: "Payment order",
         noActiveOrder: "No active payment order.",
         paymentTitle: "Bank transfer payment",
@@ -1862,8 +1874,6 @@ export const enPages = {
         "Evaluation resumed. Your saved answer is queued again.",
       resumeTurnLimitReached:
         "This answer could not be evaluated after several attempts. Please try again later or contact support.",
-      resumeTurnInsufficientCredits:
-        "Your wallet does not have enough credits to evaluate this answer. Top up credits in Billing, then press Resume again.",
       resumeTurnFailed:
         "The evaluation could not be resumed right now. Please try again.",
       contextReadyHandoff:
@@ -2581,7 +2591,7 @@ export const enPages = {
       navBilling: "Billing & Revenue",
       administrationLabel: "Administration",
       administrationDescription:
-        "System-level billing, payments, prepaid credits, usage revenue, and reconciliation.",
+        "System-level billing, payments, prepaid credits, and reconciliation.",
       roleAdminLabel: "Administrator",
       navigationAria: "Admin navigation",
       sectionsAria: "Admin sections",
@@ -2679,7 +2689,7 @@ export const enPages = {
     billing: {
       title: "Billing & Revenue",
       description:
-        "Track SePay payments, prepaid top-ups, usage charges, webhook reconciliation, and platform revenue by customer account.",
+        "Track SePay payments, prepaid top-ups, and webhook reconciliation by customer account.",
       periodAria: "Select billing reporting period",
       statusAria: "Filter payments by reconciliation status",
       gatewayAria: "Filter payments by gateway",
@@ -2700,28 +2710,16 @@ export const enPages = {
       },
       metrics: {
         settledTopUps: "Settled top-ups",
-        usageRevenue: "Usage revenue",
         pendingReconciliation: "Pending reconciliation",
         duplicates: "Duplicate blocked",
         topUpSubtitle: "Confirmed incoming SePay transfers",
-        usageSubtitle: "Charges settled from metered model usage",
         eventSuffix: "events",
       },
       trend: {
         title: "Settled top-up trend",
         description:
-          "Confirmed incoming transfers by day • usage revenue is ledger-derived",
+          "Confirmed incoming transfers by day",
         dayAria: "Settled top-up amount for {day}",
-      },
-      pricing: {
-        title: "Usage pricing policy",
-        providerCost:
-          "Provider cost = metered usage × effective provider/model pricing snapshot",
-        customerCharge: "Customer charge = provider cost × configured markup",
-        prepaidCredits:
-          "Prepaid credits carry monetary value. Token estimates are informational only.",
-        missingSnapshot:
-          "Missing pricing snapshot → fail closed; never guess a charge.",
       },
       columns: {
         order: "Order",

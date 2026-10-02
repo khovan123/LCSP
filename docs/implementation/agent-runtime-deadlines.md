@@ -22,7 +22,7 @@ configuration together. Do not disable terminal failure propagation or acknowled
 unfinished work as successful. Already-terminal scan redeliveries are acknowledged
 without repeating terminal callbacks.
 
-## Cooperative Cancellation And Billing
+## Cooperative Cancellation And Usage Telemetry
 
 The trusted run context carries an absolute `system_deadline_at`. A thread-local
 cancellation signal is shared with nested agent calls, including boundaries running
@@ -30,11 +30,9 @@ through `asyncio.to_thread`. Deadline expiry and async cancellation both stop ne
 model calls. An already-running synchronous provider request may finish; its usage
 is still recorded or durably queued before stopping further work.
 
-Permanent `BILLING_RESERVATION_TRANSITION_INVALID` usage callbacks are retained as
-`POISON` in the billing recovery store, not retried every 30 seconds. Quarantined
-usage blocks its dependent release until reconciliation. It is not a successful
-settlement, does not reopen a closed reservation, and never replays provider work.
+Model usage is provider-reported token telemetry only: it is recorded or durably
+queued for retry, never priced, and never debits a wallet or gates the run.
 
 Restart both the broker consumer and Agent Server to apply these Python changes.
-Existing failed scan jobs remain failed; recovery uses the canonical scan rerun API
-with a new server-authorized billing context, not direct broker publishing.
+Existing failed scan jobs remain failed; recovery uses the canonical scan rerun API,
+not direct broker publishing.

@@ -74,7 +74,6 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  Optional,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 
@@ -84,7 +83,6 @@ import { problemException } from "../../../../platform/http/filters/error.factor
 import { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
 import { InterviewAuditService } from "../../../audit/application/services/interview-audit.service.js";
-import { AssessmentModelCreditPreflight } from "./assessment-model-credit-preflight.js";
 import {
   normalizeStrategy,
   updateInterviewWorkingStrategy,
@@ -366,8 +364,6 @@ export class AssessmentInterviewRuntimeService {
     private readonly runtimeEvents: AssessmentRuntimeEventService,
     private readonly outboxRepository: OutboxRepository,
     private readonly interviewAudit: InterviewAuditService,
-    @Optional()
-    private readonly creditPreflight?: AssessmentModelCreditPreflight,
   ) {}
 
   async getState(
@@ -935,10 +931,6 @@ export class AssessmentInterviewRuntimeService {
   }): Promise<AssessmentInterviewRuntimeState> {
     const resume = parseResumeInput(input.resume, input.correlationId);
     await this.assertAssessmentVisible(input.assessmentId, input.actor);
-    await this.creditPreflight?.assertAvailable(
-      input.assessmentId,
-      input.correlationId,
-    );
     const provenance = await this.assessmentProvenance(input.assessmentId);
     const currentRevision = (await this.readThread(input.assessmentId))
       .contextRevision;

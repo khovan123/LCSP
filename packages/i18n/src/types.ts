@@ -266,7 +266,7 @@ export type PagesMessages = {
       agentStepOutput: string;
       agentBudgetReached: string;
       agentBudgetExhausted: string;
-      billingPaused: string;
+      boundaryPaused: string;
       agentContextTrimmed: string;
     };
     agentStreamRule: {
@@ -325,6 +325,22 @@ export type PagesMessages = {
       tools: string;
       failures: string;
       rawEvents: string;
+    };
+    agentStreamUsage: {
+      input: string;
+      output: string;
+      total: string;
+      lines: string;
+      items: string;
+      truncated: string;
+      metrics: {
+        reasoning_tokens: string;
+        thinking_tokens: string;
+        cached_input_tokens: string;
+        cache_read_tokens: string;
+        cache_creation_input_tokens: string;
+        audio_tokens: string;
+      };
     };
     agentStreamRuleAnalysisOutput: {
       aggregatedFailed: string;
@@ -1185,13 +1201,10 @@ export type PagesMessages = {
         estimateDescription: string;
         estimatePrompt: string;
         estimateLoading: string;
+        estimateAmount: string;
+        estimateCredits: string;
         estimateError: string;
-        effectiveProvider: string;
-        effectiveModel: string;
-        estimatedUsageCharge: string;
         unavailable: string;
-        insufficientPricingTitle: string;
-        insufficientPricingDescription: string;
         activeOrderTitle: string;
         noActiveOrder: string;
         paymentTitle: string;
@@ -1782,7 +1795,6 @@ export type PagesMessages = {
       resumeFailedPlaceholder: string;
       resumeTurnQueued: string;
       resumeTurnLimitReached: string;
-      resumeTurnInsufficientCredits: string;
       resumeTurnFailed: string;
       contextReadyHandoff: string;
       contextResolvedHandoff: string;
@@ -2362,24 +2374,15 @@ export type PagesMessages = {
       periods: { mtd: string; d7: string; d30: string; d90: string };
       metrics: {
         settledTopUps: string;
-        usageRevenue: string;
         pendingReconciliation: string;
         duplicates: string;
         topUpSubtitle: string;
-        usageSubtitle: string;
         eventSuffix: string;
       };
       trend: {
         title: string;
         description: string;
         dayAria: string;
-      };
-      pricing: {
-        title: string;
-        providerCost: string;
-        customerCharge: string;
-        prepaidCredits: string;
-        missingSnapshot: string;
       };
       columns: {
         order: string;

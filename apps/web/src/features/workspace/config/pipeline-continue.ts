@@ -35,8 +35,6 @@ const CONTINUE_OUTCOME_MESSAGE_KEYS: Record<string, string> = {
     "pages.assessmentFlow.pipeline.continueCompleted",
   [API_OUTCOME_KINDS.rateLimited]:
     "pages.assessmentFlow.interview.resumeTurnLimitReached",
-  [API_OUTCOME_KINDS.insufficientCredits]:
-    "pages.assessmentFlow.interview.resumeTurnInsufficientCredits",
 };
 
 export const PIPELINE_CONTINUE_FAILED_MESSAGE_KEY =

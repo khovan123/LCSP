@@ -17,9 +17,9 @@ from deepagents.backends import BackendProtocol
 
 from harness import configure_lcsp_harness
 from middleware.agent_run_budget import AgentRunBudgetMiddleware
-from middleware.billing_metering import BillingAgentRoleMiddleware
+from middleware.usage_metering import AgentRoleMiddleware
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
-from model_policy import REPOSITORY_ANALYST_MODEL_SPEC, resolve_agent_model
+from model_policy import resolve_agent_model, resolved_policy_snapshot
 from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
 from orchestration.technical_coverage_policy import attach_partial_coverage_policy
 from tools.common.capabilities.evidence.graph.schema.models import program_graph_content_hash
@@ -43,6 +43,15 @@ is already built; use the supplied graph tools for navigation and inspect source
 evidence. Do not analyze EngineeringRules, legal criteria, compliance, or customer context. Do not
 create discovery tasks, plans, batches, graph-provider queries, or a repository evidence graph.
 
+Determine only the minimum repository-backed facts needed to establish whether and how this
+application uses AI. Establish, when evidence permits: whether AI usage exists; the relevant
+provider/model invocation surface; the main feature or workflow where AI is used; and the governed
+source anchors needed for the next assessment state. Stop as soon as those facts are sufficiently
+established. Do not broadly understand the repository and do not investigate unrelated
+EngineeringRules. If the facts cannot be established with a reasonable bounded investigation,
+return AI_UNKNOWN with coverage_state PARTIAL and the limitation in material_unresolved_frontiers
+and coverage_notes instead of continuing broad exploration.
+
 Return only the small structured result. AI_CONFIRMED requires a concrete model invocation or
 outbound AI call. AI_ABSENT_CONFIRMED is allowed only after broad material coverage with no
 generated, dynamic, excluded, unreadable, or unresolved frontier; otherwise return AI_UNKNOWN.
@@ -65,10 +74,10 @@ class RepositoryDeepAnalyzer:
     def __init__(
         self,
         *,
-        model_spec: str = REPOSITORY_ANALYST_MODEL_SPEC,
+        role: str = "repository-analyst",
         backend: BackendProtocol | None = None,
     ) -> None:
-        self._model_spec = model_spec
+        self._role = role
         self._backend = backend
 
     def analyze(
@@ -121,7 +130,7 @@ class RepositoryDeepAnalyzer:
             config_hash={
                 "repository-analysis": "sha256:"
                 + hashlib.sha256(
-                    (SYSTEM_PROMPT + "\n" + self._model_spec).encode("utf-8")
+                    (SYSTEM_PROMPT + "\n" + resolved_policy_snapshot(self._role)["policyVersion"]).encode("utf-8")
                 ).hexdigest()
             },
         )
@@ -135,10 +144,7 @@ class RepositoryDeepAnalyzer:
         scan_job_id: str,
     ) -> RepositoryAnalysisResult:
         configure_lcsp_harness()
-        model = resolve_agent_model(
-            agent_name="repository-analyst",
-            model_spec=self._model_spec,
-        )
+        model = resolve_agent_model(self._role)
         agent = create_deep_agent(
             name="ai-discovery-analyst",
             model=model,
@@ -148,7 +154,7 @@ class RepositoryDeepAnalyzer:
                 AgentRunBudgetMiddleware(
                     finalize_after=AI_DISCOVERY_FINALIZE_AFTER_MODEL_CALLS
                 ),
-                BillingAgentRoleMiddleware("repository-analyst"),
+                AgentRoleMiddleware("repository-analyst"),
                 *MODEL_GOVERNANCE_MIDDLEWARE,
             ],
             tools=CODEBASE_MEMORY_GRAPH_TOOLS,
@@ -162,8 +168,9 @@ class RepositoryDeepAnalyzer:
                     {
                         "role": "user",
                         "content": (
-                            f"Discover AI use and technical coverage for snapshot {snapshot_id} "
-                            f"at commit {commit_sha or 'unknown'} (scan {scan_job_id})."
+                            f"Establish the minimum evidence of whether and how AI is used for snapshot "
+                            f"{snapshot_id} at commit {commit_sha or 'unknown'} (scan {scan_job_id}); "
+                            "stop once established, or return AI_UNKNOWN with a limitation."
                         ),
                     }
                 ]

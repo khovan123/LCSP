@@ -31,6 +31,7 @@ import {
 } from "../../utils/agent-stream-rule-groups";
 
 import { AgentStreamRuleGroup } from "./agent-stream-rule-group";
+import { AgentStreamUsageFooter } from "./agent-stream-usage-footer";
 
 import { AgentMessage, AgentTurn } from "./agent-turn";
 import {
@@ -123,7 +124,7 @@ export function AgentStreamTimeline({
           : failed
             ? labels.failed
             : paused
-              ? activityCopy("billingPaused")
+              ? activityCopy("boundaryPaused")
               : labels.completed}
         {!hasRunningActivity && duration ? ` · ${duration}` : ""}
       </span>
@@ -400,6 +401,7 @@ function StreamRowView({
                   </div>
                 ) : null}
                 <StreamTechnicalDetails row={turn} labels={labels} />
+                <AgentStreamUsageFooter usage={turn.usage} className="mt-1" />
               </div>
             ))}
           </div>
@@ -416,6 +418,9 @@ function StreamRowView({
           <StreamTechnicalDetails row={row} labels={labels} />
         ) : null}
       </details>
+      {!row.completedTurns ? (
+        <AgentStreamUsageFooter usage={row.usage} className="px-2.5 pt-0.5" />
+      ) : null}
     </div>
   );
 }

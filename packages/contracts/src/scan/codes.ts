@@ -12,7 +12,6 @@ export const SCAN_ERROR_CODES = {
   agentRuntimeBoundaryTimeout: "AGENT_RUNTIME_BOUNDARY_TIMEOUT",
   providerTimeout: "PROVIDER_TIMEOUT",
   repositorySandboxFailure: "REPOSITORY_SANDBOX_FAILURE",
-  billingFailure: "BILLING_FAILURE",
   repositoryAnalysisFailed: "REPOSITORY_ANALYSIS_FAILED",
   jobNotFound: "SCAN_JOB_NOT_FOUND",
   jobWrongState: "SCAN_JOB_WRONG_STATE",

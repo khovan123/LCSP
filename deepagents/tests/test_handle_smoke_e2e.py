@@ -13,7 +13,7 @@ def _offline_agent_models(monkeypatch):
     """Agents are built with create_deep_agent; keep model construction offline."""
     monkeypatch.setattr(
         "tools.common.capabilities.assessment.claims.ai_usage_flow.ai_usage_flow_proposer.resolve_agent_model",
-        lambda *, agent_name, model_spec: f"model:{agent_name}",
+        lambda role: f"model:{role}",
     )
 
 

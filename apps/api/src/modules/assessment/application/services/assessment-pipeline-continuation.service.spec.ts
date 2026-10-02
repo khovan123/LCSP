@@ -15,8 +15,6 @@ import type { PrismaService } from "../../../../infrastructure/prisma/prisma.ser
 import type { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import { RerunClassificationCommand } from "../../../classification/application/commands/rerun-classification/rerun-classification.command.js";
 import type { AssessmentInterviewRuntimeService } from "./assessment-interview-runtime.service.js";
-import type { AssessmentModelCreditPreflight } from "./assessment-model-credit-preflight.js";
-import type { BillingWorkflowPauseService } from "../../../billing/application/shared/billing-workflow-pause.service.js";
 import { AssessmentPipelineContinuationService } from "./assessment-pipeline-continuation.service.js";
 
 const actor = {
@@ -45,12 +43,9 @@ describe("AssessmentPipelineContinuationService", () => {
       lastActivityAt: Date | null;
     }>
   >;
-  let assertCredits: jest.Mock<(...args: unknown[]) => Promise<void>>;
   let stoppedByCustomer: jest.Mock<(...args: unknown[]) => Promise<boolean>>;
   let recordControl: jest.Mock<(...args: unknown[]) => Promise<void>>;
   let service: AssessmentPipelineContinuationService;
-  let findPause: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
-  let resumePause: jest.Mock<(...args: unknown[]) => Promise<boolean>>;
 
   const run = () =>
     service.continuePipeline({
@@ -60,12 +55,6 @@ describe("AssessmentPipelineContinuationService", () => {
     });
 
   beforeEach(() => {
-    findPause = jest
-      .fn<(...args: unknown[]) => Promise<unknown>>()
-      .mockResolvedValue(null);
-    resumePause = jest
-      .fn<(...args: unknown[]) => Promise<boolean>>()
-      .mockResolvedValue(true);
     findAssessment = jest
       .fn<(...args: unknown[]) => Promise<unknown>>()
       .mockResolvedValue({ status: AssessmentStatus.CLASSIFICATION_LOCKED });
@@ -96,9 +85,6 @@ describe("AssessmentPipelineContinuationService", () => {
         }>
       >()
       .mockResolvedValue({ live: false, lastActivityAt: null });
-    assertCredits = jest
-      .fn<(...args: unknown[]) => Promise<void>>()
-      .mockResolvedValue(undefined);
     stoppedByCustomer = jest
       .fn<(...args: unknown[]) => Promise<boolean>>()
       .mockResolvedValue(false);
@@ -107,8 +93,8 @@ describe("AssessmentPipelineContinuationService", () => {
       .mockResolvedValue(undefined);
     service = new AssessmentPipelineContinuationService(
       {
+        // No wallet/billing model on purpose: continue must never consult one.
         assessment: { findUnique: findAssessment },
-        workflowBillingPause: { findFirst: findPause },
       } as unknown as PrismaService,
       { execute } as unknown as CommandBus,
       interview as unknown as AssessmentInterviewRuntimeService,
@@ -117,37 +103,7 @@ describe("AssessmentPipelineContinuationService", () => {
         isPipelineStoppedByCustomer: stoppedByCustomer,
         recordPipelineControl: recordControl,
       } as unknown as AssessmentRuntimeEventService,
-      {
-        assertAvailable: assertCredits,
-      } as unknown as AssessmentModelCreditPreflight,
-      {
-        resume: resumePause,
-        hasPendingResume: () => Promise.resolve(false),
-      } as unknown as BillingWorkflowPauseService,
     );
-  });
-
-  it("resumes a billing pause before stale liveness or Interview guards", async () => {
-    findPause.mockResolvedValue({ id: "pause-1" });
-    liveness.mockResolvedValue({ live: true, lastActivityAt: new Date() });
-    await expect(run()).resolves.toEqual({
-      action: ASSESSMENT_PIPELINE_CONTINUE_ACTIONS.downstreamRequeued,
-    });
-    expect(assertCredits).toHaveBeenCalled();
-    expect(resumePause).toHaveBeenCalledWith(
-      "assessment-1",
-      "user-1",
-      "corr-continue",
-    );
-    expect(execute).not.toHaveBeenCalled();
-    expect(liveness).not.toHaveBeenCalled();
-  });
-
-  it("leaves the billing checkpoint parked if credits are still unavailable", async () => {
-    findPause.mockResolvedValue({ id: "pause-1" });
-    assertCredits.mockRejectedValue(new Error("credits required"));
-    await expect(run()).rejects.toThrow("credits required");
-    expect(resumePause).not.toHaveBeenCalled();
   });
 
   it("re-sends accepted evidence when the downstream pipeline stopped", async () => {
@@ -163,7 +119,6 @@ describe("AssessmentPipelineContinuationService", () => {
       "assessment-1",
       ASSESSMENT_PIPELINE_LIVENESS_WINDOW_SECONDS * 1_000,
     );
-    expect(assertCredits).toHaveBeenCalledWith("assessment-1", "corr-continue");
     expect(execute).toHaveBeenCalledWith(
       new RerunClassificationCommand(
         "assessment-1",

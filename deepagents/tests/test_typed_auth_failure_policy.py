@@ -7,10 +7,13 @@ Reproduces scan d3be1a28 (run 01a0dc37): Google slot 0 timed out, slot 1 returne
 escaped the middleware stack because ``ModelError.is_retryable is False`` made it a
 terminal task error.
 """
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
+from langchain_core.messages import AIMessage
+from conftest import use_model_routes
 from google.genai.errors import ClientError
 from langchain.agents.middleware import ModelRequest, ModelResponse, ModelRetryMiddleware
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -21,10 +24,10 @@ from langchain_google_genai.chat_models import (
 )
 from langchain_openai.chat_models.base import OpenAIAuthenticationError, OpenAIPermissionDeniedError
 
-from middleware.billing_metering import (
-    BillingMeteringMiddleware,
-    BillingMeteringSession,
-    activate_billing_metering,
+from middleware.usage_metering import (
+    AgentRunState,
+    UsageMeteringMiddleware,
+    activate_agent_run_state,
 )
 from middleware.failure_policy import (
     TerminalCredentialError,
@@ -38,6 +41,7 @@ from middleware.provider_fallback import (
     ProviderFallbackMiddleware,
     provider_circuit_breaker_failure,
     provider_fallback_failure,
+    route_key,
 )
 from middleware.token_fallback import TokenFallbackMiddleware
 from provider_credentials import credential_init_kwargs
@@ -50,8 +54,19 @@ GOOGLE_KEY_SLOTS = "google-slot-0-test-token,google-slot-1-test-token,google-slo
 def isolated_credential_health(monkeypatch):
     from middleware import token_fallback
 
-    for name in ("LLM_FALLBACK_PROVIDER_1", "LLM_FALLBACK_PROVIDER_2"):
-        monkeypatch.delenv(name, raising=False)
+    use_model_routes(
+        monkeypatch,
+        (
+            {
+                "routes": {
+                    "g": {"provider": "google_genai", "model": "future-model-v99"},
+                    "l": {"provider": "llm7", "model": "model-gamma"},
+                },
+                "roles": {"default": "g"},
+                "fallbacks": {"g": ["l"]},
+            }
+        ),
+    )
     token_fallback._DEAD_CREDENTIAL_SLOTS.clear()
     token_fallback._RATE_LIMITED_UNTIL.clear()
 
@@ -188,7 +203,7 @@ def test_non_auth_non_retryable_model_errors_stay_terminal_without_fallback():
 
 def _gemini_request() -> ModelRequest:
     model = ChatGoogleGenerativeAI(
-        model="gemini-3.5-flash-lite",
+        model="future-model-v99",
         thinking_level="minimal",
         **credential_init_kwargs("google_genai"),
     )
@@ -273,7 +288,6 @@ async def test_timeout_then_typed_auth_on_last_slot_ends_with_bounded_credential
 async def test_exhausted_google_pool_with_typed_auth_moves_to_next_provider(monkeypatch, asynchronous):
     monkeypatch.setenv("GOOGLE_API_KEY", "google-slot-0-test-token,google-slot-1-test-token")
     monkeypatch.setenv("LLM7_API_KEY", "llm7-only-test-token")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "llm7")
     response = ModelResponse(result=[])
     side_effect = [_google_timeout(), _google_auth_error(), _google_timeout(), response]
     handler = AsyncMock(side_effect=side_effect) if asynchronous else MagicMock(side_effect=side_effect)
@@ -309,49 +323,34 @@ async def test_typed_auth_opens_provider_circuit_and_later_calls_skip_that_provi
 ):
     import middleware.provider_fallback as fallback_module
 
-    class _BillingModel:
-        def __init__(self, provider: str):
+    class _FakeModel:
+        def __init__(self, provider: str, model_name: str = "future-model-v99"):
             self.provider = provider
-            self.model_name = "gemini-3.5-flash-lite"
+            self.model_name = model_name
 
-    class _BillingRequest:
+    class _FakeRequest:
         def __init__(self, model):
             self.model = model
             self.messages = []
             self.tools = []
 
         def override(self, **kwargs):
-            return _BillingRequest(kwargs.get("model", self.model))
+            return _FakeRequest(kwargs.get("model", self.model))
 
-    class BillingClient:
+    class UsageClient:
         def __init__(self):
-            self.claims = []
             self.payloads = []
-
-        def claim_billing_invocation(self, reservation_id, payload):
-            self.claims.append((reservation_id, payload.invocationId))
 
         def post_settled_usage(self, payload):
             self.payloads.append(payload)
 
-    monkeypatch.setattr(fallback_module, "publish_agent_stream_event", lambda *args, **kwargs: None)
-    monkeypatch.setattr(fallback_module, "model_provider", lambda model: model.provider)
-    monkeypatch.setattr(fallback_module, "configured_fallback_providers", lambda: ("llm7",))
-    monkeypatch.setattr(fallback_module, "fallback_model", lambda provider: _BillingModel(provider))
-    client = BillingClient()
-    session = BillingMeteringSession(
+    monkeypatch.setattr(fallback_module, "fallback_model", lambda config: _FakeModel(config.provider, config.model))
+    client = UsageClient()
+    session = AgentRunState(
         api_client=client,
         assessment_id="assessment-typed-auth",
         run_id="run-typed-auth",
-        reservation_id="reservation-typed-auth",
         agent_role="investigator",
-        reserved_provider="GOOGLE_GENAI",
-        reserved_model="gemini-3.5-flash-lite",
-        authorized_models={
-            ("GOOGLE_GENAI", "gemini-3.5-flash-lite"),
-            ("LLM7", "gemini-3.5-flash-lite"),
-        },
-        max_invocations=1,
     )
     provider_calls = []
 
@@ -359,16 +358,18 @@ async def test_typed_auth_opens_provider_circuit_and_later_calls_skip_that_provi
         provider_calls.append(request.model.provider)
         if request.model.provider == "google_genai":
             raise _google_auth_error()
-        return ModelResponse(result=[])
+        return ModelResponse(
+            result=[AIMessage(content="ok", usage_metadata={"input_tokens": 3, "output_tokens": 2, "total_tokens": 5})]
+        )
 
     async def async_provider_handler(request):
         return provider_handler(request)
 
     fallback = ProviderFallbackMiddleware()
-    billing = BillingMeteringMiddleware()
-    request = _BillingRequest(_BillingModel("google_genai"))
+    billing = UsageMeteringMiddleware()
+    request = _FakeRequest(_FakeModel("google_genai"))
 
-    with activate_billing_metering(session):
+    with activate_agent_run_state(session):
         for _ in range(2):
             if asynchronous:
                 async def metered(next_request):
@@ -384,25 +385,11 @@ async def test_typed_auth_opens_provider_circuit_and_later_calls_skip_that_provi
 
     # Google is tried once, its run-scoped circuit opens, and the next call skips it.
     assert provider_calls == ["google_genai", "llm7", "llm7"]
-    assert session.provider_route_disabled("google_genai") is True
-    # One invocation claim per provider attempt. The failed google attempt settles
-    # a zero-charge "unavailable" payload via record_unavailable(); the two llm7
-    # successes settle normal usage.
-    assert len(client.claims) == 3
-    assert len(client.payloads) == 3
-    assert [payload.provider for payload in client.payloads] == [
-        "GOOGLE_GENAI",
-        "LLM7",
-        "LLM7",
-    ]
-    unavailable = client.payloads[0]
-    assert unavailable.provider == "GOOGLE_GENAI"
-    assert unavailable.model == "gemini-3.5-flash-lite"
-    assert unavailable.providerResponseId is None
-    assert unavailable.inputTokens is None
-    assert unavailable.outputTokens is None
-    assert unavailable.totalTokens is None
+    assert session.provider_route_disabled(route_key("google_genai", "future-model-v99")) is True
+    # Only the two answered llm7 calls report provider usage; the failed google attempt
+    # reports nothing (no invented zero-usage record).
 
+    assert [payload.provider for payload in client.payloads] == ["LLM7", "LLM7"]
 
 @pytest.mark.parametrize("auth_error", [_google_auth_error, _google_permission_error])
 @pytest.mark.parametrize("asynchronous", [False, True])
@@ -429,7 +416,7 @@ def test_non_retryable_boundary_failures_are_terminal_at_the_boundary():
         InterviewTechnicalCoverageRecoveryRequired,
     )
 
-    # Never redelivered, so the invocation's billing reservation must be released.
+    # Never redelivered by the broker.
     assert is_terminal_boundary_error(NonRetryableAgentBoundaryError("scan job is terminal")) is True
     assert is_terminal_boundary_error(
         InterviewTechnicalCoverageRecoveryRequired("technical coverage recovery required")
@@ -441,90 +428,19 @@ def test_non_retryable_boundary_failures_are_terminal_at_the_boundary():
     ) is False
 
 
-@pytest.mark.parametrize(
-    ("error_factory", "released"),
-    [
-        (lambda: __import__(
-            "tools.common.capabilities.workflow.recovery.interview_boundary",
-            fromlist=["InterviewTechnicalCoverageRecoveryRequired"],
-        ).InterviewTechnicalCoverageRecoveryRequired("technical coverage recovery required"), True),
-        (lambda: RuntimeError("transient provider outage"), False),
-    ],
-)
-def test_invoke_boundary_releases_reservation_only_for_non_redelivered_failures(
-    monkeypatch, error_factory, released
-):
+def test_invoke_boundary_propagates_handler_failures(monkeypatch):
     from tools.common.capabilities.agent_runtime import invocation
 
-    class FakeBillingSession:
-        def __init__(self):
-            self.released = 0
-
-        def release(self):
-            self.released += 1
-
-    session = FakeBillingSession()
-    error = error_factory()
+    error = RuntimeError("transient provider outage")
 
     def failing_handler(*_args):
         raise error
 
     monkeypatch.setattr(invocation, "build_boundary", lambda _target: object())
     monkeypatch.setattr(invocation, "_agent_stream_session", lambda *_args: None)
-    monkeypatch.setattr(invocation, "_billing_metering_session", lambda *_args: session)
     monkeypatch.setattr(invocation, "_run_boundary_handler", failing_handler)
 
-    with pytest.raises(type(error)):
-        invocation.invoke_boundary("engineering_assessment_requested", {}, "corr-release")
-
-    assert session.released == (1 if released else 0)
-
-
-def test_invoke_boundary_reports_billing_reservation_failure_before_raising(monkeypatch):
-    from tools.common.capabilities.agent_runtime import invocation
-
-    class RecordingBoundary:
-        def __init__(self):
-            self.reported = []
-
-        def report_dispatch_failure(self, message, correlation_id, error):
-            self.reported.append((message, correlation_id, error))
-
-    boundary = RecordingBoundary()
-    error = RuntimeError("BILLING_INSUFFICIENT_CREDITS")
-
-    def failing_reservation(*_args):
-        raise error
-
-    monkeypatch.setattr(invocation, "build_boundary", lambda _target: boundary)
-    monkeypatch.setattr(invocation, "_agent_stream_session", lambda *_args: None)
-    monkeypatch.setattr(invocation, "_billing_metering_session", failing_reservation)
-
-    message = {"assessmentId": "assessment-1", "contextRevision": 8}
     with pytest.raises(RuntimeError) as caught:
-        invocation.invoke_boundary("engineering_assessment_requested", message, "corr-billing")
-
-    assert caught.value is error
-    assert boundary.reported == [(message, "corr-billing", error)]
-
-
-def test_dispatch_failure_report_errors_never_mask_the_original_failure(monkeypatch):
-    from tools.common.capabilities.agent_runtime import invocation
-
-    class BrokenReporter:
-        def report_dispatch_failure(self, *_args):
-            raise ValueError("progress endpoint down")
-
-    error = RuntimeError("BILLING_INSUFFICIENT_CREDITS")
-
-    def failing_reservation(*_args):
-        raise error
-
-    monkeypatch.setattr(invocation, "build_boundary", lambda _target: BrokenReporter())
-    monkeypatch.setattr(invocation, "_agent_stream_session", lambda *_args: None)
-    monkeypatch.setattr(invocation, "_billing_metering_session", failing_reservation)
-
-    with pytest.raises(RuntimeError) as caught:
-        invocation.invoke_boundary("engineering_assessment_requested", {}, "corr-billing")
+        invocation.invoke_boundary("engineering_assessment_requested", {}, "corr-fail")
 
     assert caught.value is error

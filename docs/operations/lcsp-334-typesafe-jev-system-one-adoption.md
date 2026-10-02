@@ -75,7 +75,7 @@ existing deterministic validators and gates
 
 The LCSP Decision Gateway is deliberately independent from
 `deepagents/model_policy.py`. Jev is not a LangChain chat model and must not be
-accepted as a value of `LCSP_MODEL_PROVIDER`.
+accepted as a value of the model routes file (`LCSP_MODEL_ROUTES_FILE` / `model_routes.yaml`).
 
 ## Decision Gateway Contract
 
@@ -345,7 +345,7 @@ Scope:
 
 - add reviewed architecture docs and closed decision-type contracts;
 - define allowed modes, fallback semantics and prohibited authority outputs;
-- ensure Jev is not wired through `LCSP_MODEL_PROVIDER`.
+- ensure Jev is not wired through the model routes file (`LCSP_MODEL_ROUTES_FILE` / `model_routes.yaml`).
 
 Safety boundaries:
 

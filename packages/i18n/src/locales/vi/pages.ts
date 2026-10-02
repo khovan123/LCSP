@@ -243,7 +243,7 @@ export const viPages = {
       agentBudgetReached:
         "Đã chạm giới hạn số bước, kết thúc với evidence đã kiểm tra",
       agentBudgetExhausted: "Agent không hoàn tất trong giới hạn số bước",
-      billingPaused: "Tạm dừng vì billing. Nạp tiền rồi tiếp tục.",
+      boundaryPaused: "Đã tạm dừng. Tiếp tục khi bạn sẵn sàng.",
       agentContextTrimmed:
         "Đã lược bớt kết quả tool cũ để giữ trong giới hạn context",
     },
@@ -303,6 +303,22 @@ export const viPages = {
       tools: "Lệnh công cụ/tìm kiếm",
       failures: "Lỗi nhà cung cấp/mô hình",
       rawEvents: "Sự kiện gốc",
+    },
+    agentStreamUsage: {
+      input: "{value} đầu vào",
+      output: "{value} đầu ra",
+      total: "{value} token",
+      lines: "{value} dòng",
+      items: "{value} kết quả",
+      truncated: "đã cắt bớt",
+      metrics: {
+        reasoning_tokens: "{value} suy luận",
+        thinking_tokens: "{value} suy nghĩ",
+        cached_input_tokens: "{value} đã lưu đệm",
+        cache_read_tokens: "{value} đọc đệm",
+        cache_creation_input_tokens: "{value} ghi đệm",
+        audio_tokens: "{value} âm thanh",
+      },
     },
     agentStreamRuleAnalysisOutput: {
       aggregatedFailed: "Không thể hoàn tất các điều tra",
@@ -1248,7 +1264,7 @@ export const viPages = {
       billing: {
         title: "Thanh toán",
         description:
-          "Nạp số dư VND trả trước và dùng số dư này cho các khoản phí sử dụng được hệ thống xác thực.",
+          "Nạp số dư VND trả trước bằng chuyển khoản. Việc đánh giá chạy độc lập với số dư của bạn.",
         loading: "Đang tải thông tin thanh toán",
         errorTitle: "Không thể tải thanh toán",
         errorDescription: "Không thể tải ví hoặc lịch sử thanh toán của bạn.",
@@ -1277,19 +1293,15 @@ export const viPages = {
         openExistingOrder: "Mở đơn hiện có",
         confirmCreateAnotherOrder: "Xác nhận tạo đơn khác",
         cancelAdditionalOrder: "Không tạo đơn mới",
-        estimateTitle: "Ước tính sử dụng",
+        estimateTitle: "Báo giá nạp tiền",
         estimateDescription:
-          "Chỉ mang tính tham khảo. Phí sử dụng thực tế được tính từ dữ liệu sử dụng do hệ thống xác thực.",
-        estimatePrompt: "Nhập số tiền nạp để xem ước tính hiện tại.",
-        estimateLoading: "Đang tính ước tính",
-        estimateError: "Không thể tải ước tính.",
-        effectiveProvider: "Provider hiệu lực",
-        effectiveModel: "Model hiệu lực",
-        estimatedUsageCharge: "Phí sử dụng tham khảo",
+          "Số credit bạn nhận được cho số tiền thanh toán. Việc dùng mô hình không trừ ví của bạn.",
+        estimatePrompt: "Nhập số tiền nạp để xem báo giá.",
+        estimateLoading: "Đang tính báo giá",
+        estimateAmount: "Bạn thanh toán",
+        estimateCredits: "Credit nhận được",
+        estimateError: "Không thể tải báo giá.",
         unavailable: "Chưa có",
-        insufficientPricingTitle: "Chưa thể ước tính",
-        insufficientPricingDescription:
-          "Cấu hình pricing chưa đầy đủ nên không hiển thị ước tính. Bạn vẫn có thể tạo đơn thanh toán.",
         activeOrderTitle: "Đơn thanh toán",
         noActiveOrder: "Không có đơn thanh toán đang hoạt động.",
         paymentTitle: "Thanh toán bằng chuyển khoản",
@@ -1862,8 +1874,6 @@ export const viPages = {
         "Đã tiếp tục đánh giá. Câu trả lời đã lưu đang được xếp hàng lại.",
       resumeTurnLimitReached:
         "Không thể đánh giá câu trả lời này sau nhiều lần thử. Vui lòng thử lại sau hoặc liên hệ hỗ trợ.",
-      resumeTurnInsufficientCredits:
-        "Ví của bạn không đủ credit để đánh giá câu trả lời này. Vui lòng nạp thêm credit trong mục Thanh toán rồi nhấn Tiếp tục lại.",
       resumeTurnFailed: "Hiện chưa thể tiếp tục đánh giá. Vui lòng thử lại.",
       contextReadyHandoff:
         "Bối cảnh kinh doanh cơ bản đã được xác nhận. Assessment giờ có thể tiếp tục với lập kế hoạch và điều tra. Các câu hỏi riêng cho từng yêu cầu vẫn có thể được hỏi thêm nếu cần.",
@@ -2578,7 +2588,7 @@ export const viPages = {
       navBilling: "Thanh toán & Doanh thu",
       administrationLabel: "Quản trị hệ thống",
       administrationDescription:
-        "Billing hệ thống, thanh toán, credit trả trước, doanh thu usage và đối soát.",
+        "Billing hệ thống, thanh toán, credit trả trước và đối soát.",
       roleAdminLabel: "Quản trị viên",
       navigationAria: "Điều hướng quản trị",
       sectionsAria: "Khu vực quản trị",
@@ -2675,7 +2685,7 @@ export const viPages = {
     billing: {
       title: "Thanh toán & Doanh thu",
       description:
-        "Theo dõi thanh toán SePay, khoản nạp trả trước, phí usage, đối soát webhook và doanh thu nền tảng theo tài khoản khách hàng.",
+        "Theo dõi thanh toán SePay, khoản nạp trả trước, đối soát webhook theo tài khoản khách hàng.",
       periodAria: "Chọn khoảng thời gian báo cáo thanh toán",
       statusAria: "Lọc thanh toán theo trạng thái đối soát",
       gatewayAria: "Lọc thanh toán theo cổng thanh toán",
@@ -2696,29 +2706,16 @@ export const viPages = {
       },
       metrics: {
         settledTopUps: "Khoản nạp đã quyết toán",
-        usageRevenue: "Doanh thu usage",
         pendingReconciliation: "Đang chờ đối soát",
         duplicates: "Giao dịch trùng đã chặn",
         topUpSubtitle: "Giao dịch SePay đã xác nhận",
-        usageSubtitle: "Khoản phí từ usage mô hình đã quyết toán",
         eventSuffix: "sự kiện",
       },
       trend: {
         title: "Xu hướng nạp tiền đã quyết toán",
         description:
-          "Giao dịch chuyển tiền đến đã xác nhận theo ngày • doanh thu usage lấy từ ledger",
+          "Giao dịch chuyển tiền đến đã xác nhận theo ngày",
         dayAria: "Số tiền nạp đã quyết toán ngày {day}",
-      },
-      pricing: {
-        title: "Chính sách định giá usage",
-        providerCost:
-          "Chi phí provider = usage đo được × snapshot giá provider/model hiệu lực",
-        customerCharge:
-          "Phí khách hàng = chi phí provider × mức markup đã cấu hình",
-        prepaidCredits:
-          "Credit trả trước có giá trị tiền tệ. Token ước tính chỉ mang tính tham khảo.",
-        missingSnapshot:
-          "Thiếu snapshot giá → từ chối xử lý; không tự ước đoán phí.",
       },
       columns: {
         order: "Đơn hàng",

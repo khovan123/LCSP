@@ -1,7 +1,6 @@
 import * as assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { BILLING_ERROR_CODES } from "@lcsp/contracts/billing";
 import {
   ASSESSMENT_PIPELINE_CONTINUE_ACTIONS,
   ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES,
@@ -77,9 +76,10 @@ test("continue maps every refusal to a specific customer message", async () => {
       "pages.assessmentFlow.pipeline.continueCompleted",
     ],
     [
-      problem(BILLING_ERROR_CODES.insufficientCredits, 402),
-      API_OUTCOME_KINDS.insufficientCredits,
-      "pages.assessmentFlow.interview.resumeTurnInsufficientCredits",
+      // Model usage no longer debits the wallet: a 402 is just an unexpected failure.
+      problem("BILLING_INSUFFICIENT_CREDITS", 402),
+      API_OUTCOME_KINDS.error,
+      "pages.assessmentFlow.pipeline.continueFailed",
     ],
     [
       problem("SOMETHING_UNEXPECTED", 500),
@@ -95,4 +95,8 @@ test("continue maps every refusal to a specific customer message", async () => {
       assert.equal(pipelineContinueMessageKey(outcome), messageKey);
     });
   }
+});
+
+test("Outcome kinds have no insufficient-credits path", () => {
+  assert.equal("insufficientCredits" in API_OUTCOME_KINDS, false);
 });

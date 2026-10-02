@@ -12,10 +12,13 @@ from __future__ import annotations
 
 import logging
 import json
+import math
+import re
+import time
 from queue import Full, Queue
 from threading import Event, Thread
 from contextlib import contextmanager
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterator
@@ -181,8 +184,15 @@ class AgentStreamSession:
         init=False,
     )
     emitted_tool_calls: set[str] = field(default_factory=set, init=False)
+    tool_started_at: dict[str, float] = field(default_factory=dict, init=False)
 
     def emit(self, event_type: str, **fields: Any) -> None:
+        step_id = active_model_step.get() or _MESSAGE_MODEL_STEPS.get(
+            str(fields.get("message_id") or "")
+        )
+        data = fields.get("data")
+        if step_id and (data is None or isinstance(data, dict)) and "model_step_id" not in (data or {}):
+            fields = {**fields, "data": {**(data or {}), "model_step_id": step_id}}
         self.sequence += 1
         payload = {
             "event_id": str(uuid4()),
@@ -215,6 +225,37 @@ class PendingToolCall:
     args: str = ""
     request_id: str = ""
     model_context: dict[str, Any] = field(default_factory=dict)
+
+
+# Canonical logical-model-turn identity. Set around one model step (retries,
+# credential rotation and provider fallback included); stamped on every event
+# emitted inside it. Events emitted later by the stream consumer (MODEL_REQUEST,
+# deltas) find it through the response message id remembered at completion.
+active_model_step: ContextVar[str | None] = ContextVar("active_model_step_id", default=None)
+# Scalar routing summary of the active model step (provider/credential attempts).
+# Routing transitions are infrastructure: they are counted here and logged, never
+# published as assessment events.
+active_model_step_summary: ContextVar[dict[str, Any] | None] = ContextVar(
+    "active_model_step_summary", default=None
+)
+
+
+def note_model_step(counter: str, amount: int = 1) -> None:
+    summary = active_model_step_summary.get()
+    if summary is not None:
+        summary[counter] = summary.get(counter, 0) + amount
+
+
+_MESSAGE_MODEL_STEPS: dict[str, str] = {}
+_MESSAGE_MODEL_STEPS_CAP = 4096
+
+
+def remember_message_model_step(message_id: Any, step_id: str | None) -> None:
+    if not step_id or not isinstance(message_id, str) or not message_id:
+        return
+    _MESSAGE_MODEL_STEPS[message_id] = step_id
+    while len(_MESSAGE_MODEL_STEPS) > _MESSAGE_MODEL_STEPS_CAP:
+        _MESSAGE_MODEL_STEPS.pop(next(iter(_MESSAGE_MODEL_STEPS)))
 
 
 active_agent_stream: ContextVar[AgentStreamSession | None] = ContextVar(
@@ -354,9 +395,7 @@ def agent_stream_rule_scope(
         except BaseException as error:
             # Intentional pauses (TargetedInterviewPending) are BaseExceptions so
             # generic failure handlers skip them; the rule then waits, not fails.
-            from middleware.billing_metering import BillingBudgetExhausted
-
-            if not scope.finished and isinstance(error, (*waiting_on, BillingBudgetExhausted)):
+            if not scope.finished and isinstance(error, waiting_on):
                 scope.fail(error, status="WAITING")
             elif not scope.finished and isinstance(error, Exception):
                 scope.fail(error, status="FAILED")
@@ -440,6 +479,42 @@ def activate_agent_stream(session: AgentStreamSession | None) -> Iterator[None]:
         finally:
             active_agent_stream_stage.reset(stage_token)
             active_agent_stream.reset(token)
+
+
+MODEL_WAIT_HEARTBEAT_SECONDS = 10.0
+
+
+@contextmanager
+def model_wait_heartbeat(
+    text: str,
+    *,
+    interval_seconds: float | None = None,
+) -> Iterator[None]:
+    """Keep the run visibly alive while a model call waits outside a provider attempt.
+
+    Credential-cooldown waits happen between provider attempts, where the per-call
+    heartbeat is not running. The API treats the latest runtime event as liveness.
+    """
+    interval = MODEL_WAIT_HEARTBEAT_SECONDS if interval_seconds is None else interval_seconds
+    stop = Event()
+    context = copy_context()
+
+    def beat() -> None:
+        while not stop.wait(interval):
+            context.run(
+                publish_agent_stream_event,
+                "MODEL_CALL_HEARTBEAT",
+                status="RUNNING",
+                text=text,
+            )
+
+    thread = Thread(target=beat, name="lcsp-model-wait-heartbeat", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        thread.join(timeout=0.25)
 
 
 def publish_agent_stream_event(event_type: str, **fields: Any) -> None:
@@ -737,6 +812,12 @@ def _emit_message_event(
         tool_name = _text(getattr(message, "name", None))
         tool_call_id = _text(getattr(message, "tool_call_id", None))
         result_text = _safe_text(getattr(message, "content", ""))
+        result_metrics = _tool_result_metrics(
+            getattr(message, "content", ""),
+            session.tool_started_at.pop(tool_call_id, None) if session else None,
+        )
+        if result_metrics:
+            safe_metadata = {**safe_metadata, "result_metrics": result_metrics}
         publish_agent_stream_event(
             "TOOL_RESULT",
             agent_name=agent_name,
@@ -762,6 +843,7 @@ def _emit_message_event(
                 toolName=tool_name,
                 toolCallId=tool_call_id,
                 resultSummary={"text": result_text} if result_text else {},
+                result_metrics=result_metrics,
                 status="COMPLETED",
                 **_model_context_from_metadata(safe_metadata),
             ),
@@ -1315,6 +1397,8 @@ def _emit_completed_tool_call(
         if pending.key in session.emitted_tool_calls:
             return
         session.emitted_tool_calls.add(pending.key)
+        if pending.tool_call_id:
+            session.tool_started_at[pending.tool_call_id] = time.monotonic()
         session.pending_tool_calls.pop(pending.key, None)
     publish_agent_stream_event(
         "SEMANTIC_TOOL_CALL",
@@ -1347,6 +1431,45 @@ def _structured_tool_parameters(value: Any) -> tuple[Any, bool]:
     except Exception:
         return {"arguments": _safe_tool_arguments(value)}, False
     return _safe_value(parsed), True
+
+
+_RESULT_ITEM_KEYS = ("items", "results", "matches", "files", "entries", "nodes")
+_RESULT_PARSE_MAX_BYTES = 1_000_000
+
+
+def _tool_result_metrics(content: Any, started_at: float | None) -> dict[str, Any]:
+    """Model-independent size facts of the payload handed to the agent.
+
+    Sizes and counts only: no content, no token numbers.
+    """
+    metrics: dict[str, Any] = {}
+    if started_at is not None:
+        metrics["duration_ms"] = max(0, int((time.monotonic() - started_at) * 1000))
+    if isinstance(content, str):
+        text = content
+    else:
+        try:
+            text = json.dumps(content, default=str, ensure_ascii=False)
+        except Exception:
+            return metrics
+    size = len(text.encode("utf-8", errors="replace"))
+    metrics["bytes"] = size
+    metrics["lines"] = text.count("\n") + 1 if text else 0
+    if text[:1] in "[{" and size <= _RESULT_PARSE_MAX_BYTES:
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            parsed = None
+        if isinstance(parsed, dict):
+            if isinstance(parsed.get("truncated"), bool):
+                metrics["truncated"] = parsed["truncated"]
+            parsed = next(
+                (parsed[k] for k in _RESULT_ITEM_KEYS if isinstance(parsed.get(k), list)),
+                None,
+            )
+        if isinstance(parsed, list):
+            metrics["items"] = len(parsed)
+    return metrics
 
 
 def _semantic_payload(kind: str, *, durability: str, **fields: Any) -> dict[str, Any]:
@@ -1654,7 +1777,52 @@ def _safe_value(value: Any, *, depth: int = MAX_STREAM_DEPTH) -> Any:
 
 
 def _sanitize_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    return redact_dict(_safe_value(payload))
+    safe = _safe_value(payload)
+    redacted = redact_dict(safe)
+    # redact_dict blanks any key with a "token" segment (reasoning_tokens, ...).
+    # Provider usage counters are numeric-only, so restore them after re-validation.
+    data = safe.get("data") if isinstance(safe, dict) else None
+    # Only the model-call completion event carries trusted provider usage; graph/tool
+    # authored `usage` keys on any other event are ordinary (redacted) data.
+    usage = (
+        _trusted_usage(data.get("usage"))
+        if isinstance(data, dict) and safe.get("event_type") == "MODEL_CALL_COMPLETED"
+        else None
+    )
+    if usage is not None and isinstance(redacted.get("data"), dict):
+        redacted["data"]["usage"] = usage
+    return redacted
+
+
+_USAGE_METRIC_KEY = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
+
+
+def _usage_number(value: Any) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 0
+    )
+
+
+def _trusted_usage(usage: Any) -> dict[str, Any] | None:
+    if not isinstance(usage, dict):
+        return None
+    out: dict[str, Any] = {}
+    for key in ("input_tokens", "output_tokens", "total_tokens"):
+        if _usage_number(usage.get(key)):
+            out[key] = usage[key]
+    details = usage.get("details")
+    if isinstance(details, dict):
+        clean = {
+            k: v
+            for k, v in list(details.items())[:24]
+            if isinstance(k, str) and _USAGE_METRIC_KEY.match(k) and _usage_number(v)
+        }
+        if clean:
+            out["details"] = clean
+    return out or None
 
 
 def _is_durable_stream_payload(payload: dict[str, Any]) -> bool:

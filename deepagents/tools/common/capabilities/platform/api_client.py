@@ -26,9 +26,6 @@ from tools.common.capabilities.platform.callback_schemas import (
     ConflictDetectionCallbackPayload,
     ClassificationCallbackPayload,
     AuditExportCallbackPayload,
-    BillingReservationPayload,
-    BillingReservationClaimPayload,
-    BillingReservationReleasePayload,
 )
 
 logger = get_logger(__name__)
@@ -40,9 +37,6 @@ _IDEMPOTENT_CONFLICT_CODES = {
     "PROFILE_ALREADY_EXISTS",
     "RESULT_ALREADY_EXISTS",
 }
-_NON_RETRYABLE_PROVISIONING_ERROR_CODES = frozenset({
-    "BILLING_PRICING_UNAVAILABLE",
-})
 _PRIVACY_FLAG_KEYS = {
     "containsSourceCode",
     "secretsRedacted",
@@ -264,18 +258,6 @@ class WorkerApiClient:
 
                 if resp.status_code >= 500:
                     error_code = self._response_error_code(resp)
-                    if error_code in _NON_RETRYABLE_PROVISIONING_ERROR_CODES:
-                        logger.error(
-                            CallbackLogEvent.SERVER_ERROR_TERMINAL,
-                            path=path,
-                            status_code=resp.status_code,
-                            error_code=error_code,
-                        )
-                        raise WorkerCallbackError(
-                            f"{error_code}: {server_error_message(1, resp.status_code)}",
-                            status_code=resp.status_code,
-                            error_code=error_code,
-                        )
                     if attempt < self._max_retries - 1:
                         backoff = 2**attempt
                         logger.warning(
@@ -776,42 +758,16 @@ class WorkerApiClient:
         return CallbackResponse(**resp_data)
 
     def post_settled_usage(self, payload: SettledUsagePayload) -> CallbackResponse:
-        """Submit provider-reported usage for fail-closed billing settlement."""
+        """Submit provider-reported usage telemetry for one model invocation.
+
+        Usage is observability only: it carries provider-reported token counts and
+        is never used to reserve, price, or debit customer credits.
+        """
         resp_data = self._post_with_retry(
             CallbackPath.BILLING_USAGE,
             payload.model_dump(exclude_none=True),
         )
         return CallbackResponse(**resp_data)
-
-    def reserve_billing_credits(
-        self, payload: BillingReservationPayload
-    ) -> dict:
-        """Reserve credits for a canonical assessment/run billing group."""
-        return self._post_with_retry(
-            CallbackPath.BILLING_RESERVATION,
-            payload.model_dump(exclude_none=True),
-        )
-
-    def pause_billing_workflow(self, payload: dict) -> dict:
-        """Durably park a dispatch before the broker may acknowledge it."""
-        return self._post_with_retry(CallbackPath.BILLING_WORKFLOW_PAUSE, payload)
-
-    def release_billing_reservation(
-        self, reservation_id: str, payload: BillingReservationReleasePayload
-    ) -> dict:
-        """Release unused credits; the API operation is idempotent."""
-        path = CallbackPath.BILLING_RESERVATION_RELEASE.format(
-            reservation_id=reservation_id
-        )
-        return self._post_with_retry(path, payload.model_dump(exclude_none=True))
-
-    def claim_billing_invocation(
-        self, reservation_id: str, payload: BillingReservationClaimPayload
-    ) -> dict:
-        path = CallbackPath.BILLING_RESERVATION_CLAIM.format(
-            reservation_id=reservation_id
-        )
-        return self._post_with_retry(path, payload.model_dump(exclude_none=True))
 
     def post_reconciliation_conflict_callback(
         self, payload: ConflictDetectionCallbackPayload

@@ -10,9 +10,9 @@ from typing import Any
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from deepagents import create_deep_agent
 from middleware.agent_run_budget import AgentRunBudgetMiddleware
-from middleware.billing_metering import BillingAgentRoleMiddleware
+from middleware.usage_metering import AgentRoleMiddleware
 from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
-from model_policy import TRIAGE_MODEL_SPEC, resolve_agent_model
+from model_policy import resolve_agent_model
 from tools.common.capabilities.agent_runtime.skill_loader import load_project_skill
 from tools.legal.retrieval.legal_basis.normative_chunk_filter import (
     CHUNK_NORMATIVE_CLASSES,
@@ -41,8 +41,8 @@ class LegalChunkTriageDecision:
 class LegalChunkEngineeringRuleTriage:
     """Classify approved legal chunks into compile-safe EngineeringRule sources."""
 
-    def __init__(self, model: str = TRIAGE_MODEL_SPEC) -> None:
-        self._model = model
+    def __init__(self, role: str = "legal-chunk-triage") -> None:
+        self._role = role
 
     def analyze(
         self,
@@ -64,9 +64,7 @@ class LegalChunkEngineeringRuleTriage:
         triage_skill = load_project_skill(TRIAGE_SKILL_NAME)
         agent = create_deep_agent(
             name="lcsp-legal-chunk-triage",
-            model=resolve_agent_model(
-                agent_name="lcsp-legal-chunk-triage", model_spec=self._model
-            ),
+            model=resolve_agent_model(self._role),
             backend=current_repository_backend(),
             system_prompt=(
                 "Classify approved legal chunks only. Do not make legal applicability, "
@@ -78,7 +76,7 @@ class LegalChunkEngineeringRuleTriage:
             response_format=_triage_response_schema(chunk_ids),
             middleware=[
                 AgentRunBudgetMiddleware(),
-                BillingAgentRoleMiddleware("triage"),
+                AgentRoleMiddleware("triage"),
                 *MODEL_GOVERNANCE_MIDDLEWARE,
             ],
         )

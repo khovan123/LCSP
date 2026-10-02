@@ -3,10 +3,9 @@
 from contracts.handoffs import InterviewResult
 from middleware.agent_run_budget import AgentRunBudgetMiddleware
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
-from middleware.billing_metering import BillingAgentRoleMiddleware
+from middleware.usage_metering import AgentRoleMiddleware
 from middleware.interview_runtime_context import inject_interview_runtime_context
 from middleware.tool_scope import AllowedToolsMiddleware
-from model_policy import INTERVIEW_MODEL_SPEC
 from tools.common.capabilities.agent_runtime.skill_loader import load_project_skill_package
 
 
@@ -136,7 +135,6 @@ SUBAGENT = {
     ),
     "system_prompt": SYSTEM_PROMPT,
     "tools": TOOLS,
-    "model": INTERVIEW_MODEL_SPEC,
     "middleware": [
         # The Interview resolves Customer-owned business gaps from the bounded need and
         # thread context; it never reads the repository. Deep Agents attaches
@@ -145,7 +143,7 @@ SUBAGENT = {
         AllowedToolsMiddleware(frozenset()),
         AgentRunBudgetMiddleware(finalize_after=1, grace_calls=1),
         inject_interview_runtime_context,
-        BillingAgentRoleMiddleware("interview"),
+        AgentRoleMiddleware("interview"),
         *MODEL_GOVERNANCE_MIDDLEWARE,
     ],
     "response_format": OUTPUT_MODEL,

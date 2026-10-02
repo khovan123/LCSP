@@ -19,6 +19,7 @@ from orchestration.agent_stream import (
     invoke_with_stream,
     publish_agent_stream_event,
 )
+from model_policy import resolve_agent_model
 from subagents import FLOW_SUBAGENTS
 from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
 
@@ -107,10 +108,9 @@ class RootSubagentDispatcher:
         if owner_instruction:
             prompt = f"{owner_instruction}\n\n{prompt}" if prompt else owner_instruction
 
-        # Same construction as the root ``task`` tool: Deep Agents resolves the
-        # definition's model spec through the LCSP provider profiles.
+        # The role's model is resolved here, at construction time, from the model routes YAML.
         agent_kwargs: dict[str, Any] = {
-            "model": definition["model"],
+            "model": definition.get("model") or resolve_agent_model(subagent_type),
             "backend": current_repository_backend(),
             "tools": definition["tools"],
             "system_prompt": definition["system_prompt"],

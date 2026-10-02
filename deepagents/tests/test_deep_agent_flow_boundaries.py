@@ -452,11 +452,11 @@ def test_root_agent_task_subagents_run_under_model_governance(monkeypatch) -> No
 
     assert "general-purpose" in compiled
     governance = {
-        "BillingAgentRoleMiddleware",
+        "AgentRoleMiddleware",
         "ModelRetryMiddleware",
         "ProviderFallbackMiddleware",
         "TokenFallbackMiddleware",
-        "BillingMeteringMiddleware",
+        "UsageMeteringMiddleware",
     }
     for name, middleware in compiled.items():
         missing = governance - middleware

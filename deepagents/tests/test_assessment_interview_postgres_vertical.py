@@ -3,7 +3,7 @@
 The deleted ``managed_targeted_investigator`` durable langgraph harness is gone:
 per-rule durability now lives in the API-owned rule-assessment ledger
 (``analyze_rule`` persists one accepted row per rule; a failed resume never erases
-a previously accepted row; billing pauses propagate without poisoning the ledger).
+a previously accepted row).
 These tests exercise that contract against the same Postgres-backed store path and
 stay skipped unless ``LCSP_TEST_CHECKPOINT_DATABASE_URL`` is present.
 """
@@ -15,7 +15,6 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from middleware.billing_metering import BillingBudgetExhausted
 
 from orchestration.context import LCSPRunContext
 from tools.common.capabilities.assessment.rule_assessment.run import (
@@ -157,18 +156,15 @@ def _accepted_row(context, rule) -> dict:
 
 
 class _CountingDispatcher:
-    """One Repository Analyst turn per dispatch; optionally billing-paused first."""
+    """One Repository Analyst turn per dispatch."""
 
-    def __init__(self, api: _LedgerApi, run_counter: list[int], *, paused_first: bool = False):
+    def __init__(self, api: _LedgerApi, run_counter: list[int]):
         self.api = api
         self.run_counter = run_counter
-        self.paused_first = paused_first
         self.calls = 0
 
     def dispatch(self, **kwargs):
         self.calls += 1
-        if self.paused_first and self.calls == 1:
-            raise BillingBudgetExhausted("No spendable reservation budget")
         self.run_counter.append(1)
         context = kwargs["context"]
         # Persist under the attempt's own thread so analyze_rule reads it back.
@@ -224,26 +220,14 @@ def test_post_guard_pending_completed_state_survives_store_reconstruction() -> N
     assert completed is not None and completed.completed
 
 
-def test_billing_pause_propagates_without_poisoning_rule_ledger() -> None:
+def test_accepted_rule_row_is_reused_without_rerunning_analyst() -> None:
     suffix = uuid4().hex
     rule = _engineering_rule()
     api = _LedgerApi()
     run_counter: list[int] = []
-    dispatcher = _CountingDispatcher(api, run_counter, paused_first=True)
+    dispatcher = _CountingDispatcher(api, run_counter)
     context = _context(suffix)
     confirmed = _confirmed_context(context.assessment_id)
-
-    # A billing pause propagates (BaseException): nothing is persisted, so the
-    # retry re-runs the same rule exactly once.
-    with pytest.raises(BillingBudgetExhausted):
-        analyze_rule(
-            rule=rule,
-            context=context,
-            dispatcher=dispatcher,
-            api=api,
-            confirmed_context=confirmed,
-        )
-    assert api.list_rule_assessments(context.assessment_id) == []
 
     row = analyze_rule(
         rule=rule,

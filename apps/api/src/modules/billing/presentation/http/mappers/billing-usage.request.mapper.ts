@@ -1,82 +1,19 @@
-import type {
-  BillingUsageClaimRequest,
-  BillingUsageReleaseRequest,
-  BillingUsageReservationRequest,
-  BillingUsageSettlementRequest,
-} from "@lcsp/contracts/billing";
-import type {
-  BillingUsageClaimInput,
-  BillingUsageReleaseInput,
-  BillingUsageReservationInput,
-  BillingUsageSettlementInput,
-} from "../../../application/commands/billing-usage.types.js";
+import type { BillingLlmUsageReportRequest } from "@lcsp/contracts/billing";
+import type { LlmUsageRecordInput } from "../../../application/commands/billing-usage.types.js";
 
-export function toReservationInput(
-  body: BillingUsageReservationRequest,
-): BillingUsageReservationInput {
-  return {
-    workspaceId: body.workspaceId,
-    assessmentId: body.assessmentId,
-    scanJobId: body.scanJobId,
-    threadId: body.threadId,
-    runId: body.runId,
-    invocationId: body.invocationId,
-    modelInvocationId: body.modelInvocationId,
-    amountCredits: BigInt(body.amountCredits),
-    maxChargeCredits: BigInt(body.maxChargeCredits),
-    provider: body.provider,
-    model: body.model,
-    maxInputTokens: BigInt(body.maxInputTokens),
-    maxOutputTokens: BigInt(body.maxOutputTokens),
-    maxReasoningTokens: BigInt(body.maxReasoningTokens),
-    maxInvocations: BigInt(body.maxInvocations),
-    authorizedModels: body.authorizedModels.map(({ provider, model }) => ({
-      provider: provider.toUpperCase(),
-      model,
-    })),
-    idempotencyKey: body.idempotencyKey,
-  };
-}
-
-export function toReleaseInput(
-  reservationId: string,
-  body: BillingUsageReleaseRequest,
-): BillingUsageReleaseInput {
-  return { assessmentId: body.assessmentId, reservationId };
-}
-
-export function toClaimInput(
-  reservationId: string,
-  body: BillingUsageClaimRequest,
-): BillingUsageClaimInput {
-  return {
-    assessmentId: body.assessmentId,
-    reservationId,
-    invocationId: body.invocationId,
-    provider: body.provider?.toUpperCase(),
-    model: body.model,
-    estimatedInputTokens: toBigInt(body.estimatedInputTokens),
-    estimatedInputBytes: toBigInt(body.estimatedInputBytes),
-    maxOutputTokens: toBigInt(body.maxOutputTokens),
-    maxReasoningTokens: toBigInt(body.maxReasoningTokens),
-  };
-}
-
-export function toSettlementInput(
-  body: BillingUsageSettlementRequest,
+export function toLlmUsageRecordInput(
+  body: BillingLlmUsageReportRequest,
   userId: string,
-): BillingUsageSettlementInput {
-  const runtime = body.effectiveRuntimeModel;
+): LlmUsageRecordInput {
   return {
     userId,
     assessmentId: body.assessmentId,
     runId: body.runId,
-    reservationId: body.reservationId,
     invocationId: body.invocationId,
     agentRole: body.agentRole,
-    provider: body.provider ?? runtime?.provider,
-    model: body.model ?? runtime?.model,
-    effectiveRuntimeModel: runtime,
+    provider: body.provider.trim().toUpperCase(),
+    model: body.model.trim(),
+    effectiveRuntimeModel: body.effectiveRuntimeModel,
     providerResponseId: body.providerResponseId,
     inputTokens: toBigInt(body.inputTokens),
     cachedInputTokens: toBigInt(body.cachedInputTokens),
@@ -84,7 +21,7 @@ export function toSettlementInput(
     outputTokens: toBigInt(body.outputTokens),
     reasoningTokens: toBigInt(body.reasoningTokens),
     totalTokens: toBigInt(body.totalTokens),
-    occurredAt: body.occurredAt ? new Date(body.occurredAt) : undefined,
+    occurredAt: new Date(body.occurredAt),
   };
 }
 

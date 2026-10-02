@@ -455,7 +455,7 @@ def _find_active_thread_run(
 
     RabbitMQ can redeliver the same boundary when the local poller times out even
     though the remote LangGraph run is still alive. Reusing the active run keeps
-    the scan job idempotent and avoids duplicate provider/billing reservations.
+    the scan job idempotent and avoids duplicate provider runs.
     """
     try:
         runs = client.runs.list(thread_id, limit=25)

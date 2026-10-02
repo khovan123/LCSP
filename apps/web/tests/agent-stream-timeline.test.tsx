@@ -311,7 +311,7 @@ test("Scanner log shows only four activity rows and updates the latest target in
   }
 });
 
-test("billing pause closes its dispatch without changing a real Investigator failure or another dispatch", async () => {
+test("paused boundary closes its dispatch without changing a real Investigator failure or another dispatch", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -325,7 +325,7 @@ test("billing pause closes its dispatch without changing a real Investigator fai
   ];
   await act(async () => root.render(<AgentStreamTimeline events={events} />));
   assert.equal(container.querySelectorAll(".animate-spin").length, 0);
-  assert.match(container.textContent ?? "", /billing/);
+  assert.match(container.textContent ?? "", /Paused|tạm dừng/i);
   await act(async () =>
     root.render(
       <AgentStreamTimeline
@@ -1078,7 +1078,8 @@ test("runtime events map to meaningful activities with per-activity technical de
   const activities = container.querySelectorAll<HTMLDetailsElement>(
     "details[data-stream-activity]",
   );
-  assert.equal(activities.length, 4);
+  // Historical provider-fallback events are infrastructure routing: no activity row.
+  assert.equal(activities.length, 3);
 
   const summaries = [...activities].map(
     (activity) => activity.querySelector("summary")?.textContent ?? "",
@@ -1095,11 +1096,6 @@ test("runtime events map to meaningful activities with per-activity technical de
     summaries[2] ?? "",
     /Downloading repository source|Đang tải source repository/,
   );
-  assert.match(
-    summaries[3] ?? "",
-    /Switched to a backup AI provider|Đã chuyển sang AI provider dự phòng/,
-  );
-
   for (const summary of summaries) {
     assert.doesNotMatch(
       summary,
@@ -1113,13 +1109,6 @@ test("runtime events map to meaningful activities with per-activity technical de
   assert.match(firstTechnical, /RUN_STARTED/);
   assert.match(firstTechnical, /scan_requested/);
   assert.match(firstTechnical, /run-1/);
-
-  const fallbackTechnical =
-    activities[3]?.querySelector("[data-stream-technical-details]")
-      ?.textContent ?? "";
-  assert.match(fallbackTechnical, /llm7/);
-  assert.match(fallbackTechnical, /google_genai/);
-  assert.match(fallbackTechnical, /PROVIDER_FALLBACK/);
 });
 
 test("terminal failure stops orphaned running spinners without failing completed fallback activities", async () => {
@@ -1166,7 +1155,7 @@ test("terminal failure stops orphaned running spinners without failing completed
             ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed,
             {
               boundary: "scan_requested",
-              exception_type: "BillingReservationUnavailable",
+              exception_type: "RuntimeCapacityUnavailable",
             },
             {
               source: "scan_requested",
@@ -1197,7 +1186,8 @@ test("terminal failure stops orphaned running spinners without failing completed
   ].find((node) =>
     /backup AI provider|AI provider dự phòng/.test(node.textContent ?? ""),
   );
-  assert.ok(fallbackActivity);
+  // Provider fallback is infrastructure routing and never renders as an activity.
+  assert.equal(fallbackActivity, undefined);
 
   const timeline = container.querySelector<HTMLDetailsElement>(
     'details[data-slot="agent-stream-timeline"]',
@@ -1314,7 +1304,7 @@ test("recovered provider attempts do not render as repeated terminal failures", 
         summary,
       ),
     ).length,
-    1,
+    0,
   );
   assert.ok(
     summaries.some((summary) =>

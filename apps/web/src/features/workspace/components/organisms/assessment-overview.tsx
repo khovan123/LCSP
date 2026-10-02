@@ -309,7 +309,7 @@ function AssessmentInterviewFlow({
       ),
     [stageEvents],
   );
-  const billingPaused =
+  const boundaryPaused =
     groupAgentStreamEventsByRun(liveTimeline.agentStreamEvents ?? [])
       .at(-1)
       ?.events.some(
@@ -692,16 +692,16 @@ function AssessmentInterviewFlow({
   // the API decides whether a failed/stalled Interview turn or the downstream
   // assessment restarts, and refuses while a worker still owns the pipeline.
   const canContinuePipeline =
-    (billingPaused || interviewEnabled) &&
+    (boundaryPaused || interviewEnabled) &&
     !scanFailed &&
     !hasComposerDraft &&
-    (billingPaused || !(customerActions.canAnswerQuestion && activeQuestion)) &&
+    (boundaryPaused || !(customerActions.canAnswerQuestion && activeQuestion)) &&
     !customerActions.canSubmitBlockedAction &&
     !(
       assessmentStatus !== null &&
       PIPELINE_CONTINUE_FINISHED_STATUSES.has(assessmentStatus)
     ) &&
-    (billingPaused || !interviewHandoff.isGenuinelyPending) &&
+    (boundaryPaused || !interviewHandoff.isGenuinelyPending) &&
     !submitAnswer.isPending &&
     !recordBlockedAction.isPending &&
     !submitPostFindingDecision.isPending;
@@ -1016,7 +1016,7 @@ function AssessmentInterviewFlow({
         onResume={handleContinuePipeline}
         turnRunning={anyAgentTurnRunning}
         turnPaused={
-          billingPaused ||
+          boundaryPaused ||
           interviewTurnState === "paused" ||
           downstreamTurnPaused
         }

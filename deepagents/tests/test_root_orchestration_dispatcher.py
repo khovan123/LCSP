@@ -4,6 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from model_policy import resolve_agent_model
+
 from contracts.handoffs import TriageResult
 from orchestration.context import LCSPRunContext
 from orchestration.dispatcher import RootSubagentDispatcher
@@ -446,7 +448,7 @@ def test_default_agent_factory_builds_each_specialist_definition(monkeypatch, su
     factory = RootSubagentDispatcher()._agent_factory
     assert factory is create_deep_agent
     factory(
-        model=definition["model"],
+        model=resolve_agent_model(subagent_type),
         tools=definition["tools"],
         system_prompt=definition["system_prompt"],
         middleware=definition["middleware"],
@@ -454,4 +456,4 @@ def test_default_agent_factory_builds_each_specialist_definition(monkeypatch, su
     )
 
     stack = compiled[f"lcsp-{subagent_type}-root-dispatch"]
-    assert stack.count("BillingAgentRoleMiddleware") == 1
+    assert stack.count("AgentRoleMiddleware") == 1

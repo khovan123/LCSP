@@ -4,11 +4,11 @@ from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
 from typing import Any
 
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
-from middleware.billing_metering import BillingAgentRoleMiddleware, BillingMeteringError
+from middleware.usage_metering import AgentRoleMiddleware
 from deepagents import create_deep_agent
 from middleware.agent_run_budget import AgentRunBudgetMiddleware
 from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
-from model_policy import NARRATOR_MODEL_SPEC, resolve_agent_model
+from model_policy import resolve_agent_model
 
 
 ALLOWED_RISK_LEVELS = {"LOW", "MEDIUM", "HIGH", "BLOCKED"}
@@ -18,9 +18,9 @@ ALLOWED_APPLICABILITY = {"applicable", "partially_applicable", "not_applicable"}
 class ModelAssistedClassificationProposer:
     """Ask an LLM for a structured proposal without granting final authority."""
 
-    def __init__(self, model: str = NARRATOR_MODEL_SPEC):
-        """Create the proposer with a LangChain provider:model specification."""
-        self._model = model
+    def __init__(self, role: str = "narrator"):
+        """Create the proposer bound to a semantic model role."""
+        self._role = role
 
     def generate_proposal(
         self,
@@ -79,9 +79,7 @@ class ModelAssistedClassificationProposer:
         try:
             agent = create_deep_agent(
                 name="lcsp-classification-proposer",
-                model=resolve_agent_model(
-                    agent_name="lcsp-classification-proposer", model_spec=self._model
-                ),
+                model=resolve_agent_model(self._role),
                 backend=current_repository_backend(),
                 system_prompt=(
                     "You propose bounded classification fields only. Deterministic "
@@ -90,7 +88,7 @@ class ModelAssistedClassificationProposer:
                 response_format=_classification_proposal_response_schema(),
                 middleware=[
                     AgentRunBudgetMiddleware(),
-                    BillingAgentRoleMiddleware("narrator"),
+                    AgentRoleMiddleware("narrator"),
                     *MODEL_GOVERNANCE_MIDDLEWARE,
                 ],
             )
@@ -106,8 +104,6 @@ class ModelAssistedClassificationProposer:
                 },
                 stage=AGENT_STREAM_STAGES["gate"],
             )
-        except BillingMeteringError:
-            raise
         except Exception:
             return None
 

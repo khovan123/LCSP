@@ -1,10 +1,9 @@
 """Repository Analyst subagent: one EngineeringRule per task, repository-native analysis."""
 
 from middleware.agent_run_budget import AgentRunBudgetMiddleware
-from middleware.billing_metering import BillingAgentRoleMiddleware
+from middleware.usage_metering import AgentRoleMiddleware
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.runtime_context import inject_lcsp_runtime_context
-from model_policy import REPOSITORY_ANALYST_MODEL_SPEC
 from tools.common.codebase_memory_graph import CODEBASE_MEMORY_GRAPH_TOOLS
 from tools.common.retrieve_verified_episodes.code import retrieve_verified_episodes
 from tools.common.submit_rule_assessment.code import (
@@ -56,10 +55,9 @@ SUBAGENT = {
     ),
     "system_prompt": SYSTEM_PROMPT,
     "tools": TOOLS,
-    "model": REPOSITORY_ANALYST_MODEL_SPEC,
     "middleware": [
         inject_lcsp_runtime_context,
-        BillingAgentRoleMiddleware("repository-analyst"),
+        AgentRoleMiddleware("repository-analyst"),
         AgentRunBudgetMiddleware(
             finalize_after=30,
             grace_calls=4,

@@ -200,24 +200,6 @@ def test_boundary_bindings_are_derived_from_manifest(monkeypatch):
     )
 
 
-def test_remote_billing_run_error_maps_to_billing_failure() -> None:
-    from tools.common.capabilities.agent_runtime.agent_server_client import (
-        AgentServerRunError,
-    )
-
-    error = AgentServerRunError(
-        "BillingMeteringError",
-        "Billing usage delivery failed",
-    )
-
-    assert (
-        rabbitmq_consumer._scan_failure_reason_code(error)
-        == rabbitmq_consumer.SCAN_FAILURE_BILLING_FAILURE
-    )
-    assert isinstance(error, rabbitmq_consumer.NonRetryableAgentBoundaryError)
-
-
-
 def test_delivery_handler_invokes_boundary_and_acks(monkeypatch):
     invoked = []
     class FakeWorkerClient:

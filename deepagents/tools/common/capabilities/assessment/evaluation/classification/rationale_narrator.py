@@ -2,19 +2,19 @@
 
 from orchestration.agent_stream import AGENT_STREAM_STAGES, invoke_with_stream
 from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
-from middleware.billing_metering import BillingAgentRoleMiddleware, BillingMeteringError
+from middleware.usage_metering import AgentRoleMiddleware
 from deepagents import create_deep_agent
 from middleware.agent_run_budget import AgentRunBudgetMiddleware
 from tools.common.capabilities.platform.repository_sandbox import current_repository_backend
-from model_policy import NARRATOR_MODEL_SPEC, resolve_agent_model
+from model_policy import resolve_agent_model
 
 
 class RationaleNarrator:
     """Use an LLM only to explain deterministic classification results."""
 
-    def __init__(self, model: str = NARRATOR_MODEL_SPEC):
+    def __init__(self, role: str = "narrator"):
         """Create a narrator backed by LangChain's standard agent runtime."""
-        self._model = model
+        self._role = role
 
     def generate_rationale(
         self,
@@ -66,9 +66,7 @@ class RationaleNarrator:
         try:
             agent = create_deep_agent(
                 name="lcsp-classification-rationale-narrator",
-                model=resolve_agent_model(
-                    agent_name="lcsp-classification-rationale-narrator", model_spec=self._model
-                ),
+                model=resolve_agent_model(self._role),
                 backend=current_repository_backend(),
                 system_prompt=(
                     "You explain an existing LCSP decision without changing it or "
@@ -76,7 +74,7 @@ class RationaleNarrator:
                 ),
                 middleware=[
                     AgentRunBudgetMiddleware(),
-                    BillingAgentRoleMiddleware("narrator"),
+                    AgentRoleMiddleware("narrator"),
                     *MODEL_GOVERNANCE_MIDDLEWARE,
                 ],
             )
@@ -109,8 +107,6 @@ class RationaleNarrator:
                 return None
 
             return content
-        except BillingMeteringError:
-            raise
         except Exception:
             # Rationale is optional; deterministic classification still proceeds.
             return None

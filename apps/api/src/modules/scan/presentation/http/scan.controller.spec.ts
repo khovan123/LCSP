@@ -15,7 +15,6 @@ import { RBAC_METADATA_KEY } from "../../../../platform/rbac/decorators/rbac-met
 import { GetScanJobQuery } from "../../application/queries/get-scan-job/get-scan-job.query.js";
 import { RerunScanCommand } from "../../application/commands/rerun-scan/rerun-scan.command.js";
 import { RequestTargetedReanalysisCommand } from "../../application/commands/request-targeted-reanalysis/request-targeted-reanalysis.command.js";
-import { ReleaseInactiveScanReservationsCommand } from "../../../billing/application/commands/release-inactive-scan-reservations/release-inactive-scan-reservations.command.js";
 import { InternalScanController, ScanController } from "./scan.controller.js";
 
 describe("ScanController role-only RBAC", () => {
@@ -194,6 +193,7 @@ describe("InternalScanController", () => {
       {} as unknown as CommandBus,
       { recordRepositoryAnalysisEvent } as never,
       { repositoryScanJob: { findUnique, updateMany } } as never,
+      { get: () => false } as never,
     );
 
     const result = await controller.claimScanJob("scan-1", {
@@ -253,6 +253,7 @@ describe("InternalScanController", () => {
       { execute } as unknown as CommandBus,
       { recordRepositoryAnalysisEvent } as never,
       { repositoryScanJob: { findUnique, updateMany } } as never,
+      { get: () => false } as never,
     );
 
     const result = await controller.markScanJobTerminalFailure("scan-1", {
@@ -290,10 +291,6 @@ describe("InternalScanController", () => {
         }),
       }),
     );
-    // The worker kept this scan's reservation for a redelivery that will not come.
-    expect(execute).toHaveBeenCalledWith(
-      new ReleaseInactiveScanReservationsCommand("assessment-1"),
-    );
     expect(result).toEqual({
       ok: true,
       data: {
@@ -302,42 +299,6 @@ describe("InternalScanController", () => {
         reasonCode: SCAN_ERROR_CODES.agentRuntimeBoundaryTimeout,
       },
     });
-  });
-
-  it("still terminalizes the scan when releasing held credits fails", async () => {
-    const execute = jest
-      .fn<(command: unknown) => Promise<unknown>>()
-      .mockRejectedValue(new Error("billing unavailable"));
-    const controller = new InternalScanController(
-      { execute } as unknown as CommandBus,
-      {
-        recordRepositoryAnalysisEvent: jest
-          .fn<(args: unknown) => Promise<unknown>>()
-          .mockResolvedValue({ recorded: true }),
-      } as never,
-      {
-        repositoryScanJob: {
-          updateMany: jest
-            .fn<(args: unknown) => Promise<{ count: number }>>()
-            .mockResolvedValue({ count: 1 }),
-          findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue({
-            status: PrismaRepositoryScanJobStatus.FAILED,
-            assessmentId: "assessment-1",
-          }),
-        },
-      } as never,
-    );
-
-    await expect(
-      controller.markScanJobTerminalFailure("scan-1", {
-        reason_code: SCAN_ERROR_CODES.repositoryAnalysisFailed,
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        ok: true,
-        data: expect.objectContaining({ terminalized: true }),
-      }),
-    );
   });
 
   it("does not expose arbitrary worker failure strings as scan failure reasons", async () => {
@@ -355,6 +316,7 @@ describe("InternalScanController", () => {
           }),
         },
       } as never,
+      { get: () => false } as never,
     );
 
     const result = await controller.markScanJobTerminalFailure("scan-1", {
@@ -384,6 +346,7 @@ describe("InternalScanController", () => {
       { execute } as unknown as CommandBus,
       {} as never,
       {} as never,
+      { get: () => false } as never,
     );
 
     await controller.createTargetedReanalysis(
@@ -429,6 +392,7 @@ describe("InternalScanController", () => {
       {} as unknown as CommandBus,
       { publishAgentStreamEvent } as never,
       {} as never,
+      { get: () => false } as never,
     );
 
     const result = await controller.recordAgentStreamEvent(
@@ -466,6 +430,7 @@ describe("InternalScanController", () => {
       {} as unknown as CommandBus,
       { publishAgentStreamEvent } as never,
       {} as never,
+      { get: () => false } as never,
     );
 
     await controller.recordAgentStreamEvent(
@@ -510,6 +475,7 @@ describe("InternalScanController", () => {
       {} as unknown as CommandBus,
       { publishAgentStreamEvent } as never,
       {} as never,
+      { get: () => false } as never,
     );
 
     const result = await controller.recordAgentStreamEvent(
@@ -561,6 +527,7 @@ describe("InternalScanController", () => {
       {} as unknown as CommandBus,
       {} as never,
       { decisionModelEvent: { create } } as never,
+      { get: () => false } as never,
     );
 
     await controller.recordDecisionModelEvent({
@@ -613,6 +580,7 @@ describe("InternalScanController", () => {
       {} as unknown as CommandBus,
       { publishAgentStreamEvent } as never,
       { decisionModelEvent: { create } } as never,
+      { get: () => false } as never,
     );
 
     await controller.recordDecisionModelEvent({
@@ -734,6 +702,7 @@ describe("InternalScanController", () => {
       {} as unknown as CommandBus,
       {} as never,
       { decisionModelDecision: { create } } as never,
+      { get: () => false } as never,
     );
 
     const first = await controller.claimDecisionModelRequest(
@@ -765,6 +734,7 @@ describe("InternalScanController", () => {
       {} as unknown as CommandBus,
       {} as never,
       { decisionModelDecision: { upsert } } as never,
+      { get: () => false } as never,
     );
 
     await controller.completeDecisionModelRequest(

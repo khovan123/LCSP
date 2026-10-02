@@ -6,77 +6,9 @@ defined separately under ``tools/<node>/<tool-name>/code.py``.
 
 from __future__ import annotations
 
-from deepagents import (
-    HarnessProfile,
-    ProviderProfile,
-    register_harness_profile,
-    register_provider_profile,
-)
+from deepagents import HarnessProfile, register_harness_profile
 
-from provider_credentials import credential_init_kwargs
-
-from model_policy import (
-    ALL_LCSP_MODEL_SPECS,
-    model_init_kwargs_for_agent,
-    model_profile_init_kwargs,
-    ROOT_MODEL_SPEC,
-    canonical_provider,
-    openai_responses_base_init_kwargs,
-    openai_responses_init_kwargs,
-    provider_init_kwargs,
-    provider_from_model_spec,
-    providers_for_model_specs,
-    route_provider_for_model_spec,
-    route_provider_for_transport,
-    supports_openai_reasoning,
-)
-
-
-# Backward-compatible name used by the managed entrypoint/tests.
-LCSP_MODEL_SPEC = ROOT_MODEL_SPEC
-
-# OpenAI needs an explicit LCSP Responses API client contract. Reasoning is
-# registered only for exact model specs that support it; it is not a provider-
-# wide default because non-reasoning agents can share the same OpenAI provider.
-LCSP_OPENAI_PROVIDER_PROFILE = ProviderProfile(
-    init_kwargs=openai_responses_base_init_kwargs(),
-)
-
-
-def provider_profile_for(provider: str) -> ProviderProfile:
-    """Return the LCSP construction profile for one canonical provider."""
-    canonical = canonical_provider(provider)
-    route_provider = route_provider_for_transport(canonical)
-    if route_provider == "openai":
-        return LCSP_OPENAI_PROVIDER_PROFILE
-    return ProviderProfile(init_kwargs=provider_init_kwargs(route_provider))
-
-
-def model_provider_profile_for(model_spec: str) -> ProviderProfile:
-    """Return the exact-model construction profile for LCSP reasoning-capable models.
-
-    Deep Agents builds every string model spec (root, ``task`` subagents and
-    directly dispatched specialists) from this profile, so it also carries the
-    model's context window for summarization, context trimming and billing guards.
-    """
-    provider = provider_from_model_spec(model_spec)
-    route_provider = route_provider_for_model_spec(model_spec)
-    _, _, model_name = model_spec.partition(":")
-    context_window = model_profile_init_kwargs(route_provider, model_name)
-    if route_provider in {"llm7", "inception"}:
-        return ProviderProfile(
-            init_kwargs={**provider_init_kwargs(route_provider), **context_window}
-        )
-    if model_spec == "google_genai:gemini-3.5-flash-lite":
-        return ProviderProfile(init_kwargs=model_init_kwargs_for_agent(
-            agent_name="lcsp-agent", model_spec=model_spec
-        ))
-    if provider == "openai" and supports_openai_reasoning(model_spec):
-        return ProviderProfile(
-            init_kwargs={**openai_responses_init_kwargs(model_spec), **context_window}
-        )
-    return ProviderProfile(init_kwargs={**provider_init_kwargs(provider), **context_window})
-
+from model_policy import load_model_routes
 
 # LCSP intentionally uses the complete Deep Agents harness. Repository analysis runs
 # inside an isolated backend per assessment, so filesystem, shell, task/subagent,
@@ -88,23 +20,11 @@ LCSP_FILESYSTEM_PERMISSIONS: list = []
 
 
 def configure_lcsp_harness() -> None:
-    """Register active provider routes and identical LCSP harness restrictions.
+    """Register the identical LCSP harness profile for every configured model route.
 
-    Deep Agents resolves each ``provider:model`` string through LangChain's
-    ``init_chat_model`` router. Provider profiles are registered separately so
-    provider-specific constructor kwargs never bleed across integrations.
+    Models are built per role from the model routes YAML (see ``model_policy``), so no
+    provider/model facts live here; every route receives the same restrictions.
     """
-    for provider in providers_for_model_specs(ALL_LCSP_MODEL_SPECS):
-        profile = provider_profile_for(provider)
-        credential_provider = route_provider_for_transport(provider)
-        if credentials := credential_init_kwargs(credential_provider):
-            profile = ProviderProfile(init_kwargs={**profile.init_kwargs, **credentials})
-        register_provider_profile(provider, profile)
-
-    for model_spec in ALL_LCSP_MODEL_SPECS:
-        profile = model_provider_profile_for(model_spec)
-        credential_provider = route_provider_for_model_spec(model_spec)
-        if credentials := credential_init_kwargs(credential_provider):
-            profile = ProviderProfile(init_kwargs={**profile.init_kwargs, **credentials})
-        register_provider_profile(model_spec, profile)
-        register_harness_profile(model_spec, LCSP_HARNESS_PROFILE)
+    routes = load_model_routes()
+    for route in routes.routes.values():
+        register_harness_profile(f"{route['provider']}:{route['model']}", LCSP_HARNESS_PROFILE)

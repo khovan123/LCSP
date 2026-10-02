@@ -99,8 +99,6 @@ def test_t08_safe_metadata_field_names_survive_key_redaction() -> None:
         "estimated_input_tokens": 2048,
         "estimated_input_bytes": 8192,
         "provider_context_limit": 1_000_000,
-        "reservation_max_input_tokens": 65536,
-        "reservation_max_input_bytes": 262144,
         "reasonCode": "SOURCE_SCOPE_MATCH",
         "finish_reason": "stop",
         "usage_metadata": {"total_tokens": 321},

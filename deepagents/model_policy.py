@@ -1,17 +1,46 @@
-"""Role-specific model policy for the LCSP Deep Agents graph."""
+"""Model identity is configuration, not code.
+
+Single authority: one YAML file (default ``config/model_routes.yaml`` next to this module,
+override with ``LCSP_MODEL_ROUTES_FILE``; no env-JSON path). Shape and validation live in
+``model_routes_config``::
+
+    version: 1
+    routes:    {<routeId>: {provider: <exact transport id>, model: <any string>, options: {...}}}
+    roles:     {default: <routeId>, <role>: <routeId>}
+    fallbacks: {<routeId>: [<routeId>, ...]}
+
+The file is read and validated once per resolved path (``load_model_routes.cache_clear()``
+for tests); nothing is resolved at import time. Public API: ``load_model_routes``,
+``resolve_role``, ``resolve_agent_model`` / ``build_model``, ``fallback_routes``,
+``route_for_model``, ``resolved_policy_snapshot`` / ``config_snapshot``,
+``effective_model_configs``, ``distinct_runtime_identities``, ``canonical_provider``,
+``provider_client``, ``provider_init_kwargs``.
+
+Providers are transport adapters only (LangChain key, base_url, timeout, API protocol,
+credential source), matched by exact id, and accept arbitrary case-preserved model strings;
+no model catalog or alias table exists. ``options`` are trusted inference options passed to
+``init_chat_model``; unknown options are not interpreted (LangChain/the provider fails closed).
+Protected keys (credentials, base_url, headers, endpoint, transport, client, ...) are rejected
+at load time, and adapter transport kwargs win over options at construction time.
+``context_window_tokens`` / ``max_output_tokens`` build the ModelProfile for context management.
+"""
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
-from dataclasses import dataclass
-from typing import Any, Literal
+from pathlib import Path
+from dataclasses import dataclass, field
+from functools import lru_cache
+from typing import Any
 
 from langsmith_bootstrap import disable_langsmith_tracing_by_default
 
 disable_langsmith_tracing_by_default()
 
 from langchain.chat_models import init_chat_model
-from langchain_core.language_models.model_profile import ModelProfile
+from model_routes_config import read_model_routes
 from provider_credentials import (
     credential_init_kwargs,
     inception_base_url,
@@ -19,583 +48,217 @@ from provider_credentials import (
     llm_provider_timeout_seconds,
 )
 
-
-DEFAULT_ROOT_MODEL_SPEC = "openai:gpt-5-nano"
-DEFAULT_TRIAGE_MODEL_SPEC = "openai:gpt-5-nano"
-DEFAULT_INTERVIEW_MODEL_SPEC = "openai:gpt-5-nano"
-DEFAULT_REPOSITORY_ANALYST_MODEL_SPEC = "openai:gpt-5-nano"
-DEFAULT_NARRATOR_MODEL_SPEC = "openai:gpt-4.1-nano"
-
-DEFAULT_REASONING_EFFORT = "low"
+ROUTES_FILE_ENV = "LCSP_MODEL_ROUTES_FILE"
+DEFAULT_ROUTES_FILE = Path(__file__).resolve().parent / "config" / "model_routes.yaml"
 RESPONSES_OUTPUT_VERSION = "responses/v1"
-OPENAI_REASONING_MODEL_PREFIXES = (
-    "gpt-5.6-",
-    "gpt-5.1",
-    "gpt-5-mini",
-    "gpt-5-nano",
-    "gpt-5-pro",
-    "o1",
-    "o3",
-    "o4",
-)
-OPENAI_REASONING_MODEL_IDS = frozenset({"gpt-5"})
-REASONING_AGENT_NAMES = frozenset(
-    {
-        "lcsp-agent",
-        "triage",
-        "lcsp-legal-chunk-triage",
-        "lcsp-engineering-rule-compiler",
-        "interview",
-        "repository-analyst",
-    }
-)
-NON_REASONING_AGENT_NAMES = frozenset(
-    {
-        "lcsp-final-report-narrator",
-        "lcsp-classification-rationale-narrator",
-        "lcsp-classification-proposer",
-        "lcsp-ai-usage-flow-proposer",
-    }
-)
-SUPPORTED_REASONING_EFFORTS = frozenset(
-    {
-        "none",
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max",
-    }
-)
+SNAPSHOT_EFFECTIVE_AT = "1970-01-01T00:00:00.000Z"
+PROFILE_OPTIONS = ("context_window_tokens", "max_output_tokens")
 
-# LangChain provider identifiers are canonical routing keys. Deployment-friendly
-# aliases are normalized before Deep Agents resolves provider:model specs.
-PROVIDER_ALIASES = {
-    "google": "google_genai",
-    "google_ai": "google_genai",
-    "googleai": "google_genai",
-    "gemini": "google_genai",
-}
-
-PROVIDER_CLIENTS = {
-    "openai": "responses_api",
-    "anthropic": "anthropic",
-    "google_genai": "google_genai",
-    "llm7": "openai_compatible_chat_completions",
-    "inception": "openai_compatible_chat_completions",
-}
-
-
-@dataclass(frozen=True)
-class EffectiveModelConfig:
-    role: str
-    provider: str
-    model: str
-    source: str
-    client: str
-    tools: bool = True
-    reasoning_effort: str = "provider_default"
-    output_version: str = "provider_default"
-    router: str = "langchain_init_chat_model"
-    reasoning_policy: str = "provider_default"
-
-
-def canonical_provider(provider: str) -> str:
-    """Return the canonical LangChain provider key used for model routing."""
-    normalized = provider.strip().lower().replace("-", "_")
-    if not normalized:
-        raise RuntimeError("model provider must not be blank")
-    return PROVIDER_ALIASES.get(normalized, normalized)
-
-
-@dataclass(frozen=True)
-class ProviderPreset:
-    reasoning_model: str
-    narrator_model: str
-    reasoning_effort: str = "low"
-
-
-PROVIDER_PRESETS = {
-    "openai": ProviderPreset("openai:gpt-5-nano", "openai:gpt-4.1-nano"),
-    "google_genai": ProviderPreset(
-        "google_genai:gemini-3.5-flash-lite",
-        "google_genai:gemini-3.5-flash-lite",
+# canonical provider -> (LangChain provider key, client label, transport kwargs)
+_PROVIDERS: dict[str, tuple[str, str, Any]] = {
+    "openai": (
+        "openai",
+        "responses_api",
+        lambda: {
+            "use_responses_api": True,
+            "output_version": RESPONSES_OUTPUT_VERSION,
+            "timeout": llm_provider_timeout_seconds(),
+        },
     ),
-    "llm7": ProviderPreset(
-        "openai:minimax-m2.7",
-        "openai:minimax-m2.7",
+    "anthropic": ("anthropic", "anthropic", lambda: {}),
+    "google_genai": (
+        "google_genai",
+        "google_genai",
+        lambda: {"request_timeout": llm_provider_timeout_seconds()},
     ),
-    "inception": ProviderPreset(
-        "openai:mercury-2.5",
-        "openai:mercury-2.5",
-    ),
-}
-GOOGLE_THINKING_LEVEL = "low"
-MODEL_CONTEXT_WINDOWS = {
-    ("google_genai", "gemini-3.5-flash-lite"): 1_000_000,
-    # Provider-declared window (GET /v1/models): 180k, tools + json_mode.
-    ("llm7", "minimax-m2.7"): 180_000,
-    ("inception", "mercury-2.5"): 128_000,
-}
-MODEL_OUTPUT_WINDOWS = {
-    ("google_genai", "gemini-3.5-flash-lite"): 8_192,
-    ("llm7", "minimax-m2.7"): 8_192,
-    ("inception", "mercury-2.5"): 8_192,
-}
-
-
-def _selected_provider() -> str | None:
-    value = (os.getenv("LCSP_MODEL_PROVIDER") or "").strip()
-    if not value:
-        return None
-    provider = canonical_provider(value)
-    if provider not in PROVIDER_PRESETS:
-        raise RuntimeError(
-            "LCSP_MODEL_PROVIDER must be one of: " + ", ".join(PROVIDER_PRESETS)
-        )
-    return provider
-
-
-SELECTED_PROVIDER = _selected_provider()
-
-
-def _reasoning_effort_status() -> str:
-    """Resolve the OpenAI Responses API reasoning effort with fail-closed validation."""
-    if SELECTED_PROVIDER:
-        return PROVIDER_PRESETS[SELECTED_PROVIDER].reasoning_effort
-    for env_name in (
-        "LCSP_REASONING_EFFORT",
-        "OPENAI_REASONING_EFFORT",
-        "REASONING_EFFORT",
-    ):
-        value = (os.getenv(env_name) or "").strip().lower()
-        if not value:
-            continue
-        if value not in SUPPORTED_REASONING_EFFORTS:
-            supported = ", ".join(sorted(SUPPORTED_REASONING_EFFORTS))
-            raise RuntimeError(
-                f"{env_name} must be one of the supported reasoning efforts: {supported}"
-            )
-        return value
-    return DEFAULT_REASONING_EFFORT
-
-
-def normalize_model_spec(value: str, *, source_name: str = "model spec") -> str:
-    """Normalize one ``provider:model`` spec to a canonical LangChain provider key."""
-    provider, separator, model = value.strip().partition(":")
-    if not separator or not provider.strip() or not model.strip() or ":" in model:
-        raise RuntimeError(f"{source_name} must use LangChain provider:model format")
-    return f"{canonical_provider(provider)}:{model.strip()}"
-
-
-def _model_spec(env_name: str, default: str) -> tuple[str, str]:
-    """Resolve one LangChain ``provider:model`` spec with a fail-closed shape check."""
-    if SELECTED_PROVIDER:
-        preset = PROVIDER_PRESETS[SELECTED_PROVIDER]
-        return (
-            preset.narrator_model if env_name == "LCSP_NARRATOR_MODEL" else preset.reasoning_model,
-            "provider_preset",
-        )
-    env_value = (os.getenv(env_name) or "").strip()
-    value = env_value or default
-    return (
-        normalize_model_spec(value, source_name=env_name),
-        "env" if env_value else "default",
-    )
-
-
-def provider_from_model_spec(spec: str) -> str:
-    """Return the canonical provider routing key from one model spec."""
-    normalized = normalize_model_spec(spec)
-    provider, _, _ = normalized.partition(":")
-    return provider
-
-
-def route_provider_for_model_spec(spec: str) -> str:
-    """Return the credential/client route for one model spec.
-
-    LLM7 keeps an ``openai:`` LangChain transport spec because it is an
-    OpenAI-compatible gateway rather than a native LangChain provider.
-    """
-    normalized = normalize_model_spec(spec)
-    if SELECTED_PROVIDER:
-        preset = PROVIDER_PRESETS[SELECTED_PROVIDER]
-        if normalized in {preset.reasoning_model, preset.narrator_model}:
-            return SELECTED_PROVIDER
-    return provider_from_model_spec(normalized)
-
-
-def route_provider_for_transport(provider: str) -> str:
-    """Return the active route behind one LangChain transport provider."""
-    canonical = canonical_provider(provider)
-    if SELECTED_PROVIDER:
-        preset = PROVIDER_PRESETS[SELECTED_PROVIDER]
-        transports = {
-            provider_from_model_spec(preset.reasoning_model),
-            provider_from_model_spec(preset.narrator_model),
-        }
-        if transports == {canonical}:
-            return SELECTED_PROVIDER
-    return canonical
-
-
-def model_name_from_spec(spec: str) -> str:
-    """Return the provider-local model name from one normalized model spec."""
-    normalized = normalize_model_spec(spec)
-    _, _, model = normalized.partition(":")
-    return model
-
-
-def supports_openai_reasoning(model_spec: str) -> bool:
-    """Return whether one OpenAI model spec supports Responses API reasoning kwargs."""
-    normalized = normalize_model_spec(model_spec)
-    provider, _, model = normalized.partition(":")
-    if provider != "openai":
-        return False
-    return model in OPENAI_REASONING_MODEL_IDS or model.startswith(
-        OPENAI_REASONING_MODEL_PREFIXES
-    )
-
-
-def providers_for_model_specs(model_specs: tuple[str, ...]) -> tuple[str, ...]:
-    """Return active provider routing keys in first-seen order."""
-    return tuple(dict.fromkeys(provider_from_model_spec(spec) for spec in model_specs))
-
-
-REASONING_EFFORT = _reasoning_effort_status()
-
-ROOT_MODEL_SPEC, ROOT_MODEL_SOURCE = _model_spec(
-    "LCSP_ROOT_AGENT_MODEL", DEFAULT_ROOT_MODEL_SPEC
-)
-TRIAGE_MODEL_SPEC, TRIAGE_MODEL_SOURCE = _model_spec(
-    "LCSP_TRIAGE_MODEL", DEFAULT_TRIAGE_MODEL_SPEC
-)
-INTERVIEW_MODEL_SPEC, INTERVIEW_MODEL_SOURCE = _model_spec(
-    "LCSP_INTERVIEW_MODEL", DEFAULT_INTERVIEW_MODEL_SPEC
-)
-REPOSITORY_ANALYST_MODEL_SPEC, REPOSITORY_ANALYST_MODEL_SOURCE = _model_spec(
-    "LCSP_REPOSITORY_ANALYST_MODEL", DEFAULT_REPOSITORY_ANALYST_MODEL_SPEC
-)
-# Alias for the scan-job AI-discovery task (analyzer.py, owned by the scanner workstream).
-NARRATOR_MODEL_SPEC, NARRATOR_MODEL_SOURCE = _model_spec(
-    "LCSP_NARRATOR_MODEL", DEFAULT_NARRATOR_MODEL_SPEC
-)
-
-SUBAGENT_MODEL_SPECS = {
-    "triage": TRIAGE_MODEL_SPEC,
-    "interview": INTERVIEW_MODEL_SPEC,
-    "repository-analyst": REPOSITORY_ANALYST_MODEL_SPEC,
-}
-
-# Every model used by this graph receives the same LCSP harness restrictions.
-ALL_LCSP_MODEL_SPECS = tuple(
-    dict.fromkeys(
-        (
-            ROOT_MODEL_SPEC,
-            TRIAGE_MODEL_SPEC,
-            INTERVIEW_MODEL_SPEC,
-            REPOSITORY_ANALYST_MODEL_SPEC,
-            NARRATOR_MODEL_SPEC,
-        )
-    )
-)
-
-
-def _runtime_identity_for_provider(provider: str) -> tuple[str, str]:
-    """Return the logical pricing identity for one code-owned provider preset."""
-    canonical = canonical_provider(provider)
-    preset = PROVIDER_PRESETS.get(canonical)
-    if preset is None:
-        raise RuntimeError(f"Unsupported LCSP runtime provider: {provider}")
-    return canonical.upper(), model_name_from_spec(preset.reasoning_model)
-
-
-def _billing_authorized_models(value: str) -> set[tuple[str, str]]:
-    models: set[tuple[str, str]] = set()
-    for entry in value.split(","):
-        provider, separator, model = entry.strip().partition(":")
-        if not separator or not provider.strip() or not model.strip():
-            raise RuntimeError(
-                "BILLING_AUTHORIZED_RUNTIME_MODELS must use PROVIDER:model entries"
-            )
-        models.add((provider.strip().upper(), model.strip()))
-    return models
-
-
-def _fallback_runtime_identities() -> set[tuple[str, str]]:
-    providers: list[tuple[int, str]] = []
-    prefix = "LLM_FALLBACK_PROVIDER_"
-    for name, value in os.environ.items():
-        if not name.startswith(prefix) or not value.strip():
-            continue
-        index = name.removeprefix(prefix)
-        if not index.isdigit():
-            continue
-        providers.append((int(index), value.strip()))
-    return {
-        _runtime_identity_for_provider(provider)
-        for _, provider in sorted(providers)
-    }
-
-
-def _validate_billing_runtime_policy() -> None:
-    """Fail at worker startup when billing and effective model routes have drifted."""
-    if (os.getenv("BILLING_METERING_ENABLED") or "").strip().lower() not in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }:
-        return
-    primary = (
-        _runtime_identity_for_provider(SELECTED_PROVIDER)
-        if SELECTED_PROVIDER
-        else (
-            route_provider_for_model_spec(ROOT_MODEL_SPEC).upper(),
-            model_name_from_spec(ROOT_MODEL_SPEC),
-        )
-    )
-    configured_primary = (
-        (os.getenv("BILLING_RUNTIME_PROVIDER") or "").strip().upper(),
-        (os.getenv("BILLING_RUNTIME_MODEL") or "").strip(),
-    )
-    if configured_primary != primary:
-        raise RuntimeError(
-            "BILLING_RUNTIME_PROVIDER/BILLING_RUNTIME_MODEL must match the "
-            f"effective LCSP primary runtime model {primary[0]}:{primary[1]}"
-        )
-    authorized = _billing_authorized_models(
-        os.getenv("BILLING_AUTHORIZED_RUNTIME_MODELS") or ""
-    )
-    missing = ({primary} | _fallback_runtime_identities()) - authorized
-    if missing:
-        formatted = ", ".join(
-            f"{provider}:{model}" for provider, model in sorted(missing)
-        )
-        raise RuntimeError(
-            "BILLING_AUTHORIZED_RUNTIME_MODELS must include the effective LCSP "
-            f"runtime models: {formatted}"
-        )
-
-
-_validate_billing_runtime_policy()
-
-
-def openai_responses_base_init_kwargs() -> dict[str, object]:
-    """Return the OpenAI Responses API construction contract without reasoning."""
-    return {
-        "use_responses_api": True,
-        "output_version": RESPONSES_OUTPUT_VERSION,
-        "timeout": llm_provider_timeout_seconds(),
-    }
-
-
-def openai_responses_init_kwargs(
-    model_spec: str | None = None,
-    *,
-    reasoning: bool = True,
-) -> dict[str, object]:
-    """Return OpenAI Responses API kwargs, gated by model reasoning capability."""
-    kwargs = openai_responses_base_init_kwargs()
-    if reasoning and (model_spec is None or supports_openai_reasoning(model_spec)):
-        kwargs["reasoning"] = {"effort": REASONING_EFFORT}
-    return kwargs
-
-
-def reasoning_policy_for_agent(
-    *,
-    agent_name: str,
-    model_spec: str,
-) -> Literal["enabled", "unsupported_model", "disabled_for_agent"]:
-    """Resolve LCSP reasoning policy from agent purpose and model capability."""
-    if agent_name in NON_REASONING_AGENT_NAMES:
-        return "disabled_for_agent"
-    if agent_name not in REASONING_AGENT_NAMES:
-        return "disabled_for_agent"
-    if not (supports_openai_reasoning(model_spec) or normalize_model_spec(model_spec) == "google_genai:gemini-3.5-flash-lite"):
-        return "unsupported_model"
-    return "enabled"
-
-
-def model_init_kwargs_for_agent(*, agent_name: str, model_spec: str) -> dict[str, object]:
-    """Return LangChain model kwargs for a specific LCSP agent construction."""
-    normalized = normalize_model_spec(model_spec)
-    provider, _, _ = normalized.partition(":")
-    route_provider = route_provider_for_model_spec(normalized)
-    _, _, model_name = normalized.partition(":")
-    if route_provider in {"llm7", "inception"}:
-        return {
-            **provider_init_kwargs(route_provider),
-            **model_profile_init_kwargs(route_provider, model_name),
-        }
-    if normalized == "google_genai:gemini-3.5-flash-lite":
-        return {
-            **provider_init_kwargs(provider),
-            **model_profile_init_kwargs(route_provider, model_name),
-            "thinking_level": GOOGLE_THINKING_LEVEL if reasoning_policy_for_agent(
-                agent_name=agent_name, model_spec=normalized
-            ) == "enabled" else "minimal",
-        }
-    if provider != "openai":
-        return {
-            **provider_init_kwargs(provider),
-            **model_profile_init_kwargs(route_provider, model_name),
-        }
-
-    return {
-        **openai_responses_init_kwargs(
-        normalized,
-        reasoning=reasoning_policy_for_agent(
-            agent_name=agent_name,
-            model_spec=normalized,
-        )
-        == "enabled",
-        ),
-        **model_profile_init_kwargs(route_provider, model_name),
-    }
-
-
-def model_profile_init_kwargs(provider: str, model: str) -> dict[str, object]:
-    """Return model profile metadata used by native Deep Agents context management."""
-    profile = model_profile_for_route(provider, model)
-    return {"profile": profile} if profile is not None else {}
-
-
-def model_profile_for_route(provider: str, model: str) -> ModelProfile | None:
-    canonical = canonical_provider(provider)
-    model_name = model.strip()
-    max_input_tokens = _model_profile_limit(
-        "LCSP_MODEL_CONTEXT_WINDOW_TOKENS",
-        canonical,
-        model_name,
-        MODEL_CONTEXT_WINDOWS.get((canonical, model_name)),
-    )
-    if max_input_tokens is None:
-        return None
-    max_output_tokens = _model_profile_limit(
-        "LCSP_MODEL_MAX_OUTPUT_TOKENS",
-        canonical,
-        model_name,
-        MODEL_OUTPUT_WINDOWS.get((canonical, model_name), 8192),
-    )
-    profile: ModelProfile = {
-        "name": model_name,
-        "max_input_tokens": max_input_tokens,
-    }
-    if max_output_tokens is not None:
-        profile["max_output_tokens"] = max_output_tokens
-    return profile
-
-
-def _model_profile_limit(
-    prefix: str,
-    provider: str,
-    model: str,
-    default: int | None,
-) -> int | None:
-    specific = f"{prefix}_{_env_key(provider)}_{_env_key(model)}"
-    provider_default = f"{prefix}_{_env_key(provider)}"
-    for name in (specific, provider_default):
-        raw = (os.getenv(name) or "").strip()
-        if not raw:
-            continue
-        try:
-            value = int(raw)
-        except ValueError as error:
-            raise RuntimeError(f"{name} must be a positive integer") from error
-        if value <= 0:
-            raise RuntimeError(f"{name} must be a positive integer")
-        return value
-    return default
-
-
-def _env_key(value: str) -> str:
-    return "".join(character if character.isalnum() else "_" for character in value.upper())
-
-
-def resolve_agent_model(*, agent_name: str, model_spec: str):
-    """Instantiate a LangChain chat model with LCSP agent-scoped reasoning policy."""
-    normalized = normalize_model_spec(model_spec)
-    route_provider = route_provider_for_model_spec(normalized)
-    return init_chat_model(
-        normalized,
-        **model_init_kwargs_for_agent(agent_name=agent_name, model_spec=normalized),
-        **credential_init_kwargs(route_provider),
-    )
-
-
-def provider_init_kwargs(provider: str) -> dict[str, object]:
-    """Return constructor kwargs scoped to one provider only.
-
-    The provider:model prefix selects the LangChain integration. OpenAI additionally
-    needs the LCSP Responses API client contract. Reasoning is decided per agent and
-    per model capability so OpenAI-only kwargs never bleed across integrations and
-    non-reasoning OpenAI agents do not inherit reasoning merely by provider prefix.
-    """
-    canonical = canonical_provider(provider)
-    if canonical == "llm7":
-        return {
+    "llm7": (
+        "openai",
+        "openai_compatible_chat_completions",
+        lambda: {
             "base_url": llm7_base_url(),
             "use_responses_api": False,
             "timeout": llm_provider_timeout_seconds(),
-        }
-    if canonical == "inception":
-        return {
+        },
+    ),
+    "inception": (
+        "openai",
+        "openai_compatible_chat_completions",
+        lambda: {
             "base_url": inception_base_url(),
-            "temperature": 0.75,
             "use_responses_api": False,
             "timeout": llm_provider_timeout_seconds(),
-        }
-    if canonical == "openai":
-        return openai_responses_base_init_kwargs()
-    if canonical == "google_genai":
-        return {"request_timeout": llm_provider_timeout_seconds()}
-    return {}
+        },
+    ),
+}
+
+
+@dataclass(frozen=True)
+class ResolvedModelConfig:
+    role: str
+    route_id: str
+    provider: str
+    model: str
+    options: dict[str, Any] = field(default_factory=dict)
+    fallback_route_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ModelRoutes:
+    routes: dict[str, dict[str, Any]]
+    roles: dict[str, str]
+    fallbacks: dict[str, tuple[str, ...]]
+
+    def config(self, route_id: str, role: str = "") -> ResolvedModelConfig:
+        route = self.routes[route_id]
+        return ResolvedModelConfig(
+            role=role,
+            route_id=route_id,
+            provider=route["provider"],
+            model=route["model"],
+            options=route["options"],
+            fallback_route_ids=self.fallbacks.get(route_id, ()),
+        )
+
+
+def canonical_provider(provider: str) -> str:
+    """Exact-match a supported transport id; no aliasing or normalization."""
+    if provider not in _PROVIDERS:
+        raise RuntimeError(f"unsupported model provider {provider!r}; supported: {', '.join(_PROVIDERS)}")
+    return provider
 
 
 def provider_client(provider: str) -> str:
-    """Return non-secret telemetry describing the selected provider client."""
-    canonical = canonical_provider(provider)
-    return PROVIDER_CLIENTS.get(canonical, "langchain_provider_default")
+    """Return non-secret telemetry describing the provider client."""
+    return _PROVIDERS[canonical_provider(provider)][1]
 
 
-def effective_model_configs() -> tuple[EffectiveModelConfig, ...]:
-    """Return non-secret model telemetry for startup diagnostics."""
-    role_specs = (
-        ("root", ROOT_MODEL_SPEC, ROOT_MODEL_SOURCE),
-        ("triage", TRIAGE_MODEL_SPEC, TRIAGE_MODEL_SOURCE),
-        ("interview", INTERVIEW_MODEL_SPEC, INTERVIEW_MODEL_SOURCE),
-        ("repository-analyst", REPOSITORY_ANALYST_MODEL_SPEC, REPOSITORY_ANALYST_MODEL_SOURCE),
-        ("narrator", NARRATOR_MODEL_SPEC, NARRATOR_MODEL_SOURCE),
+def provider_init_kwargs(provider: str) -> dict[str, object]:
+    """Return transport-only constructor kwargs for one provider (no model facts)."""
+    return dict(_PROVIDERS[canonical_provider(provider)][2]())
+
+
+@lru_cache(maxsize=8)
+def _load(path: Path) -> ModelRoutes:
+    routes, roles, fallbacks = read_model_routes(path, tuple(_PROVIDERS), ROUTES_FILE_ENV)
+    return ModelRoutes(routes, roles, fallbacks)
+
+
+def load_model_routes() -> ModelRoutes:
+    """Validated route config of the active file, cached per resolved path; fails closed."""
+    override = (os.environ.get(ROUTES_FILE_ENV) or "").strip()
+    return _load(Path(override).resolve() if override else DEFAULT_ROUTES_FILE)
+
+
+load_model_routes.cache_clear = _load.cache_clear  # type: ignore[attr-defined]
+
+
+def resolve_role(role: str) -> ResolvedModelConfig:
+    routes = load_model_routes()
+    return routes.config(routes.roles.get(role, routes.roles["default"]), role)
+
+
+def fallback_routes(route_id_or_role: str) -> tuple[ResolvedModelConfig, ...]:
+    """Return the ordered configured fallback chain of a route id (or role)."""
+    routes = load_model_routes()
+    route_id = (
+        route_id_or_role
+        if route_id_or_role in routes.routes
+        else routes.roles.get(route_id_or_role, routes.roles["default"])
     )
-    configs: list[EffectiveModelConfig] = []
-    for role, spec, source in role_specs:
-        _, model = spec.split(":", 1)
-        provider = route_provider_for_model_spec(spec)
-        is_openai = provider == "openai"
-        agent_name = "lcsp-agent" if role == "root" else role
-        reasoning_policy = reasoning_policy_for_agent(
-            agent_name=agent_name,
-            model_spec=spec,
-        )
-        configs.append(
-            EffectiveModelConfig(
-                role=role,
-                provider=provider,
-                model=model,
-                source=source,
-                client=provider_client(provider),
-                reasoning_effort=(
-                    REASONING_EFFORT
-                    if is_openai and reasoning_policy == "enabled"
-                    else "unset"
-                    if is_openai
-                    else str(model_init_kwargs_for_agent(agent_name=agent_name, model_spec=spec).get("thinking_level", "provider_default"))
-                ),
-                output_version=(
-                    RESPONSES_OUTPUT_VERSION if is_openai else "provider_default"
-                ),
-                reasoning_policy=reasoning_policy,
-            )
-        )
-    return tuple(configs)
+    return tuple(routes.config(item) for item in routes.fallbacks.get(route_id, ()))
+
+
+def route_for_model(provider: str, model: str) -> ResolvedModelConfig | None:
+    """Map a runtime provider/model back to its (first) configured route."""
+    routes = load_model_routes()
+    for route_id, route in routes.routes.items():
+        if route["provider"] == provider and route["model"] == model:
+            return routes.config(route_id)
+    return None
+
+
+def _init_kwargs(config: ResolvedModelConfig) -> dict[str, object]:
+    options = dict(config.options)
+    context = options.pop("context_window_tokens", None)
+    output = options.pop("max_output_tokens", None)
+    kwargs = provider_init_kwargs(config.provider)
+    if context is not None:
+        profile: dict[str, object] = {"name": config.model, "max_input_tokens": context}
+        if output is not None:
+            profile["max_output_tokens"] = output
+        kwargs["profile"] = profile
+    return {**options, **kwargs}  # precedence: options < adapter transport (< credentials, see build_model)
+
+
+def build_model(config: ResolvedModelConfig):
+    """Build the chat model for one resolved route: adapter kwargs, options, credentials."""
+    langchain_provider = _PROVIDERS[config.provider][0]
+    return init_chat_model(
+        f"{langchain_provider}:{config.model}",
+        **{**_init_kwargs(config), **credential_init_kwargs(config.provider)},  # one merge: no duplicate-kwarg TypeError
+    )
+
+
+def resolve_agent_model(role: str):
+    """Build the chat model for one role."""
+    return build_model(resolve_role(role))
+
+
+def config_snapshot(config: ResolvedModelConfig, role: str) -> dict[str, str]:
+    """Deterministic, secret-free audit identity of one route config as used by ``role``."""
+    canonical = json.dumps(
+        {
+            "role": role,
+            "routeId": config.route_id,
+            "provider": config.provider,
+            "model": config.model,
+            "options": config.options,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return {
+        "role": role,
+        "provider": config.provider.upper(),
+        "model": config.model,
+        "policyVersion": "cfg-" + hashlib.sha256(canonical.encode()).hexdigest()[:16],
+        "effectiveAt": SNAPSHOT_EFFECTIVE_AT,
+    }
+
+
+def resolved_policy_snapshot(role: str) -> dict[str, str]:
+    """Audit identity of the config a role resolves to."""
+    return config_snapshot(resolve_role(role), role)
+
+
+def effective_model_configs() -> tuple[dict[str, Any], ...]:
+    """Safe startup telemetry: option keys only, never values."""
+    routes = load_model_routes()
+    return tuple(
+        {
+            "role": role,
+            "routeId": config.route_id,
+            "provider": config.provider,
+            "model": config.model,
+            "client": provider_client(config.provider),
+            "optionKeys": tuple(sorted(config.options)),
+            "fallbackRouteIds": config.fallback_route_ids,
+        }
+        for role in routes.roles
+        for config in (routes.config(routes.roles[role], role),)
+    )
+
+
+def distinct_runtime_identities() -> frozenset[tuple[str, str]]:
+    """(PROVIDER_UPPER, model) of every route reachable from a role or a fallback chain."""
+    routes = load_model_routes()
+    reachable: set[str] = set()
+    pending = list(routes.roles.values())
+    while pending:
+        route_id = pending.pop()
+        if route_id not in reachable:
+            reachable.add(route_id)
+            pending.extend(routes.fallbacks.get(route_id, ()))
+    return frozenset(
+        (routes.routes[i]["provider"].upper(), routes.routes[i]["model"]) for i in reachable
+    )

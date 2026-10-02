@@ -52,12 +52,6 @@ export class AssessmentPipelineReconciliationService
   ) {}
 
   onModuleInit(): void {
-    if (!this.config.get<boolean>("pipelineReconciliation.enabled", true)) {
-      this.logger.log(
-        "Assessment pipeline reconciliation disabled by configuration.",
-      );
-      return;
-    }
     this.timer = setInterval(
       () => {
         void this.poll();
@@ -89,11 +83,6 @@ export class AssessmentPipelineReconciliationService
       );
       const quietBefore = new Date(now.getTime() - quietPeriodMs);
       const eligibleAssessment: Prisma.AssessmentWhereInput = {
-        billingPauses: {
-          none: {
-            OR: [{ resumedAt: null }, { resumedAt: { gt: quietBefore } }],
-          },
-        },
         status: {
           notIn: [...FINISHED_ASSESSMENT_STATUSES].map(
             toPrismaAssessmentStatus,

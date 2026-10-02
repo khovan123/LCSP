@@ -60,7 +60,7 @@ const STAGE_MESSAGE_PRIORITY: AssessmentAgentStreamStage[] = [
  * derived from every stage that one dispatch touched plus its run outcome.
  * Paused shares one
  * message across every stage, matching the existing cooperative-stop copy
- * already used for the raw timeline (pages.appShell.agentStreamActivities.billingPaused).
+ * already used for the raw timeline (pages.appShell.agentStreamActivities.boundaryPaused).
  */
 export function buildAgentStreamTurnHeadline(
   stages: AssessmentAgentStreamStage[],
@@ -73,7 +73,7 @@ export function buildAgentStreamTurnHeadline(
   const actor = t(ACTOR_KEYS[primaryStage]);
   const message =
     outcome === AGENT_STREAM_RUN_OUTCOMES.paused
-      ? t("pages.appShell.agentStreamActivities.billingPaused")
+      ? t("pages.appShell.agentStreamActivities.boundaryPaused")
       : t(MESSAGE_KEYS[primaryStage][outcome]);
   return { actor, message };
 }

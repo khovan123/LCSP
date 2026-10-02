@@ -14,7 +14,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Any
 
-from middleware.billing_metering import BillingMeteringError
 from middleware.failure_policy import AgentRunBudgetExceeded
 from orchestration.agent_stream import agent_stream_rule_scope, agent_stream_stage
 from orchestration.agent_stream import AGENT_STREAM_STAGES
@@ -217,8 +216,6 @@ def analyze_rule(
                     context=run_context,
                 )
             failure = RuntimeError("repository-analyst finished without submit_rule_assessment")
-        except BillingMeteringError:
-            raise
         except Exception as error:  # noqa: BLE001 - one rule never fails the loop
             failure = error
         # A successful submission survives a later run error (e.g. the budget hard stop).

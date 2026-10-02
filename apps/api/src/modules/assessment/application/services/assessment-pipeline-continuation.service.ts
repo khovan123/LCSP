@@ -21,8 +21,6 @@ import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rb
 import { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import { RerunClassificationCommand } from "../../../classification/application/commands/rerun-classification/rerun-classification.command.js";
 import { AssessmentInterviewRuntimeService } from "./assessment-interview-runtime.service.js";
-import { AssessmentModelCreditPreflight } from "./assessment-model-credit-preflight.js";
-import { BillingWorkflowPauseService } from "../../../billing/application/shared/billing-workflow-pause.service.js";
 
 export const FINISHED_ASSESSMENT_STATUSES = new Set<AssessmentStatusCode>([
   ASSESSMENT_STATUS_CODES.aiNotDetected,
@@ -43,8 +41,6 @@ export class AssessmentPipelineContinuationService {
     private readonly commandBus: CommandBus,
     private readonly interviewRuntime: AssessmentInterviewRuntimeService,
     private readonly runtimeEvents: AssessmentRuntimeEventService,
-    private readonly creditPreflight: AssessmentModelCreditPreflight,
-    private readonly billingPause: BillingWorkflowPauseService,
   ) {}
 
   /** Whether the customer stopped the pipeline and has not continued it. */
@@ -77,35 +73,6 @@ export class AssessmentPipelineContinuationService {
         input.correlationId,
       );
     }
-    const billingPaused = await this.prisma.workflowBillingPause.findFirst({
-      where: { assessmentId: input.assessmentId, resumedAt: null },
-      select: { id: true },
-    });
-    if (billingPaused) {
-      await this.creditPreflight.assertAvailable(
-        input.assessmentId,
-        input.correlationId,
-      );
-      if (
-        await this.billingPause.resume(
-          input.assessmentId,
-          input.actor.userId,
-          input.correlationId,
-        )
-      )
-        return {
-          action: ASSESSMENT_PIPELINE_CONTINUE_ACTIONS.downstreamRequeued,
-        };
-      throw this.conflict(
-        ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES.alreadyRunning,
-        input.correlationId,
-      );
-    }
-    if (await this.billingPause.hasPendingResume(input.assessmentId))
-      throw this.conflict(
-        ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES.alreadyRunning,
-        input.correlationId,
-      );
     const liveness = await this.runtimeEvents.getPipelineLiveness(
       input.assessmentId,
       ASSESSMENT_PIPELINE_LIVENESS_WINDOW_SECONDS * 1_000,
@@ -154,10 +121,6 @@ export class AssessmentPipelineContinuationService {
         action: ASSESSMENT_PIPELINE_CONTINUE_ACTIONS.interviewTurnResumed,
       };
     }
-    await this.creditPreflight.assertAvailable(
-      input.assessmentId,
-      input.correlationId,
-    );
     await this.commandBus.execute(
       new RerunClassificationCommand(
         input.assessmentId,

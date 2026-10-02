@@ -653,19 +653,19 @@ Future developers will need runtime support for Web, API, Worker, PostgreSQL, qu
 
 ## Local Environment Variables by Category
 
-Use configuration categories only: database, queue, object storage, OAuth/OIDC, MFA encryption, GitHub App, LLM Gateway, legal corpus, scanner rulesets, observability and app URLs.
+Use configuration categories only: database, queue, object storage, OAuth/OIDC, MFA encryption, repository credential encryption (KEK), LLM Gateway, legal corpus, scanner rulesets, observability and app URLs.
 
 ## Local OAuth Callback Strategy
 
 Use a configured local callback URL or mocked provider. Validate state, nonce, issuer, audience and expiry even in local mode.
 
-## Local GitHub App Setup Strategy
+## Local Repository Access Setup
 
-For local repository connection, create a real GitHub App, not an OAuth App. Use `http://localhost:3000/api/github/app/callback` as the user authorization callback URL, enable "Request user authorization (OAuth) during installation", and grant repository `Contents: Read-only`; GitHub's implicit `Metadata: Read-only` is allowed. Disable webhook `Active` unless a reachable webhook URL and secret are configured. "Redirect on update" may be enabled only for the LCSP-managed update UX; users should start repository access changes from the LCSP Manage action so state validation is present.
+Repository access uses per-user provider credentials (a personal access token configured in Settings or the repository setup step) that the API stores envelope-encrypted. A key-encryption-key keyring (`GITHUB_CLI_CREDENTIAL_KEK_ACTIVE_VERSION`, `GITHUB_CLI_CREDENTIAL_KEK_KEYRING`) is therefore a required secret wherever credentials are stored; see `.env.example`. The GitHub App installation flow was removed: there is no GitHub App, no installation callback and no `GITHUB_APP_*` configuration. Repository CLIs (`gh`, `glab`, `bb`, `az`) are resolved from `PATH`; `*_CLI_EXECUTABLE_PATH` is an optional override.
 
-## GitHub App Testing Strategy
+## Repository Access Testing Strategy
 
-Use a test GitHub App installation or mock repository provider. Do not substitute OAuth/OIDC identity for repository authorization.
+Use a mock repository provider or the CLI provider test doubles. Do not substitute OAuth/OIDC identity for repository authorization.
 
 ## Scanner Fixture Strategy
 
@@ -683,7 +683,7 @@ Do not use real customer repositories, secrets, full prompts or regulated person
 
 | Symptom                             | Likely Area                                                                     |
 | ----------------------------------- | ------------------------------------------------------------------------------- |
-| Login succeeds but repo unavailable | GitHub App not connected; OAuth does not grant repo access                      |
+| Login succeeds but repo unavailable | Repository credential not configured; OAuth login does not grant repo access    |
 | Scan stuck                          | Queue/Worker/job state                                                          |
 | Classification blocked              | Missing VerifiedProfile, unresolved conflict, unclear usage or missing citation |
 | Document blocked                    | Final report gate failed                                                        |

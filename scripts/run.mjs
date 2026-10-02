@@ -21,8 +21,6 @@ const workerLangGraph =
     ? path.join(workerRoot, ".venv", "Scripts", "langgraph.exe")
     : path.join(workerRoot, ".venv", "bin", "langgraph");
 const rootEnv = loadDotEnv(path.join(repoRoot, ".env"));
-const defaultOrchestrationDebug =
-  process.env.ORCHESTRATION_DEBUG ?? rootEnv.ORCHESTRATION_DEBUG ?? "false";
 const defaultPhoenixTracing =
   process.env.PHOENIX_TRACING ?? rootEnv.PHOENIX_TRACING ?? "true";
 const defaultDockerPhoenixTracing =
@@ -222,7 +220,6 @@ const targets = {
         process.env.LCSP_REPOSITORY_SANDBOX_MEMORY ??
         rootEnv.LCSP_REPOSITORY_SANDBOX_MEMORY ??
         devSandboxMemory,
-      ORCHESTRATION_DEBUG: defaultOrchestrationDebug,
       PHOENIX_TRACING: defaultPhoenixTracing,
       PHOENIX_COLLECTOR_ENDPOINT: defaultPhoenixCollectorEndpoint,
       PHOENIX_PROJECT: defaultPhoenixProject,
@@ -241,7 +238,6 @@ const targets = {
       PYTHONPATH: agentRuntimePythonPath,
       UV_CACHE_DIR: rootEnv.UV_CACHE_DIR ?? "/tmp/uv-cache",
       UV_LINK_MODE: rootEnv.UV_LINK_MODE ?? "copy",
-      ORCHESTRATION_DEBUG: defaultOrchestrationDebug,
       PHOENIX_TRACING: defaultPhoenixTracing,
       PHOENIX_COLLECTOR_ENDPOINT: defaultPhoenixCollectorEndpoint,
       PHOENIX_PROJECT: defaultPhoenixProject,
@@ -754,6 +750,16 @@ function cleanupDockerWorkerContainer(target) {
   }
 }
 
+// Model routes ship in the worker image (deepagents/config/model_routes.yaml). Only an
+// operator override file (LCSP_MODEL_ROUTES_FILE) is bind-mounted, read-only; the worker
+// validates it fail-closed.
+const dockerModelRoutesTarget = "/app/deepagents/config/model_routes.override.yaml";
+
+function dockerModelRoutesFile() {
+  const file = process.env.LCSP_MODEL_ROUTES_FILE ?? rootEnv.LCSP_MODEL_ROUTES_FILE;
+  return file ? path.resolve(repoRoot, file) : "";
+}
+
 function dockerAgentRuntimeTarget() {
   const containerName = "lcsp-agent-runtime";
   mkdirSync(dockerGraphStorageRoot, { recursive: true });
@@ -771,6 +777,12 @@ function dockerAgentRuntimeTarget() {
       "host.docker.internal:host-gateway",
       "--mount",
       `type=bind,source=${dockerGraphStorageRoot},target=/app/deepagents/tmp`,
+      ...(dockerModelRoutesFile()
+        ? [
+            "--mount",
+            `type=bind,source=${dockerModelRoutesFile()},target=${dockerModelRoutesTarget},readonly`,
+          ]
+        : []),
       ...dockerEnvArgs(dockerWorkerEnv()),
       defaultDockerWorkerImage,
     ],
@@ -796,31 +808,12 @@ function dockerWorkerEnv() {
   ].includes("LLM_PROVIDER_TIMEOUT_SECONDS")
     ? ["LLM_PROVIDER_TIMEOUT_SECONDS"]
     : [];
-  const fallbackProviderKeys = Array.from(
-    new Set(
-      [...Object.keys(rootEnv), ...Object.keys(process.env)].filter((key) =>
-        /^LLM_FALLBACK_PROVIDER_\d+$/.test(key),
-      ),
-    ),
-  ).sort(
-    (left, right) =>
-      Number(left.slice("LLM_FALLBACK_PROVIDER_".length)) -
-      Number(right.slice("LLM_FALLBACK_PROVIDER_".length)),
-  );
   const selectedKeys = [
     "LOG_LEVEL",
     "NODE_ENV",
     "ORCHESTRATION_DEBUG",
     "LCSP_DEV_UNSAFE_TRACE",
-    "AGENTIC_RUNTIME_ENABLED",
-    "AGENTIC_RUNTIME_MAX_TOOL_CALLS",
-    "AGENTIC_RUNTIME_DEFAULT_MAX_ITEMS",
-    "AGENTIC_RUNTIME_DEFAULT_MAX_DEPTH",
-    "AGENTIC_RUNTIME_DEFAULT_MAX_BYTES",
-    "AGENTIC_RUNTIME_DEFAULT_TIMEOUT_MS",
-    "AGENTIC_RUNTIME_DISPATCH_PATH",
-    "PBAC_PREFLIGHT_TIMEOUT_SECONDS",
-    "LCSP_MODEL_PROVIDER",
+    "RBAC_PREFLIGHT_TIMEOUT_SECONDS",
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
     "GEMINI_API_KEY",
@@ -832,18 +825,9 @@ function dockerWorkerEnv() {
     "INCEPTION_API_KEY",
     "INCEPTION_BASE_URL",
     ...providerTimeoutKeys,
-    ...fallbackProviderKeys,
-    "LCSP_ROOT_AGENT_MODEL",
-    "LCSP_TRIAGE_MODEL",
-    "LCSP_INTERVIEW_MODEL",
-    "LCSP_REPOSITORY_ANALYST_MODEL",
-    "LCSP_NARRATOR_MODEL",
-    "LCSP_REASONING_EFFORT",
     "LCSP_LANGSMITH_TRACING",
     "LCSP_AGENT_RUNTIME_JOBS_PER_WORKER",
     "LCSP_REPOSITORY_SANDBOX_MEMORY",
-    "WORKER_RUNTIME_VERSION",
-    "WORKER_RUNTIME_BUILD_REF",
     "PHOENIX_TRACING",
     "PHOENIX_COLLECTOR_ENDPOINT",
     "PHOENIX_PROJECT",
@@ -886,6 +870,9 @@ function dockerWorkerEnv() {
       rootEnv.LCSP_LANGSMITH_TRACING ??
       "false",
     LCSP_GRAPH_STORAGE_PATH: "/app/deepagents/tmp",
+    ...(dockerModelRoutesFile()
+      ? { LCSP_MODEL_ROUTES_FILE: dockerModelRoutesTarget }
+      : {}),
     LCSP_REPOSITORY_SANDBOX_MEMORY:
       process.env.LCSP_REPOSITORY_SANDBOX_MEMORY ??
       rootEnv.LCSP_REPOSITORY_SANDBOX_MEMORY ??

@@ -36,7 +36,6 @@ import {
   ASSESSMENT_PIPELINE_CONTINUE_PROBLEM_CODES,
 } from "@lcsp/contracts/evidence";
 
-import { BILLING_ERROR_CODES } from "@lcsp/contracts/billing";
 
 import { apiJson, apiRequest } from "./api-request";
 import { API_OUTCOME_KINDS } from "./outcome-kinds";
@@ -198,7 +197,6 @@ export type AssessmentPipelineContinueOutcome =
   | { kind: typeof API_OUTCOME_KINDS.waitingForCustomer }
   | { kind: typeof API_OUTCOME_KINDS.completed }
   | { kind: typeof API_OUTCOME_KINDS.rateLimited }
-  | { kind: typeof API_OUTCOME_KINDS.insufficientCredits }
   | { kind: typeof API_OUTCOME_KINDS.error };
 
 const PIPELINE_CONTINUE_PROBLEM_OUTCOMES: Record<
@@ -219,9 +217,6 @@ const PIPELINE_CONTINUE_PROBLEM_OUTCOMES: Record<
   },
   [ASSESSMENT_INTERVIEW_RESUME_PROBLEM_CODES.limitReached]: {
     kind: API_OUTCOME_KINDS.rateLimited,
-  },
-  [BILLING_ERROR_CODES.insufficientCredits]: {
-    kind: API_OUTCOME_KINDS.insufficientCredits,
   },
 };
 

@@ -9,7 +9,6 @@ const repoRoot = path.resolve(
 );
 const isWindows = process.platform === "win32";
 const pnpmCommand = "pnpm";
-const defaultDevelopmentInterviewGuidanceVersion = "interview-guidance-dev-v1";
 const requestedMode = process.argv[2];
 const mode = requestedMode ?? (isWindows ? "docker" : "local");
 const targets = {
@@ -36,8 +35,6 @@ async function main() {
     );
   }
 
-  configureDevelopmentDefaults();
-
   if (mode === "docker") {
     await requireDockerDaemon();
   }
@@ -45,12 +42,6 @@ async function main() {
   await run(pnpmCommand, ["run", "prepare:cli"]);
   await run(pnpmCommand, ["run", "build:runtime-packages"]);
   await run(pnpmCommand, ["--filter", "@lcsp/api", "prisma:migrate:deploy"]);
-  await run(pnpmCommand, ["--filter", "@lcsp/api", "bootstrap:model-pricing"]);
-  await run(pnpmCommand, [
-    "--filter",
-    "@lcsp/api",
-    "bootstrap:runtime-model-policies",
-  ]);
 
   if (mode === "docker") {
     console.log("[dev] Building the Docker worker image (Docker cache is reused).");
@@ -59,16 +50,6 @@ async function main() {
 
   console.log(`[dev] Starting ${mode} development mode.`);
   await run(process.execPath, ["scripts/run.mjs", targets[mode]]);
-}
-
-function configureDevelopmentDefaults() {
-  if (process.env.INTERVIEW_GUIDANCE_VERSION?.trim()) return;
-
-  process.env.INTERVIEW_GUIDANCE_VERSION =
-    defaultDevelopmentInterviewGuidanceVersion;
-  console.log(
-    `[dev] INTERVIEW_GUIDANCE_VERSION is unset; using ${defaultDevelopmentInterviewGuidanceVersion}.`,
-  );
 }
 
 async function requireDockerDaemon() {

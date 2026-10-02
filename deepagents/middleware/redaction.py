@@ -63,8 +63,6 @@ SAFE_METADATA_KEY_NAMES = frozenset(
         "output_tokens",
         "reasonCode",
         "reasoningTokens",
-        "reservation_max_input_bytes",
-        "reservation_max_input_tokens",
         "sourceCode",
         "statusCode",
         "tokenCount",

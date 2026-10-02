@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib
 import inspect
-import logging
 from dataclasses import dataclass
 from typing import Any, Type
 
@@ -15,19 +14,9 @@ from tools.common.capabilities.agentic_evidence import (
 )
 from tools.common.capabilities.agentic_evidence.governance.authorization import ApiRbacToolAuthorizer
 from tools.common.capabilities.platform.rbac_client import RbacClient
-from tools.common.capabilities.platform.api_client import WorkerApiClient, WorkerCallbackError
+from tools.common.capabilities.platform.api_client import WorkerApiClient
 from tools.common.capabilities.platform.config import load_config
-from middleware.billing_recovery import (
-    drain as drain_billing_recovery,
-    start_background_worker,
-)
-from middleware.billing_metering import (
-    BillingMeteringSession,
-    BillingMeteringError,
-    BillingFinalizationError,
-    BillingBudgetExhausted,
-    activate_billing_metering,
-)
+from middleware.usage_metering import AgentRunState, activate_agent_run_state
 from tools.common.capabilities.agent_runtime.boundary import AgentBoundaryBase
 from orchestration.agent_stream import (
     AGENT_STREAM_STAGES,
@@ -186,7 +175,6 @@ AGENT_INVOCATION_BOUNDARIES: tuple[AgentInvocationBoundary, ...] = (
     ),
 )
 
-_LOGGER = logging.getLogger(__name__)
 # Default live-stream stage for boundaries that serve exactly one stage. The
 # engineering assessment boundary spans Interview, Repository Analyst (Investigate) and
 # Gate, so each of those invocations names its own stage instead.
@@ -224,100 +212,15 @@ def invoke_boundary(
         raise ValueError(f"unknown agent runtime invocation boundary: {boundary_name}")
     boundary_handler = build_boundary(boundary.target)
     session = _agent_stream_session(boundary.name, message, correlation_id)
-    try:
-        billing_session = _billing_metering_session(
-            boundary.name, message, correlation_id
-        )
-    except BillingBudgetExhausted as error:
-        with activate_agent_stream(session):
-            return _pause_billing_dispatch(boundary, message, correlation_id, error)
-    except Exception as error:
-        if isinstance(error, WorkerCallbackError) and error.status_code == 402:
-            with activate_agent_stream(session):
-                return _pause_billing_dispatch(
-                    boundary, message, correlation_id,
-                    BillingBudgetExhausted("Billing credits required"),
-                )
-        _report_dispatch_failure(boundary_handler, message, correlation_id, error)
-        raise
-    try:
-        billing_context = activate_billing_metering(billing_session)
-        with billing_context:
-            with activate_agent_stream(session):
-                _run_boundary_handler(
-                    boundary_handler,
-                    message,
-                    correlation_id,
-                    boundary,
-                )
-    except BillingBudgetExhausted as error:
-        with activate_agent_stream(session):
-            result = _pause_billing_dispatch(
-                boundary, message, correlation_id, error, billing_session
-            )
-        if billing_session is not None:
-            billing_session.release()
-        return result
-    except Exception as error:
-        # Keep a spendable reservation for broker-retryable execution failures.
-        # Terminal failures are not going to execute again and can release now.
-        if billing_session is not None:
-            from middleware.failure_policy import is_terminal_boundary_error
-
-            if is_terminal_boundary_error(error) and not isinstance(
-                error, BillingMeteringError
-            ):
-                try:
-                    billing_session.release()
-                except Exception:
-                    pass
-        raise
-    else:
-        if billing_session is not None:
-            try:
-                billing_session.release()
-            except Exception as error:
-                # Do not redeliver completed model work when only finalization
-                # failed. Recovery must handle the reservation separately.
-                raise BillingFinalizationError(error) from error
+    run_state = _agent_run_state(boundary.name, message, correlation_id)
+    with activate_agent_run_state(run_state), activate_agent_stream(session):
+        _run_boundary_handler(boundary_handler, message, correlation_id, boundary)
     return {
         "boundary": boundary.name,
         "target": boundary.target,
         "source_event": boundary.source_event,
         "status": "COMPLETED",
     }
-
-
-def _pause_billing_dispatch(
-    boundary: AgentInvocationBoundary,
-    message: dict[str, Any],
-    correlation_id: str,
-    error: BillingBudgetExhausted,
-    billing_session: BillingMeteringSession | None = None,
-) -> dict[str, Any]:
-    billing = message.get("billing") or {}
-    assessment_id = _find_first_text(billing, ("assessmentId", "assessment_id"))
-    if not assessment_id:
-        assessment_id = _find_first_text(message, ("assessmentId", "assessment_id"))
-    if not assessment_id:
-        raise ValueError("Billing pause requires assessment identity") from error
-    config = load_config()
-    client = WorkerApiClient(config.nestjs_api_base_url, config.worker_api_key)
-    payload = {
-        "assessmentId": assessment_id,
-        "dispatchKey": f"{assessment_id}:{correlation_id}:{boundary.name}",
-        "sourceEvent": error.resume_source_event or boundary.source_event,
-        "payload": error.resume_message or {k: v for k, v in message.items() if k != "billing"},
-    }
-    if billing_session is not None:
-        payload["reservationId"] = billing_session.reservation_id
-    # Callback failures propagate normally: never ACK a pause that is not durable.
-    saved = client.pause_billing_workflow(payload)
-    publish_agent_stream_event(
-        "BOUNDARY_PAUSED", status="WAITING",
-        data={"boundary": boundary.name, "reasonCode": "BILLING_CREDITS_REQUIRED"},
-    )
-    return {"boundary": boundary.name, "status": "WAITING", **saved}
 
 
 def report_external_boundary_timeout(
@@ -337,22 +240,6 @@ def report_external_boundary_timeout(
         )
 
 
-def _report_dispatch_failure(
-    boundary_handler: AgentBoundaryBase,
-    message: dict[str, Any],
-    correlation_id: str,
-    error: BaseException,
-) -> None:
-    """Best-effort domain notification; never masks the original failure."""
-    try:
-        boundary_handler.report_dispatch_failure(message, correlation_id, error)
-    except Exception:
-        _LOGGER.warning(
-            "AGENT_RUNTIME_DISPATCH_FAILURE_REPORT_FAILED boundary=%s",
-            type(boundary_handler).__name__,
-        )
-
-
 def _run_boundary_handler(
     boundary_handler: Type[AgentBoundaryBase],
     message: dict[str, Any],
@@ -367,8 +254,6 @@ def _run_boundary_handler(
     )
     try:
         boundary_handler.handle(message, correlation_id)
-    except BillingBudgetExhausted:
-        raise
     except Exception as error:
         publish_agent_stream_event(
             "BOUNDARY_FAILED",
@@ -387,119 +272,38 @@ def _run_boundary_handler(
     )
 
 
-def _billing_metering_session(
+def _agent_run_state(
     boundary_name: str,
     message: dict[str, Any],
     correlation_id: str,
-) -> BillingMeteringSession | None:
-    """Start billing from API-issued context and reject assessment bypasses."""
-    message_assessment_id = _find_first_text(
-        message, ("assessmentId", "assessment_id")
-    )
-    billing = message.get("billing")
-    if not isinstance(billing, dict):
-        if message_assessment_id:
-            raise ValueError(
-                "billing context is required for assessment model invocation"
-            )
-        return None
-    assessment_id = _find_first_text(billing, ("assessmentId", "assessment_id"))
-    workspace_id = _find_first_text(
-        billing, ("workspaceId", "workspace_id", "tenantId")
-    )
-    scan_job_id = _find_first_text(
-        billing, ("scanJobId", "scan_job_id", "repositoryScanJobId")
-    )
-    thread_id = _find_first_text(
-        billing, ("threadId", "thread_id", "langGraphThreadId")
-    )
-    run_id = _find_first_text(billing, ("runId", "run_id", "workflowRunId"))
-    invocation_id = _find_first_text(billing, ("invocationId", "invocation_id"))
-    model_invocation_id = _find_first_text(
-        billing, ("modelInvocationId", "model_invocation_id")
-    )
-    amount = _find_first_text(billing, ("amountCredits", "reservationCredits"))
-    max_charge = _find_first_text(billing, ("maxChargeCredits",))
-    provider = _find_first_text(billing, ("provider",))
-    model = _find_first_text(billing, ("model",))
-    max_input_tokens = _find_first_text(billing, ("maxInputTokens",))
-    max_input_bytes = _find_first_text(billing, ("maxInputBytes",))
-    max_output_tokens = _find_first_text(billing, ("maxOutputTokens",))
-    max_reasoning_tokens = _find_first_text(billing, ("maxReasoningTokens",))
-    max_invocations = _find_first_text(billing, ("maxInvocations",))
-    authorized_models = billing.get("authorizedModels")
-    idempotency_key = _find_first_text(billing, ("idempotencyKey",))
-    # The boundary/agent owns the billing role. Never trust a role supplied inside
-    # an event payload because the pricing snapshot is selected by this identity.
-    role = boundary_name
-    effective = billing.get("effectiveRuntimeModel")
-    if not all(
+) -> AgentRunState:
+    """Run-scoped state for every boundary; usage is reported only for assessments."""
+    assessment_id = _find_first_text(message, ("assessmentId", "assessment_id"))
+    run_id = _find_first_text(
+        message,
         (
-            assessment_id,
-            run_id,
-            amount,
-            max_charge,
-            provider,
-            model,
-            max_input_tokens,
-            max_input_bytes,
-            max_output_tokens,
-            max_reasoning_tokens,
-            max_invocations,
-            authorized_models,
-            idempotency_key,
-        )
-    ) or not isinstance(authorized_models, list) or any(
-        not isinstance(item, dict)
-        or not isinstance(item.get("provider"), str)
-        or not isinstance(item.get("model"), str)
-        for item in authorized_models
-    ) or (
-        effective is not None and not isinstance(effective, dict)
-    ):
-        raise ValueError("billing context is incomplete")
-    if message_assessment_id and message_assessment_id != assessment_id:
-        raise ValueError("billing assessment does not match invocation assessment")
-    config = load_config()
-    client = WorkerApiClient(config.nestjs_api_base_url, config.worker_api_key)
-    if config.billing_recovery_store_path:
-        drain_billing_recovery(config.billing_recovery_store_path, client)
-        start_background_worker(config.billing_recovery_store_path, client)
-    return BillingMeteringSession.reserve(
-        api_client=client,
-        workspace_id=workspace_id,
-        assessment_id=assessment_id,
-        scan_job_id=scan_job_id,
-        thread_id=thread_id,
-        run_id=run_id,
-        invocation_id=invocation_id,
-        model_invocation_id=model_invocation_id,
-        agent_role=role,
-        amount_credits=amount,
-        max_charge_credits=max_charge,
-        provider=provider.upper(),
-        model=model,
-        max_input_tokens=max_input_tokens,
-        max_input_bytes=max_input_bytes,
-        max_output_tokens=max_output_tokens,
-        max_reasoning_tokens=max_reasoning_tokens,
-        max_invocations=max_invocations,
-        authorized_models=[
-            {str(k): str(v) for k, v in item.items()}
-            for item in authorized_models
-        ],
-        # The outbox idempotency key identifies the billing group, not a broker
-        # delivery attempt. A retry must recover/replay the same reservation;
-        # deriving a new key leaves the previous reservation stranded.
-        idempotency_key=f"{idempotency_key}:{boundary_name}",
-        effective_runtime_model=(
-            {str(k): str(v) for k, v in effective.items()}
-            if isinstance(effective, dict)
-            else None
+            "runId",
+            "run_id",
+            "workflowRunId",
+            "workflow_run_id",
+            "scanJobId",
+            "scan_job_id",
+            "documentRequestId",
+            "requestId",
+            "request_id",
         ),
-        recovery_store_path=config.billing_recovery_store_path,
+    ) or correlation_id
+    client = None
+    if assessment_id:
+        config = load_config()
+        client = WorkerApiClient(config.nestjs_api_base_url, config.worker_api_key)
+    # The boundary owns the agent role; never trust one supplied inside an event payload.
+    return AgentRunState(
+        run_id=run_id,
+        agent_role=boundary_name,
+        assessment_id=assessment_id,
+        api_client=client,
     )
-
 
 
 def _agent_stream_session(
@@ -612,7 +416,6 @@ def build_boundary(target: str) -> AgentBoundaryBase:
                     timeout_seconds=config.rbac_preflight.timeout_seconds,
                 ),
             ),
-            max_tool_calls=config.agentic_runtime.max_tool_calls,
         )
 
     return boundary_type(config, **kwargs)

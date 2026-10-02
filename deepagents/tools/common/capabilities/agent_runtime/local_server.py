@@ -334,6 +334,7 @@ class LocalAgentRuntime:
         configured = (
             os.environ.get("LANGGRAPH_CHECKPOINT_DATABASE_URL")
             or os.environ.get("POSTGRES_URI")
+            or os.environ.get("DATABASE_URL")
             or ""
         )
         checkpoint_url = checkpoint_database_url(configured)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+
+from conftest import use_model_routes
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -34,7 +36,7 @@ def test_repository_deep_analyzer_runs_as_standalone_root_without_checkpointer(
     monkeypatch.setattr(
         analyzer,
         "resolve_agent_model",
-        lambda *, agent_name, model_spec: "fake-model",
+        lambda role: "fake-model",
     )
 
     def fake_create_deep_agent(**kwargs):
@@ -85,6 +87,11 @@ def test_repository_deep_analyzer_runs_as_standalone_root_without_checkpointer(
     assert "Codebase Memory index" in create_kwargs["system_prompt"]
     assert "already built" in create_kwargs["system_prompt"]
     assert "inspect source before reporting" in create_kwargs["system_prompt"]
+    assert "Stop as soon as those facts are sufficiently" in create_kwargs["system_prompt"]
+    assert "Do not broadly understand the repository" in create_kwargs["system_prompt"]
+    assert "return AI_UNKNOWN with coverage_state PARTIAL" in create_kwargs["system_prompt"]
+    for legacy in ("Scanner", "Planner", "Investigator", "RuleDiscoveryTask"):
+        assert legacy not in create_kwargs["system_prompt"]
     from tools.common.codebase_memory_graph import CODEBASE_MEMORY_GRAPH_TOOLS
 
     assert create_kwargs["tools"] is CODEBASE_MEMORY_GRAPH_TOOLS
@@ -95,7 +102,7 @@ def test_repository_deep_analyzer_runs_as_standalone_root_without_checkpointer(
     assert create_kwargs["response_format"] is RepositoryAnalysisResult
     middleware_names = {type(item).__name__ for item in create_kwargs["middleware"]}
     assert "AgentRunBudgetMiddleware" in middleware_names
-    assert "BillingAgentRoleMiddleware" in middleware_names
+    assert "AgentRoleMiddleware" in middleware_names
     invoke = calls["invoke"]
     assert isinstance(invoke, dict)
     assert invoke["agent"] is fake_agent
@@ -121,7 +128,7 @@ def test_repository_deep_analyzer_allows_more_than_two_model_calls(
     monkeypatch.setattr(
         analyzer,
         "resolve_agent_model",
-        lambda *, agent_name, model_spec: "fake-model",
+        lambda role: "fake-model",
     )
 
     def fake_create_deep_agent(**kwargs):
@@ -188,7 +195,7 @@ def test_repository_deep_analyzer_revalidates_structured_response_contract(
     monkeypatch.setattr(
         analyzer,
         "resolve_agent_model",
-        lambda *, agent_name, model_spec: "fake-model",
+        lambda role: "fake-model",
     )
     monkeypatch.setattr(
         analyzer,
@@ -234,6 +241,7 @@ def test_repository_deep_analyzer_create_deep_agent_smoke_uses_gemini_native_out
 
     class FakeGeminiModel(BaseChatModel):
         calls: int = 0
+        model_name: str = "future-model-v99"
         seen_bind_kwargs: list[dict[str, object]] = Field(default_factory=list)
         __module__ = "langchain_google_genai.chat_models"
 
@@ -265,11 +273,19 @@ def test_repository_deep_analyzer_create_deep_agent_smoke_uses_gemini_native_out
 
     FakeGeminiModel.model_rebuild()
     model = FakeGeminiModel()
+    # Model identity is always enforced against the routes file, with or without a run state.
+    use_model_routes(
+        monkeypatch,
+        {
+            "routes": {"a": {"provider": "google_genai", "model": "future-model-v99"}},
+            "roles": {"default": "a"},
+        },
+    )
     monkeypatch.setattr(analyzer, "configure_lcsp_harness", lambda: None)
     monkeypatch.setattr(
         analyzer,
         "resolve_agent_model",
-        lambda *, agent_name, model_spec: model,
+        lambda role: model,
     )
     (tmp_path / "app.py").write_text("print('hello')\n", encoding="utf-8")
 
@@ -547,7 +563,7 @@ def test_repository_analyst_task_subagents_run_under_model_governance(
     monkeypatch.setattr(
         analyzer,
         "resolve_agent_model",
-        lambda *, agent_name, model_spec: "fake-model",
+        lambda role: "fake-model",
     )
 
     def fake_create_deep_agent(**kwargs):
@@ -577,11 +593,11 @@ def test_repository_analyst_task_subagents_run_under_model_governance(
     assert any(isinstance(item, AgentRunBudgetMiddleware) for item in middleware)
     governed_names = {type(item).__name__ for item in middleware}
     for required in (
-        "BillingAgentRoleMiddleware",
+        "AgentRoleMiddleware",
         "ModelRetryMiddleware",
         "ProviderFallbackMiddleware",
         "TokenFallbackMiddleware",
-        "BillingMeteringMiddleware",
+        "UsageMeteringMiddleware",
     ):
         assert required in governed_names
     assert len(MODEL_GOVERNANCE_MIDDLEWARE) > 0

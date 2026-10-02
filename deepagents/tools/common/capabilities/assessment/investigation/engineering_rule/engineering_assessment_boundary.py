@@ -6,7 +6,6 @@ business-context needs, then finalize deterministically into the classification 
 """
 from __future__ import annotations
 
-from middleware.billing_metering import BillingBudgetExhausted, BillingMeteringError
 
 import hashlib
 import json
@@ -139,28 +138,18 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
             message, evidence_report, evidence_report_id
         )
         scan_job_id = self._scan_job_id(evidence_report)
-        try:
-            result, pending_customer = self._assess(
-                evidence_report=evidence_report,
-                evidence_report_id=evidence_report_id,
-                assessment_id=assessment_id,
-                user_id=user_id or None,
-                workflow_run_id=workflow_run_id,
-                scan_job_id=scan_job_id,
-                correlation_id=correlationId,
-                confirmed_context=confirmed_context,
-                rule_scope=rule_scope,
-                source_crawl_requests=self._source_crawl_requests(message),
-            )
-        except BillingBudgetExhausted as error:
-            # Persisted per-rule results survive; resume re-enters the same loop.
-            error.resume_source_event = "event.technical-evidence.accepted.v1"
-            error.resume_message = {
-                "assessmentId": assessment_id,
-                "evidenceReportId": evidence_report_id,
-                "workflowRunId": workflow_run_id,
-            }
-            raise
+        result, pending_customer = self._assess(
+            evidence_report=evidence_report,
+            evidence_report_id=evidence_report_id,
+            assessment_id=assessment_id,
+            user_id=user_id or None,
+            workflow_run_id=workflow_run_id,
+            scan_job_id=scan_job_id,
+            correlation_id=correlationId,
+            confirmed_context=confirmed_context,
+            rule_scope=rule_scope,
+            source_crawl_requests=self._source_crawl_requests(message),
+        )
         if pending_customer:
             # A Customer question is open: results stay in the ledger, and the answer resumes
             # that same rule. The classification is posted once no rule is waiting.
@@ -222,11 +211,6 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
                 workflow_run_id=workflow_run_id,
                 result=result,
                 correlation_id=correlationId,
-                billing_context=(
-                    message.get("billing")
-                    if isinstance(message.get("billing"), dict)
-                    else None
-                ),
             )
 
         logger.info(
@@ -356,8 +340,6 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
                             rule=rule, assessment=assessment, context=context, api=self._api_client, user_id=user_id
                         )
                     )
-            except BillingMeteringError:
-                raise
             except Exception as error:  # noqa: BLE001 - one rule never aborts the other rules
                 logger.warning("RULE_LOOP_ITEM_FAILED", engineering_rule_id=rule_id, error_type=type(error).__name__)
 
@@ -567,18 +549,14 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
         workflow_run_id: str,
         result,
         correlation_id: str,
-        billing_context: dict[str, Any] | None,
     ) -> None:
         trigger = self._legal_triage_trigger(result)
-        billing = self._billing_checkpoint_context(assessment_id, billing_context)
-        if billing:
-            self._waiting_registry.register(
-                assessment_id=assessment_id,
-                evidence_report_id=evidence_report_id,
-                workflow_run_id=workflow_run_id,
-                source_correlation_id=correlation_id,
-                billing_context=billing,
-            )
+        self._waiting_registry.register(
+            assessment_id=assessment_id,
+            evidence_report_id=evidence_report_id,
+            workflow_run_id=workflow_run_id,
+            source_correlation_id=correlation_id,
+        )
         command = {
             "trigger": "ENGINEERING_RULE_NOT_READY",
             "affectedLegalRuleIds": trigger["affectedLegalRuleIds"],
@@ -598,24 +576,6 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
             full_backlog=trigger["fullBacklog"],
             correlationId=correlation_id,
         )
-
-    def _billing_checkpoint_context(
-        self,
-        assessment_id: str,
-        billing: dict[str, Any] | None,
-    ) -> dict[str, str] | None:
-        if not isinstance(billing, dict):
-            return None
-        values = {
-            "runId": str(billing.get("runId") or "").strip(),
-            "amountCredits": str(billing.get("amountCredits") or "").strip(),
-            "maxChargeCredits": str(billing.get("maxChargeCredits") or "").strip(),
-            "idempotencyKey": str(billing.get("idempotencyKey") or "").strip(),
-        }
-        billing_assessment_id = str(billing.get("assessmentId") or "").strip()
-        if billing_assessment_id != assessment_id or not all(values.values()):
-            return None
-        return values
 
     @classmethod
     def _legal_triage_trigger(cls, result) -> dict[str, Any]:

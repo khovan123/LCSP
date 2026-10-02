@@ -4,6 +4,7 @@ import {
   PaymentReconciliationStatus,
 } from "@prisma/client";
 import { Prisma } from "@prisma/client";
+import { BillingDomainError } from "../../domain/billing.errors.js";
 import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
@@ -14,8 +15,6 @@ import {
   toPrismaAuditResourceType,
   toPrismaAuthDecision,
 } from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
-import { selectEffectivePricingSnapshot } from "../../domain/effective-pricing.js";
-import { resolveEffectiveRuntimeModel } from "../../domain/effective-runtime-model.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import type {
   BillingTransactionPort,
@@ -86,146 +85,22 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
             }),
         },
         reservation: {
-          extendBudget: async (i) =>
-            (
-              await tx.billingReservation.updateMany({
-                where: { id: i.reservationId, status: "RESERVED" },
-                data: {
-                  amountCredits: { increment: i.amountCredits },
-                  remainingCredits: { increment: i.amountCredits },
-                },
-              })
-            ).count === 1,
           findForUser: (id, reservationId) =>
             tx.billingReservation.findFirst({
               where: { id: reservationId, userId: id },
             }),
-          findByIdempotencyKey: (id, key) =>
-            tx.billingReservation.findUnique({
-              where: {
-                userId_idempotencyKey: { userId: id, idempotencyKey: key },
-              },
-            }),
-          createReserved: (i) =>
-            tx.billingReservation.create({
-              data: {
-                ...i,
-                initialAmountCredits: i.amountCredits,
-                remainingCredits: i.amountCredits,
-                maxInvocations: i.maxInvocations ?? 1n,
-              },
-            }),
-          findInvocationClaim: async (reservationId, invocationId) => {
-            const claim = await tx.billingReservationInvocationClaim.findUnique(
-              {
-                where: {
-                  reservationId_invocationId: { reservationId, invocationId },
-                },
-              },
-            );
-            return claim
-              ? {
-                  reservationId: claim.reservationId,
-                  invocationId: claim.invocationId,
-                  authorizedChargeCredits: claim.authorizedChargeCredits,
-                  authorizationFingerprint: claim.authorizationFingerprint,
-                  settledAt: claim.settledAt,
-                }
-              : null;
-          },
-          sumUnsettledAuthorizedChargeCredits: async (reservationId) => {
-            const aggregate =
-              await tx.billingReservationInvocationClaim.aggregate({
-                where: { reservationId, settledAt: null },
-                _sum: { authorizedChargeCredits: true },
-              });
-            return aggregate._sum.authorizedChargeCredits ?? 0n;
-          },
-          claimInvocation: async (i) => {
-            const existing =
-              await tx.billingReservationInvocationClaim.findUnique({
-                where: {
-                  reservationId_invocationId: {
-                    reservationId: i.reservationId,
-                    invocationId: i.invocationId,
-                  },
-                },
-              });
-            if (existing) return true;
-            await tx.billingReservationInvocationClaim.create({
-              data: {
-                reservationId: i.reservationId,
-                invocationId: i.invocationId,
-                authorizedChargeCredits: i.authorizedChargeCredits ?? 0n,
-                authorizationFingerprint: i.authorizationFingerprint ?? null,
-              },
-            });
-            const updated = await tx.$executeRaw(Prisma.sql`
-                UPDATE "BillingReservation"
-                SET "invocationsStarted" = "invocationsStarted" + 1
-                WHERE "id" = ${i.reservationId}
-                  AND "status" = 'RESERVED'
-              `);
-            if (updated !== 1) {
-              await tx.billingReservationInvocationClaim.delete({
-                where: {
-                  reservationId_invocationId: {
-                    reservationId: i.reservationId,
-                    invocationId: i.invocationId,
-                  },
-                },
-              });
-              return false;
-            }
-            return true;
-          },
-          settleInvocationClaim: async (i) => {
-            const updated =
-              await tx.billingReservationInvocationClaim.updateMany({
-                where: {
-                  reservationId: i.reservationId,
-                  invocationId: i.invocationId,
-                  settledAt: null,
-                },
-                data: { settledAt: new Date() },
-              });
-            if (updated.count === 1) return true;
-            const existing =
-              await tx.billingReservationInvocationClaim.findUnique({
-                where: {
-                  reservationId_invocationId: {
-                    reservationId: i.reservationId,
-                    invocationId: i.invocationId,
-                  },
-                },
-              });
-            return existing?.settledAt != null;
-          },
           listReservedForWallet: (walletId) =>
             tx.billingReservation.findMany({
               where: { walletId, status: "RESERVED" },
             }),
-          consumeRemaining: async (i) =>
-            (
-              await tx.billingReservation.updateMany({
-                where: {
-                  id: i.reservationId,
-                  status: "RESERVED",
-                  remainingCredits: { gte: i.amountCredits },
-                },
-                data: { remainingCredits: { decrement: i.amountCredits } },
-              })
-            ).count === 1,
-          transitionFromReserved: async (i) =>
+          releaseReserved: async (i) =>
             (
               await tx.billingReservation.updateMany({
                 where: { id: i.reservationId, status: "RESERVED" },
                 data: {
-                  status: i.to,
+                  status: "RELEASED",
                   remainingCredits: 0n,
-                  ...(i.to === "SETTLED"
-                    ? { settledAt: i.timestamp }
-                    : { releasedAt: i.timestamp }),
+                  releasedAt: i.timestamp,
                 },
               })
             ).count === 1,
@@ -397,7 +272,6 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
             ).count === 1,
         },
         usage: {
-          findById: (id) => tx.llmUsageEvent.findUnique({ where: { id } }),
           findByInvocation: (userId, invocationId) =>
             tx.llmUsageEvent.findUnique({
               where: { userId_invocationId: { userId, invocationId } },
@@ -408,105 +282,34 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
                 provider_providerResponseId: { provider, providerResponseId },
               },
             }),
-          create: async (i) => {
-            const x = await tx.llmUsageEvent.create({ data: i });
-            return x;
-          },
-          updateRetryable: async (i) =>
-            tx.llmUsageEvent.update({
-              where: { id: i.id },
-              data: {
-                providerResponseId: i.providerResponseId,
-                inputTokens: i.inputTokens,
-                cachedInputTokens: i.cachedInputTokens,
-                cacheWriteTokens: i.cacheWriteTokens,
-                outputTokens: i.outputTokens,
-                reasoningTokens: i.reasoningTokens,
-                totalTokens: i.totalTokens,
-                pricingSnapshotId: i.pricingSnapshotId,
-                runtimePolicySnapshotId: i.runtimePolicySnapshotId,
-                providerCostCredits: i.providerCostCredits,
-                customerChargeVnd: i.customerChargeVnd,
-                chargedCredits: i.customerChargeVnd,
-                status: "SETTLED",
-                availabilityReason: null,
-              },
-            }),
-        },
-        pricing: {
-          findById: async (id) => {
-            const x = await tx.modelPricingSnapshot.findUnique({
-              where: { id },
-            });
-            return (
-              x && {
-                ...x,
-                inputPricePerMillion: x.inputPricePerMillion.toString(),
-                cachedInputPricePerMillion:
-                  x.cachedInputPricePerMillion?.toString(),
-                cacheWritePricePerMillion:
-                  x.cacheWritePricePerMillion?.toString(),
-                outputPricePerMillion: x.outputPricePerMillion.toString(),
-                reasoningPricePerMillion:
-                  x.reasoningPricePerMillion?.toString(),
-                providerCurrency: x.providerCurrency ?? undefined,
-                customerCurrency: x.customerCurrency ?? undefined,
-                markupBps: x.markupBps ?? undefined,
-                fxRateVndNumerator: x.fxRateVndNumerator ?? undefined,
-                fxRateVndDenominator: x.fxRateVndDenominator ?? undefined,
-              }
-            );
-          },
-          findApplicable: async (provider, model, occurredAt) => {
-            const rows = await tx.modelPricingSnapshot.findMany({
-              where: { provider, model, effectiveAt: { lte: occurredAt } },
-              orderBy: { effectiveAt: "desc" },
-            });
-            const x = selectEffectivePricingSnapshot(rows, occurredAt);
-            return (
-              x && {
-                ...x,
-                inputPricePerMillion: x.inputPricePerMillion.toString(),
-                cachedInputPricePerMillion:
-                  x.cachedInputPricePerMillion?.toString(),
-                cacheWritePricePerMillion:
-                  x.cacheWritePricePerMillion?.toString(),
-                outputPricePerMillion: x.outputPricePerMillion.toString(),
-                reasoningPricePerMillion:
-                  x.reasoningPricePerMillion?.toString(),
-                providerCurrency: x.providerCurrency ?? undefined,
-                customerCurrency: x.customerCurrency ?? undefined,
-                markupBps: x.markupBps ?? undefined,
-                fxRateVndNumerator: x.fxRateVndNumerator ?? undefined,
-                fxRateVndDenominator: x.fxRateVndDenominator ?? undefined,
-              }
-            );
-          },
+          create: (i) => tx.llmUsageEvent.create({ data: i }),
         },
         runtimePolicy: {
-          findApplicable: async (role, provider, model, occurredAt) => {
-            const rows = await tx.runtimeModelPolicySnapshot.findMany({
-              where: {
-                role,
-                provider,
-                model,
-                effectiveAt: { lte: occurredAt },
+          ensure: async (input) => {
+            const where = {
+              role_policyVersion: {
+                role: input.role,
+                policyVersion: input.policyVersion,
               },
-              orderBy: { effectiveAt: "desc" },
+            };
+            // ON CONFLICT DO NOTHING keeps the surrounding Postgres transaction
+            // usable when two workers race to create the same content-addressed version.
+            await tx.runtimeModelPolicySnapshot.createMany({
+              data: [input],
+              skipDuplicates: true,
             });
-            if (rows.length === 0) return null;
-            const selected = resolveEffectiveRuntimeModel(
-              rows,
-              role,
-              occurredAt,
-            );
-            return (
-              rows.find(
-                (row) =>
-                  row.policyVersion === selected.policyVersion &&
-                  row.effectiveAt.getTime() === selected.effectiveAt.getTime(),
-              ) ?? null
-            );
+            const row = await tx.runtimeModelPolicySnapshot.findUnique({
+              where,
+            });
+            if (!row)
+              throw new BillingDomainError(
+                "Runtime model policy snapshot could not be resolved",
+              );
+            if (row.provider !== input.provider || row.model !== input.model)
+              throw new BillingDomainError(
+                "Runtime model policy version already bound to a different model",
+              );
+            return row;
           },
         },
         audit: {
@@ -540,15 +343,6 @@ export class PrismaBillingTransaction implements BillingTransactionPort {
                 payload: event.payload as Prisma.InputJsonValue,
               },
             });
-          },
-        },
-        assessment: {
-          findOwnerId: async (assessmentId) => {
-            const assessment = await tx.assessment.findUnique({
-              where: { id: assessmentId },
-              select: { ownerId: true },
-            });
-            return assessment?.ownerId ?? null;
           },
         },
       };

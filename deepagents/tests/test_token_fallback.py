@@ -848,42 +848,6 @@ def test_server_errors_on_every_slot_terminate_without_waiting(monkeypatch):
     assert token_fallback._DEAD_CREDENTIAL_SLOTS.get(("openai", "OPENAI_API_KEY"), set()) == set()
 
 
-@pytest.mark.parametrize("asynchronous", [False, True])
-@pytest.mark.asyncio
-async def test_billing_budget_exhaustion_never_rotates_credentials(monkeypatch, asynchronous):
-    from middleware.billing_metering import BillingBudgetExhausted
-
-    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
-    _install_fake_cooldown_clock(monkeypatch)
-    handler = _handler(BillingBudgetExhausted("reservation exhausted"), asynchronous)
-
-    with pytest.raises(BillingBudgetExhausted):
-        await _call(TokenFallbackMiddleware(), _openai_request(), handler, asynchronous)
-    assert handler.call_count == 1
-
-
-@pytest.mark.parametrize("status", [401, 403, 429, 503])
-@pytest.mark.parametrize("asynchronous", [False, True])
-@pytest.mark.asyncio
-async def test_billing_delivery_failure_never_rebills_on_another_credential(monkeypatch, status, asynchronous):
-    from middleware.billing_metering import BillingMeteringError
-
-    monkeypatch.setenv("OPENAI_API_KEY", "first-test-token,second-test-token")
-    clock, token_fallback = _install_fake_cooldown_clock(monkeypatch)
-    callback_failure = RuntimeError("usage callback failed")
-    callback_failure.status_code = status
-    handler = _handler(BillingMeteringError(callback_failure), asynchronous)
-
-    with pytest.raises(BillingMeteringError):
-        await _call(TokenFallbackMiddleware(), _openai_request(), handler, asynchronous)
-    # A provider response was already received and billed; a second slot would re-bill it.
-    assert handler.call_count == 1
-    assert token_fallback._RATE_LIMITED_UNTIL.get(("openai", "OPENAI_API_KEY"), {}) == {}
-    # Our own API's callback status never marks a provider credential dead.
-    assert token_fallback._DEAD_CREDENTIAL_SLOTS.get(("openai", "OPENAI_API_KEY"), set()) == set()
-    assert clock.sleeps == [] and clock.async_sleeps == []
-
-
 def test_outer_model_retry_does_not_resend_auth_failures(monkeypatch):
     from langchain.agents.middleware import ModelRetryMiddleware
     from middleware.failure_policy import retry_model_error
@@ -1092,6 +1056,36 @@ def test_google_retry_info_governs_the_single_cooldown_wait(monkeypatch):
 
     # Waits the provider-requested 40s for the soonest slot, not the 30s default.
     assert clock.sleeps == [40.0]
+
+
+def test_cooldown_wait_runs_under_liveness_heartbeat(monkeypatch):
+    from contextlib import contextmanager
+
+    monkeypatch.setenv("GOOGLE_API_KEY", "first-test-token,second-test-token")
+    clock, token_fallback = _install_fake_cooldown_clock(monkeypatch, start=100.0)
+    inside: list[bool] = []
+    active = {"on": False}
+
+    @contextmanager
+    def fake_heartbeat(text):
+        active["on"] = True
+        try:
+            yield
+        finally:
+            active["on"] = False
+
+    real_sleep = clock.sleep
+    monkeypatch.setattr(token_fallback, "model_wait_heartbeat", fake_heartbeat)
+    monkeypatch.setattr(token_fallback, "_sleep", lambda s: (inside.append(active["on"]), real_sleep(s)))
+    model = ChatGoogleGenerativeAI(
+        model="gemini-3.5-flash-lite", thinking_level="minimal", **credential_init_kwargs("google_genai")
+    )
+    response = ModelResponse(result=[])
+    handler = MagicMock(side_effect=[_google_rate_limit("50s"), _google_rate_limit("40s"), response])
+
+    assert TokenFallbackMiddleware().wrap_model_call(ModelRequest(model=model, messages=[], tools=[]), handler) is response
+
+    assert inside == [True]
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])

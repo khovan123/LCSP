@@ -5,8 +5,8 @@ bound, an agent that never feels "done" (for example a Planner exploring a large
 repository) grows its context on every step, gets slower and rate-limited, and never
 returns. This middleware enforces three limits per run:
 
-1. Context: once the estimated prompt approaches the run's input budget (the billing
-   reservation's per-call ceiling, or the model window), older tool results are
+1. Context: once the estimated prompt approaches the run's input budget (the model
+   profile context window), older tool results are
    replaced by a short placeholder. The newest results are always kept.
 2. Finalize: after ``finalize_after`` model calls, or when trimming cannot bring the
    prompt under budget, tools are withdrawn and the model is told to return its final
@@ -28,10 +28,9 @@ from langchain_core.messages import HumanMessage, ToolMessage
 from langgraph.channels.untracked_value import UntrackedValue
 from typing_extensions import NotRequired
 
-from middleware.billing_metering import (
-    active_billing_metering,
-    estimate_invocation_authorization_metrics,
+from middleware.usage_metering import (
     estimate_messages_input_tokens,
+    estimate_request_metrics,
     provider_context_limit_tokens,
 )
 from middleware.failure_policy import AgentRunBudgetExceeded
@@ -238,26 +237,14 @@ def _run_model_calls(state: Any) -> int:
 
 
 def _context_budget_tokens(request: Any) -> int | None:
-    limits: list[int] = []
-    session = active_billing_metering()
-    session_limit = getattr(session, "max_input_tokens", None) if session else None
-    if isinstance(session_limit, int) and session_limit > 0:
-        limits.append(session_limit)
-    model_limit = provider_context_limit_tokens(getattr(request, "model", None))
-    if model_limit is not None:
-        limits.append(model_limit)
-    return min(limits) if limits else None
+    """The model profile's input window (route option ``context_window_tokens``), if declared."""
+    return provider_context_limit_tokens(getattr(request, "model", None))
 
 
 def _prompt_overhead_tokens(request: Any) -> int:
     """System prompt, tool schemas and response format: everything but messages."""
     try:
-        metrics = estimate_invocation_authorization_metrics(
-            request,
-            getattr(request, "model", None),
-            max_output_tokens=0,
-            max_reasoning_tokens=0,
-        )
+        metrics = estimate_request_metrics(request, getattr(request, "model", None))
     except Exception:
         return 0
     messages_only = estimate_messages_input_tokens(getattr(request, "messages", None))

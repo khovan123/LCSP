@@ -148,7 +148,7 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
       .post("/internal/outbox/process")
       .set(
         "X-Internal-Token",
-        process.env.INTERNAL_API_TOKEN ?? "test-internal-token",
+        "test-internal-token",
       )
       .send({ message_id: messageId });
 
@@ -156,7 +156,7 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
       .post("/internal/outbox/process")
       .set(
         "X-Internal-Token",
-        process.env.INTERNAL_API_TOKEN ?? "test-internal-token",
+        "test-internal-token",
       )
       .send({ message_id: messageId });
 
@@ -203,7 +203,7 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
       .post("/internal/outbox/process")
       .set(
         "X-Internal-Token",
-        process.env.INTERNAL_API_TOKEN ?? "test-internal-token",
+        "test-internal-token",
       )
       .send({
         event_type: ASSESSMENT_EVENT_TYPES.created,

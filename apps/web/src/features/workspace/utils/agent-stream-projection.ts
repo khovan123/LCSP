@@ -9,7 +9,9 @@ import {
 import { resolveMessage } from "@lcsp/i18n";
 import { appLocale } from "@/lib/locale";
 import type { AgentStreamRuleHeader } from "../types/agent-stream-rule.types";
+import type { StreamRowUsage } from "../types/agent-stream-usage.types";
 import type { WorkspaceRuntimeAgentStreamHistoryState } from "../types/workspace-runtime.types";
+import { modelTurnUsage, toolCallMetrics } from "./agent-stream-usage";
 import {
   isAgentStreamRuleLifecycleEvent,
   projectAgentStreamRuleHeaders,
@@ -69,6 +71,10 @@ export type ProjectedStreamRow = {
   /** Tool activity used to pick its icon. */
   activity: StreamActivityKey | null;
   scope: string;
+  /** Model rows only: provider tries folded into this one logical turn. */
+  providerAttempts?: number;
+  /** Provider-reported usage (model) or tool result size (tool); absent when unreported. */
+  usage?: StreamRowUsage;
   completedTurns?: ProjectedStreamRow[];
 };
 
@@ -148,12 +154,30 @@ export function latestAgentStreamRunEvents(
   return events.filter((event) => event.runId === latest.runId);
 }
 
+/**
+ * Credential rotation and provider fallback are infrastructure routing details.
+ * New runs no longer publish them; historical streams still contain them, so they
+ * are dropped from the activity projection and raw counts instead of rewritten.
+ */
+export function withoutRoutingEvents(
+  events: AssessmentAgentStreamEvent[],
+): AssessmentAgentStreamEvent[] {
+  return events.filter(
+    (event) =>
+      event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.credentialRotation &&
+      event.eventType !== ASSESSMENT_AGENT_STREAM_EVENT_TYPES.providerFallback,
+  );
+}
+
 export function projectStreamRows(
   events: AssessmentAgentStreamEvent[],
 ): ProjectedStreamRow[] {
-  const ordered = [...events].sort(
+  const sorted = [...events].sort(
     (left, right) => left.sequence - right.sequence,
   );
+  // Recovery cutoffs read historical fallback events, so compute them first.
+  const recoveredProviderFailures = recoveredProviderFailureCutoffs(sorted);
+  const ordered = withoutRoutingEvents(sorted);
   const rows: ProjectedStreamRow[] = [];
   const toolRows = new Map<string, ProjectedStreamRow>();
   const aiRows = new Map<string, ProjectedStreamRow>();
@@ -163,7 +187,12 @@ export function projectStreamRows(
   const semanticToolIds = new Set<string>();
   const semanticModelOutputIds = new Set<string>();
   const semanticReasoningIds = new Set<string>();
-  const recoveredProviderFailures = recoveredProviderFailureCutoffs(ordered);
+  const modelTurnKeys = logicalModelTurnKeys(ordered);
+  const logicalEvents = new Map<ProjectedStreamRow, AssessmentAgentStreamEvent[]>();
+  const toolRowsByCall = new Map<string, ProjectedStreamRow>();
+  const endedTurns = new Set<ProjectedStreamRow>();
+  const pendingRuntimeByCall = new Map<string, AssessmentAgentStreamEvent[]>();
+  const semanticCallKeys = new Set<string>();
 
   for (const event of ordered) {
     const semantic = semanticData(event.data);
@@ -175,6 +204,7 @@ export function projectStreamRows(
         semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolResult)
     ) {
       semanticToolIds.add(toolIdentity);
+      if (event.toolCallId) semanticCallKeys.add(`${event.runId}:${event.toolCallId}`);
     }
     if (
       semantic.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.modelOutput &&
@@ -220,6 +250,7 @@ export function projectStreamRows(
     ) {
       const existing = toolRows.get(toolIdentity);
       if (existing) {
+        logicalEvents.get(existing)?.push(event);
         existing.sequence = event.sequence;
         existing.failed =
           existing.failed ||
@@ -268,11 +299,21 @@ export function projectStreamRows(
           : "running";
       rows.push(projected);
       toolRows.set(toolIdentity, projected);
+      logicalEvents.set(projected, [event]);
+      if (event.toolCallId) {
+        const callKey = `${event.runId}:${event.toolCallId}`;
+        toolRowsByCall.set(callKey, projected);
+        for (const pending of pendingRuntimeByCall.get(callKey) ?? []) {
+          foldRuntimeToolEvent(projected, pending, runtimeEventType(pending));
+          logicalEvents.get(projected)?.push(pending);
+        }
+        pendingRuntimeByCall.delete(callKey);
+      }
       previousMergeKey = null;
       continue;
     }
 
-    const aiKey = aiActivityKey(event, semantic);
+    const aiKey = aiActivityKey(event, semantic, modelTurnKeys.get(event.eventId));
     if (aiKey) {
       let aiRow = aiRows.get(aiKey);
       if (!aiRow) {
@@ -281,8 +322,58 @@ export function projectStreamRows(
         aiRow.detail = null;
         rows.push(aiRow);
         aiRows.set(aiKey, aiRow);
+      } else if (event.agentName && aiRow.scope !== toStreamRow(event).scope) {
+        // MODEL_CALL_* carry no agent; the turn adopts the agent of its request.
+        aiRow.scope = toStreamRow(event).scope;
+        aiRow.ruleId = aiRow.ruleId ?? event.engineeringRuleId;
       }
+      logicalEvents.set(aiRow, [...(logicalEvents.get(aiRow) ?? []), event]);
+      // Late stream chunks of a turn that already ended must not reopen it.
+      const ended = endedTurns.has(aiRow);
+      const endedState = { status: aiRow.status, failed: aiRow.failed };
       applyAiActivity(aiRow, event, semantic, aiStreamedText);
+      if (ended) {
+        if (
+          event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted
+        ) {
+          endedTurns.delete(aiRow);
+        } else if (aiRow.status === "running") {
+          Object.assign(aiRow, endedState);
+        }
+      }
+      if (aiRow.status === "completed" || aiRow.status === "failed") {
+        if (
+          event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted ||
+          event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed ||
+          event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout ||
+          event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelResult
+        ) {
+          endedTurns.add(aiRow);
+        }
+      }
+      previousMergeKey = null;
+      continue;
+    }
+
+    // Runtime TOOL_* lifecycle of a call that already has its row is that row's
+    // technical detail, not another activity.
+    const runtimeToolType = runtimeEventType(event);
+    const callKey =
+      runtimeToolType?.startsWith("TOOL_") && event.toolCallId
+        ? `${event.runId}:${event.toolCallId}`
+        : null;
+    if (callKey && semanticCallKeys.has(callKey)) {
+      const callRow = toolRowsByCall.get(callKey);
+      if (callRow) {
+        foldRuntimeToolEvent(callRow, event, runtimeToolType);
+        logicalEvents.get(callRow)?.push(event);
+      } else {
+        // The semantic call row is not open yet; attach when it opens.
+        pendingRuntimeByCall.set(callKey, [
+          ...(pendingRuntimeByCall.get(callKey) ?? []),
+          event,
+        ]);
+      }
       previousMergeKey = null;
       continue;
     }
@@ -353,7 +444,137 @@ export function projectStreamRows(
     previousMergeKey = mergeKey;
   }
 
+  for (const [projected, rowEvents] of logicalEvents) {
+    projected.usage =
+      projected.kind === "model"
+        ? modelTurnUsage(rowEvents)
+        : projected.kind === "tool"
+          ? toolCallMetrics(rowEvents)
+          : undefined;
+    projected.technical = withLogicalDetails(projected, rowEvents);
+    projected.providerAttempts =
+      projected.kind === "model"
+        ? modelRoutingSummary(rowEvents).providerAttempts
+        : undefined;
+  }
   return finalizeProjectedRows(rows, ordered);
+}
+
+function foldRuntimeToolEvent(
+  callRow: ProjectedStreamRow,
+  event: AssessmentAgentStreamEvent,
+  type: string | null,
+): void {
+  callRow.sequence = Math.max(callRow.sequence, event.sequence);
+  callRow.failed = callRow.failed || type === "TOOL_FAILED";
+  if (callRow.failed) callRow.status = "failed";
+}
+
+/** Scalar routing summary the runtime attaches to the turn's final model event. */
+function modelRoutingSummary(events: AssessmentAgentStreamEvent[]): {
+  providerAttempts?: number;
+  credentialAttempts?: number;
+  fallbackUsed?: boolean;
+} {
+  const final = events
+    .filter(
+      (event) =>
+        event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted ||
+        event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed ||
+        event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout,
+    )
+    .reduce<AssessmentAgentStreamEvent | undefined>(
+      (a, b) => (!a || b.sequence >= a.sequence ? b : a),
+      undefined,
+    );
+  const data = isSummaryRecord(final?.data) ? final.data : null;
+  const count = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0
+      ? value
+      : undefined;
+  return {
+    providerAttempts: count(data?.provider_attempts),
+    credentialAttempts: count(data?.credential_attempts),
+    fallbackUsed:
+      typeof data?.fallback_used === "boolean" ? data.fallback_used : undefined,
+  };
+}
+
+function uniqueStrings(values: unknown[]): string[] {
+  return [
+    ...new Set(
+      values.filter((v): v is string => typeof v === "string" && v !== ""),
+    ),
+  ];
+}
+
+/**
+ * One logical activity's own audit block: the model turn or tool call it is,
+ * with every provider attempt / lifecycle event folded in. Only identifiers and
+ * counters are copied; prompts, credentials and raw source never are.
+ */
+function withLogicalDetails(
+  projected: ProjectedStreamRow,
+  events: AssessmentAgentStreamEvent[],
+): AssessmentRuntimeSummaryValue | null {
+  const first = events[0]!;
+  const last = events.reduce((a, b) => (b.sequence >= a.sequence ? b : a));
+  const datas = events.map((event) =>
+    isSummaryRecord(event.data) ? event.data : null,
+  );
+  const elapsed = Date.parse(last.emittedAt) - Date.parse(first.emittedAt);
+  const details: Record<string, AssessmentRuntimeSummaryValue> = {
+    logicalActivity: projected.kind,
+    eventCount: events.length,
+    durationMs: Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : null,
+    status: projected.status,
+  };
+  if (projected.kind === "model") {
+    const providers = uniqueStrings(datas.map((d) => d?.provider));
+    const routing = modelRoutingSummary(events);
+    if (routing.providerAttempts !== undefined)
+      details.providerAttempts = routing.providerAttempts;
+    if (routing.credentialAttempts !== undefined)
+      details.credentialAttempts = routing.credentialAttempts;
+    details.providers = providers;
+    details.models = uniqueStrings(datas.map((d) => d?.model));
+    details.fallbackUsed = routing.fallbackUsed ?? providers.length > 1;
+    details.requestIds = uniqueStrings([
+      ...events.map((event) => event.messageId),
+      ...datas.map((d) => d?.requestId),
+    ]);
+    details.modelStepId = uniqueStrings(datas.map((d) => d?.model_step_id))[0] ?? null;
+    details.errors = uniqueStrings(
+      datas.flatMap((d) => [d?.error_type, d?.error_code, d?.reason]),
+    );
+    details.failedAttempts = events.filter(
+      (event) =>
+        event.status === ASSESSMENT_RUNTIME_RUN_STATUSES.failed ||
+        event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed,
+    ).length;
+  } else {
+    details.tool = uniqueStrings(events.map((event) => event.toolName))[0] ?? null;
+    details.callId = uniqueStrings(events.map((event) => event.toolCallId))[0] ?? null;
+    details.runtimeEventTypes = uniqueStrings(
+      datas.map((d) => d?.runtimeEventType),
+    );
+    details.retryCount = Math.max(
+      0,
+      events.filter(
+        (event) =>
+          semanticData(event.data)?.kind ===
+          ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.toolCall,
+      ).length - 1,
+    );
+  }
+  if (projected.usage) details.usage = projected.usage;
+  const cleaned = Object.fromEntries(
+    Object.entries(details).filter(([, v]) => v !== null),
+  );
+  const existing = projected.technical;
+  return existing === null
+    ? cleaned
+    : [...(Array.isArray(existing) ? existing : [existing]), cleaned];
 }
 
 export function finalizeProjectedRows(
@@ -659,7 +880,7 @@ export function toStreamRow(
         true,
       );
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused:
-      return row(event, activityCopy("billingPaused"), null, eventMeta(event));
+      return row(event, activityCopy("boundaryPaused"), null, eventMeta(event));
     case ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelReasoningDelta:
       return row(
         event,
@@ -1000,7 +1221,7 @@ export function activityCopy(key: StreamActivityKey): string {
 
 export function streamActivityLabels() {
   return {
-    billingPaused: t("pages.appShell.agentStreamActivities.billingPaused"),
+    boundaryPaused: t("pages.appShell.agentStreamActivities.boundaryPaused"),
     repositoryScanStarted: t(
       "pages.appShell.agentStreamActivities.repositoryScanStarted",
     ),
@@ -1613,14 +1834,109 @@ export const AI_ACTIVITY_EVENT_TYPES = new Set<string>([
   ASSESSMENT_AGENT_STREAM_EVENT_TYPES.credentialRotation,
 ]);
 
+export function isAiActivityEvent(
+  event: AssessmentAgentStreamEvent,
+  semantic: SemanticRecord | null,
+): boolean {
+  return (
+    semantic?.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.reasoningSummary ||
+    AI_ACTIVITY_EVENT_TYPES.has(event.eventType)
+  );
+}
+
+type ModelTurnStep = { key: string; bound: boolean; open: boolean };
+
+/**
+ * Resolves each model-related event to ONE logical model turn.
+ *
+ * The runtime publishes three identities for the same model invocation: the
+ * billing wrapper's `model_step_id` (MODEL_CALL_*), LangGraph's `messageId`
+ * (MODEL_REQUEST, deltas, semantic output) and nothing at all for
+ * CREDENTIAL_ROTATION attempts. Keyed separately they showed as several AI
+ * steps. Here `model_step_id` owns the turn; a message binds to the open (else
+ * latest) step of its run that has no message yet; credential attempts attach to
+ * the open step. Events with no correlatable step keep their own identity, so
+ * historical streams without `model_step_id` project exactly as before.
+ * ponytail: same-run parallel turns are paired by order, not by a shared id.
+ */
+export function logicalModelTurnKeys(
+  ordered: AssessmentAgentStreamEvent[],
+): Map<string, string> {
+  const keys = new Map<string, string>();
+  const stepsByRun = new Map<string, ModelTurnStep[]>();
+  const messageKeys = new Map<string, string>();
+  // Exact links first: any event carrying both a model_step_id and a message id
+  // (stamped runtime events, or MODEL_CALL_COMPLETED's message_id) binds that
+  // message to its step regardless of arrival order. Order-based pairing below
+  // is only the fallback for messages with no exact link (historical events).
+  for (const event of ordered) {
+    const data = isSummaryRecord(event.data) ? event.data : null;
+    if (typeof data?.model_step_id !== "string") continue;
+    const messageId =
+      event.messageId ??
+      (typeof data.message_id === "string" ? data.message_id : null);
+    if (!messageId) continue;
+    messageKeys.set(
+      `${event.runId}:${messageId}`,
+      `ai:${event.runId}:step:${data.model_step_id}`,
+    );
+  }
+  const boundKeys = new Set(messageKeys.values());
+  for (const event of ordered) {
+    const semantic = semanticData(event.data);
+    if (!isAiActivityEvent(event, semantic)) continue;
+    const data = isSummaryRecord(event.data) ? event.data : null;
+    const steps = stepsByRun.get(event.runId) ?? [];
+    stepsByRun.set(event.runId, steps);
+    if (typeof data?.model_step_id === "string") {
+      const key = `ai:${event.runId}:step:${data.model_step_id}`;
+      let step = steps.find((candidate) => candidate.key === key);
+      if (!step) {
+        step = { key, bound: boundKeys.has(key), open: false };
+        steps.push(step);
+      }
+      if (event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallStarted) {
+        step.open = true;
+      } else if (
+        event.eventType ===
+          ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted ||
+        event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallFailed ||
+        event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallTimeout
+      ) {
+        step.open = false;
+      }
+      keys.set(event.eventId, key);
+      continue;
+    }
+    if (event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.credentialRotation) {
+      const step = steps.filter((candidate) => candidate.open).at(-1) ?? steps.at(-1);
+      if (step) keys.set(event.eventId, step.key);
+      continue;
+    }
+    if (!event.messageId) continue;
+    const messageKey = `${event.runId}:${event.messageId}`;
+    let key = messageKeys.get(messageKey);
+    if (!key) {
+      const free = steps.filter((candidate) => !candidate.bound);
+      const step = free.filter((candidate) => candidate.open).at(-1) ?? free.at(-1);
+      if (!step) continue;
+      step.bound = true;
+      key = step.key;
+      messageKeys.set(messageKey, key);
+    }
+    keys.set(event.eventId, key);
+  }
+  return keys;
+}
+
 export /** Keep one row per model step or streamed message, never per whole chain. */
 function aiActivityKey(
   event: AssessmentAgentStreamEvent,
   semantic: SemanticRecord | null,
+  resolvedTurnKey?: string,
 ): string | null {
-  const reasoning =
-    semantic?.kind === ASSESSMENT_AGENT_STREAM_SEMANTIC_KINDS.reasoningSummary;
-  if (!reasoning && !AI_ACTIVITY_EVENT_TYPES.has(event.eventType)) return null;
+  if (!isAiActivityEvent(event, semantic)) return null;
+  if (resolvedTurnKey) return resolvedTurnKey;
   const data = isSummaryRecord(event.data) ? event.data : null;
   const modelStepId =
     typeof data?.model_step_id === "string" ? data.model_step_id : null;

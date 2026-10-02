@@ -25,7 +25,7 @@ import { AppModule } from "../src/app.module.js";
 import type { SignInSuccess } from "../src/modules/auth/application/contracts/auth/sign-in.contract.js";
 import type { PinSnapshotDto } from "../src/modules/github-integration/application/contracts/github-integration/pin-snapshot.contract.js";
 import type { TriggerScanDto } from "../src/modules/github-integration/application/contracts/github-integration/trigger-scan.contract.js";
-import { GitHubAppClient } from "../src/modules/github-integration/infrastructure/github/github-app.client.js";
+import { GITHUB_REPOSITORY_PROVIDER } from "../src/modules/github-integration/application/ports/github-repository-provider.port.js";
 import { OutboxPublisherService } from "../src/platform/outbox/outbox-publisher.service.js";
 import { RabbitMqClient } from "../src/platform/outbox/rabbitmq.client.js";
 import {
@@ -53,7 +53,7 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
-      .overrideProvider(GitHubAppClient)
+      .overrideProvider(GITHUB_REPOSITORY_PROVIDER)
       .useValue({
         resolveCommit: () => {
           if (resolveCommitError) {

@@ -18,6 +18,7 @@ import {
   AGENT_STREAM_RUN_OUTCOMES,
   isAgentStreamDispatchFailed,
   shouldShowAgentStreamHistoryAction,
+  withoutRoutingEvents,
 } from "../../utils/agent-stream-projection";
 import { AgentStreamTechnicalSummary } from "./agent-stream-technical-summary";
 import { AgentStreamRuleAnalysisOutput } from "./agent-stream-rule-analysis-output";
@@ -64,7 +65,9 @@ export function AgentStreamTurn({
     ),
   );
   const outsideRule = (event: (typeof events)[number]) => !ruleOwned.has(event);
-  const technicalEvents = investigating ? events.filter(outsideRule) : events;
+  const technicalEvents = withoutRoutingEvents(
+    investigating ? events.filter(outsideRule) : events,
+  );
   const technicalStageEvents = investigating
     ? Object.fromEntries(
         Object.entries(stageEvents).map(([stage, items]) => [

@@ -14,7 +14,7 @@ def _offline_agent_models(monkeypatch):
     """Agents are built with create_deep_agent; keep model construction offline."""
     monkeypatch.setattr(
         "tools.common.capabilities.reporting.report.final_report.final_report_generator.resolve_agent_model",
-        lambda *, agent_name, model_spec: f"model:{agent_name}",
+        lambda role: f"model:{role}",
     )
 
 

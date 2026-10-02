@@ -515,7 +515,12 @@ export class AssessmentRuntimeEventService {
       toolCallId: sanitizeAgentStreamIdentifier(input.toolCallId),
       status: sanitizeAgentStreamIdentifier(input.status),
       text: sanitizeAgentStreamText(input.text),
-      data: sanitizeAgentStreamValue(input.data),
+      data: sanitizeAgentStreamValue(
+        input.data,
+        0,
+        false,
+        input.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted,
+      ),
     };
     if (isPersistableAgentStreamEvent(event)) {
       await this.persistAgentStreamJournalEvent(event);

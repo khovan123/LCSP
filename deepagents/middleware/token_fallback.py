@@ -19,7 +19,7 @@ from middleware.failure_policy import (
     is_terminal_task_error,
     error_status,
 )
-from orchestration.agent_stream import publish_agent_stream_event
+from orchestration.agent_stream import model_wait_heartbeat, note_model_step
 from provider_credentials import (
     INCEPTION_DEFAULT_BASE_URL,
     LLM7_DEFAULT_BASE_URL,
@@ -43,6 +43,7 @@ _RATE_LIMITED_UNTIL: dict[tuple[str, str], dict[int, float]] = {}
 _monotonic = time.monotonic
 _sleep = time.sleep
 _asleep = asyncio.sleep
+_COOLDOWN_WAIT_TEXT = "model call waiting for credential cooldown"
 # Set by ProviderFallbackMiddleware while another provider route remains after the
 # current one. Waiting out a same-provider cooldown then only delays the run.
 _FURTHER_PROVIDER_ROUTE: ContextVar[bool] = ContextVar(
@@ -276,18 +277,7 @@ class TokenFallbackMiddleware(AgentMiddleware):
             fallback_enabled=True,
             reason=reason,
         )
-        publish_agent_stream_event(
-            "CREDENTIAL_ROTATION",
-            status="RUNNING",
-            text="credential fallback attempt",
-            data={
-                "provider": provider,
-                "credential_source": env_name,
-                "credential_slot": index,
-                "credential_fingerprint": fingerprint,
-                "reason": reason,
-            },
-        )
+        note_model_step("credential_rotations")
 
     def _log_dead_slot(
         self,
@@ -306,18 +296,6 @@ class TokenFallbackMiddleware(AgentMiddleware):
             credential_fingerprint=fingerprint,
             fallback_enabled=True,
             status_code=status,
-        )
-        publish_agent_stream_event(
-            "CREDENTIAL_ROTATION",
-            status="FAILED",
-            text="credential slot marked dead",
-            data={
-                "provider": provider,
-                "credential_source": env_name,
-                "credential_slot": index,
-                "credential_fingerprint": fingerprint,
-                "status_code": status,
-            },
         )
 
     def _log_skip_dead_slot(
@@ -356,18 +334,6 @@ class TokenFallbackMiddleware(AgentMiddleware):
             fallback_enabled=True,
             cooldown_seconds=cooldown_seconds,
         )
-        publish_agent_stream_event(
-            "CREDENTIAL_ROTATION",
-            status="WAITING",
-            text="credential slot rate limited",
-            data={
-                "provider": provider,
-                "credential_source": env_name,
-                "credential_slot": index,
-                "credential_fingerprint": fingerprint,
-                "cooldown_seconds": cooldown_seconds,
-            },
-        )
 
     def _log_wait_for_rate_limit(
         self,
@@ -386,18 +352,6 @@ class TokenFallbackMiddleware(AgentMiddleware):
             credential_fingerprint=fingerprint,
             fallback_enabled=True,
             wait_seconds=wait_seconds,
-        )
-        publish_agent_stream_event(
-            "CREDENTIAL_ROTATION",
-            status="WAITING",
-            text="waiting for credential cooldown",
-            data={
-                "provider": provider,
-                "credential_source": env_name,
-                "credential_slot": index,
-                "credential_fingerprint": fingerprint,
-                "wait_seconds": wait_seconds,
-            },
         )
 
     def _mark_dead(
@@ -660,7 +614,8 @@ class TokenFallbackMiddleware(AgentMiddleware):
                     fingerprint=_credential_fingerprint(tokens[index]),
                     wait_seconds=wait_seconds,
                 )
-                _sleep(wait_seconds)
+                with model_wait_heartbeat(_COOLDOWN_WAIT_TEXT):
+                    _sleep(wait_seconds)
                 self._end_cooldown_wait(provider=provider, env_name=env_name, index=index, attempted=attempted)
                 continue
             if not order:
@@ -729,7 +684,8 @@ class TokenFallbackMiddleware(AgentMiddleware):
                     fingerprint=_credential_fingerprint(tokens[index]),
                     wait_seconds=wait_seconds,
                 )
-                await _asleep(wait_seconds)
+                with model_wait_heartbeat(_COOLDOWN_WAIT_TEXT):
+                    await _asleep(wait_seconds)
                 self._end_cooldown_wait(provider=provider, env_name=env_name, index=index, attempted=attempted)
                 continue
             if not order:

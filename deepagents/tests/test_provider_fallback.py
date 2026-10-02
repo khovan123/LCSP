@@ -1,7 +1,9 @@
+import json
 import os
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from conftest import use_model_routes
 from langchain.agents.middleware import ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_openai import ChatOpenAI
@@ -12,18 +14,39 @@ from middleware.failure_policy import (
 )
 from middleware.provider_fallback import (
     ProviderFallbackMiddleware,
-    configured_fallback_providers,
     provider_circuit_breaker_failure,
     provider_fallback_failure,
+    route_key,
 )
-from middleware.billing_metering import (
-    BillingBudgetExhausted,
-    BillingMeteringMiddleware,
-    BillingMeteringSession,
-    activate_billing_metering,
+from middleware.usage_metering import (
+    AgentRunState,
+    UsageMeteringMiddleware,
+    activate_agent_run_state,
 )
 from middleware.token_fallback import TokenFallbackMiddleware, model_provider
 from provider_credentials import credential_init_kwargs
+
+
+ALPHA, GAMMA, FUTURE, DELTA = "model-alpha", "model-gamma", "future-model-v99", "model-delta"
+MODEL_FOR = {"openai": ALPHA, "llm7": GAMMA, "google_genai": FUTURE, "inception": DELTA}
+
+
+def _routes(monkeypatch, primary: str, *fallbacks: str) -> None:
+    """Configure the model routes file: ``primary`` bound as default, ``fallbacks`` its ordered chain."""
+    chain = (primary, *fallbacks)
+    use_model_routes(
+        monkeypatch,
+        (
+            {
+                "routes": {
+                    f"r{i}": {"provider": provider, "model": MODEL_FOR[provider]}
+                    for i, provider in enumerate(chain)
+                },
+                "roles": {"default": "r0"},
+                "fallbacks": {"r0": [f"r{i}" for i in range(1, len(chain))]},
+            }
+        ),
+    )
 
 
 class QuotaError(Exception):
@@ -58,9 +81,9 @@ class LocalValidationError(Exception):
 
 @pytest.fixture(autouse=True)
 def clear_provider_fallback_env(monkeypatch):
-    for name in list(os.environ):
-        if name.startswith("LLM_FALLBACK_PROVIDER_"):
-            monkeypatch.delenv(name, raising=False)
+    _routes(monkeypatch, "openai")
+    for key in ("OPENAI_API_KEY", "LLM7_API_KEY", "GOOGLE_API_KEY", "INCEPTION_API_KEY"):
+        monkeypatch.setenv(key, "offline-test-key")
     from middleware import token_fallback
 
     token_fallback._DEAD_CREDENTIAL_SLOTS.clear()
@@ -85,7 +108,7 @@ def clear_provider_fallback_env(monkeypatch):
 
 def _openai_model():
     return ChatOpenAI(
-        model="gpt-5-nano",
+        model=ALPHA,
         use_responses_api=True,
         **credential_init_kwargs("openai"),
     )
@@ -93,27 +116,27 @@ def _openai_model():
 
 def _llm7_model():
     return ChatOpenAI(
-        model="minimax-m2.7",
+        model=GAMMA,
         base_url="https://api.llm7.io/v1",
         use_responses_api=False,
         **credential_init_kwargs("llm7"),
     )
 
 
-class _BillingModel:
-    def __init__(self, provider: str, model_name: str = "gpt-5-nano"):
+class _FakeModel:
+    def __init__(self, provider: str, model_name: str | None = None):
         self.provider = provider
-        self.model_name = model_name
+        self.model_name = model_name or MODEL_FOR[provider]
 
 
-class _BillingRequest:
+class _FakeRequest:
     def __init__(self, model, *, messages=None, tools=None):
         self.model = model
         self.messages = list(messages or [])
         self.tools = list(tools or [])
 
     def override(self, **kwargs):
-        return _BillingRequest(
+        return _FakeRequest(
             kwargs.get("model", self.model),
             messages=self.messages,
             tools=self.tools,
@@ -137,98 +160,74 @@ async def _async_chain(request, raw_handler):
     return await ProviderFallbackMiddleware().awrap_model_call(request, token_handler)
 
 
-def test_configured_provider_chain_is_numeric_ordered_aliased_and_deduplicated(monkeypatch):
-    monkeypatch.setenv("GOOGLE_API_KEY", "google-test-token")
-    monkeypatch.setenv("LLM7_API_KEY", "llm7-test-token")
-    monkeypatch.setenv("INCEPTION_API_KEY", "inception-test-token")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_20", "llm7")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_10", "inception")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_2", "gemini")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_3", "google_genai")
+def _usage_response() -> ModelResponse:
+    return ModelResponse(
+        result=[
+            AIMessage(
+                content="ok",
+                usage_metadata={"input_tokens": 3, "output_tokens": 2, "total_tokens": 5},
+            )
+        ]
+    )
 
-    assert configured_fallback_providers() == ("google_genai", "inception", "llm7")
 
-
-def test_terminal_billing_delivery_failure_does_not_enter_provider_fallback(monkeypatch):
+def test_usage_delivery_failure_neither_fails_the_call_nor_enters_provider_fallback(
+    monkeypatch, tmp_path
+):
     import middleware.provider_fallback as fallback_module
 
-    monkeypatch.setattr(fallback_module, "model_provider", lambda model: model.provider)
+    monkeypatch.setenv("USAGE_RECOVERY_STORE_PATH", str(tmp_path / "usage.sqlite3"))
+    _routes(monkeypatch, "openai", "llm7")
     monkeypatch.setattr(
-        fallback_module, "configured_fallback_providers", lambda: ("llm7",)
+        fallback_module, "fallback_model", lambda config: _FakeModel(config.provider, config.model)
     )
-    monkeypatch.setattr(
-        fallback_module, "fallback_model", lambda provider: _BillingModel(provider)
-    )
-    session = BillingMeteringSession(
+    state = AgentRunState(
         api_client=type(
-            "FailingBillingClient",
+            "FailingUsageClient",
             (),
             {"post_settled_usage": lambda self, _payload: (_ for _ in ()).throw(RuntimeError("api-down"))},
         )(),
         assessment_id="assessment-1",
         run_id="run-1",
-        reservation_id="reservation-1",
         agent_role="planner",
-        reserved_provider="OPENAI",
-        reserved_model="gpt-5-nano",
     )
     provider_calls = []
 
     def provider_handler(_request):
         provider_calls.append(1)
-        return ModelResponse(result=[])
+        return _usage_response()
 
-    request = _BillingRequest(_BillingModel("openai"))
-    billing = BillingMeteringMiddleware()
-    with activate_billing_metering(session), pytest.raises(Exception) as error:
-        ProviderFallbackMiddleware().wrap_model_call(
+    request = _FakeRequest(_FakeModel("openai"))
+    metering = UsageMeteringMiddleware()
+    with activate_agent_run_state(state):
+        response = ProviderFallbackMiddleware().wrap_model_call(
             request,
-            lambda next_request: billing.wrap_model_call(
-                next_request, provider_handler
-            ),
+            lambda next_request: metering.wrap_model_call(next_request, provider_handler),
         )
-    assert type(error.value).__name__ == "BillingMeteringError"
+    assert isinstance(response, ModelResponse)
     assert len(provider_calls) == 1
 
 
-def test_llm7_402_fallback_settles_failed_attempt_then_success(monkeypatch):
+def test_llm7_402_fallback_reports_usage_of_the_answering_route_only(monkeypatch):
     import middleware.provider_fallback as fallback_module
 
-    monkeypatch.setattr(fallback_module, "model_provider", lambda model: model.provider)
-    monkeypatch.setattr(
-        fallback_module,
-        "configured_fallback_providers",
-        lambda: ("google_genai",),
-    )
+    _routes(monkeypatch, "llm7", "google_genai")
     monkeypatch.setattr(
         fallback_module,
         "fallback_model",
-        lambda provider: _BillingModel(provider),
+        lambda config: _FakeModel(config.provider, config.model),
     )
 
     payloads = []
-    claims = []
-
-    class BillingClient:
-        def claim_billing_invocation(self, reservation_id, payload):
-            claims.append((reservation_id, payload.invocationId))
-
+    class UsageClient:
         def post_settled_usage(self, payload):
             payloads.append(payload)
 
-    session = BillingMeteringSession(
-        api_client=BillingClient(),
+    session = AgentRunState(
+        api_client=UsageClient(),
         assessment_id="assessment-1",
         run_id="run-1",
-        reservation_id="reservation-1",
         agent_role="planner",
-        reserved_provider="LLM7",
-        reserved_model="gpt-5-nano",
-        authorized_models={
-            ("LLM7", "gpt-5-nano"),
-            ("GOOGLE_GENAI", "gpt-5-nano"),
-        },
-        max_invocations=2,
     )
     provider_calls = []
 
@@ -236,11 +235,11 @@ def test_llm7_402_fallback_settles_failed_attempt_then_success(monkeypatch):
         provider_calls.append(request.model.provider)
         if request.model.provider == "llm7":
             raise CapacityError("insufficient balance")
-        return ModelResponse(result=[])
+        return _usage_response()
 
-    request = _BillingRequest(_BillingModel("llm7"))
-    billing = BillingMeteringMiddleware()
-    with activate_billing_metering(session):
+    request = _FakeRequest(_FakeModel("llm7"))
+    billing = UsageMeteringMiddleware()
+    with activate_agent_run_state(session):
         response = ProviderFallbackMiddleware().wrap_model_call(
             request,
             lambda next_request: billing.wrap_model_call(
@@ -251,74 +250,43 @@ def test_llm7_402_fallback_settles_failed_attempt_then_success(monkeypatch):
 
     assert isinstance(response, ModelResponse)
     assert provider_calls == ["llm7", "google_genai"]
-    assert [reservation_id for reservation_id, _ in claims] == [
-        "reservation-1",
-        "reservation-1",
-    ]
-    assert len({invocation_id for _, invocation_id in claims}) == 2
-    assert len(payloads) == 2
-    assert [payload.reservationId for payload in payloads] == [
-        "reservation-1",
-        "reservation-1",
-    ]
-    assert [payload.provider for payload in payloads] == [
-        "LLM7",
-        "GOOGLE_GENAI",
-    ]
-    assert payloads[0].inputTokens is None
-    assert payloads[0].outputTokens is None
-    assert [payload.invocationId for payload in payloads] == [
-        claims[0][1],
-        claims[1][1],
-    ]
+    # Only the provider-answered attempt reports usage; the failed attempt has none.
+    assert [payload.provider for payload in payloads] == ["GOOGLE_GENAI"]
+    assert payloads[0].inputTokens == "3"
+    assert payloads[0].outputTokens == "2"
 
 
 def test_llm7_402_opens_run_scoped_circuit_and_skips_next_primary(monkeypatch):
     import middleware.provider_fallback as fallback_module
 
     stream_events = []
+    import middleware.usage_metering as billing_module
+
     monkeypatch.setattr(
-        fallback_module,
+        billing_module,
         "publish_agent_stream_event",
         lambda event_type, **fields: stream_events.append((event_type, fields)),
     )
-    monkeypatch.setattr(fallback_module, "model_provider", lambda model: model.provider)
-    monkeypatch.setattr(
-        fallback_module,
-        "configured_fallback_providers",
-        lambda: ("google_genai",),
-    )
+    _routes(monkeypatch, "llm7", "google_genai")
     monkeypatch.setattr(
         fallback_module,
         "fallback_model",
-        lambda provider: _BillingModel(provider),
+        lambda config: _FakeModel(config.provider, config.model),
     )
 
-    class BillingClient:
+    class UsageClient:
         def __init__(self):
-            self.claims = []
             self.payloads = []
-
-        def claim_billing_invocation(self, reservation_id, payload):
-            self.claims.append((reservation_id, payload.invocationId))
 
         def post_settled_usage(self, payload):
             self.payloads.append(payload)
 
-    client = BillingClient()
-    session = BillingMeteringSession(
+    client = UsageClient()
+    session = AgentRunState(
         api_client=client,
         assessment_id="assessment-circuit",
         run_id="run-circuit",
-        reservation_id="reservation-circuit",
         agent_role="investigator",
-        reserved_provider="LLM7",
-        reserved_model="gpt-5-nano",
-        authorized_models={
-            ("LLM7", "gpt-5-nano"),
-            ("GOOGLE_GENAI", "gpt-5-nano"),
-        },
-        max_invocations=1,
     )
     provider_calls = []
 
@@ -326,13 +294,13 @@ def test_llm7_402_opens_run_scoped_circuit_and_skips_next_primary(monkeypatch):
         provider_calls.append(request.model.provider)
         if request.model.provider == "llm7":
             raise CapacityError("insufficient balance")
-        return ModelResponse(result=[])
+        return _usage_response()
 
-    request = _BillingRequest(_BillingModel("llm7"))
+    request = _FakeRequest(_FakeModel("llm7"))
     fallback = ProviderFallbackMiddleware()
-    billing = BillingMeteringMiddleware()
+    billing = UsageMeteringMiddleware()
 
-    with activate_billing_metering(session):
+    with activate_agent_run_state(session):
         for _ in range(2):
             assert isinstance(
                 fallback.wrap_model_call(
@@ -346,67 +314,48 @@ def test_llm7_402_opens_run_scoped_circuit_and_skips_next_primary(monkeypatch):
             )
 
     assert provider_calls == ["llm7", "google_genai", "google_genai"]
-    assert session.provider_route_disabled("llm7") is True
-    assert len(client.claims) == 3
-    assert len(client.payloads) == 3
+    assert session.provider_route_disabled(route_key("llm7", MODEL_FOR["llm7"])) is True
     assert [payload.provider for payload in client.payloads] == [
-        "LLM7",
         "GOOGLE_GENAI",
         "GOOGLE_GENAI",
     ]
-    assert client.payloads[0].inputTokens is None
-    assert client.payloads[0].outputTokens is None
-    assert [event_type for event_type, _ in stream_events] == [
-        "PROVIDER_FALLBACK",
-    ]
+    # Routing transitions are infrastructure, never assessment events.
+    assert not {"PROVIDER_FALLBACK", "CREDENTIAL_ROTATION"} & {
+        event_type for event_type, _ in stream_events
+    }
 
 
 def test_llm7_upstream_unprocessable_fallback_preserves_tool_continuation_and_opens_circuit(monkeypatch):
     import middleware.provider_fallback as fallback_module
 
     stream_events = []
+    import middleware.usage_metering as billing_module
+
     monkeypatch.setattr(
-        fallback_module,
+        billing_module,
         "publish_agent_stream_event",
         lambda event_type, **fields: stream_events.append((event_type, fields)),
     )
-    monkeypatch.setattr(fallback_module, "model_provider", lambda model: model.provider)
-    monkeypatch.setattr(
-        fallback_module,
-        "configured_fallback_providers",
-        lambda: ("google_genai",),
-    )
+    _routes(monkeypatch, "llm7", "google_genai")
     monkeypatch.setattr(
         fallback_module,
         "fallback_model",
-        lambda provider: _BillingModel(provider, "gemini-3.5-flash-lite"),
+        lambda config: _FakeModel(config.provider, config.model),
     )
 
-    class BillingClient:
+    class UsageClient:
         def __init__(self):
-            self.claims = []
             self.payloads = []
-
-        def claim_billing_invocation(self, reservation_id, payload):
-            self.claims.append((reservation_id, payload.invocationId))
 
         def post_settled_usage(self, payload):
             self.payloads.append(payload)
 
-    client = BillingClient()
-    session = BillingMeteringSession(
+    client = UsageClient()
+    session = AgentRunState(
         api_client=client,
         assessment_id="assessment-tools",
         run_id="run-tools",
-        reservation_id="reservation-tools",
         agent_role="investigator",
-        reserved_provider="LLM7",
-        reserved_model="minimax-m2.7",
-        authorized_models={
-            ("LLM7", "minimax-m2.7"),
-            ("GOOGLE_GENAI", "gemini-3.5-flash-lite"),
-        },
-        max_invocations=16,
     )
     messages = [
         HumanMessage(content="inspect the repository"),
@@ -426,8 +375,8 @@ def test_llm7_upstream_unprocessable_fallback_preserves_tool_continuation_and_op
             name="ls",
         ),
     ]
-    request = _BillingRequest(
-        _BillingModel("llm7", "minimax-m2.7"),
+    request = _FakeRequest(
+        _FakeModel("llm7"),
         messages=messages,
     )
     provider_calls = []
@@ -444,9 +393,9 @@ def test_llm7_upstream_unprocessable_fallback_preserves_tool_continuation_and_op
         )
 
     fallback = ProviderFallbackMiddleware()
-    billing = BillingMeteringMiddleware()
+    billing = UsageMeteringMiddleware()
 
-    with activate_billing_metering(session):
+    with activate_agent_run_state(session):
         first_response = fallback.wrap_model_call(
             request,
             lambda next_request: billing.wrap_model_call(
@@ -472,19 +421,13 @@ def test_llm7_upstream_unprocessable_fallback_preserves_tool_continuation_and_op
         ("google_genai", messages),
         ("google_genai", messages),
     ]
-    assert session.provider_route_disabled("llm7") is True
-    assert len(client.claims) == 3
-    assert len(client.payloads) == 3
-    assert [payload.provider for payload in client.payloads] == [
-        "LLM7",
-        "GOOGLE_GENAI",
-        "GOOGLE_GENAI",
-    ]
-    assert client.payloads[0].inputTokens is None
-    assert client.payloads[0].outputTokens is None
-    assert [event_type for event_type, _ in stream_events] == [
-        "PROVIDER_FALLBACK",
-    ]
+    assert session.provider_route_disabled(route_key("llm7", MODEL_FOR["llm7"])) is True
+    # No provider-reported usage on these responses: nothing is posted, no zeros invented.
+    assert client.payloads == []
+    # Routing transitions are infrastructure, never assessment events.
+    assert not {"PROVIDER_FALLBACK", "CREDENTIAL_ROTATION"} & {
+        event_type for event_type, _ in stream_events
+    }
 
 
 def test_provider_route_incompatibility_is_fallback_before_generic_422_terminal():
@@ -495,16 +438,6 @@ def test_provider_route_incompatibility_is_fallback_before_generic_422_terminal(
     assert provider_circuit_breaker_failure(error)
 
 
-def test_lcsp_billing_402_remains_terminal_without_provider_fallback():
-    error = BillingBudgetExhausted(
-        "Billing budget exhausted before provider call",
-        error_code="BILLING_INSUFFICIENT_CREDITS",
-    )
-
-    assert not provider_fallback_failure(error)
-    assert not provider_circuit_breaker_failure(error)
-
-
 def test_local_validation_422_remains_terminal_without_provider_fallback():
     error = LocalValidationError("callback payload invalid")
 
@@ -513,25 +446,20 @@ def test_local_validation_422_remains_terminal_without_provider_fallback():
     assert not provider_circuit_breaker_failure(error)
 
 
-def test_configured_provider_requires_its_own_credentials(monkeypatch):
+def test_fallback_route_requires_its_own_credentials(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-only")
     monkeypatch.delenv("LLM7_API_KEY", raising=False)
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "llm7")
+    _routes(monkeypatch, "openai", "llm7")
+    request = ModelRequest(model=_openai_model(), messages=[], tools=[])
 
     with pytest.raises(RuntimeError, match="requires LLM7_API_KEY"):
-        configured_fallback_providers()
-
-
-def test_invalid_fallback_provider_fails_closed(monkeypatch):
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "unknown-gateway")
-
-    with pytest.raises(RuntimeError, match="must be one of"):
-        configured_fallback_providers()
+        ProviderFallbackMiddleware().wrap_model_call(request, lambda _r: ModelResponse(result=[]))
 
 
 def test_primary_key_pool_exhausts_before_llm7_pool(monkeypatch):
+    _routes(monkeypatch, "openai", "llm7")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-a,openai-b")
     monkeypatch.setenv("LLM7_API_KEY", "llm7-a,llm7-b")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "llm7")
     request = ModelRequest(model=_openai_model(), messages=[], tools=[])
     response = ModelResponse(result=[])
     raw_handler = MagicMock(
@@ -560,9 +488,9 @@ def test_primary_key_pool_exhausts_before_llm7_pool(monkeypatch):
 
 
 def test_single_primary_auth_failure_moves_to_llm7(monkeypatch):
+    _routes(monkeypatch, "openai", "llm7")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-only")
     monkeypatch.setenv("LLM7_API_KEY", "llm7-only")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "llm7")
     request = ModelRequest(model=_openai_model(), messages=[], tools=[])
     response = ModelResponse(result=[])
     raw_handler = MagicMock(side_effect=[AuthError(), response])
@@ -575,9 +503,9 @@ def test_single_primary_auth_failure_moves_to_llm7(monkeypatch):
 
 
 def test_llm7_capacity_failure_rotates_keys_then_moves_to_google(monkeypatch):
+    _routes(monkeypatch, "llm7", "google_genai")
     monkeypatch.setenv("LLM7_API_KEY", "llm7-a,llm7-b")
     monkeypatch.setenv("GOOGLE_API_KEY", "google-only")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "google_genai")
     request = ModelRequest(model=_llm7_model(), messages=[], tools=[])
     response = ModelResponse(result=[])
     raw_handler = MagicMock(
@@ -604,9 +532,9 @@ def test_llm7_capacity_failure_rotates_keys_then_moves_to_google(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_async_provider_fallback_keeps_llm7_key_rotation(monkeypatch):
+    _routes(monkeypatch, "openai", "llm7")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-only")
     monkeypatch.setenv("LLM7_API_KEY", "llm7-a,llm7-b")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "llm7")
     request = ModelRequest(model=_openai_model(), messages=[], tools=[])
     response = ModelResponse(result=[])
     raw_handler = AsyncMock(side_effect=[QuotaError(), QuotaError(), response])
@@ -622,11 +550,10 @@ async def test_async_provider_fallback_keeps_llm7_key_rotation(monkeypatch):
 
 
 def test_chain_advances_openai_then_google_then_llm7(monkeypatch):
+    _routes(monkeypatch, "openai", "google_genai", "llm7")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-a,openai-b")
     monkeypatch.setenv("GOOGLE_API_KEY", "google-a,google-b")
     monkeypatch.setenv("LLM7_API_KEY", "llm7-only")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "google_genai")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_2", "llm7")
     request = ModelRequest(model=_openai_model(), messages=[], tools=[])
     response = ModelResponse(result=[])
     raw_handler = MagicMock(side_effect=[QuotaError()] * 4 + [response])
@@ -643,9 +570,9 @@ def test_chain_advances_openai_then_google_then_llm7(monkeypatch):
 
 
 def test_schema_request_failure_does_not_cross_provider(monkeypatch):
+    _routes(monkeypatch, "openai", "llm7")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-only")
     monkeypatch.setenv("LLM7_API_KEY", "llm7-only")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "llm7")
     request = ModelRequest(model=_openai_model(), messages=[], tools=[])
     raw_handler = MagicMock(side_effect=TypeError("bad structured request"))
 
@@ -655,9 +582,9 @@ def test_schema_request_failure_does_not_cross_provider(monkeypatch):
 
 
 def test_all_provider_pools_exhaust_to_terminal_error(monkeypatch):
+    _routes(monkeypatch, "openai", "llm7")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-a,openai-b")
     monkeypatch.setenv("LLM7_API_KEY", "llm7-a,llm7-b")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "llm7")
     request = ModelRequest(model=_openai_model(), messages=[], tools=[])
     raw_handler = MagicMock(side_effect=QuotaError())
 
@@ -671,10 +598,9 @@ def test_all_provider_pools_exhaust_to_terminal_error(monkeypatch):
 
 
 def test_current_provider_is_not_reentered_from_fallback_chain(monkeypatch):
+    _routes(monkeypatch, "openai", "openai", "llm7")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-only")
     monkeypatch.setenv("LLM7_API_KEY", "llm7-only")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "openai")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_2", "llm7")
     request = ModelRequest(model=_openai_model(), messages=[], tools=[])
     response = ModelResponse(result=[])
     raw_handler = MagicMock(side_effect=[QuotaError(), response])
@@ -708,28 +634,19 @@ def test_structured_output_rejection_is_provider_scoped_not_retried():
 def _rejection_session(monkeypatch, routes=("google_genai",)):
     import middleware.provider_fallback as fallback_module
 
-    monkeypatch.setattr(fallback_module, "publish_agent_stream_event", lambda *a, **k: None)
-    monkeypatch.setattr(fallback_module, "model_provider", lambda model: model.provider)
-    monkeypatch.setattr(fallback_module, "configured_fallback_providers", lambda: routes)
-    monkeypatch.setattr(fallback_module, "fallback_model", lambda provider: _BillingModel(provider))
+    _routes(monkeypatch, "llm7", *routes)
+    monkeypatch.setattr(fallback_module, "fallback_model", lambda config: _FakeModel(config.provider, config.model))
 
-    class BillingClient:
-        def claim_billing_invocation(self, reservation_id, payload):
-            pass
+    class UsageClient:
 
         def post_settled_usage(self, payload):
             pass
 
-    return BillingMeteringSession(
-        api_client=BillingClient(),
+    return AgentRunState(
+        api_client=UsageClient(),
         assessment_id="assessment-rejection",
         run_id="run-rejection",
-        reservation_id="reservation-rejection",
         agent_role="investigator",
-        reserved_provider="LLM7",
-        reserved_model="gpt-5-nano",
-        authorized_models={("LLM7", "gpt-5-nano"), ("GOOGLE_GENAI", "gpt-5-nano")},
-        max_invocations=1,
     )
 
 
@@ -753,8 +670,8 @@ async def test_llm7_output_rejection_falls_back_and_opens_circuit(monkeypatch, a
         return provider_handler(request)
 
     fallback = ProviderFallbackMiddleware()
-    request = _BillingRequest(_BillingModel("llm7"))
-    with activate_billing_metering(session):
+    request = _FakeRequest(_FakeModel("llm7"))
+    with activate_agent_run_state(session):
         for _ in range(2):
             if asynchronous:
                 result = await fallback.awrap_model_call(request, async_handler)
@@ -763,7 +680,7 @@ async def test_llm7_output_rejection_falls_back_and_opens_circuit(monkeypatch, a
             assert isinstance(result, ModelResponse)
 
     assert calls == ["llm7", "google_genai", "google_genai"]
-    assert session.provider_route_disabled("llm7") is True
+    assert session.provider_route_disabled(route_key("llm7", MODEL_FOR["llm7"])) is True
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
@@ -780,8 +697,8 @@ async def test_output_rejected_by_every_route_reraises_the_schema_error(monkeypa
         return reject(request)
 
     fallback = ProviderFallbackMiddleware()
-    request = _BillingRequest(_BillingModel("llm7"))
-    with activate_billing_metering(session):
+    request = _FakeRequest(_FakeModel("llm7"))
+    with activate_agent_run_state(session):
         with pytest.raises(StructuredOutputRejected, match="llm7 rejected"):
             if asynchronous:
                 await fallback.awrap_model_call(request, async_reject)
@@ -790,13 +707,13 @@ async def test_output_rejected_by_every_route_reraises_the_schema_error(monkeypa
 
 
 def test_rate_limited_llm7_pool_moves_to_google_without_cooldown_wait(monkeypatch):
+    _routes(monkeypatch, "llm7", "google_genai")
     from middleware import token_fallback
 
     sleeps: list[float] = []
     monkeypatch.setattr(token_fallback, "_sleep", sleeps.append)
     monkeypatch.setenv("LLM7_API_KEY", "llm7-a,llm7-b")
     monkeypatch.setenv("GOOGLE_API_KEY", "google-a,google-b")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "google_genai")
     request = ModelRequest(model=_llm7_model(), messages=[], tools=[])
     response = ModelResponse(result=[])
     raw_handler = MagicMock(side_effect=[QuotaError(), QuotaError(), response])
@@ -812,13 +729,13 @@ def test_rate_limited_llm7_pool_moves_to_google_without_cooldown_wait(monkeypatc
 
 
 def test_last_provider_route_still_waits_for_its_cooldown(monkeypatch):
+    _routes(monkeypatch, "llm7", "google_genai")
     from middleware import token_fallback
 
     sleeps: list[float] = []
     monkeypatch.setattr(token_fallback, "_sleep", sleeps.append)
     monkeypatch.setenv("LLM7_API_KEY", "llm7-a,llm7-b")
     monkeypatch.setenv("GOOGLE_API_KEY", "google-a,google-b")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "google_genai")
     request = ModelRequest(model=_llm7_model(), messages=[], tools=[])
     response = ModelResponse(result=[])
     raw_handler = MagicMock(
@@ -838,6 +755,7 @@ def test_last_provider_route_still_waits_for_its_cooldown(monkeypatch):
 
 
 def test_llm7_text_only_structured_answer_falls_back_to_google(monkeypatch):
+    _routes(monkeypatch, "openai", "google_genai")
     from langchain.agents.structured_output import ToolStrategy
     from pydantic import BaseModel
     from middleware.model_governance import StopSchemaRepairMiddleware
@@ -847,7 +765,6 @@ def test_llm7_text_only_structured_answer_falls_back_to_google(monkeypatch):
 
     monkeypatch.setenv("LLM7_API_KEY", "llm7-a,llm7-b")
     monkeypatch.setenv("GOOGLE_API_KEY", "google-a")
-    monkeypatch.setenv("LLM_FALLBACK_PROVIDER_1", "google_genai")
     request = ModelRequest(
         model=_llm7_model(), messages=[], tools=[], response_format=ToolStrategy(Answer),
     )
@@ -885,7 +802,7 @@ class _StatusError(RuntimeError):
 
 class _RouteRequest:
     def __init__(self, provider: str):
-        self.model = type("M", (), {"provider": provider})()
+        self.model = type("M", (), {"provider": provider, "model_name": MODEL_FOR[provider]})()
 
     def override(self, *, model):
         request = _RouteRequest(model.provider)
@@ -907,14 +824,11 @@ def _rate_limited_primary(code: str | None = None) -> BaseException:
 def _install_routes(monkeypatch):
     import middleware.provider_fallback as fallback_module
 
-    monkeypatch.setattr(fallback_module, "model_provider", lambda model: model.provider)
-    monkeypatch.setattr(
-        fallback_module, "configured_fallback_providers", lambda: ("google_genai",)
-    )
+    _routes(monkeypatch, "llm7", "google_genai")
     monkeypatch.setattr(
         fallback_module,
         "fallback_model",
-        lambda provider: type("M", (), {"provider": provider})(),
+        lambda config: type("M", (), {"provider": config.provider, "model_name": config.model})(),
     )
     monkeypatch.setattr(fallback_module, "_provider_route_disabled", lambda _p: False)
     monkeypatch.setattr(fallback_module, "_trip_provider_circuit", lambda *_a: None)
@@ -957,3 +871,216 @@ def test_an_exhausted_quota_is_not_waited_on(monkeypatch):
     with pytest.raises(TerminalCredentialError):
         ProviderFallbackMiddleware().wrap_model_call(_RouteRequest("llm7"), handler)
     assert calls == ["llm7", "google_genai"]
+
+
+def _run_session(run_id: str, **kwargs) -> AgentRunState:
+    class _Client:
+
+        def post_settled_usage(self, payload):
+            pass
+
+    return AgentRunState(
+        api_client=_Client(),
+        assessment_id="assessment-sticky",
+        run_id=run_id,
+        agent_role="repository_analyst",
+        **kwargs,
+    )
+
+
+def _sticky_env(monkeypatch):
+    _routes(monkeypatch, "openai", "llm7")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-a,openai-b")
+    monkeypatch.setenv("LLM7_API_KEY", "llm7-only")
+
+
+def _providers(handler):
+    return [model_provider(call.args[0].model) for call in handler.call_args_list]
+
+
+def test_fallback_is_sticky_for_later_turns_even_after_cooldown_expires(monkeypatch):
+    from middleware import token_fallback
+
+    _sticky_env(monkeypatch)
+    session = _run_session("run-sticky")
+    request = ModelRequest(model=_openai_model(), messages=[], tools=[])
+    response = ModelResponse(result=[])
+    handler = MagicMock(side_effect=[QuotaError(), QuotaError(), response, response, response])
+
+    with activate_agent_run_state(session):
+        assert _sync_chain(request, handler) is response
+        # Past the maximum credential cooldown: the primary slots are eligible again.
+        clock_now = token_fallback._monotonic()
+        monkeypatch.setattr(token_fallback, "_monotonic", lambda: clock_now + 10_000)
+        assert _sync_chain(request, handler) is response
+        assert _sync_chain(request, handler) is response
+
+    assert _providers(handler) == ["openai", "openai", "llm7", "llm7", "llm7"]
+    assert session.provider_route_disabled(route_key("openai", MODEL_FOR["openai"])) is True
+
+
+def test_new_run_reconsiders_primary(monkeypatch):
+    _sticky_env(monkeypatch)
+    request = ModelRequest(model=_openai_model(), messages=[], tools=[])
+    response = ModelResponse(result=[])
+    first = MagicMock(side_effect=[QuotaError(), QuotaError(), response])
+    with activate_agent_run_state(_run_session("run-one")):
+        _sync_chain(request, first)
+
+    from middleware import token_fallback
+
+    token_fallback._RATE_LIMITED_UNTIL.clear()
+    second = MagicMock(return_value=response)
+    session = _run_session("run-two")
+    with activate_agent_run_state(session):
+        _sync_chain(request, second)
+
+    assert _providers(second) == ["openai"]
+    assert session.provider_route_disabled(route_key("openai", MODEL_FOR["openai"])) is False
+
+
+def test_auth_failure_semantics_unchanged_with_sticky_fallback(monkeypatch):
+    _routes(monkeypatch, "openai", "llm7")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-a,openai-b")
+    monkeypatch.setenv("LLM7_API_KEY", "llm7-only")
+    from middleware import token_fallback
+
+    request = ModelRequest(model=_openai_model(), messages=[], tools=[])
+    response = ModelResponse(result=[])
+    handler = MagicMock(side_effect=[AuthError(), AuthError(), response])
+    with activate_agent_run_state(_run_session("run-auth")):
+        assert _sync_chain(request, handler) is response
+    # 401 still marks slots dead for the process and opens the run circuit.
+    assert token_fallback._DEAD_CREDENTIAL_SLOTS[("openai", "OPENAI_API_KEY")] == {0, 1}
+    assert _providers(handler) == ["openai", "openai", "llm7"]
+
+
+def test_sticky_fallback_failure_stays_bounded(monkeypatch):
+    _sticky_env(monkeypatch)
+    request = ModelRequest(model=_openai_model(), messages=[], tools=[])
+    response = ModelResponse(result=[])
+    session = _run_session("run-bounded")
+    handler = MagicMock(side_effect=[QuotaError(), QuotaError(), response])
+    with activate_agent_run_state(session):
+        _sync_chain(request, handler)
+        failing = MagicMock(side_effect=QuotaError())
+        with pytest.raises(TerminalCredentialError, match="provider routes exhausted"):
+            _sync_chain(request, failing)
+    # Fallback pool makes its own bounded attempts, then the sticky-skipped primary
+    # gets one last-resort retry (its transient failure is not a permanent circuit).
+    assert set(_providers(failing)) == {"llm7", "openai"}
+    assert failing.call_count <= 3
+
+
+def test_sticky_fallback_reports_usage_per_answered_attempt_without_extra_logical_turns(monkeypatch):
+    import middleware.provider_fallback as fallback_module
+
+    _routes(monkeypatch, "openai", "llm7")
+    monkeypatch.setattr(fallback_module, "fallback_model", lambda config: _FakeModel(config.provider, config.model))
+
+    class Client:
+        def __init__(self):
+            self.payloads = []
+
+        def post_settled_usage(self, payload):
+            self.payloads.append(payload)
+
+    client = Client()
+    session = AgentRunState(
+        api_client=client,
+        assessment_id="a",
+        run_id="run-bill",
+        agent_role="repository_analyst",
+    )
+    calls = []
+
+    def provider_handler(request):
+        calls.append(request.model.provider)
+        if request.model.provider == "openai":
+            raise QuotaError()
+        return _usage_response()
+
+    billing = UsageMeteringMiddleware()
+    fallback = ProviderFallbackMiddleware()
+    with activate_agent_run_state(session):
+        for _ in range(2):
+            fallback.wrap_model_call(
+                _FakeRequest(_FakeModel("openai")),
+                lambda r: billing.wrap_model_call(r, provider_handler),
+            )
+
+    # Turn 1: failed primary attempt + fallback success; turn 2: fallback only.
+    assert calls == ["openai", "llm7", "llm7"]
+    # Only the answering route reports usage; the failed primary attempt reports none.
+    assert [p.provider for p in client.payloads] == ["LLM7", "LLM7"]
+    assert len({p.invocationId for p in client.payloads}) == 2
+
+
+def _raw_routes(monkeypatch, routes: dict, chain: list[str]) -> None:
+    use_model_routes(
+        monkeypatch,
+        (
+            {
+                "routes": routes,
+                "roles": {"default": "primary"},
+                "fallbacks": {"primary": chain},
+            }
+        ),
+    )
+
+
+def test_fallback_model_is_built_from_the_configured_route(monkeypatch):
+    import middleware.provider_fallback as fallback_module
+    import model_policy
+
+    _raw_routes(
+        monkeypatch,
+        {
+            "primary": {"provider": "openai", "model": ALPHA},
+            "backup": {"provider": "llm7", "model": "model-omega-7", "options": {"temperature": 0.25}},
+        },
+        ["backup"],
+    )
+    (config,) = model_policy.fallback_routes("primary")
+
+    model = fallback_module.fallback_model(config)
+
+    assert model_provider(model) == "llm7"
+    assert model.model_name == "model-omega-7"
+    assert model.temperature == 0.25
+
+
+def test_same_provider_different_model_route_is_a_distinct_fallback(monkeypatch):
+    import middleware.provider_fallback as fallback_module
+
+    _raw_routes(
+        monkeypatch,
+        {
+            "primary": {"provider": "openai", "model": ALPHA},
+            "backup": {"provider": "openai", "model": "model-beta"},
+        },
+        ["backup"],
+    )
+    monkeypatch.setattr(
+        fallback_module,
+        "fallback_model",
+        lambda config: _FakeModel(config.provider, config.model),
+    )
+    session = _run_session("route-identity")
+    seen = []
+
+    def handler(request):
+        seen.append((request.model.provider, request.model.model_name))
+        if request.model.model_name == ALPHA:
+            raise AuthError("revoked")
+        return ModelResponse(result=[])
+
+    fallback = ProviderFallbackMiddleware()
+    with activate_agent_run_state(session):
+        fallback.wrap_model_call(_FakeRequest(_FakeModel("openai", ALPHA)), handler)
+        fallback.wrap_model_call(_FakeRequest(_FakeModel("openai", ALPHA)), handler)
+
+    # The permanently failed route stays closed for the run; its sibling model is untouched.
+    assert seen == [("openai", ALPHA), ("openai", "model-beta"), ("openai", "model-beta")]
+    assert session.provider_route_disabled(route_key("openai", ALPHA)) is True
+    assert session.provider_route_disabled(route_key("openai", "model-beta")) is False

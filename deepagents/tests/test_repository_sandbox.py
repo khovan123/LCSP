@@ -144,8 +144,8 @@ def test_agent_server_dispatch_raises_terminal_error_from_run_state(monkeypatch)
     fake_client.runs.get.return_value = {"run_id": "run-1", "status": "error"}
     fake_client.threads.get_state.return_value = {
         "error": {
-            "error": "BillingMeteringError",
-            "message": "Billing usage delivery failed",
+            "error": "RuntimeError",
+            "message": "Remote run failed",
         }
     }
     monkeypatch.setattr(agent_server_client, "get_sync_client", lambda **_kwargs: fake_client)
@@ -158,8 +158,8 @@ def test_agent_server_dispatch_raises_terminal_error_from_run_state(monkeypatch)
             "corr-1",
         )
 
-    assert captured.value.remote_error_type == "BillingMeteringError"
-    assert "Billing usage delivery failed" in str(captured.value)
+    assert captured.value.remote_error_type == "RuntimeError"
+    assert "Remote run failed" in str(captured.value)
 
 
 
