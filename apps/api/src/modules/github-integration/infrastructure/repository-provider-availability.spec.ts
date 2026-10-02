@@ -27,8 +27,8 @@ describe("providerOrUnavailable", () => {
       },
       () => new Error("client_unavailable"),
     );
-    await expect(
-      provider.validateIdentity({} as never),
-    ).rejects.toThrow("client_unavailable");
+    await expect(provider.validateIdentity({} as never)).rejects.toThrow(
+      "client_unavailable",
+    );
   });
 });

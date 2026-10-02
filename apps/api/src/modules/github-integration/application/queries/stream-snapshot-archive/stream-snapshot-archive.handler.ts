@@ -221,41 +221,40 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
     const leaseHolder: { lease: CredentialLease | null } = { lease: null };
     try {
       const archive = await (async () => {
-    leaseHolder.lease =
-      await this.credentialResolver.resolveForConnection(
-        {
-          actorId: null,
-          userId: connection.userId,
-          assessmentId: snapshot.assessmentId,
-          operation: GITHUB_CREDENTIAL_OPERATIONS.retrieveArchive,
-          correlationId: query.correlationId,
-        },
-        connection.id,
-        snapshot.repositoryFullName,
-      );
-    const transport =
-      this.archiveTransportRegistry?.get(connection.provider) ??
-      this.githubArchiveTransport;
-    const result = await transport.downloadArchive({
-      credentialLease: leaseHolder.lease,
-      repositoryId: snapshot.repositoryId,
-      repositoryFullName: snapshot.repositoryFullName,
-      commitSha: snapshot.commitSha,
-    });
-    if (
-      result.redirectValidation !==
-      GITHUB_ARCHIVE_REDIRECT_VALIDATION_STATUSES.verified
-    ) {
-      result.stream.destroy();
-      throw new GitHubArchiveTransportError(
-        GITHUB_ARCHIVE_TRANSPORT_ERROR_CODES.redirectValidationFailed,
-      );
-    }
-    return {
-      stream: result.stream,
-      contentType: result.contentType,
-      resolvedUrl: `https://${result.validatedHost}/`,
-    };
+        leaseHolder.lease = await this.credentialResolver.resolveForConnection(
+          {
+            actorId: null,
+            userId: connection.userId,
+            assessmentId: snapshot.assessmentId,
+            operation: GITHUB_CREDENTIAL_OPERATIONS.retrieveArchive,
+            correlationId: query.correlationId,
+          },
+          connection.id,
+          snapshot.repositoryFullName,
+        );
+        const transport =
+          this.archiveTransportRegistry?.get(connection.provider) ??
+          this.githubArchiveTransport;
+        const result = await transport.downloadArchive({
+          credentialLease: leaseHolder.lease,
+          repositoryId: snapshot.repositoryId,
+          repositoryFullName: snapshot.repositoryFullName,
+          commitSha: snapshot.commitSha,
+        });
+        if (
+          result.redirectValidation !==
+          GITHUB_ARCHIVE_REDIRECT_VALIDATION_STATUSES.verified
+        ) {
+          result.stream.destroy();
+          throw new GitHubArchiveTransportError(
+            GITHUB_ARCHIVE_TRANSPORT_ERROR_CODES.redirectValidationFailed,
+          );
+        }
+        return {
+          stream: result.stream,
+          contentType: result.contentType,
+          resolvedUrl: `https://${result.validatedHost}/`,
+        };
       })();
 
       const stream = await this.captureArchiveForRerun(

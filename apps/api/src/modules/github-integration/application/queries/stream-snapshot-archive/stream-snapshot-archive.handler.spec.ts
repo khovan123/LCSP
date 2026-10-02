@@ -273,7 +273,6 @@ describe("StreamSnapshotArchiveHandler", () => {
     expect(claimScanJobMock).not.toHaveBeenCalled();
   });
 
-
   it("rejects a queued scan job claimed by another worker", async () => {
     const { handler } = buildHandler({ claimCount: 0 });
 
@@ -315,7 +314,6 @@ describe("StreamSnapshotArchiveHandler", () => {
       expect(fixture.downloadRepositoryArchiveMock).not.toHaveBeenCalled();
     },
   );
-
 
   it("maps archive retrieval failure to bad gateway", async () => {
     const loggerError = jest
@@ -372,6 +370,4 @@ describe("StreamSnapshotArchiveHandler", () => {
     expect((thrown as HttpException).getStatus()).toBe(429);
     loggerError.mockRestore();
   });
-
-
 });

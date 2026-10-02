@@ -41,7 +41,6 @@ import {
   GITHUB_REPOSITORY_PROVIDER,
   REPOSITORY_PROVIDER_REGISTRY,
   type GitHubRepositoryProviderPort,
-  type RepositoryProviderAdapter,
 } from "./application/ports/github-repository-provider.port.js";
 import {
   GitHubCliProviderError,

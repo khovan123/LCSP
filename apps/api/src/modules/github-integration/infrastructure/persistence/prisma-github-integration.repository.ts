@@ -9,9 +9,7 @@ import {
   type RepositoryAuthenticationMode,
 } from "@lcsp/contracts/github-integration";
 
-import {
-  fromPrismaRepositoryConnectionStatus,
-} from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
+import { fromPrismaRepositoryConnectionStatus } from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import type { RepositoryConnectionRepository } from "../../application/ports/persistence/repository-connection.repository.js";
 import { RepositoryConnection } from "../../domain/entities/repository-connection.entity.js";

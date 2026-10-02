@@ -158,11 +158,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
     }
     const revision = commitSha ?? ref ?? branch ?? connection.defaultBranch;
 
-    const resolved = await this.resolveCommit(
-      command,
-      connection,
-      revision,
-    );
+    const resolved = await this.resolveCommit(command, connection, revision);
 
     if (resolved.repositoryFullName !== connection.repositoryFullName) {
       await this.auditDenied(

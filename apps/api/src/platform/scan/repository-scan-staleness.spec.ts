@@ -89,7 +89,9 @@ describe("repository scan staleness", () => {
     expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: { in: ["scan-1"] } },
-        data: expect.objectContaining({ blockedReason: expect.any(String) }),
+        data: expect.objectContaining({
+          blockedReason: expect.any(String) as string,
+        }) as unknown,
       }),
     );
   });

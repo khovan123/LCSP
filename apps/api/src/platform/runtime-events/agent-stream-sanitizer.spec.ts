@@ -100,7 +100,12 @@ describe("agent stream sanitizer", () => {
 
   it("only exempts top-level usage when the event is allowed to carry provider usage", () => {
     expect(
-      sanitizeAgentStreamValue({ usage: { reasoning_tokens: 7 } }, 0, false, false),
+      sanitizeAgentStreamValue(
+        { usage: { reasoning_tokens: 7 } },
+        0,
+        false,
+        false,
+      ),
     ).toEqual({ usage: { reasoning_tokens: "[REDACTED]" } });
   });
 });

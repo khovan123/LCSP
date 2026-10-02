@@ -519,7 +519,8 @@ export class AssessmentRuntimeEventService {
         input.data,
         0,
         false,
-        input.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted,
+        input.eventType ===
+          ASSESSMENT_AGENT_STREAM_EVENT_TYPES.modelCallCompleted,
       ),
     };
     if (isPersistableAgentStreamEvent(event)) {
