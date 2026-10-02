@@ -16,12 +16,16 @@ const databaseUrl = process.env.LCSP_M03_CONCURRENCY_DATABASE_URL;
 const postgresSuite = databaseUrl ? describe : describe.skip;
 
 function connection(applicationName: string): PrismaClient {
-  if (!databaseUrl) throw new Error("LCSP_M03_CONCURRENCY_DATABASE_URL is required");
+  if (!databaseUrl)
+    throw new Error("LCSP_M03_CONCURRENCY_DATABASE_URL is required");
   const url = new URL(databaseUrl);
   if (
     !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) ||
     !url.pathname.endsWith("_test")
-  ) throw new Error("Refusing concurrency test outside a disposable local _test database");
+  )
+    throw new Error(
+      "Refusing concurrency test outside a disposable local _test database",
+    );
   url.searchParams.set("application_name", applicationName);
   return new PrismaClient({
     adapter: new PrismaPg(url.toString()),
@@ -31,7 +35,9 @@ function connection(applicationName: string): PrismaClient {
 
 function deferred() {
   let resolve!: () => void;
-  const promise = new Promise<void>((done) => { resolve = done; });
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 
@@ -51,48 +57,119 @@ postgresSuite("M03 rerun with actual PostgreSQL row contention", () => {
     let pending: Promise<unknown>[] = [];
     let createdUser = false;
     try {
-      await fixture.user.create({ data: {
-        id: userId, email: `${prefix}@fixture.test`, passwordHash: "unused-fixture-hash",
-        emailVerified: true, failedLoginCount: 0, role: AUTH_USER_ROLES.customer,
-      } });
+      await fixture.user.create({
+        data: {
+          id: userId,
+          email: `${prefix}@fixture.test`,
+          passwordHash: "unused-fixture-hash",
+          emailVerified: true,
+          failedLoginCount: 0,
+          role: AUTH_USER_ROLES.customer,
+        },
+      });
       createdUser = true;
-      await fixture.assessment.create({ data: {
-        id: assessmentId, ownerId: userId, name: "M03 concurrency fixture", status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
-      } });
-      await fixture.repositoryConnection.create({ data: {
-        id: connectionId, assessmentId, userId, repositoryId: prefix,
-        repositoryName: "fixture", repositoryFullName: `${prefix}/fixture`, defaultBranch: "main", permissions: {},
-      } });
-      await fixture.repositorySnapshot.create({ data: {
-        id: snapshotId, assessmentId, connectionId, repositoryId: prefix,
-        repositoryFullName: `${prefix}/fixture`, commitSha: "a".repeat(40), providerMetadata: {}, actorId: userId,
-      } });
-      const actor = { userId, sessionId: `${prefix}-session`, role: AUTH_USER_ROLES.customer, scope: null };
-      const handlerA = new RerunScanHandler(clientA as unknown as PrismaService,
+      await fixture.assessment.create({
+        data: {
+          id: assessmentId,
+          ownerId: userId,
+          name: "M03 concurrency fixture",
+          status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
+        },
+      });
+      await fixture.repositoryConnection.create({
+        data: {
+          id: connectionId,
+          assessmentId,
+          userId,
+          repositoryId: prefix,
+          repositoryName: "fixture",
+          repositoryFullName: `${prefix}/fixture`,
+          defaultBranch: "main",
+          permissions: {},
+        },
+      });
+      await fixture.repositorySnapshot.create({
+        data: {
+          id: snapshotId,
+          assessmentId,
+          connectionId,
+          repositoryId: prefix,
+          repositoryFullName: `${prefix}/fixture`,
+          commitSha: "a".repeat(40),
+          providerMetadata: {},
+          actorId: userId,
+        },
+      });
+      const actor = {
+        userId,
+        sessionId: `${prefix}-session`,
+        role: AUTH_USER_ROLES.customer,
+        scope: null,
+      };
+      const handlerA = new RerunScanHandler(
+        clientA as unknown as PrismaService,
         { write: async () => undefined } as never,
-        { enqueue: async () => { entered.resolve(); await release.promise; } } as never);
-      const handlerB = new RerunScanHandler(clientB as unknown as PrismaService,
+        {
+          enqueue: async () => {
+            entered.resolve();
+            await release.promise;
+          },
+        } as never,
+      );
+      const handlerB = new RerunScanHandler(
+        clientB as unknown as PrismaService,
         { write: async () => undefined } as never,
-        { enqueue: async () => undefined } as never);
-      const first = handlerA.execute(new RerunScanCommand(assessmentId, snapshotId, `${prefix}-key-a`, actor, `${prefix}-corr-a`));
+        { enqueue: async () => undefined } as never,
+      );
+      const first = handlerA.execute(
+        new RerunScanCommand(
+          assessmentId,
+          snapshotId,
+          `${prefix}-key-a`,
+          actor,
+          `${prefix}-corr-a`,
+        ),
+      );
       pending = [first];
       await Promise.race([
         entered.promise,
-        first.then(() => { throw new Error("First transaction never reached the barrier"); }),
+        first.then(() => {
+          throw new Error("First transaction never reached the barrier");
+        }),
       ]);
       let secondFinished = false;
-      const second = handlerB.execute(new RerunScanCommand(assessmentId, snapshotId, `${prefix}-key-b`, actor, `${prefix}-corr-b`));
+      const second = handlerB.execute(
+        new RerunScanCommand(
+          assessmentId,
+          snapshotId,
+          `${prefix}-key-b`,
+          actor,
+          `${prefix}-corr-b`,
+        ),
+      );
       pending.push(second);
-      void second.then(() => { secondFinished = true; }, () => { secondFinished = true; });
+      void second.then(
+        () => {
+          secondFinished = true;
+        },
+        () => {
+          secondFinished = true;
+        },
+      );
       const results = Promise.allSettled([first, second]);
       // Observe PostgreSQL itself, not an artificial mutex or a mocked $queryRaw.
       let observedLockWait = false;
       const deadline = Date.now() + 5_000;
       while (Date.now() < deadline && !secondFinished) {
-        const rows = await fixture.$queryRaw<Array<{ wait_event_type: string | null }>>(
+        const rows = await fixture.$queryRaw<
+          Array<{ wait_event_type: string | null }>
+        >(
           Prisma.sql`SELECT wait_event_type FROM pg_stat_activity WHERE application_name = ${applicationB}`,
         );
-        if (rows.some((row) => row.wait_event_type === "Lock")) { observedLockWait = true; break; }
+        if (rows.some((row) => row.wait_event_type === "Lock")) {
+          observedLockWait = true;
+          break;
+        }
         await delay(25);
       }
       expect(observedLockWait).toBe(true);
@@ -102,20 +179,34 @@ postgresSuite("M03 rerun with actual PostgreSQL row contention", () => {
       expect(a.status).toBe("fulfilled");
       expect(b.status).toBe("rejected");
       if (b.status === "rejected") {
-        expect(b.reason).toMatchObject({ response: { problem: { status: 409, code: SCAN_ERROR_CODES.jobWrongState } } });
+        expect(b.reason).toMatchObject({
+          response: {
+            problem: { status: 409, code: SCAN_ERROR_CODES.jobWrongState },
+          },
+        });
       }
-      const jobs = await fixture.repositoryScanJob.findMany({ where: { assessmentId } });
+      const jobs = await fixture.repositoryScanJob.findMany({
+        where: { assessmentId },
+      });
       expect(jobs).toHaveLength(1);
       expect(jobs[0].status).toBe(REPOSITORY_SCAN_JOB_STATUSES.queued);
     } finally {
       release.resolve();
       await Promise.allSettled(pending);
       if (createdUser) {
-        await fixture.assessment.deleteMany({ where: { id: assessmentId, ownerId: userId } });
-        await fixture.repositoryConnection.deleteMany({ where: { id: connectionId, userId } });
+        await fixture.assessment.deleteMany({
+          where: { id: assessmentId, ownerId: userId },
+        });
+        await fixture.repositoryConnection.deleteMany({
+          where: { id: connectionId, userId },
+        });
         await fixture.user.deleteMany({ where: { id: userId } });
       }
-      await Promise.all([fixture.$disconnect(), clientA.$disconnect(), clientB.$disconnect()]);
+      await Promise.all([
+        fixture.$disconnect(),
+        clientA.$disconnect(),
+        clientB.$disconnect(),
+      ]);
     }
   }, 25_000);
 });
