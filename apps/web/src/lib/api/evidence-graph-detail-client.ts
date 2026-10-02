@@ -11,6 +11,14 @@ export type ProgramEvidenceGraphOverview = {
   code_symbols_indexed: number | null;
   ai_model_invocations: number | null;
   evidence_mapped_scope: number | null;
+  report_id?: string | null;
+  snapshot_id?: string | null;
+  scan_job_id?: string | null;
+};
+
+export type EvidenceGraphFilters = {
+  snapshotId?: string;
+  scanJobId?: string;
 };
 
 export type ProgramEvidenceGraphDetail = {
@@ -135,14 +143,24 @@ export function normalizeProgramEvidenceGraphDetail(
   detail: ProgramEvidenceGraphDetail,
 ): ProgramEvidenceGraphDetail {
   const overview = detail.overview ?? {};
+  const normalizedOverview: ProgramEvidenceGraphOverview = {
+    modules_analyzed: normalizeMetric(overview.modules_analyzed),
+    code_symbols_indexed: normalizeMetric(overview.code_symbols_indexed),
+    ai_model_invocations: normalizeMetric(overview.ai_model_invocations),
+    evidence_mapped_scope: normalizeMetric(overview.evidence_mapped_scope),
+  };
+  if (typeof overview.report_id === "string") {
+    normalizedOverview.report_id = overview.report_id;
+  }
+  if (typeof overview.snapshot_id === "string") {
+    normalizedOverview.snapshot_id = overview.snapshot_id;
+  }
+  if (typeof overview.scan_job_id === "string") {
+    normalizedOverview.scan_job_id = overview.scan_job_id;
+  }
   return {
     ...detail,
-    overview: {
-      modules_analyzed: normalizeMetric(overview.modules_analyzed),
-      code_symbols_indexed: normalizeMetric(overview.code_symbols_indexed),
-      ai_model_invocations: normalizeMetric(overview.ai_model_invocations),
-      evidence_mapped_scope: normalizeMetric(overview.evidence_mapped_scope),
-    },
+    overview: normalizedOverview,
     paths: {
       nodes: detail.paths?.nodes ?? [],
       edges: detail.paths?.edges ?? [],
@@ -217,8 +235,9 @@ function normalizeCount(value: unknown): number {
 
 async function getProgramEvidenceGraphDetail(
   assessmentId: string,
+  filters?: EvidenceGraphFilters,
 ): Promise<ProgramEvidenceGraphDetail | null> {
-  const result = await getProgramEvidenceGraphDetailState(assessmentId);
+  const result = await getProgramEvidenceGraphDetailState(assessmentId, filters);
   return result.state === PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.ready
     ? result.detail
     : null;
@@ -226,9 +245,15 @@ async function getProgramEvidenceGraphDetail(
 
 export async function getProgramEvidenceGraphDetailState(
   assessmentId: string,
+  filters?: EvidenceGraphFilters,
 ): Promise<ProgramEvidenceGraphDetailLoadResult> {
+  const searchParams = new URLSearchParams();
+  if (filters?.snapshotId) searchParams.set("snapshotId", filters.snapshotId);
+  if (filters?.scanJobId) searchParams.set("scanJobId", filters.scanJobId);
+  const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
+
   const { payload, ok } = await apiRequest(
-    `/api/assessments/${encodeURIComponent(assessmentId)}/evidence-graph`,
+    `/api/assessments/${encodeURIComponent(assessmentId)}/evidence-graph${query}`,
     { cache: "no-store" },
   );
   if (ok) {

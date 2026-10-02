@@ -330,7 +330,7 @@ test("assessment scanner renders retry action for failed source scans", async ()
   assert.match(overviewSource, /scanFailed={flow\.scanFailed}/);
   assert.match(
     overviewSource,
-    /retryScan\.mutate\(\{ snapshotId: retryScanSnapshotId \}\)/,
+    /retryScan\.mutate\(\s*\{\s*snapshotId:\s*retryScanSnapshotId,\s*idempotencyKey:\s*retryKeyRef\.current/,
   );
   assert.match(scannerStepSource, /RotateCcwIcon/);
   assert.match(scannerStepSource, /pages\.assessmentFlow\.scanner\.retryScan/);

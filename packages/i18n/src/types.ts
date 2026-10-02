@@ -1674,6 +1674,8 @@ export type PagesMessages = {
       loadingState: string;
     };
     scanner: {
+      queuedThinking: string;
+      queuedDescription: string;
       runningThinking: string;
       runningDescription: string;
       completeThinking: string;
@@ -1683,6 +1685,7 @@ export type PagesMessages = {
       retryScan: string;
       retryingScan: string;
       retryError: string;
+      reconnecting: string;
       activities: {
         connect: string;
         clone: string;
@@ -2000,6 +2003,8 @@ export type PagesMessages = {
     rerunScan: string;
     rerunningScan: string;
     rerunError: string;
+    currentBadge: string;
+    historicalBadge: string;
     scanStatuses: {
       queued: string;
       running: string;

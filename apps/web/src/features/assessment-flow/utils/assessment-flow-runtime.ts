@@ -27,6 +27,7 @@ export function deriveAssessmentFlowRuntime(input: {
   snapshot: WorkspaceRuntimeRepositorySnapshot | null;
   scanJob: WorkspaceRuntimeScanJob | null;
   evidenceReport: WorkspaceRuntimeEvidenceReport | null;
+  evidenceGraphReady?: boolean;
   recentActivity?: WorkspaceRuntimeActivityItem[];
 }) {
   const scanFailed =
@@ -90,9 +91,15 @@ export function deriveAssessmentFlowRuntime(input: {
                     ? TOOL_ACTIVITY_STATUSES.running
                     : TOOL_ACTIVITY_STATUSES.pending
               : activity.id === SCANNER_ACTIVITY_IDS.buildGraph
-                ? scanCompleted || evidenceAccepted || evidenceRejected
-                  ? TOOL_ACTIVITY_STATUSES.completed
-                  : TOOL_ACTIVITY_STATUSES.pending
+                ? input.evidenceGraphReady !== undefined
+                  ? input.evidenceGraphReady
+                    ? TOOL_ACTIVITY_STATUSES.completed
+                    : scanCompleted
+                      ? TOOL_ACTIVITY_STATUSES.running
+                      : TOOL_ACTIVITY_STATUSES.pending
+                  : scanCompleted || evidenceAccepted || evidenceRejected
+                    ? TOOL_ACTIVITY_STATUSES.completed
+                    : TOOL_ACTIVITY_STATUSES.pending
                 : evidenceAccepted
                   ? TOOL_ACTIVITY_STATUSES.completed
                   : evidenceRejected

@@ -10,6 +10,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
@@ -102,6 +103,19 @@ export class EvidenceController {
     @Req() request: AuthenticatedRequest,
   ) {
     const context = request.rbacContext;
+    if (context.role !== AUTH_USER_ROLES.admin) {
+      const assessment = await this.prisma.assessment.findUnique({
+        where: { id: assessmentId },
+        select: { ownerId: true },
+      });
+      if (!assessment || assessment.ownerId !== context.userId) {
+        throw problemException(
+          ASSESSMENT_ERROR_CODES.notFound,
+          request.correlationId ?? randomUUID(),
+          { status: HttpStatus.NOT_FOUND },
+        );
+      }
+    }
     return resultEnvelope(
       await this.queryBus.execute(
         new GetEvidenceQuery(
@@ -119,6 +133,8 @@ export class EvidenceController {
   async getEvidenceGraph(
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,
+    @Query("snapshotId") snapshotId?: string,
+    @Query("scanJobId") scanJobId?: string,
   ) {
     const context = request.rbacContext;
     if (context.role !== AUTH_USER_ROLES.admin) {
@@ -137,6 +153,8 @@ export class EvidenceController {
     const report = await this.prisma.technicalEvidenceReport.findFirst({
       where: {
         assessmentId,
+        ...(snapshotId ? { snapshotId } : {}),
+        ...(scanJobId ? { scanJobId } : {}),
         status: toPrismaEvidenceAcceptanceStatus(
           TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
         ),
@@ -186,6 +204,8 @@ export class EvidenceController {
   async getEvidenceGraphOverview(
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,
+    @Query("snapshotId") snapshotId?: string,
+    @Query("scanJobId") scanJobId?: string,
   ) {
     const context = request.rbacContext;
     if (context.role !== AUTH_USER_ROLES.admin) {
@@ -204,12 +224,19 @@ export class EvidenceController {
     const report = await this.prisma.technicalEvidenceReport.findFirst({
       where: {
         assessmentId,
+        ...(snapshotId ? { snapshotId } : {}),
+        ...(scanJobId ? { scanJobId } : {}),
         status: toPrismaEvidenceAcceptanceStatus(
           TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
         ),
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      select: { evidencePayload: true },
+      select: {
+        id: true,
+        scanJobId: true,
+        snapshotId: true,
+        evidencePayload: true,
+      },
     });
     if (!report) {
       throw await this.unavailableEvidenceGraphProblem(
@@ -217,9 +244,13 @@ export class EvidenceController {
         request.correlationId ?? randomUUID(),
       );
     }
-    return resultEnvelope(
-      this.graphDetail.projectOverview(report.evidencePayload),
-    );
+    const overview = this.graphDetail.projectOverview(report.evidencePayload);
+    return resultEnvelope({
+      ...overview,
+      report_id: report.id,
+      snapshot_id: report.snapshotId,
+      scan_job_id: report.scanJobId,
+    });
   }
 
   /**
