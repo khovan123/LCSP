@@ -441,6 +441,16 @@ describe("EvidenceController assessment artifact reads", () => {
     expect(artifacts.getInvestigationNotes).not.toHaveBeenCalled();
   });
 
+  it("denies another customer from reading persisted evidence", async () => {
+    const { controller, assessmentFindUnique } =
+      buildPublicEvidenceController();
+    assessmentFindUnique.mockResolvedValue({ ownerId: "another-owner" });
+
+    await expect(
+      controller.getEvidence("assessment-1", customerRequest),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it("allows an admin to read artifact availability", async () => {
     const { controller, assessmentFindUnique, artifacts } =
       buildPublicEvidenceController();

@@ -5,6 +5,9 @@ export interface ProgramEvidenceGraphOverviewDto {
   code_symbols_indexed: ProgramEvidenceGraphMetric;
   ai_model_invocations: ProgramEvidenceGraphMetric;
   evidence_mapped_scope: ProgramEvidenceGraphMetric;
+  report_id?: string | null;
+  snapshot_id?: string | null;
+  scan_job_id?: string | null;
 }
 
 export interface ProgramEvidenceGraphRepositoryDto {

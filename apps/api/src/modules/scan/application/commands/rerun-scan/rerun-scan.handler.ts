@@ -22,6 +22,7 @@ import {
 } from "@lcsp/contracts/outbox";
 import { SCAN_ERROR_CODES, SCAN_EVENT_TYPES } from "@lcsp/contracts/scan";
 
+import { Prisma } from "@prisma/client";
 import {
   fromPrismaAssessmentStatus,
   fromPrismaRepositoryScanJobStatus,
@@ -70,29 +71,6 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
         GITHUB_INTEGRATION_ERROR_CODES.scanIdempotencyKeyRequired,
         command.correlationId,
         { status: HttpStatus.BAD_REQUEST },
-      );
-    }
-
-    const existing = await this.prisma.repositoryScanJob.findUnique({
-      where: { idempotencyKey: command.idempotencyKey },
-    });
-
-    if (existing) {
-      if (
-        existing.assessmentId !== command.assessmentId ||
-        existing.snapshotId !== command.snapshotId
-      ) {
-        throw problemException(
-          GITHUB_INTEGRATION_ERROR_CODES.scanIdempotencyConflict,
-          command.correlationId,
-          { status: HttpStatus.CONFLICT },
-        );
-      }
-      return this.toDto(
-        existing.id,
-        fromPrismaRepositoryScanJobStatus(existing.status),
-        undefined,
-        command.correlationId,
       );
     }
 
@@ -152,6 +130,29 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
       );
     }
 
+    const existing = await this.prisma.repositoryScanJob.findUnique({
+      where: { idempotencyKey: command.idempotencyKey },
+    });
+
+    if (existing) {
+      if (
+        existing.assessmentId !== command.assessmentId ||
+        existing.snapshotId !== command.snapshotId
+      ) {
+        throw problemException(
+          GITHUB_INTEGRATION_ERROR_CODES.scanIdempotencyConflict,
+          command.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
+      }
+      return this.toDto(
+        existing.id,
+        fromPrismaRepositoryScanJobStatus(existing.status),
+        undefined,
+        command.correlationId,
+      );
+    }
+
     const newScanJobId = randomUUID();
     const triggerSource = REPOSITORY_SCAN_TRIGGER_SOURCES.manual;
     const status = REPOSITORY_SCAN_JOB_STATUSES.queued;
@@ -163,6 +164,11 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
     let replacedScanJobId: string | undefined;
     try {
       await this.prisma.$transaction(async (tx) => {
+        // Serializes concurrent rerun requests for the same assessment to prevent race conditions.
+        await tx.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "Assessment" WHERE "id" = ${command.assessmentId} FOR UPDATE`,
+        );
+
         await failStaleRepositoryScanJobs(tx, {
           assessmentId: command.assessmentId,
         });
@@ -194,10 +200,8 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
         });
         replacedScanJobId = priorJob?.id;
 
-        await replaceSameSnapshotScanArtifacts(tx, {
-          assessmentId: command.assessmentId,
-          snapshotId: command.snapshotId,
-        });
+        // Preserves prior scan artifacts and reports in accordance with UC-M03 (A4, BR-62).
+        // Historical jobs and reports remain queryable for audit traceability.
 
         const event = buildOutboxMessageInput({
           aggregateType: OUTBOX_AGGREGATE_TYPES.repositoryScanJob,
@@ -241,6 +245,16 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
         where: { idempotencyKey: command.idempotencyKey },
       });
       if (raced) {
+        if (
+          raced.assessmentId !== command.assessmentId ||
+          raced.snapshotId !== command.snapshotId
+        ) {
+          throw problemException(
+            GITHUB_INTEGRATION_ERROR_CODES.scanIdempotencyConflict,
+            command.correlationId,
+            { status: HttpStatus.CONFLICT },
+          );
+        }
         return this.toDto(
           raced.id,
           fromPrismaRepositoryScanJobStatus(raced.status),
