@@ -12,10 +12,13 @@ import {
   type AssessmentInterviewBlockedAction,
   type RemediationDecision,
 } from "@lcsp/contracts/evidence";
-import { REPOSITORY_CONNECTION_STATUSES } from "@lcsp/contracts/github-integration";
+import {
+  REPOSITORY_CONNECTION_STATUSES,
+  REPOSITORY_SCAN_JOB_STATUSES,
+} from "@lcsp/contracts/github-integration";
 import { resolveMessage } from "@lcsp/i18n";
 import { InfoIcon, SaveIcon, TextCursorInputIcon } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { RepositorySetupConversation } from "@/features/assessment-flow/components/organisms/repository-setup-conversation";
@@ -36,6 +39,7 @@ import {
   useSubmitAssessmentPostFindingDecisionMutation,
 } from "@/lib/api/assessment-queries";
 import { API_OUTCOME_KINDS } from "@/lib/api/outcome-kinds";
+import { isGraphOverviewReadyFor } from "@/lib/api/evidence-graph-overview-client";
 import { useAssessmentsQuery } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 
@@ -90,6 +94,7 @@ import {
 import { InterviewOutputPanel } from "../molecules/interview-output-panel";
 import { PostFindingFlowSteps } from "../molecules/post-finding-flow-steps";
 import { TurnFooter } from "../molecules/turn-footer";
+import { WORKSPACE_RUNTIME_CONNECTION_STATES } from "../../types/workspace-runtime.types";
 import { AssessmentComposer } from "./assessment-composer";
 import { AssessmentTranscript } from "./assessment-transcript";
 import { useWorkspaceRuntime } from "./workspace-runtime-provider";
@@ -105,9 +110,6 @@ type InterviewAnswerDraft = {
 export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
   const workspaceRuntime = useWorkspaceRuntime();
   const readinessQuery = useReadinessStatusQuery(assessmentId);
-  const evidenceOverviewQuery =
-    useProgramEvidenceGraphOverviewQuery(assessmentId);
-  const retryScan = useRerunRepositoryScanMutation(assessmentId);
   const readinessLoaded =
     readinessQuery.data?.kind === API_OUTCOME_KINDS.loaded;
   const readiness = readinessQuery.data?.kind === API_OUTCOME_KINDS.loaded
@@ -128,6 +130,15 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
   const scanJob = liveScanJob && (
     !persistedScanJob || liveScanJob.updatedAt >= persistedScanJob.updatedAt
   ) ? liveScanJob : persistedScanJob;
+
+  const graphFilters = snapshot?.id
+    ? { snapshotId: snapshot.id, scanJobId: scanJob?.id }
+    : undefined;
+  const evidenceOverviewQuery =
+    useProgramEvidenceGraphOverviewQuery(assessmentId, graphFilters);
+  const retryScan = useRerunRepositoryScanMutation(assessmentId);
+  const retryKeyRef = useRef<string | null>(null);
+
   const evidenceReport =
     workspaceRuntime.evidenceReports.find(
       (item) => item.assessmentId === assessmentId &&
@@ -143,11 +154,35 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
     snapshot,
     scanJob,
     evidenceReport,
+    evidenceGraphReady: isGraphOverviewReadyFor(
+      evidenceOverviewQuery.data,
+      { snapshotId: snapshot?.id, scanJobId: scanJob?.id },
+      evidenceReport?.id,
+    ),
     recentActivity: timeline.recentActivity,
   });
   const retryScanSnapshotId = scanJob?.snapshotId ?? snapshot?.id;
   const retryScanDisabled =
     retryScanSnapshotId === undefined || retryScan.isPending;
+
+  const handleRetryScan = () => {
+    if (retryScanSnapshotId !== undefined && !retryScanDisabled) {
+      if (!retryKeyRef.current) {
+        retryKeyRef.current = crypto.randomUUID();
+      }
+      retryScan.mutate(
+        {
+          snapshotId: retryScanSnapshotId,
+          idempotencyKey: retryKeyRef.current,
+        },
+        {
+          onSuccess: () => {
+            retryKeyRef.current = null;
+          },
+        },
+      );
+    }
+  };
 
   if (readinessQuery.isLoading) {
     return (
@@ -211,6 +246,7 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
             }}
             activities={flow.activities}
             evidenceReady={flow.evidenceAccepted}
+            graphReady={flow.evidenceGraphReady}
             thinkingLabel={agentThinkingLabel(
               flow.scanActive,
               scopeAgentStreamRunEvents(
@@ -222,14 +258,15 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
             programEvidenceSummary={flow.programEvidenceSummary}
             canonicalOverview={evidenceOverviewQuery.data}
             scanFailed={flow.scanFailed}
+            isQueued={scanJob?.status === REPOSITORY_SCAN_JOB_STATUSES.queued}
+            isReconnecting={
+              workspaceRuntime.connectionState ===
+              WORKSPACE_RUNTIME_CONNECTION_STATES.disconnected
+            }
             retryScanPending={retryScan.isPending}
             retryScanError={retryScan.isError}
             retryScanDisabled={retryScanDisabled}
-            onRetryScan={() => {
-              if (retryScanSnapshotId !== undefined && !retryScanDisabled) {
-                retryScan.mutate({ snapshotId: retryScanSnapshotId });
-              }
-            }}
+            onRetryScan={handleRetryScan}
           />
         </>
       }

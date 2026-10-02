@@ -200,6 +200,7 @@ test("flow remains in scanner while source evidence is incomplete", () => {
 test("flow begins Interview only after accepted evidence for the scan", () => {
   const flow = deriveAssessmentFlowRuntime({
     hasRepositoryConnection: true,
+    evidenceGraphReady: true,
     snapshot: {
       id: "snapshot-1",
       assessmentId: "assessment-1",
@@ -271,7 +272,7 @@ test("completed scan waits for accepted evidence before rendering F04", () => {
       TOOL_ACTIVITY_STATUSES.completed,
       TOOL_ACTIVITY_STATUSES.completed,
       TOOL_ACTIVITY_STATUSES.completed,
-      TOOL_ACTIVITY_STATUSES.completed,
+      TOOL_ACTIVITY_STATUSES.pending,
       TOOL_ACTIVITY_STATUSES.running,
     ],
   );
@@ -330,7 +331,7 @@ test("assessment scanner renders retry action for failed source scans", async ()
   assert.match(overviewSource, /scanFailed={flow\.scanFailed}/);
   assert.match(
     overviewSource,
-    /retryScan\.mutate\(\{ snapshotId: retryScanSnapshotId \}\)/,
+    /retryScan\.mutate\(\s*\{\s*snapshotId:\s*retryScanSnapshotId,\s*idempotencyKey:\s*retryKeyRef\.current/,
   );
   assert.match(scannerStepSource, /RotateCcwIcon/);
   assert.match(scannerStepSource, /pages\.assessmentFlow\.scanner\.retryScan/);
