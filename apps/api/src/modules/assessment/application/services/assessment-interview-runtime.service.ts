@@ -456,7 +456,7 @@ export class AssessmentInterviewRuntimeService {
     questionId: string,
     actor: RbacRequestContext,
   ): Promise<{
-    evidenceReportId: string;
+    evidenceReportId?: string;
     snippetRef: AiDiscoverySnippetRef;
   }> {
     await this.assertAssessmentVisible(assessmentId, actor);
@@ -474,11 +474,8 @@ export class AssessmentInterviewRuntimeService {
     const evidenceReportId = evidenceReportRef?.slice(
       "technicalEvidenceReport:".length,
     );
-    if (!evidenceReportId) {
-      throw new NotFoundException({
-        code: "INTERVIEW_SOURCE_SNIPPET_UNAVAILABLE",
-      });
-    }
+    // Agent-authored refs may be plain anchor ids; the snippet service then resolves the
+    // accepted report by the snippet's pinned snapshot and re-verifies the governed ref.
     return { evidenceReportId, snippetRef: question.snippetRef };
   }
 

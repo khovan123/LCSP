@@ -51,18 +51,19 @@ export class AssessmentInterviewSnippetService {
   async resolve(input: {
     assessmentId: string;
     correlationId: string;
-    evidenceReportId: string;
+    evidenceReportId?: string;
     snippetRef: AiDiscoverySnippetRef;
   }): Promise<AssessmentInterviewSourceSnippet> {
     assertSnippetRef(input.snippetRef);
 
     const evidenceReport = await this.prisma.technicalEvidenceReport.findFirst({
       where: {
-        id: input.evidenceReportId,
+        ...(input.evidenceReportId ? { id: input.evidenceReportId } : {}),
         assessmentId: input.assessmentId,
         snapshotId: input.snippetRef.snapshot_id,
         status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
       },
+      orderBy: { createdAt: "desc" },
       select: { evidencePayload: true },
     });
     if (
