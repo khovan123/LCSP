@@ -445,18 +445,16 @@ describe("RerunScanHandler", () => {
       ownerId: "user-1",
       status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
     });
-    prisma.repositoryScanJob.findFirst.mockImplementation(
-      async (args: unknown) => {
-        const where = (args as { where?: { status?: unknown } })?.where;
-        if (where?.status) {
-          return activeJob;
-        }
-        return null;
-      },
-    );
-    prisma.repositoryScanJob.create.mockImplementation(async () => {
+    prisma.repositoryScanJob.findFirst.mockImplementation((args: unknown) => {
+      const where = (args as { where?: { status?: unknown } })?.where;
+      if (where?.status) {
+        return Promise.resolve(activeJob);
+      }
+      return Promise.resolve(null);
+    });
+    prisma.repositoryScanJob.create.mockImplementation(() => {
       activeJob = { id: "job-1" };
-      return {} as never;
+      return Promise.resolve({} as never);
     });
 
     const command1 = new RerunScanCommand(

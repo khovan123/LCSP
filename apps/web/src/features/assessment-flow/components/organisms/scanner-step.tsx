@@ -121,14 +121,16 @@ export function ScannerStep({
             ) : null}
           </div>
         ) : null}
-        {evidenceReady && graphReady ? (
-          <ProgramEvidenceSummary
-            className="mt-4"
-            commitSha={repository.commitSha}
-            summary={programEvidenceSummary}
-            canonicalOverview={canonicalOverview}
-            assessmentId={assessmentId}
-          />
+        {evidenceReady ? (
+          graphReady ? (
+            <ProgramEvidenceSummary
+              className="mt-4"
+              commitSha={repository.commitSha}
+              summary={programEvidenceSummary}
+              canonicalOverview={canonicalOverview}
+              assessmentId={assessmentId}
+            />
+          ) : null
         ) : null}
       </AgentTurn>
     </>

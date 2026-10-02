@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/require-await */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { jest } from "@jest/globals";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
