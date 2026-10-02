@@ -445,13 +445,15 @@ describe("RerunScanHandler", () => {
       ownerId: "user-1",
       status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
     });
-    prisma.repositoryScanJob.findFirst.mockImplementation(async (args: unknown) => {
-      const where = (args as { where?: { status?: unknown } })?.where;
-      if (where?.status) {
-        return activeJob;
-      }
-      return null;
-    });
+    prisma.repositoryScanJob.findFirst.mockImplementation(
+      async (args: unknown) => {
+        const where = (args as { where?: { status?: unknown } })?.where;
+        if (where?.status) {
+          return activeJob;
+        }
+        return null;
+      },
+    );
     prisma.repositoryScanJob.create.mockImplementation(async () => {
       activeJob = { id: "job-1" };
       return {} as never;
@@ -475,8 +477,6 @@ describe("RerunScanHandler", () => {
     const result1 = await handler.execute(command1);
     expect(result1.status).toBe(REPOSITORY_SCAN_JOB_STATUSES.queued);
 
-    await expect(handler.execute(command2)).rejects.toThrow(
-      ConflictException,
-    );
+    await expect(handler.execute(command2)).rejects.toThrow(ConflictException);
   });
 });
