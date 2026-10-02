@@ -1,4 +1,4 @@
-import { asRecord as record } from "../../../../../common/utils/index.js";
+import { asRecord as record } from "@lcsp/contracts/shared";
 import { Injectable } from "@nestjs/common";
 import {
   ASSESSMENT_ARTIFACT_STATUSES,

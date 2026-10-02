@@ -1,4 +1,4 @@
-import { asRecord as objectRecord } from "../../../../common/utils/index.js";
+import { asRecord as objectRecord } from "@lcsp/contracts/shared";
 import { randomUUID } from "node:crypto";
 import {
   ASSESSMENT_ERROR_CODES,

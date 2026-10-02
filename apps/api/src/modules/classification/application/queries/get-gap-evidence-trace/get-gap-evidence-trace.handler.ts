@@ -1,4 +1,4 @@
-import { asRecord as record } from "../../../../../common/utils/index.js";
+import { asRecord as record } from "@lcsp/contracts/shared";
 import { createHash } from "node:crypto";
 
 import { HttpStatus } from "@nestjs/common";

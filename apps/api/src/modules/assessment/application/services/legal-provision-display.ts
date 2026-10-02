@@ -1,4 +1,4 @@
-import { asRecord } from "../../../../common/utils/index.js";
+import { asRecord } from "@lcsp/contracts/shared";
 import type { LegalProvisionDisplayDto } from "../contracts/assessment/assessment-detail.contract.js";
 
 type LegalChunkDisplaySource = {

@@ -1,4 +1,4 @@
-import { asRecord as record } from "../../../../common/utils/index.js";
+import { asRecord as record } from "@lcsp/contracts/shared";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   AGENTIC_TOOL_NAMES,

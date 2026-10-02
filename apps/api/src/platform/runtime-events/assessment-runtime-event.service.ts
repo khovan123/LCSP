@@ -1,4 +1,4 @@
-import { asRecord } from "../../common/utils/index.js";
+import { asRecord } from "@lcsp/contracts/shared";
 import { randomUUID } from "node:crypto";
 import {
   ASSESSMENT_AGENT_STREAM_EVENT_TYPES,

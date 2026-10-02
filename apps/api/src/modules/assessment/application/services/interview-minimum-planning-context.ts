@@ -1,4 +1,4 @@
-import { isRecord } from "../../../../common/utils/index.js";
+import { isRecord } from "@lcsp/contracts/shared";
 
 /**
  * Deterministic minimum planning context required before an initial Interview may

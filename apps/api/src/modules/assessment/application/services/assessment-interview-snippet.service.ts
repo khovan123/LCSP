@@ -1,4 +1,4 @@
-import { asRecord as objectRecord } from "../../../../common/utils/index.js";
+import { asRecord as objectRecord } from "@lcsp/contracts/shared";
 import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import { createGunzip } from "node:zlib";

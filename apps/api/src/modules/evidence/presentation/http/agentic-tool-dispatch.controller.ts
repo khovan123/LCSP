@@ -1,4 +1,4 @@
-import { asRecord as record } from "../../../../common/utils/index.js";
+import { asRecord as record } from "@lcsp/contracts/shared";
 import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { RBAC_DECISIONS } from "@lcsp/contracts/rbac";
 import {

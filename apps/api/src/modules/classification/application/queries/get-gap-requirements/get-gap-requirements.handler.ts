@@ -1,4 +1,4 @@
-import { asRecord } from "../../../../../common/utils/index.js";
+import { asRecord } from "@lcsp/contracts/shared";
 import { createHash } from "node:crypto";
 
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";

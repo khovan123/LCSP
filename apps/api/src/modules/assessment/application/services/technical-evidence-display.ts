@@ -1,4 +1,4 @@
-import { asRecord } from "../../../../common/utils/index.js";
+import { asRecord } from "@lcsp/contracts/shared";
 import type { TechnicalEvidenceDisplayDto } from "../contracts/assessment/assessment-detail.contract.js";
 
 const MAX_TECHNICAL_EVIDENCE_DISPLAY_ITEMS = 12;

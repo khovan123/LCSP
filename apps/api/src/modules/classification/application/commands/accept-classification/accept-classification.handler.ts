@@ -39,10 +39,7 @@ import {
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import type { Prisma } from "@prisma/client";
 
-import {
-  cleanString as clean,
-  isRecord,
-} from "../../../../../common/utils/index.js";
+import { cleanString as clean, isRecord } from "@lcsp/contracts/shared";
 
 import {
   toPrismaClassificationGuardrailStatus,
