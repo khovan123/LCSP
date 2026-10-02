@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: ["**"]
   push:
-    branches: [develop]
+    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
@@ -216,7 +216,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
-    env:
     services:
       postgres:
         image: postgres:16
