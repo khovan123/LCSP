@@ -250,7 +250,8 @@ export const enPages = {
         ruleAnalysisStarted: "Analysis of this rule started",
         ruleAnalysisCompleted: "Analysis of this rule finished",
         ruleAnalysisNeedsContext: "Analysis needs more business context",
-        ruleAnalysisUnresolved: "Analysis could not establish every requirement",
+        ruleAnalysisUnresolved:
+          "Analysis could not establish every requirement",
         ruleAnalysisFailed: "Analysis of this rule failed",
         businessContextRequested: "Asked for business context",
         businessContextResolved: "Business context received",
@@ -750,8 +751,7 @@ export const enPages = {
       capabilityOneTitle: "Orchestrated assessment",
       capabilityOneDescription:
         "Scan, Interview, Rule analysis, and a deterministic Gate work as one visible assessment flow.",
-      capabilityOneMeta:
-        "Scan · Interview · Rule analysis · Gate",
+      capabilityOneMeta: "Scan · Interview · Rule analysis · Gate",
       capabilityTwoTitle: "Controlled connectors",
       capabilityTwoDescription:
         "Connect GitHub, Bitbucket, or Azure DevOps while keeping repository and workspace scope explicit.",
@@ -1737,6 +1737,11 @@ export const enPages = {
       retryScan: "Retry source scan",
       retryingScan: "Creating new scan",
       retryError: "Unable to retry the source scan. Please try again.",
+      repositoriesDescription:
+        "Each pinned repository is scanned in its own isolated workspace.",
+      repositoriesStatus: "Repository scans",
+      relationMappingStatus: "Confirmed relations",
+      pgeStatus: "Program Evidence Graph",
       activities: {
         connect: "Connected to Git provider",
         clone: "Cloned source archive",
@@ -1744,6 +1749,45 @@ export const enPages = {
         buildGraph: "Built program evidence graph",
         collectEvidence: "Collected evidence",
         collectEvidenceRunning: "Collecting evidence...",
+      },
+    },
+    multiRepository: {
+      thought: "Repository context",
+      addRepository: "Add repository",
+      reviewTitle: "Review repository scope",
+      reviewDescription:
+        "Confirm the pinned repositories and directed relations before scanning.",
+      confirmScope: "Confirm and start scan",
+      confirmingScope: "Confirming scope...",
+      backToSetup: "Back to setup",
+      relationCount: "{count} relations",
+      pinnedRevision: "{provider} · {branch} · {commit}",
+      edit: "Edit",
+      removeRepository: "Remove repository",
+      removeConfirm:
+        "Remove this repository from the assessment? Source data at the Git provider will not be deleted.",
+      description:
+        "Review directed evidence and execution relationships before scanning.",
+      tableLabel: "Repository relationship map",
+      repository: "Repository",
+      relations: "Relations",
+      noRelation: "No relation yet",
+      addRelation: "Add relation",
+      editorLabel: "Repository relationship editor",
+      from: "From repository",
+      type: "Relationship type",
+      to: "To repository",
+      save: "Save relationship",
+      cancel: "Cancel",
+      remove: "Remove relationship",
+      keepIndependent: "Keep repositories independent",
+      independentState:
+        "Repositories will be scanned independently; no relation edges will be added.",
+      relationTypes: {
+        runtimeApiInteraction: "Runtime / API interaction",
+        buildPackageDependency: "Build / package dependency",
+        dataEventFlow: "Data / event flow",
+        sharedLibrary: "Shared library",
       },
     },
     graph: {
@@ -1764,6 +1808,7 @@ export const enPages = {
         "In-scope graph nodes linked to technical evidence.",
       unavailableValue: "--",
       viewEvidenceGraph: "View evidence graph",
+      continueInterview: "Continue to Interview",
       drawerDescription:
         "Bounded evidence paths from the pinned repository snapshot.",
       close: "Close Program Evidence Graph",
@@ -1775,6 +1820,10 @@ export const enPages = {
       notFound: "No evidence graph exists for this assessment yet.",
       loadError: "Unable to load the evidence graph. Try again later.",
       repositorySnapshot: "Repository snapshot",
+      repository: "Repository",
+      branch: "Branch",
+      commit: "Commit",
+      status: "Status",
       overview: "Graph overview",
       pathMap: "Evidence path map",
       claims: "Evidence claims",
@@ -2717,8 +2766,7 @@ export const enPages = {
       },
       trend: {
         title: "Settled top-up trend",
-        description:
-          "Confirmed incoming transfers by day",
+        description: "Confirmed incoming transfers by day",
         dayAria: "Settled top-up amount for {day}",
       },
       columns: {
