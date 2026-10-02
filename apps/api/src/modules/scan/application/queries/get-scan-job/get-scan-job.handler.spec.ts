@@ -44,7 +44,7 @@ function query(
     overrides.subjectRole ?? AUTH_USER_ROLES.customer,
     overrides.scope ?? null,
     overrides.correlationId ?? "request-corr-1",
-    overrides.userId !== undefined ? overrides.userId ?? undefined : "user-1",
+    overrides.userId !== undefined ? (overrides.userId ?? undefined) : "user-1",
   );
 }
 
