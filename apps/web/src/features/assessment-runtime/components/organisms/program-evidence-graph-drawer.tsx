@@ -193,12 +193,16 @@ export function ProgramEvidenceGraphProvider({
       .catch(() => setTextArtifact(null))
       .finally(() => setTextArtifactLoading(false));
   };
-  useEffect(() => {
-    requestVersionRef.current += 1;
-    selectedGraphRef.current = null;
+  const [prevAssessmentId, setPrevAssessmentId] = useState(assessmentId);
+  if (assessmentId !== prevAssessmentId) {
+    setPrevAssessmentId(assessmentId);
     setDetail(null);
     setLoading(false);
     setOpen(false);
+  }
+  useEffect(() => {
+    requestVersionRef.current += 1;
+    selectedGraphRef.current = null;
     return () => { requestVersionRef.current += 1; };
   }, [assessmentId]);
   const handleGraphOpenChange = (nextOpen: boolean) => {
@@ -239,9 +243,7 @@ export function ProgramEvidenceGraphProvider({
     );
     return () => clearTimeout(timer);
   }, [open, loading, loadState, loadDetail]);
-  const displayedDetail = selectedGraphRef.current?.assessmentId === assessmentId
-    ? detail
-    : null;
+  const displayedDetail = detail;
   return (
     <DrawerContext.Provider
       value={{ openArtifact, overview: displayedDetail?.overview ?? null }}

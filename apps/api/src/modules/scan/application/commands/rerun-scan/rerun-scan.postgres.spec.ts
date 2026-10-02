@@ -16,16 +16,18 @@ const databaseUrl = process.env.LCSP_M03_CONCURRENCY_DATABASE_URL;
 const postgresSuite = databaseUrl ? describe : describe.skip;
 
 function connection(applicationName: string): PrismaClient {
-  if (!databaseUrl)
+  if (!databaseUrl) {
     throw new Error("LCSP_M03_CONCURRENCY_DATABASE_URL is required");
+  }
   const url = new URL(databaseUrl);
   if (
     !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) ||
     !url.pathname.endsWith("_test")
-  )
+  ) {
     throw new Error(
       "Refusing concurrency test outside a disposable local _test database",
     );
+  }
   url.searchParams.set("application_name", applicationName);
   return new PrismaClient({
     adapter: new PrismaPg(url.toString()),
@@ -108,7 +110,7 @@ postgresSuite("M03 rerun with actual PostgreSQL row contention", () => {
       };
       const handlerA = new RerunScanHandler(
         clientA as unknown as PrismaService,
-        { write: async () => undefined } as never,
+        { write: () => Promise.resolve() } as never,
         {
           enqueue: async () => {
             entered.resolve();
@@ -118,8 +120,8 @@ postgresSuite("M03 rerun with actual PostgreSQL row contention", () => {
       );
       const handlerB = new RerunScanHandler(
         clientB as unknown as PrismaService,
-        { write: async () => undefined } as never,
-        { enqueue: async () => undefined } as never,
+        { write: () => Promise.resolve() } as never,
+        { enqueue: () => Promise.resolve() } as never,
       );
       const first = handlerA.execute(
         new RerunScanCommand(
@@ -181,7 +183,10 @@ postgresSuite("M03 rerun with actual PostgreSQL row contention", () => {
       if (b.status === "rejected") {
         expect(b.reason).toMatchObject({
           response: {
-            problem: { status: 409, code: SCAN_ERROR_CODES.jobWrongState },
+            problem: {
+              status: 409,
+              code: SCAN_ERROR_CODES.jobWrongState,
+            },
           },
         });
       }

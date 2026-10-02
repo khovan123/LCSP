@@ -111,7 +111,7 @@ export class EvidenceController {
       });
       if (!assessment || assessment.ownerId !== context.userId) {
         throw problemException(
-          ASSESSMENT_ERROR_CODES.notFound,
+          EVIDENCE_ERROR_CODES.notFound,
           request.correlationId ?? randomUUID(),
           { status: HttpStatus.NOT_FOUND },
         );

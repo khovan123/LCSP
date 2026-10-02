@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/require-await */
 import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
 import { HttpStatus } from "@nestjs/common";
 import { ProgramEvidenceGraphDetailService } from "./program-evidence-graph-detail.service.js";
