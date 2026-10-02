@@ -1685,6 +1685,7 @@ export type PagesMessages = {
       retryScan: string;
       retryingScan: string;
       retryError: string;
+      graphPendingDescription: string;
       reconnecting: string;
       activities: {
         connect: string;

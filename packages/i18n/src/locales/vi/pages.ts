@@ -1742,6 +1742,7 @@ export const viPages = {
       retryScan: "Thử lại quét source",
       retryingScan: "Đang tạo scan mới",
       retryError: "Không thể thử lại quét source. Hãy thử lại sau.",
+      graphPendingDescription: "Quét đã hoàn tất và evidence đã được chấp nhận. Graph chưa được xác nhận sẵn sàng để xem.",
       reconnecting: "Đang kết nối lại luồng cập nhật trực tiếp...",
       activities: {
         connect: "Đã kết nối Git provider",

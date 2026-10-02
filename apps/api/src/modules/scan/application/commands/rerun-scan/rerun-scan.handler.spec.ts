@@ -432,7 +432,7 @@ describe("RerunScanHandler", () => {
     expect(prisma.repositoryScanJob.deleteMany).not.toHaveBeenCalled();
   });
 
-  it("rejects second concurrent rerun request with 409 conflict when another rerun is active", async () => {
+  it("rejects a subsequent rerun with 409 while the earlier job is active", async () => {
     let activeJob: { id: string } | null = null;
     prisma.repositoryScanJob.findUnique.mockResolvedValue(null);
     prisma.repositorySnapshot.findUnique.mockResolvedValue({

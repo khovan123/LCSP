@@ -328,6 +328,8 @@ export function useProgramEvidenceGraphOverviewQuery(
       filters,
     ),
     queryFn: () => getProgramEvidenceGraphOverview(assessmentId, filters),
+    // Storage availability may recover without a new scan-status event.
+    refetchInterval: (query) => query.state.data?.graph_ready === false ? 5_000 : false,
     enabled: assessmentId.length > 0,
   });
 }

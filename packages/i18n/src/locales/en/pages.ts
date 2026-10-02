@@ -1740,6 +1740,7 @@ export const enPages = {
       retryScan: "Retry source scan",
       retryingScan: "Creating new scan",
       retryError: "Unable to retry the source scan. Please try again.",
+      graphPendingDescription: "The scan is complete and evidence has been accepted. The graph is not yet confirmed ready to view.",
       reconnecting: "Reconnecting to live update stream...",
       activities: {
         connect: "Connected to Git provider",

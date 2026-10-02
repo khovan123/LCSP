@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { RepositoryScanJob } from "@prisma/client";
 
 import {
   Body,
@@ -136,66 +137,15 @@ export class EvidenceController {
     @Query("snapshotId") snapshotId?: string,
     @Query("scanJobId") scanJobId?: string,
   ) {
-    const context = request.rbacContext;
-    if (context.role !== AUTH_USER_ROLES.admin) {
-      const assessment = await this.prisma.assessment.findUnique({
-        where: { id: assessmentId },
-        select: { ownerId: true },
-      });
-      if (!assessment || assessment.ownerId !== context.userId) {
-        throw problemException(
-          ASSESSMENT_ERROR_CODES.notFound,
-          request.correlationId ?? randomUUID(),
-          { status: HttpStatus.NOT_FOUND },
-        );
-      }
-    }
-    const report = await this.prisma.technicalEvidenceReport.findFirst({
-      where: {
-        assessmentId,
-        ...(snapshotId ? { snapshotId } : {}),
-        ...(scanJobId ? { scanJobId } : {}),
-        status: toPrismaEvidenceAcceptanceStatus(
-          TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
-        ),
-      },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      select: {
-        id: true,
-        assessmentId: true,
-        scanJobId: true,
-        snapshotId: true,
-        createdAt: true,
-        snapshot: {
-          select: {
-            repositoryFullName: true,
-            branch: true,
-            ref: true,
-            commitSha: true,
-            status: true,
-          },
-        },
-      },
-    });
-    if (!report) {
-      throw await this.unavailableEvidenceGraphProblem(
-        assessmentId,
-        request.correlationId ?? randomUUID(),
-      );
-    }
-    return resultEnvelope(
-      await this.graphDetail.projectAcceptedReport({
-        report,
-        snapshot: report.snapshot,
-        loadEvidencePayload: async () =>
-          (
-            await this.prisma.technicalEvidenceReport.findUnique({
-              where: { id: report.id },
-              select: { evidencePayload: true },
-            })
-          )?.evidencePayload ?? null,
-      }),
-    );
+    await this.assertAssessmentArtifactAccess(assessmentId, request);
+    const correlationId = request.correlationId ?? randomUUID();
+    const report = await this.findGraphReport(assessmentId, correlationId, snapshotId, scanJobId);
+    return resultEnvelope(await this.graphDetail.projectAcceptedReport({
+      report,
+      snapshot: report.snapshot,
+      correlationId,
+      loadEvidencePayload: () => this.loadGraphPayload(report.id),
+    }));
   }
 
   @Get(":assessmentId/evidence-graph/overview")
@@ -207,105 +157,90 @@ export class EvidenceController {
     @Query("snapshotId") snapshotId?: string,
     @Query("scanJobId") scanJobId?: string,
   ) {
-    const context = request.rbacContext;
-    if (context.role !== AUTH_USER_ROLES.admin) {
-      const assessment = await this.prisma.assessment.findUnique({
-        where: { id: assessmentId },
-        select: { ownerId: true },
+    await this.assertAssessmentArtifactAccess(assessmentId, request);
+    const correlationId = request.correlationId ?? randomUUID();
+    const report = await this.findGraphReport(assessmentId, correlationId, snapshotId, scanJobId);
+    return resultEnvelope(await this.graphDetail.projectAcceptedOverview({
+      report,
+      snapshot: report.snapshot,
+      correlationId,
+      loadEvidencePayload: () => this.loadGraphPayload(report.id),
+    }));
+  }
+
+  private async loadGraphPayload(reportId: string): Promise<unknown> {
+    return (await this.prisma.technicalEvidenceReport.findUnique({
+      where: { id: reportId },
+      select: { evidencePayload: true },
+    }))?.evidencePayload ?? null;
+  }
+
+  /** Resolve one run before reading its report; never fall back to an older accepted report. */
+  private async findGraphReport(
+    assessmentId: string,
+    correlationId: string,
+    snapshotId?: string,
+    scanJobId?: string,
+  ) {
+    const scan = await this.prisma.repositoryScanJob.findFirst({
+      where: {
+        assessmentId,
+        ...(snapshotId ? { snapshotId } : {}),
+        ...(scanJobId ? { id: scanJobId } : {}),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { id: true, snapshotId: true, status: true },
+    });
+    if (!scan) {
+      throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+        status: HttpStatus.NOT_FOUND,
       });
-      if (!assessment || assessment.ownerId !== context.userId) {
-        throw problemException(
-          ASSESSMENT_ERROR_CODES.notFound,
-          request.correlationId ?? randomUUID(),
-          { status: HttpStatus.NOT_FOUND },
-        );
-      }
     }
     const report = await this.prisma.technicalEvidenceReport.findFirst({
       where: {
         assessmentId,
-        ...(snapshotId ? { snapshotId } : {}),
-        ...(scanJobId ? { scanJobId } : {}),
-        status: toPrismaEvidenceAcceptanceStatus(
-          TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
-        ),
+        scanJobId: scan.id,
+        snapshotId: scan.snapshotId,
+        status: toPrismaEvidenceAcceptanceStatus(TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted),
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: {
-        id: true,
-        scanJobId: true,
-        snapshotId: true,
-        evidencePayload: true,
+        id: true, assessmentId: true, scanJobId: true, snapshotId: true, createdAt: true,
+        snapshot: { select: {
+          repositoryFullName: true, branch: true, ref: true, commitSha: true, status: true,
+        } },
       },
     });
-    if (!report) {
-      throw await this.unavailableEvidenceGraphProblem(
-        assessmentId,
-        request.correlationId ?? randomUUID(),
-      );
-    }
-    const overview = this.graphDetail.projectOverview(report.evidencePayload);
-    return resultEnvelope({
-      ...overview,
-      report_id: report.id,
-      snapshot_id: report.snapshotId,
-      scan_job_id: report.scanJobId,
-    });
+    if (!report) throw await this.unavailableEvidenceGraphProblem(scan, correlationId);
+    return report;
   }
 
-  /**
-   * Distinguishes why no accepted graph exists: still building (NOT_READY), the
-   * latest scan or its evidence report failed (BUILD_FAILED), or nothing was ever
-   * started for this assessment (NOT_FOUND).
-   */
+  /** Failure guidance is scoped to exactly the run selected for the graph request. */
   private async unavailableEvidenceGraphProblem(
-    assessmentId: string,
+    scan: Pick<RepositoryScanJob, "id" | "snapshotId" | "status">,
     correlationId: string,
   ) {
-    const latestScanJob = await this.prisma.repositoryScanJob.findFirst({
-      where: { assessmentId },
-      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-      select: { id: true, status: true },
-    });
-    if (!latestScanJob) {
-      return problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
-        status: HttpStatus.NOT_FOUND,
-      });
-    }
-    const scanStatus = fromPrismaRepositoryScanJobStatus(latestScanJob.status);
-    const meta = { scanJobId: latestScanJob.id, scanStatus };
+    const scanStatus = fromPrismaRepositoryScanJobStatus(scan.status);
+    const meta = { scanJobId: scan.id, snapshotId: scan.snapshotId, scanStatus };
     if (FAILED_EVIDENCE_GRAPH_SCAN_STATUSES.has(scanStatus)) {
       return problemException(EVIDENCE_ERROR_CODES.buildFailed, correlationId, {
-        status: HttpStatus.CONFLICT,
-        meta,
+        status: HttpStatus.CONFLICT, meta,
       });
     }
-    if (scanStatus === REPOSITORY_SCAN_JOB_STATUSES.completed) {
-      const rejectedReport =
-        await this.prisma.technicalEvidenceReport.findFirst({
-          where: {
-            scanJobId: latestScanJob.id,
-            status: toPrismaEvidenceAcceptanceStatus(
-              TECHNICAL_EVIDENCE_REPORT_STATUSES.rejected,
-            ),
-          },
-          select: { id: true },
-        });
-      if (rejectedReport) {
-        return problemException(
-          EVIDENCE_ERROR_CODES.buildFailed,
-          correlationId,
-          {
-            status: HttpStatus.CONFLICT,
-            meta,
-          },
-        );
-      }
+    const rejectedReport = await this.prisma.technicalEvidenceReport.findFirst({
+      where: {
+        scanJobId: scan.id,
+        status: toPrismaEvidenceAcceptanceStatus(TECHNICAL_EVIDENCE_REPORT_STATUSES.rejected),
+      },
+      select: { id: true },
+    });
+    if (rejectedReport) {
+      return problemException(EVIDENCE_ERROR_CODES.buildFailed, correlationId, {
+        status: HttpStatus.CONFLICT, meta,
+      });
     }
-    // Active scans, and completed scans whose report acceptance is still pending.
     return problemException(EVIDENCE_ERROR_CODES.notReady, correlationId, {
-      status: HttpStatus.ACCEPTED,
-      meta,
+      status: HttpStatus.ACCEPTED, meta,
     });
   }
 

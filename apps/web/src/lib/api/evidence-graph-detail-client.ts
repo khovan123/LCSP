@@ -11,6 +11,7 @@ export type ProgramEvidenceGraphOverview = {
   code_symbols_indexed: number | null;
   ai_model_invocations: number | null;
   evidence_mapped_scope: number | null;
+  graph_ready?: boolean;
   report_id?: string | null;
   snapshot_id?: string | null;
   scan_job_id?: string | null;
@@ -149,6 +150,9 @@ export function normalizeProgramEvidenceGraphDetail(
     ai_model_invocations: normalizeMetric(overview.ai_model_invocations),
     evidence_mapped_scope: normalizeMetric(overview.evidence_mapped_scope),
   };
+  if (typeof overview.graph_ready === "boolean") {
+    normalizedOverview.graph_ready = overview.graph_ready;
+  }
   if (typeof overview.report_id === "string") {
     normalizedOverview.report_id = overview.report_id;
   }
@@ -256,7 +260,7 @@ export async function getProgramEvidenceGraphDetailState(
     `/api/assessments/${encodeURIComponent(assessmentId)}/evidence-graph${query}`,
     { cache: "no-store" },
   );
-  if (ok) {
+  if (ok && isGraphDetailForSelection(payload, filters)) {
     return {
       state: PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.ready,
       detail: normalizeProgramEvidenceGraphDetail(
@@ -273,4 +277,22 @@ export async function getProgramEvidenceGraphDetailState(
       PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.unavailable,
     detail: null,
   };
+}
+
+/** Never display a success response belonging to another source or run. */
+function isGraphDetailForSelection(
+  payload: unknown,
+  filters?: EvidenceGraphFilters,
+): payload is ProgramEvidenceGraphDetail {
+  if (typeof payload !== "object" || payload === null) return false;
+  const detail = payload as Partial<ProgramEvidenceGraphDetail>;
+  const provenance = detail.provenance;
+  return Boolean(
+    detail.repository && detail.overview && detail.paths &&
+    Array.isArray(detail.paths.nodes) && Array.isArray(detail.paths.edges) &&
+    provenance && typeof provenance.evidence_report_id === "string" &&
+    typeof provenance.snapshot_id === "string" && typeof provenance.scan_job_id === "string" &&
+    (!filters?.snapshotId || provenance.snapshot_id === filters.snapshotId) &&
+    (!filters?.scanJobId || provenance.scan_job_id === filters.scanJobId),
+  );
 }
