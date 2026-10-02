@@ -24,6 +24,7 @@ type ScannerStepProps = {
   repository: RepositoryHistory;
   activities: ScannerActivityItem[];
   evidenceReady: boolean;
+  graphReady?: boolean;
   /** "Thinking..." while scanning, then the measured "Thought for N seconds". */
   thinkingLabel?: string;
   programEvidenceSummary: ProgramEvidenceSummaryType;
@@ -42,6 +43,7 @@ export function ScannerStep({
   repository,
   activities,
   evidenceReady,
+  graphReady = false,
   thinkingLabel,
   programEvidenceSummary,
   canonicalOverview,
@@ -80,7 +82,9 @@ export function ScannerStep({
           {scanFailed
             ? t("pages.assessmentFlow.scanner.failedPlaceholder")
             : evidenceReady
-              ? t("pages.assessmentFlow.scanner.completeDescription")
+              ? t(graphReady
+                  ? "pages.assessmentFlow.scanner.completeDescription"
+                  : "pages.assessmentFlow.scanner.graphPendingDescription")
               : isQueued
                 ? t("pages.assessmentFlow.scanner.queuedDescription")
                 : t("pages.assessmentFlow.scanner.runningDescription")}
@@ -117,7 +121,7 @@ export function ScannerStep({
             ) : null}
           </div>
         ) : null}
-        {evidenceReady ? (
+        {evidenceReady && graphReady ? (
           <ProgramEvidenceSummary
             className="mt-4"
             commitSha={repository.commitSha}

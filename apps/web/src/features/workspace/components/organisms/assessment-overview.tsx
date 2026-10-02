@@ -39,6 +39,7 @@ import {
 } from "@/lib/api/assessment-queries";
 import { useAssessmentRuntimeControl } from "@/lib/api/assessment-runtime-control-queries";
 import { API_OUTCOME_KINDS } from "@/lib/api/outcome-kinds";
+import { isGraphOverviewReadyFor } from "@/lib/api/evidence-graph-overview-client";
 import { useAssessmentsQuery } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 
@@ -161,10 +162,10 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
     snapshot,
     scanJob,
     evidenceReport,
-    evidenceGraphReady: Boolean(
-      evidenceOverviewQuery.data &&
-        (evidenceOverviewQuery.data.report_id ||
-          evidenceOverviewQuery.data.modules_analyzed !== null),
+    evidenceGraphReady: isGraphOverviewReadyFor(
+      evidenceOverviewQuery.data,
+      { snapshotId: snapshot?.id, scanJobId: scanJob?.id },
+      evidenceReport?.id,
     ),
     recentActivity: timeline.recentActivity,
   });
@@ -258,6 +259,7 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
             }}
             activities={flow.activities}
             evidenceReady={flow.evidenceAccepted}
+            graphReady={flow.evidenceGraphReady}
             thinkingLabel={agentThinkingLabel(
               flow.scanActive,
               scopeAgentStreamRunEvents(

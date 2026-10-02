@@ -122,12 +122,16 @@ export function ProgramEvidenceGraphProvider({
   const triggerRef = useRef<HTMLElement | null>(null);
   const wasOpenRef = useRef(false);
   const requestVersionRef = useRef(0);
+  const selectedGraphRef = useRef<ArtifactRef | null>(null);
   const loadDetail = useCallback(() => {
     if (!assessmentId) return;
     const requestVersion = ++requestVersionRef.current;
-    // Keep a previously rendered graph visible while a later open refreshes it.
+    // Poll the selected run, never silently switch to another report.
     setLoading(true);
-    void getProgramEvidenceGraphDetailState(assessmentId)
+    void getProgramEvidenceGraphDetailState(assessmentId, {
+      snapshotId: selectedGraphRef.current?.snapshotId,
+      scanJobId: selectedGraphRef.current?.scanJobId,
+    })
       .then((value) => {
         if (requestVersion === requestVersionRef.current) {
           setDetail(value.detail);
@@ -147,6 +151,9 @@ export function ProgramEvidenceGraphProvider({
     if (ref.assessmentId !== assessmentId) return;
     triggerRef.current = trigger ?? null;
     if (ref.type === ARTIFACT_TYPES.programEvidenceGraph) {
+      selectedGraphRef.current = ref;
+      setDetail(null);
+      setLoadState(PROGRAM_EVIDENCE_GRAPH_DETAIL_LOAD_STATES.unavailable);
       setOpen(true);
       loadDetail();
       return;
@@ -187,6 +194,22 @@ export function ProgramEvidenceGraphProvider({
       .finally(() => setTextArtifactLoading(false));
   };
   useEffect(() => {
+    requestVersionRef.current += 1;
+    selectedGraphRef.current = null;
+    setDetail(null);
+    setLoading(false);
+    setOpen(false);
+    return () => { requestVersionRef.current += 1; };
+  }, [assessmentId]);
+  const handleGraphOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      requestVersionRef.current += 1;
+      selectedGraphRef.current = null;
+      setLoading(false);
+    }
+    setOpen(nextOpen);
+  };
+  useEffect(() => {
     if (wasOpenRef.current && !open) {
       const trigger = triggerRef.current;
       if (trigger) requestAnimationFrame(() => trigger.focus());
@@ -216,20 +239,23 @@ export function ProgramEvidenceGraphProvider({
     );
     return () => clearTimeout(timer);
   }, [open, loading, loadState, loadDetail]);
+  const displayedDetail = selectedGraphRef.current?.assessmentId === assessmentId
+    ? detail
+    : null;
   return (
     <DrawerContext.Provider
-      value={{ openArtifact, overview: detail?.overview ?? null }}
+      value={{ openArtifact, overview: displayedDetail?.overview ?? null }}
     >
       {children}
       {assessmentId ? (
         <>
           <ProgramEvidenceGraphDrawer
             assessmentId={assessmentId}
-            detail={detail}
+            detail={displayedDetail}
             loading={loading}
             loadState={loadState}
             open={open}
-            onOpenChange={setOpen}
+            onOpenChange={handleGraphOpenChange}
           />
           <AssessmentTextArtifactDialog
             artifact={textArtifact}

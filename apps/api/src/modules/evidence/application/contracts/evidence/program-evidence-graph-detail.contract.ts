@@ -5,6 +5,8 @@ export interface ProgramEvidenceGraphOverviewDto {
   code_symbols_indexed: ProgramEvidenceGraphMetric;
   ai_model_invocations: ProgramEvidenceGraphMetric;
   evidence_mapped_scope: ProgramEvidenceGraphMetric;
+  /** True only after the graph data for this report has been read and validated. */
+  graph_ready?: boolean;
   report_id?: string | null;
   snapshot_id?: string | null;
   scan_job_id?: string | null;
