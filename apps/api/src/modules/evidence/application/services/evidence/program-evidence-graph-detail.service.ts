@@ -225,7 +225,10 @@ export class ProgramEvidenceGraphDetailService {
         input.correlationId ?? input.report.id,
         {
           status: HttpStatus.ACCEPTED,
-          meta: { scanJobId: input.report.scanJobId, snapshotId: input.report.snapshotId },
+          meta: {
+            scanJobId: input.report.scanJobId,
+            snapshotId: input.report.snapshotId,
+          },
         },
       );
     }
@@ -245,7 +248,9 @@ export class ProgramEvidenceGraphDetailService {
     };
   }
 
-  private async acceptedProjection(input: AcceptedGraphInput): Promise<CachedPayloadProjection> {
+  private async acceptedProjection(
+    input: AcceptedGraphInput,
+  ): Promise<CachedPayloadProjection> {
     const cached = this.projections.get(input.report.id);
     if (
       cached &&
@@ -255,7 +260,9 @@ export class ProgramEvidenceGraphDetailService {
       this.projections.set(input.report.id, cached);
       return cached;
     }
-    const computed = await this.projectPayload(await input.loadEvidencePayload());
+    const computed = await this.projectPayload(
+      await input.loadEvidencePayload(),
+    );
     this.projections.delete(input.report.id);
     // Never cache an unavailable graph: a subsequent read may observe a recovered artifact.
     if (
@@ -285,7 +292,9 @@ export class ProgramEvidenceGraphDetailService {
       sourceGraph = null;
       if (graphRef) {
         try {
-          sourceGraph = record(await this.storage.readJsonArtifactReference(graphRef));
+          sourceGraph = record(
+            await this.storage.readJsonArtifactReference(graphRef),
+          );
         } catch {
           sourceGraph = null;
         }
@@ -1261,7 +1270,8 @@ function isSafeReference(value: string): boolean {
 
 /** Validate the topology container independently of metrics or redaction/projection. */
 function hasGraphTopology(graph: Record<string, unknown> | null): boolean {
-  if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return false;
+  if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges))
+    return false;
   const nodeIds = new Set<string>();
   for (const entry of graph.nodes) {
     const node = record(entry);
@@ -1276,10 +1286,15 @@ function hasGraphTopology(graph: Record<string, unknown> | null): boolean {
     const source = edge?.source_node_id ?? edge?.sourceNodeId ?? edge?.source;
     const target = edge?.target_node_id ?? edge?.targetNodeId ?? edge?.target;
     if (
-      typeof id !== "string" || !id.trim() || edgeIds.has(id) ||
-      typeof source !== "string" || typeof target !== "string" ||
-      !nodeIds.has(source) || !nodeIds.has(target)
-    ) return false;
+      typeof id !== "string" ||
+      !id.trim() ||
+      edgeIds.has(id) ||
+      typeof source !== "string" ||
+      typeof target !== "string" ||
+      !nodeIds.has(source) ||
+      !nodeIds.has(target)
+    )
+      return false;
     edgeIds.add(id);
   }
   return true;

@@ -85,7 +85,11 @@ function buildPublicEvidenceController() {
       }),
     ),
     projectOverview: jest.fn((payload: unknown) => payload),
-    projectAcceptedOverview: jest.fn(async (input: { loadEvidencePayload: () => Promise<unknown> }) => ({ payload: await input.loadEvidencePayload() })),
+    projectAcceptedOverview: jest.fn(
+      async (input: { loadEvidencePayload: () => Promise<unknown> }) => ({
+        payload: await input.loadEvidencePayload(),
+      }),
+    ),
   };
   const artifacts = {
     getAvailability: jest
@@ -375,7 +379,9 @@ describe("EvidenceController graph lifecycle", () => {
       graphDetail,
     } = buildPublicEvidenceController();
     repositoryScanJobFindFirst.mockResolvedValue({
-      id: "scan-done", snapshotId: "snapshot-1", status: REPOSITORY_SCAN_JOB_STATUSES.completed,
+      id: "scan-done",
+      snapshotId: "snapshot-1",
+      status: REPOSITORY_SCAN_JOB_STATUSES.completed,
     });
     technicalEvidenceReportFindFirst.mockResolvedValue({
       id: "report-accepted",
