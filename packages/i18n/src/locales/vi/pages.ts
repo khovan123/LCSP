@@ -284,7 +284,8 @@ export const viPages = {
       interviewFailed: "Gặp sự cố khi xử lý câu trả lời của bạn.",
       investigateRunning: "Đang điều tra các engineering rule đã chọn…",
       investigateCompleted: "Đã điều tra xong các engineering rule đã chọn.",
-      investigateFailed: "Không thể hoàn tất điều tra các engineering rule đã chọn.",
+      investigateFailed:
+        "Không thể hoàn tất điều tra các engineering rule đã chọn.",
       gateRunning: "Đang xem xét kết quả điều tra…",
       gateCompleted: "Đã hoàn tất đánh giá tuân thủ.",
       gateFailed: "Không thể hoàn tất đánh giá tuân thủ.",
@@ -757,8 +758,7 @@ export const viPages = {
       capabilityOneTitle: "Phiên đánh giá được điều phối",
       capabilityOneDescription:
         "Quét, Phỏng vấn, Phân tích quy tắc và Cổng kiểm tra xác định hoạt động như một luồng đánh giá được hiển thị rõ ràng.",
-      capabilityOneMeta:
-        "Quét · Phỏng vấn · Phân tích quy tắc · Cổng kiểm tra",
+      capabilityOneMeta: "Quét · Phỏng vấn · Phân tích quy tắc · Cổng kiểm tra",
       capabilityTwoTitle: "Connector có kiểm soát",
       capabilityTwoDescription:
         "Kết nối GitHub, Bitbucket hoặc Azure DevOps trong khi vẫn xác định rõ phạm vi kho mã và không gian làm việc.",
@@ -1705,13 +1705,24 @@ export const viPages = {
     },
     repositorySetupDescription:
       "Trước khi assessment bắt đầu, hãy kết nối repository cần quét. Tôi sẽ phân tích source đã pin trước, sau đó mới bắt đầu Interview.",
+    addRepositoryDescription:
+      "Chọn provider cho repository này. Mỗi repository giữ provider, branch và commit đã pin riêng.",
     providerQuestion: "Chọn Git provider",
     providerHelp:
       "Chọn provider để mở kết nối bảo mật. Repository và commit đã pin là bắt buộc trước khi scan.",
+    providerSelected: "Provider đã chọn cho repository này",
+    selected: "Đã chọn",
     providerComingSoon: "Sắp hỗ trợ",
     configureProvider: "Cấu hình kết nối bảo mật",
+    repositoryUrlLabel: "URL repository",
     repositoryPlaceholder: "Dán URL repository để tiếp tục...",
     repositoryDisabledPlaceholder: "Kết nối provider để tiếp tục...",
+    repositoryPreviewDescription:
+      "Repository này sẽ giữ provider, branch và commit đã pin riêng.",
+    addRepositoryAction: "Thêm repository",
+    replaceRepositoryAction: "Thay thế repository",
+    backToProviders: "Quay lại providers",
+    backToRepositories: "Quay lại repositories",
     providers: {
       github: "GitHub",
       gitlab: "GitLab",
@@ -1739,6 +1750,11 @@ export const viPages = {
       retryScan: "Thử lại quét source",
       retryingScan: "Đang tạo scan mới",
       retryError: "Không thể thử lại quét source. Hãy thử lại sau.",
+      repositoriesDescription:
+        "Mỗi repository đã pin được quét trong workspace cô lập riêng.",
+      repositoriesStatus: "Các lượt quét repository",
+      relationMappingStatus: "Quan hệ đã xác nhận",
+      pgeStatus: "Program Evidence Graph",
       activities: {
         connect: "Đã kết nối Git provider",
         clone: "Đã clone source archive",
@@ -1746,6 +1762,45 @@ export const viPages = {
         buildGraph: "Đã xây dựng Program Evidence Graph",
         collectEvidence: "Đã thu thập evidence",
         collectEvidenceRunning: "Đang thu thập evidence...",
+      },
+    },
+    multiRepository: {
+      thought: "Ngữ cảnh repository",
+      addRepository: "Thêm repository",
+      reviewTitle: "Rà soát phạm vi repository",
+      reviewDescription:
+        "Xác nhận các repository đã pin và quan hệ có hướng trước khi scan.",
+      confirmScope: "Xác nhận và bắt đầu scan",
+      confirmingScope: "Đang xác nhận phạm vi...",
+      backToSetup: "Quay lại thiết lập",
+      relationCount: "{count} quan hệ",
+      pinnedRevision: "{provider} · {branch} · {commit}",
+      edit: "Chỉnh sửa",
+      removeRepository: "Xoá repository",
+      removeConfirm:
+        "Xoá repository này khỏi assessment? Dữ liệu source tại Git provider sẽ không bị xoá.",
+      description:
+        "Rà soát quan hệ evidence và execution có hướng trước khi scan.",
+      tableLabel: "Bản đồ quan hệ repository",
+      repository: "Repository",
+      relations: "Quan hệ",
+      noRelation: "Chưa có quan hệ",
+      addRelation: "Thêm quan hệ",
+      editorLabel: "Trình chỉnh sửa quan hệ repository",
+      from: "Repository nguồn",
+      type: "Loại quan hệ",
+      to: "Repository đích",
+      save: "Lưu quan hệ",
+      cancel: "Huỷ",
+      remove: "Xoá quan hệ",
+      keepIndependent: "Giữ các repository độc lập",
+      independentState:
+        "Các repository sẽ được quét độc lập; không thêm cạnh quan hệ.",
+      relationTypes: {
+        runtimeApiInteraction: "Tương tác runtime / API",
+        buildPackageDependency: "Phụ thuộc build / package",
+        dataEventFlow: "Luồng dữ liệu / sự kiện",
+        sharedLibrary: "Thư viện dùng chung",
       },
     },
     graph: {
@@ -1766,6 +1821,7 @@ export const viPages = {
         "Các node graph trong phạm vi được liên kết với bằng chứng kỹ thuật.",
       unavailableValue: "--",
       viewEvidenceGraph: "Xem evidence graph",
+      continueInterview: "Tiếp tục vào Interview",
       drawerDescription:
         "Các đường dẫn bằng chứng từ snapshot repository đã pin.",
       close: "Đóng Program Evidence Graph",
@@ -1776,6 +1832,10 @@ export const viPages = {
       notFound: "Assessment này chưa có evidence graph.",
       loadError: "Không thể tải evidence graph. Vui lòng thử lại sau.",
       repositorySnapshot: "Snapshot repository",
+      repository: "Repository",
+      branch: "Nhánh",
+      commit: "Commit",
+      status: "Trạng thái",
       overview: "Tổng quan graph",
       pathMap: "Bản đồ đường dẫn bằng chứng",
       claims: "Nhận định có bằng chứng",
@@ -2713,8 +2773,7 @@ export const viPages = {
       },
       trend: {
         title: "Xu hướng nạp tiền đã quyết toán",
-        description:
-          "Giao dịch chuyển tiền đến đã xác nhận theo ngày",
+        description: "Giao dịch chuyển tiền đến đã xác nhận theo ngày",
         dayAria: "Số tiền nạp đã quyết toán ngày {day}",
       },
       columns: {

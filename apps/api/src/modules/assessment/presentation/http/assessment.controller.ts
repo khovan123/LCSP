@@ -21,6 +21,15 @@ import { resultEnvelope } from "../../../../platform/http/filters/error.factory.
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { CreateAssessmentCommand } from "../../application/commands/create-assessment/create-assessment.command.js";
 import { CompleteRepositorySetupCommand } from "../../application/commands/complete-repository-setup/complete-repository-setup.command.js";
+import {
+  ManageRepositoryRelationCommand,
+  REPOSITORY_RELATION_MUTATIONS,
+} from "../../application/commands/manage-repository-relation/manage-repository-relation.command.js";
+import { RemoveAssessmentRepositoryCommand } from "../../application/commands/remove-assessment-repository/remove-assessment-repository.command.js";
+import {
+  ASSESSMENT_REPOSITORY_RELATION_TYPES,
+  type AssessmentRepositoryRelationType,
+} from "@lcsp/contracts/assessment";
 import { DeleteAssessmentCommand } from "../../application/commands/delete-assessment/delete-assessment.command.js";
 import { RenameAssessmentCommand } from "../../application/commands/rename-assessment/rename-assessment.command.js";
 import { PutRuleAssessmentCommand } from "../../application/commands/put-rule-assessment/put-rule-assessment.command.js";
@@ -87,14 +96,112 @@ export class AssessmentController {
   @RequireRoles(AUTH_USER_ROLES.customer)
   async completeRepositorySetup(
     @Param("assessmentId") assessmentId: string,
+    @Body() body: unknown,
     @Req() request: AuthenticatedRequest,
   ) {
+    const expectedSetupVersion = repositorySetupVersion(body);
     return resultEnvelope(
       await this.commandBus.execute(
         new CompleteRepositorySetupCommand(
           assessmentId,
           request.rbacContext.userId,
           request.correlationId ?? "repository-setup-complete",
+          expectedSetupVersion,
+        ),
+      ),
+    );
+  }
+
+  @Post(":assessmentId/repository-relations")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
+  async createRepositoryRelation(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const relation = relationBody(body);
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new ManageRepositoryRelationCommand(
+          REPOSITORY_RELATION_MUTATIONS.create,
+          assessmentId,
+          request.rbacContext.userId,
+          null,
+          relation?.fromSnapshotId ?? null,
+          relation?.toSnapshotId ?? null,
+          relation?.type ?? null,
+          request.correlationId ?? "repository-relation-create",
+        ),
+      ),
+    );
+  }
+
+  @Patch(":assessmentId/repository-relations/:relationId")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
+  async updateRepositoryRelation(
+    @Param("assessmentId") assessmentId: string,
+    @Param("relationId") relationId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const relation = relationBody(body);
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new ManageRepositoryRelationCommand(
+          REPOSITORY_RELATION_MUTATIONS.update,
+          assessmentId,
+          request.rbacContext.userId,
+          relationId,
+          relation?.fromSnapshotId ?? null,
+          relation?.toSnapshotId ?? null,
+          relation?.type ?? null,
+          request.correlationId ?? "repository-relation-update",
+        ),
+      ),
+    );
+  }
+
+  @Delete(":assessmentId/repository-relations/:relationId")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
+  async deleteRepositoryRelation(
+    @Param("assessmentId") assessmentId: string,
+    @Param("relationId") relationId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new ManageRepositoryRelationCommand(
+          REPOSITORY_RELATION_MUTATIONS.remove,
+          assessmentId,
+          request.rbacContext.userId,
+          relationId,
+          null,
+          null,
+          null,
+          request.correlationId ?? "repository-relation-remove",
+        ),
+      ),
+    );
+  }
+
+  @Delete(":assessmentId/repositories/:connectionId")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
+  async removeAssessmentRepository(
+    @Param("assessmentId") assessmentId: string,
+    @Param("connectionId") connectionId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new RemoveAssessmentRepositoryCommand(
+          assessmentId,
+          connectionId,
+          request.rbacContext.userId,
+          request.correlationId ?? "assessment-repository-remove",
         ),
       ),
     );
@@ -370,6 +477,19 @@ export class AssessmentController {
   }
 }
 
+function repositorySetupVersion(body: unknown): number {
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "setup_version" in body &&
+    typeof body.setup_version === "number" &&
+    Number.isInteger(body.setup_version) &&
+    body.setup_version >= 0
+  )
+    return body.setup_version;
+  return 0;
+}
+
 @Controller("internal/assessment-interviews")
 @UseGuards(WorkerApiKeyGuard)
 export class InternalAssessmentInterviewController {
@@ -545,4 +665,24 @@ export class InternalRuleAssessmentController {
       ),
     );
   }
+}
+
+function relationBody(value: unknown): {
+  fromSnapshotId: string;
+  toSnapshotId: string;
+  type: AssessmentRepositoryRelationType;
+} | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.from_snapshot_id === "string" &&
+    typeof candidate.to_snapshot_id === "string" &&
+    Object.values(ASSESSMENT_REPOSITORY_RELATION_TYPES).includes(
+      candidate.type as AssessmentRepositoryRelationType,
+    )
+    ? {
+        fromSnapshotId: candidate.from_snapshot_id,
+        toSnapshotId: candidate.to_snapshot_id,
+        type: candidate.type as AssessmentRepositoryRelationType,
+      }
+    : null;
 }

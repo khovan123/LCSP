@@ -10,7 +10,7 @@ from typing import Any, Mapping
 
 from langchain.agents.middleware import AgentMiddleware, hook_config
 
-from orchestration.context import LCSPRunContext
+from orchestration.context import LCSPRunContext, coerce_run_context
 from orchestration.agent_stream import (
     AgentStreamInterrupted,
     active_agent_stream_cancel,
@@ -33,6 +33,7 @@ from tools.common.capabilities.platform.api_client import WorkerApiClient
 from tools.common.capabilities.platform.repository_sandbox import (
     activate_repository_backend,
     ensure_repository_for_event,
+    repository_root_for_snapshot,
     resolve_repository_thread_backend,
 )
 
@@ -167,6 +168,10 @@ def _dispatch_active_system_event(state, runtime) -> dict[str, Any] | None:
         or context.system_boundary_name
     )
     scan_job_id = _event_text(context.system_event, "scanJobId", "scan_job_id")
+    snapshot_id = _event_text(context.system_event, "snapshotId", "snapshot_id")
+    repository_root = (
+        repository_root_for_snapshot(snapshot_id) if snapshot_id else None
+    )
     client = _worker_client()
     _post_scan_runtime_event(
         client,
@@ -181,15 +186,20 @@ def _dispatch_active_system_event(state, runtime) -> dict[str, Any] | None:
         event,
     )
     try:
-        ensure_repository_for_event(
+        _ensure_repository_for_event(
             backend,
             context.system_boundary_name,
             context.system_event,
             lifecycle=lifecycle,
+            repository_root=repository_root,
         )
         # Agents query the repository through the Codebase Memory graph; index
         # the hydrated snapshot before any of them starts (reused if current).
-        ensure_codebase_memory_index(backend, lifecycle=lifecycle)
+        ensure_codebase_memory_index(
+            backend,
+            lifecycle=lifecycle,
+            repository_root=repository_root or "/workspace/repository",
+        )
     except Exception as exc:
         _post_repository_hydration_failed(client, scan_job_id, exc)
         if context.system_boundary_name == "scan_requested" and scan_job_id:
@@ -198,7 +208,7 @@ def _dispatch_active_system_event(state, runtime) -> dict[str, Any] | None:
             except Exception:
                 pass
         raise
-    with activate_repository_backend(backend):
+    with activate_repository_backend(backend, root=repository_root or "/workspace/repository"):
         check_agent_execution_active()
         invoke_boundary(
             context.system_boundary_name,
@@ -208,6 +218,34 @@ def _dispatch_active_system_event(state, runtime) -> dict[str, Any] | None:
     return {"jump_to": "end"}
 
 
+def _ensure_repository_for_event(
+    backend: object,
+    boundary_name: str,
+    event: Mapping[str, Any],
+    *,
+    lifecycle,
+    repository_root: str | None,
+) -> None:
+    """Call the repository hydrator while retaining compatibility with test/runtime adapters."""
+    try:
+        ensure_repository_for_event(
+            backend,
+            boundary_name,
+            event,
+            lifecycle=lifecycle,
+            repository_root=repository_root,
+        )
+    except TypeError as exc:
+        if "unexpected keyword argument 'repository_root'" not in str(exc):
+            raise
+        ensure_repository_for_event(
+            backend,
+            boundary_name,
+            event,
+            lifecycle=lifecycle,
+        )
+
+
 dispatch_agent_runtime_system_event = _SystemEventDispatchMiddleware()
 
 
@@ -215,7 +253,7 @@ def _context(value: object) -> LCSPRunContext | None:
     if isinstance(value, LCSPRunContext):
         return value
     if isinstance(value, Mapping):
-        return LCSPRunContext(**dict(value))
+        return coerce_run_context(dict(value))
     return None
 
 

@@ -19,6 +19,7 @@ import {
   type VerificationResultStatus,
   type AssessmentStageLifecycleProjection,
 } from "@lcsp/contracts/evidence";
+import type { AssessmentRepositorySetupState } from "@lcsp/contracts/assessment";
 import {
   PROVIDER_CREDENTIAL_STATUSES,
   REPOSITORY_SCAN_JOB_STATUSES,
@@ -339,6 +340,8 @@ export type AdapterTimelineInput = {
 
 export type NormalizeAssessmentRuntimeParams = {
   assessmentId: string;
+  /** Readiness checkpoint used to prevent stale runtime artifacts from reopening stages. */
+  repositorySetup?: AssessmentRepositorySetupState | null;
   interviewState?: unknown | AdapterInterviewStateInput | null;
   artifactState?: AdapterArtifactAvailabilityInput | null;
   timeline?: AdapterTimelineInput | null;
