@@ -3,6 +3,9 @@ import { afterEach, test } from "node:test";
 
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
+import { ASSESSMENT_RUNTIME_CONTROL_STATES as States } from "@lcsp/contracts/evidence";
+import { resolveMessage } from "@lcsp/i18n";
+import { appLocale } from "../src/lib/locale.ts";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "http://localhost/",
@@ -28,9 +31,8 @@ Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
 });
 
 const { createRoot } = await import("react-dom/client");
-const { AssessmentComposer } = await import(
-  "../src/features/workspace/components/organisms/assessment-composer.tsx"
-);
+const { AssessmentComposer } =
+  await import("../src/features/workspace/components/organisms/assessment-composer.tsx");
 
 const roots: ReturnType<typeof createRoot>[] = [];
 
@@ -62,9 +64,53 @@ function actionButton(container: HTMLElement) {
   return container.querySelector('button[type="button"]:last-of-type');
 }
 
+test("explicit acknowledged lifecycle renders Stop, Stopping, Continue, Continuing, Stop", () => {
+  let stops = 0;
+  let resumes = 0;
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const steps = [
+    [States.running, "pages.appShell.chatStopTurn", false],
+    [States.stopRequested, "pages.appShell.chatStoppingTurn", true],
+    [States.stopped, "pages.appShell.chatResumeTurn", false],
+    [States.resumeRequested, "pages.appShell.chatContinuingTurn", true],
+    [States.running, "pages.appShell.chatStopTurn", false],
+  ] as const;
+  for (const [state, key, disabled] of steps) {
+    act(() =>
+      root.render(
+        <AssessmentComposer
+          value=""
+          onValueChange={() => {}}
+          onSubmit={() => {}}
+          runtimeControlState={state}
+          onInterruptTurn={() => stops++}
+          onResumeTurn={() => resumes++}
+        />,
+      ),
+    );
+    const label = resolveMessage(appLocale, key);
+    const button = Array.from(container.querySelectorAll("button")).find(
+      (candidate) => candidate.getAttribute("aria-label") === label,
+    )!;
+    assert.ok(button);
+    assert.equal(button.disabled, disabled);
+    assert.equal(submitButton(container), null);
+    act(() => button.click());
+  }
+  assert.equal(stops, 2);
+  assert.equal(resumes, 1);
+});
+
 test("idle composer shows the plain send button", () => {
   const container = render(
-    <AssessmentComposer value="" onValueChange={() => {}} onSubmit={() => {}} />,
+    <AssessmentComposer
+      value=""
+      onValueChange={() => {}}
+      onSubmit={() => {}}
+    />,
   );
 
   assert.ok(submitButton(container));
@@ -119,9 +165,8 @@ test("a paused turn shows a play-style button distinct from the stop button", ()
       onInterruptTurn={() => {}}
     />,
   );
-  const stopAriaLabel = actionButton(runningContainer)?.getAttribute(
-    "aria-label",
-  );
+  const stopAriaLabel =
+    actionButton(runningContainer)?.getAttribute("aria-label");
 
   const pausedContainer = render(
     <AssessmentComposer
@@ -132,9 +177,8 @@ test("a paused turn shows a play-style button distinct from the stop button", ()
       onResumeTurn={() => {}}
     />,
   );
-  const playAriaLabel = actionButton(pausedContainer)?.getAttribute(
-    "aria-label",
-  );
+  const playAriaLabel =
+    actionButton(pausedContainer)?.getAttribute("aria-label");
 
   assert.ok(stopAriaLabel);
   assert.ok(playAriaLabel);

@@ -1,5 +1,6 @@
 "use client";
 
+import { ASSESSMENT_RUNTIME_CONTROL_STATES as States } from "@lcsp/contracts/evidence";
 import { resolveMessage } from "@lcsp/i18n";
 import {
   CirclePlayIcon,
@@ -25,34 +26,11 @@ import {
 } from "@/components/ui/tooltip";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
+import type { AssessmentComposerProps } from "../../types/assessment-composer.types";
 
 const COLLAPSED_MAX_ROWS = 3;
 const EXPANDED_MAX_VIEWPORT_RATIO = 0.42;
 const EXPANDED_MAX_HEIGHT_PX = 352;
-
-type AssessmentComposerProps = {
-  value: string;
-  onValueChange: (value: string) => void;
-  onSubmit: () => void;
-  onResume?: () => void;
-  placeholder?: string;
-  sendLabel?: string;
-  resumeLabel?: string;
-  disabled?: boolean;
-  submitting?: boolean;
-  resuming?: boolean;
-  submitReady?: boolean;
-  resumeAvailable?: boolean;
-  className?: string;
-  /** An agent turn is currently running: replaces send with a stop button. */
-  turnRunning?: boolean;
-  /** The running turn was cooperatively stopped: replaces stop with play. */
-  turnPaused?: boolean;
-  onInterruptTurn?: () => void;
-  onResumeTurn?: () => void;
-  interruptingTurn?: boolean;
-  resumingTurn?: boolean;
-};
 
 export function AssessmentComposer({
   value,
@@ -74,7 +52,20 @@ export function AssessmentComposer({
   onResumeTurn,
   interruptingTurn = false,
   resumingTurn = false,
+  runtimeControlState,
 }: AssessmentComposerProps) {
+  const controlState =
+    runtimeControlState === undefined
+      ? turnPaused
+        ? States.stopped
+        : turnRunning
+          ? States.running
+          : null
+      : runtimeControlState;
+  const stopping = controlState === States.stopRequested;
+  const continuing = controlState === States.resumeRequested;
+  const stopped = controlState === States.stopped;
+  const controlled = controlState !== null && controlState !== States.completed;
   const [expanded, setExpanded] = useState(false);
   const [canResize, setCanResize] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -114,13 +105,22 @@ export function AssessmentComposer({
   }, [value, expanded]);
   const isSubmitReady =
     submitReady !== undefined ? submitReady : value.trim().length > 0;
-  const sendDisabled = disabled || submitting || !isSubmitReady;
+  const sendDisabled = controlled || disabled || submitting || !isSubmitReady;
   const showResumeAction = resumeAvailable && value.trim().length === 0;
   const resumeDisabled = resuming || !onResume;
-  const stopTurnLabel = t("pages.appShell.chatStopTurn");
-  const resumeTurnLabel = t("pages.appShell.chatResumeTurn");
-  const interruptTurnDisabled = interruptingTurn || !onInterruptTurn;
-  const resumeTurnDisabled = resumingTurn || !onResumeTurn;
+  const stopTurnLabel = t(
+    stopping
+      ? "pages.appShell.chatStoppingTurn"
+      : "pages.appShell.chatStopTurn",
+  );
+  const resumeTurnLabel = t(
+    continuing
+      ? "pages.appShell.chatContinuingTurn"
+      : "pages.appShell.chatResumeTurn",
+  );
+  const interruptTurnDisabled =
+    stopping || continuing || interruptingTurn || !onInterruptTurn;
+  const resumeTurnDisabled = continuing || resumingTurn || !onResumeTurn;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -185,13 +185,21 @@ export function AssessmentComposer({
         ref={textareaRef}
         rows={1}
         value={value}
-        disabled={disabled || submitting}
+        disabled={controlled || disabled || submitting}
         onChange={(event) => onValueChange(event.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={placeholder}
+        placeholder={
+          stopping
+            ? stopTurnLabel
+            : continuing
+              ? resumeTurnLabel
+              : stopped
+                ? t("pages.appShell.chatStoppedTurn")
+                : placeholder
+        }
         aria-label={placeholder}
         className={cn(
-          "min-h-11 resize-none overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-0 bg-transparent px-4.5 py-3 pr-14 text-sm leading-5 shadow-none placeholder:text-muted-foreground focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent",
+          "min-h-11 resize-none overflow-y-hidden scrollbar-none border-0 bg-transparent px-4.5 py-3 pr-14 text-sm leading-5 shadow-none placeholder:text-muted-foreground focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent",
         )}
       />
       {canResize || expanded ? (
@@ -231,16 +239,28 @@ export function AssessmentComposer({
           </TooltipContent>
         </Tooltip>
       ) : null}
-      {turnRunning || turnPaused ? (
+      {controlled ? (
         <Button
           type="button"
-          size="icon"
-          disabled={turnPaused ? resumeTurnDisabled : interruptTurnDisabled}
-          aria-label={turnPaused ? resumeTurnLabel : stopTurnLabel}
-          onClick={turnPaused ? handleResumeTurn : handleInterruptTurn}
-          className="absolute bottom-2 right-3 size-8 rounded-full bg-transparent text-foreground hover:bg-accent disabled:bg-transparent"
+          size={stopping || continuing ? "sm" : "icon"}
+          disabled={
+            stopped || continuing ? resumeTurnDisabled : interruptTurnDisabled
+          }
+          aria-label={stopped || continuing ? resumeTurnLabel : stopTurnLabel}
+          onClick={stopped ? handleResumeTurn : handleInterruptTurn}
+          data-runtime-control-state={controlState}
+          className={cn(
+            "absolute bottom-2 right-3 h-8 rounded-full bg-transparent text-foreground hover:bg-accent disabled:bg-transparent",
+            stopping || continuing ? "px-2" : "w-8",
+          )}
         >
-          {turnPaused ? (
+          {stopping || continuing ? (
+            continuing ? (
+              resumeTurnLabel
+            ) : (
+              stopTurnLabel
+            )
+          ) : stopped ? (
             <CirclePlayIcon aria-hidden="true" />
           ) : (
             <CircleStopIcon aria-hidden="true" />

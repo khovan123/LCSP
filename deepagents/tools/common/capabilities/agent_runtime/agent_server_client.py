@@ -76,6 +76,8 @@ def dispatch_agent_runtime_event(
         boundary_name
     )
     if interrupt_targets is not None:
+        if _find_text(message, "targetRunId"):
+            return _dispatch_runtime_control(message, correlation_id, timeout_seconds=timeout_seconds)
         for interrupt_target in interrupt_targets:
             interrupt_agent_runtime_run(interrupt_target, message, correlation_id)
         return {"status": "interrupt_requested"}
@@ -189,6 +191,43 @@ def dispatch_agent_runtime_event(
     )
 
 
+def _dispatch_runtime_control(message: dict[str, Any], correlation_id: str, *, timeout_seconds: float | None) -> Any:
+    """Control only the bound native run, never whatever happens to be active later."""
+    thread_id = _find_text(message, "threadId")
+    run_id = _find_text(message, "targetRunId")
+    boundary = _find_text(message, "boundary")
+    if not thread_id or not run_id or not boundary:
+        raise AgentServerRunError("RuntimeControlIdentityMissing", "Runtime control requires exact target identity")
+    client = get_sync_client(url=os.getenv("LCSP_AGENT_SERVER_URL", DEFAULT_AGENT_SERVER_URL), timeout=30)
+    target = client.runs.get(thread_id, run_id)
+    status = _run_status(target, "")
+    if message.get("controlAction") == "RESUME":
+        if status != "interrupted":
+            if status == "success":
+                return {"state": "COMPLETED", "targetRunId": run_id}
+            raise AgentServerRunError("RuntimeNotStopped", "The target run has not acknowledged interruption")
+        return resume_agent_runtime_run(boundary, message, correlation_id, timeout_seconds=timeout_seconds)
+    if status in _ACTIVE_RUN_STATUSES:
+        client.runs.cancel(thread_id, run_id, wait=False, action="interrupt")
+    deadline = time.monotonic() + 10.0
+    while status in _ACTIVE_RUN_STATUSES:
+        if time.monotonic() >= deadline:
+            # Retry the SAME target through the broker. Never resolve another run.
+            raise RuntimeError("Runtime stop acknowledgement is still pending")
+        time.sleep(0.05)
+        status = _run_status(client.runs.get(thread_id, run_id), "")
+    state = "STOPPED" if status == "interrupted" else "COMPLETED"
+    cfg = load_config()
+    callback = {
+        "assessmentId": _find_text(message, "assessmentId"),
+        "targetRunId": run_id, "state": state, "correlationId": correlation_id,
+    }
+    if state == "STOPPED":
+        callback["checkpoint"] = client.threads.get_state(thread_id).get("checkpoint")
+    WorkerApiClient(cfg.nestjs_api_base_url, cfg.worker_api_key)._post_with_retry("/internal/assessment-runtime-controls", callback, redact=False)
+    return {"state": state, "targetRunId": run_id}
+
+
 def _poll_run_until_terminal(
     client: Any,
     *,
@@ -270,7 +309,7 @@ def _poll_run_until_terminal(
                 next_heartbeat_at = timeout_at + pending_heartbeat_seconds
             continue
         current_status = _run_status(run, last_status)
-        if current_status != last_status:
+        if current_status != last_status and current_status != _INTERRUPTED_RUN_STATUS:
             observer.emit(
                 event_type="TOOL_COMPLETED",
                 run_status=(
@@ -337,7 +376,7 @@ def resume_agent_runtime_run(
     new input, so the graph resumes purely from checkpointed state (LangGraph's
     standard resume idiom) instead of appending another turn.
     """
-    thread_id = agent_thread_id(boundary_name, message, correlation_id)
+    thread_id = _find_text(message, "threadId") or agent_thread_id(boundary_name, message, correlation_id)
     assessment_id = _find_text(message, "assessmentId", "assessment_id")
     workflow_run_id = _find_text(
         message,
@@ -360,11 +399,38 @@ def resume_agent_runtime_run(
         "system_event": message,
         "repository_path": "/",
     }
+    original_context = message.get("runtimeContext")
+    if isinstance(original_context, Mapping):
+        # Resume the frozen event and repository pins, with a fresh cancellation
+        # generation. Never reinterpret the resume command as an Interview answer.
+        context = dict(original_context)
+        context["logical_run_id"] = _find_text(message, "logicalRunId")
+        stopped_at = _find_text(message, "stoppedAt")
+        deadline_at = context.get("system_deadline_at")
+        if stopped_at and isinstance(deadline_at, (float, int)):
+            from datetime import datetime
+            stopped_timestamp = datetime.fromisoformat(stopped_at.replace("Z", "+00:00")).timestamp()
+            # Paused wall time must not consume the boundary's execution budget.
+            # Keep the original remaining budget and the frozen workflow input.
+            context["system_deadline_at"] = deadline_at + max(0, time.time() - stopped_timestamp)
     client = get_sync_client(
         url=os.getenv("LCSP_AGENT_SERVER_URL", DEFAULT_AGENT_SERVER_URL),
         timeout=30,
     )
-    run = client.runs.create(
+    request_id = _find_text(message, "requestId")
+    run = None
+    if request_id:
+        # Redelivery reattaches even a completed generation of this request.
+        run = next((candidate for candidate in client.runs.list(thread_id)
+                    if isinstance(candidate, Mapping) and
+                    (candidate.get("metadata") or {}).get("lcsp_resume_request_id") == request_id), None)
+    active = _find_active_thread_run(client, thread_id, boundary_name)
+    if run is None and active is not None:
+        if original_context:
+            raise AgentServerRunError("RuntimeAlreadyRunning", "Another native generation owns the thread")
+        run = active
+    if run is None:
+        run = client.runs.create(
         thread_id,
         os.getenv("LCSP_AGENT_ASSISTANT_ID", DEFAULT_ASSISTANT_ID),
         input=None,
@@ -373,10 +439,12 @@ def resume_agent_runtime_run(
             "lcsp_boundary_name": boundary_name,
             "correlation_id": correlation_id,
             "assessment_id": assessment_id,
+            "lcsp_resume_request_id": _find_text(message, "requestId"),
         },
-        multitask_strategy="enqueue",
+        multitask_strategy="reject" if original_context else "enqueue",
         on_completion="keep",
-    )
+        **({"checkpoint_id": message["checkpoint"]["checkpoint_id"]} if isinstance(message.get("checkpoint"), Mapping) and message["checkpoint"].get("checkpoint_id") else {}),
+        )
     run_id = _find_text(run, "run_id", "runId")
     if not run_id:
         raise AgentServerRunError(
@@ -443,6 +511,8 @@ class _ScanRunObserver:
             payload["error_summary"] = error_summary
         if output_summary:
             payload["output_summary"] = dict(output_summary)
+            if output_summary.get("runId"):
+                payload["output_summary"]["runtimeRunId"] = output_summary["runId"]
         self.client.post_scan_runtime_event(self.scan_job_id, payload)
 
 

@@ -71,7 +71,9 @@ export function groupAgentStreamEventsByStage(
       event.eventType ===
         ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted ||
       event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed ||
-      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused;
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused ||
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeStopped ||
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeCompleted;
     if (dispatchEnded) {
       const stages = participatingStages.get(key);
       if (stages?.size) {
@@ -103,6 +105,10 @@ export function groupAgentStreamEventsByStage(
 }
 
 function agentStreamTurnKey(event: AssessmentAgentStreamEvent): string {
+  const data = event.data as Record<string, unknown> | null;
+  const control = data?.runtimeControl as Record<string, unknown> | undefined;
+  const nativeRunId = data?.runtimeRunId ?? control?.targetRunId;
+  if (typeof nativeRunId === "string") return JSON.stringify([nativeRunId]);
   return JSON.stringify([event.runId, event.correlationId]);
 }
 
@@ -178,10 +184,15 @@ export function deriveLatestAgentStreamTurnState(
       isCustomerRequestedStop(event.data);
     if (event.engineeringRuleId && !ruleScopedCustomerStop) continue;
     if (
-      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeStopped
     ) {
       terminal = true;
       pausedByCustomer = true;
+      continue;
+    }
+    if (pausedByCustomer) continue;
+    if (event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused) {
+      terminal = true;
       continue;
     }
     const failed =
@@ -189,10 +200,11 @@ export function deriveLatestAgentStreamTurnState(
       event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed;
     const completed =
       event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentCompleted ||
-      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted;
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted ||
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeCompleted;
     if (failed) {
       terminal = true;
-      pausedByCustomer = isCustomerRequestedStop(event.data);
+      pausedByCustomer = false;
     } else if (completed) {
       terminal = true;
       pausedByCustomer = false;
