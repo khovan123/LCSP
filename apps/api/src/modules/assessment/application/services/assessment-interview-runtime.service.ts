@@ -1123,10 +1123,15 @@ export class AssessmentInterviewRuntimeService {
     actor: RbacRequestContext;
     correlationId: string;
     resume: AssessmentInterviewResumeInput;
-  }): Promise<AssessmentRuntimeControlResult | AssessmentInterviewRuntimeState> {
+  }): Promise<
+    AssessmentRuntimeControlResult | AssessmentInterviewRuntimeState
+  > {
     await this.assertAssessmentVisible(input.assessmentId, input.actor);
     const current = await this.runtimeControl.current(input.assessmentId);
-    if (current && current.state !== ASSESSMENT_RUNTIME_CONTROL_STATES.completed) {
+    if (
+      current &&
+      current.state !== ASSESSMENT_RUNTIME_CONTROL_STATES.completed
+    ) {
       return this.runtimeControl.request({
         assessmentId: input.assessmentId,
         actorId: input.actor.userId,

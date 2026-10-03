@@ -50,8 +50,12 @@ describe("AssessmentPipelineContinuationService", () => {
   let stoppedByCustomer: jest.Mock<(...args: unknown[]) => Promise<boolean>>;
   let recordControl: jest.Mock<(...args: unknown[]) => Promise<void>>;
   let service: AssessmentPipelineContinuationService;
-  let currentControl: jest.Mock<(...args: unknown[]) => Promise<AssessmentRuntimeControlResult | null>>;
-  let requestControl: jest.Mock<(...args: unknown[]) => Promise<AssessmentRuntimeControlResult>>;
+  let currentControl: jest.Mock<
+    (...args: unknown[]) => Promise<AssessmentRuntimeControlResult | null>
+  >;
+  let requestControl: jest.Mock<
+    (...args: unknown[]) => Promise<AssessmentRuntimeControlResult>
+  >;
 
   const run = () =>
     service.continuePipeline({
@@ -97,8 +101,15 @@ describe("AssessmentPipelineContinuationService", () => {
     recordControl = jest
       .fn<(...args: unknown[]) => Promise<void>>()
       .mockResolvedValue(undefined);
-    currentControl = jest.fn<(...args: unknown[]) => Promise<AssessmentRuntimeControlResult | null>>().mockResolvedValue(null);
-    requestControl = jest.fn<(...args: unknown[]) => Promise<AssessmentRuntimeControlResult>>();
+    currentControl = jest
+      .fn<
+        (...args: unknown[]) => Promise<AssessmentRuntimeControlResult | null>
+      >()
+      .mockResolvedValue(null);
+    requestControl =
+      jest.fn<
+        (...args: unknown[]) => Promise<AssessmentRuntimeControlResult>
+      >();
     service = new AssessmentPipelineContinuationService(
       {
         // No wallet/billing model on purpose: continue must never consult one.
@@ -111,16 +122,35 @@ describe("AssessmentPipelineContinuationService", () => {
         isPipelineStoppedByCustomer: stoppedByCustomer,
         recordPipelineControl: recordControl,
       } as unknown as AssessmentRuntimeEventService,
-      { current: currentControl, request: requestControl } as unknown as AssessmentRuntimeControlService,
+      {
+        current: currentControl,
+        request: requestControl,
+      } as unknown as AssessmentRuntimeControlService,
     );
   });
 
   it("uses native checkpoint resume before any legacy requeue or rule rerun", async () => {
-    currentControl.mockResolvedValue({ state: States.stopped, targetRunId: "native-run", requestId: "stop" });
-    const control = { state: States.resumeRequested, targetRunId: "native-run", requestId: "resume" };
+    currentControl.mockResolvedValue({
+      state: States.stopped,
+      targetRunId: "native-run",
+      requestId: "stop",
+    });
+    const control = {
+      state: States.resumeRequested,
+      targetRunId: "native-run",
+      requestId: "resume",
+    };
     requestControl.mockResolvedValue(control);
-    await expect(run()).resolves.toEqual({ action: ASSESSMENT_PIPELINE_CONTINUE_ACTIONS.checkpointResumeRequested, control });
-    expect(requestControl).toHaveBeenCalledWith(expect.objectContaining({ action: Actions.resume, targetRunId: "native-run" }));
+    await expect(run()).resolves.toEqual({
+      action: ASSESSMENT_PIPELINE_CONTINUE_ACTIONS.checkpointResumeRequested,
+      control,
+    });
+    expect(requestControl).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: Actions.resume,
+        targetRunId: "native-run",
+      }),
+    );
     expect(interview.resumeFailedTurn).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
     expect(recordControl).not.toHaveBeenCalled();
@@ -128,7 +158,11 @@ describe("AssessmentPipelineContinuationService", () => {
   });
 
   it("does not fall back to replay when Stop acknowledgement is pending", async () => {
-    currentControl.mockResolvedValue({ state: States.stopRequested, targetRunId: "native-run", requestId: "stop" });
+    currentControl.mockResolvedValue({
+      state: States.stopRequested,
+      targetRunId: "native-run",
+      requestId: "stop",
+    });
     requestControl.mockRejectedValue(new Error("not stopped"));
     await expect(run()).rejects.toThrow("not stopped");
     expect(execute).not.toHaveBeenCalled();

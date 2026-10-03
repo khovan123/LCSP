@@ -1962,7 +1962,10 @@ describe("AssessmentRuntimeEventService", () => {
 describe("AssessmentRuntimeEventService.getPipelineLiveness", () => {
   const WINDOW_MS = 90_000;
 
-  function serviceWithLatest(latest: Record<string, unknown> | null, turn: Record<string, unknown> | null = null) {
+  function serviceWithLatest(
+    latest: Record<string, unknown> | null,
+    turn: Record<string, unknown> | null = null,
+  ) {
     const findMany = jest
       .fn<(...args: unknown[]) => Promise<unknown[]>>()
       .mockResolvedValue(latest ? [latest] : []);
@@ -1999,11 +2002,16 @@ describe("AssessmentRuntimeEventService.getPipelineLiveness", () => {
     ASSESSMENT_RUNTIME_CONTROL_STATES.resumeRequested,
     ASSESSMENT_RUNTIME_CONTROL_STATES.completed,
   ])("ignores old heartbeat liveness after native state %s", async (state) => {
-    const { service, findMany } = serviceWithLatest({
-      runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
-      createdAt: new Date(),
-    }, { state, updatedAt: new Date() });
-    await expect(service.getPipelineLiveness("assessment-1", WINDOW_MS)).resolves.toMatchObject({ live: false });
+    const { service, findMany } = serviceWithLatest(
+      {
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+        createdAt: new Date(),
+      },
+      { state, updatedAt: new Date() },
+    );
+    await expect(
+      service.getPipelineLiveness("assessment-1", WINDOW_MS),
+    ).resolves.toMatchObject({ live: false });
     expect(findMany).not.toHaveBeenCalled();
   });
 
@@ -2012,7 +2020,9 @@ describe("AssessmentRuntimeEventService.getPipelineLiveness", () => {
       state: ASSESSMENT_RUNTIME_CONTROL_STATES.stopRequested,
       updatedAt: new Date(),
     });
-    await expect(service.getPipelineLiveness("assessment-1", WINDOW_MS)).resolves.toMatchObject({ live: true });
+    await expect(
+      service.getPipelineLiveness("assessment-1", WINDOW_MS),
+    ).resolves.toMatchObject({ live: true });
   });
 
   it("does not treat a request marker as a stop acknowledgement", async () => {

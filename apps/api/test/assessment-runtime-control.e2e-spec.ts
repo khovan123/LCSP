@@ -124,7 +124,7 @@ describe("durable acknowledged runtime controls", () => {
       where: { aggregateId: assessmentId },
     });
     expect(stopOutbox).toHaveLength(1);
-    expect(JSON.stringify(stopOutbox[0]!.payload)).toContain(runId);
+    expect(JSON.stringify(stopOutbox[0].payload)).toContain(runId);
     await acknowledge(States.stopped);
     const [resume, duplicateResume] = await Promise.all([
       request(Actions.resume),

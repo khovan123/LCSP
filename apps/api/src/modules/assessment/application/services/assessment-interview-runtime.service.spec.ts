@@ -42,7 +42,10 @@ import type { PrismaService } from "../../../../infrastructure/prisma/prisma.ser
 import type { OutboxRepository } from "../../../../platform/outbox/outbox.repository.js";
 import type { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import type { AssessmentRuntimeControlService } from "../../../../platform/runtime-events/assessment-runtime-control.service.js";
-import { ASSESSMENT_RUNTIME_CONTROL_STATES, ASSESSMENT_RUNTIME_CONTROL_ACTIONS } from "@lcsp/contracts/evidence";
+import {
+  ASSESSMENT_RUNTIME_CONTROL_STATES,
+  ASSESSMENT_RUNTIME_CONTROL_ACTIONS,
+} from "@lcsp/contracts/evidence";
 import type { InterviewAuditService } from "../../../audit/application/services/interview-audit.service.js";
 import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
@@ -665,7 +668,13 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         .mockReturnValue(TEST_GUIDANCE_VERSION),
     };
 
-    controlRequest = jest.fn<(...args: unknown[]) => Promise<unknown>>().mockResolvedValue({ state: ASSESSMENT_RUNTIME_CONTROL_STATES.stopRequested, targetRunId: "native-run", requestId: "request-1" });
+    controlRequest = jest
+      .fn<(...args: unknown[]) => Promise<unknown>>()
+      .mockResolvedValue({
+        state: ASSESSMENT_RUNTIME_CONTROL_STATES.stopRequested,
+        targetRunId: "native-run",
+        requestId: "request-1",
+      });
     service = new AssessmentInterviewRuntimeService(
       mockPrisma as unknown as PrismaService,
       mockRuntimeEvents as unknown as AssessmentRuntimeEventService,
@@ -1822,7 +1831,11 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         correlationId: "corr-pause-1",
         action: ASSESSMENT_RUNTIME_CONTROL_ACTIONS.stop,
       });
-      expect(result).toEqual({ state: ASSESSMENT_RUNTIME_CONTROL_STATES.stopRequested, targetRunId: "native-run", requestId: "request-1" });
+      expect(result).toEqual({
+        state: ASSESSMENT_RUNTIME_CONTROL_STATES.stopRequested,
+        targetRunId: "native-run",
+        requestId: "request-1",
+      });
       expect(mockRuntimeEvents.recordPipelineControl).not.toHaveBeenCalled();
     });
 
@@ -1835,7 +1848,12 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         correlationId: "corr-pause-2",
       });
 
-      expect(controlRequest).toHaveBeenCalledWith(expect.objectContaining({ assessmentId: "assessment-1", action: ASSESSMENT_RUNTIME_CONTROL_ACTIONS.stop }));
+      expect(controlRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          assessmentId: "assessment-1",
+          action: ASSESSMENT_RUNTIME_CONTROL_ACTIONS.stop,
+        }),
+      );
     });
 
     it("rejects a customer pausing an assessment they do not own", async () => {
