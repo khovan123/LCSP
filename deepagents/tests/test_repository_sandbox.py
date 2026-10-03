@@ -132,6 +132,7 @@ def test_agent_server_scan_observer_persists_scheduler_progress(monkeypatch) -> 
                 "output_summary": {
                     "runId": "run-1",
                     "schedulerState": "pending",
+                    "runtimeRunId": "run-1",
                 },
             },
         )

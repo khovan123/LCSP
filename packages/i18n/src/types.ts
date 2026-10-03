@@ -182,6 +182,9 @@ export type PagesMessages = {
     chatSend: string;
     chatStopTurn: string;
     chatResumeTurn: string;
+    chatStoppingTurn: string;
+    chatContinuingTurn: string;
+    chatStoppedTurn: string;
     chatExpand: string;
     chatCollapse: string;
     chatShowMore: string;
