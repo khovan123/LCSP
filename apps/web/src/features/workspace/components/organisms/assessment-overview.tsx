@@ -58,6 +58,7 @@ import {
   splitCurrentInterviewActivity,
 } from "../../utils/agent-stream-stages";
 import { agentThinkingLabel } from "../../utils/agent-thinking-label";
+import { selectAssessmentComposerRuntimeControl } from "../../utils/assessment-composer-control";
 import {
   selectComposerAvailability,
   selectCustomerActions,
@@ -354,11 +355,19 @@ function AssessmentInterviewFlow({
     useAssessmentInterviewBlockedActionMutation(assessmentId);
   const continuePipeline = useContinueAssessmentPipelineMutation(assessmentId);
   const runtimeControl = useAssessmentRuntimeControl(assessmentId);
+  const activeRuntimeControl = useMemo(
+    () =>
+      selectAssessmentComposerRuntimeControl(
+        liveTimeline.agentStreamEvents ?? [],
+        runtimeControl.control.data,
+      ),
+    [liveTimeline.agentStreamEvents, runtimeControl.control.data],
+  );
   const runtimeControlState = runtimeControl.stop.isPending
     ? ASSESSMENT_RUNTIME_CONTROL_STATES.stopRequested
     : runtimeControl.resume.isPending
       ? ASSESSMENT_RUNTIME_CONTROL_STATES.resumeRequested
-      : (runtimeControl.control.data?.state ?? null);
+      : activeRuntimeControl.state;
   const submitPostFindingDecision =
     useSubmitAssessmentPostFindingDecisionMutation(assessmentId);
 
@@ -670,6 +679,9 @@ function AssessmentInterviewFlow({
   // the API decides whether a failed/stalled Interview turn or the downstream
   // assessment restarts, and refuses while a worker still owns the pipeline.
   const canContinuePipeline =
+    runtimeControlState !== ASSESSMENT_RUNTIME_CONTROL_STATES.running &&
+    runtimeControlState !== ASSESSMENT_RUNTIME_CONTROL_STATES.stopRequested &&
+    runtimeControlState !== ASSESSMENT_RUNTIME_CONTROL_STATES.resumeRequested &&
     (boundaryPaused || interviewEnabled) &&
     !scanFailed &&
     !hasComposerDraft &&
@@ -988,13 +1000,13 @@ function AssessmentInterviewFlow({
         onResume={handleContinuePipeline}
         runtimeControlState={runtimeControlState}
         onInterruptTurn={() =>
-          runtimeControl.stop.mutate(undefined, {
+          runtimeControl.stop.mutate(activeRuntimeControl.targetRunId, {
             onError: () =>
               setLastSavedMessage(t(PIPELINE_CONTINUE_FAILED_MESSAGE_KEY)),
           })
         }
         onResumeTurn={() =>
-          runtimeControl.resume.mutate(undefined, {
+          runtimeControl.resume.mutate(activeRuntimeControl.targetRunId, {
             onError: () =>
               setLastSavedMessage(t(PIPELINE_CONTINUE_FAILED_MESSAGE_KEY)),
           })

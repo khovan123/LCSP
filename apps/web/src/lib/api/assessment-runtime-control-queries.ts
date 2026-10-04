@@ -12,29 +12,33 @@ export function useAssessmentRuntimeControl(assessmentId: string) {
     queryFn: () => assessmentRuntimeControl(assessmentId, "control"),
     refetchInterval: 1000,
   });
+  const beginRequest = async (targetRunId: string | undefined) => {
+    const previousTargetRunId =
+      client.getQueryData<AssessmentRuntimeControlResult | null>(
+        queryKey,
+      )?.targetRunId;
+    await client.cancelQueries({ queryKey });
+    return { targetRunId, previousTargetRunId };
+  };
   const stop = useMutation({
-    mutationFn: () =>
-      assessmentRuntimeControl(assessmentId, "stop", control.data?.targetRunId),
-    onMutate: () => client.cancelQueries({ queryKey }),
-    onSuccess: (value) =>
+    mutationFn: (targetRunId: string | undefined) =>
+      assessmentRuntimeControl(assessmentId, "stop", targetRunId),
+    onMutate: beginRequest,
+    onSuccess: (value, _targetRunId, request) =>
       client.setQueryData<AssessmentRuntimeControlResult | null>(
         queryKey,
-        (current) => mergeRuntimeControlResponse(current, value),
+        (current) => mergeRuntimeControlResponse(current, value, request),
       ),
     onSettled: () => client.invalidateQueries({ queryKey }),
   });
   const resume = useMutation({
-    mutationFn: () =>
-      assessmentRuntimeControl(
-        assessmentId,
-        "continue",
-        control.data?.targetRunId,
-      ),
-    onMutate: () => client.cancelQueries({ queryKey }),
-    onSuccess: (value) =>
+    mutationFn: (targetRunId: string | undefined) =>
+      assessmentRuntimeControl(assessmentId, "continue", targetRunId),
+    onMutate: beginRequest,
+    onSuccess: (value, _targetRunId, request) =>
       client.setQueryData<AssessmentRuntimeControlResult | null>(
         queryKey,
-        (current) => mergeRuntimeControlResponse(current, value),
+        (current) => mergeRuntimeControlResponse(current, value, request),
       ),
     onSettled: () => client.invalidateQueries({ queryKey }),
   });

@@ -1,5 +1,10 @@
 import type { AssessmentRuntimeControlState } from "@lcsp/contracts/evidence";
 
+export type AssessmentComposerRuntimeControl = {
+  state: AssessmentRuntimeControlState | null;
+  targetRunId?: string;
+};
+
 export type AssessmentComposerProps = {
   value: string;
   onValueChange: (value: string) => void;

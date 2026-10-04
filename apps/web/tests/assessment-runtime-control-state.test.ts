@@ -46,3 +46,63 @@ test("completion wins over delayed stop acknowledgement", () => {
     completed,
   );
 });
+
+test("Stop for the generation already visible in SSE advances its older unchanged poll cache", () => {
+  const olderCache = {
+    state: States.resumeRequested,
+    targetRunId: "old",
+    requestId: "continue",
+  };
+  const requested = {
+    state: States.stopRequested,
+    targetRunId: "resumed",
+    requestId: "stop",
+  };
+  assert.equal(
+    mergeRuntimeControlResponse(olderCache, requested, {
+      targetRunId: "resumed",
+      previousTargetRunId: "old",
+    }),
+    requested,
+  );
+});
+
+test("an in-flight response cannot replace a newer generation that updated the cache", () => {
+  const current = {
+    state: States.running,
+    targetRunId: "newer",
+    requestId: null,
+  };
+  assert.equal(
+    mergeRuntimeControlResponse(
+      current,
+      {
+        state: States.stopRequested,
+        targetRunId: "resumed",
+        requestId: "stop",
+      },
+      { targetRunId: "resumed", previousTargetRunId: "old" },
+    ),
+    current,
+  );
+});
+
+test("a response for an unexpected target cannot advance an older cache", () => {
+  const current = {
+    state: States.completed,
+    targetRunId: "old",
+    requestId: null,
+  };
+  assert.equal(
+    mergeRuntimeControlResponse(
+      current,
+      {
+        state: States.stopRequested,
+        targetRunId: "different",
+        requestId: "stop",
+      },
+      { targetRunId: "resumed", previousTargetRunId: "old" },
+    ),
+    current,
+  );
+});

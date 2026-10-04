@@ -104,11 +104,18 @@ export function groupAgentStreamEventsByStage(
   return grouped;
 }
 
-function agentStreamTurnKey(event: AssessmentAgentStreamEvent): string {
+export function agentStreamRuntimeRunId(
+  event: AssessmentAgentStreamEvent,
+): string | undefined {
   const data = event.data as Record<string, unknown> | null;
   const control = data?.runtimeControl as Record<string, unknown> | undefined;
   const nativeRunId = data?.runtimeRunId ?? control?.targetRunId;
-  if (typeof nativeRunId === "string") return JSON.stringify([nativeRunId]);
+  return typeof nativeRunId === "string" ? nativeRunId : undefined;
+}
+
+function agentStreamTurnKey(event: AssessmentAgentStreamEvent): string {
+  const nativeRunId = agentStreamRuntimeRunId(event);
+  if (nativeRunId !== undefined) return JSON.stringify([nativeRunId]);
   return JSON.stringify([event.runId, event.correlationId]);
 }
 
@@ -191,7 +198,9 @@ export function deriveLatestAgentStreamTurnState(
       continue;
     }
     if (pausedByCustomer) continue;
-    if (event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused) {
+    if (
+      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryPaused
+    ) {
       terminal = true;
       continue;
     }
@@ -200,7 +209,8 @@ export function deriveLatestAgentStreamTurnState(
       event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryFailed;
     const completed =
       event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.agentCompleted ||
-      event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted ||
+      event.eventType ===
+        ASSESSMENT_AGENT_STREAM_EVENT_TYPES.boundaryCompleted ||
       event.eventType === ASSESSMENT_AGENT_STREAM_EVENT_TYPES.runtimeCompleted;
     if (failed) {
       terminal = true;

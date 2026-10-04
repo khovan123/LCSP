@@ -6,6 +6,12 @@ import React, { act } from "react";
 import { ASSESSMENT_RUNTIME_CONTROL_STATES as States } from "@lcsp/contracts/evidence";
 import { resolveMessage } from "@lcsp/i18n";
 import { appLocale } from "../src/lib/locale.ts";
+import { selectAssessmentComposerRuntimeControl } from "../src/features/workspace/utils/assessment-composer-control.ts";
+import {
+  ASSESSMENT_AGENT_STREAM_EVENT_TYPES as Events,
+  ASSESSMENT_AGENT_STREAM_STAGES as Stages,
+  type AssessmentAgentStreamEvent,
+} from "@lcsp/contracts/evidence";
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "http://localhost/",
@@ -97,11 +103,69 @@ test("explicit acknowledged lifecycle renders Stop, Stopping, Continue, Continui
     )!;
     assert.ok(button);
     assert.equal(button.disabled, disabled);
+    assert.equal(
+      button
+        .querySelector("svg")
+        ?.classList.contains(
+          state === States.stopped
+            ? "lucide-circle-play"
+            : "lucide-circle-stop",
+        ) ?? false,
+      state !== States.stopRequested && state !== States.resumeRequested,
+    );
     assert.equal(submitButton(container), null);
     act(() => button.click());
   }
   assert.equal(stops, 2);
   assert.equal(resumes, 1);
+});
+
+test("Thinking from the live stream renders circle-stop even when generic Continue is available and control is null", () => {
+  const events: AssessmentAgentStreamEvent[] = [
+    {
+      eventId: "thinking",
+      sequence: 1,
+      clientSequence: 1,
+      emittedAt: "2026-10-03T00:00:00Z",
+      assessmentId: "assessment-1",
+      runId: "snapshot-1",
+      correlationId: "answer-1",
+      eventType: Events.modelCallStarted,
+      stage: Stages.interview,
+      engineeringRuleId: null,
+      source: null,
+      agentName: null,
+      subagentName: null,
+      namespace: [],
+      nodeName: null,
+      messageId: null,
+      toolName: null,
+      toolCallId: null,
+      status: null,
+      text: null,
+      data: { runtimeRunId: "native-1" },
+    },
+  ];
+  let stopped = 0;
+  let continued = 0;
+  const control = selectAssessmentComposerRuntimeControl(events, null);
+  const container = render(
+    <AssessmentComposer
+      value=""
+      onValueChange={() => {}}
+      onSubmit={() => {}}
+      resumeAvailable
+      onResume={() => continued++}
+      runtimeControlState={control.state}
+      onInterruptTurn={() => stopped++}
+    />,
+  );
+  const button = actionButton(container) as HTMLButtonElement;
+  assert.ok(button.querySelector(".lucide-circle-stop"));
+  assert.equal(button.querySelector(".lucide-circle-play"), null);
+  act(() => button.click());
+  assert.equal(stopped, 1);
+  assert.equal(continued, 0);
 });
 
 test("idle composer shows the plain send button", () => {
