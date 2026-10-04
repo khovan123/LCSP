@@ -361,7 +361,11 @@ describe("GetAssessmentHandler direct EngineeringRule runtime", () => {
     const assessment = makeAssessment();
     const handler = buildHandler({
       assessment,
-      scanJob: { id: "scan-rerun-2", snapshotId: "snapshot-1", status: "QUEUED" },
+      scanJob: {
+        id: "scan-rerun-2",
+        snapshotId: "snapshot-1",
+        status: "QUEUED",
+      },
       acceptedEvidenceReport: null,
       classificationResult: {
         guardrailStatus: CLASSIFICATION_GUARDRAIL_STATUSES.passed,
