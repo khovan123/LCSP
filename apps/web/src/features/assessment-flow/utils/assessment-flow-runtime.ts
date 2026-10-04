@@ -62,7 +62,7 @@ export function deriveAssessmentFlowRuntime(input: {
     !input.snapshot ||
     (input.setupState !== undefined && needsRepositorySetupResume(input.setupState))
       ? ASSESSMENT_FLOW_STAGES.repositorySetup
-      : evidenceAccepted
+      : evidenceAccepted && evidenceGraphReady
         ? ASSESSMENT_FLOW_STAGES.interview
         : ASSESSMENT_FLOW_STAGES.scanner;
 
@@ -93,12 +93,14 @@ export function deriveAssessmentFlowRuntime(input: {
                   ? TOOL_ACTIVITY_STATUSES.completed
                   : evidenceRejected
                     ? TOOL_ACTIVITY_STATUSES.failed
-                    : TOOL_ACTIVITY_STATUSES.pending
-                : evidenceAccepted
+                    : scanCompleted
+                      ? TOOL_ACTIVITY_STATUSES.running
+                      : TOOL_ACTIVITY_STATUSES.pending
+                : evidenceAccepted && evidenceGraphReady
                   ? TOOL_ACTIVITY_STATUSES.completed
                   : evidenceRejected
                     ? TOOL_ACTIVITY_STATUSES.failed
-                    : scanCompleted
+                    : evidenceGraphReady
                       ? TOOL_ACTIVITY_STATUSES.running
                       : TOOL_ACTIVITY_STATUSES.pending,
     }),

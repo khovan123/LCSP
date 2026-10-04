@@ -65,17 +65,31 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
       this.throwNotFound(query.correlationId);
     }
 
-    const acceptedEvidenceReport =
-      await this.prisma.technicalEvidenceReport.findFirst({
-        where: {
-          assessmentId: assessment.id,
-          status: toPrismaEvidenceAcceptanceStatus(
-            TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
-          ),
-        },
-        select: { id: true, evidencePayload: true },
-        orderBy: { createdAt: "desc" },
-      });
+    const latestScan = await this.prisma.repositoryScanJob.findFirst({
+      where: {
+        assessmentId: assessment.id,
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+        snapshotId: true,
+      },
+    });
+
+    const acceptedEvidenceReport = latestScan
+      ? await this.prisma.technicalEvidenceReport.findFirst({
+          where: {
+            assessmentId: assessment.id,
+            scanJobId: latestScan.id,
+            snapshotId: latestScan.snapshotId,
+            status: toPrismaEvidenceAcceptanceStatus(
+              TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+            ),
+          },
+          select: { id: true, evidencePayload: true, createdAt: true },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        })
+      : null;
 
     const classificationResult = acceptedEvidenceReport
       ? await this.prisma.classificationResult.findFirst({
@@ -84,12 +98,13 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
             status: toPrismaEvidenceAcceptanceStatus(
               CLASSIFICATION_RESULT_STATUSES.accepted,
             ),
+            createdAt: { gte: acceptedEvidenceReport.createdAt },
           },
           select: {
             guardrailStatus: true,
             classificationData: true,
           },
-          orderBy: { createdAt: "desc" },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         })
       : null;
 

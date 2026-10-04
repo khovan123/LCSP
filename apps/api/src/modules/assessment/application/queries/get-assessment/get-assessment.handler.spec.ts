@@ -39,10 +39,16 @@ type LegalChunkFixture = {
 
 function buildHandler(input: {
   assessment: Assessment | null;
-  acceptedEvidenceReport?: { id: string; evidencePayload?: unknown } | null;
+  scanJob?: { id: string; snapshotId: string; status: string } | null;
+  acceptedEvidenceReport?: {
+    id: string;
+    evidencePayload?: unknown;
+    createdAt?: Date;
+  } | null;
   classificationResult?: {
     guardrailStatus: string;
     classificationData: unknown;
+    createdAt?: Date;
   } | null;
   legalChunks?: LegalChunkFixture[];
 }) {
@@ -58,12 +64,33 @@ function buildHandler(input: {
       .fn<AssessmentRepository["findMany"]>()
       .mockResolvedValue({ items: [], total: 0 }),
   };
+  const scanJob =
+    input.scanJob !== undefined
+      ? input.scanJob
+      : input.acceptedEvidenceReport
+        ? { id: "scan-1", snapshotId: "snapshot-1", status: "COMPLETED" }
+        : null;
+  const acceptedEvidenceReport = input.acceptedEvidenceReport
+    ? {
+        createdAt: new Date("2026-09-01T00:00:00.000Z"),
+        ...input.acceptedEvidenceReport,
+      }
+    : null;
+  const classificationResult = input.classificationResult
+    ? {
+        createdAt: new Date("2026-09-01T00:00:01.000Z"),
+        ...input.classificationResult,
+      }
+    : null;
   const prisma = {
+    repositoryScanJob: {
+      findFirst: resolvedMock(scanJob),
+    },
     technicalEvidenceReport: {
-      findFirst: resolvedMock(input.acceptedEvidenceReport ?? null),
+      findFirst: resolvedMock(acceptedEvidenceReport),
     },
     classificationResult: {
-      findFirst: resolvedMock(input.classificationResult ?? null),
+      findFirst: resolvedMock(classificationResult),
     },
     legalDocumentChunk: {
       findMany: resolvedMock(input.legalChunks ?? []),
@@ -328,5 +355,26 @@ describe("GetAssessmentHandler direct EngineeringRule runtime", () => {
         query(assessment.id, AUTH_USER_ROLES.admin, "system-admin-1"),
       ),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it("locks classification and excludes evidence when current scan has no accepted report (e.g. queued rerun)", async () => {
+    const assessment = makeAssessment();
+    const handler = buildHandler({
+      assessment,
+      scanJob: { id: "scan-rerun-2", snapshotId: "snapshot-1", status: "QUEUED" },
+      acceptedEvidenceReport: null,
+      classificationResult: {
+        guardrailStatus: CLASSIFICATION_GUARDRAIL_STATUSES.passed,
+        classificationData: {},
+      },
+    });
+
+    const result = await handler.execute(query(assessment.id));
+    expect(result.readiness_state.classification_locked).toBe(true);
+    expect(result.readiness_state.lock_reason).toBe(
+      ASSESSMENT_LOCK_REASONS.evidenceRequired,
+    );
+    expect(result.classification_result).toBeNull();
+    expect(result.can_rerun_classification).toBe(false);
   });
 });
