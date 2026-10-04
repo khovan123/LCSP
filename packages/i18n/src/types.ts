@@ -1664,12 +1664,21 @@ export type PagesMessages = {
       completedWithoutDuration: string;
     };
     repositorySetupDescription: string;
+    addRepositoryDescription: string;
     providerQuestion: string;
     providerHelp: string;
+    providerSelected: string;
+    selected: string;
     providerComingSoon: string;
     configureProvider: string;
+    repositoryUrlLabel: string;
     repositoryPlaceholder: string;
     repositoryDisabledPlaceholder: string;
+    repositoryPreviewDescription: string;
+    addRepositoryAction: string;
+    replaceRepositoryAction: string;
+    backToProviders: string;
+    backToRepositories: string;
     providers: {
       github: string;
       gitlab: string;
@@ -1693,6 +1702,10 @@ export type PagesMessages = {
       retryScan: string;
       retryingScan: string;
       retryError: string;
+      repositoriesDescription: string;
+      repositoriesStatus: string;
+      relationMappingStatus: string;
+      pgeStatus: string;
       activities: {
         connect: string;
         clone: string;
@@ -1700,6 +1713,43 @@ export type PagesMessages = {
         buildGraph: string;
         collectEvidence: string;
         collectEvidenceRunning: string;
+      };
+    };
+    multiRepository: {
+      thought: string;
+      addRepository: string;
+      reviewTitle: string;
+      reviewDescription: string;
+      confirmScope: string;
+      confirmingScope: string;
+      backToSetup: string;
+      relationCount: string;
+      pinnedRevision: string;
+      edit: string;
+      editRelation: string;
+      removeRepository: string;
+      removeConfirm: string;
+      description: string;
+      tableLabel: string;
+      repository: string;
+      relations: string;
+      noRelation: string;
+      addRelation: string;
+      editorLabel: string;
+      from: string;
+      type: string;
+      to: string;
+      save: string;
+      cancel: string;
+      remove: string;
+      removeRelationConfirm: string;
+      keepIndependent: string;
+      independentState: string;
+      relationTypes: {
+        runtimeApiInteraction: string;
+        buildPackageDependency: string;
+        dataEventFlow: string;
+        sharedLibrary: string;
       };
     };
     graph: {
@@ -1716,6 +1766,7 @@ export type PagesMessages = {
       evidenceMappedScopeDescription: string;
       unavailableValue: string;
       viewEvidenceGraph: string;
+      continueInterview: string;
       artifactMetadata: string;
       drawerDescription: string;
       close: string;
@@ -1725,6 +1776,10 @@ export type PagesMessages = {
       notFound: string;
       loadError: string;
       repositorySnapshot: string;
+      repository: string;
+      branch: string;
+      commit: string;
+      status: string;
       overview: string;
       pathMap: string;
       claims: string;

@@ -3,10 +3,15 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 import {
+  ASSESSMENT_GRAPH_STATES,
   ASSESSMENT_FLOW_STAGES,
   ASSESSMENT_REPOSITORY_PROVIDERS,
+  ASSESSMENT_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
-import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
+import {
+  REPOSITORY_CONNECTION_STATUSES,
+  REPOSITORY_SCAN_JOB_STATUSES,
+} from "@lcsp/contracts/github-integration";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 
 import { repositorySetupSchema } from "../src/features/assessment-flow/schemas/repository-setup.schema";
@@ -35,6 +40,18 @@ const scannerStepPath = new URL(
   "../src/features/assessment-flow/components/organisms/scanner-step.tsx",
   import.meta.url,
 );
+const repositoryReviewPath = new URL(
+  "../src/features/assessment-flow/components/organisms/repository-review-turn.tsx",
+  import.meta.url,
+);
+const repositoryMapPath = new URL(
+  "../src/features/assessment-flow/components/organisms/repository-map-turn.tsx",
+  import.meta.url,
+);
+const repositoryDetailsPath = new URL(
+  "../src/features/assessment-flow/components/organisms/repository-details-turn.tsx",
+  import.meta.url,
+);
 const scannerSequencePath = new URL(
   "../src/features/assessment-flow/components/molecules/scanner-activity-sequence.tsx",
   import.meta.url,
@@ -44,22 +61,159 @@ const assessmentQueriesPath = new URL(
   import.meta.url,
 );
 
-test("new assessment opens repository setup and removes the legacy details form", async () => {
-  const [page, setup] = await Promise.all([
+test("new assessment renders the active repository entry as one inline form", async () => {
+  const [page, setup, overview] = await Promise.all([
     readFile(newAssessmentPagePath, "utf8"),
     readFile(repositorySetupPath, "utf8"),
+    readFile(assessmentOverviewPath, "utf8"),
   ]);
 
   assert.match(page, /RepositorySetupStep/);
   assert.doesNotMatch(page, /CreateAssessmentForm/);
-  assert.match(setup, /RepositorySetupConversation/);
   assert.match(setup, /ProviderCredentialDialog/);
   assert.match(setup, /ConfirmAccessDialog/);
   assert.match(setup, /onReauthenticate/);
-  assert.doesNotMatch(setup, /useDeleteAssessmentMutation|deleteAssessment\.mutateAsync/);
+  assert.doesNotMatch(
+    setup,
+    /useDeleteAssessmentMutation|deleteAssessment\.mutateAsync/,
+  );
   assert.match(setup, /connectAssessmentRepository/);
-  assert.match(setup, /startRepositoryAnalysis/);
-  assert.match(setup, /AssessmentComposer/);
+  assert.match(setup, /startAssessmentRepositoryAnalysis/);
+  assert.match(setup, /RepositoryDetailsTurn/);
+  assert.match(setup, /isInlineMapRepositoryEntry/);
+  assert.match(
+    setup,
+    /entryReturnStep === REPOSITORY_SETUP_STEPS\.repositoryMap/,
+  );
+  assert.match(setup, /onProviderChange=/);
+  assert.match(setup, /credentialConfigured/);
+  assert.match(setup, /entryReturnStep/);
+  assert.match(setup, /allRepositoriesPinned/);
+  assert.doesNotMatch(setup, /AssessmentComposer/);
+  assert.doesNotMatch(overview, /RepositorySetupConversation/);
+  assert.match(setup, /RepositoryReviewTurn/);
+  assert.match(setup, /REPOSITORY_SETUP_STEPS/);
+  assert.match(setup, /REPOSITORY_ENTRY_INTENTS/);
+  assert.match(setup, /refreshedRepositories\.length > 0/);
+  assert.match(setup, /REPOSITORY_SETUP_STEPS\.repositoryMap/);
+  assert.match(setup, /setupState\.repositories\.length > 0/);
+});
+
+test("review and map stay inside the Agent transcript with explicit terminal actions", async () => {
+  const [review, map] = await Promise.all([
+    readFile(repositoryReviewPath, "utf8"),
+    readFile(repositoryMapPath, "utf8"),
+  ]);
+  assert.match(review, /Confirm and start scan|confirmScope/);
+  assert.match(review, /onBack/);
+  assert.match(review, /relations/);
+  assert.match(map, /<table/);
+  assert.match(map, /<select/);
+  assert.match(map, /removeConfirm/);
+  assert.match(map, /editRelation/);
+  assert.match(map, /confirmingRelationRemoval/);
+  assert.match(map, /removeRelationConfirm/);
+  assert.match(map, /<AgentTurn>/);
+  assert.match(map, /pinnableRepositories\.length > 0/);
+  assert.match(map, /pinnableRepositories\.length > 1/);
+  assert.match(map, /repositoryEntryActive/);
+  assert.match(map, /onRelationEditorOpen/);
+  assert.match(map, /aria-pressed=\{editorOpen\}/);
+  assert.match(map, /aria-pressed=\{repositoryEntryActive\}/);
+  assert.doesNotMatch(map, /keepIndependent|independentAcknowledged/);
+  assert.match(map, /onReviewScope/);
+  assert.match(map, /autoFocus/);
+  assert.doesNotMatch(review, /onAddRepository|onEditMap/);
+});
+
+test("repository provider choices render the approved provider logos", async () => {
+  const details = await readFile(repositoryDetailsPath, "utf8");
+
+  assert.match(details, /<Image/);
+  assert.match(details, /data-selected=\{selected \? "true" : "false"\}/);
+  assert.match(details, /ring-primary\/30/);
+  assert.doesNotMatch(details, /text-primary-foreground/);
+  assert.match(details, /logo-github\.svg/);
+  assert.match(details, /logo-gitlab\.svg/);
+  assert.match(details, /logo-bitbucket\.svg/);
+  assert.match(details, /logo-azure-devops\.svg/);
+});
+
+test("aggregate runtime waits for every repository and the aggregate graph", () => {
+  const setupState = {
+    assessmentId: "assessment-1",
+    assessmentStatus: ASSESSMENT_STATUS_CODES.wizardSubmitted,
+    connection: null,
+    snapshot: {
+      id: "snapshot-2",
+      assessmentId: "assessment-1",
+      connectionId: "connection-2",
+      provider: ASSESSMENT_REPOSITORY_PROVIDERS.github,
+      repositoryFullName: "acme/api",
+      branch: "main",
+      commitSha: "b".repeat(40),
+      createdAt: "2026-10-01T00:00:00Z",
+    },
+    scanJob: null,
+    repositories: [
+      {
+        connectionId: "connection-1",
+        provider: ASSESSMENT_REPOSITORY_PROVIDERS.github,
+        repositoryId: "repo-1",
+        repositoryFullName: "acme/web",
+        defaultBranch: "main",
+        status: REPOSITORY_CONNECTION_STATUSES.active,
+        snapshot: {
+          id: "snapshot-1",
+          branch: "main",
+          commitSha: "a".repeat(40),
+          createdAt: "2026-10-01T00:00:00Z",
+        },
+        scanJob: {
+          id: "job-1",
+          status: REPOSITORY_SCAN_JOB_STATUSES.completed,
+          attemptCount: 1,
+          blockedReason: null,
+          updatedAt: "2026-10-01T00:00:01Z",
+        },
+      },
+      {
+        connectionId: "connection-2",
+        provider: ASSESSMENT_REPOSITORY_PROVIDERS.gitlab,
+        repositoryId: "repo-2",
+        repositoryFullName: "acme/api",
+        defaultBranch: "main",
+        status: REPOSITORY_CONNECTION_STATUSES.active,
+        snapshot: {
+          id: "snapshot-2",
+          branch: "main",
+          commitSha: "b".repeat(40),
+          createdAt: "2026-10-01T00:00:00Z",
+        },
+        scanJob: {
+          id: "job-2",
+          status: REPOSITORY_SCAN_JOB_STATUSES.running,
+          attemptCount: 1,
+          blockedReason: null,
+          updatedAt: "2026-10-01T00:00:01Z",
+        },
+      },
+    ],
+    programEvidenceGraph: {
+      state: ASSESSMENT_GRAPH_STATES.notReady,
+      reportCount: 1,
+    },
+  };
+  const flow = deriveAssessmentFlowRuntime({
+    setupState,
+    hasRepositoryConnection: true,
+    snapshot: setupState.snapshot,
+    scanJob: null,
+    evidenceReport: null,
+  });
+  assert.equal(flow.stage, ASSESSMENT_FLOW_STAGES.scanner);
+  assert.equal(flow.evidenceAccepted, false);
+  assert.equal(flow.scanActive, true);
 });
 
 test("flow remains in repository setup before a secure repository connection", () => {
