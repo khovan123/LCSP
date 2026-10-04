@@ -317,6 +317,7 @@ export type PagesMessages = {
       ruleInvestigated: string;
       ruleFailed: string;
       ruleWaiting: string;
+      rulePaused: string;
       ruleQueued: string;
       ruleFallback: string;
     };
@@ -485,6 +486,7 @@ export type PagesMessages = {
     runtimePanelEmpty: string;
     runtimePanelViewFull: string;
     runtimePanelStatuses: {
+      stopped: string;
       queued: string;
       unknown: string;
       running: string;

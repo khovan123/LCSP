@@ -790,6 +790,7 @@ function AssessmentInterviewFlow({
               <AgentStreamDispatchTurns
                 key={`activity:${segment.turnKey}`}
                 segment={segment}
+                runtimeControl={activeRuntimeControl}
               />
             ))}
 
@@ -807,6 +808,7 @@ function AssessmentInterviewFlow({
                     <AgentStreamDispatchTurns
                       key={`activity:${segment.turnKey}`}
                       segment={segment}
+                      runtimeControl={activeRuntimeControl}
                       outputs={
                         // The answer's result belongs to the dispatch that
                         // processed it, not to later retries appended after it.

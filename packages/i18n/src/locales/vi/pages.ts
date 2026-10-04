@@ -295,6 +295,7 @@ export const viPages = {
       ruleInvestigated: "Đã điều tra xong",
       ruleFailed: "Điều tra bị dừng",
       ruleWaiting: "Đang chờ thêm ngữ cảnh",
+      rulePaused: "Đã tạm dừng",
       ruleQueued: "Đang chờ điều tra",
       ruleFallback: "Rule {index}",
     },
@@ -467,6 +468,7 @@ export const viPages = {
     runtimePanelEmpty: "Assessment này chưa có hoạt động runtime.",
     runtimePanelViewFull: "Xem runtime đầy đủ",
     runtimePanelStatuses: {
+      stopped: "Đã dừng",
       queued: "Đang xếp hàng",
       unknown: "Không rõ",
       running: "Đang chạy",

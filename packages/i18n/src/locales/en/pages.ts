@@ -295,6 +295,7 @@ export const enPages = {
       ruleInvestigated: "Investigated",
       ruleFailed: "Investigation stopped",
       ruleWaiting: "Waiting for more context",
+      rulePaused: "Paused",
       ruleQueued: "Waiting its turn",
       ruleFallback: "Rule {index}",
     },
@@ -466,6 +467,7 @@ export const enPages = {
     runtimePanelEmpty: "No runtime activity for this assessment yet.",
     runtimePanelViewFull: "View full runtime",
     runtimePanelStatuses: {
+      stopped: "Stopped",
       queued: "Queued",
       unknown: "Unknown",
       running: "Running",
