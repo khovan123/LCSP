@@ -13,7 +13,9 @@ describe("runtime control registration", () => {
     "rejects %s without a native registration instead of reporting completion",
     async (action) => {
       const tx = {
-        assessmentRuntimeTurn: { findFirst: jest.fn(async () => null) },
+        assessmentRuntimeTurn: {
+          findFirst: jest.fn<() => Promise<null>>().mockResolvedValue(null),
+        },
       };
       const prisma = {
         $transaction: async (work: (value: typeof tx) => Promise<unknown>) =>

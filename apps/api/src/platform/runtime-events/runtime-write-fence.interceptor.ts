@@ -5,7 +5,8 @@ import {
   Injectable,
   type NestInterceptor,
 } from "@nestjs/common";
-import { defer, lastValueFrom } from "rxjs";
+import type { Request } from "express";
+import { defer, lastValueFrom, type Observable } from "rxjs";
 import {
   ASSESSMENT_RUNTIME_CONTROL_STATES as States,
   ASSESSMENT_RUNTIME_CONTROL_PROBLEM_CODES as Problems,
@@ -18,11 +19,17 @@ import { problemException } from "../http/filters/error.factory.js";
  * a new cancellation generation has resumed the same logical checkpoint.
  */
 @Injectable()
-export class RuntimeWriteFenceInterceptor implements NestInterceptor {
+export class RuntimeWriteFenceInterceptor implements NestInterceptor<
+  unknown,
+  unknown
+> {
   constructor(private readonly prisma: PrismaService) {}
 
-  intercept(context: ExecutionContext, next: CallHandler) {
-    const req = context.switchToHttp().getRequest();
+  intercept(
+    context: ExecutionContext,
+    next: CallHandler<unknown>,
+  ): Observable<unknown> {
+    const req = context.switchToHttp().getRequest<Request>();
     const runId = req.headers?.["x-lcsp-runtime-run-id"];
     const path: string = req.originalUrl ?? req.url ?? "";
     if (
@@ -44,9 +51,10 @@ export class RuntimeWriteFenceInterceptor implements NestInterceptor {
             (rows[0].state !== States.running &&
               rows[0].state !== States.stopRequested)
           ) {
+            const correlationId = req.headers["x-correlation-id"];
             throw problemException(
               Problems.staleTarget,
-              req.headers["x-correlation-id"] ?? runId,
+              typeof correlationId === "string" ? correlationId : runId,
               { status: HttpStatus.CONFLICT },
             );
           }

@@ -1971,7 +1971,11 @@ describe("AssessmentRuntimeEventService.getPipelineLiveness", () => {
       .mockResolvedValue(latest ? [latest] : []);
     const service = new AssessmentRuntimeEventService({
       assessmentRuntimeEvent: { findMany },
-      assessmentRuntimeTurn: { findFirst: async () => turn },
+      assessmentRuntimeTurn: {
+        findFirst: jest
+          .fn<() => Promise<typeof turn>>()
+          .mockResolvedValue(turn),
+      },
     } as never);
     return { service, findMany };
   }
