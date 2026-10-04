@@ -42,6 +42,7 @@ function buildHandler(input: {
   scanJob?: { id: string; snapshotId: string; status: string } | null;
   acceptedEvidenceReport?: {
     id: string;
+    snapshotId?: string;
     evidencePayload?: unknown;
     createdAt?: Date;
   } | null;
@@ -50,6 +51,15 @@ function buildHandler(input: {
     classificationData: unknown;
     createdAt?: Date;
   } | null;
+  classificationResults?: Array<{
+    guardrailStatus: string;
+    classificationData: unknown;
+    verifiedProfile?: { technicalEvidenceReportId: string | null } | null;
+    legalRuleMatch?: {
+      verifiedProfile?: { technicalEvidenceReportId: string | null } | null;
+    } | null;
+    createdAt?: Date;
+  }>;
   legalChunks?: LegalChunkFixture[];
 }) {
   const repository: AssessmentRepository = {
@@ -68,10 +78,15 @@ function buildHandler(input: {
     input.scanJob !== undefined
       ? input.scanJob
       : input.acceptedEvidenceReport
-        ? { id: "scan-1", snapshotId: "snapshot-1", status: "COMPLETED" }
+        ? {
+            id: "scan-1",
+            snapshotId: input.acceptedEvidenceReport.snapshotId ?? "snapshot-1",
+            status: "COMPLETED",
+          }
         : null;
   const acceptedEvidenceReport = input.acceptedEvidenceReport
     ? {
+        snapshotId: "snapshot-1",
         createdAt: new Date("2026-09-01T00:00:00.000Z"),
         ...input.acceptedEvidenceReport,
       }
@@ -82,6 +97,9 @@ function buildHandler(input: {
         ...input.classificationResult,
       }
     : null;
+  const candidateClassifications =
+    input.classificationResults ??
+    (classificationResult ? [classificationResult] : []);
   const prisma = {
     repositoryScanJob: {
       findFirst: resolvedMock(scanJob),
@@ -91,6 +109,7 @@ function buildHandler(input: {
     },
     classificationResult: {
       findFirst: resolvedMock(classificationResult),
+      findMany: resolvedMock(candidateClassifications),
     },
     legalDocumentChunk: {
       findMany: resolvedMock(input.legalChunks ?? []),
@@ -380,5 +399,40 @@ describe("GetAssessmentHandler direct EngineeringRule runtime", () => {
     );
     expect(result.classification_result).toBeNull();
     expect(result.can_rerun_classification).toBe(false);
+  });
+
+  it("does not surface a stale ClassificationResult from Scan A when Scan B report is current", async () => {
+    const assessment = makeAssessment();
+    const handler = buildHandler({
+      assessment,
+      scanJob: {
+        id: "scan-job-b",
+        snapshotId: "snapshot-b",
+        status: "COMPLETED",
+      },
+      acceptedEvidenceReport: {
+        id: "report-b",
+        snapshotId: "snapshot-b",
+        createdAt: new Date("2026-09-02T00:00:00.000Z"),
+      },
+      classificationResults: [
+        {
+          guardrailStatus: CLASSIFICATION_GUARDRAIL_STATUSES.passed,
+          classificationData: {
+            mode: "ENGINEERING_RULE_EVALUATION",
+            status: "COMPLETE",
+            technical_evidence_report_id: "report-a",
+            snapshot_id: "snapshot-a",
+          },
+          createdAt: new Date("2026-09-02T00:05:00.000Z"),
+        },
+      ],
+    });
+
+    const result = await handler.execute(query(assessment.id));
+    expect(result.readiness_state.classification_locked).toBe(false);
+    expect(result.classification_result).toBeNull();
+    expect(result.guardrail_status).toBeNull();
+    expect(result.can_rerun_classification).toBe(true);
   });
 });

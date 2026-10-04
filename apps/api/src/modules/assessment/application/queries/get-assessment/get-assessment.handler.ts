@@ -86,27 +86,74 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
               TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
             ),
           },
-          select: { id: true, evidencePayload: true, createdAt: true },
+          select: {
+            id: true,
+            snapshotId: true,
+            evidencePayload: true,
+            createdAt: true,
+          },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         })
       : null;
 
-    const classificationResult = acceptedEvidenceReport
-      ? await this.prisma.classificationResult.findFirst({
+    const candidateClassifications = acceptedEvidenceReport
+      ? await this.prisma.classificationResult.findMany({
           where: {
             assessmentId: assessment.id,
             status: toPrismaEvidenceAcceptanceStatus(
               CLASSIFICATION_RESULT_STATUSES.accepted,
             ),
-            createdAt: { gte: acceptedEvidenceReport.createdAt },
           },
           select: {
             guardrailStatus: true,
             classificationData: true,
+            verifiedProfile: {
+              select: {
+                technicalEvidenceReportId: true,
+              },
+            },
+            legalRuleMatch: {
+              select: {
+                verifiedProfile: {
+                  select: {
+                    technicalEvidenceReportId: true,
+                  },
+                },
+              },
+            },
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         })
-      : null;
+      : [];
+
+    const classificationResult =
+      candidateClassifications.find((candidate) => {
+        const data = isRecord(candidate.classificationData)
+          ? candidate.classificationData
+          : null;
+        const reportIdInData = cleanString(data?.technical_evidence_report_id);
+        const snapshotIdInData = cleanString(data?.snapshot_id);
+        const profileReportId =
+          candidate.verifiedProfile?.technicalEvidenceReportId ??
+          candidate.legalRuleMatch?.verifiedProfile?.technicalEvidenceReportId;
+
+        if (reportIdInData) {
+          if (reportIdInData !== acceptedEvidenceReport?.id) return false;
+          if (
+            snapshotIdInData &&
+            snapshotIdInData !== acceptedEvidenceReport?.snapshotId
+          ) {
+            return false;
+          }
+          return true;
+        }
+
+        if (profileReportId) {
+          return profileReportId === acceptedEvidenceReport?.id;
+        }
+
+        return false;
+      }) ?? null;
 
     const legalChunks = classificationResult
       ? await this.loadLegalChunks(classificationResult.classificationData)
