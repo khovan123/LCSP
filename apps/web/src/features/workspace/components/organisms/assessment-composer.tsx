@@ -3,6 +3,7 @@
 import { ASSESSMENT_RUNTIME_CONTROL_STATES as States } from "@lcsp/contracts/evidence";
 import { resolveMessage } from "@lcsp/i18n";
 import {
+  CirclePauseIcon,
   CirclePlayIcon,
   CircleStopIcon,
   CornerDownLeftIcon,
@@ -242,24 +243,17 @@ export function AssessmentComposer({
       {controlled ? (
         <Button
           type="button"
-          size={stopping || continuing ? "sm" : "icon"}
+          size="icon"
           disabled={
             stopped || continuing ? resumeTurnDisabled : interruptTurnDisabled
           }
           aria-label={stopped || continuing ? resumeTurnLabel : stopTurnLabel}
           onClick={stopped ? handleResumeTurn : handleInterruptTurn}
           data-runtime-control-state={controlState}
-          className={cn(
-            "absolute bottom-2 right-3 h-8 rounded-full bg-transparent text-foreground hover:bg-accent disabled:bg-transparent",
-            stopping || continuing ? "px-2" : "w-8",
-          )}
+          className="absolute bottom-2 right-3 size-8 rounded-full bg-transparent text-foreground hover:bg-accent disabled:bg-transparent"
         >
           {stopping || continuing ? (
-            continuing ? (
-              resumeTurnLabel
-            ) : (
-              stopTurnLabel
-            )
+            <CirclePauseIcon aria-hidden="true" />
           ) : stopped ? (
             <CirclePlayIcon aria-hidden="true" />
           ) : (

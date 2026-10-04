@@ -341,26 +341,12 @@ class LocalAgentRuntime:
         self._report_control(thread_id, run_id, context, "STOPPED" if interrupted else "COMPLETED")
 
     def _report_control(self, thread_id: str, run_id: str, context: dict[str, Any], state: str) -> None:
-        assessment_id = context.get("assessment_id")
-        if not assessment_id:
-            return
-        from tools.common.capabilities.platform.config import load_config
-        from tools.common.capabilities.platform.api_client import WorkerApiClient
-        cfg = load_config()
-        client = WorkerApiClient(cfg.nestjs_api_base_url, cfg.worker_api_key)
-        body = {
-            "assessmentId": assessment_id, "targetRunId": run_id,
-            "threadId": thread_id, "boundary": context.get("system_boundary_name"),
-            "logicalRunId": context.get("logical_run_id", run_id),
-            "workflowRunId": context.get("workflow_run_id"),
-            "correlationId": context.get("correlation_id") or run_id,
-            "state": state,
-        }
-        if state == "RUNNING":
-            body["context"] = context
-        if state == "STOPPED":
-            body["checkpoint"] = self.get_state(thread_id).get("checkpoint")
-        client._post_with_retry("/internal/assessment-runtime-controls", body, redact=False)
+        from tools.common.capabilities.agent_runtime.runtime_control import report_runtime_control
+
+        report_runtime_control(
+            thread_id, run_id, context, state,
+            checkpoint=self.get_state(thread_id).get("checkpoint") if state == "STOPPED" and context.get("assessment_id") else None,
+        )
 
     def get_state(self, thread_id: str) -> dict[str, Any]:
         self.create_thread({"thread_id": thread_id, "if_exists": "do_nothing"})

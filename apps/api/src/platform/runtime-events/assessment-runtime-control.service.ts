@@ -74,15 +74,13 @@ export class AssessmentRuntimeControlService {
         where: { assessmentId: input.assessmentId },
         orderBy: { createdAt: "desc" },
       });
-      if (!row)
-        return {
-          control: {
-            state: States.completed,
-            targetRunId: "",
-            requestId: null,
-          },
-          changed: false,
-        };
+      if (!row) {
+        // Missing registration is not proof that the visible runtime completed.
+        // Report the unavailable target instead of silently accepting a no-op.
+        throw problemException(Problems.staleTarget, input.correlationId, {
+          status: HttpStatus.CONFLICT,
+        });
+      }
       if (input.targetRunId && input.targetRunId !== row.id) {
         const target = await tx.assessmentRuntimeTurn.findUnique({
           where: { id: input.targetRunId },

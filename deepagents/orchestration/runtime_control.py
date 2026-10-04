@@ -6,12 +6,15 @@ import asyncio
 import copy
 import hashlib
 import json
+import os
+from contextlib import contextmanager
 from contextvars import ContextVar, copy_context
 from queue import Queue
 from threading import Event, Lock, Thread
 from typing import Any, Callable
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 
 active_runtime_run_id: ContextVar[str | None] = ContextVar("runtime_run_id", default=None)
@@ -55,6 +58,50 @@ class NativeExecutionScope:
 active_native_execution_scope: ContextVar[NativeExecutionScope | None] = ContextVar(
     "native_execution_scope", default=None
 )
+
+# Match langgraph dev's process-local checkpoint lifetime when no durable
+# database is configured. Continue must reuse this saver, not a fresh instance.
+_dev_nested_checkpointer = InMemorySaver()
+
+
+@contextmanager
+def hosted_checkpoint_scope(thread_id: str, logical_run_id: str):
+    """Keep nested checkpoints stable across hosted native run generations."""
+    from tools.common.capabilities.platform.graph_runtime import checkpoint_database_url
+
+    url = checkpoint_database_url(
+        os.getenv("LANGGRAPH_CHECKPOINT_DATABASE_URL")
+        or os.getenv("POSTGRES_URI")
+        or os.getenv("DATABASE_URL")
+    )
+
+    @contextmanager
+    def bind(saver):
+        token = active_checkpoint_scope.set(
+            (AsyncCompatibleSaver(saver), f"{thread_id}:{logical_run_id}")
+        )
+        try:
+            yield
+        finally:
+            active_checkpoint_scope.reset(token)
+
+    if url:
+        from langgraph.checkpoint.postgres import PostgresSaver
+
+        with PostgresSaver.from_conn_string(url) as saver:
+            saver.setup()
+            with bind(saver):
+                yield
+    else:
+        if (
+            os.getenv("LCSP_AGENT_RUNTIME_MODE", "").strip().lower() == "production"
+            or os.getenv("NODE_ENV", "").strip().lower() == "production"
+        ):
+            raise RuntimeError(
+                "production LCSP Agent Runtime requires LANGGRAPH_CHECKPOINT_DATABASE_URL"
+            )
+        with bind(_dev_nested_checkpointer):
+            yield
 
 
 def invoke_native_values(graph: Any, input_value: Any, **kwargs: Any) -> Any:

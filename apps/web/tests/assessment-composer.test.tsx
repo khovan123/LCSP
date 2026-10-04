@@ -109,10 +109,16 @@ test("explicit acknowledged lifecycle renders Stop, Stopping, Continue, Continui
         ?.classList.contains(
           state === States.stopped
             ? "lucide-circle-play"
-            : "lucide-circle-stop",
+            : state === States.stopRequested || state === States.resumeRequested
+              ? "lucide-circle-pause"
+              : "lucide-circle-stop",
         ) ?? false,
-      state !== States.stopRequested && state !== States.resumeRequested,
+      true,
     );
+    assert.equal(button.textContent, "");
+    if (state === States.stopRequested || state === States.resumeRequested) {
+      assert.equal(container.querySelector("textarea")?.placeholder, label);
+    }
     assert.equal(submitButton(container), null);
     act(() => button.click());
   }
