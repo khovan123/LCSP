@@ -73,7 +73,12 @@ type SseResponse = {
   on(event: "error", listener: (error: Error) => void): void;
 };
 
-describe("W1 canonical read isolation (e2e preparation)", () => {
+// Needs its own fresh, task-owned database (it refuses a non-empty target), so it is
+// opt-in: the shared CI e2e database (lcsp_api_e2e) is populated by earlier specs.
+const integration =
+  process.env.DATABASE_URL === TARGET_DATABASE_URL ? describe : describe.skip;
+
+integration("W1 canonical read isolation (e2e preparation)", () => {
   let app: INestApplication;
   let prisma: PrismaClient;
   let ownerAToken: string;
