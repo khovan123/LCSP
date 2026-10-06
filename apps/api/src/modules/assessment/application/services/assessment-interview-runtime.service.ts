@@ -2970,7 +2970,7 @@ export class AssessmentInterviewRuntimeService {
         }
       | null
       | undefined = null;
-    let snapshot: { id: string; commitSha: string } | null = null;
+    let snapshot: { id: string; commitSha: string } | null;
 
     if (technicalEvidenceReportId) {
       report = await client.technicalEvidenceReport.findFirst({
