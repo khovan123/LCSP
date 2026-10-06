@@ -1557,6 +1557,16 @@ async function seedWaitingQuestion(
   // Directly materialized Interview threads still require the same accepted,
   // usable technical-report provenance as a worker-seeded question.
   await seedUsableTechnicalCoverage(prisma);
+  const snapshot = await prisma.repositorySnapshot.findFirstOrThrow({
+    where: { assessmentId: "assessment-1" },
+    orderBy: { createdAt: "desc" },
+  });
+  const report = await prisma.technicalEvidenceReport.findFirstOrThrow({
+    where: { assessmentId: "assessment-1" },
+    orderBy: { createdAt: "desc" },
+  });
+  const sourceVersion = `${snapshot.id}:${snapshot.commitSha}`;
+  const pgeVersion = `${report.id}:${report.schemaVersion}`;
   const privateContext = {
     revisions: [],
     workflowRunId: "00000000-0000-4000-8000-000000000001",
@@ -1564,6 +1574,8 @@ async function seedWaitingQuestion(
   await prisma.assessmentInterviewThread.upsert({
     where: { assessmentId: "assessment-1" },
     update: {
+      sourceVersion,
+      pgeVersion,
       contextRevision: 0,
       activeQuestionId: questionId,
       processedRevision: 0,
@@ -1584,6 +1596,8 @@ async function seedWaitingQuestion(
     create: {
       id: "interview:assessment-1",
       assessmentId: "assessment-1",
+      sourceVersion,
+      pgeVersion,
       contextRevision: 0,
       activeQuestionId: questionId,
       processedRevision: 0,
