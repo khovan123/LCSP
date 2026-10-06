@@ -218,7 +218,7 @@ class _FakeRepositorySnapshotApi:
 
     @property
     def url(self) -> str:
-        host, port = self._server.server_address
+        host, port = self._server.server_address[:2]
         return f"http://{host}:{port}"
 
     def start(self) -> None:

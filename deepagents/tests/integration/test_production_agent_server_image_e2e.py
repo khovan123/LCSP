@@ -132,6 +132,7 @@ def test_production_agent_server_image_runs_without_license_and_persists_state(
             event,
             correlation_id,
         )
+        values = _state_values(graph_url, thread_id)
         skills_metadata = values.get("skills_metadata")
         if skills_metadata is not None:
             assert any(
@@ -184,7 +185,7 @@ class _SnapshotApi:
 
     @property
     def container_url(self) -> str:
-        _host, port = self._server.server_address
+        _host, port = self._server.server_address[:2]
         return f"http://host.docker.internal:{port}"
 
     def start(self) -> None:
