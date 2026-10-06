@@ -44,59 +44,125 @@ function expectProblem(action: () => void, code: string) {
 
 describe("M04 mutation guards", () => {
   it("allows a currently advertised blocked action", () => {
-    expect(() => assertInterviewBlockedActionAvailable(thread(), command, "corr")).not.toThrow();
+    expect(() =>
+      assertInterviewBlockedActionAvailable(thread(), command, "corr"),
+    ).not.toThrow();
   });
   it("rejects an old context revision", () => {
-    expectProblem(() => assertInterviewBlockedActionAvailable(thread(), {
-      ...command, expectedSessionRevision: 1,
-    }, "corr"), CODES.revisionStale);
+    expectProblem(
+      () =>
+        assertInterviewBlockedActionAvailable(
+          thread(),
+          {
+            ...command,
+            expectedSessionRevision: 1,
+          },
+          "corr",
+        ),
+      CODES.revisionStale,
+    );
   });
-  it.each([OUTCOMES.contextReady, OUTCOMES.contextResolved, OUTCOMES.waitingForCustomer, OUTCOMES.failed])(
-    "does not turn %s back into BLOCKED", (outcome) => {
-      const current = thread(); current.state.outcome = outcome;
-      expectProblem(() => assertInterviewBlockedActionAvailable(current, command, "corr"), CODES.blockedActionNotAvailable);
-    },
-  );
+  it.each([
+    OUTCOMES.contextReady,
+    OUTCOMES.contextResolved,
+    OUTCOMES.waitingForCustomer,
+    OUTCOMES.failed,
+  ])("does not turn %s back into BLOCKED", (outcome) => {
+    const current = thread();
+    current.state.outcome = outcome;
+    expectProblem(
+      () => assertInterviewBlockedActionAvailable(current, command, "corr"),
+      CODES.blockedActionNotAvailable,
+    );
+  });
   it("rejects an action while a follow-up is queued", () => {
-    const current = thread(); current.state.orchestrationRequested = true;
-    expectProblem(() => assertInterviewBlockedActionAvailable(current, command, "corr"), CODES.blockedActionNotAvailable);
+    const current = thread();
+    current.state.orchestrationRequested = true;
+    expectProblem(
+      () => assertInterviewBlockedActionAvailable(current, command, "corr"),
+      CODES.blockedActionNotAvailable,
+    );
   });
   it("rejects missing threads and actions no longer offered", () => {
-    const current = thread(); current.exists = false;
-    expectProblem(() => assertInterviewBlockedActionAvailable(current, command, "corr"), CODES.blockedActionNotAvailable);
-    current.exists = true; current.state.blockedActions = [];
-    expectProblem(() => assertInterviewBlockedActionAvailable(current, command, "corr"), CODES.blockedActionNotAvailable);
+    const current = thread();
+    current.exists = false;
+    expectProblem(
+      () => assertInterviewBlockedActionAvailable(current, command, "corr"),
+      CODES.blockedActionNotAvailable,
+    );
+    current.exists = true;
+    current.state.blockedActions = [];
+    expectProblem(
+      () => assertInterviewBlockedActionAvailable(current, command, "corr"),
+      CODES.blockedActionNotAvailable,
+    );
   });
   it("does not clear a current question", () => {
-    const current = thread(); current.activeQuestionId = "new-question";
-    expectProblem(() => assertInterviewBlockedActionAvailable(current, command, "corr"), CODES.blockedActionNotAvailable);
+    const current = thread();
+    current.activeQuestionId = "new-question";
+    expectProblem(
+      () => assertInterviewBlockedActionAvailable(current, command, "corr"),
+      CODES.blockedActionNotAvailable,
+    );
   });
   it("accepts matching pinned provenance", () => {
-    expect(() => assertInterviewMutationProvenance(thread(), thread(), "corr")).not.toThrow();
+    expect(() =>
+      assertInterviewMutationProvenance(thread(), thread(), "corr"),
+    ).not.toThrow();
   });
   it.each([
     { sourceVersion: "snapshot-b:commit-b", pgeVersion: "report-a:v1" },
     { sourceVersion: "snapshot-a:commit-a", pgeVersion: "report-b:v1" },
   ])("rejects replaced source/evidence: %j", (current) => {
-    expectProblem(() => assertInterviewMutationProvenance(thread(), current, "corr"), CODES.provenanceStale);
+    expectProblem(
+      () => assertInterviewMutationProvenance(thread(), current, "corr"),
+      CODES.provenanceStale,
+    );
   });
   it("rejects an unpinned legacy question rather than inventing provenance", () => {
-    expectProblem(() => assertInterviewMutationProvenance({ sourceVersion: null, pgeVersion: null }, thread(), "corr"), CODES.provenanceStale);
+    expectProblem(
+      () =>
+        assertInterviewMutationProvenance(
+          { sourceVersion: null, pgeVersion: null },
+          thread(),
+          "corr",
+        ),
+      CODES.provenanceStale,
+    );
   });
   it.each([
-    {}, { ...command, expectedSessionRevision: undefined },
-    { ...command, expectedSessionRevision: -1 }, { ...command, expectedSessionRevision: 0.5 },
-    { ...command, clientRequestId: " " }, { ...command, draft: 42 },
+    {},
+    { ...command, expectedSessionRevision: undefined },
+    { ...command, expectedSessionRevision: -1 },
+    { ...command, expectedSessionRevision: 0.5 },
+    { ...command, clientRequestId: " " },
+    { ...command, draft: 42 },
   ])("rejects incomplete blocked commands: %j", (value) => {
-    expectProblem(() => parseInterviewBlockedAction(value, "corr"), CODES.blockedActionInvalid);
+    expectProblem(
+      () => parseInterviewBlockedAction(value, "corr"),
+      CODES.blockedActionInvalid,
+    );
   });
   it("parses a versioned command without promoting its draft", () => {
-    expect(parseInterviewBlockedAction({ ...command, draft: "not confirmed" }, "corr"))
-      .toEqual({ ...command, draft: "not confirmed" });
+    expect(
+      parseInterviewBlockedAction(
+        { ...command, draft: "not confirmed" },
+        "corr",
+      ),
+    ).toEqual({ ...command, draft: "not confirmed" });
   });
   it("accepts durable receipts and rejects malformed records", () => {
-    expect(isInterviewBlockedActionReceipt({ clientRequestId: "r", payloadFingerprint: "p", contextRevision: 0,
-      actorId: "u", recordedAt: "2026-10-05T00:00:00Z" })).toBe(true);
-    expect(isInterviewBlockedActionReceipt({ clientRequestId: "r" })).toBe(false);
+    expect(
+      isInterviewBlockedActionReceipt({
+        clientRequestId: "r",
+        payloadFingerprint: "p",
+        contextRevision: 0,
+        actorId: "u",
+        recordedAt: "2026-10-05T00:00:00Z",
+      }),
+    ).toBe(true);
+    expect(isInterviewBlockedActionReceipt({ clientRequestId: "r" })).toBe(
+      false,
+    );
   });
 });

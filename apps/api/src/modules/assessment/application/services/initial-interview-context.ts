@@ -30,21 +30,33 @@ export function requireExistingInitialContext(
     !context ||
     context.assessmentId !== assessmentId ||
     context.contextRevision !== expectedRevision ||
-    !Number.isSafeInteger(expectedRevision) || expectedRevision <= 0 ||
+    !Number.isSafeInteger(expectedRevision) ||
+    expectedRevision <= 0 ||
     context.authority !==
       CONFIRMED_STRUCTURED_BUSINESS_CONTEXT_AUTHORITIES.customerConfirmedConfirmedOnly ||
-    state.contextAuthority === ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.uncertain ||
-    state.contextAuthority === ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.conflicted ||
-    state.contextAuthority === ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.superseded ||
-    !Array.isArray(statements) || statements.length === 0 ||
+    state.contextAuthority ===
+      ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.uncertain ||
+    state.contextAuthority ===
+      ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.conflicted ||
+    state.contextAuthority ===
+      ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.superseded ||
+    !Array.isArray(statements) ||
+    statements.length === 0 ||
     statements.some((value) => {
       const statement = asRecord(value);
-      return !statement || statement.assessmentId !== assessmentId ||
-        !nonEmpty(statement.statementId) || !nonEmpty(statement.topic) ||
-        !nonEmpty(statement.statement) || !nonEmpty(statement.respondentRef) ||
+      return (
+        !statement ||
+        statement.assessmentId !== assessmentId ||
+        !nonEmpty(statement.statementId) ||
+        !nonEmpty(statement.topic) ||
+        !nonEmpty(statement.statement) ||
+        !nonEmpty(statement.respondentRef) ||
         !nonEmpty(statement.createdAt) ||
-        statement.source !== ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed ||
-        statement.resolutionState !== ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed;
+        statement.source !==
+          ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed ||
+        statement.resolutionState !==
+          ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.confirmed
+      );
     })
   ) {
     throw problemException(
@@ -66,10 +78,13 @@ export function assertExistingInitialContextSufficient(
     throw problemException(
       ASSESSMENT_INTERVIEW_READINESS_ERROR_CODES.minimumContextIncomplete,
       correlationId,
-      { status: HttpStatus.CONFLICT, meta: {
-        missingDimensionCount: missing.length,
-        missingDimensions: missing.join(","),
-      } },
+      {
+        status: HttpStatus.CONFLICT,
+        meta: {
+          missingDimensionCount: missing.length,
+          missingDimensions: missing.join(","),
+        },
+      },
     );
   }
 }

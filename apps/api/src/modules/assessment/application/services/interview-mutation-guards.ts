@@ -62,7 +62,8 @@ export function assertInterviewBlockedActionAvailable(
   }
   if (
     !thread.exists ||
-    thread.state.outcome !== ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved ||
+    thread.state.outcome !==
+      ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved ||
     thread.activeQuestionId !== null ||
     thread.state.activeQuestion ||
     thread.state.orchestrationRequested === true ||
@@ -83,7 +84,9 @@ export function parseInterviewBlockedAction(
   const input = asRecord(value);
   if (
     !input ||
-    !Object.values(ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS).includes(input.action as never) ||
+    !Object.values(ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS).includes(
+      input.action as never,
+    ) ||
     !Number.isSafeInteger(input.expectedSessionRevision) ||
     (input.expectedSessionRevision as number) < 0 ||
     typeof input.clientRequestId !== "string" ||
@@ -99,19 +102,23 @@ export function parseInterviewBlockedAction(
   }
   return {
     action: input.action as AssessmentInterviewBlockedInput["action"],
-    draft: input.draft as string | undefined,
+    draft: input.draft,
     expectedSessionRevision: input.expectedSessionRevision as number,
     clientRequestId: input.clientRequestId.trim(),
   };
 }
 
-export function isInterviewBlockedActionReceipt(value: unknown): value is InterviewBlockedActionReceipt {
+export function isInterviewBlockedActionReceipt(
+  value: unknown,
+): value is InterviewBlockedActionReceipt {
   const record = asRecord(value);
   return Boolean(
     record &&
-    typeof record.clientRequestId === "string" && record.clientRequestId.length > 0 &&
+    typeof record.clientRequestId === "string" &&
+    record.clientRequestId.length > 0 &&
     typeof record.payloadFingerprint === "string" &&
-    Number.isSafeInteger(record.contextRevision) && (record.contextRevision as number) >= 0 &&
+    Number.isSafeInteger(record.contextRevision) &&
+    (record.contextRevision as number) >= 0 &&
     typeof record.actorId === "string" &&
     typeof record.recordedAt === "string",
   );

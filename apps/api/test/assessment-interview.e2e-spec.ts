@@ -19,7 +19,11 @@ import {
 import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { EvidenceAcceptanceStatus, PrismaClient, type Prisma } from "@prisma/client";
+import {
+  EvidenceAcceptanceStatus,
+  PrismaClient,
+  type Prisma,
+} from "@prisma/client";
 
 import { AppModule } from "../src/app.module.js";
 import {
@@ -1497,7 +1501,9 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
 });
 
 /** Materialize the prior Agent BLOCKED outcome instead of abusing a waiting question. */
-async function markInterviewBlockedFixture(prisma: PrismaClient): Promise<void> {
+async function markInterviewBlockedFixture(
+  prisma: PrismaClient,
+): Promise<void> {
   const thread = await prisma.assessmentInterviewThread.findUniqueOrThrow({
     where: { assessmentId: "assessment-1" },
   });

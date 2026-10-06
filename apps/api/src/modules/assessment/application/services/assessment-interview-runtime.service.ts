@@ -656,8 +656,16 @@ export class AssessmentInterviewRuntimeService {
       }
       // Exact replays have already returned. New writes must match the question's
       // pinned evidence, using an uncached read inside the transaction.
-      const provenance = await this.assessmentProvenance(input.assessmentId, undefined, tx);
-      assertInterviewMutationProvenance(thread, provenance, input.correlationId);
+      const provenance = await this.assessmentProvenance(
+        input.assessmentId,
+        undefined,
+        tx,
+      );
+      assertInterviewMutationProvenance(
+        thread,
+        provenance,
+        input.correlationId,
+      );
       assertAnswerMatchesQuestion(answer, thread.state.activeQuestion);
       const priorRevision = thread.contextRevision;
       const nextRevision = priorRevision + 1;
@@ -1169,7 +1177,10 @@ export class AssessmentInterviewRuntimeService {
     correlationId: string;
     blocked: AssessmentInterviewBlockedInput;
   }): Promise<AssessmentInterviewRuntimeState> {
-    const blocked = parseInterviewBlockedAction(input.blocked, input.correlationId);
+    const blocked = parseInterviewBlockedAction(
+      input.blocked,
+      input.correlationId,
+    );
     await this.assertAssessmentVisible(input.assessmentId, input.actor);
     const now = new Date();
     const result = await this.runInterviewTransaction(async (tx) => {
@@ -1195,15 +1206,30 @@ export class AssessmentInterviewRuntimeService {
         }
         return {
           state: current.state,
-          workflowRunId: current.privateStore.targetedContinuation?.workflowRunId ??
-            current.privateStore.workflowRunId ?? this.threadId(input.assessmentId),
-          partialCoveragePolicyDecision: current.privateStore.partialCoveragePolicyDecision,
+          workflowRunId:
+            current.privateStore.targetedContinuation?.workflowRunId ??
+            current.privateStore.workflowRunId ??
+            this.threadId(input.assessmentId),
+          partialCoveragePolicyDecision:
+            current.privateStore.partialCoveragePolicyDecision,
           idempotentReplay: true,
         };
       }
-      assertInterviewBlockedActionAvailable(current, blocked, input.correlationId);
-      const provenance = await this.assessmentProvenance(input.assessmentId, undefined, tx);
-      assertInterviewMutationProvenance(current, provenance, input.correlationId);
+      assertInterviewBlockedActionAvailable(
+        current,
+        blocked,
+        input.correlationId,
+      );
+      const provenance = await this.assessmentProvenance(
+        input.assessmentId,
+        undefined,
+        tx,
+      );
+      assertInterviewMutationProvenance(
+        current,
+        provenance,
+        input.correlationId,
+      );
       const shouldResume =
         blocked.action ===
         ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext;
@@ -1795,7 +1821,11 @@ export class AssessmentInterviewRuntimeService {
     const result = await this.runInterviewTransaction(async (tx) => {
       await this.lockInterviewThread(input.assessmentId, tx);
       const thread = await this.readThread(input.assessmentId, tx);
-      const authoritative = await this.assessmentProvenance(input.assessmentId, undefined, tx);
+      const authoritative = await this.assessmentProvenance(
+        input.assessmentId,
+        undefined,
+        tx,
+      );
       if (decision.expectedContextRevision !== thread.contextRevision) {
         throw problemException(
           "INTERVIEW_DECISION_STALE_REVISION",
@@ -2311,18 +2341,27 @@ export class AssessmentInterviewRuntimeService {
   }): Promise<AssessmentInterviewRuntimeState> {
     const proposed = objectRecord(input.state);
     const expectedRevision = proposed?.expectedContextRevision;
-    const ready = proposed?.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextReady;
-    const waiting = proposed?.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer;
+    const ready =
+      proposed?.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextReady;
+    const waiting =
+      proposed?.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer;
     if (
-      !proposed || (!ready && !waiting) ||
-      !Number.isSafeInteger(expectedRevision) || (expectedRevision as number) < 0 ||
-      !input.workflowRunId?.trim() || !input.technicalEvidenceReportId?.trim() ||
-      (proposed.mode !== undefined && proposed.mode !== ASSESSMENT_INTERVIEW_MODES.initialInterview) ||
-      (proposed.contextRevision !== undefined && proposed.contextRevision !== expectedRevision) ||
+      !proposed ||
+      (!ready && !waiting) ||
+      !Number.isSafeInteger(expectedRevision) ||
+      (expectedRevision as number) < 0 ||
+      !input.workflowRunId?.trim() ||
+      !input.technicalEvidenceReportId?.trim() ||
+      (proposed.mode !== undefined &&
+        proposed.mode !== ASSESSMENT_INTERVIEW_MODES.initialInterview) ||
+      (proposed.contextRevision !== undefined &&
+        proposed.contextRevision !== expectedRevision) ||
       (ready && proposed.activeQuestion != null) ||
-      (ready && [proposed.contextUpdates, proposed.unresolved, proposed.flags].some(
-        (value) => value !== undefined && (!Array.isArray(value) || value.length > 0),
-      ))
+      (ready &&
+        [proposed.contextUpdates, proposed.unresolved, proposed.flags].some(
+          (value) =>
+            value !== undefined && (!Array.isArray(value) || value.length > 0),
+        ))
     ) {
       throw problemException(
         ASSESSMENT_INTERVIEW_INITIAL_PROBLEM_CODES.decisionInvalid,
@@ -2334,64 +2373,116 @@ export class AssessmentInterviewRuntimeService {
     return this.runInterviewTransaction(async (tx) => {
       await this.lockInitialInterviewSeed(input.assessmentId, tx);
       const existing = await this.readThread(input.assessmentId, tx);
-      if (existing.contextRevision !== expectedRevision || activeBusinessContextNeed(existing.privateStore)) {
-        throw problemException(ASSESSMENT_INTERVIEW_INITIAL_PROBLEM_CODES.seedStale,
-          input.correlationId, { status: HttpStatus.CONFLICT });
+      if (
+        existing.contextRevision !== expectedRevision ||
+        activeBusinessContextNeed(existing.privateStore)
+      ) {
+        throw problemException(
+          ASSESSMENT_INTERVIEW_INITIAL_PROBLEM_CODES.seedStale,
+          input.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
       }
       // Resolve both the requested report and current provenance inside the transaction.
       // A delayed event must not complete Initial for a different source/report.
       const provenance = await this.assessmentProvenance(
-        input.assessmentId, input.technicalEvidenceReportId, tx,
+        input.assessmentId,
+        input.technicalEvidenceReportId,
+        tx,
       );
-      const current = await this.assessmentProvenance(input.assessmentId, undefined, tx);
-      assertInterviewMutationProvenance(existing, provenance, input.correlationId);
+      const current = await this.assessmentProvenance(
+        input.assessmentId,
+        undefined,
+        tx,
+      );
+      assertInterviewMutationProvenance(
+        existing,
+        provenance,
+        input.correlationId,
+      );
       assertInterviewMutationProvenance(existing, current, input.correlationId);
-      this.assertInitialInterviewCoverageUsable(provenance.technicalCoverageState,
-        provenance.coverageLimitations, provenance.partialCoveragePolicyDecision,
-        input.correlationId);
+      this.assertInitialInterviewCoverageUsable(
+        provenance.technicalCoverageState,
+        provenance.coverageLimitations,
+        provenance.partialCoveragePolicyDecision,
+        input.correlationId,
+      );
       const context = requireExistingInitialContext(
-        input.assessmentId, existing.state, existing.contextRevision, input.correlationId,
+        input.assessmentId,
+        existing.state,
+        existing.contextRevision,
+        input.correlationId,
       );
       // Model-created statements or edited confirmations cannot enter through this path.
       const proposedContext = objectRecord(proposed.confirmedContext);
-      const noContextUpdates = proposed.confirmedContext == null ||
-        (proposedContext !== null && proposedContext !== undefined &&
+      const noContextUpdates =
+        proposed.confirmedContext == null ||
+        (proposedContext !== null &&
+          proposedContext !== undefined &&
           (Object.keys(proposedContext).length === 0 ||
             (Object.keys(proposedContext).length === 1 &&
-              Array.isArray(proposedContext.statements) && proposedContext.statements.length === 0)));
-      if (!noContextUpdates && stableJson(proposed.confirmedContext) !== stableJson(context)) {
-        throw problemException(ASSESSMENT_INTERVIEW_INITIAL_PROBLEM_CODES.contextChanged,
-          input.correlationId, { status: HttpStatus.CONFLICT });
+              Array.isArray(proposedContext.statements) &&
+              proposedContext.statements.length === 0)));
+      if (
+        !noContextUpdates &&
+        stableJson(proposed.confirmedContext) !== stableJson(context)
+      ) {
+        throw problemException(
+          ASSESSMENT_INTERVIEW_INITIAL_PROBLEM_CODES.contextChanged,
+          input.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
       }
-      if (ready) assertExistingInitialContextSufficient(context, input.correlationId);
-      const question = waiting ? parsePersistableInterviewQuestion(
-        proposed.activeQuestion, ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
-        new Set(provenance.governedEvidenceRefs), input.correlationId,
-      ) : undefined;
+      if (ready)
+        assertExistingInitialContextSufficient(context, input.correlationId);
+      const question = waiting
+        ? parsePersistableInterviewQuestion(
+            proposed.activeQuestion,
+            ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+            new Set(provenance.governedEvidenceRefs),
+            input.correlationId,
+          )
+        : undefined;
       if (waiting && !question) {
-        throw problemException(ASSESSMENT_INTERVIEW_INITIAL_PROBLEM_CODES.decisionInvalid,
-          input.correlationId, { status: HttpStatus.BAD_REQUEST });
+        throw problemException(
+          ASSESSMENT_INTERVIEW_INITIAL_PROBLEM_CODES.decisionInvalid,
+          input.correlationId,
+          { status: HttpStatus.BAD_REQUEST },
+        );
       }
-      const exactReplay = existing.privateStore.workflowRunId === workflowRunId &&
+      const exactReplay =
+        existing.privateStore.workflowRunId === workflowRunId &&
         existing.activeQuestionId === (question?.id ?? null) &&
         existing.state.outcome === proposed.outcome &&
-        stableJson(existing.state.activeQuestion ?? null) === stableJson(question ?? null) &&
+        stableJson(existing.state.activeQuestion ?? null) ===
+          stableJson(question ?? null) &&
         existing.processedRevision === existing.contextRevision;
       if (exactReplay) return existing.state;
       if (
-        !existing.exists || existing.activeQuestionId || existing.state.activeQuestion ||
+        !existing.exists ||
+        existing.activeQuestionId ||
+        existing.state.activeQuestion ||
         existing.state.orchestrationRequested === true ||
-        existing.state.outcome !== ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer ||
+        existing.state.outcome !==
+          ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer ||
         (existing.state.flags?.length ?? 0) > 0 ||
-        existing.privateRevisions.some((revision) =>
-          revision.contextRevision === existing.contextRevision && !revision.processedAt)
+        existing.privateRevisions.some(
+          (revision) =>
+            revision.contextRevision === existing.contextRevision &&
+            !revision.processedAt,
+        )
       ) {
-        throw problemException(ASSESSMENT_INTERVIEW_INITIAL_PROBLEM_CODES.seedStale,
-          input.correlationId, { status: HttpStatus.CONFLICT });
+        throw problemException(
+          ASSESSMENT_INTERVIEW_INITIAL_PROBLEM_CODES.seedStale,
+          input.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
       }
       const state: AssessmentInterviewRuntimeState = {
         ...existing.state,
-        outcome: ready ? ASSESSMENT_INTERVIEW_OUTCOMES.contextReady : ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        outcome: ready
+          ? ASSESSMENT_INTERVIEW_OUTCOMES.contextReady
+          : ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
         activeQuestion: question,
         assistantMessage: undefined,
         blockedActions: [],
@@ -2400,53 +2491,86 @@ export class AssessmentInterviewRuntimeService {
         // Preserve the authoritative statements, actor/time and revision exactly.
         confirmedContext: context,
       };
-      const guidanceVersion = existing.guidanceVersion ?? this.resolveGuidanceVersion();
+      const guidanceVersion =
+        existing.guidanceVersion ?? this.resolveGuidanceVersion();
       await this.persistThreadState(input.assessmentId, state, tx, {
         contextRevision: existing.contextRevision,
         processedRevision: existing.contextRevision,
         activeQuestionId: question?.id ?? null,
-        privateStore: { ...existing.privateStore, workflowRunId,
-          partialCoveragePolicyDecision: provenance.partialCoveragePolicyDecision },
+        privateStore: {
+          ...existing.privateStore,
+          workflowRunId,
+          partialCoveragePolicyDecision:
+            provenance.partialCoveragePolicyDecision,
+        },
         sourceVersion: existing.sourceVersion!,
         pgeVersion: existing.pgeVersion!,
         guidanceVersion,
       });
-      await this.interviewAudit.recordInterviewOutcome({
-        assessmentId: input.assessmentId, outcome: state.outcome,
-        activeQuestionId: question?.id, contextRevision: existing.contextRevision,
-        sessionId: this.threadId(input.assessmentId), threadId: this.threadId(input.assessmentId),
-        guidanceVersion, correlationId: input.correlationId,
-      }, tx);
+      await this.interviewAudit.recordInterviewOutcome(
+        {
+          assessmentId: input.assessmentId,
+          outcome: state.outcome,
+          activeQuestionId: question?.id,
+          contextRevision: existing.contextRevision,
+          sessionId: this.threadId(input.assessmentId),
+          threadId: this.threadId(input.assessmentId),
+          guidanceVersion,
+          correlationId: input.correlationId,
+        },
+        tx,
+      );
       const event = {
-        assessmentId: input.assessmentId, runId: workflowRunId,
-        correlationId: input.correlationId, stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+        assessmentId: input.assessmentId,
+        runId: workflowRunId,
+        correlationId: input.correlationId,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
         toolName: INTERVIEW_TOOL_NAME,
-        summary: ready ? "Existing Customer context is sufficient; no new question is required."
+        summary: ready
+          ? "Existing Customer context is sufficient; no new question is required."
           : "Interview Agent question is waiting for Customer response.",
         outputSummary: {
           assessmentInterview: runtimeEventState(state),
-          interviewWorkflowEvent: ready ? ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewContextReady
+          interviewWorkflowEvent: ready
+            ? ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewContextReady
             : ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
-          orchestratorAction: ready ? ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.continueToEngineeringRule
+          orchestratorAction: ready
+            ? ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.continueToEngineeringRule
             : ASSESSMENT_INTERVIEW_ORCHESTRATOR_ACTIONS.waitForCustomer,
           interviewMode: ASSESSMENT_INTERVIEW_MODES.initialInterview,
-          partialCoveragePolicyDecision: provenance.partialCoveragePolicyDecision ?? null,
+          partialCoveragePolicyDecision:
+            provenance.partialCoveragePolicyDecision ?? null,
         },
         startedAt: new Date(),
       };
       if (ready) {
         await this.runtimeEvents.recordToolCompleted(event, tx);
       } else if (question) {
-        await this.interviewAudit.recordQuestionPersisted({
-          assessmentId: input.assessmentId, questionId: question.id,
-          questionIntent: question.intent, prompt: question.prompt, control: question.control,
-          choices: question.choices, whyEvidenceRefs: question.whyEvidenceRefs,
-          sessionId: this.threadId(input.assessmentId), threadId: this.threadId(input.assessmentId),
-          turnId: existing.contextRevision, sourceSnapshot: { ...provenance, guidanceVersion },
-          correlationId: input.correlationId,
-        }, tx);
-        await this.runtimeEvents.recordToolWaitingInput({ ...event,
-          waitingReason: ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted }, tx);
+        await this.interviewAudit.recordQuestionPersisted(
+          {
+            assessmentId: input.assessmentId,
+            questionId: question.id,
+            questionIntent: question.intent,
+            prompt: question.prompt,
+            control: question.control,
+            choices: question.choices,
+            whyEvidenceRefs: question.whyEvidenceRefs,
+            sessionId: this.threadId(input.assessmentId),
+            threadId: this.threadId(input.assessmentId),
+            turnId: existing.contextRevision,
+            sourceSnapshot: { ...provenance, guidanceVersion },
+            correlationId: input.correlationId,
+          },
+          tx,
+        );
+        await this.runtimeEvents.recordToolWaitingInput(
+          {
+            ...event,
+            waitingReason:
+              ASSESSMENT_INTERVIEW_WORKFLOW_EVENTS.interviewStarted,
+          },
+          tx,
+        );
       }
       return state;
     });
