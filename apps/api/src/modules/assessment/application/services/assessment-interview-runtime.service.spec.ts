@@ -309,8 +309,14 @@ type MockPrismaDelegates = {
     updateMany: jest.Mock<(...args: unknown[]) => Promise<{ count: number }>>;
     upsert: jest.Mock<(...args: unknown[]) => Promise<Record<string, unknown>>>;
   };
+  repositoryConnection: {
+    findFirst: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
+  };
   repositorySnapshot: {
-    findFirst: jest.Mock<() => Promise<{ id: string; commitSha: string }>>;
+    findFirst: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
+  };
+  repositoryScanJob: {
+    findFirst: jest.Mock<(...args: unknown[]) => Promise<unknown>>;
   };
   engineeringRuleAssessment: {
     findMany: jest.Mock<() => Promise<unknown[]>>;
@@ -325,7 +331,7 @@ type MockPrismaDelegates = {
           coverageLimitations?: string[];
           [key: string]: unknown;
         };
-      }>
+      } | null>
     >;
   };
 };
@@ -565,12 +571,31 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
           .fn<(...args: unknown[]) => Promise<Record<string, unknown>>>()
           .mockResolvedValue({}),
       },
+      repositoryConnection: {
+        findFirst: jest
+          .fn<(...args: unknown[]) => Promise<unknown>>()
+          .mockResolvedValue({
+            id: "conn-1",
+          }),
+      },
       repositorySnapshot: {
         findFirst: jest
           .fn<() => Promise<{ id: string; commitSha: string }>>()
           .mockResolvedValue({
             id: "snap-1",
             commitSha: "sha-123456",
+          }),
+      },
+      repositoryScanJob: {
+        findFirst: jest
+          .fn<(...args: unknown[]) => Promise<unknown>>()
+          .mockResolvedValue({
+            id: "scan-1",
+            snapshotId: "snap-1",
+            snapshot: {
+              id: "snap-1",
+              commitSha: "sha-123456",
+            },
           }),
       },
       engineeringRuleAssessment: {
@@ -1699,6 +1724,144 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       ).not.toHaveBeenCalled();
       expect(mockOutboxRepository.enqueue).not.toHaveBeenCalled();
       expect(mockTx.$queryRaw).toHaveBeenCalled();
+    });
+
+    it("rejects answer when a new scan is queued/running and has no accepted report yet", async () => {
+      const row = initialInterviewThreadFixture();
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
+        ...row,
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+        stateJson: {
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+          contextRevision: 1,
+          activeQuestion: {
+            id: "q-1",
+            intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+            control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+            prompt: "How is it used?",
+          },
+        },
+      });
+      // Scan B is current but has no accepted report yet
+      mockTx.repositoryScanJob.findFirst.mockResolvedValue({
+        id: "scan-2",
+        snapshotId: "snap-2",
+        snapshot: { id: "snap-2", commitSha: "sha-new" },
+      });
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.submitAnswer({
+          assessmentId: "assessment-1",
+          actor,
+          correlationId: "m04-scan-b-running",
+          answer: submitAnswerCommand({
+            questionId: "q-1",
+            answer: {
+              kind: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+              text: "customer answer",
+            },
+          }),
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          problem: {
+            code: ASSESSMENT_INTERVIEW_MUTATION_PROBLEM_CODES.provenanceStale,
+          },
+        },
+      });
+    });
+
+    it("rejects blocked action when a new scan is running with no accepted report yet", async () => {
+      const row = initialInterviewThreadFixture();
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
+        ...row,
+        sourceVersion: "snap-1:sha-123456",
+        pgeVersion: "report-1:v1",
+        activeQuestionId: null,
+        stateJson: {
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved,
+          contextRevision: 1,
+          blockedActions: [
+            ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
+          ],
+        },
+      });
+      // Scan B running with no accepted report yet
+      mockTx.repositoryScanJob.findFirst.mockResolvedValue({
+        id: "scan-2",
+        snapshotId: "snap-2",
+        snapshot: { id: "snap-2", commitSha: "sha-new" },
+      });
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.recordBlockedAction({
+          assessmentId: "assessment-1",
+          actor,
+          correlationId: "m04-blocked-scan-b-running",
+          blocked: {
+            expectedSessionRevision: 1,
+            clientRequestId: "req-blocked-1",
+            action: ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
+            draft: "Draft explanation",
+          },
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          problem: {
+            code: ASSESSMENT_INTERVIEW_MUTATION_PROBLEM_CODES.provenanceStale,
+          },
+        },
+      });
+    });
+
+    it("accepts answer when question matches newly completed Scan B and Report B", async () => {
+      const row = initialInterviewThreadFixture();
+      mockTx.assessmentInterviewThread.findUnique.mockResolvedValue({
+        ...row,
+        sourceVersion: "snap-2:sha-new",
+        pgeVersion: "report-2:v1",
+        stateJson: {
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+          contextRevision: 1,
+          activeQuestion: {
+            id: "q-1",
+            intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+            control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+            prompt: "How is it used?",
+          },
+        },
+      });
+      mockTx.repositoryScanJob.findFirst.mockResolvedValue({
+        id: "scan-2",
+        snapshotId: "snap-2",
+        snapshot: { id: "snap-2", commitSha: "sha-new" },
+      });
+      mockTx.technicalEvidenceReport.findFirst.mockResolvedValue({
+        id: "report-2",
+        schemaVersion: "v1",
+        evidencePayload: {
+          technicalCoverageState: "READY",
+          coverageLimitations: [],
+        },
+      });
+
+      const result = await service.submitAnswer({
+        assessmentId: "assessment-1",
+        actor,
+        correlationId: "m04-scan-b-accepted",
+        answer: submitAnswerCommand({
+          questionId: "q-1",
+          answer: {
+            kind: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+            text: "customer answer for scan B",
+          },
+        }),
+      });
+      expect(result.contextRevision).toBe(2);
+      expect(mockTx.assessmentInterviewThread.updateMany).toHaveBeenCalled();
     });
   });
 

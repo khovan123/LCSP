@@ -84,6 +84,15 @@ import {
   type AssessmentRuntimeControlResult,
 } from "@lcsp/contracts/evidence";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
+import {
+  toPrismaEvidenceAcceptanceStatus,
+  toPrismaRepositoryConnectionStatus,
+  toPrismaRepositorySnapshotStatus,
+} from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
+import {
+  REPOSITORY_CONNECTION_STATUSES,
+  REPOSITORY_SNAPSHOT_STATUSES,
+} from "@lcsp/contracts/github-integration";
 import { problemException } from "../../../../platform/http/filters/error.factory.js";
 import { OutboxRepository } from "../../../../platform/outbox/outbox.repository.js";
 import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
@@ -2941,39 +2950,129 @@ export class AssessmentInterviewRuntimeService {
     technicalEvidenceReportId?: string,
     tx?: Prisma.TransactionClient,
   ): Promise<AssessmentProvenanceSnapshot> {
-    const cacheKey = `${assessmentId}:${technicalEvidenceReportId ?? "latest"}`;
-    const cached = this.provenanceCache.get(cacheKey);
-    if (!tx && cached && cached.expiresAt > Date.now()) {
-      return cached.value;
+    const cacheKey = technicalEvidenceReportId
+      ? `${assessmentId}:${technicalEvidenceReportId}`
+      : null;
+    if (!tx && cacheKey) {
+      const cached = this.provenanceCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        return cached.value;
+      }
     }
     const client = tx ?? this.prisma;
-    const report = await client.technicalEvidenceReport.findFirst({
-      where: technicalEvidenceReportId
-        ? {
-            assessmentId,
-            id: technicalEvidenceReportId,
-            status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
-          }
-        : {
-            assessmentId,
-            status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
-          },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        schemaVersion: true,
-        evidencePayload: true,
-        snapshotId: true,
-        snapshot: { select: { id: true, commitSha: true } },
-      },
-    });
-    const snapshot = report?.snapshot
-      ? report.snapshot
-      : await client.repositorySnapshot.findFirst({
+    let report:
+      | {
+          id: string;
+          schemaVersion: string;
+          evidencePayload: Prisma.JsonValue;
+          snapshotId: string;
+          snapshot: { id: string; commitSha: string };
+        }
+      | null
+      | undefined = null;
+    let snapshot: { id: string; commitSha: string } | null = null;
+
+    if (technicalEvidenceReportId) {
+      report = await client.technicalEvidenceReport.findFirst({
+        where: {
+          assessmentId,
+          id: technicalEvidenceReportId,
+          status: toPrismaEvidenceAcceptanceStatus(
+            TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+          ),
+        },
+        select: {
+          id: true,
+          schemaVersion: true,
+          evidencePayload: true,
+          snapshotId: true,
+          snapshot: { select: { id: true, commitSha: true } },
+        },
+      });
+      snapshot = report?.snapshot ?? null;
+      if (!snapshot) {
+        snapshot = await client.repositorySnapshot.findFirst({
           where: { assessmentId },
-          orderBy: { createdAt: "desc" },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           select: { id: true, commitSha: true },
         });
+      }
+    } else {
+      const activeConnection = await client.repositoryConnection.findFirst({
+        where: {
+          assessmentId,
+          status: toPrismaRepositoryConnectionStatus(
+            REPOSITORY_CONNECTION_STATUSES.active,
+          ),
+        },
+        orderBy: [{ connectedAt: "desc" }, { id: "desc" }],
+        select: { id: true },
+      });
+
+      const currentSnapshot = activeConnection
+        ? await client.repositorySnapshot.findFirst({
+            where: {
+              assessmentId,
+              connectionId: activeConnection.id,
+              status: toPrismaRepositorySnapshotStatus(
+                REPOSITORY_SNAPSHOT_STATUSES.ready,
+              ),
+            },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            select: { id: true, commitSha: true },
+          })
+        : await client.repositorySnapshot.findFirst({
+            where: { assessmentId },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            select: { id: true, commitSha: true },
+          });
+
+      const currentScan = currentSnapshot
+        ? await client.repositoryScanJob.findFirst({
+            where: {
+              assessmentId,
+              snapshotId: currentSnapshot.id,
+            },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            select: {
+              id: true,
+              snapshotId: true,
+              snapshot: { select: { id: true, commitSha: true } },
+            },
+          })
+        : await client.repositoryScanJob.findFirst({
+            where: { assessmentId },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            select: {
+              id: true,
+              snapshotId: true,
+              snapshot: { select: { id: true, commitSha: true } },
+            },
+          });
+
+      snapshot = currentScan?.snapshot ?? currentSnapshot ?? null;
+
+      if (currentScan) {
+        report = await client.technicalEvidenceReport.findFirst({
+          where: {
+            assessmentId,
+            scanJobId: currentScan.id,
+            snapshotId: currentScan.snapshotId,
+            status: toPrismaEvidenceAcceptanceStatus(
+              TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+            ),
+          },
+          select: {
+            id: true,
+            schemaVersion: true,
+            evidencePayload: true,
+            snapshotId: true,
+            snapshot: { select: { id: true, commitSha: true } },
+          },
+        });
+      }
+    }
+
     const evidencePayload = objectRecord(report?.evidencePayload);
     const evidenceGraph = objectRecord(
       evidencePayload?.evidence_graph ??
@@ -3095,7 +3194,7 @@ export class AssessmentInterviewRuntimeService {
     // its snapshot are immutable, so a positive snapshot can never go stale in a
     // dangerous direction. A "no report yet" snapshot must never be cached, or a
     // newly accepted report would be masked until the TTL expires.
-    if (report && !tx) {
+    if (report && !tx && cacheKey) {
       this.provenanceCache.set(cacheKey, {
         value: provenance,
         expiresAt: Date.now() + PROVENANCE_CACHE_TTL_MS,

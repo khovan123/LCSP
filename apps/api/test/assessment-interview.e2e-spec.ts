@@ -1498,6 +1498,121 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       /PROVIDE_MORE_CONTEXT/u,
     );
   });
+
+  it("rejects mutations pinned to old Scan A when rerun Scan B is current without accepted report, and accepts once Report B is accepted", async () => {
+    // 1. Scan A completed and Report A accepted -> Question pinned to Scan A
+    await seedWaitingQuestion(prisma, "q-scan-a");
+
+    // 2. Customer starts rerun: Scan B becomes current with QUEUED/RUNNING status and no accepted report
+    await seedRepositoryScanGraph(prisma, {
+      assessmentId: "assessment-1",
+      userId: "user-1",
+      connectionId: "connection-interview-ready",
+      snapshotId: "snapshot-scan-b",
+      scanJobId: "scan-job-b",
+    });
+
+    // Submitting answer to question pinned to Scan A must be rejected as STALE_PROVENANCE (409)
+    const staleAnswer = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        submitAnswerCommand({
+          questionRef: "q-scan-a",
+          expectedSessionRevision: 0,
+          clientRequestId: "client-request-stale-scan-a",
+          answer: {
+            kind: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+            text: "Answer to stale question",
+          },
+        }),
+      );
+    assert.equal(staleAnswer.status, 409, JSON.stringify(staleAnswer.body));
+    assert.equal(
+      problemCode(staleAnswer),
+      "INTERVIEW_ANSWER_STALE_PROVENANCE",
+    );
+
+    // 3. Now Report B is accepted for Scan B
+    await prisma.technicalEvidenceReport.create({
+      data: {
+        id: "report-scan-b",
+        scanJobId: "scan-job-b",
+        assessmentId: "assessment-1",
+        snapshotId: "snapshot-scan-b",
+        toolsVersion: { scanner: "test" },
+        configHash: { scanner: "test" },
+        evidencePayload: {
+          evidence_graph: { coverage_state: "SUFFICIENT", coverage_notes: [] },
+        },
+        privacyFlags: { containsSourceCode: false, secretsRedacted: true },
+        schemaVersion: "v1",
+        status: EvidenceAcceptanceStatus.ACCEPTED,
+      },
+    });
+
+    // An answer still pinned to Scan A is still rejected
+    const stillStale = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        submitAnswerCommand({
+          questionRef: "q-scan-a",
+          expectedSessionRevision: 0,
+          clientRequestId: "client-request-stale-scan-a-2",
+          answer: {
+            kind: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+            text: "Answer to stale question",
+          },
+        }),
+      );
+    assert.equal(stillStale.status, 409, JSON.stringify(stillStale.body));
+    assert.equal(
+      problemCode(stillStale),
+      "INTERVIEW_ANSWER_STALE_PROVENANCE",
+    );
+
+    // Question re-pinned to Scan B / Report B can now be answered successfully
+    const snapshotB = await prisma.repositorySnapshot.findUniqueOrThrow({
+      where: { id: "snapshot-scan-b" },
+    });
+    await prisma.assessmentInterviewThread.update({
+      where: { assessmentId: "assessment-1" },
+      data: {
+        sourceVersion: `${snapshotB.id}:${snapshotB.commitSha}`,
+        pgeVersion: "report-scan-b:v1",
+        activeQuestionId: "q-scan-b",
+        stateJson: {
+          outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+          threadId: "interview:assessment-1",
+          contextRevision: 0,
+          activeQuestion: {
+            id: "q-scan-b",
+            intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+            control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+            prompt: "Question for Scan B",
+          },
+          answerHistory: [],
+        },
+      },
+    });
+
+    const validAnswer = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send(
+        submitAnswerCommand({
+          questionRef: "q-scan-b",
+          expectedSessionRevision: 0,
+          clientRequestId: "client-request-valid-scan-b",
+          answer: {
+            kind: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+            text: "Valid answer for Scan B",
+          },
+        }),
+      );
+    assert.equal(validAnswer.status, 201, JSON.stringify(validAnswer.body));
+  });
 });
 
 /** Materialize the prior Agent BLOCKED outcome instead of abusing a waiting question. */
