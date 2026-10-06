@@ -19,7 +19,7 @@ import {
 import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { EvidenceAcceptanceStatus, PrismaClient } from "@prisma/client";
+import { EvidenceAcceptanceStatus, PrismaClient, type Prisma } from "@prisma/client";
 
 import { AppModule } from "../src/app.module.js";
 import {
@@ -279,12 +279,15 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       );
     assert.equal(answered.status, 201, JSON.stringify(answered.body));
 
+    await markInterviewBlockedFixture(prisma);
     const blocked = await httpRequest(app)
       .post("/assessments/assessment-1/interview/blocked-actions")
       .set("Authorization", `Bearer ${token}`)
       .send({
         action: ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.saveAndExit,
         draft: RAW_DRAFT,
+        expectedSessionRevision: 1,
+        clientRequestId: "save-draft-after-answer",
       });
     assert.equal(blocked.status, 201, JSON.stringify(blocked.body));
     const state = successBody<{
@@ -1404,12 +1407,15 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
 
   it("keeps raw saved draft out of Agent-decision runtime events", async () => {
     await seedWaitingQuestion(prisma);
+    await markInterviewBlockedFixture(prisma);
     const saved = await httpRequest(app)
       .post("/assessments/assessment-1/interview/blocked-actions")
       .set("Authorization", `Bearer ${token}`)
       .send({
         action: ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.saveAndExit,
         draft: RAW_DRAFT,
+        expectedSessionRevision: 0,
+        clientRequestId: "save-redacted-draft",
       });
     assert.equal(saved.status, 201, JSON.stringify(saved.body));
 
@@ -1418,6 +1424,8 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       .set("Authorization", `Bearer ${token}`)
       .send({
         action: ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
+        expectedSessionRevision: 0,
+        clientRequestId: "more-after-redacted-draft",
       });
     assert.equal(more.status, 201, JSON.stringify(more.body));
 
@@ -1460,11 +1468,14 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       where: { aggregateId: "assessment-1" },
     });
     await seedWaitingQuestion(prisma);
+    await markInterviewBlockedFixture(prisma);
     const blocked = await httpRequest(app)
       .post("/assessments/assessment-1/interview/blocked-actions")
       .set("Authorization", `Bearer ${token}`)
       .send({
         action: ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
+        expectedSessionRevision: 0,
+        clientRequestId: "more-context",
       });
     assert.equal(blocked.status, 201, JSON.stringify(blocked.body));
     assert.equal(
@@ -1484,6 +1495,26 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
     );
   });
 });
+
+/** Materialize the prior Agent BLOCKED outcome instead of abusing a waiting question. */
+async function markInterviewBlockedFixture(prisma: PrismaClient): Promise<void> {
+  const thread = await prisma.assessmentInterviewThread.findUniqueOrThrow({
+    where: { assessmentId: "assessment-1" },
+  });
+  await prisma.assessmentInterviewThread.update({
+    where: { assessmentId: "assessment-1" },
+    data: {
+      activeQuestionId: null,
+      stateJson: {
+        ...(thread.stateJson as Prisma.InputJsonObject),
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved,
+        activeQuestion: null,
+        orchestrationRequested: false,
+        blockedActions: Object.values(ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS),
+      },
+    },
+  });
+}
 
 async function seedUsableTechnicalCoverage(
   prisma: PrismaClient,
