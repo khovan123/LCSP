@@ -1528,10 +1528,7 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
         }),
       );
     assert.equal(staleAnswer.status, 409, JSON.stringify(staleAnswer.body));
-    assert.equal(
-      problemCode(staleAnswer),
-      "INTERVIEW_ANSWER_STALE_PROVENANCE",
-    );
+    assert.equal(problemCode(staleAnswer), "INTERVIEW_ANSWER_STALE_PROVENANCE");
 
     // 3. Now Report B is accepted for Scan B
     await prisma.technicalEvidenceReport.create({
@@ -1567,10 +1564,7 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
         }),
       );
     assert.equal(stillStale.status, 409, JSON.stringify(stillStale.body));
-    assert.equal(
-      problemCode(stillStale),
-      "INTERVIEW_ANSWER_STALE_PROVENANCE",
-    );
+    assert.equal(problemCode(stillStale), "INTERVIEW_ANSWER_STALE_PROVENANCE");
 
     // Question re-pinned to Scan B / Report B can now be answered successfully
     const snapshotB = await prisma.repositorySnapshot.findUniqueOrThrow({
