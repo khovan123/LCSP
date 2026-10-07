@@ -5,7 +5,9 @@ import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { WorkspaceRuntimeEventsController } from "./workspace-runtime-events.controller.js";
 import { GetWorkspaceRuntimeQuery } from "../../application/queries/get-workspace-runtime/get-workspace-runtime.query.js";
-const req = (role: import("@lcsp/contracts/auth").AuthUserRole = AUTH_USER_ROLES.customer) =>
+const req = (
+  role: import("@lcsp/contracts/auth").AuthUserRole = AUTH_USER_ROLES.customer,
+) =>
   ({
     rbacContext: { userId: "owner", role, scope: null },
     correlationId: "corr",

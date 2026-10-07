@@ -134,7 +134,10 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
     assert.equal(result.status, 200);
     assert.ok(body.assessments.length >= 1);
     body.assessments.forEach((item) => {
-      assert.equal(item.lifecycle?.state, ASSESSMENT_LIFECYCLE_STATES.PREPARING);
+      assert.equal(
+        item.lifecycle?.state,
+        ASSESSMENT_LIFECYCLE_STATES.PREPARING,
+      );
     });
   });
 

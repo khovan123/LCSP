@@ -7,15 +7,13 @@ import { ListAssessmentsQuery } from "./list-assessments.query.js";
 
 describe("canonical assessment list filters", () => {
   it("passes validated lifecycle filters to the read loader", async () => {
-    const list = jest
-      .fn<AssessmentDetailLoader["list"]>()
-      .mockResolvedValue({
-        assessments: [],
-        total: 0,
-        page: 1,
-        page_size: 20,
-        correlationId: "corr",
-      });
+    const list = jest.fn<AssessmentDetailLoader["list"]>().mockResolvedValue({
+      assessments: [],
+      total: 0,
+      page: 1,
+      page_size: 20,
+      correlationId: "corr",
+    });
     const query = new ListAssessmentsQuery(
       "owner",
       AUTH_USER_ROLES.customer,
