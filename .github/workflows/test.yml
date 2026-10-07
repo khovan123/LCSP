@@ -409,8 +409,8 @@ jobs:
       - name: Install Python dependencies
         working-directory: deepagents
         run: |
-          python -m venv .venv
-          .venv/bin/python -m pip install -e ".[dev]"
+          python -m pip install uv==0.10.6
+          uv sync --frozen --extra dev
 
       - name: Build contracts and API
         run: |
