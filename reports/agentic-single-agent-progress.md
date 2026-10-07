@@ -2,7 +2,7 @@
 
 ## Current position
 
-2026-10-07: W3 (LCSP-353) convention audit and regression gate completed in `/home/khovan/Workplaces/LCSP`. Branch `develop`; HEAD `1647b8d6c`. Current-wave work remains uncommitted. The W1/W2 logs below are historical evidence; the final W3 convention section records the fresh checks for this change. No Wave restarted.
+2026-10-07: W3 (LCSP-353) convention audit and regression gate completed in `/home/khovan/Workplaces/LCSP` and published as PR #360 on `feat/LCSP-353-implement-isolated-assessment-root-and-domain-runtime`. The CI diagnosis used PR head `26bc93ede1ea32f8be06f276518508cc188c8c12`. The user subsequently authorized updating the PR description and fixing CI; the repair evidence is recorded below. The W1/W2 logs are historical. No Wave restarted.
 
 ## Current authorized Wave
 
@@ -10,7 +10,7 @@ W3 (LCSP-353) authorized by user `continue W3` on 2026-10-07 after W2 GATE PASS 
 
 ## Current Gate
 
-W3 local convention/regression gate: PASS. See `Codebase convention verification` below for implementation evidence, exact commands, skips and proof limits. Remote CI for the uncommitted changes is NOT PROVEN.
+W3 local convention/regression gate: PASS. See `Codebase convention verification` below for implementation evidence, exact commands, skips and proof limits. PR #360 CI repair is recorded separately below; local PASS is not a claim that the new remote head's checks have completed.
 
 ## Jira Wave
 
@@ -276,4 +276,25 @@ Fresh checks (all shell commands invoked with RTK; PASS means completed exit 0):
 
 Proof limits: verticals use real API, PostgreSQL and native Python agents with SCRIPTED model output. They do not establish live-provider metering, real PostgresSaver crash/checkpoint recovery, Docker sandbox hydration or browser acceptance. Existing W4/W5 deferred surfaces remain recorded above. The standard API e2e harness uses its disposable db-push database; raw SQL constraints are separately covered by ordered migrate-deploy and the verticals. Skipped e2e/Python tests remain skipped, not passed. No remote CI run for this uncommitted head is claimed.
 
-Convention result: **PASS for the inspected current-wave changes**, supported by source, transport tests, migrated persistence tests and vertical execution. The obsolete LegalPortfolioService known-violation entry is closed by its inspected CQRS replacement and fresh checks. No commit, push, PR, deployment or next-Wave action performed. Stop here; W4 requires the user's explicit `continue`.
+Convention result: **PASS for the inspected current-wave changes**, supported by source, transport tests, migrated persistence tests and vertical execution. The obsolete LegalPortfolioService known-violation entry is closed by its inspected CQRS replacement and fresh checks. At that gate closure no commit, push, PR, deployment or next-Wave action had been performed. The subsequent PR/CI work is recorded below; W4 still requires the user's explicit `continue`.
+
+### W3 PR #360 CI repair (2026-10-07)
+
+Authorization: user requested "update PR description and fix ci failed". Verified a clean feature branch matching PR head `26bc93ede1ea32f8be06f276518508cc188c8c12` before editing. Updated the PR description with the final W3 behavior, CQRS/convention changes, migration rollout, local evidence and deferred scope, then read it back from GitHub.
+
+**Root cause:** [Assessment Root vertical job 112639012651](https://github.com/khovan123/LCSP/actions/runs/37574083501/job/112639012651) failed at Prisma generation: the new job omitted DATABASE_URL, which prisma.config.ts requires. Source/caller inspection also found the scripts launch `deepagents/.venv/bin/python`, while that job installed dependencies globally and never created the virtual environment. [Docker sandbox job 112639012759](https://github.com/khovan123/LCSP/actions/runs/37574083501/job/112639012759) failed one hydration assertion that expected the intentionally retired interview-context skill to be present. Other checks on that original head completed successfully.
+
+**Fix:** the Root vertical job supplies the URL of its own disposable PostgreSQL service and installs dependencies into `.venv`. The existing stack helper still overrides DATABASE_URL for each named W2/W3 disposable database. Docker hydration now asserts the retired skill entrypoint is absent, while retaining the active LCSP skill, repository contents, marker, hydration idempotency, mountpoint and Git checks. No production runtime, contract, persistence authority or frontend behavior changed.
+
+| Fresh local command / check | Result |
+|---|---|
+| `rtk pnpm run build:runtime-packages` | PASS |
+| `rtk proxy env NODE_ENV=test DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55437/postgres?schema=public pnpm --filter @lcsp/api prisma:generate` | PASS; generation accepts the job's explicit URL |
+| Same explicit environment with `pnpm --filter @lcsp/api build` | PASS |
+| YAML parse and service/URL port consistency assertion | PASS |
+| Same explicit environment with `node tests/legal-portfolio-vertical.mjs` and `node tests/assessment-domain-vertical.mjs` | PASS 54 / 82; real API, migrated named disposable DBs on the helper's local default port 55441, native Python agents, scripted models |
+| `rtk docker build -f deepagents/Dockerfile.dev -t lcsp-agent-runtime:lcsp353-ci-fix .`; `rtk docker build -f deepagents-langgraph/Dockerfile -t lcsp-agent-runtime-server:lcsp353-ci-fix .` | PASS; fresh source images with task-specific tags |
+| `rtk proxy env LCSP_DOCKER_SANDBOX_E2E=1 LCSP_PRODUCTION_AGENT_SERVER_IMAGE_E2E=1 LCSP_REPOSITORY_SANDBOX_IMAGE=lcsp-agent-runtime:lcsp353-ci-fix LCSP_PRODUCTION_AGENT_SERVER_IMAGE=lcsp-agent-runtime-server:lcsp353-ci-fix uv run --project deepagents --extra dev pytest deepagents/tests/integration/test_codebase_memory_runtime_e2e.py deepagents/tests/integration/test_docker_sandbox_e2e.py deepagents/tests/integration/test_local_agent_runtime_e2e.py deepagents/tests/integration/test_production_agent_server_image_e2e.py -q` | PASS 7, no skips, including real Docker hydration and production-image health-graph persistence/restart |
+| `rtk proxy graphify update .`; `rtk proxy git diff --check` | PASS |
+
+Convention verification delta: inspected only the changed CI setup and integration expectation; no new production module, handler, domain, BFF or UI implementation. Existing W3 CQRS/layer/Zod evidence remains applicable. The Docker health graph's persistence/restart check is not Assessment Root PostgresSaver crash-recovery proof. Final remote acceptance must use the pushed PR head's rollup; historical failing jobs and these local checks cannot substitute for it. W4 has not started.

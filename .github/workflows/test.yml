@@ -385,6 +385,7 @@ jobs:
           --health-retries 5
     env:
       LCSP_W2_PG_PORT: 55437
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55437/postgres?schema=public
       NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
@@ -407,7 +408,9 @@ jobs:
 
       - name: Install Python dependencies
         working-directory: deepagents
-        run: python -m pip install -e ".[dev]"
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -e ".[dev]"
 
       - name: Build contracts and API
         run: |
