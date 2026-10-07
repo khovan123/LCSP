@@ -810,117 +810,19 @@ export class AssessmentRuntimeEventService {
     ownerId?: string,
     correlationId = "",
   ): Promise<AssessmentRuntimeSnapshot> {
-    const emittedAt = new Date().toISOString();
-    const [events, repositorySnapshots, scanJobs, evidenceReports] =
-      await Promise.all([
-        this.safeFindMany({
-          where: nonAgentStreamJournalWhere(
-            ownerId ? { assessment: { ownerId } } : undefined,
-          ),
-          orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
-          take: 200,
-        }),
-        this.prisma.repositorySnapshot.findMany({
-          ...(ownerId ? { where: { assessment: { ownerId } } } : {}),
-          orderBy: { createdAt: "desc" },
-          take: 50,
-          select: {
-            id: true,
-            assessmentId: true,
-            repositoryFullName: true,
-            branch: true,
-            commitSha: true,
-            connection: { select: { provider: true } },
-            createdAt: true,
-          },
-        }),
-        this.prisma.repositoryScanJob.findMany({
-          ...(ownerId ? { where: { assessment: { ownerId } } } : {}),
-          orderBy: { updatedAt: "desc" },
-          take: 50,
-          select: {
-            id: true,
-            assessmentId: true,
-            snapshotId: true,
-            status: true,
-            attemptCount: true,
-            blockedReason: true,
-            updatedAt: true,
-          },
-        }),
-        this.prisma.technicalEvidenceReport.findMany({
-          ...(ownerId ? { where: { assessment: { ownerId } } } : {}),
-          orderBy: { createdAt: "desc" },
-          take: 50,
-          select: {
-            id: true,
-            assessmentId: true,
-            scanJobId: true,
-            snapshotId: true,
-            status: true,
-            rejectionReason: true,
-            createdAt: true,
-          },
-        }),
-      ]);
-
-    const persistedActivity = events.map((event) =>
-      this.toActivityEvent(event),
-    );
-    const engineeringProgress = await this.deriveDurableEngineeringProgress();
-    const syntheticActivity = buildSyntheticRuntimeActivity(
-      scanJobs,
-      evidenceReports,
-      persistedActivity,
-      emittedAt,
-    );
-    const recentActivity = [...persistedActivity, ...syntheticActivity]
-      .sort((left, right) => right.emittedAt.localeCompare(left.emittedAt))
-      .slice(0, 50);
-    const runs = deriveRuns(recentActivity).slice(0, 20);
-    const postFindingStates = deriveLatestPostFindingStates(events);
-    const canonicalAssessments = await this.readCanonicalAssessments(
-      ownerId,
-      correlationId,
-    );
-    const canonicalEvents = await this.readCanonicalEvents(ownerId);
-
+    const [canonicalAssessments, canonicalEvents] = await Promise.all([
+      this.readCanonicalAssessments(ownerId, correlationId),
+      this.readCanonicalEvents(ownerId),
+    ]);
     return {
-      emittedAt,
-      runs,
-      recentActivity,
-      engineeringProgress,
-      repositorySnapshots: repositorySnapshots.map(
-        (snapshot: RuntimeRepositorySnapshot) => ({
-          id: snapshot.id,
-          assessmentId: snapshot.assessmentId,
-          provider: snapshot.connection?.provider ?? null,
-          repositoryFullName: snapshot.repositoryFullName,
-          branch: snapshot.branch,
-          commitSha: snapshot.commitSha,
-          createdAt: snapshot.createdAt.toISOString(),
-        }),
-      ),
-      scanJobs: scanJobs.map((scanJob) => ({
-        id: scanJob.id,
-        assessmentId: scanJob.assessmentId,
-        snapshotId: scanJob.snapshotId,
-        status: scanJob.status,
-        attemptCount: scanJob.attemptCount,
-        blockedReason: scanJob.blockedReason,
-        updatedAt: scanJob.updatedAt.toISOString(),
-      })),
-      evidenceReports: evidenceReports.map((report) => ({
-        id: report.id,
-        assessmentId: report.assessmentId,
-        scanJobId: report.scanJobId,
-        snapshotId: report.snapshotId,
-        status: report.status,
-        rejectionReason: report.rejectionReason,
-        createdAt: report.createdAt.toISOString(),
-      })),
-      postFindingStates,
-      // Lifecycle is no longer inferred from V1 stage/artifact records.
+      emittedAt: new Date().toISOString(),
+      runs: [],
+      recentActivity: [],
+      engineeringProgress: [],
+      repositorySnapshots: [],
+      scanJobs: [],
+      evidenceReports: [],
+      postFindingStates: [],
       stageLifecycles: [],
       canonicalAssessments,
       canonicalEvents,

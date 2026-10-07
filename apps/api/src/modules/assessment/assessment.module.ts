@@ -1,3 +1,5 @@
+import { WorkspaceRuntimeEventsController } from "./presentation/http/workspace-runtime-events.controller.js";
+import { GetWorkspaceRuntimeHandler } from "./application/queries/get-workspace-runtime/get-workspace-runtime.handler.js";
 import { Module } from "@nestjs/common";
 import { APP_INTERCEPTOR } from "@nestjs/core";
 import { CqrsModule } from "@nestjs/cqrs";
@@ -6,6 +8,15 @@ import { StorageModule } from "../../platform/storage/storage.module.js";
 import { AnswerHumanRequestHandler } from "./application/commands/answer-human-request/answer-human-request.handler.js";
 import { GetHumanRequestsHandler } from "./application/queries/get-human-requests/get-human-requests.handler.js";
 import { AssessmentHumanRequestSupport } from "./infrastructure/persistence/assessment-human-request-support.service.js";
+import { AssessmentDetailLoader } from "./infrastructure/persistence/assessment-detail.loader.js";
+import { AssessmentReportLoader } from "./infrastructure/persistence/assessment-report.loader.js";
+import { GetAssessmentReportHandler } from "./application/queries/get-assessment-report/get-assessment-report.handler.js";
+import { AssessmentArtifactController } from "./presentation/http/assessment-artifact.controller.js";
+import { AssessmentRepositorySetupLoader } from "./infrastructure/persistence/assessment-repository-setup.loader.js";
+import { GetRepositorySetupHandler } from "./application/queries/get-repository-setup/get-repository-setup.handler.js";
+import { GetRuntimeControlHandler } from "./application/queries/get-runtime-control/get-runtime-control.handler.js";
+import { GetRootControlHandler } from "./application/queries/get-root-control/get-root-control.handler.js";
+import { ControlAssessmentRuntimeHandler } from "./application/commands/control-assessment-runtime/control-assessment-runtime.handler.js";
 import { AssessmentHumanResolutionController } from "./presentation/http/assessment-human-resolution.controller.js";
 
 import { RbacModule } from "../../platform/rbac/rbac.module.js";
@@ -80,20 +91,21 @@ import {
   ],
   controllers: [
     AssessmentRuntimeControlController,
-    InternalAssessmentRuntimeControlController,
     AssessmentController,
-    InternalAssessmentInterviewController,
-    InternalRuleAssessmentController,
+    WorkspaceRuntimeEventsController,
     AssessmentDomainController,
     AssessmentHumanResolutionController,
+    AssessmentArtifactController,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: RuntimeWriteFenceInterceptor },
     AssessmentRuntimeControlService,
+    GetRuntimeControlHandler,
+    GetRootControlHandler,
+    ControlAssessmentRuntimeHandler,
     AssessmentInterviewRuntimeService,
     AssessmentInterviewSnippetService,
     AssessmentPipelineContinuationService,
-    AssessmentPipelineReconciliationService,
     AssessmentLifecycleCoordinator,
     AssessmentEventAppender,
     AssessmentRuntimeAuthority,
@@ -129,7 +141,12 @@ import {
     PutRuleAssessmentHandler,
     ListRuleAssessmentsHandler,
     GetAssessmentHandler,
-    GetAssessmentReadinessHandler,
+    GetWorkspaceRuntimeHandler,
+    AssessmentDetailLoader,
+    AssessmentReportLoader,
+    AssessmentRepositorySetupLoader,
+    GetRepositorySetupHandler,
+    GetAssessmentReportHandler,
     ListAssessmentsHandler,
     PrismaAssessmentRepository,
     {
