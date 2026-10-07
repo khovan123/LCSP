@@ -48,7 +48,7 @@ from tools.common.capabilities.assessment.rule_assessment.values import (
     RULE_CRITERION_STATUSES,
     RULE_EVIDENCE_KINDS,
 )
-from tools.common.capabilities.platform.api_client import WorkerApiClient
+from tools.common.capabilities.platform.api_client import WorkerApiClient, WorkerCallbackError
 from tools.common.capabilities.platform.callback_schemas import ScanCallbackPayload
 from tools.common.capabilities.workflow.recovery.interview_boundary import (
     AssessmentInterviewResumeBoundary,
@@ -97,7 +97,7 @@ SCAN_JOB_ID = "scan-lcsp-278-release"
 BLOCKED_SCAN_JOB_ID = "scan-lcsp-278-blocked"
 SNAPSHOT_ID = "snapshot-lcsp-278-release"
 BLOCKED_SNAPSHOT_ID = "snapshot-lcsp-278-blocked"
-CORPUS_ID = "corpus-lcsp-278-release"
+CORPUS_ID = "a2780000-0000-4000-8000-000000000278"
 LEGAL_RULE_ID = "LEGAL-LCSP-278-RELEASE"
 # Precompiled ids embed their legal rule so the deterministic applicability
 # gate (``legal_rule_id_index``) routes them to the parent LegalRule.
@@ -902,6 +902,14 @@ def _seed_active_legal_portfolio(api: WorkerApiClient) -> None:
     catalog to seed. The packet cites every non-repealed pinned chunk so the mechanical
     completeness gate passes without any legal meaning being invented here.
     """
+    try:
+        active = api.get_active_legal_portfolio()
+    except WorkerCallbackError as error:
+        if getattr(error, "status_code", None) != 404:
+            raise
+        active = None
+    if isinstance(active, dict) and active.get("legalCorpusVersionId") == CORPUS_ID:
+        return  # both release-gate tests share one pinned corpus and its ACTIVE portfolio
     chunks = [
         item
         for item in api.get_legal_corpus_chunks(CORPUS_ID).get("chunks", [])
