@@ -481,6 +481,49 @@ test("OTHER IS NOT HARDCODED: custom choice where label is not 'Other' triggers 
   });
 });
 
+test("requiresFreeText draft is not submitted after switching back to a normal choice", async () => {
+  const submissions: unknown[] = [];
+  const question: AssessmentInterviewQuestion = {
+    choices: [
+      { id: "normal", label: "Normal path" },
+      { id: "other", label: "Other path", requiresFreeText: true },
+    ],
+    control: ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
+    id: "q-switch-choice",
+    intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+    prompt: "Choose a path",
+  };
+  const { container } = await renderElement(
+    React.createElement(InterviewInteractiveHarness, {
+      onSubmit: (payload) => submissions.push(payload),
+      question,
+    }),
+  );
+  const radios = container.querySelectorAll<HTMLButtonElement>("[role='radio']");
+  await click(radios[1]);
+  await changeText(
+    container.querySelector("[data-slot='assessment-composer'] textarea") as HTMLTextAreaElement,
+    "A custom explanation",
+  );
+  await click(radios[0]);
+
+  const composerSend = container.querySelector<HTMLButtonElement>(
+    "[data-slot='assessment-composer'] button[type='submit']",
+  );
+  const structuredSend = container.querySelector<HTMLButtonElement>(
+    "[data-slot='selection-submit-action'] button",
+  );
+  assert.ok(composerSend);
+  assert.ok(structuredSend);
+  assert.equal(composerSend.disabled, true);
+  assert.equal(structuredSend.disabled, false);
+  await click(structuredSend);
+
+  assert.deepEqual(submissions, [
+    { questionId: "q-switch-choice", selectedChoiceIds: ["normal"] },
+  ]);
+});
+
 test("selection controls expose an inline send action that arms only after a choice", async () => {
   // Regression: choosing an option only staged a draft. The sole way to send it was the
   // composer arrow inside an empty text box, so a chosen answer looked submitted while
