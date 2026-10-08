@@ -79,11 +79,12 @@ function buildHandler() {
     lifecycle,
     { createCaseInTx } as never,
     {
-      load: async (input: { assessmentId: string; correlationId: string }) => ({
-        assessment_id: input.assessmentId,
-        correlationId: input.correlationId,
-        lifecycle: { state: ASSESSMENT_LIFECYCLE_STATES.PREPARING },
-      }),
+      load: (input: { assessmentId: string; correlationId: string }) =>
+        Promise.resolve({
+          assessment_id: input.assessmentId,
+          correlationId: input.correlationId,
+          lifecycle: { state: ASSESSMENT_LIFECYCLE_STATES.PREPARING },
+        }),
     } as never,
   );
 

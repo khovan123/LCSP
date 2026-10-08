@@ -47,7 +47,6 @@ import { SubmitRuleDecisionHandler } from "./application/commands/submit-rule-de
 import { TransitionAssessmentLifecycleHandler } from "./application/commands/transition-lifecycle/transition-lifecycle.handler.js";
 import { ASSESSMENT_BILLING_RETENTION } from "./application/ports/billing/assessment-billing-retention.port.js";
 import { ASSESSMENT_REPOSITORY } from "./application/ports/persistence/assessment.repository.js";
-import { GetAssessmentReadinessHandler } from "./application/queries/get-assessment-readiness/get-assessment-readiness.handler.js";
 import { GetAssessmentHandler } from "./application/queries/get-assessment/get-assessment.handler.js";
 import { GetPinnedPortfolioHandler } from "./application/queries/get-pinned-portfolio/get-pinned-portfolio.handler.js";
 import { GetRootContextHandler } from "./application/queries/get-root-context/get-root-context.handler.js";
@@ -60,22 +59,14 @@ import { AssessmentInterviewRuntimeService } from "./application/services/assess
 import { AssessmentInterviewSnippetService } from "./application/services/assessment-interview-snippet.service.js";
 import { AssessmentLifecycleCoordinator } from "./application/services/assessment-lifecycle-coordinator.service.js";
 import { AssessmentPipelineContinuationService } from "./application/services/assessment-pipeline-continuation.service.js";
-import { AssessmentPipelineReconciliationService } from "./application/services/assessment-pipeline-reconciliation.service.js";
 import { AssessmentRuntimeAuthority } from "./application/services/assessment-runtime-authority.service.js";
 import { AssessmentRuntimePreparation } from "./application/services/assessment-runtime-preparation.service.js";
 import { PrismaAssessmentBillingRetention } from "./infrastructure/billing/prisma-assessment-billing-retention.js";
 import { AssessmentCaseSupport } from "./infrastructure/persistence/assessment-case-support.service.js";
 import { PrismaAssessmentRepository } from "./infrastructure/persistence/prisma-assessment.repository.js";
 import { AssessmentDomainController } from "./presentation/http/assessment-domain.controller.js";
-import {
-  AssessmentRuntimeControlController,
-  InternalAssessmentRuntimeControlController,
-} from "./presentation/http/assessment-runtime-control.controller.js";
-import {
-  AssessmentController,
-  InternalAssessmentInterviewController,
-  InternalRuleAssessmentController,
-} from "./presentation/http/assessment.controller.js";
+import { AssessmentRuntimeControlController } from "./presentation/http/assessment-runtime-control.controller.js";
+import { AssessmentController } from "./presentation/http/assessment.controller.js";
 
 /**
  * Wires RBAC-protected assessment commands and queries to Prisma-backed persistence and HTTP endpoints.

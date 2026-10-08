@@ -21,12 +21,13 @@ import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { GetAssessmentReportQuery } from "../../application/queries/get-assessment-report/get-assessment-report.query.js";
 
-const idPipe = () =>
-  new ZodValidationPipe(
+function idPipe() {
+  return new ZodValidationPipe(
     claimAssessmentRootRequestSchema.shape.assessmentId,
     ASSESSMENT_DOMAIN_ERROR_CODES.REQUEST_INVALID,
     422,
   );
+}
 
 @Controller("assessments/:assessmentId/artifacts")
 @UseGuards(RbacGuard)

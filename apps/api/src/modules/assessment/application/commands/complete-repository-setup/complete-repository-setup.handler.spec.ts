@@ -27,9 +27,11 @@ function context(
     .fn<(...args: unknown[]) => Promise<unknown>>()
     .mockResolvedValue(snapshot);
   const tx = {
-    $queryRaw: async () => [],
-    assessment: { findUnique: async () => row },
-    repositoryConnection: { findFirst: async () => ({ id: "connection" }) },
+    $queryRaw: () => Promise.resolve([]),
+    assessment: { findUnique: () => Promise.resolve(row) },
+    repositoryConnection: {
+      findFirst: () => Promise.resolve({ id: "connection" }),
+    },
     repositorySnapshot: { findFirst: snapshotRead },
   };
   const prisma = {
