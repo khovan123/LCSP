@@ -44,7 +44,9 @@ function build(target: ArchivedReportDownload | null, stored?: Buffer | Error) {
         : Promise.resolve(stored ?? Buffer.alloc(0)),
     ),
   } as unknown as LegacyArchiveBlobStore;
-  const write = jest.fn(() => Promise.resolve(undefined));
+  const write = jest
+    .fn<AuditWriterService["write"]>()
+    .mockResolvedValue(undefined);
   const handler = new DownloadLegacyArchiveReportHandler(archive, blobs, {
     write,
   } as unknown as AuditWriterService);
