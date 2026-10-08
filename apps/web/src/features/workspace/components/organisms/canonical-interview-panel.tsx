@@ -102,7 +102,11 @@ export function CanonicalInterviewPanel({
     Boolean(activeQuestionId) &&
     (lockedQuestionId === activeQuestionId ||
       submittedQuestionId === activeQuestionId);
-  const mutationPending = submitAnswer.isPending || submitAnswer.hasPendingRequest;
+  // The retrier intentionally keeps an uncertain command after a transport
+  // failure so the user can retry it with the same clientRequestId. That
+  // retained command is not an in-flight mutation and must not keep the UI
+  // locked after the ordinary error has been surfaced.
+  const mutationPending = submitAnswer.isPending;
   const interactive =
     presentation.state ===
     CANONICAL_INTERVIEW_PRESENTATION_STATES.interactiveEligible;
