@@ -416,6 +416,7 @@ test("OTHER / requiresFreeText: requires custom text in shared composer before s
 
   // The reusable structured action is the sole submission owner.
   await click(sendAction);
+  await click(sendAction);
   assert.equal(submissions.length, 1);
   assert.deepEqual(submissions[0], {
     otherText: "Lead Compliance Officer with Tier-3 Signoff",
