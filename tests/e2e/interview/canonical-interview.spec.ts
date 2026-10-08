@@ -105,6 +105,12 @@ function runtimeSse(currentLifecycle = lifecycle) {
   ].join("\n");
 }
 type MutationResponse = { status: number; body?: string };
+const unexpectedRequestsByPage = new WeakMap<Page, string[]>();
+
+test.afterEach(async ({ page }) => {
+  expect(unexpectedRequestsByPage.get(page) ?? []).toEqual([]);
+});
+
 async function installFixture(
   page: Page,
   options: {
@@ -118,6 +124,8 @@ async function installFixture(
   const mutationResponses: MutationResponse[] = [];
   let holdNextMutation = false;
   let releaseHeldMutation: (() => void) | undefined;
+  const unexpectedRequests: string[] = [];
+  unexpectedRequestsByPage.set(page, unexpectedRequests);
   await page.route("**/api/**", async (route: Route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -175,6 +183,19 @@ async function installFixture(
       });
       return;
     }
+    if (
+      path === `/api/assessments/${ASSESSMENT_ID}/repository-setup` ||
+      path === `/api/assessments/${ASSESSMENT_ID}/runtime/control` ||
+      path === "/api/assessments" ||
+      path === "/api/workspace"
+    ) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: envelope(null),
+      });
+      return;
+    }
     if (path === "/api/auth/profile") {
       await route.fulfill({
         status: 200,
@@ -189,10 +210,12 @@ async function installFixture(
       });
       return;
     }
+    const requestDescription = `${request.method()} ${path}`;
+    unexpectedRequests.push(requestDescription);
     await route.fulfill({
-      status: 200,
+      status: 500,
       contentType: "application/json",
-      body: envelope(null),
+      body: problemEnvelope(),
     });
   });
   await page.context().addCookies([
@@ -212,6 +235,7 @@ async function installFixture(
   ]);
   return {
     submissions,
+    unexpectedRequests,
     setInterviewState(next: InterviewState) {
       currentInterview = next;
     },
