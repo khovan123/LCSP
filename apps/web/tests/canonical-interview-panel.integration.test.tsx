@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { JSDOM } from "jsdom";
-import { act, createElement } from "react";
+import { act, createElement, type ReactNode } from "react";
 
 import {
   ASSESSMENT_INTERVIEW_CONTROLS,
@@ -11,7 +11,13 @@ import {
   type AssessmentInterviewQuestion,
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
-import { ASSESSMENT_LIFECYCLE_STATES } from "@lcsp/contracts/assessment";
+import {
+  ASSESSMENT_LIFECYCLE_STATES,
+  HUMAN_RESOLUTION_REQUEST_STATUSES,
+} from "@lcsp/contracts/assessment";
+import {
+  HUMAN_RESOLUTION_CONTROL_TYPES,
+} from "@lcsp/contracts/assessment-domain";
 import { apiQueryKeys } from "../src/lib/api/query-keys";
 
 const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", {
@@ -88,6 +94,12 @@ const { WorkspaceRuntimeProvider } = await import(
 const { CanonicalInterviewPanel } = await import(
   "../src/features/workspace/components/organisms/canonical-interview-panel"
 );
+const { AssessmentOverview } = await import(
+  "../src/features/workspace/components/organisms/assessment-overview"
+);
+const { assessmentDomainKeys } = await import(
+  "../src/lib/api/assessment-domain-queries"
+);
 
 const assessmentId = "00000000-0000-4000-8000-000000000001";
 const roots: ReturnType<typeof createRoot>[] = [];
@@ -147,6 +159,12 @@ async function mount(
   options: {
     lifecycleState?: (typeof ASSESSMENT_LIFECYCLE_STATES)[keyof typeof ASSESSMENT_LIFECYCLE_STATES];
     mutation?: (input: unknown) => Promise<Response>;
+    humanMutation?: (input: unknown) => Promise<Response>;
+    interviewFetch?: () => Promise<Response>;
+    detailFetch?: () => Promise<Response>;
+    humanRequestsFetch?: () => Promise<Response>;
+    child?: ReactNode;
+    seed?: (queryClient: InstanceType<typeof QueryClient>) => void;
   } = {},
 ) {
   const current = state;
@@ -154,16 +172,30 @@ async function mount(
   fetchImpl = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     const path = String(input);
+    if (path.includes("/human-requests/") && init?.method === "POST") {
+      return options.humanMutation
+        ? options.humanMutation(JSON.parse(String(init.body)))
+        : envelope(null);
+    }
+    if (path.endsWith(`/assessments/${assessmentId}`) && init?.method !== "POST") {
+      return options.detailFetch ? options.detailFetch() : envelope(null);
+    }
+    if (path.endsWith(`/assessments/${assessmentId}/human-requests`)) {
+      return options.humanRequestsFetch ? options.humanRequestsFetch() : envelope(null);
+    }
     if (path.includes("/interview") && init?.method === "POST") {
       return mutation(JSON.parse(String(init.body)));
     }
-    if (path.includes("/interview")) return envelope(current);
+    if (path.includes("/interview")) {
+      return options.interviewFetch ? options.interviewFetch() : envelope(current);
+    }
     if (path.includes("/artifacts")) return envelope(null);
     return envelope(null);
   };
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
+  options.seed?.(queryClient);
   const root = createRoot(testWindow.document.getElementById("root")!);
   roots.push(root);
   await act(async () => {
@@ -174,13 +206,14 @@ async function mount(
         createElement(
           WorkspaceRuntimeProvider,
           null,
-          createElement(CanonicalInterviewPanel, {
-            assessmentId,
-            lifecycleState:
-              options.lifecycleState ??
-              ASSESSMENT_LIFECYCLE_STATES.WAITING_FOR_REQUIRED_INPUT,
-            canonicalAvailable: true,
-          }),
+          options.child ??
+            createElement(CanonicalInterviewPanel, {
+              assessmentId,
+              lifecycleState:
+                options.lifecycleState ??
+                ASSESSMENT_LIFECYCLE_STATES.WAITING_FOR_REQUIRED_INPUT,
+              canonicalAvailable: true,
+            }),
         ),
       ),
     );
@@ -190,7 +223,7 @@ async function mount(
     emitCanonicalRuntime(options.lifecycleState);
     await new Promise((resolve) => setTimeout(resolve, 100));
   });
-  return { container: testWindow.document.getElementById("root")!, queryClient };
+  return { container: testWindow.document.getElementById("root")!, queryClient, root };
 }
 
 function emitCanonicalRuntime(
@@ -423,4 +456,166 @@ test("canonical panel blocks stale Interview answers even with a valid draft", a
   assert.equal(action.disabled, true);
   await click(action);
   assert.equal(calls, 0);
+});
+
+test("canonical panel keeps an active structured action visible beside read-only answer history", async () => {
+  const mounted = await mount(interviewState(question("q-history")));
+  const { container, queryClient } = mounted;
+  queryClient.setQueryData(
+    apiQueryKeys.assessment.interview(assessmentId),
+    {
+      ...interviewState(question("q-history")),
+      answerHistory: [
+        {
+          questionId: "q-old",
+          question: question("q-old"),
+          summary: "Previously recorded answer",
+          answeredAt: "2026-10-08T00:00:00.000Z",
+        },
+      ],
+    },
+  );
+  await settle();
+  assert.match(container.textContent ?? "", /Previously recorded answer/);
+  assert.ok(container.querySelector("[data-history-question-id='q-old']"));
+  const action = container.querySelector<HTMLButtonElement>(
+    "[data-slot='selection-submit-action'] button",
+  );
+  assert.ok(action);
+  await click(container.querySelectorAll<HTMLElement>("[role='radio']")[0]);
+  assert.equal(action.disabled, false);
+});
+
+test("canonical panel keeps loading and error states local to Interview", async () => {
+  let resolveInterview!: (response: Response) => void;
+  const loading = await mount(interviewState(question("q-loading")), {
+    interviewFetch: () =>
+      new Promise<Response>((resolve) => (resolveInterview = resolve)),
+  });
+  assert.equal(loading.container.querySelector("[aria-busy='true']") !== null, true);
+  assert.equal(loading.container.querySelector("[data-slot='selection-submit-action']"), null);
+  resolveInterview(envelope(interviewState(question("q-loading"))));
+  loading.queryClient.setQueryData(
+    apiQueryKeys.assessment.interview(assessmentId),
+    interviewState(question("q-loading")),
+  );
+  await settle();
+  assert.ok(loading.container.querySelector("[data-slot='selection-submit-action']"));
+
+  await act(async () => loading.root.unmount());
+  const failed = await mount(interviewState(question("q-error")), {
+    interviewFetch: async () => {
+      throw new Error("Interview unavailable");
+    },
+  });
+  assert.ok(failed.container.querySelector("[data-slot='canonical-interview-panel']"));
+  assert.ok(failed.container.querySelector("button"));
+  assert.equal(failed.container.querySelector("[data-slot='selection-submit-action']"), null);
+});
+
+test("canonical assessment keeps Interview and Human Resolution workflows independent", async () => {
+  const requestId = "00000000-0000-4000-8000-000000000010";
+  const assessmentDetail = {
+    assessment_id: assessmentId,
+    name: "Integration assessment",
+    owner_id: "owner-1",
+    lifecycle: {
+      state: ASSESSMENT_LIFECYCLE_STATES.WAITING_FOR_REQUIRED_INPUT,
+      assessmentRevision: 1,
+    },
+    runtime: {
+      threadId: "00000000-0000-4000-8000-000000000002",
+      rootAgentVersion: "test",
+      checkpointNamespace: "00000000-0000-4000-8000-000000000003",
+      checkpointId: null,
+      currentExecutionId: "00000000-0000-4000-8000-000000000004",
+      executionState: "RUNNING",
+      eventSequence: 1,
+      startedAt: "2026-10-08T00:00:00.000Z",
+      lastResumedAt: null,
+      updatedAt: "2026-10-08T00:00:00.000Z",
+    },
+    case: null,
+    created_at: "2026-10-08T00:00:00.000Z",
+    updated_at: "2026-10-08T00:00:00.000Z",
+    correlationId: "correlation-1",
+  };
+  const humanRequest = {
+    requestId,
+    requestRevision: 1,
+    openedCaseRevision: 1,
+    status: HUMAN_RESOLUTION_REQUEST_STATUSES.OPEN,
+    checkpointId: null,
+    resolvedFactId: null,
+    answers: [],
+    engineeringRuleId: "rule-1",
+    criterionIds: ["criterion-1"],
+    question: "Which fact should be recorded?",
+    unresolvedFact: "A required fact is unresolved.",
+    decisionImpact: ["Decision impact"],
+    resolutionAttempts: ["Interview evidence was insufficient."],
+    controlType: HUMAN_RESOLUTION_CONTROL_TYPES.FREE_TEXT,
+    choices: [],
+  };
+  let interviewCalls = 0;
+  let humanCalls = 0;
+  const mounted = await mount(interviewState(question("q-overview")), {
+    child: createElement(AssessmentOverview, { assessmentId }),
+    mutation: async () => {
+      interviewCalls += 1;
+      return envelope(interviewState(question("q-overview")));
+    },
+    humanMutation: async () => {
+      humanCalls += 1;
+      return envelope({
+        requestId,
+        requestRevision: 1,
+        caseRevision: 1,
+        status: HUMAN_RESOLUTION_REQUEST_STATUSES.RESOLVED,
+        factId: null,
+        resumed: false,
+        replayed: false,
+      });
+    },
+    detailFetch: async () => envelope(assessmentDetail),
+    humanRequestsFetch: async () =>
+      envelope({ caseRevision: 1, requests: [humanRequest] }),
+    seed: (queryClient) => {
+      queryClient.setQueryData(assessmentDomainKeys.detail(assessmentId), assessmentDetail);
+      queryClient.setQueryData(assessmentDomainKeys.requests(assessmentId), {
+        caseRevision: 1,
+        requests: [humanRequest],
+      });
+      queryClient.setQueryData(apiQueryKeys.assessment.artifacts(assessmentId), null);
+    },
+  });
+  const { container } = mounted;
+  assert.ok(container.querySelector("main[data-assessment-id]"));
+  assert.ok(container.querySelector("[data-slot='canonical-interview-panel']"));
+  assert.ok(container.querySelector(`[data-human-request='${requestId}']`));
+  assert.ok(container.querySelector("[data-canonical-status='PRESENT']"));
+
+  const interviewChoice = container.querySelector<HTMLElement>("[role='radio']");
+  assert.ok(interviewChoice);
+  await click(interviewChoice);
+  await click(
+    container.querySelector<HTMLButtonElement>(
+      "[data-slot='selection-submit-action'] button",
+    )!,
+  );
+  assert.equal(interviewCalls, 1);
+  assert.equal(humanCalls, 0);
+
+  const humanTextarea = container.querySelector<HTMLTextAreaElement>(
+    `[data-human-request='${requestId}'] textarea`,
+  );
+  assert.ok(humanTextarea);
+  await changeText(humanTextarea, "Recorded fact");
+  await click(
+    container.querySelector<HTMLButtonElement>(
+      `[data-human-request='${requestId}'] button[type='submit']`,
+    )!,
+  );
+  assert.equal(interviewCalls, 1);
+  assert.equal(humanCalls, 1);
 });
