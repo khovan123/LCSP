@@ -5,17 +5,32 @@ import {
   type AssessmentInterviewQuestion,
 } from "@lcsp/contracts/evidence";
 import { resolveMessage, type MessageKey } from "@lcsp/i18n";
+import { useEffect, useRef, useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { resolveAppMessage } from "@/lib/i18n";
 import { appLocale } from "@/lib/locale";
-import { useAssessmentInterviewStateQuery } from "@/lib/api/assessment-queries";
+import {
+  useAssessmentInterviewStateQuery,
+  useSubmitAssessmentInterviewAnswerMutation,
+} from "@/lib/api/assessment-queries";
+import { AssessmentComposer } from "./assessment-composer";
+import {
+  AssessmentQuestionTurn,
+  type AssessmentQuestionAnswerInput,
+} from "../molecules/assessment-question-turn";
 import { useAssessmentRuntimeViewModel } from "../../hooks/use-assessment-runtime-view-model";
 import {
   CANONICAL_INTERVIEW_PRESENTATION_STATES,
   selectCanonicalInterviewPresentation,
 } from "../../utils/canonical-interview-presentation";
+import {
+  composerModeForAnswerMode,
+  deriveInterviewAnswerMode,
+  INTERVIEW_ANSWER_MODES,
+  INTERVIEW_COMPOSER_MODES,
+} from "../../utils/interview-answer-mode";
 import type { NormalizedAssessmentRuntime } from "../../types/assessment-runtime-adapter.types";
 
 type CanonicalInterviewPanelProps = {
@@ -26,6 +41,22 @@ type CanonicalInterviewPanelProps = {
   canonicalAvailable: boolean;
 };
 
+type InterviewDraft = {
+  questionId: string;
+  freeText: string;
+  selectedChoiceIds: string[];
+  otherText: string;
+  isAdjusting: boolean;
+};
+
+const emptyDraft = (questionId: string, pendingDraft = ""): InterviewDraft => ({
+  questionId,
+  freeText: pendingDraft,
+  selectedChoiceIds: [],
+  otherText: "",
+  isAdjusting: false,
+});
+
 export function CanonicalInterviewPanel({
   assessmentId,
   lifecycleState,
@@ -33,6 +64,7 @@ export function CanonicalInterviewPanel({
 }: CanonicalInterviewPanelProps) {
   const interviewQuery = useAssessmentInterviewStateQuery(assessmentId);
   const runtime = useAssessmentRuntimeViewModel(assessmentId);
+  const submitAnswer = useSubmitAssessmentInterviewAnswerMutation(assessmentId);
   const presentation = selectCanonicalInterviewPresentation({
     lifecycleState,
     interview: runtime.interview,
@@ -41,15 +73,65 @@ export function CanonicalInterviewPanel({
     queryError: interviewQuery.isError,
     canonicalAvailable,
   });
+  const activeQuestion = presentation.activeQuestion;
+  const activeQuestionId = activeQuestion?.id ?? "";
+  const previousQuestionId = useRef(activeQuestionId);
+  const [draft, setDraft] = useState<InterviewDraft>(() =>
+    emptyDraft(activeQuestionId, runtime.interview.pendingDraft ?? ""),
+  );
+  const [lockedQuestionId, setLockedQuestionId] = useState<string | null>(null);
+  const [submittedQuestionId, setSubmittedQuestionId] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (previousQuestionId.current === activeQuestionId) return;
+    previousQuestionId.current = activeQuestionId;
+    setDraft(emptyDraft(activeQuestionId, runtime.interview.pendingDraft ?? ""));
+    setLockedQuestionId(null);
+    setSubmittedQuestionId(null);
+  }, [activeQuestionId, runtime.interview.pendingDraft]);
+
+  const selectedChoiceRequiresFreeText = Boolean(
+    activeQuestion?.choices?.some(
+      (choice) =>
+        choice.requiresFreeText && draft.selectedChoiceIds.includes(choice.id),
+    ),
+  );
+  const questionLocked =
+    Boolean(activeQuestionId) &&
+    (lockedQuestionId === activeQuestionId ||
+      submittedQuestionId === activeQuestionId);
+  const mutationPending = submitAnswer.isPending || submitAnswer.hasPendingRequest;
+  const interactive =
+    presentation.state ===
+    CANONICAL_INTERVIEW_PRESENTATION_STATES.interactiveEligible;
+  const answerMode = deriveInterviewAnswerMode({
+    question: activeQuestion,
+    selectedChoiceRequiresFreeText,
+    isAdjusting: draft.isAdjusting,
+    pending: mutationPending,
+    submitted: questionLocked,
+    stale: runtime.interview.stale,
+    revalidating: runtime.interview.revalidating,
+    canAnswer: interactive,
+  });
+  const composerMode = composerModeForAnswerMode(answerMode);
+  const composerValue =
+    composerMode === INTERVIEW_COMPOSER_MODES.requiredSelectionText
+      ? draft.otherText
+      : draft.freeText;
+  const submitReady = isAnswerReady({
+    question: activeQuestion,
+    draft,
+    selectedChoiceRequiresFreeText,
+    interactive,
+    questionLocked,
+    mutationPending,
+  });
 
   if (interviewQuery.isPending && !interviewQuery.data) {
-    return (
-      <section data-slot="canonical-interview-panel" aria-busy="true">
-        <p className="text-sm text-muted-foreground" role="status">
-          {t("pages.assessment.loadingInterviewState")}
-        </p>
-      </section>
-    );
+    return <InterviewLoading />;
   }
 
   if (interviewQuery.isError && !interviewQuery.data) {
@@ -74,6 +156,67 @@ export function CanonicalInterviewPanel({
     return null;
   }
 
+  function updateDraft(update: Partial<InterviewDraft>) {
+    if (!interactive || questionLocked || mutationPending) return;
+    setDraft((current) => ({ ...current, ...update }));
+  }
+
+  function submit(input: AssessmentQuestionAnswerInput) {
+    if (
+      !activeQuestion ||
+      !interviewQuery.data ||
+      !interactive ||
+      !submitReadyForInput(
+        input,
+        activeQuestion,
+        draft,
+        selectedChoiceRequiresFreeText,
+      ) ||
+      questionLocked ||
+      mutationPending ||
+      runtime.interview.stale ||
+      runtime.interview.revalidating
+    ) {
+      return;
+    }
+    setLockedQuestionId(input.questionId);
+    submitAnswer.mutate(
+      { answer: input, state: interviewQuery.data },
+      {
+        onSuccess: () => {
+          setSubmittedQuestionId(input.questionId);
+          setDraft(emptyDraft(input.questionId));
+        },
+        onError: () => {
+          setLockedQuestionId((current) =>
+            current === input.questionId ? null : current,
+          );
+        },
+      },
+    );
+  }
+
+  function submitCurrentAnswer() {
+    if (!activeQuestion) return;
+    const input: AssessmentQuestionAnswerInput = {
+      questionId: activeQuestion.id,
+    };
+    if (activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
+      input.freeText = draft.freeText.trim();
+    } else if (
+      activeQuestion.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust
+    ) {
+      input.adjusted = true;
+      input.freeText = draft.freeText.trim();
+    } else {
+      input.selectedChoiceIds = draft.selectedChoiceIds;
+      if (selectedChoiceRequiresFreeText) {
+        input.otherText = draft.otherText.trim();
+      }
+    }
+    submit(input);
+  }
+
   return (
     <section
       data-slot="canonical-interview-panel"
@@ -81,52 +224,133 @@ export function CanonicalInterviewPanel({
       data-interview-outcome={presentation.interviewOutcome ?? undefined}
       className="flex flex-col gap-4 rounded-lg border p-4"
     >
-      {presentation.activeQuestion ? (
-        <ReadOnlyQuestion question={presentation.activeQuestion} />
+      {activeQuestion ? (
+        <AssessmentQuestionTurn
+          assessmentId={assessmentId}
+          question={activeQuestion}
+          answerHistoryVisible={presentation.answerHistory.length > 0}
+          historical={false}
+          selectedChoiceIds={draft.selectedChoiceIds}
+          onSelectedChoiceIdsChange={(selectedChoiceIds) =>
+            updateDraft({ selectedChoiceIds })
+          }
+          isAdjusting={draft.isAdjusting}
+          onAdjust={() => updateDraft({ isAdjusting: true })}
+          canSubmitSelection={submitReady}
+          selectionPending={mutationPending}
+          selectionSubmitted={submittedQuestionId === activeQuestion.id}
+          onSubmitSelection={submitCurrentAnswer}
+          disabled={!interactive || questionLocked || mutationPending}
+          onSubmitAnswer={submit}
+        />
       ) : null}
       {presentation.answerHistory.length > 0 ? (
         <InterviewHistory items={presentation.answerHistory} />
+      ) : null}
+      {activeQuestion && interactive ? (
+        <AssessmentComposer
+          value={composerValue}
+          disabled={answerMode === INTERVIEW_ANSWER_MODES.disabled}
+          submitEnabled={
+            composerMode === INTERVIEW_COMPOSER_MODES.freeText ||
+            composerMode === INTERVIEW_COMPOSER_MODES.adjustmentText
+          }
+          submitReady={submitReady}
+          submitting={mutationPending || questionLocked}
+          placeholder={composerPlaceholder(
+            activeQuestion,
+            selectedChoiceRequiresFreeText,
+            draft.isAdjusting,
+          )}
+          onValueChange={(value) =>
+            composerMode === INTERVIEW_COMPOSER_MODES.requiredSelectionText
+              ? updateDraft({ otherText: value })
+              : updateDraft({ freeText: value })
+          }
+          onSubmit={submitCurrentAnswer}
+        />
       ) : null}
     </section>
   );
 }
 
-function ReadOnlyQuestion({
+function isAnswerReady({
   question,
+  draft,
+  selectedChoiceRequiresFreeText,
+  interactive,
+  questionLocked,
+  mutationPending,
 }: {
-  question: AssessmentInterviewQuestion;
+  question: AssessmentInterviewQuestion | null;
+  draft: InterviewDraft;
+  selectedChoiceRequiresFreeText: boolean;
+  interactive: boolean;
+  questionLocked: boolean;
+  mutationPending: boolean;
 }) {
-  const choices =
-    question.choices && question.choices.length > 0
-      ? question.choices
-      : question.control === ASSESSMENT_INTERVIEW_CONTROLS.boolean
-        ? [
-            { id: "yes", label: t("pages.assessment.booleanYes") },
-            { id: "no", label: t("pages.assessment.booleanNo") },
-          ]
-        : [];
-
+  if (!question || !interactive || questionLocked || mutationPending) return false;
+  if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.freeText)
+    return draft.freeText.trim().length > 0;
+  if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust)
+    return draft.isAdjusting && draft.freeText.trim().length > 0;
+  if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.multiSelect) {
+    return (
+      draft.selectedChoiceIds.length > 0 &&
+      (!selectedChoiceRequiresFreeText || draft.otherText.trim().length > 0)
+    );
+  }
   return (
-    <article data-slot="canonical-interview-question" data-question-id={question.id}>
-      <p className="text-sm leading-6 text-foreground">{question.prompt}</p>
-      {choices.length > 0 ? (
-        <ul className="mt-3 space-y-2" aria-label={question.prompt}>
-          {choices.map((choice) => (
-            <li
-              key={choice.id}
-              className="rounded-md border px-3 py-2 text-sm text-muted-foreground"
-            >
-              {choice.label}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {question.proposedInterpretation ? (
-        <p className="mt-3 rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-          {question.proposedInterpretation}
-        </p>
-      ) : null}
-    </article>
+    draft.selectedChoiceIds.length === 1 &&
+    (!selectedChoiceRequiresFreeText || draft.otherText.trim().length > 0)
+  );
+}
+
+function submitReadyForInput(
+  input: AssessmentQuestionAnswerInput,
+  question: AssessmentInterviewQuestion,
+  draft: InterviewDraft,
+  selectedChoiceRequiresFreeText: boolean,
+) {
+  if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust) {
+    return (
+      input.confirmed === true ||
+      (input.adjusted === true && Boolean(input.freeText?.trim()))
+    );
+  }
+  if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.freeText) {
+    return Boolean(input.freeText?.trim());
+  }
+  const selected = input.selectedChoiceIds ?? draft.selectedChoiceIds;
+  return (
+    selected.length > 0 &&
+    (!selectedChoiceRequiresFreeText || Boolean(input.otherText?.trim()))
+  );
+}
+
+function composerPlaceholder(
+  question: AssessmentInterviewQuestion,
+  requiresText: boolean,
+  isAdjusting: boolean,
+) {
+  if (question.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust) {
+    return t(
+      isAdjusting
+        ? "pages.assessment.adjustPlaceholder"
+        : "pages.assessment.composerChooseConfirmAdjust",
+    );
+  }
+  if (requiresText) return t("pages.assessment.otherDescribe");
+  return t("pages.assessmentFlow.interview.placeholder");
+}
+
+function InterviewLoading() {
+  return (
+    <section data-slot="canonical-interview-panel" aria-busy="true">
+      <p className="text-sm text-muted-foreground" role="status">
+        {t("pages.assessment.loadingInterviewState")}
+      </p>
+    </section>
   );
 }
 

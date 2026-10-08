@@ -12,6 +12,12 @@ import {
   CANONICAL_INTERVIEW_PRESENTATION_STATES,
   selectCanonicalInterviewPresentation,
 } from "../src/features/workspace/utils/canonical-interview-presentation.ts";
+import {
+  composerModeForAnswerMode,
+  deriveInterviewAnswerMode,
+  INTERVIEW_ANSWER_MODES,
+  INTERVIEW_COMPOSER_MODES,
+} from "../src/features/workspace/utils/interview-answer-mode.ts";
 
 const overviewPath = new URL(
   "../src/features/workspace/components/organisms/assessment-overview.tsx",
@@ -55,6 +61,76 @@ test("canonical Interview is interactive-eligible only when canonical and Interv
     ).state,
     CANONICAL_INTERVIEW_PRESENTATION_STATES.readOnly,
   );
+});
+
+test("canonical answer-mode policy keeps required text on the shared structured action", () => {
+  const modes = [
+    [
+      ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+      false,
+      INTERVIEW_ANSWER_MODES.freeText,
+      INTERVIEW_COMPOSER_MODES.freeText,
+    ],
+    [
+      ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
+      false,
+      INTERVIEW_ANSWER_MODES.structuredSelection,
+      INTERVIEW_COMPOSER_MODES.disabled,
+    ],
+    [
+      ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
+      true,
+      INTERVIEW_ANSWER_MODES.structuredSelectionWithText,
+      INTERVIEW_COMPOSER_MODES.requiredSelectionText,
+    ],
+    [
+      ASSESSMENT_INTERVIEW_CONTROLS.multiSelect,
+      true,
+      INTERVIEW_ANSWER_MODES.structuredSelectionWithText,
+      INTERVIEW_COMPOSER_MODES.requiredSelectionText,
+    ],
+  ] as const;
+
+  for (const [control, requiresText, expectedMode, expectedComposer] of modes) {
+    const mode = deriveInterviewAnswerMode({
+      question: { ...question, control },
+      selectedChoiceRequiresFreeText: requiresText,
+      isAdjusting: false,
+      pending: false,
+      submitted: false,
+      stale: false,
+      revalidating: false,
+      canAnswer: true,
+    });
+    assert.equal(mode, expectedMode);
+    assert.equal(composerModeForAnswerMode(mode), expectedComposer);
+  }
+});
+
+test("canonical answer-mode policy disables every capability while pending or stale", () => {
+  const questionWithRequiredText = {
+    ...question,
+    choices: [{ id: "other", label: "Other", requiresFreeText: true }],
+  };
+  for (const flags of [
+    { pending: true, submitted: false, stale: false, revalidating: false },
+    { pending: false, submitted: true, stale: false, revalidating: false },
+    { pending: false, submitted: false, stale: true, revalidating: false },
+    { pending: false, submitted: false, stale: false, revalidating: true },
+  ]) {
+    const mode = deriveInterviewAnswerMode({
+      question: questionWithRequiredText,
+      selectedChoiceRequiresFreeText: true,
+      isAdjusting: false,
+      canAnswer: true,
+      ...flags,
+    });
+    assert.equal(mode, INTERVIEW_ANSWER_MODES.disabled);
+    assert.equal(
+      composerModeForAnswerMode(mode),
+      INTERVIEW_COMPOSER_MODES.disabled,
+    );
+  }
 });
 
 test("preparing and missing Interview content stay hidden", () => {

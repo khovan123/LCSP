@@ -65,7 +65,6 @@ export function selectCanonicalInterviewPresentation(
 
   if (
     !input.canonicalAvailable ||
-    input.queryError ||
     input.lifecycleState === ASSESSMENT_LIFECYCLE_STATES.PREPARING ||
     input.lifecycleState === ASSESSMENT_LIFECYCLE_STATES.CREATED ||
     !hasContent
@@ -83,6 +82,7 @@ export function selectCanonicalInterviewPresentation(
     ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer;
   const eligible =
     !input.queryPending &&
+    !input.queryError &&
     !input.interview.stale &&
     !input.interview.revalidating &&
     ACTIVE_LIFECYCLE_STATES.has(input.lifecycleState ?? "") &&
