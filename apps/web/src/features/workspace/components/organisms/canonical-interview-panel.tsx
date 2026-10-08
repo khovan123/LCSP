@@ -28,7 +28,6 @@ import {
 import {
   composerModeForAnswerMode,
   deriveInterviewAnswerMode,
-  INTERVIEW_ANSWER_MODES,
   INTERVIEW_COMPOSER_MODES,
 } from "../../utils/interview-answer-mode";
 import type { NormalizedAssessmentRuntime } from "../../types/assessment-runtime-adapter.types";
@@ -254,7 +253,7 @@ export function CanonicalInterviewPanel({
       {activeQuestion && interactive ? (
         <AssessmentComposer
           value={composerValue}
-          disabled={answerMode === INTERVIEW_ANSWER_MODES.disabled}
+          disabled={composerMode === INTERVIEW_COMPOSER_MODES.disabled}
           submitEnabled={
             composerMode === INTERVIEW_COMPOSER_MODES.freeText ||
             composerMode === INTERVIEW_COMPOSER_MODES.adjustmentText
