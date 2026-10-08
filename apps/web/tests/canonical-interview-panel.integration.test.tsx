@@ -5,12 +5,14 @@ import { act, createElement } from "react";
 
 import {
   ASSESSMENT_INTERVIEW_CONTROLS,
+  ASSESSMENT_CONTEXT_AUTHORITY_STATUSES,
   ASSESSMENT_INTERVIEW_OUTCOMES,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
   type AssessmentInterviewQuestion,
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
 import { ASSESSMENT_LIFECYCLE_STATES } from "@lcsp/contracts/assessment";
+import { apiQueryKeys } from "../src/lib/api/query-keys";
 
 const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", {
   url: "http://localhost/assessments/integration-1",
@@ -125,6 +127,12 @@ function interviewState(activeQuestion: AssessmentInterviewQuestion | null): Ass
     activeQuestion,
     answerHistory: [],
   } as AssessmentInterviewRuntimeState;
+}
+
+async function settle() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 }
 
 function envelope(data: unknown) {
@@ -287,4 +295,132 @@ test("canonical panel is read-only when lifecycle interaction is not eligible", 
   );
   assert.ok(action);
   assert.equal(action.disabled, true);
+});
+
+test("canonical panel keeps the same question locked after success and refetch", async () => {
+  let calls = 0;
+  let resolveMutation!: (response: Response) => void;
+  const q1 = question("q-refetch");
+  const mounted = await mount(interviewState(q1), {
+    mutation: () => {
+      calls += 1;
+      return new Promise<Response>((resolve) => (resolveMutation = resolve));
+    },
+  });
+  const { container, queryClient } = mounted;
+  await click(container.querySelectorAll<HTMLElement>("[role='radio']")[0]);
+  const action = container.querySelector<HTMLButtonElement>(
+    "[data-slot='selection-submit-action'] button",
+  )!;
+  await click(action);
+  assert.equal(calls, 1);
+  assert.equal(action.disabled, true);
+  resolveMutation(envelope(interviewState(q1)));
+  await settle();
+  queryClient.setQueryData(apiQueryKeys.assessment.interview(assessmentId), interviewState(q1));
+  await settle();
+  const refetchedAction = container.querySelector<HTMLButtonElement>(
+    "[data-slot='selection-submit-action'] button",
+  )!;
+  assert.equal(refetchedAction.disabled, true);
+  await click(refetchedAction);
+  assert.equal(calls, 1);
+});
+
+test("canonical panel releases a failed structured answer for retry without losing the draft", async () => {
+  let calls = 0;
+  let rejectMutation!: (error: Error) => void;
+  let resolveRetry!: (response: Response) => void;
+  const mounted = await mount(interviewState(question("q-retry")), {
+    mutation: () => {
+      calls += 1;
+      if (calls === 1) return new Promise<Response>((_, reject) => (rejectMutation = reject));
+      return new Promise<Response>((resolve) => (resolveRetry = resolve));
+    },
+  });
+  const { container } = mounted;
+  await click(container.querySelectorAll<HTMLElement>("[role='radio']")[0]);
+  const action = container.querySelector<HTMLButtonElement>(
+    "[data-slot='selection-submit-action'] button",
+  )!;
+  await click(action);
+  assert.equal(action.disabled, true);
+  rejectMutation(new Error("temporary network failure"));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  });
+  const retryAction = container.querySelector<HTMLButtonElement>(
+    "[data-slot='selection-submit-action'] button",
+  )!;
+  assert.equal(retryAction.disabled, false);
+  await click(retryAction);
+  assert.equal(calls, 2);
+  resolveRetry(envelope(interviewState(question("q-retry"))));
+  await settle();
+  assert.equal(
+    container.querySelector<HTMLButtonElement>(
+      "[data-slot='selection-submit-action'] button",
+    )!.disabled,
+    true,
+  );
+});
+
+test("canonical panel resets draft, lock and mode when the authoritative question changes", async () => {
+  let calls = 0;
+  let resolveMutation!: (response: Response) => void;
+  const q1 = question("q-one");
+  const q2 = question("q-two", ASSESSMENT_INTERVIEW_CONTROLS.freeText);
+  const mounted = await mount(interviewState(q1), {
+    mutation: () => {
+      calls += 1;
+      return new Promise<Response>((resolve) => (resolveMutation = resolve));
+    },
+  });
+  const { container, queryClient } = mounted;
+  await click(container.querySelectorAll<HTMLElement>("[role='radio']")[1]);
+  const textarea = container.querySelector<HTMLTextAreaElement>("textarea")!;
+  await changeText(textarea, "draft for q1");
+  const action = container.querySelector<HTMLButtonElement>(
+    "[data-slot='selection-submit-action'] button",
+  )!;
+  await click(action);
+  assert.equal(calls, 1);
+  resolveMutation(envelope(interviewState(q1)));
+  await settle();
+  queryClient.setQueryData(
+    apiQueryKeys.assessment.interview(assessmentId),
+    interviewState(q2),
+  );
+  await settle();
+  const q2Textarea = container.querySelector<HTMLTextAreaElement>("textarea")!;
+  assert.equal(q2Textarea.value, "");
+  assert.equal(q2Textarea.disabled, false);
+  assert.equal(
+    container.querySelector("[data-slot='selection-submit-action']"),
+    null,
+  );
+  await changeText(q2Textarea, "answer for q2");
+  await click(container.querySelector<HTMLButtonElement>("button[type='submit']")!);
+  assert.equal(calls, 2);
+});
+
+test("canonical panel blocks stale Interview answers even with a valid draft", async () => {
+  const stale = {
+    ...interviewState(question("q-stale")),
+    contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.superseded,
+  } as AssessmentInterviewRuntimeState;
+  let calls = 0;
+  const mounted = await mount(stale, { mutation: async () => {
+    calls += 1;
+    return envelope(stale);
+  }});
+  const { container } = mounted;
+  assert.equal(container.querySelector("textarea"), null);
+  const action = container.querySelector<HTMLButtonElement>(
+    "[data-slot='selection-submit-action'] button",
+  );
+  assert.ok(action);
+  assert.equal(action.disabled, true);
+  await click(action);
+  assert.equal(calls, 0);
 });
