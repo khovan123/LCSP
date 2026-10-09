@@ -486,6 +486,100 @@ test("canonical panel keeps an active structured action visible beside read-only
   assert.equal(action.disabled, false);
 });
 
+test("canonical panel preserves confirmed and adjusted historical interpretations as read-only", async () => {
+  const mounted = await mount(interviewState(question("q-history-active")));
+  const { container, queryClient } = mounted;
+  const confirmedInterpretation = "Original statement A";
+  const adjustedInterpretation = "Original statement for adjustment";
+  queryClient.setQueryData(
+    apiQueryKeys.assessment.interview(assessmentId),
+    {
+      ...interviewState(question("q-history-active")),
+      answerHistory: [
+        {
+          questionId: "q-confirmed-history",
+          question: {
+            ...question(
+              "q-confirmed-history",
+              ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust,
+            ),
+            proposedInterpretation: confirmedInterpretation,
+          },
+          summary: "Confirmed answer",
+          answeredAt: "2026-10-08T00:00:00.000Z",
+        },
+        {
+          questionId: "q-adjusted-history",
+          question: {
+            ...question(
+              "q-adjusted-history",
+              ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust,
+            ),
+            proposedInterpretation: adjustedInterpretation,
+          },
+          summary: "Adjusted answer",
+          comment: "Customer correction B",
+          answeredAt: "2026-10-08T00:01:00.000Z",
+        },
+      ],
+    },
+  );
+  await settle();
+
+  const history = container.querySelector(
+    "[data-slot='canonical-interview-history']",
+  );
+  assert.ok(history);
+  const interpretations = history.querySelectorAll(
+    "[data-slot='proposed-interpretation']",
+  );
+  assert.equal(interpretations.length, 2);
+  assert.equal(interpretations[0]?.textContent, confirmedInterpretation);
+  assert.equal(interpretations[1]?.textContent, adjustedInterpretation);
+  assert.match(history.textContent ?? "", /Confirmed answer/);
+  assert.match(history.textContent ?? "", /Adjusted answer/);
+  assert.match(history.textContent ?? "", /Customer correction B/);
+  assert.equal(history.querySelectorAll("button").length, 0);
+});
+
+test("canonical panel keeps historical entries without question metadata readable", async () => {
+  const mounted = await mount(interviewState(question("q-history-fallback")));
+  const { container, queryClient } = mounted;
+  queryClient.setQueryData(
+    apiQueryKeys.assessment.interview(assessmentId),
+    {
+      ...interviewState(question("q-history-fallback")),
+      answerHistory: [
+        {
+          questionId: "q-no-question",
+          summary: "Historical summary without question metadata",
+          answeredAt: "2026-10-08T00:02:00.000Z",
+        },
+        {
+          questionId: "q-no-interpretation",
+          question: question(
+            "q-no-interpretation",
+            ASSESSMENT_INTERVIEW_CONTROLS.singleSelect,
+          ),
+          summary: "Historical ordinary selection",
+          answeredAt: "2026-10-08T00:03:00.000Z",
+        },
+      ],
+    },
+  );
+  await settle();
+  const history = container.querySelector(
+    "[data-slot='canonical-interview-history']",
+  );
+  assert.ok(history);
+  assert.match(history.textContent ?? "", /Historical summary without question metadata/);
+  assert.match(history.textContent ?? "", /Historical ordinary selection/);
+  assert.equal(
+    history.querySelectorAll("[data-slot='proposed-interpretation']").length,
+    0,
+  );
+});
+
 test("canonical panel keeps loading and error states local to Interview", async () => {
   let resolveInterview!: (response: Response) => void;
   const loading = await mount(interviewState(question("q-loading")), {

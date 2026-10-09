@@ -500,3 +500,47 @@ test("read-only canonical lifecycle does not submit an Interview answer", async 
   );
   expect(fixture.submissions).toHaveLength(0);
 });
+
+test("historical CONFIRM_ADJUST entries preserve original interpretations without actions", async ({
+  page,
+}) => {
+  const fixture = await installFixture(page, {
+    initialInterview: interviewState("SINGLE_SELECT", "q-active-history", [
+      {
+        questionId: "q-history-confirmed",
+        summary: "Confirmed answer",
+        answeredAt: "2026-10-08T00:00:00.000Z",
+        question: {
+          id: "q-history-confirmed",
+          intent: "CLARIFY",
+          control: "CONFIRM_ADJUST",
+          prompt: "Confirm the original statement?",
+          proposedInterpretation: "Original statement A",
+        },
+      },
+      {
+        questionId: "q-history-adjusted",
+        summary: "Adjusted answer",
+        comment: "Customer correction B",
+        answeredAt: "2026-10-08T00:01:00.000Z",
+        question: {
+          id: "q-history-adjusted",
+          intent: "CLARIFY",
+          control: "CONFIRM_ADJUST",
+          prompt: "Confirm the original statement for adjustment?",
+          proposedInterpretation: "Original statement for adjustment",
+        },
+      },
+    ]),
+  });
+  await openAssessment(page);
+  const history = page.locator("[data-slot='canonical-interview-history']");
+  await expect(history).toContainText("Original statement A");
+  await expect(history).toContainText("Original statement for adjustment");
+  await expect(history).toContainText("Customer correction B");
+  await expect(
+    history.locator("[data-slot='proposed-interpretation']"),
+  ).toHaveCount(2);
+  await expect(history.getByRole("button")).toHaveCount(0);
+  expect(fixture.submissions).toHaveLength(0);
+});

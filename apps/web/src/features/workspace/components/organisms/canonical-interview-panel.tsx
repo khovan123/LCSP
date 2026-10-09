@@ -373,6 +373,16 @@ function InterviewHistory({
           {item.question?.prompt ? (
             <p className="text-sm text-foreground">{item.question.prompt}</p>
           ) : null}
+          {item.question?.proposedInterpretation ? (
+            <div
+              data-slot="proposed-interpretation"
+              className="rounded-lg border bg-muted/30 p-3.5 text-sm leading-6 text-foreground"
+            >
+              <p className="whitespace-pre-wrap">
+                {item.question.proposedInterpretation}
+              </p>
+            </div>
+          ) : null}
           <p className="mt-1 text-sm text-muted-foreground">{item.summary}</p>
           {item.comment ? (
             <p className="mt-1 text-sm text-muted-foreground">{item.comment}</p>
