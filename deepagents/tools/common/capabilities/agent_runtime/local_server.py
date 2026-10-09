@@ -228,12 +228,23 @@ class LocalAgentRuntime:
                 context = payload.get("context")
                 if not isinstance(context, Mapping):
                     context = {}
+                else:
+                    context = dict(context)
+                from orchestration.context import resolve_response_language
+                context["response_language"] = resolve_response_language(
+                    context.get("response_language")
+                    or context.get("responseLanguage")
+                    or context.get("locale")
+                    or (payload.get("metadata") or {}).get("locale")
+                    or (payload.get("metadata") or {}).get("responseLanguage")
+                )
                 config = _runtime_config(
                     thread_id,
                     payload.get("config"),
                     payload.get("metadata"),
                     context,
                 )
+
                 if payload.get("checkpoint_id"):
                     config["configurable"]["checkpoint_id"] = payload["checkpoint_id"]
                 graph_input = payload.get("input")

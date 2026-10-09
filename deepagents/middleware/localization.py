@@ -86,7 +86,20 @@ class ResponseLocalizationMiddleware(AgentMiddleware):
 
         updates: dict[str, Any] = {}
 
-        # 1. Check final message in state
+        # 1. If structured response is present, perform at most ONE schema-aware transform
+        structured = state.get("structured_response") if isinstance(state, dict) else getattr(state, "structured_response", None)
+        if structured is not None:
+            transformed_structured, _ = transform_structured_response(
+                structured,
+                target_locale,
+                model=self.transform_model,
+                config=self.config,
+            )
+            if transformed_structured is not structured:
+                updates["structured_response"] = transformed_structured
+            return updates if updates else None
+
+        # 2. Otherwise, transform the final user-visible AIMessage
         messages = list(state.get("messages", [])) if isinstance(state, dict) else list(getattr(state, "messages", []))
         if messages:
             last_message = messages[-1]
@@ -114,19 +127,8 @@ class ResponseLocalizationMiddleware(AgentMiddleware):
                         )
                         updates["messages"] = [updated_message]
 
-        # 2. Check structured response in state if present
-        structured = state.get("structured_response") if isinstance(state, dict) else getattr(state, "structured_response", None)
-        if structured is not None:
-            transformed_structured, _ = transform_structured_response(
-                structured,
-                target_locale,
-                model=self.transform_model,
-                config=self.config,
-            )
-            if transformed_structured is not structured:
-                updates["structured_response"] = transformed_structured
-
         return updates if updates else None
 
     async def aafter_agent(self, state: Any, runtime: Any) -> dict[str, Any] | None:
         return self.after_agent(state, runtime)
+

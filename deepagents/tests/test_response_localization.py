@@ -281,7 +281,8 @@ def test_transform_failure_falls_back_to_primary_response() -> None:
     assert result == original_text
     assert telemetry["status"] == "FALLBACK"
     assert telemetry["fallback_used"] is True
-    assert telemetry["reason"] == "TimeoutError"
+    assert telemetry["reason"] == "TIMEOUT"
+
 
 
 # 8. Mid-Thread Language Switch (Turn 1 EN -> Turn 2 VI)
@@ -289,8 +290,8 @@ def test_transform_failure_falls_back_to_primary_response() -> None:
 def test_mid_thread_language_switch() -> None:
     """Changing language context between turns works immediately without recreating thread."""
     transform_model = MockChatModel(responses=[
-        "First turn answer in English",
-        "Câu trả lời lượt thứ hai bằng Tiếng Việt",
+        "Turn 1 answer in English",
+        "Câu trả lời lượt 2 bằng Tiếng Việt",
     ])
     middleware = ResponseLocalizationMiddleware(transform_model=transform_model)
 
@@ -303,20 +304,21 @@ def test_mid_thread_language_switch() -> None:
     }
     updates_1 = middleware.after_agent(state_turn1, SimpleNamespace(context=LCSPRunContext(response_language="en")))
     assert updates_1 is not None
-    assert updates_1["messages"][0].content == "First turn answer in English"
+    assert updates_1["messages"][0].content == "Turn 1 answer in English"
 
     # Turn 2: Switch to VI on the same thread
     state_turn2 = {
         "messages": [
             HumanMessage(content="Analyze rule 1"),
-            AIMessage(content="First turn answer in English"),
+            AIMessage(content="Turn 1 answer in English"),
             HumanMessage(content="Analyze rule 2"),
             AIMessage(content="Turn 2 raw"),
         ]
     }
     updates_2 = middleware.after_agent(state_turn2, SimpleNamespace(context=LCSPRunContext(response_language="vi")))
     assert updates_2 is not None
-    assert updates_2["messages"][0].content == "Câu trả lời lượt thứ hai bằng Tiếng Việt"
+    assert updates_2["messages"][0].content == "Câu trả lời lượt 2 bằng Tiếng Việt"
+
 
 
 # 9. Configuration Toggle (Disabled localization)
@@ -479,4 +481,209 @@ def test_agent_code_heavy_response_flow() -> None:
     assert "export function validateSecret(token: string): boolean" in final_content
     assert "return token.startsWith('lcsp_sec_');" in final_content
     assert "Dưới đây là logic kiểm tra:" in final_content
+
+
+# 12. Timeout & Execution Deadline Regression Tests
+
+def test_transform_enforces_real_elapsed_timeout() -> None:
+    """Transform model exceeding timeout_seconds is terminated and falls back to primary text."""
+    slow_model = MagicMock()
+
+    def slow_invoke(*args: Any, **kwargs: Any) -> Any:
+        time.sleep(0.3)
+        return AIMessage(content="Late translation")
+
+    slow_model.invoke.side_effect = slow_invoke
+    config = ResponseLocalizationConfig(timeout_seconds=0.1)
+
+    start = time.monotonic()
+    result, telemetry = transform_response_text("Original message", "vi", model=slow_model, config=config)
+    elapsed = time.monotonic() - start
+
+    assert result == "Original message"
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert telemetry["reason"] == "TIMEOUT"
+    assert elapsed < 0.25
+
+
+# 13. Fail-Closed Invariant Mutation Tests
+
+def test_fail_closed_on_jira_id_mutation() -> None:
+    """If transform corrupts a Jira ticket ID (e.g. LCSP-123 -> LCSP-999), fail back closed."""
+    original = "Violation identified in ticket LCSP-123."
+    mutated = "Đã xác định vi phạm trong phiếu LCSP-999."
+    result, telemetry = transform_response_text(original, "vi", model=MockChatModel([mutated]))
+
+    assert result == original
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert "INVARIANT_VIOLATION" in str(telemetry["reason"])
+
+
+def test_fail_closed_on_url_mutation() -> None:
+    """If transform alters a URL link, fail back closed."""
+    original = "Read report at https://lcsp.internal/reports/2026."
+    mutated = "Đọc báo cáo tại https://evil.internal/reports/2026."
+    result, telemetry = transform_response_text(original, "vi", model=MockChatModel([mutated]))
+
+    assert result == original
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert "INVARIANT_VIOLATION" in str(telemetry["reason"])
+
+
+def test_fail_closed_on_code_block_mutation() -> None:
+    """If transform modifies code logic inside a fenced code block, fail back closed."""
+    original = "Fix with:\n```typescript\nconst valid = isAuthorized(req);\n```"
+    mutated = "Sửa bằng:\n```typescript\nconst valid = true;\n```"
+    result, telemetry = transform_response_text(original, "vi", model=MockChatModel([mutated]))
+
+    assert result == original
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert "INVARIANT_VIOLATION" in str(telemetry["reason"])
+
+
+def test_fail_closed_on_number_mutation() -> None:
+    """If transform changes a percentage or numerical value, fail back closed."""
+    original = "Completed 100% of 42 checks."
+    mutated = "Đã hoàn thành 80% của 40 kiểm tra."
+    result, telemetry = transform_response_text(original, "vi", model=MockChatModel([mutated]))
+
+    assert result == original
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert "INVARIANT_VIOLATION" in str(telemetry["reason"])
+
+
+def test_fail_closed_on_enum_mutation() -> None:
+    """If transform changes a SCREAMING_SNAKE_CASE enum or error constant, fail back closed."""
+    original = "Result status is `STATUS_REJECTED` due to `SEVERITY_HIGH`."
+    mutated = "Kết quả là `STATUS_APPROVED` do `SEVERITY_LOW`."
+    result, telemetry = transform_response_text(original, "vi", model=MockChatModel([mutated]))
+
+    assert result == original
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert "INVARIANT_VIOLATION" in str(telemetry["reason"])
+
+
+def test_fail_closed_on_file_path_mutation() -> None:
+    """If transform alters a protected source file path, fail back closed."""
+    original = "Inspection failed at /workspace/repo/src/core/auth.ts:50."
+    mutated = "Kiểm tra thất bại tại /workspace/repo/src/core/other.ts:50."
+    result, telemetry = transform_response_text(original, "vi", model=MockChatModel([mutated]))
+
+    assert result == original
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert "INVARIANT_VIOLATION" in str(telemetry["reason"])
+
+
+# 14. Single Transform Invocations per Completed Structured Turn
+
+class MultiFieldStructuredOutput(BaseModel):
+    status: str
+    summary: str
+    description: str
+    notes: str
+
+
+def test_structured_output_multi_field_single_transform_invocation() -> None:
+    """Structured response with multiple user-facing fields invokes transform model at most 1 time."""
+    import json
+
+    json_resp = json.dumps({
+        "summary": "Tóm tắt tuân thủ",
+        "description": "Mô tả chi tiết",
+        "notes": "Ghi chú bổ sung",
+    })
+    mock_model = MockChatModel(responses=[json_resp])
+    original = MultiFieldStructuredOutput(
+        status="COMPLIANCE_PASSED",
+        summary="Compliance summary",
+        description="Detailed description",
+        notes="Additional notes",
+    )
+
+    transformed, telemetry = transform_structured_response(
+        original,
+        "vi",
+        model=mock_model,
+    )
+
+    assert len(mock_model.calls) == 1
+    assert isinstance(transformed, MultiFieldStructuredOutput)
+    assert transformed.status == "COMPLIANCE_PASSED"
+    assert transformed.summary == "Tóm tắt tuân thủ"
+    assert transformed.description == "Mô tả chi tiết"
+    assert transformed.notes == "Ghi chú bổ sung"
+    assert telemetry["status"] == "APPLIED"
+
+
+def test_after_agent_structured_turn_invokes_at_most_one_transform() -> None:
+    """after_agent middleware performs at most 1 transform when structured output is present."""
+    import json
+
+    json_resp = json.dumps({
+        "summary": "Tóm tắt tuân thủ",
+        "description": "Mô tả",
+        "notes": "Ghi chú",
+    })
+    mock_model = MockChatModel(responses=[json_resp])
+    middleware = ResponseLocalizationMiddleware(transform_model=mock_model)
+
+    state = {
+        "messages": [
+            HumanMessage(content="Audit"),
+            AIMessage(content="English message"),
+        ],
+        "structured_response": MultiFieldStructuredOutput(
+            status="PASSED",
+            summary="Summary",
+            description="Desc",
+            notes="Notes",
+        ),
+    }
+    runtime = SimpleNamespace(context=LCSPRunContext(response_language="vi"))
+
+    updates = middleware.after_agent(state, runtime)
+    assert updates is not None
+    assert "structured_response" in updates
+    assert len(mock_model.calls) == 1
+
+
+# 15. Production Dispatch & Resume Integration Tests
+
+def test_dispatch_agent_runtime_event_wires_response_language() -> None:
+    """dispatch_agent_runtime_event resolves and propagates response_language to runtime context."""
+    from tools.common.capabilities.agent_runtime.agent_server_client import dispatch_agent_runtime_event
+
+    captured_contexts = []
+    mock_client = MagicMock()
+
+    def mock_runs_create(thread_id, assistant_id, **kwargs):
+        captured_contexts.append(kwargs.get("context", {}))
+        return {"run_id": "r1", "status": "success"}
+
+    mock_client.runs.create.side_effect = mock_runs_create
+    mock_client.runs.get.return_value = {"run_id": "r1", "status": "success"}
+    mock_client.threads.get_state.return_value = {"values": {"messages": []}}
+
+    with (
+        patch("tools.common.capabilities.agent_runtime.agent_server_client.get_sync_client", return_value=mock_client),
+        patch("tools.common.capabilities.agent_runtime.agent_server_client._find_active_thread_run", return_value=None),
+        patch("tools.common.capabilities.agent_runtime.agent_server_client._ScanRunObserver"),
+    ):
+        # Turn 1 with English locale
+        msg_en = {"assessmentId": "asm-1", "responseLanguage": "en"}
+        dispatch_agent_runtime_event("scan_requested", msg_en, "corr-1")
+        assert captured_contexts[0]["response_language"] == "en"
+
+        # Turn 2 on same thread with Vietnamese locale
+        msg_vi = {"assessmentId": "asm-1", "locale": "vi"}
+        dispatch_agent_runtime_event("scan_requested", msg_vi, "corr-2")
+        assert captured_contexts[1]["response_language"] == "vi"
+
 
