@@ -468,7 +468,7 @@
     {
       "id": "customer-stated-vs-confirmed",
       "description": "",
-      "prompt": "Customer explicit nói: 'Human reviewer bắt buộc approve mọi regulator report trước khi submit.' Không có conflict và đây là material uncertainty duy nhất.",
+      "prompt": "Customer trả lời: 'Chúng tôi xem xét các trường hợp quan trọng một cách thủ công.' Normalized context diễn giải câu này thành: 'Mọi lệnh từ chối có rủi ro cao đều yêu cầu người phê duyệt trước khi thực thi.' Không có uncertainty nào khác.",
       "semantic_mode": "INITIAL_INTERVIEW",
       "runtime_mode": "INITIAL_INTERVIEW",
       "runtime_context": {},
