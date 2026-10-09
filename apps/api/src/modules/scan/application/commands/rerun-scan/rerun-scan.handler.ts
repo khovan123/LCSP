@@ -204,7 +204,9 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
         // Preserves prior scan artifacts and reports in accordance with UC-M03 (A4, BR-62).
         // Historical jobs and reports remain queryable for audit traceability.
 
-        const responseLanguage = resolveResponseLanguage(command.responseLanguage);
+        const responseLanguage = resolveResponseLanguage(
+          command.responseLanguage,
+        );
         const event = buildOutboxMessageInput({
           aggregateType: OUTBOX_AGGREGATE_TYPES.repositoryScanJob,
           aggregateId: newScanJobId,
