@@ -39,6 +39,20 @@ class LCSPRunContext:
     context_revision: int = 0
     prior_evidence_refs: tuple[str, ...] = ()  # accepted refs from a previous result (resume)
     rule_execution_id: str | None = None
+    response_language: str = "vi"
+
+
+DEFAULT_RESPONSE_LANGUAGE = "vi"
+SUPPORTED_RESPONSE_LANGUAGES = ("en", "vi")
+
+
+def resolve_response_language(value: Any, fallback: str = DEFAULT_RESPONSE_LANGUAGE) -> str:
+    """Normalize and validate response language against supported locales."""
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in SUPPORTED_RESPONSE_LANGUAGES:
+            return normalized
+    return fallback
 
 
 def coerce_run_context(value: Any) -> LCSPRunContext | None:
@@ -49,7 +63,13 @@ def coerce_run_context(value: Any) -> LCSPRunContext | None:
         try:
             return LCSPRunContext(**value)
         except TypeError:
-            return None
+            # Fallback if extra/unknown keys present
+            valid_keys = {f for f in LCSPRunContext.__dataclass_fields__}
+            filtered = {k: v for k, v in value.items() if k in valid_keys}
+            try:
+                return LCSPRunContext(**filtered)
+            except TypeError:
+                return None
     return None
 
 

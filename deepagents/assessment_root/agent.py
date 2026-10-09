@@ -65,6 +65,8 @@ def create_assessment_root_agent(
     tools = graph_tools if graph_tools is not None else _graph_tools()
     # The default general-purpose subagent would inherit the governed tools; disable it so the
     # researcher is the only delegate and it holds none of them.
+    from middleware.localization import ResponseLocalizationMiddleware
+
     with _without_general_purpose_subagent(_lookup_profile_key(model)):
         return create_deep_agent(
             name="lcsp-assessment-root",
@@ -74,7 +76,7 @@ def create_assessment_root_agent(
             tools=[*build_root_tools(run), *tools],
             subagents=[researcher_subagent(tools)],
             permissions=root_permissions(),
-            middleware=[*governance, *middleware],
+            middleware=[ResponseLocalizationMiddleware(), *governance, *middleware],
             checkpointer=checkpointer,
             store=store,
         )

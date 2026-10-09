@@ -1,0 +1,482 @@
+"""Tests for Deep Agent response localization, language authority, and transform fallback."""
+
+from __future__ import annotations
+
+import time
+from dataclasses import asdict
+from types import SimpleNamespace
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from langchain.agents import create_agent
+from langchain.agents.middleware import ModelRequest, ModelResponse
+from langchain.chat_models import init_chat_model
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.tools import tool
+from pydantic import BaseModel
+
+from middleware.localization import ResponseLocalizationMiddleware
+from orchestration.context import (
+    DEFAULT_RESPONSE_LANGUAGE,
+    SUPPORTED_RESPONSE_LANGUAGES,
+    LCSPRunContext,
+    coerce_run_context,
+    resolve_response_language,
+)
+from orchestration.localization import (
+    LocaleDefinition,
+    ResponseLocalizationConfig,
+    SUPPORTED_LOCALES,
+    get_language_prompt_instruction,
+    load_localization_config,
+    transform_response_text,
+    transform_structured_response,
+)
+
+
+class MockChatModel(BaseChatModel):
+    """Configurable mock chat model for unit testing."""
+
+    responses: list[Any] = []
+    calls: list[Any] = []
+
+    def __init__(self, responses: list[AIMessage | str] | None = None, **kwargs: Any) -> None:
+        formatted: list[AIMessage] = []
+        for r in responses or []:
+            if isinstance(r, str):
+                formatted.append(AIMessage(content=r))
+            else:
+                formatted.append(r)
+        super().__init__(responses=formatted, calls=[], **kwargs)
+
+    @property
+    def _llm_type(self) -> str:
+        return "mock-chat-model"
+
+    def bind_tools(self, tools: Any, **kwargs: Any) -> Any:
+        return self
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        self.calls.append(list(messages))
+        if self.responses:
+            resp = self.responses.pop(0)
+        else:
+            resp = AIMessage(content="Default response")
+        return ChatResult(generations=[ChatGeneration(message=resp)])
+
+
+MockChatModel.model_rebuild()
+
+
+
+# 1. Contract & Helper Tests
+
+def test_resolve_response_language() -> None:
+    assert resolve_response_language("en") == "en"
+    assert resolve_response_language("EN") == "en"
+    assert resolve_response_language("vi") == "vi"
+    assert resolve_response_language("VI") == "vi"
+    assert resolve_response_language("unknown") == DEFAULT_RESPONSE_LANGUAGE
+    assert resolve_response_language(None) == DEFAULT_RESPONSE_LANGUAGE
+    assert resolve_response_language(123) == DEFAULT_RESPONSE_LANGUAGE
+
+
+def test_lcsp_run_context_coercion() -> None:
+    ctx = LCSPRunContext(assessment_id="a1", response_language="en")
+    assert ctx.response_language == "en"
+
+    coerced = coerce_run_context({"assessment_id": "a2", "response_language": "vi", "extra_field": "ignore"})
+    assert coerced is not None
+    assert coerced.assessment_id == "a2"
+    assert coerced.response_language == "vi"
+
+
+# 2. Dynamic Prompt Injection Tests
+
+@pytest.mark.parametrize("locale,expected_substring", [
+    ("en", "Produce your final user-visible response in English"),
+    ("vi", "Produce your final user-visible response in Vietnamese"),
+])
+def test_dynamic_prompt_injection(locale: str, expected_substring: str) -> None:
+    middleware = ResponseLocalizationMiddleware()
+    request = MagicMock()
+    request.runtime = SimpleNamespace(context=LCSPRunContext(response_language=locale))
+    request.system_message = SystemMessage(content="You are an LCSP agent.")
+    handler = MagicMock()
+
+    middleware.wrap_model_call(request, handler)
+    overridden = request.override.call_args.kwargs["system_message"]
+    text = "\n".join(b["text"] for b in overridden.content_blocks)
+
+    assert "You are an LCSP agent." in text
+    assert expected_substring in text
+    assert "Keep all technical identifiers" in text
+    handler.assert_called_once()
+
+
+# 3. Direct Q&A & Language Authority Tests
+
+def test_language_authority_wins_over_user_message_language() -> None:
+    """Selected system language (VI) wins even when user queries in English."""
+    transform_model = MockChatModel(responses=["Báo cáo phân tích đã hoàn tất."])
+    middleware = ResponseLocalizationMiddleware(transform_model=transform_model)
+
+    state = {
+        "messages": [
+            HumanMessage(content="What is the current compliance status of this repository?"),
+            AIMessage(content="The compliance report is ready."),
+        ]
+    }
+    runtime = SimpleNamespace(context=LCSPRunContext(response_language="vi"))
+
+    updates = middleware.after_agent(state, runtime)
+    assert updates is not None
+    assert len(updates["messages"]) == 1
+    assert updates["messages"][0].content == "Báo cáo phân tích đã hoàn tất."
+
+
+def test_language_authority_en_wins_when_user_queries_in_vietnamese() -> None:
+    """Selected system language (EN) wins even when user queries in Vietnamese."""
+    transform_model = MockChatModel(responses=["Compliance analysis is complete."])
+    middleware = ResponseLocalizationMiddleware(transform_model=transform_model)
+
+    state = {
+        "messages": [
+            HumanMessage(content="Trạng thái tuân thủ thế nào?"),
+            AIMessage(content="Báo cáo tuân thủ đã sẵn sàng."),
+        ]
+    }
+    runtime = SimpleNamespace(context=LCSPRunContext(response_language="en"))
+
+    updates = middleware.after_agent(state, runtime)
+    assert updates is not None
+    assert updates["messages"][0].content == "Compliance analysis is complete."
+
+
+# 4. Invariant Preservation Tests (Code, Citations, IDs, URLs, Paths, Enums)
+
+def test_transform_preserves_technical_invariants() -> None:
+    raw_text = (
+        "Found 3 violations in file `/workspace/repo/src/auth.ts#L45-L60`.\n"
+        "Reference [1] and Jira ticket LCSP-404.\n"
+        "Status: `STATUS_REJECTED`. See https://compliance.lcsp.internal/report\n"
+        "```typescript\nconst token = checkToken(req);\n```"
+    )
+
+    expected_vietnamese = (
+        "Đã tìm thấy 3 vi phạm trong tệp `/workspace/repo/src/auth.ts#L45-L60`.\n"
+        "Tham chiếu [1] và phiếu Jira LCSP-404.\n"
+        "Trạng thái: `STATUS_REJECTED`. Xem https://compliance.lcsp.internal/report\n"
+        "```typescript\nconst token = checkToken(req);\n```"
+    )
+
+    mock_model = MockChatModel(responses=[expected_vietnamese])
+    result, telemetry = transform_response_text(
+        raw_text,
+        "vi",
+        model=mock_model,
+    )
+
+    assert result == expected_vietnamese
+    assert telemetry["status"] == "APPLIED"
+    assert telemetry["fallback_used"] is False
+    assert "/workspace/repo/src/auth.ts#L45-L60" in result
+    assert "LCSP-404" in result
+    assert "STATUS_REJECTED" in result
+    assert "https://compliance.lcsp.internal/report" in result
+    assert "const token = checkToken(req);" in result
+
+
+# 5. Tool Call and Subagent Isolation (Do not translate internal tool calls)
+
+def test_tool_calls_are_not_translated() -> None:
+    """Tool calls generated during intermediate steps must not be translated."""
+    middleware = ResponseLocalizationMiddleware(transform_model=MockChatModel(responses=["Translated"]))
+    tool_call_message = AIMessage(
+        content="",
+        tool_calls=[{"name": "search_code", "args": {"query": "auth"}, "id": "call_1", "type": "tool_call"}],
+    )
+    state = {"messages": [tool_call_message]}
+    runtime = SimpleNamespace(context=LCSPRunContext(response_language="vi"))
+
+    updates = middleware.after_agent(state, runtime)
+    assert updates is None
+
+
+# 6. Structured Output Localization & Validation
+
+class SampleStructuredOutput(BaseModel):
+    status: str
+    rule_id: str
+    summary: str
+    code_snippet: str
+
+
+def test_structured_output_localization_preserves_keys_and_enums() -> None:
+    mock_model = MockChatModel(responses=["Tóm tắt tuân thủ được cập nhật"])
+    original = SampleStructuredOutput(
+        status="COMPLIANCE_PASSED",
+        rule_id="ENG-101",
+        summary="Compliance summary was updated",
+        code_snippet="export const API_KEY = 1;",
+    )
+
+    transformed, telemetry = transform_structured_response(
+        original,
+        "vi",
+        model=mock_model,
+    )
+
+    assert isinstance(transformed, SampleStructuredOutput)
+    assert transformed.status == "COMPLIANCE_PASSED"
+    assert transformed.rule_id == "ENG-101"
+    assert transformed.code_snippet == "export const API_KEY = 1;"
+    assert transformed.summary == "Tóm tắt tuân thủ được cập nhật"
+    assert telemetry["status"] == "APPLIED"
+
+
+def test_structured_output_validation_failure_falls_back_cleanly() -> None:
+    """If transformation makes structured output invalid, fallback to original."""
+    original = SampleStructuredOutput(
+        status="COMPLIANCE_PASSED",
+        rule_id="ENG-101",
+        summary="Original summary",
+        code_snippet="code",
+    )
+
+    with patch.object(SampleStructuredOutput, "model_validate", side_effect=ValueError("Invalid field")):
+        transformed, telemetry = transform_structured_response(
+            original,
+            "vi",
+            model=MockChatModel(responses=["Tóm tắt mới"]),
+        )
+        assert transformed == original
+        assert telemetry["status"] == "FALLBACK"
+        assert telemetry["fallback_used"] is True
+
+
+# 7. Fallback on Transform Model Timeout / Error
+
+def test_transform_failure_falls_back_to_primary_response() -> None:
+    """When the transform model throws an exception or times out, primary response is preserved."""
+    failing_model = MagicMock()
+    failing_model.invoke.side_effect = TimeoutError("Transform model request timed out")
+
+    original_text = "Primary agent synthesized answer."
+    result, telemetry = transform_response_text(
+        original_text,
+        "vi",
+        model=failing_model,
+    )
+
+    assert result == original_text
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert telemetry["reason"] == "TimeoutError"
+
+
+# 8. Mid-Thread Language Switch (Turn 1 EN -> Turn 2 VI)
+
+def test_mid_thread_language_switch() -> None:
+    """Changing language context between turns works immediately without recreating thread."""
+    transform_model = MockChatModel(responses=[
+        "First turn answer in English",
+        "Câu trả lời lượt thứ hai bằng Tiếng Việt",
+    ])
+    middleware = ResponseLocalizationMiddleware(transform_model=transform_model)
+
+    # Turn 1: EN
+    state_turn1 = {
+        "messages": [
+            HumanMessage(content="Analyze rule 1"),
+            AIMessage(content="Turn 1 raw"),
+        ]
+    }
+    updates_1 = middleware.after_agent(state_turn1, SimpleNamespace(context=LCSPRunContext(response_language="en")))
+    assert updates_1 is not None
+    assert updates_1["messages"][0].content == "First turn answer in English"
+
+    # Turn 2: Switch to VI on the same thread
+    state_turn2 = {
+        "messages": [
+            HumanMessage(content="Analyze rule 1"),
+            AIMessage(content="First turn answer in English"),
+            HumanMessage(content="Analyze rule 2"),
+            AIMessage(content="Turn 2 raw"),
+        ]
+    }
+    updates_2 = middleware.after_agent(state_turn2, SimpleNamespace(context=LCSPRunContext(response_language="vi")))
+    assert updates_2 is not None
+    assert updates_2["messages"][0].content == "Câu trả lời lượt thứ hai bằng Tiếng Việt"
+
+
+# 9. Configuration Toggle (Disabled localization)
+
+def test_disabled_localization_skips_cleanly() -> None:
+    config = ResponseLocalizationConfig(enabled=False)
+    mock_model = MockChatModel(responses=["Should not be called"])
+    text = "Untransformed text"
+
+    result, telemetry = transform_response_text(text, "vi", model=mock_model, config=config)
+    assert result == text
+    assert telemetry["status"] == "SKIPPED"
+    assert telemetry["reason"] == "LOCALIZATION_DISABLED"
+    assert len(mock_model.calls) == 0
+
+
+# 10. Extensibility Test (Adding a 3rd Locale)
+
+def test_extensibility_adding_third_locale() -> None:
+    """Adding a new locale definition immediately supports dynamic prompt and localization."""
+    custom_locales = {
+        **SUPPORTED_LOCALES,
+        "ja": LocaleDefinition(
+            code="ja",
+            name="日本語",
+            english_name="Japanese",
+            instruction="Produce your final user-visible response in Japanese (日本語).",
+        ),
+    }
+
+    with patch("orchestration.localization.SUPPORTED_LOCALES", custom_locales):
+        prompt_instruction = get_language_prompt_instruction("ja")
+        assert "Japanese" in prompt_instruction
+        assert "日本語" in prompt_instruction
+
+        mock_model = MockChatModel(responses=["分析が完了しました。"])
+        config = ResponseLocalizationConfig(supported_locales=("en", "vi", "ja"))
+        result, telemetry = transform_response_text(
+            "Analysis complete",
+            "ja",
+            model=mock_model,
+            config=config,
+        )
+        assert result == "分析が完了しました。"
+        assert telemetry["status"] == "APPLIED"
+
+
+# 11. End-to-End Agent Workflow Integration Tests
+
+@pytest.mark.parametrize("locale,target_translated", [
+    ("en", "The compliance audit completed with zero critical issues."),
+    ("vi", "Cuộc kiểm toán tuân thủ đã hoàn tất mà không có vấn đề nghiêm trọng."),
+])
+def test_agent_direct_qa_flow(locale: str, target_translated: str) -> None:
+    primary_model = MockChatModel(responses=[
+        AIMessage(content="Compliance audit completed.")
+    ])
+    transform_model = MockChatModel(responses=[
+        AIMessage(content=target_translated)
+    ])
+    middleware = ResponseLocalizationMiddleware(transform_model=transform_model)
+
+    agent = create_agent(
+        model=primary_model,
+        tools=[],
+        middleware=[middleware],
+        context_schema=LCSPRunContext,
+    )
+
+    result = agent.invoke(
+        {"messages": [{"role": "user", "content": "Run compliance audit"}]},
+        context=LCSPRunContext(response_language=locale),
+    )
+
+    assert result["messages"][-1].content == target_translated
+    # Verify primary model was prompted with language directive
+    assert len(primary_model.calls) == 1
+    system_msgs = [m for m in primary_model.calls[0] if isinstance(m, SystemMessage)]
+    assert any("Final Response Language Directive" in str(m.content) for m in system_msgs)
+
+
+def test_agent_tool_calling_flow_preserves_tool_execution_and_localizes_final() -> None:
+    tool_executed = False
+
+    @tool
+    def read_legal_document(doc_id: str) -> str:
+        """Read legal document contents."""
+        nonlocal tool_executed
+        tool_executed = True
+        return "Law No. 86/2015/QH13 on Cyber Information Security."
+
+    # Turn 1: model calls tool; Turn 2: model synthesizes final answer
+    primary_model = MockChatModel(responses=[
+        AIMessage(content="", tool_calls=[{"name": "read_legal_document", "args": {"doc_id": "86"}, "id": "t1", "type": "tool_call"}]),
+        AIMessage(content="Analysis based on Law No. 86/2015/QH13."),
+    ])
+    transform_model = MockChatModel(responses=[
+        AIMessage(content="Phân tích dựa trên Luật số 86/2015/QH13 về An toàn thông tin mạng."),
+    ])
+    middleware = ResponseLocalizationMiddleware(transform_model=transform_model)
+
+    agent = create_agent(
+        model=primary_model,
+        tools=[read_legal_document],
+        middleware=[middleware],
+        context_schema=LCSPRunContext,
+    )
+
+    result = agent.invoke(
+        {"messages": [{"role": "user", "content": "Check law 86"}]},
+        context=LCSPRunContext(response_language="vi"),
+    )
+
+    assert tool_executed is True
+    # The intermediate tool message was NOT translated
+    tool_msgs = [m for m in result["messages"] if isinstance(m, ToolMessage)]
+    assert len(tool_msgs) == 1
+    assert "Law No. 86/2015/QH13 on Cyber Information Security." in tool_msgs[0].content
+    # The final AIMessage is translated to Vietnamese
+    assert result["messages"][-1].content == "Phân tích dựa trên Luật số 86/2015/QH13 về An toàn thông tin mạng."
+
+
+def test_agent_code_heavy_response_flow() -> None:
+    code_text = (
+        "Here is the validation logic:\n"
+        "```typescript\n"
+        "export function validateSecret(token: string): boolean {\n"
+        "  return token.startsWith('lcsp_sec_');\n"
+        "}\n"
+        "```\n"
+        "Make sure to store it securely."
+    )
+    localized_code_text = (
+        "Dưới đây là logic kiểm tra:\n"
+        "```typescript\n"
+        "export function validateSecret(token: string): boolean {\n"
+        "  return token.startsWith('lcsp_sec_');\n"
+        "}\n"
+        "```\n"
+        "Hãy đảm bảo lưu trữ an toàn."
+    )
+
+    primary_model = MockChatModel(responses=[AIMessage(content=code_text)])
+    transform_model = MockChatModel(responses=[AIMessage(content=localized_code_text)])
+    middleware = ResponseLocalizationMiddleware(transform_model=transform_model)
+
+    agent = create_agent(
+        model=primary_model,
+        tools=[],
+        middleware=[middleware],
+        context_schema=LCSPRunContext,
+    )
+
+    result = agent.invoke(
+        {"messages": [{"role": "user", "content": "Show me the validator"}]},
+        context=LCSPRunContext(response_language="vi"),
+    )
+
+    final_content = result["messages"][-1].content
+    assert "export function validateSecret(token: string): boolean" in final_content
+    assert "return token.startsWith('lcsp_sec_');" in final_content
+    assert "Dưới đây là logic kiểm tra:" in final_content
+

@@ -34,6 +34,7 @@ roles:
   narrator: primary
   legal-chunk-triage: primary
   legal-compiler: primary
+  response-transform: fallback
 
 # Ordered fallback chain per route (optional; cycles are rejected).
 fallbacks:
