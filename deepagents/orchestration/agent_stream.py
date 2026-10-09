@@ -186,6 +186,10 @@ class AgentStreamSession:
     )
     emitted_tool_calls: set[str] = field(default_factory=set, init=False)
     tool_started_at: dict[str, float] = field(default_factory=dict, init=False)
+    buffered_content_deltas: list[dict[str, Any]] = field(
+        default_factory=list,
+        init=False,
+    )
 
     def emit(self, event_type: str, **fields: Any) -> None:
         cancel = active_agent_stream_cancel.get()
@@ -697,12 +701,67 @@ def _invoke_with_stream(
             "LCSP streamed agent invocation completed without a final values projection"
         )
 
+    if session is not None and getattr(session, "buffered_content_deltas", None):
+        _flush_buffered_content_deltas(session, final.value, resolved_name)
+
     publish_agent_stream_event(
         "AGENT_COMPLETED",
         agent_name=resolved_name,
         status="COMPLETED",
     )
     return final.value
+
+
+def _flush_buffered_content_deltas(
+    session: AgentStreamSession,
+    final_value: Any,
+    default_agent_name: str,
+) -> None:
+    """Emit final localized answer content deltas after turn localization completes (AC #12)."""
+    if not session.buffered_content_deltas:
+        return
+
+    deltas = list(session.buffered_content_deltas)
+    session.buffered_content_deltas.clear()
+
+    # Determine if localized final message exists in final_value
+    final_text: str | None = None
+    if isinstance(final_value, dict):
+        messages = final_value.get("messages")
+        if isinstance(messages, list) and messages:
+            last_msg = messages[-1]
+            content = getattr(last_msg, "content", None) or (
+                last_msg.get("content") if isinstance(last_msg, dict) else None
+            )
+            if isinstance(content, list):
+                final_text = "".join(
+                    b.get("text", "") if isinstance(b, dict) else str(b) for b in content
+                )
+            elif isinstance(content, str):
+                final_text = content
+
+    if final_text is not None and final_text.strip():
+        last_delta = deltas[-1]
+        publish_agent_stream_event(
+            "MODEL_CONTENT_DELTA",
+            agent_name=last_delta.get("agent_name", default_agent_name),
+            namespace=last_delta.get("namespace", []),
+            message_id=last_delta.get("message_id", ""),
+            text=final_text,
+            data=last_delta.get("data", {}),
+            status="RUNNING",
+        )
+    else:
+        for delta in deltas:
+            publish_agent_stream_event(
+                "MODEL_CONTENT_DELTA",
+                agent_name=delta.get("agent_name", default_agent_name),
+                namespace=delta.get("namespace", []),
+                message_id=delta.get("message_id", ""),
+                text=delta.get("text", ""),
+                data=delta.get("data", {}),
+                status="RUNNING",
+            )
 
 
 
@@ -942,6 +1001,19 @@ def _emit_message_event(
                 agent_name=agent_name,
                 text=text,
             )
+            from orchestration.localization import load_localization_config
+            loc_config = load_localization_config()
+            if loc_config.enabled and session is not None:
+                session.buffered_content_deltas.append(
+                    {
+                        "agent_name": agent_name,
+                        "namespace": list(namespace),
+                        "message_id": message_id,
+                        "text": text,
+                        "data": safe_metadata,
+                    }
+                )
+                continue
         else:
             _record_model_reasoning_delta(
                 message_id=message_id,

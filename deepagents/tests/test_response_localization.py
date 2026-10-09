@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import asdict
 from types import SimpleNamespace
@@ -13,7 +14,7 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import ModelRequest, ModelResponse
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import tool
 from pydantic import BaseModel
@@ -581,6 +582,102 @@ def test_fail_closed_on_file_path_mutation() -> None:
     assert "INVARIANT_VIOLATION" in str(telemetry["reason"])
 
 
+def test_fail_closed_on_injected_extra_jira_id() -> None:
+    """If transform keeps original Jira ID but injects an extra Jira ID (e.g. LCSP-123 -> LCSP-123 and LCSP-999), fail closed."""
+    original = "Issue logged in LCSP-123."
+    mutated = "Vấn đề được ghi lại trong LCSP-123 và LCSP-999."
+    result, telemetry = transform_response_text(original, "vi", model=MockChatModel([mutated]))
+
+    assert result == original
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert "EXTRA_INJECTED_JIRA_ISSUES" in str(telemetry["reason"])
+
+
+def test_fail_closed_on_injected_extra_github_issue() -> None:
+    """If transform injects an extra GitHub issue ref (#42 -> #42 and #999), fail closed."""
+    original = "Fixed in PR #42."
+    mutated = "Đã sửa trong PR #42 và #999."
+    result, telemetry = transform_response_text(original, "vi", model=MockChatModel([mutated]))
+
+    assert result == original
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert "EXTRA_INJECTED_GITHUB_ISSUES" in str(telemetry["reason"])
+
+
+def test_fail_closed_on_injected_extra_url() -> None:
+    """If transform preserves original URL but adds a new URL, fail closed."""
+    original = "See docs at https://lcsp.internal/docs."
+    mutated = "Xem tài liệu tại https://lcsp.internal/docs và https://evil.internal/phish."
+    result, telemetry = transform_response_text(original, "vi", model=MockChatModel([mutated]))
+
+    assert result == original
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert "EXTRA_INJECTED_URLS" in str(telemetry["reason"])
+
+
+def test_fail_closed_on_injected_extra_number() -> None:
+    """If transform preserves original numbers but adds a new number (e.g. 100% -> 100% và 50%), fail closed."""
+    original = "Scan coverage is 100%."
+    mutated = "Độ bao phủ quét là 100% và 50% kiểm tra."
+    result, telemetry = transform_response_text(original, "vi", model=MockChatModel([mutated]))
+
+    assert result == original
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert "EXTRA_INJECTED_NUMBERS" in str(telemetry["reason"])
+
+
+def test_fail_closed_on_injected_extra_enum() -> None:
+    """If transform preserves original enum but injects another SCREAMING_SNAKE_CASE enum, fail closed."""
+    original = "Status is STATUS_REJECTED."
+    mutated = "Trạng thái là STATUS_REJECTED và STATUS_APPROVED."
+    result, telemetry = transform_response_text(original, "vi", model=MockChatModel([mutated]))
+
+    assert result == original
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert "EXTRA_INJECTED_SCREAMING_ENUMS" in str(telemetry["reason"])
+
+
+def test_fail_closed_on_injected_extra_code_block() -> None:
+    """If transform introduces an extra code block not in the original text, fail closed."""
+    original = "Run the check:\n```bash\nnpm test\n```"
+    mutated = "Chạy kiểm tra:\n```bash\nnpm test\n```\nThêm:\n```bash\nrm -rf /\n```"
+    result, telemetry = transform_response_text(original, "vi", model=MockChatModel([mutated]))
+
+    assert result == original
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert "EXTRA_INJECTED_CODE_BLOCKS" in str(telemetry["reason"])
+
+
+def test_fail_closed_on_injected_extra_inline_code() -> None:
+    """If transform introduces extra inline code backticks, fail closed."""
+    original = "Use function `authenticate()`."
+    mutated = "Sử dụng hàm `authenticate()` và `bypassSecurity()`."
+    result, telemetry = transform_response_text(original, "vi", model=MockChatModel([mutated]))
+
+    assert result == original
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert "EXTRA_INJECTED_INLINE_CODE" in str(telemetry["reason"])
+
+
+def test_fail_closed_on_injected_extra_file_path() -> None:
+    """If transform introduces extra file paths, fail closed."""
+    original = "Found in apps/web/src/main.ts."
+    mutated = "Tìm thấy trong apps/web/src/main.ts và packages/contracts/src/auth.ts."
+    result, telemetry = transform_response_text(original, "vi", model=MockChatModel([mutated]))
+
+    assert result == original
+    assert telemetry["status"] == "FALLBACK"
+    assert telemetry["fallback_used"] is True
+    assert "EXTRA_INJECTED_FILE_PATHS" in str(telemetry["reason"])
+
+
 # 14. Single Transform Invocations per Completed Structured Turn
 
 class MultiFieldStructuredOutput(BaseModel):
@@ -685,5 +782,174 @@ def test_dispatch_agent_runtime_event_wires_response_language() -> None:
         msg_vi = {"assessmentId": "asm-1", "locale": "vi"}
         dispatch_agent_runtime_event("scan_requested", msg_vi, "corr-2")
         assert captured_contexts[1]["response_language"] == "vi"
+
+
+def test_real_api_producer_to_worker_to_agent_server_context() -> None:
+    """Real API outbox producer payload (e.g. from TriggerScanHandler / scanTriggered) propagates
+    authoritative responseLanguage through worker RabbitMQ message to Agent Server runtime context."""
+    from tools.common.capabilities.agent_runtime.agent_server_client import dispatch_agent_runtime_event
+
+    captured_contexts = []
+    mock_client = MagicMock()
+    mock_client.runs.create.side_effect = lambda thread_id, assistant_id, **kwargs: (
+        captured_contexts.append(kwargs.get("context", {})) or {"run_id": "r1", "status": "success"}
+    )
+    mock_client.runs.get.return_value = {"run_id": "r1", "status": "success"}
+    mock_client.threads.get_state.return_value = {"values": {"messages": []}}
+
+    with (
+        patch("tools.common.capabilities.agent_runtime.agent_server_client.get_sync_client", return_value=mock_client),
+        patch("tools.common.capabilities.agent_runtime.agent_server_client._find_active_thread_run", return_value=None),
+        patch("tools.common.capabilities.agent_runtime.agent_server_client._ScanRunObserver"),
+    ):
+        # 1. Real producer payload for English user scan request
+        producer_payload_en = {
+            "scanJobId": "scan-job-prod-1",
+            "assessmentId": "assessment-prod-1",
+            "snapshotId": "snapshot-prod-1",
+            "commitSha": "abc1234",
+            "triggerSource": "MANUAL",
+            "idempotencyKey": "scan-request:assessment-prod-1:snapshot-prod-1:1",
+            "correlationId": "corr-prod-1",
+            "responseLanguage": "en",
+        }
+        dispatch_agent_runtime_event("scan_requested", producer_payload_en, "corr-prod-1")
+        assert captured_contexts[0]["response_language"] == "en"
+        assert captured_contexts[0]["scan_job_id"] == "scan-job-prod-1"
+        assert captured_contexts[0]["assessment_id"] == "assessment-prod-1"
+
+        # 2. Real producer payload for default / Vietnamese user scan request
+        producer_payload_vi = {
+            "scanJobId": "scan-job-prod-2",
+            "assessmentId": "assessment-prod-2",
+            "snapshotId": "snapshot-prod-2",
+            "commitSha": "abc1234",
+            "triggerSource": "MANUAL",
+            "idempotencyKey": "scan-request:assessment-prod-2:snapshot-prod-2:2",
+            "correlationId": "corr-prod-2",
+            "responseLanguage": "vi",
+        }
+        dispatch_agent_runtime_event("scan_requested", producer_payload_vi, "corr-prod-2")
+        assert captured_contexts[1]["response_language"] == "vi"
+
+
+# 16. Async Non-Blocking Localization Tests
+
+@pytest.mark.asyncio
+async def test_async_transform_does_not_block_event_loop() -> None:
+    """Async transform allows concurrent asyncio tasks to progress without being blocked by sleep/IO."""
+    from orchestration.localization import atransform_response_text
+
+    class AsyncDelayModel:
+        async def ainvoke(self, messages, **kwargs):
+            await asyncio.sleep(0.08)
+            return AIMessage(content="Báo cáo tuân thủ hoàn tất.")
+
+    counter = 0
+    async def concurrent_task():
+        nonlocal counter
+        for _ in range(4):
+            await asyncio.sleep(0.01)
+            counter += 1
+
+    model = AsyncDelayModel()
+    transform_task = asyncio.create_task(atransform_response_text("Compliance report completed.", "vi", model=model))
+    bg_task = asyncio.create_task(concurrent_task())
+
+    result, telemetry = await transform_task
+    await bg_task
+
+    assert result == "Báo cáo tuân thủ hoàn tất."
+    assert telemetry["status"] == "APPLIED"
+    assert counter == 4  # Proves concurrent task ran while async transform was awaiting
+
+
+@pytest.mark.asyncio
+async def test_aafter_agent_async_transform() -> None:
+    """aafter_agent uses async transform methods and returns localized AIMessage and structured responses."""
+    class AsyncMockModel:
+        async def ainvoke(self, messages, **kwargs):
+            return AIMessage(content="Kết quả kiểm tra tuân thủ.")
+
+    middleware = ResponseLocalizationMiddleware(transform_model=AsyncMockModel())
+    state = {"messages": [AIMessage(content="Compliance check result.")]}
+    runtime = SimpleNamespace(context=LCSPRunContext(response_language="vi"))
+
+    updates = await middleware.aafter_agent(state, runtime)
+    assert updates is not None
+    assert updates["messages"][0].content == "Kết quả kiểm tra tuân thủ."
+
+
+# 17. Streaming Final Answer Guarantee (AC #12)
+
+def test_streaming_buffers_wrong_language_deltas_until_localized_final() -> None:
+    """Under response localization, raw wrong-language content deltas are buffered and never emitted to the stream (AC #12)."""
+    from orchestration.agent_stream import AgentStreamSession, activate_agent_stream, invoke_with_stream
+
+    emitted_events = []
+    def mock_deliver(payload):
+        emitted_events.append(payload)
+
+    class StreamingTestAgent:
+        name = "test_agent"
+        def stream(self, input_value, **kwargs):
+            # Model streaming English deltas for a Vietnamese user request
+            yield {
+                "type": "messages",
+                "ns": (),
+                "data": (
+                    AIMessageChunk(
+                        id="msg-stream-1",
+                        content=[{"type": "text", "text": "Analyzing repository "}],
+                    ),
+                    {"langgraph_node": "model"},
+                ),
+            }
+            yield {
+                "type": "messages",
+                "ns": (),
+                "data": (
+                    AIMessageChunk(
+                        id="msg-stream-1",
+                        content=[{"type": "text", "text": "structure for compliance."}],
+                    ),
+                    {"langgraph_node": "model"},
+                ),
+            }
+            # Final values projection with localized final message (as post-processed by middleware)
+            yield {
+                "type": "values",
+                "ns": (),
+                "data": {
+                    "messages": [
+                        AIMessage(
+                            content="Đang phân tích cấu trúc kho lưu trữ để tuân thủ.",
+                            id="msg-stream-1",
+                        )
+                    ]
+                },
+            }
+
+    session = AgentStreamSession(
+        assessment_id="asm-stream-1",
+        run_id="run-stream-1",
+        correlation_id="corr-stream-1",
+        boundary_name="scan_requested",
+        emit_payload=mock_deliver,
+    )
+
+    with activate_agent_stream(session):
+        result = invoke_with_stream(StreamingTestAgent(), {"messages": []})
+
+    content_deltas = [
+        e for e in emitted_events if e.get("event_type") == "MODEL_CONTENT_DELTA"
+    ]
+    # Verify that NO intermediate English tokens were emitted
+    assert not any("Analyzing repository" in (e.get("text") or "") for e in content_deltas)
+    assert not any("structure for compliance" in (e.get("text") or "") for e in content_deltas)
+
+    # Verify that ONLY the final localized Vietnamese text was emitted as content delta
+    assert len(content_deltas) == 1
+    assert content_deltas[0]["text"] == "Đang phân tích cấu trúc kho lưu trữ để tuân thủ."
 
 

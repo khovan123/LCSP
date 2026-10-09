@@ -253,6 +253,7 @@ export class ScanController {
           request.rbacContext,
           request.correlationId,
           payload.reason,
+          payload.response_language ?? payload.locale,
         ),
       ),
     );

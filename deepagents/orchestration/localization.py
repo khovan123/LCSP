@@ -8,6 +8,7 @@ transform model.
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 import json
 import os
 import re
@@ -136,36 +137,37 @@ PRESERVATION INVARIANTS:
 """
 
 
-def extract_technical_invariants(text: str) -> dict[str, set[str]]:
-    """Extract deterministic technical invariants that must be preserved verbatim."""
+def extract_technical_invariants(text: str) -> dict[str, list[str]]:
+    """Extract deterministic technical invariants as lists (multisets) that must be preserved verbatim."""
     if not text or not isinstance(text, str):
         return {}
 
     raw_urls = re.findall(r"https?://[^\s\"'>]+", text)
-    cleaned_urls = {u.rstrip(".,;:)>]") for u in raw_urls if u.strip()}
+    cleaned_urls = [u.rstrip(".,;:)>]") for u in raw_urls if u.strip()]
 
     raw_paths = re.findall(
         r"(?:/(?:workspace|[\w.-]+/\w+)|(?:\b(?:src|apps|packages|deepagents|\.lcsp)/))[\w./-]+[a-zA-Z0-9_-](?::\d+|#L\d+(?:-L\d+)?)?",
         text,
     )
-    cleaned_paths = {p.rstrip(".,;:)>]") for p in raw_paths if p.strip()}
+    cleaned_paths = [p.rstrip(".,;:)>]") for p in raw_paths if p.strip()]
 
-    invariants: dict[str, set[str]] = {
-        "code_blocks": set(re.findall(r"```[\w-]*\n?[\s\S]*?```", text)),
-        "inline_code": set(re.findall(r"`[^`\n]+`", text)),
+    invariants: dict[str, list[str]] = {
+        "code_blocks": re.findall(r"```[\w-]*\n?[\s\S]*?```", text),
+        "inline_code": re.findall(r"`[^`\n]+`", text),
         "urls": cleaned_urls,
-        "citations": set(re.findall(r"\[(?:\d+|[^\]\n]+#L\d+(?:-L\d+)?)\]", text)),
-        "jira_issues": set(re.findall(r"\b[A-Z]{2,}-\d+\b", text)),
-        "github_issues": set(re.findall(r"(?<!\w)#\d+\b", text)),
-        "screaming_enums": set(re.findall(r"\b[A-Z][A-Z0-9_]*_[A-Z0-9_]+\b", text)),
+        "citations": re.findall(r"\[(?:\d+|[^\]\n]+#L\d+(?:-L\d+)?)\]", text),
+        "jira_issues": re.findall(r"\b[A-Z]{2,}-\d+\b", text),
+        "github_issues": re.findall(r"(?<!\w)#\d+\b", text),
+        "screaming_enums": re.findall(r"\b[A-Z][A-Z0-9_]*_[A-Z0-9_]+\b", text),
         "file_paths": cleaned_paths,
-        "numbers": set(re.findall(r"\b\d+(?:\.\d+)?%?\b", text)),
+        "numbers": re.findall(r"\b\d+(?:\.\d+)?%?\b", text),
     }
     return invariants
 
 
 def validate_invariant_preservation(original_text: str, transformed_text: str) -> tuple[bool, str | None]:
-    """Deterministically verify that transformed_text preserves all technical invariants from original_text.
+    """Deterministically verify that transformed_text preserves all technical invariants from original_text
+    in an exact bidirectional multiset (no missing and no injected/extra values).
 
     Returns:
         (is_valid, failure_reason)
@@ -173,19 +175,36 @@ def validate_invariant_preservation(original_text: str, transformed_text: str) -
     if not original_text or not transformed_text:
         return True, None
 
-    original_invariants = extract_technical_invariants(original_text)
+    orig_invariants = extract_technical_invariants(original_text)
+    trans_invariants = extract_technical_invariants(transformed_text)
 
-    # 1. Exact string matches for code blocks, inline code, URLs, citations, Jira/GitHub IDs, file paths, enums
-    for category in ("code_blocks", "inline_code", "urls", "citations", "jira_issues", "github_issues", "screaming_enums", "file_paths"):
-        for item in original_invariants.get(category, set()):
-            if item not in transformed_text:
+    categories = (
+        "code_blocks",
+        "inline_code",
+        "urls",
+        "citations",
+        "jira_issues",
+        "github_issues",
+        "screaming_enums",
+        "file_paths",
+        "numbers",
+    )
+
+    for category in categories:
+        orig_counts = Counter(orig_invariants.get(category, []))
+        trans_counts = Counter(trans_invariants.get(category, []))
+
+        # Check for missing invariants (original had more than transformed)
+        for item, orig_count in orig_counts.items():
+            trans_count = trans_counts.get(item, 0)
+            if trans_count < orig_count:
                 return False, f"MISSING_{category.upper()}: {item}"
 
-    # 2. Numeric invariants check
-    transformed_numbers = set(re.findall(r"\b\d+(?:\.\d+)?%?\b", transformed_text))
-    for num in original_invariants.get("numbers", set()):
-        if num not in transformed_numbers and num not in transformed_text:
-            return False, f"MISSING_NUMBER: {num}"
+        # Check for injected/extra invariants (transformed has more than original)
+        for item, trans_count in trans_counts.items():
+            orig_count = orig_counts.get(item, 0)
+            if trans_count > orig_count:
+                return False, f"EXTRA_INJECTED_{category.upper()}: {item}"
 
     return True, None
 
@@ -644,4 +663,142 @@ def transform_structured_response(
             fallback_used=True,
         )
         return structured, telemetry
+
+
+async def atransform_structured_response(
+    structured: Any,
+    target_locale: str,
+    *,
+    model: Any | None = None,
+    config: ResponseLocalizationConfig | None = None,
+) -> tuple[Any, dict[str, Any]]:
+    """Asynchronously transform user-facing string fields of a structured response in at most ONE model invocation.
+
+    Preserves schema, non-string fields, and technical invariants without blocking the event loop.
+    """
+    if config is None:
+        config = load_localization_config()
+
+    normalized_locale = resolve_response_language(target_locale)
+    telemetry: dict[str, Any] = {
+        "locale": normalized_locale,
+        "status": "SKIPPED",
+        "fallback_used": False,
+    }
+
+    if structured is None or not config.enabled:
+        return structured, telemetry
+
+    is_pydantic = isinstance(structured, BaseModel)
+    data = structured.model_dump() if is_pydantic else (dict(structured) if isinstance(structured, dict) else None)
+    if data is None:
+        return structured, telemetry
+
+    # User-facing fields to localize in structured objects
+    user_facing_fields = {"summary", "message", "explanation", "detail", "description", "label", "notes"}
+    fields_to_transform = {
+        key: value
+        for key, value in data.items()
+        if key in user_facing_fields and isinstance(value, str) and value.strip()
+    }
+
+    if not fields_to_transform:
+        return structured, telemetry
+
+    definition = SUPPORTED_LOCALES.get(normalized_locale, SUPPORTED_LOCALES["en"])
+    active_model = model or _get_transform_model(config)
+    if active_model is None:
+        telemetry["status"] = "FALLBACK"
+        telemetry["fallback_used"] = True
+        telemetry["reason"] = "MODEL_UNAVAILABLE"
+        return structured, telemetry
+
+    # Single-field optimization: 1 model call via atransform_response_text
+    if len(fields_to_transform) == 1:
+        key, original_val = next(iter(fields_to_transform.items()))
+        transformed_val, t = await atransform_response_text(original_val, target_locale, model=active_model, config=config)
+        if t["status"] == "APPLIED":
+            updated = dict(data)
+            updated[key] = transformed_val
+            telemetry.update(t)
+            if is_pydantic:
+                try:
+                    reconstructed = structured.__class__.model_validate(updated)
+                    return reconstructed, telemetry
+                except Exception:
+                    telemetry["status"] = "FALLBACK"
+                    telemetry["fallback_used"] = True
+                    telemetry["reason"] = "STRUCTURED_VALIDATION_FAILED"
+                    return structured, telemetry
+            return updated, telemetry
+        return structured, t
+
+    # Multi-field schema-aware single transform (1 async model invocation for all fields)
+    bound_model = _bind_model_limits(active_model, config)
+    system_prompt = STRUCTURED_SYSTEM_PROMPT_TEMPLATE.format(
+        target_language=definition.name,
+        target_locale=definition.code,
+    )
+    json_payload = json.dumps(fields_to_transform, ensure_ascii=False)
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=json_payload),
+    ]
+
+    start_time = time.monotonic()
+    try:
+        response = await _ainvoke_with_timeout(bound_model, messages, timeout_seconds=config.timeout_seconds)
+        duration_ms = (time.monotonic() - start_time) * 1000.0
+        telemetry["latency_ms"] = round(duration_ms, 2)
+
+        raw_output, token_usage = _extract_response_content(response)
+        if token_usage:
+            telemetry["token_usage"] = token_usage
+
+        clean_json = raw_output.strip()
+        if clean_json.startswith("```json"):
+            clean_json = clean_json.removeprefix("```json").removesuffix("```").strip()
+        elif clean_json.startswith("```"):
+            clean_json = clean_json.removeprefix("```").removesuffix("```").strip()
+
+        parsed = json.loads(clean_json)
+        if not isinstance(parsed, dict):
+            raise ValueError("Structured transform output is not a JSON object")
+
+        updated = dict(data)
+        for k, orig_v in fields_to_transform.items():
+            trans_v = parsed.get(k)
+            if isinstance(trans_v, str) and trans_v.strip():
+                is_valid, violation = validate_invariant_preservation(orig_v, trans_v)
+                if not is_valid:
+                    raise ValueError(f"Invariant violation in field '{k}': {violation}")
+                updated[k] = trans_v
+
+        telemetry["status"] = "APPLIED"
+        if is_pydantic:
+            try:
+                reconstructed = structured.__class__.model_validate(updated)
+                return reconstructed, telemetry
+            except Exception:
+                telemetry["status"] = "FALLBACK"
+                telemetry["fallback_used"] = True
+                telemetry["reason"] = "STRUCTURED_VALIDATION_FAILED"
+                return structured, telemetry
+        return updated, telemetry
+
+    except Exception as exc:
+        duration_ms = (time.monotonic() - start_time) * 1000.0
+        telemetry["latency_ms"] = round(duration_ms, 2)
+        telemetry["status"] = "FALLBACK"
+        telemetry["fallback_used"] = True
+        telemetry["reason"] = type(exc).__name__ if not isinstance(exc, (TimeoutError, asyncio.TimeoutError)) else "TIMEOUT"
+        logger.warning(
+            "STRUCTURED_LOCALIZATION_FALLBACK",
+            locale=normalized_locale,
+            reason=telemetry["reason"],
+            latency_ms=telemetry["latency_ms"],
+            fallback_used=True,
+        )
+        return structured, telemetry
+
 

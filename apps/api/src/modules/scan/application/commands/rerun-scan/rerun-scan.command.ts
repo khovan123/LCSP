@@ -21,5 +21,6 @@ export class RerunScanCommand {
     public readonly rbacContext: RbacRequestContext,
     public readonly correlationId: string,
     public readonly reason?: string,
+    public readonly responseLanguage?: string | null,
   ) {}
 }

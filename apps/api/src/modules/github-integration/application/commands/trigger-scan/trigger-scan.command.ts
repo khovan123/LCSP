@@ -26,5 +26,6 @@ export class TriggerScanCommand {
     public readonly subjectRole: AuthUserRole | null,
     public readonly scope: string | undefined,
     public readonly correlationId: string,
+    public readonly responseLanguage?: string | null,
   ) {}
 }

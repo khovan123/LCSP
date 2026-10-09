@@ -20,6 +20,7 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
+import { resolveResponseLanguage } from "@lcsp/contracts/shared/locale";
 import { SCAN_ERROR_CODES, SCAN_EVENT_TYPES } from "@lcsp/contracts/scan";
 
 import { Prisma } from "@prisma/client";
@@ -203,6 +204,7 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
         // Preserves prior scan artifacts and reports in accordance with UC-M03 (A4, BR-62).
         // Historical jobs and reports remain queryable for audit traceability.
 
+        const responseLanguage = resolveResponseLanguage(command.responseLanguage);
         const event = buildOutboxMessageInput({
           aggregateType: OUTBOX_AGGREGATE_TYPES.repositoryScanJob,
           aggregateId: newScanJobId,
@@ -223,6 +225,7 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
             idempotencyKey: command.idempotencyKey,
             correlationId: command.correlationId,
             replacesScanJobId: replacedScanJobId,
+            responseLanguage,
           },
         });
 
