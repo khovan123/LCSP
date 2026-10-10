@@ -27,13 +27,15 @@ describe("GetRootContextHandler locale authority", () => {
     repositoryCommit: "a".repeat(40),
   };
 
-  function createFixture(options: {
-    executionId?: string;
-    currentTurnContext?: Record<string, unknown> | null;
-    latestTurnContext?: Record<string, unknown> | null;
-    outboxPayload?: Record<string, unknown> | null;
-    eventPayload?: Record<string, unknown> | null;
-  } = {}) {
+  function createFixture(
+    options: {
+      executionId?: string;
+      currentTurnContext?: Record<string, unknown> | null;
+      latestTurnContext?: Record<string, unknown> | null;
+      outboxPayload?: Record<string, unknown> | null;
+      eventPayload?: Record<string, unknown> | null;
+    } = {},
+  ) {
     const executionId = options.executionId ?? randomUUID();
     const tx = {
       assessmentDecisionCoverage: {
@@ -96,7 +98,9 @@ describe("GetRootContextHandler locale authority", () => {
     };
 
     const prisma = {
-      $transaction: jest.fn((callback: (t: typeof tx) => unknown) => callback(tx)),
+      $transaction: jest.fn((callback: (t: typeof tx) => unknown) =>
+        callback(tx),
+      ),
     } as unknown as PrismaService;
 
     const authority = {

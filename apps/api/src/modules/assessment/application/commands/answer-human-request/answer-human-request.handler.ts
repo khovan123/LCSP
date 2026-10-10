@@ -348,7 +348,11 @@ export class AnswerHumanRequestHandler implements ICommandHandler<AnswerHumanReq
             payload: {
               assessmentId: input.assessmentId,
               ...(input.responseLanguage
-                ? { responseLanguage: resolveResponseLanguage(input.responseLanguage) }
+                ? {
+                    responseLanguage: resolveResponseLanguage(
+                      input.responseLanguage,
+                    ),
+                  }
                 : {}),
             },
           }),

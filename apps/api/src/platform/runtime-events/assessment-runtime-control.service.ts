@@ -245,7 +245,8 @@ export class AssessmentRuntimeControlService {
             where: { id: row.id },
             data: {
               contextJson: {
-                ...(typeof row.contextJson === "object" && row.contextJson !== null
+                ...(typeof row.contextJson === "object" &&
+                row.contextJson !== null
                   ? (row.contextJson as Record<string, unknown>)
                   : {}),
                 responseLanguage,

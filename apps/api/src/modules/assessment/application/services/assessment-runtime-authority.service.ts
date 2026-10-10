@@ -221,11 +221,15 @@ export class AssessmentRuntimeAuthority {
           logicalRunId: executionId,
           correlationId: input.correlationId,
           state: Controls.running,
-          contextJson: persistedLanguage ? { responseLanguage: persistedLanguage } : {},
+          contextJson: persistedLanguage
+            ? { responseLanguage: persistedLanguage }
+            : {},
         },
         update: {
           state: recoveringStop ? Controls.stopRequested : Controls.running,
-          ...(persistedLanguage ? { contextJson: { responseLanguage: persistedLanguage } } : {}),
+          ...(persistedLanguage
+            ? { contextJson: { responseLanguage: persistedLanguage } }
+            : {}),
         },
       });
       if (safePauseResume) {

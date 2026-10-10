@@ -253,7 +253,11 @@ export class AssessmentRuntimePreparation {
         payload: {
           assessmentId: input.assessmentId,
           ...(input.responseLanguage
-            ? { responseLanguage: resolveResponseLanguage(input.responseLanguage) }
+            ? {
+                responseLanguage: resolveResponseLanguage(
+                  input.responseLanguage,
+                ),
+              }
             : {}),
         },
       }),

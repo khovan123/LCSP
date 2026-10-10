@@ -74,7 +74,8 @@ export class AssessmentHumanResolutionController {
     body: AnswerAssessmentHumanRequest,
     @Req() req: AuthenticatedRequest,
   ) {
-    const locale = (req.headers?.["x-lcsp-locale"] as string | undefined) ?? null;
+    const locale =
+      (req.headers?.["x-lcsp-locale"] as string | undefined) ?? null;
     return resultEnvelope(
       await this.commands.execute(
         new AnswerHumanRequestCommand(
