@@ -1,9 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, jest } from "@jest/globals";
-import {
-  ASSESSMENT_DECISION_SCOPE,
-  ASSESSMENT_ROOT_COMMAND_TYPES,
-} from "@lcsp/contracts/assessment-domain";
+import { ASSESSMENT_DECISION_SCOPE } from "@lcsp/contracts/assessment-domain";
 import { ASSESSMENT_LIFECYCLE_STATES } from "@lcsp/contracts/assessment";
 import { DEFAULT_RESPONSE_LANGUAGE } from "@lcsp/contracts/shared/locale";
 
