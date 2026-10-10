@@ -880,28 +880,79 @@ async def test_aafter_agent_async_transform() -> None:
     assert updates["messages"][0].content == "Kết quả kiểm tra tuân thủ."
 
 
-# 17. Streaming Final Answer Guarantee (AC #12)
+def test_assessment_root_runner_persisted_locale_authority(tmp_path) -> None:
+    """Active Assessment Root runner loads authoritative responseLanguage from server context (command.assessment.root.requested.v1)."""
+    from assessment_root.runner import run_assessment_root
+    from deepagents.backends import FilesystemBackend
+    from langchain_core.messages import AIMessage
+    from test_assessment_root_agent import FakeClient, RootScriptedModel, _repo
 
-def test_streaming_buffers_wrong_language_deltas_until_localized_final() -> None:
-    """Under response localization, raw wrong-language content deltas are buffered and never emitted to the stream (AC #12)."""
+    # Test 1: Server context specifies Vietnamese ("vi")
+    client_vi = FakeClient()
+    # Override context responseLanguage to Vietnamese
+    orig_context_vi = client_vi.context
+    client_vi.context = lambda: {**orig_context_vi(), "responseLanguage": "vi"}
+    
+    captured_messages_vi = []
+    class LocSpyModel(RootScriptedModel):
+        def _generate(self, messages, **kwargs):
+            captured_messages_vi.append(list(messages))
+            return super()._generate(messages, **kwargs)
+
+    model_vi = LocSpyModel(responses=[AIMessage(content="Đã kiểm tra tuân thủ.")])
+    result_vi = run_assessment_root(
+        client_vi,
+        "11111111-1111-4111-8111-111111111111",
+        backend_factory=lambda claim, ctx: (FilesystemBackend(root_dir=_repo(tmp_path / "vi"), virtual_mode=True), None),
+        model=model_vi,
+        governance=(),
+    )
+    assert result_vi["state"] == "SUCCEEDED"
+    assert ("finish", "SUCCEEDED") in client_vi.calls
+    # Prompt directive must contain Vietnamese guidance
+    first_turn_text_vi = str([getattr(m, "content", "") for m in captured_messages_vi[0]])
+    assert "Vietnamese" in first_turn_text_vi or "tiếng Việt" in first_turn_text_vi
+
+    # Test 2: Server context specifies English ("en")
+    client_en = FakeClient()
+    orig_context_en = client_en.context
+    client_en.context = lambda: {**orig_context_en(), "responseLanguage": "en"}
+
+    captured_messages_en = []
+    class LocSpyModelEn(RootScriptedModel):
+        def _generate(self, messages, **kwargs):
+            captured_messages_en.append(list(messages))
+            return super()._generate(messages, **kwargs)
+
+    model_en = LocSpyModelEn(responses=[AIMessage(content="Compliance check completed.")])
+    result_en = run_assessment_root(
+        client_en,
+        "11111111-1111-4111-8111-111111111111",
+        backend_factory=lambda claim, ctx: (FilesystemBackend(root_dir=_repo(tmp_path / "en"), virtual_mode=True), None),
+        model=model_en,
+        governance=(),
+    )
+    assert result_en["state"] == "SUCCEEDED"
+    assert ("finish", "SUCCEEDED") in client_en.calls
+    # Prompt directive must contain English guidance
+    first_turn_text_en = str([getattr(m, "content", "") for m in captured_messages_en[0]])
+    assert "English" in first_turn_text_en
+
+
+def test_streaming_and_non_streaming_suppress_raw_model_result_summary_before_localization() -> None:
+    """Both streaming and non-streaming providers buffer/redact MODEL_RESULT summaries until localized final answer (AC #12)."""
     from orchestration.agent_stream import AgentStreamSession, activate_agent_stream, invoke_with_stream
 
-    emitted_events = []
-    def mock_deliver(payload):
-        emitted_events.append(payload)
-
-    class StreamingTestAgent:
-        name = "test_agent"
+    # A. Streaming provider path
+    streaming_events = []
+    class StreamingEnglishAgent:
+        name = "streaming_agent"
         def stream(self, input_value, **kwargs):
-            # Model streaming English deltas for a Vietnamese user request
             yield {
                 "type": "messages",
                 "ns": (),
                 "data": (
-                    AIMessageChunk(
-                        id="msg-stream-1",
-                        content=[{"type": "text", "text": "Analyzing repository "}],
-                    ),
+                    AIMessageChunk(id="msg-stream", content="English raw delta 1. "),
                     {"langgraph_node": "model"},
                 ),
             }
@@ -909,47 +960,110 @@ def test_streaming_buffers_wrong_language_deltas_until_localized_final() -> None
                 "type": "messages",
                 "ns": (),
                 "data": (
-                    AIMessageChunk(
-                        id="msg-stream-1",
-                        content=[{"type": "text", "text": "structure for compliance."}],
-                    ),
-                    {"langgraph_node": "model"},
+                    AIMessageChunk(id="msg-stream", content="English raw delta 2."),
+                    {"langgraph_node": "model", "finish_reason": "stop", "usage": {"input_tokens": 10, "output_tokens": 20}},
                 ),
             }
-            # Final values projection with localized final message (as post-processed by middleware)
             yield {
                 "type": "values",
                 "ns": (),
                 "data": {
                     "messages": [
                         AIMessage(
-                            content="Đang phân tích cấu trúc kho lưu trữ để tuân thủ.",
-                            id="msg-stream-1",
+                            content="Câu trả lời cuối cùng bằng tiếng Việt.",
+                            id="msg-stream",
                         )
                     ]
                 },
             }
 
-    session = AgentStreamSession(
-        assessment_id="asm-stream-1",
-        run_id="run-stream-1",
-        correlation_id="corr-stream-1",
+    session_stream = AgentStreamSession(
+        assessment_id="asm-stream-2",
+        run_id="run-stream-2",
+        correlation_id="corr-stream-2",
         boundary_name="scan_requested",
-        emit_payload=mock_deliver,
+        emit_payload=streaming_events.append,
+    )
+    with activate_agent_stream(session_stream):
+        invoke_with_stream(StreamingEnglishAgent(), {"messages": []})
+
+    model_results_stream = [e for e in streaming_events if e.get("event_type") == "MODEL_RESULT"]
+    content_deltas_stream = [e for e in streaming_events if e.get("event_type") == "MODEL_CONTENT_DELTA"]
+
+    # Verify no raw English leaked in deltas
+    assert not any("English raw" in (e.get("text") or "") for e in content_deltas_stream)
+    assert len(content_deltas_stream) == 1
+    assert content_deltas_stream[0]["text"] == "Câu trả lời cuối cùng bằng tiếng Việt."
+
+    # Verify no raw English leaked in MODEL_RESULT resultSummary
+    for mr in model_results_stream:
+        summary_text = (mr.get("data") or {}).get("resultSummary", {}).get("text", "")
+        assert "English raw" not in summary_text
+
+    # Final MODEL_RESULT contains localized Vietnamese text
+    assert any(
+        (mr.get("data") or {}).get("resultSummary", {}).get("text") == "Câu trả lời cuối cùng bằng tiếng Việt."
+        for mr in model_results_stream
     )
 
-    with activate_agent_stream(session):
-        result = invoke_with_stream(StreamingTestAgent(), {"messages": []})
+    # B. Non-streaming provider path (_emit_complete_model_message)
+    non_streaming_events = []
+    class NonStreamingEnglishAgent:
+        name = "non_streaming_agent"
+        def stream(self, input_value, **kwargs):
+            yield {
+                "type": "messages",
+                "ns": (),
+                "data": (
+                    AIMessage(
+                        id="msg-nonstream",
+                        content="Non-streaming English raw complete message.",
+                        response_metadata={"finish_reason": "stop"},
+                    ),
+                    {"langgraph_node": "model", "usage": {"input_tokens": 15, "output_tokens": 25}},
+                ),
+            }
+            yield {
+                "type": "values",
+                "ns": (),
+                "data": {
+                    "messages": [
+                        AIMessage(
+                            content="Thông điệp hoàn chỉnh tiếng Việt.",
+                            id="msg-nonstream",
+                        )
+                    ]
+                },
+            }
 
-    content_deltas = [
-        e for e in emitted_events if e.get("event_type") == "MODEL_CONTENT_DELTA"
-    ]
-    # Verify that NO intermediate English tokens were emitted
-    assert not any("Analyzing repository" in (e.get("text") or "") for e in content_deltas)
-    assert not any("structure for compliance" in (e.get("text") or "") for e in content_deltas)
+    session_non_stream = AgentStreamSession(
+        assessment_id="asm-nonstream-1",
+        run_id="run-nonstream-1",
+        correlation_id="corr-nonstream-1",
+        boundary_name="scan_requested",
+        emit_payload=non_streaming_events.append,
+    )
+    with activate_agent_stream(session_non_stream):
+        invoke_with_stream(NonStreamingEnglishAgent(), {"messages": []})
 
-    # Verify that ONLY the final localized Vietnamese text was emitted as content delta
-    assert len(content_deltas) == 1
-    assert content_deltas[0]["text"] == "Đang phân tích cấu trúc kho lưu trữ để tuân thủ."
+    model_results_nonstream = [e for e in non_streaming_events if e.get("event_type") == "MODEL_RESULT"]
+    content_deltas_nonstream = [e for e in non_streaming_events if e.get("event_type") == "MODEL_CONTENT_DELTA"]
+
+    # Verify no raw English leaked in deltas or MODEL_RESULT
+    assert not any("Non-streaming English" in (e.get("text") or "") for e in content_deltas_nonstream)
+    for mr in model_results_nonstream:
+        summary_text = (mr.get("data") or {}).get("resultSummary", {}).get("text", "")
+        assert "Non-streaming English" not in summary_text
+
+    # Final MODEL_RESULT contains localized Vietnamese text
+    assert any(
+        (mr.get("data") or {}).get("resultSummary", {}).get("text") == "Thông điệp hoàn chỉnh tiếng Việt."
+        for mr in model_results_nonstream
+    )
+    assert any(
+        (mr.get("data") or {}).get("usage") == {"input_tokens": 15, "output_tokens": 25}
+        for mr in model_results_nonstream
+    )
+
 
 

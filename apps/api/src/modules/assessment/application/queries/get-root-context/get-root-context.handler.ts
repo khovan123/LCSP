@@ -4,6 +4,7 @@ import {
   assessmentRootContextSchema,
   type AssessmentRootContext,
 } from "@lcsp/contracts/assessment-domain";
+import { resolveResponseLanguage } from "@lcsp/contracts/shared/locale";
 import { type IQueryHandler, QueryHandler } from "@nestjs/cqrs";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
@@ -92,6 +93,7 @@ export class GetRootContextHandler implements IQueryHandler<GetRootContextQuery>
           createdAt: row.createdAt.toISOString(),
         })),
         openHumanRequestIds: openRequests.map((row) => row.requestId),
+        responseLanguage: resolveResponseLanguage(undefined),
       });
     });
   }

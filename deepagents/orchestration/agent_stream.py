@@ -190,6 +190,10 @@ class AgentStreamSession:
         default_factory=list,
         init=False,
     )
+    pending_model_result: dict[str, Any] | None = field(
+        default=None,
+        init=False,
+    )
 
     def emit(self, event_type: str, **fields: Any) -> None:
         cancel = active_agent_stream_cancel.get()
@@ -717,12 +721,14 @@ def _flush_buffered_content_deltas(
     final_value: Any,
     default_agent_name: str,
 ) -> None:
-    """Emit final localized answer content deltas after turn localization completes (AC #12)."""
+    """Emit final localized answer content deltas and MODEL_RESULT after turn localization completes (AC #12)."""
     if not session.buffered_content_deltas:
         return
 
     deltas = list(session.buffered_content_deltas)
     session.buffered_content_deltas.clear()
+    pending_result = getattr(session, "pending_model_result", None)
+    session.pending_model_result = None
 
     # Determine if localized final message exists in final_value
     final_text: str | None = None
@@ -740,28 +746,93 @@ def _flush_buffered_content_deltas(
             elif isinstance(content, str):
                 final_text = content
 
+    last_delta = deltas[-1]
+    agent_name = (
+        (pending_result and pending_result.get("agent_name"))
+        or last_delta.get("agent_name", default_agent_name)
+    )
+    namespace = (
+        (pending_result and pending_result.get("namespace"))
+        or last_delta.get("namespace", [])
+    )
+    message_id = (
+        (pending_result and pending_result.get("message_id"))
+        or last_delta.get("message_id", "")
+    )
+    metadata = last_delta.get("data", {})
+    model_context = (pending_result and pending_result.get("model_context")) or {}
+    node_name = (pending_result and pending_result.get("node_name")) or model_context.get("nodeName")
+    finish_reason = (pending_result and pending_result.get("finish_reason")) or "stop"
+    usage = (pending_result and pending_result.get("usage")) or {}
+    output_refs = (pending_result and pending_result.get("output_refs")) or _output_refs(metadata, message_id=message_id)
+
     if final_text is not None and final_text.strip():
-        last_delta = deltas[-1]
         publish_agent_stream_event(
             "MODEL_CONTENT_DELTA",
-            agent_name=last_delta.get("agent_name", default_agent_name),
-            namespace=last_delta.get("namespace", []),
-            message_id=last_delta.get("message_id", ""),
+            agent_name=agent_name,
+            namespace=namespace,
+            message_id=message_id,
             text=final_text,
-            data=last_delta.get("data", {}),
+            data=metadata,
             status="RUNNING",
         )
+        publish_agent_stream_event(
+            "MODEL_RESULT",
+            agent_name=agent_name,
+            namespace=namespace,
+            node_name=node_name,
+            message_id=message_id,
+            text="model result summary",
+            data=_semantic_payload(
+                "MODEL_OUTPUT",
+                durability=DURABLE,
+                requestId=message_id,
+                messageId=message_id,
+                finishReason=finish_reason,
+                usage=usage,
+                outputRefs=output_refs,
+                resultSummary={"text": _safe_text(final_text)},
+                status="COMPLETED",
+                **model_context,
+            ),
+            status="COMPLETED",
+        )
     else:
+        raw_parts: list[str] = []
         for delta in deltas:
+            delta_text = delta.get("text", "")
+            raw_parts.append(delta_text)
             publish_agent_stream_event(
                 "MODEL_CONTENT_DELTA",
                 agent_name=delta.get("agent_name", default_agent_name),
                 namespace=delta.get("namespace", []),
                 message_id=delta.get("message_id", ""),
-                text=delta.get("text", ""),
+                text=delta_text,
                 data=delta.get("data", {}),
                 status="RUNNING",
             )
+        joined_raw = "".join(raw_parts)
+        publish_agent_stream_event(
+            "MODEL_RESULT",
+            agent_name=agent_name,
+            namespace=namespace,
+            node_name=node_name,
+            message_id=message_id,
+            text="model result summary",
+            data=_semantic_payload(
+                "MODEL_OUTPUT",
+                durability=DURABLE,
+                requestId=message_id,
+                messageId=message_id,
+                finishReason=finish_reason,
+                usage=usage,
+                outputRefs=output_refs,
+                resultSummary={"text": _safe_text(joined_raw)} if joined_raw else {},
+                status="COMPLETED",
+                **model_context,
+            ),
+            status="COMPLETED",
+        )
 
 
 
@@ -1051,32 +1122,46 @@ def _emit_message_event(
             message_id=message_id,
             model_context=model_context,
         )
-        publish_agent_stream_event(
-            "MODEL_RESULT",
-            agent_name=agent_name,
-            namespace=list(namespace),
-            node_name=model_context.get("nodeName"),
-            message_id=message_id,
-            text="model result summary",
-            data=_semantic_payload(
-                "MODEL_OUTPUT",
-                durability=DURABLE,
-                requestId=message_id,
-                messageId=message_id,
-                finishReason=finish_reason,
-                usage=_usage_metadata(message, safe_metadata),
-                outputRefs=_output_refs(safe_metadata, message_id=message_id),
-                resultSummary=_model_result_summary(
-                    message,
-                    message_id=message_id,
-                    namespace=namespace,
-                    agent_name=agent_name,
+        from orchestration.localization import load_localization_config
+        loc_config = load_localization_config()
+        if loc_config.enabled and session is not None and getattr(session, "buffered_content_deltas", None):
+            session.pending_model_result = {
+                "agent_name": agent_name,
+                "namespace": list(namespace),
+                "node_name": model_context.get("nodeName"),
+                "message_id": message_id,
+                "model_context": model_context,
+                "finish_reason": finish_reason,
+                "usage": _usage_metadata(message, safe_metadata),
+                "output_refs": _output_refs(safe_metadata, message_id=message_id),
+            }
+        else:
+            publish_agent_stream_event(
+                "MODEL_RESULT",
+                agent_name=agent_name,
+                namespace=list(namespace),
+                node_name=model_context.get("nodeName"),
+                message_id=message_id,
+                text="model result summary",
+                data=_semantic_payload(
+                    "MODEL_OUTPUT",
+                    durability=DURABLE,
+                    requestId=message_id,
+                    messageId=message_id,
+                    finishReason=finish_reason,
+                    usage=_usage_metadata(message, safe_metadata),
+                    outputRefs=_output_refs(safe_metadata, message_id=message_id),
+                    resultSummary=_model_result_summary(
+                        message,
+                        message_id=message_id,
+                        namespace=namespace,
+                        agent_name=agent_name,
+                    ),
+                    status="COMPLETED",
+                    **model_context,
                 ),
                 status="COMPLETED",
-                **model_context,
-            ),
-            status="COMPLETED",
-        )
+            )
 
 
 def _content_deltas(message: AIMessage) -> list[tuple[str, str]]:
@@ -1258,27 +1343,52 @@ def _emit_complete_model_message(
         if isinstance(response_metadata, dict)
         else ""
     )
-    publish_agent_stream_event(
-        "MODEL_RESULT",
-        agent_name=agent_name,
-        namespace=list(namespace),
-        node_name=model_context.get("nodeName"),
-        message_id=message_id,
-        text="model result summary",
-        data=_semantic_payload(
-            "MODEL_OUTPUT",
-            durability=DURABLE,
-            requestId=message_id,
-            messageId=message_id,
-            finishReason=finish_reason,
-            usage=_usage_metadata(message, safe_metadata),
-            outputRefs=_output_refs(safe_metadata, message_id=message_id),
-            resultSummary={"text": _safe_text(output)} if output else {},
+    from orchestration.localization import load_localization_config
+    loc_config = load_localization_config()
+    session = active_agent_stream.get()
+
+    if loc_config.enabled and session is not None and output and not (getattr(message, "tool_calls", None) or []):
+        session.buffered_content_deltas.append(
+            {
+                "agent_name": agent_name,
+                "namespace": list(namespace),
+                "message_id": message_id,
+                "text": output,
+                "data": safe_metadata,
+            }
+        )
+        session.pending_model_result = {
+            "agent_name": agent_name,
+            "namespace": list(namespace),
+            "node_name": model_context.get("nodeName"),
+            "message_id": message_id,
+            "model_context": model_context,
+            "finish_reason": finish_reason,
+            "usage": _usage_metadata(message, safe_metadata),
+            "output_refs": _output_refs(safe_metadata, message_id=message_id),
+        }
+    else:
+        publish_agent_stream_event(
+            "MODEL_RESULT",
+            agent_name=agent_name,
+            namespace=list(namespace),
+            node_name=model_context.get("nodeName"),
+            message_id=message_id,
+            text="model result summary",
+            data=_semantic_payload(
+                "MODEL_OUTPUT",
+                durability=DURABLE,
+                requestId=message_id,
+                messageId=message_id,
+                finishReason=finish_reason,
+                usage=_usage_metadata(message, safe_metadata),
+                outputRefs=_output_refs(safe_metadata, message_id=message_id),
+                resultSummary={"text": _safe_text(output)} if output else {},
+                status="COMPLETED",
+                **model_context,
+            ),
             status="COMPLETED",
-            **model_context,
-        ),
-        status="COMPLETED",
-    )
+        )
 
 
 def _emit_reasoning_summary(
@@ -1782,7 +1892,11 @@ def _model_result_summary(
     namespace: tuple[str, ...],
     agent_name: str,
 ) -> Any:
+    from orchestration.localization import load_localization_config
+    loc_config = load_localization_config()
     session = active_agent_stream.get()
+    if loc_config.enabled and session is not None and getattr(session, "buffered_content_deltas", None):
+        return {}
     if session is not None:
         key = _model_message_key(
             message_id=message_id,
