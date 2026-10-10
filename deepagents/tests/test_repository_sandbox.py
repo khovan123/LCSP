@@ -170,13 +170,17 @@ def test_agent_server_dispatch_cancels_run_at_boundary_deadline(monkeypatch) -> 
     fake_client.runs.create.return_value = {"run_id": "run-timeout", "status": "pending"}
     fake_client.runs.get.return_value = {"run_id": "run-timeout", "status": "pending"}
     monkeypatch.setattr(agent_server_client, "get_sync_client", lambda **_kwargs: fake_client)
+    monkeypatch.setattr(agent_server_client, "_ScanRunObserver", lambda _msg: MagicMock())
     monotonic_values = iter([0.0, 0.0, 0.0, 2.0])
     monkeypatch.setattr(
         agent_server_client.time,
         "monotonic",
-        lambda: next(monotonic_values),
+        lambda: next(monotonic_values, 2.0),
     )
     monkeypatch.setattr(agent_server_client.time, "sleep", lambda _seconds: None)
+
+
+
 
     with pytest.raises(agent_server_client.AgentServerRunError) as captured:
         agent_server_client.dispatch_agent_runtime_event(

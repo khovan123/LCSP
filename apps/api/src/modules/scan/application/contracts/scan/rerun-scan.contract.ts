@@ -2,6 +2,8 @@ export interface RerunScanRequestDto {
   snapshot_id: string;
   idempotency_key: string;
   reason?: string;
+  response_language?: string;
+  locale?: string;
 }
 
 export interface RerunScanResponseDto {

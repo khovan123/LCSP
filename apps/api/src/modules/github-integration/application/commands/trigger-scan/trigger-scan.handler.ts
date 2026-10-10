@@ -27,6 +27,7 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
+import { resolveResponseLanguage } from "@lcsp/contracts/shared/locale";
 
 import { fromPrismaAssessmentStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
@@ -212,6 +213,7 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
       triggerSource: command.triggerSource,
       correlationId: command.correlationId,
     });
+    const responseLanguage = resolveResponseLanguage(command.responseLanguage);
     const event = buildOutboxMessageInput({
       aggregateType: OUTBOX_AGGREGATE_TYPES.repositoryScanJob,
       aggregateId: job.id,
@@ -234,6 +236,7 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
         triggerSource: job.triggerSource,
         idempotencyKey: job.idempotencyKey,
         correlationId: job.correlationId,
+        responseLanguage,
       },
     });
 

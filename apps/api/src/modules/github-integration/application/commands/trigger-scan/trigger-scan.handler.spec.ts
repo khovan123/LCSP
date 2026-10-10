@@ -40,6 +40,7 @@ function command(overrides?: Partial<TriggerScanCommand>): TriggerScanCommand {
       : overrides.subjectRole,
     overrides?.scope,
     overrides?.correlationId ?? "corr-1",
+    overrides?.responseLanguage,
   );
 }
 
@@ -138,6 +139,7 @@ describe("TriggerScanHandler", () => {
         triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.manual,
         idempotencyKey: "scan-request:assessment-1:snapshot-1:1",
         correlationId: "corr-1",
+        responseLanguage: "vi",
       },
     });
     expect(write).toHaveBeenCalledWith(
@@ -145,6 +147,20 @@ describe("TriggerScanHandler", () => {
         eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanJobTriggeredAudit,
       }),
     );
+  });
+
+  it("persists authoritative responseLanguage: en when requested by caller", async () => {
+    const { handler, saveWithTriggeredEvent } = buildHandler();
+
+    await handler.execute(command({ responseLanguage: "en" }));
+
+    const [, event] = saveWithTriggeredEvent.mock.calls[0];
+    expect(event).toMatchObject({
+      eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanTriggered,
+      payload: {
+        responseLanguage: "en",
+      },
+    });
   });
 
   it("returns the existing state without creating another outbox command", async () => {

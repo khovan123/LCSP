@@ -96,6 +96,8 @@ export class AssessmentRuntimeControlController {
     @Req() req: AuthenticatedRequest,
     @Body(controlPipe()) body: { targetRunId: string },
   ) {
+    const locale =
+      (req.headers?.["x-lcsp-locale"] as string | undefined) ?? null;
     return resultEnvelope(
       await this.commands.execute(
         new ControlAssessmentRuntimeCommand(
@@ -104,6 +106,7 @@ export class AssessmentRuntimeControlController {
           ASSESSMENT_RUNTIME_CONTROL_ACTIONS.resume,
           body.targetRunId,
           req.correlationId ?? assessmentId,
+          locale,
         ),
       ),
     );

@@ -15,6 +15,7 @@ from deepagents import create_deep_agent
 from langchain.agents.middleware import TodoListMiddleware
 
 from harness import configure_lcsp_harness
+from middleware.localization import ResponseLocalizationMiddleware
 from middleware.model_governance import (
     MODEL_GOVERNANCE_MIDDLEWARE,
     governed_general_purpose_subagent,
@@ -81,6 +82,7 @@ def create_root_agent(*, checkpointer=None, store=None):
         middleware=[
             dispatch_agent_runtime_system_event,
             inject_lcsp_runtime_context,
+            ResponseLocalizationMiddleware(),
             AgentRoleMiddleware("root"),
             *MODEL_GOVERNANCE_MIDDLEWARE,
             TodoListMiddleware(),

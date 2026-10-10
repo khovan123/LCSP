@@ -37,6 +37,10 @@ import {
   REPOSITORY_CONNECTION_STATUSES,
   REPOSITORY_SCAN_JOB_STATUSES,
 } from "../github-integration/statuses.ts";
+import {
+  LOCALES,
+  DEFAULT_RESPONSE_LANGUAGE,
+} from "../shared/locale.ts";
 
 const uuidSchema = z.uuid();
 const revisionSchema = z
@@ -379,6 +383,7 @@ export const assessmentRootContextSchema = z.strictObject({
   facts: z.array(assessmentCaseFactSchema),
   evidence: z.array(assessmentEvidenceSchema),
   openHumanRequestIds: z.array(uuidSchema),
+  responseLanguage: z.enum(LOCALES).default(DEFAULT_RESPONSE_LANGUAGE),
 });
 export type AssessmentRootContext = z.infer<typeof assessmentRootContextSchema>;
 
