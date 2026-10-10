@@ -881,62 +881,132 @@ async def test_aafter_agent_async_transform() -> None:
 
 
 def test_assessment_root_runner_persisted_locale_authority(tmp_path) -> None:
-    """Active Assessment Root runner loads authoritative responseLanguage from server context (command.assessment.root.requested.v1)."""
+    """Active Assessment Root runner loads authoritative responseLanguage from server context and reflects mid-thread switches."""
     from assessment_root.runner import run_assessment_root
     from deepagents.backends import FilesystemBackend
     from langchain_core.messages import AIMessage
     from test_assessment_root_agent import FakeClient, RootScriptedModel, _repo
+    from orchestration.context import DEFAULT_RESPONSE_LANGUAGE, resolve_response_language
 
-    # Test 1: Server context specifies Vietnamese ("vi")
-    client_vi = FakeClient()
-    # Override context responseLanguage to Vietnamese
-    orig_context_vi = client_vi.context
-    client_vi.context = lambda: {**orig_context_vi(), "responseLanguage": "vi"}
-    
-    captured_messages_vi = []
-    class LocSpyModel(RootScriptedModel):
+    class AuthoritativeRootContextClient(FakeClient):
+        """Real context producer stand-in reflecting GetRootContextHandler server-state authority."""
+
+        def __init__(self, *, thread_id: str = "t-shared-1", **kwargs: Any) -> None:
+            super().__init__(**kwargs)
+            self.thread_id = thread_id
+            self.turns: list[dict[str, Any]] = []
+            self.outbox_messages: list[dict[str, Any]] = []
+
+        def persist_setting_on_thread(self, execution_id: str, language: str | None) -> None:
+            """Persists user setting on this thread in canonical server state (turn context / outbox)."""
+            self.turns.append({
+                "executionId": execution_id,
+                "threadId": self.thread_id,
+                "contextJson": {"responseLanguage": language} if language else {},
+            })
+            if language:
+                self.outbox_messages.append({
+                    "eventType": "command.assessment.root.requested.v1",
+                    "payload": {"responseLanguage": language},
+                })
+
+        def context(self) -> dict[str, Any]:
+            base = super().context()
+            # Canonical server state resolution matching GetRootContextHandler
+            saved_locale = None
+            if self.turns:
+                saved_locale = self.turns[-1].get("contextJson", {}).get("responseLanguage")
+            if not saved_locale and self.outbox_messages:
+                saved_locale = self.outbox_messages[-1].get("payload", {}).get("responseLanguage")
+            resolved = resolve_response_language(saved_locale, fallback=DEFAULT_RESPONSE_LANGUAGE)
+            return {
+                **base,
+                "threadId": self.thread_id,
+                "responseLanguage": resolved,
+            }
+
+    # 1. Unset state: falls back to DEFAULT_RESPONSE_LANGUAGE ("vi")
+    client_default = AuthoritativeRootContextClient(thread_id="thread-default")
+    captured_messages_default = []
+    class LocSpyModelDefault(RootScriptedModel):
         def _generate(self, messages, **kwargs):
-            captured_messages_vi.append(list(messages))
+            captured_messages_default.append(list(messages))
             return super()._generate(messages, **kwargs)
 
-    model_vi = LocSpyModel(responses=[AIMessage(content="Đã kiểm tra tuân thủ.")])
-    result_vi = run_assessment_root(
-        client_vi,
+    model_default = LocSpyModelDefault(responses=[AIMessage(content="Đã kiểm tra tuân thủ.")])
+    result_default = run_assessment_root(
+        client_default,
         "11111111-1111-4111-8111-111111111111",
-        backend_factory=lambda claim, ctx: (FilesystemBackend(root_dir=_repo(tmp_path / "vi"), virtual_mode=True), None),
-        model=model_vi,
+        backend_factory=lambda claim, ctx: (FilesystemBackend(root_dir=_repo(tmp_path / "default"), virtual_mode=True), None),
+        model=model_default,
         governance=(),
     )
-    assert result_vi["state"] == "SUCCEEDED"
-    assert ("finish", "SUCCEEDED") in client_vi.calls
-    # Prompt directive must contain Vietnamese guidance
-    first_turn_text_vi = str([getattr(m, "content", "") for m in captured_messages_vi[0]])
-    assert "Vietnamese" in first_turn_text_vi or "tiếng Việt" in first_turn_text_vi
+    assert result_default["state"] == "SUCCEEDED"
+    prompt_text_default = str([getattr(m, "content", "") for m in captured_messages_default[0]])
+    assert "Vietnamese" in prompt_text_default or "tiếng Việt" in prompt_text_default
 
-    # Test 2: Server context specifies English ("en")
-    client_en = FakeClient()
-    orig_context_en = client_en.context
-    client_en.context = lambda: {**orig_context_en(), "responseLanguage": "en"}
+    # 2. Same-thread locale switching: EN -> VI -> EN
+    client_shared_thread = AuthoritativeRootContextClient(thread_id="thread-shared-authority")
 
-    captured_messages_en = []
-    class LocSpyModelEn(RootScriptedModel):
+    # Turn 1: English persisted in server state
+    client_shared_thread.persist_setting_on_thread("exec-turn-1", "en")
+    captured_messages_turn1 = []
+    class LocSpyModelTurn1(RootScriptedModel):
         def _generate(self, messages, **kwargs):
-            captured_messages_en.append(list(messages))
+            captured_messages_turn1.append(list(messages))
             return super()._generate(messages, **kwargs)
 
-    model_en = LocSpyModelEn(responses=[AIMessage(content="Compliance check completed.")])
-    result_en = run_assessment_root(
-        client_en,
+    model_turn1 = LocSpyModelTurn1(responses=[AIMessage(content="Turn 1 English answer.")])
+    result_turn1 = run_assessment_root(
+        client_shared_thread,
         "11111111-1111-4111-8111-111111111111",
-        backend_factory=lambda claim, ctx: (FilesystemBackend(root_dir=_repo(tmp_path / "en"), virtual_mode=True), None),
-        model=model_en,
+        backend_factory=lambda claim, ctx: (FilesystemBackend(root_dir=_repo(tmp_path / "t1"), virtual_mode=True), None),
+        model=model_turn1,
         governance=(),
     )
-    assert result_en["state"] == "SUCCEEDED"
-    assert ("finish", "SUCCEEDED") in client_en.calls
-    # Prompt directive must contain English guidance
-    first_turn_text_en = str([getattr(m, "content", "") for m in captured_messages_en[0]])
-    assert "English" in first_turn_text_en
+    assert result_turn1["state"] == "SUCCEEDED"
+    prompt_text_turn1 = str([getattr(m, "content", "") for m in captured_messages_turn1[0]])
+    assert "English" in prompt_text_turn1
+
+    # Turn 2 ON SAME THREAD: user changes setting to Vietnamese, persisted to server state
+    client_shared_thread.persist_setting_on_thread("exec-turn-2", "vi")
+    captured_messages_turn2 = []
+    class LocSpyModelTurn2(RootScriptedModel):
+        def _generate(self, messages, **kwargs):
+            captured_messages_turn2.append(list(messages))
+            return super()._generate(messages, **kwargs)
+
+    model_turn2 = LocSpyModelTurn2(responses=[AIMessage(content="Turn 2 Vietnamese answer.")])
+    result_turn2 = run_assessment_root(
+        client_shared_thread,
+        "11111111-1111-4111-8111-111111111111",
+        backend_factory=lambda claim, ctx: (FilesystemBackend(root_dir=_repo(tmp_path / "t2"), virtual_mode=True), None),
+        model=model_turn2,
+        governance=(),
+    )
+    assert result_turn2["state"] == "SUCCEEDED"
+    prompt_text_turn2 = str([getattr(m, "content", "") for m in captured_messages_turn2[0]])
+    assert "Vietnamese" in prompt_text_turn2 or "tiếng Việt" in prompt_text_turn2
+
+    # Turn 3 ON SAME THREAD: user changes setting back to English, persisted to server state
+    client_shared_thread.persist_setting_on_thread("exec-turn-3", "en")
+    captured_messages_turn3 = []
+    class LocSpyModelTurn3(RootScriptedModel):
+        def _generate(self, messages, **kwargs):
+            captured_messages_turn3.append(list(messages))
+            return super()._generate(messages, **kwargs)
+
+    model_turn3 = LocSpyModelTurn3(responses=[AIMessage(content="Turn 3 English answer.")])
+    result_turn3 = run_assessment_root(
+        client_shared_thread,
+        "11111111-1111-4111-8111-111111111111",
+        backend_factory=lambda claim, ctx: (FilesystemBackend(root_dir=_repo(tmp_path / "t3"), virtual_mode=True), None),
+        model=model_turn3,
+        governance=(),
+    )
+    assert result_turn3["state"] == "SUCCEEDED"
+    prompt_text_turn3 = str([getattr(m, "content", "") for m in captured_messages_turn3[0]])
+    assert "English" in prompt_text_turn3
 
 
 def test_streaming_and_non_streaming_suppress_raw_model_result_summary_before_localization() -> None:

@@ -16,11 +16,30 @@ import {
   ASSESSMENT_DOMAIN_ERROR_CODES,
   ASSESSMENT_DOMAIN_LIMITS,
   ASSESSMENT_ROOT_BOUNDARY,
+  ASSESSMENT_ROOT_COMMAND_TYPES,
   type AssessmentRootClaim,
 } from "@lcsp/contracts/assessment-domain";
 import { AUDIT_ACTOR_IDS, AUDIT_ACTOR_TYPES } from "@lcsp/contracts/audit";
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+
+function extractSavedLocale(data: unknown): string | undefined {
+  if (typeof data === "string") {
+    const trimmed = data.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return undefined;
+  }
+  const record = data as Record<string, unknown>;
+  const raw =
+    record.responseLanguage ??
+    record.response_language ??
+    record.locale ??
+    record.language ??
+    record.lcsp_locale;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : undefined;
+}
 
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { problemException } from "../../../../platform/http/filters/error.factory.js";
@@ -166,6 +185,32 @@ export class AssessmentRuntimeAuthority {
           lastResumedAt: now,
         },
       });
+      const [latestCommand, previousTurn] = await Promise.all([
+        tx.outboxMessage?.findFirst
+          ? tx.outboxMessage.findFirst({
+              where: {
+                aggregateId: input.assessmentId,
+                eventType: ASSESSMENT_ROOT_COMMAND_TYPES["ROOT_REQUESTED"],
+              },
+              orderBy: { createdAt: "desc" },
+              select: { payload: true },
+            })
+          : Promise.resolve(null),
+        tx.assessmentRuntimeTurn?.findFirst
+          ? tx.assessmentRuntimeTurn.findFirst({
+              where: {
+                assessmentId: input.assessmentId,
+                threadId: row.threadId,
+              },
+              orderBy: { createdAt: "desc" },
+              select: { contextJson: true },
+            })
+          : Promise.resolve(null),
+      ]);
+      const persistedLanguage =
+        extractSavedLocale(latestCommand?.payload) ??
+        extractSavedLocale(previousTurn?.contextJson);
+
       await tx.assessmentRuntimeTurn.upsert({
         where: { id: executionId },
         create: {
@@ -176,10 +221,11 @@ export class AssessmentRuntimeAuthority {
           logicalRunId: executionId,
           correlationId: input.correlationId,
           state: Controls.running,
-          contextJson: {},
+          contextJson: persistedLanguage ? { responseLanguage: persistedLanguage } : {},
         },
         update: {
           state: recoveringStop ? Controls.stopRequested : Controls.running,
+          ...(persistedLanguage ? { contextJson: { responseLanguage: persistedLanguage } } : {}),
         },
       });
       if (safePauseResume) {
