@@ -100,19 +100,21 @@ describe("GetRootContextHandler locale authority", () => {
     } as unknown as PrismaService;
 
     const authority = {
-      authorizeInTx: jest.fn().mockResolvedValue({
-        assessmentId,
-        threadId,
-        executionId,
-        lifecycleState: ASSESSMENT_LIFECYCLE_STATES.ACTIVE,
-        lifecycleRevision: 1,
-        blockerReason: null,
-        blockerReference: null,
-      }),
+      authorizeInTx: jest.fn(() =>
+        Promise.resolve({
+          assessmentId,
+          threadId,
+          executionId,
+          lifecycleState: ASSESSMENT_LIFECYCLE_STATES.ACTIVE,
+          lifecycleRevision: 1,
+          blockerReason: null,
+          blockerReference: null,
+        }),
+      ),
     } as unknown as AssessmentRuntimeAuthority;
 
     const support = {
-      loadPins: jest.fn().mockResolvedValue(pins),
+      loadPins: jest.fn(() => Promise.resolve(pins)),
     } as unknown as AssessmentCaseSupport;
 
     const handler = new GetRootContextHandler(prisma, authority, support);
